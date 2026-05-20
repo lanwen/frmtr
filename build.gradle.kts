@@ -1,41 +1,43 @@
 plugins {
-    `java-library`
-    application
-    jacoco
+    base
 }
 
 group = "dev.lanwen.frmtr"
 version = "0.1.0-SNAPSHOT"
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
+subprojects {
+    group = rootProject.group
+    version = rootProject.version
+
+    pluginManager.withPlugin("java") {
+        configure<JavaPluginExtension> {
+            toolchain {
+                languageVersion = JavaLanguageVersion.of(25)
+            }
+        }
+
+        dependencies {
+            add("testImplementation", libs.junit.jupiter)
+            add("testRuntimeOnly", libs.junit.platform.launcher)
+        }
+
+        tasks.withType<JavaCompile>().configureEach {
+            options.encoding = "UTF-8"
+            options.compilerArgs.add("-Xlint:all")
+        }
+
+        tasks.withType<Test>().configureEach {
+            useJUnitPlatform()
+        }
     }
-}
 
-application {
-    mainClass = "dev.lanwen.frmtr.cli.Main"
-}
+    pluginManager.withPlugin("jacoco") {
+        tasks.named("jacocoTestReport") {
+            dependsOn(tasks.named("test"))
+        }
 
-dependencies {
-    api("com.github.javaparser:javaparser-core:3.28.1")
-
-    implementation("info.picocli:picocli:4.7.7")
-
-    testImplementation("org.junit.jupiter:junit-jupiter:6.0.3")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-}
-
-tasks.withType<JavaCompile>().configureEach {
-    options.encoding = "UTF-8"
-    options.compilerArgs.add("-Xlint:all")
-}
-
-tasks.test {
-    useJUnitPlatform()
-    finalizedBy(tasks.jacocoTestReport)
-}
-
-tasks.jacocoTestReport {
-    dependsOn(tasks.test)
+        tasks.withType<Test>().configureEach {
+            finalizedBy(tasks.named("jacocoTestReport"))
+        }
+    }
 }

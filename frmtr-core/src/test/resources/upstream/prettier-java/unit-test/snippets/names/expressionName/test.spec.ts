@@ -1,0 +1,17 @@
+import { expectSnippetToBeFormatted } from "../../../../test-utils.ts";
+
+describe("expressionName", () => {
+  it("can format a ExpressionName without dots", () => {
+    expectSnippetToBeFormatted({
+      snippet: "myExpression",
+      expectedOutput: "myExpression"
+    });
+  });
+
+  it("can format a ExpressionName with dots", () => {
+    expectSnippetToBeFormatted({
+      snippet: "myExpression.with.lot.of.dots",
+      expectedOutput: "myExpression.with.lot.of.dots"
+    });
+  });
+});

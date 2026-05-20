@@ -5,6 +5,6 @@
 The formatter parses Java source, adapts the parsed tree into formatter-owned syntax views, prints a compact document IR, and renders that IR with width-aware line breaking.
 
 ```bash
-./gradlew test
-./gradlew run --args='--check src/main/java'
+./gradlew build
+./gradlew :frmtr-cli:run --args='--check frmtr-core/src/main/java'
 ```

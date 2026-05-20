@@ -1,0 +1,17 @@
+import { expectSnippetToBeFormatted } from "../../../../test-utils.ts";
+
+describe("AmbiguousName", () => {
+  it("can format a AmbiguousName without dots", () => {
+    expectSnippetToBeFormatted({
+      snippet: "myAmbiguousName",
+      expectedOutput: "myAmbiguousName"
+    });
+  });
+
+  it("can format a AmbiguousName with dots", () => {
+    expectSnippetToBeFormatted({
+      snippet: "myAmbiguousName.with.lot.of.dots",
+      expectedOutput: "myAmbiguousName.with.lot.of.dots"
+    });
+  });
+});

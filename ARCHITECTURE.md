@@ -1,24 +1,25 @@
 # Architecture
 
-`frmtr` is a Java formatter with a small public API, a thin CLI, and a formatter engine built around JavaParser plus an internal document IR. The current implementation is intentionally single-module until there is a concrete reason to split release or dependency boundaries.
+`frmtr` is a Java formatter with a small public API, a thin CLI, and a formatter engine built around JavaParser plus an internal document IR. The project is split into focused Gradle modules so formatter internals, command-line integration, and future wrappers can evolve behind explicit dependency boundaries.
 
 ## Build
 
-The project is a Gradle Java application/library:
+The project is a Gradle multi-module build:
 
 - Group: `dev.lanwen.frmtr`
 - Java toolchain: Java 25
-- Runtime entry point: `dev.lanwen.frmtr.cli.Main`
-- Core parser dependency: `com.github.javaparser:javaparser-core`
+- Root project: aggregator only; it does not produce the formatter library or CLI artifact.
+- `:frmtr-core`: formatter library and engine.
+- `:frmtr-cli`: Picocli application that depends on `:frmtr-core`.
 
-The build produces both a library API and an application distribution. Tests run with JUnit Jupiter and coverage is wired through JaCoCo.
+Shared subproject conventions configure Java 25, UTF-8 compilation, `-Xlint:all`, JUnit Platform, and JaCoCo. External dependency versions are managed through the Gradle version catalog in `gradle/libs.versions.toml`.
 
 ## Package Layout
 
-- `dev.lanwen.frmtr`: public API and configuration.
-- `dev.lanwen.frmtr.cli`: Picocli command-line adapter.
-- `dev.lanwen.frmtr.doc`: formatter document IR and renderer.
-- `dev.lanwen.frmtr.java`: JavaParser-backed parser, syntax view, comment handling, and Java-specific printer.
+- `frmtr-core/src/main/java/dev/lanwen/frmtr`: public API and configuration.
+- `frmtr-core/src/main/java/dev/lanwen/frmtr/doc`: formatter document IR and renderer.
+- `frmtr-core/src/main/java/dev/lanwen/frmtr/java`: JavaParser-backed parser, syntax view, comment handling, and Java-specific printer.
+- `frmtr-cli/src/main/java/dev/lanwen/frmtr/cli`: Picocli command-line adapter.
 
 ## Formatting Pipeline
 
@@ -65,13 +66,16 @@ The CLI is an adapter over the public formatter API:
 
 CLI behavior should not own formatting policy. New formatting behavior belongs in the API and Java formatter pipeline first.
 
+The CLI module owns application packaging and Gradle `run` wiring. Local execution uses `./gradlew :frmtr-cli:run --args='...'`.
+
 ## Tests
 
 The test suite covers:
 
-- Doc rendering behavior and line-breaking.
-- Formatter output, idempotence, reparse validity, comments, and parse errors.
-- CLI stdout, option validation, and exit codes.
-- Golden resources under `src/test/resources/format`.
+- `:frmtr-core`: Doc rendering behavior, formatter output, idempotence, reparse validity, comments, parse errors, and fixture corpus checks.
+- `:frmtr-cli`: CLI stdout, option validation, and exit codes.
+- Golden resources under `frmtr-core/src/test/resources/format`.
+- A representative active subset of upstream `prettier-java` fixtures under `frmtr-core/src/test/resources/format/prettier-java`.
+- The full upstream `prettier-java` fixture corpus under `frmtr-core/src/test/resources/upstream/prettier-java`.
 
 New formatter rules should include golden coverage plus idempotence and reparse checks where practical.

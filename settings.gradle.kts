@@ -13,3 +13,6 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "frmtr"
+
+include("frmtr-core")
+include("frmtr-cli")

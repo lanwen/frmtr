@@ -1,0 +1,10 @@
+[versions]
+javaparser = "3.28.1"
+junit-jupiter = "6.0.3"
+picocli = "4.7.7"
+
+[libraries]
+javaparser-core = { module = "com.github.javaparser:javaparser-core", version.ref = "javaparser" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+picocli = { module = "info.picocli:picocli", version.ref = "picocli" }

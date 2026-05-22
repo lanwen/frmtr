@@ -29,6 +29,9 @@ public final class JavaFormatter {
         ParserConfiguration configuration = new ParserConfiguration()
                 .setStoreTokens(true)
                 .setAttributeComments(true);
+        // Native image would need broad JavaParser metamodel reflection for language-level validation.
+        // The grammar parse still rejects syntactically invalid source before formatting.
+        configuration.setLanguageLevel(null);
         this.parser = new JavaParser(configuration);
     }
 

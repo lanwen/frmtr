@@ -1,6 +1,6 @@
 package dev.lanwen.frmtr.doc;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.lanwen.frmtr.FormatterOptions;
 import org.junit.jupiter.api.Test;
@@ -13,7 +13,7 @@ final class DocRendererTest {
         String rendered = new DocRenderer(new FormatterOptions(40, FormatterOptions.IndentStyle.SPACE, 2, FormatterOptions.LineEnding.LF, false))
                 .render(doc);
 
-        assertEquals("call(value)", rendered);
+        assertThat(rendered).isEqualTo("call(value)");
     }
 
     @Test
@@ -27,10 +27,10 @@ final class DocRendererTest {
         String rendered = new DocRenderer(new FormatterOptions(20, FormatterOptions.IndentStyle.SPACE, 2, FormatterOptions.LineEnding.LF, false))
                 .render(doc);
 
-        assertEquals("""
+        assertThat(rendered).isEqualTo("""
                 call(
                   firstArgument,
                   secondArgument
-                )""", rendered);
+                )""");
     }
 }

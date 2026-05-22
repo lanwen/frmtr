@@ -8,8 +8,6 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.Callable;
 import picocli.CommandLine;
@@ -31,20 +29,26 @@ public final class Main implements Callable<Integer> {
     @Option(names = "--line-width", description = "Target line width.", defaultValue = "100")
     int lineWidth;
 
-    @Parameters(arity = "0..*", paramLabel = "PATH", description = "Java files or directories.")
-    List<Path> paths = List.of();
+    @Parameters(arity = "0..*", paramLabel = "SELECTOR", description = "Java files, directories, globs, or comma-separated selectors.")
+    List<String> selectors = List.of();
 
     private final PrintWriter out;
     private final PrintWriter err;
+    private final Path workingDirectory;
     private String stdin;
 
     public Main() {
-        this(new PrintWriter(System.out, true), new PrintWriter(System.err, true), null);
+        this(new PrintWriter(System.out, true), new PrintWriter(System.err, true), Path.of("."), null);
     }
 
     Main(PrintWriter out, PrintWriter err, String stdin) {
+        this(out, err, Path.of("."), stdin);
+    }
+
+    Main(PrintWriter out, PrintWriter err, Path workingDirectory, String stdin) {
         this.out = out;
         this.err = err;
+        this.workingDirectory = workingDirectory.toAbsolutePath().normalize();
         this.stdin = stdin;
     }
 
@@ -65,7 +69,7 @@ public final class Main implements Callable<Integer> {
                 FormatterOptions.DEFAULT_INDENT_WIDTH,
                 FormatterOptions.LineEnding.LF,
                 true);
-        if (paths.isEmpty()) {
+        if (selectors.isEmpty()) {
             if (check || write) {
                 err.println("--check and --write require at least one file or directory");
                 return 2;
@@ -74,10 +78,11 @@ public final class Main implements Callable<Integer> {
             out.flush();
             return 0;
         }
-        List<Path> files = javaFiles(paths);
+        List<Path> files = new FileDiscovery(workingDirectory).discover(selectors);
         boolean changed = false;
         boolean failed = false;
-        for (Path file : files) {
+        for (int i = 0; i < files.size(); i++) {
+            Path file = files.get(i);
             try {
                 String original = Files.readString(file, StandardCharsets.UTF_8);
                 String formatted = Frmtr.format(original, options);
@@ -85,9 +90,12 @@ public final class Main implements Callable<Integer> {
                     changed = true;
                     if (write) {
                         Files.writeString(file, formatted, StandardCharsets.UTF_8);
-                    } else {
-                        out.println(file);
+                    } else if (check) {
+                        out.println(displayPath(file));
                     }
+                }
+                if (!write && !check) {
+                    printFormatted(files, i, file, formatted);
                 }
             } catch (FormatterException | IOException exception) {
                 failed = true;
@@ -107,20 +115,18 @@ public final class Main implements Callable<Integer> {
         return new String(System.in.readAllBytes(), StandardCharsets.UTF_8);
     }
 
-    private static List<Path> javaFiles(List<Path> paths) throws IOException {
-        List<Path> files = new ArrayList<>();
-        for (Path path : paths) {
-            if (Files.isDirectory(path)) {
-                try (var stream = Files.walk(path)) {
-                    stream.filter(Files::isRegularFile)
-                            .filter(candidate -> candidate.toString().endsWith(".java"))
-                            .forEach(files::add);
-                }
-            } else if (path.toString().endsWith(".java")) {
-                files.add(path);
+    private void printFormatted(List<Path> files, int index, Path file, String formatted) {
+        if (files.size() > 1) {
+            if (index > 0) {
+                out.println();
             }
+            out.println("==> " + displayPath(file) + " <==");
         }
-        files.sort(Comparator.naturalOrder());
-        return files;
+        out.print(formatted);
+        out.flush();
+    }
+
+    private Path displayPath(Path file) {
+        return workingDirectory.relativize(file.toAbsolutePath().normalize());
     }
 }

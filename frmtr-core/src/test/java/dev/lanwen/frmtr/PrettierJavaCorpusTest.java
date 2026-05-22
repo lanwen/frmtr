@@ -1,7 +1,6 @@
 package dev.lanwen.frmtr;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -14,13 +13,13 @@ final class PrettierJavaCorpusTest {
 
     @Test
     void prettierJavaCorpusIsPresentWithLicenseAndNotice() throws Exception {
-        assertNotNull(resource(CORPUS_ROOT + "/LICENSE"));
-        assertNotNull(resource(CORPUS_ROOT + "/NOTICE"));
+        assertThat(resource(CORPUS_ROOT + "/LICENSE")).isNotNull();
+        assertThat(resource(CORPUS_ROOT + "/NOTICE")).isNotNull();
 
         Path unitTests = Path.of(resource(CORPUS_ROOT + "/unit-test").toURI());
 
-        assertEquals(84, count(unitTests, "_input.java"));
-        assertEquals(84, count(unitTests, "_output.java"));
+        assertThat(count(unitTests, "_input.java")).isEqualTo(84);
+        assertThat(count(unitTests, "_output.java")).isEqualTo(84);
     }
 
     private static java.net.URL resource(String name) {

@@ -1,7 +1,7 @@
 package dev.lanwen.frmtr;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import com.github.javaparser.StaticJavaParser;
 import java.io.IOException;
@@ -21,10 +21,10 @@ final class PrettierJavaFixtureTest {
     void formatsRepresentativePrettierJavaFixtureInputs(String fixture) throws IOException {
         String input = readFixture(fixture, "_input.java");
 
-        String formatted = assertDoesNotThrow(() -> Frmtr.format(input));
+        String formatted = Frmtr.format(input);
 
-        assertDoesNotThrow(() -> StaticJavaParser.parse(formatted));
-        assertEquals(formatted, Frmtr.format(formatted));
+        assertThatCode(() -> StaticJavaParser.parse(formatted)).doesNotThrowAnyException();
+        assertThat(Frmtr.format(formatted)).isEqualTo(formatted);
     }
 
     @ParameterizedTest(name = "{0}")
@@ -32,7 +32,7 @@ final class PrettierJavaFixtureTest {
     void copiedPrettierJavaExpectedOutputsRemainParseableReferences(String fixture) throws IOException {
         String prettierOutput = readFixture(fixture, "_prettier_output.java");
 
-        assertDoesNotThrow(() -> StaticJavaParser.parse(prettierOutput));
+        assertThatCode(() -> StaticJavaParser.parse(prettierOutput)).doesNotThrowAnyException();
     }
 
     private static Stream<String> fixtures() {

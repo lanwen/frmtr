@@ -17,6 +17,7 @@ subprojects {
         }
 
         dependencies {
+            add("testImplementation", libs.assertj.core)
             add("testImplementation", libs.junit.jupiter)
             add("testRuntimeOnly", libs.junit.platform.launcher)
         }

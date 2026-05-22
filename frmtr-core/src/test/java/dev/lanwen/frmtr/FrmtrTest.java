@@ -1,8 +1,8 @@
 package dev.lanwen.frmtr;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.github.javaparser.StaticJavaParser;
 import org.junit.jupiter.api.Test;
@@ -18,7 +18,7 @@ final class FrmtrTest {
 
         String formatted = Frmtr.format(source);
 
-        assertEquals("""
+        assertThat(formatted).isEqualTo("""
                 package dev.example;
 
                 import java.util.List;
@@ -36,9 +36,9 @@ final class FrmtrTest {
                         return value;
                     }
                 }
-                """, formatted);
-        assertEquals(formatted, Frmtr.format(formatted));
-        assertDoesNotThrow(() -> StaticJavaParser.parse(formatted));
+                """);
+        assertThat(Frmtr.format(formatted)).isEqualTo(formatted);
+        assertThatCode(() -> StaticJavaParser.parse(formatted)).doesNotThrowAnyException();
     }
 
     @Test
@@ -53,7 +53,7 @@ final class FrmtrTest {
 
         String formatted = Frmtr.format(source);
 
-        assertEquals("""
+        assertThat(formatted).isEqualTo("""
                 package dev.example;
 
                 // demo type
@@ -61,11 +61,11 @@ final class FrmtrTest {
                     // value comment
                     int value;
                 }
-                """, formatted);
+                """);
     }
 
     @Test
     void rejectsInvalidJava() {
-        assertThrows(FormatterException.class, () -> Frmtr.format("class {"));
+        assertThatThrownBy(() -> Frmtr.format("class {")).isInstanceOf(FormatterException.class);
     }
 }

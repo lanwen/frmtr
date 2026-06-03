@@ -4,14 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.io.StringWriter;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import picocli.CommandLine;
 
 final class MainTest {
     @Test
@@ -23,7 +22,7 @@ final class MainTest {
                 new PrintWriter(err, true),
                 "class Demo{int value;}");
 
-        int exitCode = new CommandLine(main).execute();
+        int exitCode = Main.commandLine(main).execute();
 
         assertThat(exitCode).isZero();
         assertThat(out.toString()).isEqualTo("""
@@ -40,7 +39,7 @@ final class MainTest {
         StringWriter err = new StringWriter();
         Main main = new Main(new PrintWriter(out, true), new PrintWriter(err, true), "");
 
-        int exitCode = new CommandLine(main).execute("--check", "--write", "src");
+        int exitCode = Main.commandLine(main).execute("--check", "--write", "src");
 
         assertThat(exitCode).isEqualTo(2);
         assertThat(err.toString()).isEqualTo("--check and --write cannot be used together\n");
@@ -107,14 +106,53 @@ final class MainTest {
     }
 
     @Test
-    void checkReportsChangedFilesAndReturnsOne(@TempDir Path dir) throws IOException {
+    void checkReportsPassedAndChangedFilesAndReturnsOne(@TempDir Path dir) throws IOException {
+        write(
+                dir.resolve("src/Formatted.java"),
+                """
+                class Formatted {
+                    int value;
+                }
+                """);
         write(dir.resolve("src/Main.java"), "class Main{int value;}");
 
         Result result = run(dir, null, "--check", "src");
 
         assertThat(result.exitCode()).isEqualTo(1);
-        assertThat(result.out()).isEqualTo("src/Main.java\n");
+        assertThat(result.out()).isEqualTo("""
+                ✓ src/Formatted.java
+                ✗ src/Main.java
+                """);
         assertThat(result.err()).isEmpty();
+    }
+
+    @Test
+    void checkReportsFailedFilesWithoutStacktraceByDefault(@TempDir Path dir) throws IOException {
+        write(dir.resolve("src/Broken.java"), "class {");
+
+        Result result = run(dir, null, "--check", "src");
+
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.out()).isEqualTo("✗ src/Broken.java\n");
+        assertThat(result.err())
+                .contains("src/Broken.java: Unable to parse Java source:")
+                .contains("Parse error")
+                .doesNotContain("Problem stacktrace")
+                .doesNotContain("JavaFormatter.parse");
+    }
+
+    @Test
+    void stacktraceOptionReportsFailureStacktrace(@TempDir Path dir) throws IOException {
+        write(dir.resolve("src/Broken.java"), "class {");
+
+        Result result = run(dir, null, "--stacktrace", "--check", "src");
+
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.out()).isEqualTo("✗ src/Broken.java\n");
+        assertThat(result.err())
+                .contains("src/Broken.java: Unable to parse Java source:")
+                .contains("Problem stacktrace")
+                .contains("dev.lanwen.frmtr.java.JavaFormatter.parse");
     }
 
     @Test
@@ -137,7 +175,7 @@ final class MainTest {
         Result result = run(dir, null, "--check", ".");
 
         assertThat(result.exitCode()).isEqualTo(1);
-        assertThat(result.out()).isEqualTo("kept/Kept.java\n");
+        assertThat(result.out()).isEqualTo("✗ kept/Kept.java\n");
         assertThat(result.err()).isEmpty();
     }
 
@@ -146,7 +184,7 @@ final class MainTest {
         StringWriter err = new StringWriter();
         Main main = new Main(new PrintWriter(out, true), new PrintWriter(err, true), workingDirectory, stdin);
 
-        int exitCode = new CommandLine(main).execute(args);
+        int exitCode = Main.commandLine(main).execute(args);
 
         return new Result(exitCode, out.toString(), err.toString());
     }

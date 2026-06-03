@@ -26,6 +26,9 @@ public final class Main implements Callable<Integer> {
     @Option(names = "--write", description = "Rewrite files in place.")
     boolean write;
 
+    @Option(names = "--stacktrace", description = "Print stack traces for formatter and I/O failures.")
+    boolean stacktrace;
+
     @Option(names = "--line-width", description = "Target line width.", defaultValue = "100")
     int lineWidth;
 
@@ -53,8 +56,19 @@ public final class Main implements Callable<Integer> {
     }
 
     public static void main(String[] args) {
-        int exitCode = new CommandLine(new Main()).execute(args);
+        int exitCode = commandLine(new Main()).execute(args);
         System.exit(exitCode);
+    }
+
+    static CommandLine commandLine(Main main) {
+        return new CommandLine(main).setExecutionExceptionHandler(Main::handleExecutionException);
+    }
+
+    private static int handleExecutionException(
+            Exception exception, CommandLine commandLine, CommandLine.ParseResult parseResult) {
+        Main main = commandLine.getCommand();
+        main.printFailure("frmtr", exception);
+        return 2;
     }
 
     @Override
@@ -74,9 +88,14 @@ public final class Main implements Callable<Integer> {
                 err.println("--check and --write require at least one file or directory");
                 return 2;
             }
-            out.print(Frmtr.format(readStdin(), options));
-            out.flush();
-            return 0;
+            try {
+                out.print(Frmtr.format(readStdin(), options));
+                out.flush();
+                return 0;
+            } catch (FormatterException | IOException exception) {
+                printFailure("stdin", exception);
+                return 2;
+            }
         }
         List<Path> files = new FileDiscovery(workingDirectory).discover(selectors);
         boolean changed = false;
@@ -86,20 +105,25 @@ public final class Main implements Callable<Integer> {
             try {
                 String original = Files.readString(file, StandardCharsets.UTF_8);
                 String formatted = Frmtr.format(original, options);
-                if (!formatted.equals(original)) {
+                boolean fileChanged = !formatted.equals(original);
+                if (fileChanged) {
                     changed = true;
                     if (write) {
                         Files.writeString(file, formatted, StandardCharsets.UTF_8);
-                    } else if (check) {
-                        out.println(displayPath(file));
                     }
+                }
+                if (check) {
+                    out.println(statusLine(!fileChanged, file));
                 }
                 if (!write && !check) {
                     printFormatted(files, i, file, formatted);
                 }
             } catch (FormatterException | IOException exception) {
                 failed = true;
-                err.println(file + ": " + exception.getMessage());
+                if (check) {
+                    out.println(statusLine(false, file));
+                }
+                printFailure(displayPath(file).toString(), exception);
             }
         }
         if (failed) {
@@ -124,6 +148,18 @@ public final class Main implements Callable<Integer> {
         }
         out.print(formatted);
         out.flush();
+    }
+
+    private String statusLine(boolean passed, Path file) {
+        return (passed ? "✓ " : "✗ ") + displayPath(file);
+    }
+
+    private void printFailure(String target, Exception exception) {
+        err.println(target + ": " + exception.getMessage());
+        if (stacktrace) {
+            exception.printStackTrace(err);
+        }
+        err.flush();
     }
 
     private Path displayPath(Path file) {

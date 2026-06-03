@@ -25,6 +25,8 @@ Format selectors in place:
 
 Selectors can be repeated, comma-separated, files, directories, or glob patterns. The CLI formats `.java` files, skips unknown extensions silently, and respects `.gitignore`.
 
+`--check` prints `✓` for files that are already formatted and `✗` for files that need formatting or failed to parse. Failure output is concise by default; add `--stacktrace` when debugging formatter or I/O failures.
+
 ## Native Binary
 
 The default native binary build is Linux via Docker:

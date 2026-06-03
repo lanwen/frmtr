@@ -3,6 +3,7 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParseProblemException;
 import com.github.javaparser.ParseResult;
+import com.github.javaparser.Problem;
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.Providers;
 import com.github.javaparser.ast.CompilationUnit;
@@ -18,6 +19,7 @@ import dev.lanwen.frmtr.doc.Doc;
 import dev.lanwen.frmtr.doc.DocRenderer;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public final class JavaFormatter {
@@ -27,11 +29,9 @@ public final class JavaFormatter {
     public JavaFormatter(FormatterOptions options) {
         this.options = options;
         ParserConfiguration configuration = new ParserConfiguration()
+                .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_25)
                 .setStoreTokens(true)
                 .setAttributeComments(true);
-        // Native image would need broad JavaParser metamodel reflection for language-level validation.
-        // The grammar parse still rejects syntactically invalid source before formatting.
-        configuration.setLanguageLevel(null);
         this.parser = new JavaParser(configuration);
     }
 
@@ -48,17 +48,24 @@ public final class JavaFormatter {
             ParseResult<CompilationUnit> result =
                     parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source));
             if (!result.isSuccessful() || result.getResult().isEmpty()) {
-                String problems = result.getProblems().stream()
-                        .sorted(Comparator.comparing(problem -> problem.getLocation().map(Object::toString).orElse("")))
-                        .map(Object::toString)
-                        .reduce((left, right) -> left + System.lineSeparator() + right)
-                        .orElse("unknown parse error");
-                throw new FormatterException("Unable to parse Java source:" + System.lineSeparator() + problems);
+                throw new FormatterException(
+                        "Unable to parse Java source:" + System.lineSeparator() + formatProblems(result.getProblems()),
+                        new ParseProblemException(result.getProblems()));
             }
             return result.getResult().orElseThrow();
         } catch (ParseProblemException exception) {
-            throw new FormatterException("Unable to parse Java source", exception);
+            throw new FormatterException(
+                    "Unable to parse Java source:" + System.lineSeparator() + formatProblems(exception.getProblems()),
+                    exception);
         }
+    }
+
+    private static String formatProblems(List<Problem> problems) {
+        return problems.stream()
+                .sorted(Comparator.comparing(problem -> problem.getLocation().map(Object::toString).orElse("")))
+                .map(Problem::getVerboseMessage)
+                .reduce((left, right) -> left + System.lineSeparator() + right)
+                .orElse("unknown parse error");
     }
 
     static final class CommentTracker {

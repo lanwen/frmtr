@@ -49,7 +49,7 @@ JavaParser printers are not the formatter engine. They may be useful as referenc
 
 ## Java Formatter
 
-`JavaFormatter` owns JavaParser configuration and parse-error handling. It enables token storage and comment attribution because formatter rules need syntax-adjacent trivia. JavaParser is configured for the project Java 25 toolchain so grammar feature gates, such as switch-expression `yield`, match source accepted by the build.
+`JavaFormatter` owns JavaParser configuration and parse-error handling. It enables token storage and comment attribution because formatter rules need syntax-adjacent trivia. `FormatterOptions.JavaLanguageLevel` is the public parser-level setting; `JavaFormatter` converts it to JavaParser's own language-level enum internally. The default is `LATEST_AVAILABLE`, which resolves through JavaParser's latest available stable alias at runtime, while `UNSET` deliberately selects JavaParser raw mode. Parse failures are reported with nearby source lines and a caret marker at JavaParser's reported line and column.
 
 `JavaPrinter` contains the current Java formatting rules for packages, imports, common type declarations, fields, methods, constructors, blocks, and basic statements. It keeps the v1 style deliberately opinionated and sparse on options.
 
@@ -60,8 +60,9 @@ JavaParser printers are not the formatter engine. They may be useful as referenc
 The CLI is an adapter over the public formatter API:
 
 - No paths: read Java source from stdin and write formatted source to stdout.
-- `--check`: report each checked Java file with a status marker and exit non-zero when changes are needed.
+- `--check`: report each checked Java file with a status marker and exit non-zero when changes are needed. `✓` means already formatted, `✗` means formatting would change, and `!` means parsing or reading failed.
 - `--write`: rewrite files in place.
+- `--java-level`: select the core Java parser language level; accepts enum names such as `LATEST_AVAILABLE` and `UNSET`, plus release shorthands such as `21` or `JAVA_21`.
 - `--stacktrace`: include formatter or I/O stack traces in failure output; default CLI failures stay concise.
 - Selectors may be repeated, comma-separated, files, directories, or glob patterns.
 - Directory and glob traversal formats `.java` files, skips unknown extensions silently, and respects `.gitignore`.

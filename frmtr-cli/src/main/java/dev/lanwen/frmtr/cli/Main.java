@@ -32,6 +32,13 @@ public final class Main implements Callable<Integer> {
     @Option(names = "--line-width", description = "Target line width.", defaultValue = "100")
     int lineWidth;
 
+    @Option(
+            names = "--java-level",
+            description = "Java parser language level. Use LATEST_AVAILABLE by default or UNSET for raw parser mode.",
+            defaultValue = "LATEST_AVAILABLE",
+            converter = JavaLanguageLevelConverter.class)
+    FormatterOptions.JavaLanguageLevel javaLanguageLevel;
+
     @Parameters(arity = "0..*", paramLabel = "SELECTOR", description = "Java files, directories, globs, or comma-separated selectors.")
     List<String> selectors = List.of();
 
@@ -82,7 +89,8 @@ public final class Main implements Callable<Integer> {
                 FormatterOptions.IndentStyle.SPACE,
                 FormatterOptions.DEFAULT_INDENT_WIDTH,
                 FormatterOptions.LineEnding.LF,
-                true);
+                true,
+                javaLanguageLevel);
         if (selectors.isEmpty()) {
             if (check || write) {
                 err.println("--check and --write require at least one file or directory");
@@ -113,15 +121,21 @@ public final class Main implements Callable<Integer> {
                     }
                 }
                 if (check) {
-                    out.println(statusLine(!fileChanged, file));
+                    out.println(statusLine(fileChanged ? "✗" : "✓", file));
                 }
                 if (!write && !check) {
                     printFormatted(files, i, file, formatted);
                 }
-            } catch (FormatterException | IOException exception) {
+            } catch (FormatterException exception) {
                 failed = true;
                 if (check) {
-                    out.println(statusLine(false, file));
+                    out.println(statusLine("!", file));
+                }
+                printFailure(displayPath(file).toString(), exception);
+            } catch (IOException exception) {
+                failed = true;
+                if (check) {
+                    out.println(statusLine("!", file));
                 }
                 printFailure(displayPath(file).toString(), exception);
             }
@@ -150,8 +164,8 @@ public final class Main implements Callable<Integer> {
         out.flush();
     }
 
-    private String statusLine(boolean passed, Path file) {
-        return (passed ? "✓ " : "✗ ") + displayPath(file);
+    private String statusLine(String marker, Path file) {
+        return marker + " " + displayPath(file);
     }
 
     private void printFailure(String target, Exception exception) {
@@ -164,5 +178,20 @@ public final class Main implements Callable<Integer> {
 
     private Path displayPath(Path file) {
         return workingDirectory.relativize(file.toAbsolutePath().normalize());
+    }
+
+    static final class JavaLanguageLevelConverter
+            implements CommandLine.ITypeConverter<FormatterOptions.JavaLanguageLevel> {
+        @Override
+        public FormatterOptions.JavaLanguageLevel convert(String value) {
+            String normalized = value.trim().toUpperCase().replace('-', '_');
+            if (normalized.equals("LATEST")) {
+                return FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE;
+            }
+            if (normalized.matches("\\d+")) {
+                normalized = "JAVA_" + normalized;
+            }
+            return FormatterOptions.JavaLanguageLevel.valueOf(normalized);
+        }
     }
 }

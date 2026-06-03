@@ -133,10 +133,11 @@ final class MainTest {
         Result result = run(dir, null, "--check", "src");
 
         assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.out()).isEqualTo("✗ src/Broken.java\n");
+        assertThat(result.out()).isEqualTo("! src/Broken.java\n");
         assertThat(result.err())
                 .contains("src/Broken.java: Unable to parse Java source:")
                 .contains("Parse error")
+                .contains("^")
                 .doesNotContain("Problem stacktrace")
                 .doesNotContain("JavaFormatter.parse");
     }
@@ -148,11 +149,36 @@ final class MainTest {
         Result result = run(dir, null, "--stacktrace", "--check", "src");
 
         assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.out()).isEqualTo("✗ src/Broken.java\n");
+        assertThat(result.out()).isEqualTo("! src/Broken.java\n");
         assertThat(result.err())
                 .contains("src/Broken.java: Unable to parse Java source:")
                 .contains("Problem stacktrace")
                 .contains("dev.lanwen.frmtr.java.JavaFormatter.parse");
+    }
+
+    @Test
+    void javaLevelUnsetUsesRawParserMode(@TempDir Path dir) throws IOException {
+        write(dir.resolve("src/Switch.java"), switchExpressionYieldSource());
+
+        Result result = run(dir, null, "--check", "--java-level", "unset", "src");
+
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.out()).isEqualTo("! src/Switch.java\n");
+        assertThat(result.err())
+                .contains("src/Switch.java: Unable to parse Java source:")
+                .contains("yield")
+                .contains("^");
+    }
+
+    @Test
+    void javaLevelAcceptsPlainVersionNumber(@TempDir Path dir) throws IOException {
+        write(dir.resolve("src/Switch.java"), switchExpressionYieldSource());
+
+        Result result = run(dir, null, "--check", "--java-level", "25", "src");
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.out()).isEqualTo("✗ src/Switch.java\n");
+        assertThat(result.err()).isEmpty();
     }
 
     @Test
@@ -196,6 +222,20 @@ final class MainTest {
         } catch (IOException exception) {
             throw new UncheckedIOException(exception);
         }
+    }
+
+    private static String switchExpressionYieldSource() {
+        return """
+                class Switch {
+                    Object map(Command command) {
+                        return switch (command) {
+                            case CreateCommand cmd -> {
+                                yield new Created(cmd.id());
+                            }
+                            case DeleteCommand cmd -> new Deleted(cmd.id());
+                        };
+                    }
+                }""";
     }
 
     private record Result(int exitCode, String out, String err) {}

@@ -3,6 +3,7 @@ package dev.lanwen.frmtr;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParseStart;
@@ -74,8 +75,82 @@ final class FrmtrTest {
     }
 
     @Test
-    void parsesSwitchExpressionYieldCases() {
+    void defaultsToLatestAvailableJavaLanguageLevel() {
+        assertThat(FormatterOptions.defaults().javaLanguageLevel())
+                .isEqualTo(FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+    }
+
+    @Test
+    void parseErrorsIncludeSourceContext() {
         String source = """
+                class Demo {
+                    void method() {
+                        var something =
+                    }
+                }""";
+
+        Throwable thrown = catchThrowable(() -> Frmtr.format(source));
+
+        assertThat(thrown)
+                .isInstanceOf(FormatterException.class)
+                .hasMessageContaining("2      void method() {")
+                .hasMessageContaining("3          var something =")
+                .hasMessageContaining("4      }")
+                .hasMessageContaining("----------------------^")
+                .hasMessageContaining("(line 3,col 23) Parse error");
+    }
+
+    @Test
+    void parseErrorsSeparateMultipleProblems() {
+        String source = """
+                class Demo {
+                    void first() {
+                        var one =
+                    }
+                    void second() {
+                        var two =
+                    }
+                }""";
+
+        Throwable thrown = catchThrowable(() -> Frmtr.format(source));
+
+        assertThat(thrown)
+                .isInstanceOf(FormatterException.class)
+                .hasMessageContaining(System.lineSeparator()
+                        + System.lineSeparator()
+                        + "// ..."
+                        + System.lineSeparator()
+                        + System.lineSeparator())
+                .hasMessageContaining("(line 3,col 17) Parse error")
+                .hasMessageContaining("(line 6,col 17) Parse error");
+    }
+
+    @Test
+    void parsesSwitchExpressionYieldCases() {
+        String formatted = Frmtr.format(switchExpressionYieldSource());
+
+        var parser = new JavaParser(new ParserConfiguration().setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_25));
+        assertThat(parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(formatted)).isSuccessful())
+                .isTrue();
+    }
+
+    @Test
+    void unsetJavaLanguageLevelUsesRawParserMode() {
+        FormatterOptions options = new FormatterOptions(
+                FormatterOptions.DEFAULT_LINE_WIDTH,
+                FormatterOptions.IndentStyle.SPACE,
+                FormatterOptions.DEFAULT_INDENT_WIDTH,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.UNSET);
+
+        assertThatThrownBy(() -> Frmtr.format(switchExpressionYieldSource(), options))
+                .isInstanceOf(FormatterException.class)
+                .hasMessageContaining("yield");
+    }
+
+    private static String switchExpressionYieldSource() {
+        return """
                 class Demo {
                     Object map(Command command) {
                         return switch (command) {
@@ -86,11 +161,5 @@ final class FrmtrTest {
                         };
                     }
                 }""";
-
-        String formatted = Frmtr.format(source);
-
-        var parser = new JavaParser(new ParserConfiguration().setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_25));
-        assertThat(parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(formatted)).isSuccessful())
-                .isTrue();
     }
 }

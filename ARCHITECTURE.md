@@ -103,7 +103,7 @@ The plugin is project-local. Applying it to a root project does not automaticall
 
 Default Java source selection covers all Java source sets, de-duplicates files by normalized path, and excludes files under the project's Gradle build directory. `frmtr { java { include(...) exclude(...) } }` narrows source-set selection using source-root-relative Gradle patterns. Formatter tasks do not depend on source-generation tasks by default.
 
-Java parser language level is inferred from the Java toolchain language version first, then `sourceCompatibility`, and otherwise falls back to `LATEST_AVAILABLE`. Gradle stack trace output is controlled by Gradle's native `--stacktrace`; the plugin does not define a formatter-specific stacktrace switch.
+Gradle exposes parser language level as semantic DSL choices instead of mirroring every core Java release. `AUTO` infers from the Java toolchain language version first, then `sourceCompatibility`, and otherwise falls back to `LATEST_AVAILABLE`. `LATEST_AVAILABLE` explicitly ignores the Gradle project target and uses the newest stable JavaParser level. `UNDEFINED` maps to the core `UNSET` raw parser mode. Gradle stack trace output is controlled by Gradle's native `--stacktrace`; the plugin does not define a formatter-specific stacktrace switch.
 
 ## Native Binary
 
@@ -120,7 +120,7 @@ The test suite covers:
 - `:frmtr-core`: Doc rendering behavior, formatter output, idempotence, reparse validity, comments, parse errors, and fixture corpus checks.
 - `:frmtr-tooling`: file-oriented run summaries, deterministic ordering, de-duplication, diffs, write behavior, and per-file failure handling.
 - `:frmtr-cli`: CLI selector parsing, glob/directory discovery, ignore handling, stdout/write/check behavior, option validation, and exit codes.
-- `:frmtr-gradle-plugin`: TestKit functional coverage for task registration, zero-configuration Java defaults, `check` lifecycle wiring, no-op non-Java projects, Gradle and source-set source filters, build-directory exclusion, check diff output, and Java language-level inference.
+- `:frmtr-gradle-plugin`: TestKit functional coverage for task registration, zero-configuration Java defaults, `check` lifecycle wiring, no-op non-Java projects, Gradle and source-set source filters, build-directory exclusion, check diff output, Java language-level inference, and explicit Gradle language-level overrides.
 - Golden resources under `frmtr-core/src/test/resources/format`.
 - A representative active subset of upstream `prettier-java` fixtures under `frmtr-core/src/test/resources/format/prettier-java`.
 - The full upstream `prettier-java` fixture corpus under `frmtr-core/src/test/resources/upstream/prettier-java`.

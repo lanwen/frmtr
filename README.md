@@ -44,7 +44,7 @@ frmtr {
         include("**/*.java")
         exclude("**/generated/**")
         lineWidth.set(140)
-        languageLevel.set(FrmtrJavaLanguageLevel.JAVA_21)
+        languageLevel.set(FrmtrJavaLanguageLevel.LATEST_AVAILABLE)
     }
     check {
         print {
@@ -54,7 +54,7 @@ frmtr {
 }
 ```
 
-Java source files under the Gradle build directory are excluded by default. Check output prints changed and failed files; unified diffs for changed files are enabled by default.
+Java source files under the Gradle build directory are excluded by default. The Gradle parser language level defaults to `AUTO`, which uses the Java toolchain first, then `sourceCompatibility`, and otherwise falls back to `LATEST_AVAILABLE`. Set `LATEST_AVAILABLE` to ignore the Gradle project target, or `UNDEFINED` for JavaParser raw mode. Check output prints changed and failed files; unified diffs for changed files are enabled by default.
 
 ## CLI
 

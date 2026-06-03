@@ -19,7 +19,7 @@ public abstract class FrmtrJavaExtension {
         this.includes = objects.listProperty(String.class).convention(List.of());
         this.excludes = objects.listProperty(String.class).convention(List.of());
         this.lineWidth = objects.property(Integer.class).convention(FormatterOptions.DEFAULT_LINE_WIDTH);
-        this.languageLevel = objects.property(FrmtrJavaLanguageLevel.class);
+        this.languageLevel = objects.property(FrmtrJavaLanguageLevel.class).convention(FrmtrJavaLanguageLevel.AUTO);
     }
 
     public ListProperty<String> getIncludes() {

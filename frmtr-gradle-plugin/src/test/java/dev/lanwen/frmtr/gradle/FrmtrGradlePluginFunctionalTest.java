@@ -231,6 +231,35 @@ final class FrmtrGradlePluginFunctionalTest {
                 .contains("^");
     }
 
+    @Test
+    void explicitLatestAvailableLanguageLevelOverridesSourceCompatibility() {
+        writeSettings();
+        writeBuildFile("""
+                import dev.lanwen.frmtr.gradle.FrmtrJavaLanguageLevel
+
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+
+                java {
+                    sourceCompatibility = JavaVersion.VERSION_1_8
+                }
+
+                frmtr {
+                    java {
+                        languageLevel.set(FrmtrJavaLanguageLevel.LATEST_AVAILABLE)
+                    }
+                }
+                """);
+        write("src/main/java/demo/SwitchDemo.java", switchExpressionYieldSource());
+
+        BuildResult result = gradle("frmtrFormat").build();
+
+        assertThat(result.task(":frmtrJavaFormat").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+        assertThat(read("src/main/java/demo/SwitchDemo.java")).contains("yield new Created(cmd.id());");
+    }
+
     private GradleRunner gradle(String... arguments) {
         return GradleRunner.create()
                 .withProjectDir(projectDir.toFile())

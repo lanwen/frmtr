@@ -44,8 +44,7 @@ public final class FrmtrGradlePlugin implements Plugin<Project> {
         Provider<List<File>> sourceFiles = project.provider(() -> sourceFiles(project, java, extension));
         Provider<FormatterOptions.JavaLanguageLevel> languageLevel = extension.getJava()
                 .getLanguageLevel()
-                .map(FrmtrJavaLanguageLevel::toFormatterOptions)
-                .orElse(project.provider(() -> inferJavaLanguageLevel(java)));
+                .map(configured -> resolveJavaLanguageLevel(configured, java));
 
         TaskProvider<FrmtrJavaFormatTask> javaFormat =
                 project.getTasks().register("frmtrJavaFormat", FrmtrJavaFormatTask.class, task -> {
@@ -106,6 +105,15 @@ public final class FrmtrGradlePlugin implements Plugin<Project> {
         return absolute.toString();
     }
 
+    private static FormatterOptions.JavaLanguageLevel resolveJavaLanguageLevel(
+            FrmtrJavaLanguageLevel configured, JavaPluginExtension java) {
+        return switch (configured) {
+            case AUTO -> inferJavaLanguageLevel(java);
+            case LATEST_AVAILABLE -> FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE;
+            case UNDEFINED -> FormatterOptions.JavaLanguageLevel.UNSET;
+        };
+    }
+
     private static FormatterOptions.JavaLanguageLevel inferJavaLanguageLevel(JavaPluginExtension java) {
         if (java.getToolchain().getLanguageVersion().isPresent()) {
             return fromMajor(java.getToolchain().getLanguageVersion().get().asInt());
@@ -118,26 +126,10 @@ public final class FrmtrGradlePlugin implements Plugin<Project> {
     }
 
     private static FormatterOptions.JavaLanguageLevel fromMajor(int major) {
-        return switch (major) {
-            case 8 -> FormatterOptions.JavaLanguageLevel.JAVA_8;
-            case 9 -> FormatterOptions.JavaLanguageLevel.JAVA_9;
-            case 10 -> FormatterOptions.JavaLanguageLevel.JAVA_10;
-            case 11 -> FormatterOptions.JavaLanguageLevel.JAVA_11;
-            case 12 -> FormatterOptions.JavaLanguageLevel.JAVA_12;
-            case 13 -> FormatterOptions.JavaLanguageLevel.JAVA_13;
-            case 14 -> FormatterOptions.JavaLanguageLevel.JAVA_14;
-            case 15 -> FormatterOptions.JavaLanguageLevel.JAVA_15;
-            case 16 -> FormatterOptions.JavaLanguageLevel.JAVA_16;
-            case 17 -> FormatterOptions.JavaLanguageLevel.JAVA_17;
-            case 18 -> FormatterOptions.JavaLanguageLevel.JAVA_18;
-            case 19 -> FormatterOptions.JavaLanguageLevel.JAVA_19;
-            case 20 -> FormatterOptions.JavaLanguageLevel.JAVA_20;
-            case 21 -> FormatterOptions.JavaLanguageLevel.JAVA_21;
-            case 22 -> FormatterOptions.JavaLanguageLevel.JAVA_22;
-            case 23 -> FormatterOptions.JavaLanguageLevel.JAVA_23;
-            case 24 -> FormatterOptions.JavaLanguageLevel.JAVA_24;
-            case 25 -> FormatterOptions.JavaLanguageLevel.JAVA_25;
-            default -> FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE;
-        };
+        try {
+            return FormatterOptions.JavaLanguageLevel.valueOf("JAVA_" + major);
+        } catch (IllegalArgumentException exception) {
+            return FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE;
+        }
     }
 }

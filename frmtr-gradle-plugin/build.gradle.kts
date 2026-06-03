@@ -5,6 +5,7 @@ plugins {
 
 dependencies {
     implementation(project(":frmtr-core"))
+    implementation(project(":frmtr-tooling"))
     testImplementation(gradleTestKit())
 }
 

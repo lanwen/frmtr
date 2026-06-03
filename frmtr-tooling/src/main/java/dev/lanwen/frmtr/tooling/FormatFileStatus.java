@@ -1,4 +1,4 @@
-package dev.lanwen.frmtr.check;
+package dev.lanwen.frmtr.tooling;
 
 public enum FormatFileStatus {
     /**

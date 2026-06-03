@@ -125,6 +125,40 @@ final class FrmtrGradlePluginFunctionalTest {
     }
 
     @Test
+    void honorsJavaSourceSetExcludes() {
+        writeSettings();
+        writeBuildFile("""
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+
+                sourceSets {
+                    main {
+                        java {
+                            exclude("**/ExcludedBySourceSet.java")
+                        }
+                    }
+                }
+                """);
+        write("src/main/java/demo/IncludedBySourceSet.java", "package demo; class IncludedBySourceSet{int value;}");
+        write("src/main/java/demo/ExcludedBySourceSet.java", "package demo; class ExcludedBySourceSet{int value;}");
+
+        BuildResult result = gradle("frmtrFormat").build();
+
+        assertThat(result.task(":frmtrJavaFormat").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+        assertThat(read("src/main/java/demo/IncludedBySourceSet.java")).isEqualTo("""
+                package demo;
+
+                class IncludedBySourceSet {
+                    int value;
+                }
+                """);
+        assertThat(read("src/main/java/demo/ExcludedBySourceSet.java"))
+                .isEqualTo("package demo; class ExcludedBySourceSet{int value;}");
+    }
+
+    @Test
     void excludesBuildDirectorySourcesByDefault() {
         writeSettings();
         writeBuildFile("""

@@ -1,4 +1,4 @@
-package dev.lanwen.frmtr.check;
+package dev.lanwen.frmtr.tooling;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -24,15 +24,19 @@ final class FormatterRunnerTest {
                 """);
         Path changed = write(dir.resolve("src/Changed.java"), "class Changed{int value;}");
 
-        List<FormatFileResult> results = FormatterRunner.check(
+        FormatRunResult run = FormatterRunner.check(
                 dir,
                 List.of(unchanged, changed, changed),
                 FormatterOptions.defaults(),
                 true);
+        List<FormatFileResult> results = run.results();
 
         assertThat(results)
                 .extracting(FormatFileResult::displayPath)
                 .containsExactly(Path.of("src/Changed.java"), Path.of("src/Unchanged.java"));
+        assertThat(run.hasChanges()).isTrue();
+        assertThat(run.hasFailures()).isFalse();
+        assertThat(run.changedCount()).isEqualTo(1);
         assertThat(results.getFirst().status()).isEqualTo(FormatFileStatus.CHANGED);
         assertThat(results.getFirst().unifiedDiff())
                 .hasValueSatisfying(diff -> assertThat(diff)
@@ -47,11 +51,17 @@ final class FormatterRunnerTest {
         Path changed = write(dir.resolve("src/Changed.java"), "class Changed{int value;}");
         Path broken = write(dir.resolve("src/Broken.java"), "class {");
 
-        List<FormatFileResult> results = FormatterRunner.write(dir, List.of(changed, broken), FormatterOptions.defaults());
+        FormatRunResult run = FormatterRunner.write(dir, List.of(changed, broken), FormatterOptions.defaults());
+        List<FormatFileResult> results = run.results();
 
         assertThat(results)
                 .extracting(FormatFileResult::status)
                 .containsExactly(FormatFileStatus.FAILED, FormatFileStatus.WRITTEN);
+        assertThat(run.hasChanges()).isTrue();
+        assertThat(run.hasFailures()).isTrue();
+        assertThat(run.changedCount()).isEqualTo(1);
+        assertThat(run.failureCount()).isEqualTo(1);
+        assertThat(run.firstFailure()).isPresent();
         assertThat(Files.readString(changed, StandardCharsets.UTF_8)).isEqualTo("""
                 class Changed {
                     int value;
@@ -65,14 +75,16 @@ final class FormatterRunnerTest {
         assertThat(readOnly.toFile().setWritable(false)).isTrue();
 
         try {
-            List<FormatFileResult> results = FormatterRunner.write(dir, List.of(readOnly), FormatterOptions.defaults());
+            FormatRunResult run = FormatterRunner.write(dir, List.of(readOnly), FormatterOptions.defaults());
 
-            assertThat(results).singleElement().satisfies(result -> {
+            assertThat(run.results()).singleElement().satisfies(result -> {
                 assertThat(result.status()).isEqualTo(FormatFileStatus.WRITTEN_PARTIALLY);
                 assertThat(result.changed()).isTrue();
                 assertThat(result.failed()).isTrue();
                 assertThat(result.failureException()).isPresent();
             });
+            assertThat(run.changedCount()).isEqualTo(1);
+            assertThat(run.failureCount()).isEqualTo(1);
         } finally {
             readOnly.toFile().setWritable(true);
         }

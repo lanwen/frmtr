@@ -3,9 +3,10 @@ package dev.lanwen.frmtr.cli;
 import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.Frmtr;
-import dev.lanwen.frmtr.check.FormatFileResult;
-import dev.lanwen.frmtr.check.FormatFileStatus;
-import dev.lanwen.frmtr.check.FormatterRunner;
+import dev.lanwen.frmtr.tooling.FormatFileResult;
+import dev.lanwen.frmtr.tooling.FormatFileStatus;
+import dev.lanwen.frmtr.tooling.FormatRunResult;
+import dev.lanwen.frmtr.tooling.FormatterRunner;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
@@ -126,8 +127,8 @@ public final class Main implements Callable<Integer> {
     }
 
     private int checkFiles(List<Path> files, FormatterOptions options) {
-        List<FormatFileResult> results = FormatterRunner.check(workingDirectory, files, options, diff);
-        for (FormatFileResult result : results) {
+        FormatRunResult run = FormatterRunner.check(workingDirectory, files, options, diff);
+        for (FormatFileResult result : run.results()) {
             out.println(statusLine(statusMarker(result.status()), result.displayPath()));
             result.unifiedDiff().ifPresent(out::print);
             if (result.failed()) {
@@ -135,19 +136,18 @@ public final class Main implements Callable<Integer> {
             }
         }
         out.flush();
-        if (results.stream().anyMatch(FormatFileResult::failed)) {
+        if (run.hasFailures()) {
             return 2;
         }
-        return results.stream().anyMatch(FormatFileResult::changed) ? 1 : 0;
+        return run.hasChanges() ? 1 : 0;
     }
 
     private int writeFiles(List<Path> files, FormatterOptions options) {
-        List<FormatFileResult> results = FormatterRunner.write(workingDirectory, files, options);
-        results.stream()
-                .filter(FormatFileResult::failed)
+        FormatRunResult run = FormatterRunner.write(workingDirectory, files, options);
+        run.failedResults().stream()
                 .forEach(result -> result.failureException()
                         .ifPresent(exception -> printFailure(result.displayPath().toString(), exception)));
-        return results.stream().anyMatch(FormatFileResult::failed) ? 2 : 0;
+        return run.hasFailures() ? 2 : 0;
     }
 
     private int printFiles(List<Path> files, FormatterOptions options) {

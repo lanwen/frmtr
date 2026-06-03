@@ -1,8 +1,8 @@
 package dev.lanwen.frmtr.gradle;
 
-import dev.lanwen.frmtr.check.FormatFileResult;
-import dev.lanwen.frmtr.check.FormatterRunner;
-import java.util.List;
+import dev.lanwen.frmtr.tooling.FormatFileResult;
+import dev.lanwen.frmtr.tooling.FormatRunResult;
+import dev.lanwen.frmtr.tooling.FormatterRunner;
 import javax.inject.Inject;
 import org.gradle.api.GradleException;
 import org.gradle.api.model.ObjectFactory;
@@ -26,38 +26,23 @@ public abstract class FrmtrJavaCheckTask extends AbstractFrmtrJavaTask {
 
     @TaskAction
     public void checkFormatting() {
-        List<FormatFileResult> results =
-                FormatterRunner.check(displayRoot(), selectedFiles(), formatterOptions(), printDiffs.get());
-        results.stream().filter(FormatFileResult::changed).forEach(this::printChanged);
-        results.stream().filter(FormatFileResult::failed).forEach(this::printFailed);
+        FormatRunResult run = FormatterRunner.check(displayRoot(), selectedFiles(), formatterOptions(), printDiffs.get());
+        run.changedResults().forEach(this::printChanged);
+        run.failedResults().forEach(this::printFailed);
 
-        long failures = results.stream().filter(FormatFileResult::failed).count();
-        if (failures > 0) {
-            throw new GradleException("frmtr failed to check " + failures + " Java file(s).", firstFailure(results));
+        if (run.hasFailures()) {
+            throw formatterFailure("check", run);
         }
 
-        long changed = results.stream().filter(FormatFileResult::changed).count();
-        if (changed > 0) {
+        if (run.hasChanges()) {
             throw new GradleException(
-                    "frmtr found " + changed + " unformatted Java file(s). Run ./gradlew frmtrFormat.");
+                    "frmtr found %d unformatted Java file(s). Run ./gradlew frmtrFormat."
+                            .formatted(run.changedCount()));
         }
     }
 
     private void printChanged(FormatFileResult result) {
         getLogger().lifecycle("✗ {}", result.displayPath());
         result.unifiedDiff().ifPresent(diff -> getLogger().lifecycle(diff.stripTrailing()));
-    }
-
-    private void printFailed(FormatFileResult result) {
-        getLogger().lifecycle("! {}", result.displayPath());
-        result.failureException()
-                .ifPresent(exception -> getLogger().lifecycle("{}: {}", result.displayPath(), exception.getMessage()));
-    }
-
-    private Exception firstFailure(List<FormatFileResult> results) {
-        return results.stream()
-                .flatMap(result -> result.failureException().stream())
-                .findFirst()
-                .orElse(null);
     }
 }

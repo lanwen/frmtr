@@ -2,17 +2,21 @@ package dev.lanwen.frmtr.gradle;
 
 import dev.lanwen.frmtr.FormatterOptions;
 import java.io.File;
-import java.util.ArrayList;
+import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.JavaVersion;
+import org.gradle.api.Task;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.plugins.JavaPluginExtension;
+import org.gradle.api.file.FileTree;
 import org.gradle.api.provider.Provider;
 import org.gradle.api.tasks.SourceSet;
 import org.gradle.api.tasks.TaskProvider;
-import org.gradle.api.Task;
 import org.gradle.language.base.plugins.LifecycleBasePlugin;
 
 public final class FrmtrGradlePlugin implements Plugin<Project> {
@@ -37,7 +41,7 @@ public final class FrmtrGradlePlugin implements Plugin<Project> {
     private static void configureJava(
             Project project, FrmtrExtension extension, TaskProvider<Task> format, TaskProvider<Task> check) {
         JavaPluginExtension java = project.getExtensions().getByType(JavaPluginExtension.class);
-        Provider<List<File>> sourceDirectories = project.provider(() -> sourceDirectories(java));
+        Provider<List<File>> sourceFiles = project.provider(() -> sourceFiles(project, java, extension));
         Provider<FormatterOptions.JavaLanguageLevel> languageLevel = extension.getJava()
                 .getLanguageLevel()
                 .map(FrmtrJavaLanguageLevel::toFormatterOptions)
@@ -47,39 +51,59 @@ public final class FrmtrGradlePlugin implements Plugin<Project> {
                 project.getTasks().register("frmtrJavaFormat", FrmtrJavaFormatTask.class, task -> {
                     task.setGroup("formatting");
                     task.setDescription("Formats Java source files with frmtr.");
-                    task.getSourceDirectories().from(sourceDirectories);
+                    task.getSourceFiles().from(sourceFiles);
                     task.getIncludes().set(extension.getJava().getIncludes());
                     task.getExcludes().set(extension.getJava().getExcludes());
                     task.getLineWidth().set(extension.getJava().getLineWidth());
                     task.getJavaLanguageLevel().set(languageLevel);
                     task.getProjectDirectory().set(project.getLayout().getProjectDirectory());
-                    task.getBuildDirectory().set(project.getLayout().getBuildDirectory());
                 });
 
         TaskProvider<FrmtrJavaCheckTask> javaCheck =
                 project.getTasks().register("frmtrJavaCheck", FrmtrJavaCheckTask.class, task -> {
                     task.setGroup(LifecycleBasePlugin.VERIFICATION_GROUP);
                     task.setDescription("Checks Java source files are formatted with frmtr.");
-                    task.getSourceDirectories().from(sourceDirectories);
+                    task.getSourceFiles().from(sourceFiles);
                     task.getIncludes().set(extension.getJava().getIncludes());
                     task.getExcludes().set(extension.getJava().getExcludes());
                     task.getLineWidth().set(extension.getJava().getLineWidth());
                     task.getJavaLanguageLevel().set(languageLevel);
                     task.getPrintDiffs().set(extension.getCheck().getPrint().getDiffs());
                     task.getProjectDirectory().set(project.getLayout().getProjectDirectory());
-                    task.getBuildDirectory().set(project.getLayout().getBuildDirectory());
                 });
 
         format.configure(task -> task.dependsOn(javaFormat));
         check.configure(task -> task.dependsOn(javaCheck));
     }
 
-    private static List<File> sourceDirectories(JavaPluginExtension java) {
-        List<File> directories = new ArrayList<>();
+    private static List<File> sourceFiles(Project project, JavaPluginExtension java, FrmtrExtension extension) {
+        Path projectRoot = project.getLayout().getProjectDirectory().getAsFile().toPath().toAbsolutePath().normalize();
+        Path buildRoot = project.getLayout().getBuildDirectory().get().getAsFile().toPath().toAbsolutePath().normalize();
+        Set<File> files = new TreeSet<>(Comparator.comparing(file -> displayPath(projectRoot, file)));
+        List<String> includes = extension.getJava().getIncludes().get();
+        List<String> excludes = extension.getJava().getExcludes().get();
         for (SourceSet sourceSet : java.getSourceSets()) {
-            directories.addAll(sourceSet.getAllJava().getSrcDirs());
+            FileTree tree = sourceSet.getAllJava().matching(spec -> {
+                if (!includes.isEmpty()) {
+                    spec.include(includes);
+                }
+                spec.exclude(excludes);
+            });
+            tree.getFiles().stream()
+                    .filter(File::isFile)
+                    .filter(file -> !file.toPath().toAbsolutePath().normalize().startsWith(buildRoot))
+                    .sorted(Comparator.comparing(file -> displayPath(projectRoot, file)))
+                    .forEach(files::add);
         }
-        return directories;
+        return List.copyOf(files);
+    }
+
+    private static String displayPath(Path projectRoot, File file) {
+        Path absolute = file.toPath().toAbsolutePath().normalize();
+        if (absolute.startsWith(projectRoot)) {
+            return projectRoot.relativize(absolute).toString();
+        }
+        return absolute.toString();
     }
 
     private static FormatterOptions.JavaLanguageLevel inferJavaLanguageLevel(JavaPluginExtension java) {

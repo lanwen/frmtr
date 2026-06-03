@@ -10,17 +10,18 @@ The project is a Gradle multi-module build:
 - Java toolchain: Java 25
 - Root project: aggregator only; it does not produce the formatter library or CLI artifact.
 - `:frmtr-core`: formatter library and engine.
-- `:frmtr-cli`: Picocli application and native executable entrypoint that depends on `:frmtr-core`.
-- `:frmtr-gradle-plugin`: Gradle plugin with project-local formatting tasks that depends on `:frmtr-core`.
+- `:frmtr-tooling`: reusable file-oriented runner, result summaries, and diff rendering for adapters.
+- `:frmtr-cli`: Picocli application and native executable entrypoint that depends on `:frmtr-core` and `:frmtr-tooling`.
+- `:frmtr-gradle-plugin`: Gradle plugin with project-local formatting tasks that depends on `:frmtr-core` and `:frmtr-tooling`.
 
 Shared subproject conventions configure Java 25, UTF-8 compilation, `-Xlint:all`, JUnit Platform, and JaCoCo. External dependency versions and the GraalVM Native Build Tools plugin are managed through the Gradle version catalog in `gradle/libs.versions.toml`.
 
 ## Package Layout
 
 - `frmtr-core/src/main/java/dev/lanwen/frmtr`: public API and configuration.
-- `frmtr-core/src/main/java/dev/lanwen/frmtr/check`: reusable file-oriented check/write results and unified diff rendering shared by build-tool adapters.
 - `frmtr-core/src/main/java/dev/lanwen/frmtr/doc`: formatter document IR and renderer.
 - `frmtr-core/src/main/java/dev/lanwen/frmtr/java`: JavaParser-backed parser, syntax view, comment handling, and Java-specific printer.
+- `frmtr-tooling/src/main/java/dev/lanwen/frmtr/tooling`: reusable file-oriented check/write runner, run summaries, per-file results, and unified diff rendering shared by adapters.
 - `frmtr-cli/src/main/java/dev/lanwen/frmtr/cli`: Picocli command-line adapter, selector discovery, ignore handling, and output modes.
 - `frmtr-gradle-plugin/src/main/java/dev/lanwen/frmtr/gradle`: Gradle extension, Java source-set integration, and formatter tasks.
 
@@ -52,13 +53,13 @@ JavaParser printers are not the formatter engine. They may be useful as referenc
 
 ## File-Oriented Runs
 
-`dev.lanwen.frmtr.check` provides reusable file-oriented support for adapters that need to check or write many source files:
+`:frmtr-tooling` provides reusable file-oriented support for adapters that need to check or write many source files:
 
-- `FormatterRunner.check(...)` formats selected files in memory and returns `FormatFileResult` values for unchanged, changed, and failed files.
-- `FormatterRunner.write(...)` writes changed formatter output back to disk, continues after per-file failures, distinguishes write-step failures as partially written results, and reports the full result set.
+- `FormatterRunner.check(...)` formats selected files in memory and returns a `FormatRunResult` with per-file results and aggregate status helpers.
+- `FormatterRunner.write(...)` writes changed formatter output back to disk, continues after per-file failures, distinguishes write-step failures as partially written results, and reports the full run summary.
 - `UnifiedDiffRenderer` renders the same unified diff format for CLI and Gradle check output.
 
-The runner owns deterministic path ordering and de-duplication for file lists supplied by adapters. Source discovery remains adapter-specific: the CLI uses selectors and `.gitignore`; the Gradle plugin uses Java source sets and Gradle-style source filters.
+The runner owns deterministic path ordering and de-duplication for file lists supplied by adapters. Source discovery remains adapter-specific: the CLI uses selectors and `.gitignore`; the Gradle plugin builds one canonical file collection from Java source sets and Gradle-style source filters, then uses that same collection for task inputs and task actions.
 
 ## Java Formatter
 
@@ -117,8 +118,9 @@ Local host-native builds use SDKMAN-managed GraalVM from `.sdkmanrc`, then `./gr
 The test suite covers:
 
 - `:frmtr-core`: Doc rendering behavior, formatter output, idempotence, reparse validity, comments, parse errors, and fixture corpus checks.
+- `:frmtr-tooling`: file-oriented run summaries, deterministic ordering, de-duplication, diffs, write behavior, and per-file failure handling.
 - `:frmtr-cli`: CLI selector parsing, glob/directory discovery, ignore handling, stdout/write/check behavior, option validation, and exit codes.
-- `:frmtr-gradle-plugin`: TestKit functional coverage for task registration, zero-configuration Java defaults, `check` lifecycle wiring, no-op non-Java projects, Gradle source filters, build-directory exclusion, check diff output, and Java language-level inference.
+- `:frmtr-gradle-plugin`: TestKit functional coverage for task registration, zero-configuration Java defaults, `check` lifecycle wiring, no-op non-Java projects, Gradle and source-set source filters, build-directory exclusion, check diff output, and Java language-level inference.
 - Golden resources under `frmtr-core/src/test/resources/format`.
 - A representative active subset of upstream `prettier-java` fixtures under `frmtr-core/src/test/resources/format/prettier-java`.
 - The full upstream `prettier-java` fixture corpus under `frmtr-core/src/test/resources/upstream/prettier-java`.

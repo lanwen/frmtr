@@ -1,4 +1,4 @@
-package dev.lanwen.frmtr.check;
+package dev.lanwen.frmtr.tooling;
 
 import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
@@ -15,17 +15,17 @@ import java.util.Set;
 public final class FormatterRunner {
     private FormatterRunner() {}
 
-    public static List<FormatFileResult> check(
+    public static FormatRunResult check(
             Path displayRoot, List<Path> files, FormatterOptions options, boolean includeDiffs) {
-        return selectedFiles(displayRoot, files).stream()
+        return new FormatRunResult(selectedFiles(displayRoot, files).stream()
                 .map(file -> checkFile(displayRoot, file, options, includeDiffs))
-                .toList();
+                .toList());
     }
 
-    public static List<FormatFileResult> write(Path displayRoot, List<Path> files, FormatterOptions options) {
-        return selectedFiles(displayRoot, files).stream()
+    public static FormatRunResult write(Path displayRoot, List<Path> files, FormatterOptions options) {
+        return new FormatRunResult(selectedFiles(displayRoot, files).stream()
                 .map(file -> writeFile(displayRoot, file, options))
-                .toList();
+                .toList());
     }
 
     private static FormatFileResult checkFile(

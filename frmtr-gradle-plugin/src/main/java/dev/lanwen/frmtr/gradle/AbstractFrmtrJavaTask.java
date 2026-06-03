@@ -1,19 +1,16 @@
 package dev.lanwen.frmtr.gradle;
 
 import dev.lanwen.frmtr.FormatterOptions;
-import java.io.File;
+import dev.lanwen.frmtr.tooling.FormatFileResult;
+import dev.lanwen.frmtr.tooling.FormatRunResult;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import javax.inject.Inject;
 import org.gradle.api.DefaultTask;
+import org.gradle.api.GradleException;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.DirectoryProperty;
-import org.gradle.api.file.FileCollection;
-import org.gradle.api.file.FileTree;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Property;
@@ -25,29 +22,29 @@ import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.SkipWhenEmpty;
 
 public abstract class AbstractFrmtrJavaTask extends DefaultTask {
-    private final ConfigurableFileCollection sourceDirectories;
+    private final ConfigurableFileCollection sourceFiles;
     private final ListProperty<String> includes;
     private final ListProperty<String> excludes;
     private final Property<Integer> lineWidth;
     private final Property<FormatterOptions.JavaLanguageLevel> javaLanguageLevel;
     private final DirectoryProperty projectDirectory;
-    private final DirectoryProperty buildDirectory;
 
     @Inject
     public AbstractFrmtrJavaTask(ObjectFactory objects) {
-        this.sourceDirectories = objects.fileCollection();
+        this.sourceFiles = objects.fileCollection();
         this.includes = objects.listProperty(String.class).convention(List.of());
         this.excludes = objects.listProperty(String.class).convention(List.of());
         this.lineWidth = objects.property(Integer.class).convention(FormatterOptions.DEFAULT_LINE_WIDTH);
         this.javaLanguageLevel = objects.property(FormatterOptions.JavaLanguageLevel.class)
                 .convention(FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
         this.projectDirectory = objects.directoryProperty();
-        this.buildDirectory = objects.directoryProperty();
     }
 
-    @Internal
-    public ConfigurableFileCollection getSourceDirectories() {
-        return sourceDirectories;
+    @SkipWhenEmpty
+    @InputFiles
+    @PathSensitive(PathSensitivity.RELATIVE)
+    public ConfigurableFileCollection getSourceFiles() {
+        return sourceFiles;
     }
 
     @Input
@@ -75,18 +72,6 @@ public abstract class AbstractFrmtrJavaTask extends DefaultTask {
         return projectDirectory;
     }
 
-    @Internal
-    public DirectoryProperty getBuildDirectory() {
-        return buildDirectory;
-    }
-
-    @SkipWhenEmpty
-    @InputFiles
-    @PathSensitive(PathSensitivity.RELATIVE)
-    public FileCollection getSourceFiles() {
-        return getProject().files(selectedFiles());
-    }
-
     protected FormatterOptions formatterOptions() {
         return new FormatterOptions(
                 lineWidth.get(),
@@ -102,26 +87,30 @@ public abstract class AbstractFrmtrJavaTask extends DefaultTask {
     }
 
     protected List<Path> selectedFiles() {
-        Path buildRoot = buildDirectory.get().getAsFile().toPath().toAbsolutePath().normalize();
-        Set<Path> files = new LinkedHashSet<>();
-        for (File sourceDirectory : sourceDirectories.getFiles()) {
-            if (!sourceDirectory.isDirectory()) {
-                continue;
-            }
-            FileTree tree = getProject().fileTree(sourceDirectory, spec -> {
-                List<String> configuredIncludes = includes.get();
-                spec.include(configuredIncludes.isEmpty() ? List.of("**/*.java") : configuredIncludes);
-                spec.exclude(excludes.get());
-            });
-            tree.getFiles().stream()
-                    .filter(File::isFile)
-                    .map(file -> file.toPath().toAbsolutePath().normalize())
-                    .filter(path -> !path.startsWith(buildRoot))
-                    .forEach(files::add);
-        }
-        List<Path> sorted = new ArrayList<>(files);
         Path root = displayRoot().toAbsolutePath().normalize();
-        sorted.sort(Comparator.comparing(path -> root.relativize(path).toString()));
-        return sorted;
+        return sourceFiles.getFiles().stream()
+                .map(file -> file.toPath().toAbsolutePath().normalize())
+                .distinct()
+                .sorted(Comparator.comparing(path -> displayPath(root, path).toString()))
+                .toList();
+    }
+
+    protected void printFailed(FormatFileResult result) {
+        getLogger().lifecycle("! {}", result.displayPath());
+        result.failureException()
+                .ifPresent(exception -> getLogger().lifecycle("{}: {}", result.displayPath(), exception.getMessage()));
+    }
+
+    protected GradleException formatterFailure(String action, FormatRunResult run) {
+        return new GradleException(
+                "frmtr failed to %s %d Java file(s).".formatted(action, run.failureCount()),
+                run.firstFailure().orElse(null));
+    }
+
+    private Path displayPath(Path root, Path path) {
+        if (path.startsWith(root)) {
+            return root.relativize(path);
+        }
+        return path;
     }
 }

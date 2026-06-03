@@ -10,6 +10,7 @@ application {
 
 dependencies {
     implementation(project(":frmtr-core"))
+    implementation(project(":frmtr-tooling"))
     implementation(libs.jgit)
     implementation(libs.picocli)
     runtimeOnly(libs.slf4j.nop)

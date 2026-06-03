@@ -25,7 +25,7 @@ Format selectors in place:
 
 Selectors can be repeated, comma-separated, files, directories, or glob patterns. The CLI formats `.java` files, skips unknown extensions silently, and respects `.gitignore`.
 
-`--check` prints `✓` for files that are already formatted, `✗` for files that need formatting, and `!` for files that failed to parse or could not be read. Failure output is concise by default; add `--stacktrace` when debugging formatter or I/O failures.
+`--check` prints `✓` for files that are already formatted, `✗` for files that need formatting, and `!` for files that failed to parse or could not be read. Add `--diff` to render unified diffs for files marked `✗`. Failure output is concise by default; add `--stacktrace` when debugging formatter or I/O failures.
 
 Use `--java-level` to choose the parser language level. The default is `LATEST_AVAILABLE`, which uses the newest stable level exposed by the bundled JavaParser dependency. Use `UNSET` for JavaParser raw mode, or a release value such as `17`, `JAVA_21`, or `JAVA_25`.
 

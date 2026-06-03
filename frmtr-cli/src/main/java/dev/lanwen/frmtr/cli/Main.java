@@ -3,6 +3,7 @@ package dev.lanwen.frmtr.cli;
 import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.Frmtr;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
@@ -10,6 +11,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.Callable;
+import org.eclipse.jgit.diff.DiffAlgorithm;
+import org.eclipse.jgit.diff.DiffAlgorithm.SupportedAlgorithm;
+import org.eclipse.jgit.diff.DiffFormatter;
+import org.eclipse.jgit.diff.EditList;
+import org.eclipse.jgit.diff.RawText;
+import org.eclipse.jgit.diff.RawTextComparator;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -22,6 +29,9 @@ import picocli.CommandLine.Parameters;
 public final class Main implements Callable<Integer> {
     @Option(names = "--check", description = "Check whether files are already formatted.")
     boolean check;
+
+    @Option(names = "--diff", description = "With --check, print unified diffs for files that need formatting.")
+    boolean diff;
 
     @Option(names = "--write", description = "Rewrite files in place.")
     boolean write;
@@ -80,6 +90,10 @@ public final class Main implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
+        if (diff && !check) {
+            err.println("--diff requires --check");
+            return 2;
+        }
         if (check && write) {
             err.println("--check and --write cannot be used together");
             return 2;
@@ -93,7 +107,7 @@ public final class Main implements Callable<Integer> {
                 javaLanguageLevel);
         if (selectors.isEmpty()) {
             if (check || write) {
-                err.println("--check and --write require at least one file or directory");
+                err.println("file-oriented options require at least one file or directory");
                 return 2;
             }
             try {
@@ -122,6 +136,10 @@ public final class Main implements Callable<Integer> {
                 }
                 if (check) {
                     out.println(statusLine(fileChanged ? "✗" : "✓", file));
+                    if (diff && fileChanged) {
+                        out.print(renderDiff(file, original, formatted));
+                        out.flush();
+                    }
                 }
                 if (!write && !check) {
                     printFormatted(files, i, file, formatted);
@@ -166,6 +184,26 @@ public final class Main implements Callable<Integer> {
 
     private String statusLine(String marker, Path file) {
         return marker + " " + displayPath(file);
+    }
+
+    private String renderDiff(Path file, String original, String formatted) throws IOException {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        String path = displayPath(file).toString().replace('\\', '/');
+        output.write(("diff --git a/" + path + " b/" + path + "\n").getBytes(StandardCharsets.UTF_8));
+        output.write(("--- a/" + path + "\n").getBytes(StandardCharsets.UTF_8));
+        output.write(("+++ b/" + path + "\n").getBytes(StandardCharsets.UTF_8));
+
+        RawText oldText = new RawText(original.getBytes(StandardCharsets.UTF_8));
+        RawText newText = new RawText(formatted.getBytes(StandardCharsets.UTF_8));
+        EditList edits = DiffAlgorithm.getAlgorithm(SupportedAlgorithm.HISTOGRAM)
+                .diff(RawTextComparator.DEFAULT, oldText, newText);
+        try (DiffFormatter formatter = new DiffFormatter(output)) {
+            formatter.setContext(3);
+            formatter.setDiffComparator(RawTextComparator.DEFAULT);
+            formatter.format(edits, oldText, newText);
+            formatter.flush();
+        }
+        return output.toString(StandardCharsets.UTF_8);
     }
 
     private void printFailure(String target, Exception exception) {

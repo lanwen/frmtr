@@ -61,6 +61,7 @@ The CLI is an adapter over the public formatter API:
 
 - No paths: read Java source from stdin and write formatted source to stdout.
 - `--check`: report each checked Java file with a status marker and exit non-zero when changes are needed. `✓` means already formatted, `✗` means formatting would change, and `!` means parsing or reading failed.
+- `--diff`: when combined with `--check`, print unified diffs for files marked `✗`; passed files and parse/read failures do not produce diff blocks.
 - `--write`: rewrite files in place.
 - `--java-level`: select the core Java parser language level; accepts enum names such as `LATEST_AVAILABLE` and `UNSET`, plus release shorthands such as `21` or `JAVA_21`.
 - `--stacktrace`: include formatter or I/O stack traces in failure output; default CLI failures stay concise.

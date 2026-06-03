@@ -46,6 +46,32 @@ final class MainTest {
     }
 
     @Test
+    void rejectsDiffWithoutCheck() {
+        StringWriter out = new StringWriter();
+        StringWriter err = new StringWriter();
+        Main main = new Main(new PrintWriter(out, true), new PrintWriter(err, true), "");
+
+        int exitCode = Main.commandLine(main).execute("--diff", "src");
+
+        assertThat(exitCode).isEqualTo(2);
+        assertThat(out.toString()).isEmpty();
+        assertThat(err.toString()).isEqualTo("--diff requires --check\n");
+    }
+
+    @Test
+    void rejectsFileOrientedOptionsWithoutSelectors() {
+        StringWriter out = new StringWriter();
+        StringWriter err = new StringWriter();
+        Main main = new Main(new PrintWriter(out, true), new PrintWriter(err, true), "");
+
+        int exitCode = Main.commandLine(main).execute("--check", "--diff");
+
+        assertThat(exitCode).isEqualTo(2);
+        assertThat(out.toString()).isEmpty();
+        assertThat(err.toString()).isEqualTo("file-oriented options require at least one file or directory\n");
+    }
+
+    @Test
     void writesCommaSeparatedGlobMatchesInPlace(@TempDir Path dir) throws IOException {
         write(dir.resolve("src/Main.java"), "class Main{int value;}");
         write(dir.resolve("examples/Example.java"), "class Example{int value;}");
@@ -123,6 +149,37 @@ final class MainTest {
                 ✓ src/Formatted.java
                 ✗ src/Main.java
                 """);
+        assertThat(result.err()).isEmpty();
+    }
+
+    @Test
+    void checkDiffPrintsUnifiedDiffForChangedFilesOnly(@TempDir Path dir) throws IOException {
+        write(
+                dir.resolve("src/Formatted.java"),
+                """
+                class Formatted {
+                    int value;
+                }
+                """);
+        write(dir.resolve("src/Main.java"), "class Main{int value;}");
+
+        Result result = run(dir, null, "--check", "--diff", "src");
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.out())
+                .startsWith("""
+                        ✓ src/Formatted.java
+                        ✗ src/Main.java
+                        """)
+                .contains("diff --git a/src/Main.java b/src/Main.java\n")
+                .contains("--- a/src/Main.java\n+++ b/src/Main.java\n")
+                .contains("-class Main{int value;}\n")
+                .contains("""
+                        +class Main {
+                        +    int value;
+                        +}
+                        """)
+                .doesNotContain("diff --git a/src/Formatted.java b/src/Formatted.java");
         assertThat(result.err()).isEmpty();
     }
 

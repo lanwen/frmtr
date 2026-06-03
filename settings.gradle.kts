@@ -16,3 +16,4 @@ rootProject.name = "frmtr"
 
 include("frmtr-core")
 include("frmtr-cli")
+include("frmtr-gradle-plugin")

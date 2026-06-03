@@ -1,6 +1,6 @@
 # Architecture
 
-`frmtr` is a Java formatter with a small public API, a thin CLI, and a formatter engine built around JavaParser plus an internal document IR. The project is split into focused Gradle modules so formatter internals, command-line integration, and future wrappers can evolve behind explicit dependency boundaries.
+`frmtr` is a Java formatter with a small public API, thin CLI and Gradle adapters, and a formatter engine built around JavaParser plus an internal document IR. The project is split into focused Gradle modules so formatter internals and build-tool integrations can evolve behind explicit dependency boundaries.
 
 ## Build
 
@@ -11,19 +11,22 @@ The project is a Gradle multi-module build:
 - Root project: aggregator only; it does not produce the formatter library or CLI artifact.
 - `:frmtr-core`: formatter library and engine.
 - `:frmtr-cli`: Picocli application and native executable entrypoint that depends on `:frmtr-core`.
+- `:frmtr-gradle-plugin`: Gradle plugin with project-local formatting tasks that depends on `:frmtr-core`.
 
 Shared subproject conventions configure Java 25, UTF-8 compilation, `-Xlint:all`, JUnit Platform, and JaCoCo. External dependency versions and the GraalVM Native Build Tools plugin are managed through the Gradle version catalog in `gradle/libs.versions.toml`.
 
 ## Package Layout
 
 - `frmtr-core/src/main/java/dev/lanwen/frmtr`: public API and configuration.
+- `frmtr-core/src/main/java/dev/lanwen/frmtr/check`: reusable file-oriented check/write results and unified diff rendering shared by build-tool adapters.
 - `frmtr-core/src/main/java/dev/lanwen/frmtr/doc`: formatter document IR and renderer.
 - `frmtr-core/src/main/java/dev/lanwen/frmtr/java`: JavaParser-backed parser, syntax view, comment handling, and Java-specific printer.
 - `frmtr-cli/src/main/java/dev/lanwen/frmtr/cli`: Picocli command-line adapter, selector discovery, ignore handling, and output modes.
+- `frmtr-gradle-plugin/src/main/java/dev/lanwen/frmtr/gradle`: Gradle extension, Java source-set integration, and formatter tasks.
 
 ## Formatting Pipeline
 
-Formatting starts at `Frmtr.format(...)`.
+Single-source formatting starts at `Frmtr.format(...)`.
 
 1. `Frmtr` applies default or caller-provided `FormatterOptions`.
 2. `JavaFormatter` parses source with JavaParser using stored tokens and attributed comments.
@@ -46,6 +49,16 @@ JavaParser printers are not the formatter engine. They may be useful as referenc
 - `IfBreak` selects different output for flat versus broken groups.
 
 `DocRenderer` is language-agnostic. Java-specific choices belong in `JavaPrinter`, not in the renderer.
+
+## File-Oriented Runs
+
+`dev.lanwen.frmtr.check` provides reusable file-oriented support for adapters that need to check or write many source files:
+
+- `FormatterRunner.check(...)` formats selected files in memory and returns `FormatFileResult` values for unchanged, changed, and failed files.
+- `FormatterRunner.write(...)` writes changed formatter output back to disk, continues after per-file failures, distinguishes write-step failures as partially written results, and reports the full result set.
+- `UnifiedDiffRenderer` renders the same unified diff format for CLI and Gradle check output.
+
+The runner owns deterministic path ordering and de-duplication for file lists supplied by adapters. Source discovery remains adapter-specific: the CLI uses selectors and `.gitignore`; the Gradle plugin uses Java source sets and Gradle-style source filters.
 
 ## Java Formatter
 
@@ -73,6 +86,24 @@ CLI behavior should not own formatting policy. New formatting behavior belongs i
 
 The CLI module owns application packaging and Gradle `run` wiring. Local execution uses `./gradlew :frmtr-cli:run --args='...'`.
 
+## Gradle Plugin
+
+The Gradle plugin ID is `dev.lanwen.frmtr`. Applying it creates project-local aggregate tasks:
+
+- `frmtrFormat`: mutating formatter task aggregate, never wired into lifecycle tasks.
+- `frmtrCheck`: verification aggregate wired into Gradle's `check` lifecycle.
+
+When the Gradle Java plugin is present, Java formatting is enabled by convention without requiring a `frmtr {}` block. The plugin registers:
+
+- `frmtrJavaFormat`: formats selected Java source-set files in place.
+- `frmtrJavaCheck`: checks selected Java source-set files, suppresses unchanged-file output by default, prints `✗` and `!` status lines, and prints unified diffs for changed files by default.
+
+The plugin is project-local. Applying it to a root project does not automatically reach into subprojects; users should apply it in each project or through a convention plugin.
+
+Default Java source selection covers all Java source sets, de-duplicates files by normalized path, and excludes files under the project's Gradle build directory. `frmtr { java { include(...) exclude(...) } }` narrows source-set selection using source-root-relative Gradle patterns. Formatter tasks do not depend on source-generation tasks by default.
+
+Java parser language level is inferred from the Java toolchain language version first, then `sourceCompatibility`, and otherwise falls back to `LATEST_AVAILABLE`. Gradle stack trace output is controlled by Gradle's native `--stacktrace`; the plugin does not define a formatter-specific stacktrace switch.
+
 ## Native Binary
 
 `frmtr-cli` applies GraalVM Native Build Tools and configures the native executable name as `frmtr`.
@@ -87,6 +118,7 @@ The test suite covers:
 
 - `:frmtr-core`: Doc rendering behavior, formatter output, idempotence, reparse validity, comments, parse errors, and fixture corpus checks.
 - `:frmtr-cli`: CLI selector parsing, glob/directory discovery, ignore handling, stdout/write/check behavior, option validation, and exit codes.
+- `:frmtr-gradle-plugin`: TestKit functional coverage for task registration, zero-configuration Java defaults, `check` lifecycle wiring, no-op non-Java projects, Gradle source filters, build-directory exclusion, check diff output, and Java language-level inference.
 - Golden resources under `frmtr-core/src/test/resources/format`.
 - A representative active subset of upstream `prettier-java` fixtures under `frmtr-core/src/test/resources/format/prettier-java`.
 - The full upstream `prettier-java` fixture corpus under `frmtr-core/src/test/resources/upstream/prettier-java`.

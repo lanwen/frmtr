@@ -1,0 +1,249 @@
+package dev.lanwen.frmtr.gradle;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import org.gradle.testkit.runner.BuildResult;
+import org.gradle.testkit.runner.GradleRunner;
+import org.gradle.testkit.runner.TaskOutcome;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+final class FrmtrGradlePluginFunctionalTest {
+    @TempDir
+    private Path projectDir;
+
+    @Test
+    void registersProjectLocalTasksInNonJavaProjects() {
+        writeSettings();
+        writeBuildFile("""
+                plugins {
+                    id("dev.lanwen.frmtr")
+                }
+                """);
+
+        BuildResult tasks = gradle("tasks", "--all").build();
+        BuildResult check = gradle("frmtrCheck").build();
+
+        assertThat(tasks.getOutput())
+                .contains("frmtrFormat")
+                .contains("frmtrCheck")
+                .doesNotContain("frmtrJavaFormat")
+                .doesNotContain("frmtrJavaCheck");
+        assertThat(check.task(":frmtrCheck").getOutcome()).isEqualTo(TaskOutcome.UP_TO_DATE);
+    }
+
+    @Test
+    void checksAndFormatsJavaSourceSetsWithZeroConfiguration() {
+        writeSettings();
+        writeBuildFile("""
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+                """);
+        write("src/main/java/demo/Main.java", "package demo; class Main{int value;}");
+
+        BuildResult failedCheck = gradle("frmtrCheck").buildAndFail();
+
+        assertThat(failedCheck.getOutput())
+                .contains("✗ src/main/java/demo/Main.java")
+                .contains("diff --git a/src/main/java/demo/Main.java b/src/main/java/demo/Main.java")
+                .contains("-package demo; class Main{int value;}")
+                .doesNotContain("✓ src/main/java/demo/Main.java");
+
+        BuildResult format = gradle("frmtrFormat").build();
+
+        assertThat(format.task(":frmtrJavaFormat").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+        assertThat(read("src/main/java/demo/Main.java")).isEqualTo("""
+                package demo;
+
+                class Main {
+                    int value;
+                }
+                """);
+
+        BuildResult passedCheck = gradle("frmtrCheck").build();
+
+        assertThat(passedCheck.task(":frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+        assertThat(passedCheck.getOutput()).doesNotContain("✓ src/main/java/demo/Main.java");
+    }
+
+    @Test
+    void wiresFrmtrCheckIntoGradleCheckLifecycle() {
+        writeSettings();
+        writeBuildFile("""
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+                """);
+        write("src/main/java/demo/Main.java", "package demo; class Main{int value;}");
+
+        BuildResult result = gradle("check").buildAndFail();
+
+        assertThat(result.task(":frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.FAILED);
+        assertThat(result.getOutput()).contains("frmtr found 1 unformatted Java file(s)");
+    }
+
+    @Test
+    void javaFiltersUseSourceRootRelativeGradlePatterns() {
+        writeSettings();
+        writeBuildFile("""
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+
+                frmtr {
+                    java {
+                        include("**/Included.java")
+                        exclude("**/Excluded.java")
+                    }
+                }
+                """);
+        write("src/main/java/demo/Included.java", "package demo; class Included{int value;}");
+        write("src/main/java/demo/Excluded.java", "package demo; class Excluded{int value;}");
+        write("src/main/java/demo/Skipped.java", "package demo; class Skipped{int value;}");
+
+        BuildResult result = gradle("frmtrFormat").build();
+
+        assertThat(result.task(":frmtrJavaFormat").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+        assertThat(read("src/main/java/demo/Included.java")).isEqualTo("""
+                package demo;
+
+                class Included {
+                    int value;
+                }
+                """);
+        assertThat(read("src/main/java/demo/Excluded.java")).isEqualTo("package demo; class Excluded{int value;}");
+        assertThat(read("src/main/java/demo/Skipped.java")).isEqualTo("package demo; class Skipped{int value;}");
+    }
+
+    @Test
+    void excludesBuildDirectorySourcesByDefault() {
+        writeSettings();
+        writeBuildFile("""
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+
+                sourceSets {
+                    main {
+                        java.srcDir(layout.buildDirectory.dir("generated/sources/demo"))
+                    }
+                }
+                """);
+        write("build/generated/sources/demo/demo/Generated.java", "package demo; class Generated{int value;}");
+
+        BuildResult result = gradle("frmtrCheck").build();
+
+        assertThat(result.getOutput()).doesNotContain("Generated.java");
+        assertThat(result.task(":frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.NO_SOURCE);
+    }
+
+    @Test
+    void canDisableCheckDiffPrinting() {
+        writeSettings();
+        writeBuildFile("""
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+
+                frmtr {
+                    check {
+                        print {
+                            diffs.set(false)
+                        }
+                    }
+                }
+                """);
+        write("src/main/java/demo/Main.java", "package demo; class Main{int value;}");
+
+        BuildResult result = gradle("frmtrCheck").buildAndFail();
+
+        assertThat(result.getOutput())
+                .contains("✗ src/main/java/demo/Main.java")
+                .doesNotContain("diff --git");
+    }
+
+    @Test
+    void infersJavaLanguageLevelFromSourceCompatibility() {
+        writeSettings();
+        writeBuildFile("""
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+
+                java {
+                    sourceCompatibility = JavaVersion.VERSION_1_8
+                }
+                """);
+        write("src/main/java/demo/SwitchDemo.java", switchExpressionYieldSource());
+
+        BuildResult result = gradle("frmtrCheck").buildAndFail();
+
+        assertThat(result.getOutput())
+                .contains("! src/main/java/demo/SwitchDemo.java")
+                .contains("src/main/java/demo/SwitchDemo.java: Unable to parse Java source:")
+                .contains("yield")
+                .contains("^");
+    }
+
+    private GradleRunner gradle(String... arguments) {
+        return GradleRunner.create()
+                .withProjectDir(projectDir.toFile())
+                .withPluginClasspath()
+                .withArguments(arguments);
+    }
+
+    private void writeSettings() {
+        write("settings.gradle.kts", """
+                rootProject.name = "fixture"
+                """);
+    }
+
+    private void writeBuildFile(String content) {
+        write("build.gradle.kts", content);
+    }
+
+    private String read(String path) {
+        try {
+            return Files.readString(projectDir.resolve(path), StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
+        }
+    }
+
+    private void write(String path, String content) {
+        try {
+            Path file = projectDir.resolve(path);
+            Files.createDirectories(file.getParent());
+            Files.writeString(file, content, StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
+        }
+    }
+
+    private static String switchExpressionYieldSource() {
+        return """
+                package demo;
+                class SwitchDemo {
+                    Object map(Command command) {
+                        return switch (command) {
+                            case CreateCommand cmd -> {
+                                yield new Created(cmd.id());
+                            }
+                            case DeleteCommand cmd -> new Deleted(cmd.id());
+                        };
+                    }
+                }""";
+    }
+}

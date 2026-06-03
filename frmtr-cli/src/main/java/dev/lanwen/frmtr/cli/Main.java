@@ -3,7 +3,9 @@ package dev.lanwen.frmtr.cli;
 import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.Frmtr;
-import java.io.ByteArrayOutputStream;
+import dev.lanwen.frmtr.check.FormatFileResult;
+import dev.lanwen.frmtr.check.FormatFileStatus;
+import dev.lanwen.frmtr.check.FormatterRunner;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
@@ -11,12 +13,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.Callable;
-import org.eclipse.jgit.diff.DiffAlgorithm;
-import org.eclipse.jgit.diff.DiffAlgorithm.SupportedAlgorithm;
-import org.eclipse.jgit.diff.DiffFormatter;
-import org.eclipse.jgit.diff.EditList;
-import org.eclipse.jgit.diff.RawText;
-import org.eclipse.jgit.diff.RawTextComparator;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -39,7 +35,7 @@ public final class Main implements Callable<Integer> {
     @Option(names = "--stacktrace", description = "Print stack traces for formatter and I/O failures.")
     boolean stacktrace;
 
-    @Option(names = "--line-width", description = "Target line width.", defaultValue = "100")
+    @Option(names = "--line-width", description = "Target line width.", defaultValue = "140")
     int lineWidth;
 
     @Option(
@@ -120,48 +116,53 @@ public final class Main implements Callable<Integer> {
             }
         }
         List<Path> files = new FileDiscovery(workingDirectory).discover(selectors);
-        boolean changed = false;
+        if (check) {
+            return checkFiles(files, options);
+        }
+        if (write) {
+            return writeFiles(files, options);
+        }
+        return printFiles(files, options);
+    }
+
+    private int checkFiles(List<Path> files, FormatterOptions options) {
+        List<FormatFileResult> results = FormatterRunner.check(workingDirectory, files, options, diff);
+        for (FormatFileResult result : results) {
+            out.println(statusLine(statusMarker(result.status()), result.displayPath()));
+            result.unifiedDiff().ifPresent(out::print);
+            if (result.failed()) {
+                result.failureException().ifPresent(exception -> printFailure(result.displayPath().toString(), exception));
+            }
+        }
+        out.flush();
+        if (results.stream().anyMatch(FormatFileResult::failed)) {
+            return 2;
+        }
+        return results.stream().anyMatch(FormatFileResult::changed) ? 1 : 0;
+    }
+
+    private int writeFiles(List<Path> files, FormatterOptions options) {
+        List<FormatFileResult> results = FormatterRunner.write(workingDirectory, files, options);
+        results.stream()
+                .filter(FormatFileResult::failed)
+                .forEach(result -> result.failureException()
+                        .ifPresent(exception -> printFailure(result.displayPath().toString(), exception)));
+        return results.stream().anyMatch(FormatFileResult::failed) ? 2 : 0;
+    }
+
+    private int printFiles(List<Path> files, FormatterOptions options) {
         boolean failed = false;
         for (int i = 0; i < files.size(); i++) {
             Path file = files.get(i);
             try {
-                String original = Files.readString(file, StandardCharsets.UTF_8);
-                String formatted = Frmtr.format(original, options);
-                boolean fileChanged = !formatted.equals(original);
-                if (fileChanged) {
-                    changed = true;
-                    if (write) {
-                        Files.writeString(file, formatted, StandardCharsets.UTF_8);
-                    }
-                }
-                if (check) {
-                    out.println(statusLine(fileChanged ? "✗" : "✓", file));
-                    if (diff && fileChanged) {
-                        out.print(renderDiff(file, original, formatted));
-                        out.flush();
-                    }
-                }
-                if (!write && !check) {
-                    printFormatted(files, i, file, formatted);
-                }
-            } catch (FormatterException exception) {
+                String formatted = Frmtr.format(Files.readString(file, StandardCharsets.UTF_8), options);
+                printFormatted(files, i, file, formatted);
+            } catch (FormatterException | IOException exception) {
                 failed = true;
-                if (check) {
-                    out.println(statusLine("!", file));
-                }
-                printFailure(displayPath(file).toString(), exception);
-            } catch (IOException exception) {
-                failed = true;
-                if (check) {
-                    out.println(statusLine("!", file));
-                }
                 printFailure(displayPath(file).toString(), exception);
             }
         }
-        if (failed) {
-            return 2;
-        }
-        return changed && check ? 1 : 0;
+        return failed ? 2 : 0;
     }
 
     private String readStdin() throws IOException {
@@ -183,27 +184,17 @@ public final class Main implements Callable<Integer> {
     }
 
     private String statusLine(String marker, Path file) {
-        return marker + " " + displayPath(file);
+        return marker + " " + file;
     }
 
-    private String renderDiff(Path file, String original, String formatted) throws IOException {
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        String path = displayPath(file).toString().replace('\\', '/');
-        output.write(("diff --git a/" + path + " b/" + path + "\n").getBytes(StandardCharsets.UTF_8));
-        output.write(("--- a/" + path + "\n").getBytes(StandardCharsets.UTF_8));
-        output.write(("+++ b/" + path + "\n").getBytes(StandardCharsets.UTF_8));
-
-        RawText oldText = new RawText(original.getBytes(StandardCharsets.UTF_8));
-        RawText newText = new RawText(formatted.getBytes(StandardCharsets.UTF_8));
-        EditList edits = DiffAlgorithm.getAlgorithm(SupportedAlgorithm.HISTOGRAM)
-                .diff(RawTextComparator.DEFAULT, oldText, newText);
-        try (DiffFormatter formatter = new DiffFormatter(output)) {
-            formatter.setContext(3);
-            formatter.setDiffComparator(RawTextComparator.DEFAULT);
-            formatter.format(edits, oldText, newText);
-            formatter.flush();
-        }
-        return output.toString(StandardCharsets.UTF_8);
+    private String statusMarker(FormatFileStatus status) {
+        return switch (status) {
+            case UNCHANGED -> "✓";
+            case CHANGED -> "✗";
+            case WRITTEN -> "✗";
+            case WRITTEN_PARTIALLY -> "!";
+            case FAILED -> "!";
+        };
     }
 
     private void printFailure(String target, Exception exception) {

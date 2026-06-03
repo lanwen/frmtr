@@ -9,7 +9,7 @@ public record FormatterOptions(
         LineEnding lineEnding,
         boolean trailingNewline,
         JavaLanguageLevel javaLanguageLevel) {
-    public static final int DEFAULT_LINE_WIDTH = 100;
+    public static final int DEFAULT_LINE_WIDTH = 140;
     public static final int DEFAULT_INDENT_WIDTH = 4;
 
     public FormatterOptions(

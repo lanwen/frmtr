@@ -174,11 +174,9 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
 
         abstract String getKeyRole();
 
-        @Nullable
-        abstract V getValue(int index);
+        abstract @Nullable V getValue(int index);
 
-        @Nullable
-        abstract V setValue(int index, V newValue);
+        abstract @Nullable V setValue(int index, V newValue);
 
         @Override
         public int size() {
@@ -557,8 +555,7 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
         return columnKeyToIndex.keySet();
     }
 
-    @MonotonicNonNull
-    private transient ColumnMap columnMap;
+    private transient @MonotonicNonNull ColumnMap columnMap;
 
     @Override
     public Map<C, Map<R, V>> columnMap() {
@@ -648,8 +645,7 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
         return rowKeyToIndex.keySet();
     }
 
-    @MonotonicNonNull
-    private transient RowMap rowMap;
+    private transient @MonotonicNonNull RowMap rowMap;
 
     @Override
     public Map<R, Map<C, V>> rowMap() {

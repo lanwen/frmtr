@@ -7,20 +7,16 @@ public interface InterfaceWithModifiers {
 
     @AnnotationOne
     @AnnotationTwo
-    @AnnotationThree
-    public default String defaultMethod() {
+    public default @AnnotationThree String defaultMethod() {
         return INTERFACE_CONSTANT;
     }
 
     @AnnotationOne
-    @AnnotationTwo
-    public static String staticMethod() {
+    public static @AnnotationTwo String staticMethod() {
         return INTERFACE_CONSTANT;
     }
 
-    @AnnotationOne
-    @AnnotationTwo
-    public void twoTrailingAnnotations();
+    public @AnnotationOne @AnnotationTwo void twoTrailingAnnotations();
 
     @AnnotationOne
     void onlyAnnotations();
@@ -35,12 +31,9 @@ public abstract class AbstractClassWithModifiers {
 
     @AnnotationOne
     @AnnotationTwo
-    @AnnotationThree
-    protected abstract String method();
+    protected abstract @AnnotationThree String method();
 
-    @AnnotationOne
-    @AnnotationTwo
-    public void twoTrailingAnnotations() {}
+    public @AnnotationOne @AnnotationTwo void twoTrailingAnnotations() {}
 
     @AnnotationOne
     void onlyAnnotations() {}
@@ -56,30 +49,23 @@ public final class ClassWithModifiers {
 
     @AnnotationOne
     @AnnotationTwo
-    @AnnotationThree
-    protected static final String CONSTANT_2 = "123";
+    protected static final @AnnotationThree String CONSTANT_2 = "123";
 
     @AnnotationOne
-    @AnnotationTwo
-    public static String staticField;
+    public static @AnnotationTwo String staticField;
 
-    @AnnotationOne
-    @AnnotationTwo
-    public String twoTrailingAnnotations;
+    public @AnnotationOne @AnnotationTwo String twoTrailingAnnotations;
 
     @AnnotationOne
     String onlyAnnotations;
 
     @AnnotationOne
     @AnnotationTwo
-    @AnnotationThree
-    protected static final synchronized String method() {
+    protected static final synchronized @AnnotationThree String method() {
         return CONSTANT;
     }
 
-    @AnnotationOne
-    @AnnotationTwo
-    public void twoTrailingAnnotations() {}
+    public @AnnotationOne @AnnotationTwo void twoTrailingAnnotations() {}
 
     @AnnotationOne
     void onlyAnnotations() {}

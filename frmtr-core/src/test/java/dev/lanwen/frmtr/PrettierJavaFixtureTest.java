@@ -65,6 +65,7 @@ final class PrettierJavaFixtureTest {
             "instantiation",
             "method_reference",
             "marker_annotations",
+            "modifiers",
             "modules",
             "package_and_imports/classWithMixedImports",
             "package_and_imports/classWithMixedCaseImports",

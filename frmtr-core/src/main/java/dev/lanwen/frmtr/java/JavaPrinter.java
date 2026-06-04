@@ -472,11 +472,13 @@ final class JavaPrinter {
     private Doc field(FieldDeclaration declaration) {
         List<Doc> docs = new ArrayList<>();
         docs.add(comments.leading(declaration));
-        docs.add(annotations(declaration));
+        docs.add(declarationAnnotations(declaration));
         docs.add(Doc.text(modifiers(declaration)));
         String declarationPrefix = modifiers(declaration);
         if (!declaration.getVariables().isEmpty()) {
-            String type = compactTypeLike(declaration.getVariables().get(0).getType()) + " ";
+            String type = inlineAnnotations(declaration)
+                    + compactTypeLike(declaration.getVariables().get(0).getType())
+                    + " ";
             declarationPrefix += type;
             docs.add(Doc.text(type));
         }
@@ -537,7 +539,7 @@ final class JavaPrinter {
     private Doc method(MethodDeclaration declaration) {
         List<Doc> docs = new ArrayList<>();
         docs.add(comments.leading(declaration));
-        docs.add(annotations(declaration));
+        docs.add(declarationAnnotations(declaration));
         String prefix = modifiers(declaration);
         docs.add(Doc.text(prefix));
         if (!declaration.getTypeParameters().isEmpty()) {
@@ -545,7 +547,10 @@ final class JavaPrinter {
             prefix += typeParameters;
             docs.add(Doc.text(typeParameters));
         }
-        String signature = compact(declaration.getType()) + " " + declaration.getNameAsString();
+        String signature = inlineAnnotations(declaration)
+                + compact(declaration.getType())
+                + " "
+                + declaration.getNameAsString();
         prefix += signature;
         docs.add(Doc.text(signature));
         docs.add(parameters(declaration.getParameters()));
@@ -1412,13 +1417,64 @@ final class JavaPrinter {
     }
 
     private Doc annotations(NodeWithAnnotations<?> node) {
-        List<AnnotationExpr> annotations = node.getAnnotations();
+        return annotations(node.getAnnotations());
+    }
+
+    private Doc declarationAnnotations(NodeWithAnnotations<?> node) {
+        if (!(node instanceof NodeWithModifiers<?> nodeWithModifiers)) {
+            return annotations(node);
+        }
+        return annotations(node.getAnnotations().stream()
+                .filter(annotation -> !afterAllModifiers(annotation, nodeWithModifiers))
+                .toList());
+    }
+
+    private Doc annotations(List<AnnotationExpr> annotations) {
         if (annotations.isEmpty()) {
             return Doc.EMPTY;
         }
         return Doc.concat(annotations.stream()
                 .map(annotation -> Doc.concat(annotation(annotation), Doc.HARD_LINE))
                 .toList());
+    }
+
+    private String inlineAnnotations(NodeWithAnnotations<?> node) {
+        if (!(node instanceof NodeWithModifiers<?> nodeWithModifiers)) {
+            return "";
+        }
+        String annotations = node.getAnnotations().stream()
+                .filter(annotation -> afterAllModifiers(annotation, nodeWithModifiers))
+                .map(annotation -> compact(annotation) + " ")
+                .reduce("", String::concat);
+        return annotations;
+    }
+
+    private boolean afterAllModifiers(AnnotationExpr annotation, NodeWithModifiers<?> node) {
+        if (node.getModifiers().isEmpty()) {
+            return false;
+        }
+        return annotation.getRange()
+                .flatMap(annotationRange -> node.getModifiers().stream()
+                        .map(Modifier::getRange)
+                        .flatMap(Optional::stream)
+                        .max(this::compareRangeEnds)
+                        .map(modifierRange -> startsAfter(annotationRange, modifierRange)))
+                .orElse(false);
+    }
+
+    private int compareRangeEnds(com.github.javaparser.Range left, com.github.javaparser.Range right) {
+        int line = Integer.compare(left.end.line, right.end.line);
+        if (line != 0) {
+            return line;
+        }
+        return Integer.compare(left.end.column, right.end.column);
+    }
+
+    private boolean startsAfter(com.github.javaparser.Range annotationRange, com.github.javaparser.Range modifierRange) {
+        if (annotationRange.begin.line != modifierRange.end.line) {
+            return annotationRange.begin.line > modifierRange.end.line;
+        }
+        return annotationRange.begin.column > modifierRange.end.column;
     }
 
     private String modifiers(NodeWithModifiers<?> node) {

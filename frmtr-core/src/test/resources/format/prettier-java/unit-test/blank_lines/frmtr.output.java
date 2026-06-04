@@ -16,8 +16,7 @@ public class BlankLines {
 
     private String a;
     private String b;
-    @Nullable
-    private String shouldNotAddBlankLines;
+    private @Nullable String shouldNotAddBlankLines;
     private String d;
     private String e;
 
@@ -65,23 +64,19 @@ interface BlankLinesInInterfaces {
     String fieldThree;
     String fieldFour;
 
-    @Nullable
-    private String test();
+    private @Nullable String test();
 
     @Nullable
     private static String test();
 
-    @Nullable
-    private String test();
+    private @Nullable String test();
 
-    @Nullable
-    private String test();
+    private @Nullable String test();
 
     @Nullable
     private static String test();
 
-    @Nullable
-    private String test();
+    private @Nullable String test();
 
     private static String test();
 

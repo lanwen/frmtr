@@ -3626,10 +3626,15 @@ final class JavaPrinter {
 
     private Doc brokenLambdaExpressionBody(LambdaExpr expression) {
         return expression.getExpressionBody()
-                .map(body -> body instanceof BinaryExpr
+                .map(body -> body instanceof BinaryExpr binaryExpr && isLogicalBinaryOperator(binaryExpr)
                         ? binaryExpressionLines(body, true)
                         : expression(body))
                 .orElseGet(() -> statement(expression.getBody()));
+    }
+
+    private boolean isLogicalBinaryOperator(BinaryExpr expression) {
+        return expression.getOperator() == BinaryExpr.Operator.AND
+                || expression.getOperator() == BinaryExpr.Operator.OR;
     }
 
     private Doc lambdaParametersForHeader(LambdaExpr expression, String flatParameters) {

@@ -44,6 +44,7 @@ public class PrettierTest {
                     case 1:
                         System.out.println("One ");
                         System.out.println("One ");
+
                         System.out.println("One ");
                         /*just a break*/ break;
                     case 2:
@@ -51,6 +52,7 @@ public class PrettierTest {
                         break;
                     case 0:
                         System.out.println("Zero ");
+
                         continue /*labeled continued*/ loop;
                     default /*def*/:
                         /*labeled break*/ break loop;
@@ -59,17 +61,15 @@ public class PrettierTest {
         }
     }
 
-    private synchronized void myFunction(int arg1, int arg2) {
-        for (int i = 0; i < arg1; i++)
-            do /*dodododo*/
-            {
-                //do whiles
-                //asserting
-                assert/*true*/ true == true;
-                continue;
-                break;
-                return;
-            } while (/*at least one iteration !*/ false);
+    private synchronized void myFunction(int arg1, int arg2 /*overloading*/) {
+        for (int i = 0; i < /*=*/ arg1; i++) do /*dodododo*/ {
+            //do whiles
+            //asserting
+            assert /*true*/ true == true;
+            continue;
+            break; /*dead code*/
+            return; /*dead code*/
+        } /*at least one iteration !*/ while (false);
         synchronized (/*declares synchronizd statement*/ this) {
             while (/*infinite*/ true)
                 /*stop the program*/ throw new RuntimeException();
@@ -80,7 +80,6 @@ public class PrettierTest {
 //Additionnal enumeration
 enum Cards {
     //The Heart and the Spade
-    HEART,
-    /*the heart*/
+    HEART /*the heart*/,
     SPADES /*and the spade*/,
 }

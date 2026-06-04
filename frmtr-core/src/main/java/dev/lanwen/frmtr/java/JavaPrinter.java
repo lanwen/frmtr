@@ -2307,7 +2307,7 @@ final class JavaPrinter {
                 Doc.indent(Doc.concat(
                         Doc.SOFT_LINE,
                         Doc.join(Doc.concat(Doc.text(","), Doc.LINE), typeParameters.stream()
-                                .map(typeParameter -> Doc.text(compactTypeLike(typeParameter)))
+                                .map(this::typeParameter)
                                 .toList()))),
                 Doc.SOFT_LINE,
                 Doc.text(">")));
@@ -2319,14 +2319,43 @@ final class JavaPrinter {
                 Doc.indent(Doc.concat(
                         Doc.HARD_LINE,
                         Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), typeParameters.stream()
-                                .map(typeParameter -> Doc.text(compactTypeLike(typeParameter)))
+                                .map(this::typeParameter)
                                 .toList()))),
                 Doc.HARD_LINE,
                 Doc.text(">"));
         return indentClosingBracket ? Doc.indent(parameters) : parameters;
     }
 
+    private Doc typeParameter(TypeParameter typeParameter) {
+        String flat = compactTypeLike(typeParameter);
+        if (!typeParameter.getAnnotations().isEmpty() || typeParameter.getTypeBound().isEmpty() || flat.contains("@")) {
+            return Doc.text(compactTypeLike(typeParameter));
+        }
+        Doc firstBound = typeBody(typeParameter.getTypeBound().get(0));
+        List<Doc> trailingBounds = typeParameter.getTypeBound().stream()
+                .skip(1)
+                .map(bound -> Doc.concat(Doc.text("& "), typeBody(bound)))
+                .toList();
+        if (trailingBounds.isEmpty()) {
+            return Doc.group(Doc.concat(Doc.text(typeParameter.getNameAsString() + " extends "), firstBound));
+        }
+        return Doc.group(Doc.concat(
+                Doc.text(typeParameter.getNameAsString() + " extends "),
+                firstBound,
+                Doc.indent(Doc.concat(Doc.LINE, Doc.join(Doc.LINE, trailingBounds)))));
+    }
+
     private Doc parameter(Parameter parameter) {
+        if (!parameter.isVarArgs() && typeCanBreak(parameter.getType())) {
+            List<String> prefixes = new ArrayList<>();
+            parameter.getAnnotations().stream().map(this::compact).forEach(prefixes::add);
+            parameter.getModifiers().stream().map(this::modifier).forEach(prefixes::add);
+            String prefix = prefixes.isEmpty() ? "" : String.join(" ", prefixes) + " ";
+            return Doc.group(Doc.concat(
+                    Doc.text(prefix),
+                    typeBody(parameter.getType()),
+                    Doc.text(" " + parameter.getNameAsString())));
+        }
         List<String> parts = new ArrayList<>();
         parameter.getAnnotations().stream().map(this::compact).forEach(parts::add);
         parameter.getModifiers().stream().map(this::modifier).forEach(parts::add);
@@ -4569,7 +4598,7 @@ final class JavaPrinter {
             return anonymousObjectCreation(expression, prefix);
         }
         if (expression.getArguments().isEmpty()) {
-            return Doc.text(prefix + "()");
+            return objectCreationWithBrokenType(expression).orElseGet(() -> Doc.text(prefix + "()"));
         }
         Optional<Doc> huggableLambda = huggableBlockLambdaArguments(prefix, expression.getArguments());
         if (huggableLambda.isPresent()) {
@@ -4597,6 +4626,17 @@ final class JavaPrinter {
                 + (creationComment == Doc.EMPTY ? "new " : commentText(creationComment) + " new ")
                 + expression.getTypeArguments().map(typeArguments -> "<" + compactJoinTypeLike(typeArguments) + ">").orElse("")
                 + type;
+    }
+
+    private Optional<Doc> objectCreationWithBrokenType(ObjectCreationExpr expression) {
+        if (expression.getScope().isPresent()
+                || expression.getTypeArguments().isPresent()
+                || expression.getComment().filter(BlockComment.class::isInstance).isPresent()
+                || expression.getType().getComment().filter(BlockComment.class::isInstance).isPresent()
+                || !typeCanBreak(expression.getType())) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.group(Doc.concat(Doc.text("new "), typeBody(expression.getType()), Doc.text("()"))));
     }
 
     private Doc anonymousObjectCreation(ObjectCreationExpr expression, String prefix) {
@@ -4900,15 +4940,33 @@ final class JavaPrinter {
         docs.add(Doc.text(modifiers(declaration)));
         String declarationPrefix = modifiers(declaration);
         if (!declaration.getVariables().isEmpty()) {
-            String type = compactTypeLike(declaration.getVariables().get(0).getType()) + " ";
-            declarationPrefix += type;
-            docs.add(Doc.text(type));
+            Type type = declaration.getVariables().get(0).getType();
+            String flatType = compactTypeLike(type) + " ";
+            declarationPrefix += flatType;
+            if (localVariableTypeShouldBreak(type, declaration.getVariables(), declarationPrefix)) {
+                Doc variables = Doc.join(Doc.concat(Doc.text(","), Doc.LINE), declaration.getVariables().stream()
+                        .map(variable -> variable(variable, localVariableDeclarationPrefix(variable, "")))
+                        .toList());
+                docs.add(Doc.group(Doc.concat(typeBody(type), Doc.text(" "), variables)));
+                return Doc.concat(docs);
+            }
+            docs.add(Doc.text(flatType));
         }
         String variableDeclarationPrefix = declarationPrefix;
         docs.add(Doc.group(Doc.join(Doc.concat(Doc.text(","), Doc.LINE), declaration.getVariables().stream()
                 .map(variable -> variable(variable, localVariableDeclarationPrefix(variable, variableDeclarationPrefix)))
                 .toList())));
         return Doc.concat(docs);
+    }
+
+    private boolean localVariableTypeShouldBreak(
+            Type type,
+            NodeList<VariableDeclarator> variables,
+            String declarationPrefix) {
+        return typeCanBreak(type)
+                && variables.stream()
+                        .anyMatch(variable -> currentIndentedWidth(declarationPrefix + variable.getNameAsString())
+                                > options.lineWidth());
     }
 
     private String localVariableDeclarationPrefix(VariableDeclarator variable, String declarationPrefix) {
@@ -5511,9 +5569,35 @@ final class JavaPrinter {
                         Doc.HARD_LINE,
                         Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), type.getTypeArguments().stream()
                                 .flatMap(NodeList::stream)
-                                .map(argument -> Doc.text(compactTypeLike(argument)))
+                                .map(this::typeBody)
                                 .toList()))),
                 Doc.HARD_LINE,
+                Doc.text(">"));
+    }
+
+    private boolean typeCanBreak(Type type) {
+        return type instanceof ClassOrInterfaceType classOrInterfaceType
+                && classOrInterfaceType.getTypeArguments().isPresent();
+    }
+
+    private Doc typeBody(Type type) {
+        if (type instanceof ClassOrInterfaceType classOrInterfaceType
+                && classOrInterfaceType.getTypeArguments().isPresent()) {
+            return classOrInterfaceTypeBody(classOrInterfaceType);
+        }
+        return Doc.text(compactTypeLike(type));
+    }
+
+    private Doc classOrInterfaceTypeBody(ClassOrInterfaceType type) {
+        return Doc.concat(
+                Doc.text(typeNameWithoutArguments(type) + "<"),
+                Doc.indent(Doc.concat(
+                        Doc.SOFT_LINE,
+                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), type.getTypeArguments().stream()
+                                .flatMap(NodeList::stream)
+                                .map(this::typeBody)
+                                .toList()))),
+                Doc.SOFT_LINE,
                 Doc.text(">"));
     }
 

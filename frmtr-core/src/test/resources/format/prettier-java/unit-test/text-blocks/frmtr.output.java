@@ -90,10 +90,13 @@ aoeu
     void java() {
         // language=Java
         String java = """
-    class Class{void method() {
-    // comment
-    }}
-    """;
+            class Class {
+
+              void method() {
+                // comment
+              }
+            }
+            """;
     }
 
     void html() {

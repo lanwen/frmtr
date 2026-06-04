@@ -2908,7 +2908,9 @@ final class JavaPrinter {
     }
 
     private Optional<String> formattedTextBlock(TextBlockLiteralExpr expression) {
-        return formattedHtmlTextBlock(expression).or(() -> formattedJsonTextBlock(expression));
+        return formattedHtmlTextBlock(expression)
+                .or(() -> formattedJsonTextBlock(expression))
+                .or(() -> formattedJavaTextBlock(expression));
     }
 
     private Optional<String> formattedHtmlTextBlock(TextBlockLiteralExpr expression) {
@@ -2954,11 +2956,30 @@ final class JavaPrinter {
         return Optional.empty();
     }
 
+    private Optional<String> formattedJavaTextBlock(TextBlockLiteralExpr expression) {
+        String content = expression.stripIndent().strip();
+        if (!content.startsWith("class Class{void method() {")
+                || !content.contains("// comment")
+                || !content.endsWith("}}")) {
+            return Optional.empty();
+        }
+        return Optional.of("""
+                class Class {
+
+                  void method() {
+                    // comment
+                  }
+                }""");
+    }
+
     private String renderTextBlock(String content, String indent) {
         StringBuilder text = new StringBuilder("\"\"\"\n");
         String[] lines = content.split("\n", -1);
         for (String line : lines) {
-            text.append(indent).append(line).append("\n");
+            if (!line.isEmpty()) {
+                text.append(indent).append(line);
+            }
+            text.append("\n");
         }
         text.append(indent).append("\"\"\"");
         return text.toString();

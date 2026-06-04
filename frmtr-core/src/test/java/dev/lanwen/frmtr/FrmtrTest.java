@@ -478,6 +478,39 @@ final class FrmtrTest {
     }
 
     @Test
+    void formatsCompactJavaTextBlock() {
+        String source = """
+                class Demo {
+                    void method() {
+                        String java = \"""
+                            class Class{void method() {
+                            // comment
+                            }}
+                            \""";
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("String java = \"\"\"\n")
+                .contains("      class Class {\n")
+                .contains("        void method() {\n")
+                .contains("          // comment\n")
+                .contains("        }\n")
+                .contains("      }\n")
+                .contains("      \"\"\";");
+    }
+
+    @Test
     void breaksLongBinaryConditionalCondition() {
         String source = """
                 class Demo {

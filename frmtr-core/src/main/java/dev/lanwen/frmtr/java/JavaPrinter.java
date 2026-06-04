@@ -1493,7 +1493,7 @@ final class JavaPrinter {
             if (compactObjectCreationChain.isPresent()) {
                 return compactObjectCreationChain.orElseThrow();
             }
-            Optional<Doc> chain = methodCallChain(methodCall, true);
+            Optional<Doc> chain = mixedFieldMethodCallChain(methodCall).or(() -> methodCallChain(methodCall, true));
             if (chain.isPresent()) {
                 return variableWithMethodCallChain(
                         name,
@@ -1716,7 +1716,9 @@ final class JavaPrinter {
             String flatName,
             MethodCallExpr methodCall,
             Doc chain) {
-        String firstLine = methodCallChainFirstLine(methodCall);
+        String firstLine = mixedFieldMethodCallRoot(methodCall)
+                .map(this::compact)
+                .orElseGet(() -> methodCallChainFirstLine(methodCall));
         if (methodCallChainRootIsObjectCreation(methodCall)
                 && blockStatementWidth(flatName + " = " + firstLine + ";") > options.lineWidth()) {
             return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
@@ -4473,6 +4475,97 @@ final class JavaPrinter {
                 Doc.text(")")));
     }
 
+    private Optional<Doc> mixedFieldMethodCallChain(MethodCallExpr expression) {
+        if (!expression.getAllContainedComments().isEmpty()) {
+            return Optional.empty();
+        }
+        List<Doc> segments = new ArrayList<>();
+        Optional<Expression> root = collectMixedFieldMethodCallChain(expression, segments);
+        if (root.isEmpty() || segments.size() < 2) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+                expression(root.orElseThrow()),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, segments)))));
+    }
+
+    private Optional<Expression> mixedFieldMethodCallRoot(MethodCallExpr expression) {
+        if (!expression.getAllContainedComments().isEmpty()) {
+            return Optional.empty();
+        }
+        if (mixedFieldMethodCallSegmentCount(expression) < 2) {
+            return Optional.empty();
+        }
+        return mixedFieldMethodCallStructuralRoot(expression);
+    }
+
+    private int mixedFieldMethodCallSegmentCount(MethodCallExpr expression) {
+        Optional<Expression> scope = expression.getScope();
+        if (scope.isEmpty()) {
+            return 0;
+        }
+        Expression scoped = scope.orElseThrow();
+        if (scoped instanceof MethodCallExpr methodScope) {
+            int segments = mixedFieldMethodCallSegmentCount(methodScope);
+            return segments == 0 ? 0 : segments + 1;
+        }
+        if (scoped instanceof FieldAccessExpr fieldAccess) {
+            Optional<MethodCallExpr> methodRoot = fieldAccessMethodRoot(fieldAccess);
+            return methodRoot.map(root -> mixedFieldMethodCallSegmentCount(root) + 1).orElse(0);
+        }
+        return 1;
+    }
+
+    private Optional<Expression> mixedFieldMethodCallStructuralRoot(MethodCallExpr expression) {
+        Optional<Expression> scope = expression.getScope();
+        if (scope.isEmpty()) {
+            return Optional.empty();
+        }
+        Expression scoped = scope.orElseThrow();
+        if (scoped instanceof MethodCallExpr methodScope) {
+            return mixedFieldMethodCallStructuralRoot(methodScope);
+        }
+        if (scoped instanceof FieldAccessExpr fieldAccess) {
+            return fieldAccessMethodRoot(fieldAccess).flatMap(this::mixedFieldMethodCallStructuralRoot);
+        }
+        return Optional.of(scoped);
+    }
+
+    private Optional<Expression> collectMixedFieldMethodCallChain(MethodCallExpr expression, List<Doc> segments) {
+        Optional<Expression> scope = expression.getScope();
+        if (scope.isEmpty()) {
+            return Optional.empty();
+        }
+        Expression scoped = scope.orElseThrow();
+        if (scoped instanceof MethodCallExpr methodScope) {
+            Optional<Expression> root = collectMixedFieldMethodCallChain(methodScope, segments);
+            root.ifPresent(ignored -> segments.add(methodCallChainSegment(expression)));
+            return root;
+        }
+        if (scoped instanceof FieldAccessExpr fieldAccess) {
+            Optional<MethodCallExpr> methodRoot = fieldAccessMethodRoot(fieldAccess);
+            if (methodRoot.isEmpty()) {
+                return Optional.empty();
+            }
+            Optional<Expression> root = collectMixedFieldMethodCallChain(methodRoot.orElseThrow(), segments);
+            root.ifPresent(ignored -> segments.add(fieldAccessMethodCallSegment(fieldAccess, expression)));
+            return root;
+        }
+        segments.add(methodCallChainSegment(expression));
+        return Optional.of(scoped);
+    }
+
+    private Optional<MethodCallExpr> fieldAccessMethodRoot(FieldAccessExpr fieldAccess) {
+        Expression scope = fieldAccess.getScope();
+        if (scope instanceof MethodCallExpr methodCall) {
+            return Optional.of(methodCall);
+        }
+        if (scope instanceof FieldAccessExpr innerFieldAccess) {
+            return fieldAccessMethodRoot(innerFieldAccess);
+        }
+        return Optional.empty();
+    }
+
     private boolean methodCallChainHasComments(MethodCallExpr expression) {
         List<MethodCallExpr> calls = new ArrayList<>();
         Expression root = methodCallChainRoot(expression, calls);
@@ -4567,8 +4660,19 @@ final class JavaPrinter {
         String typeArguments = methodCall.getTypeArguments()
                 .map(arguments -> "<" + compactJoinTypeLike(arguments) + ">")
                 .orElse("");
-        return Doc.text("." + fieldAccess.getNameAsString() + "." + typeArguments + methodCall.getNameAsString()
+        return Doc.text(fieldAccessSuffixAfterMethodRoot(fieldAccess) + "." + typeArguments + methodCall.getNameAsString()
                 + "(" + compactJoin(methodCall.getArguments()) + ")");
+    }
+
+    private String fieldAccessSuffixAfterMethodRoot(FieldAccessExpr fieldAccess) {
+        Expression scope = fieldAccess.getScope();
+        if (scope instanceof MethodCallExpr) {
+            return "." + fieldAccess.getNameAsString();
+        }
+        if (scope instanceof FieldAccessExpr innerFieldAccess) {
+            return fieldAccessSuffixAfterMethodRoot(innerFieldAccess) + "." + fieldAccess.getNameAsString();
+        }
+        return "." + fieldAccess.getNameAsString();
     }
 
     private boolean startsOnSameLine(Comment comment, Node node) {

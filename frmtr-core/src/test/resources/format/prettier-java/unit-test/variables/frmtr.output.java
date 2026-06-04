@@ -182,11 +182,15 @@ public class Variables {
 
         ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> variable = new MyExtremelyLongAndObnoxiousClassName<>();
 
-        ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> variable =
-            new MyExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName>();
+        ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> variable = new MyExtremelyLongAndObnoxiousClassName<
+            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
+            ExtremelyLongAndObnoxiousClassName
+        >();
 
-        ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
-            new MyExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName>();
+        ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new MyExtremelyLongAndObnoxiousClassName<
+            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
+            ExtremelyLongAndObnoxiousClassName
+        >();
 
         new MyExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName>().method();
     }
@@ -218,15 +222,14 @@ public class Variables {
             "ffffffffffffffffffff"
         );
 
-        final Foo bar =
-            new Foo(
-                "aaaaaaaaaaaaaaaaaaaa",
-                "bbbbbbbbbbbbbbbbbbbb",
-                "cccccccccccccccccccc",
-                "dddddddddddddddddddd",
-                "eeeeeeeeeeeeeeeeeeee",
-                "ffffffffffffffffffff"
-            );
+        final Foo bar = new Foo(
+            "aaaaaaaaaaaaaaaaaaaa",
+            "bbbbbbbbbbbbbbbbbbbb",
+            "cccccccccccccccccccc",
+            "dddddddddddddddddddd",
+            "eeeeeeeeeeeeeeeeeeee",
+            "ffffffffffffffffffff"
+        );
 
         int a, b, c = 1;
     }

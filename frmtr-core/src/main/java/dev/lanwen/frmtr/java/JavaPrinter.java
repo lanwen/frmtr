@@ -1432,6 +1432,15 @@ final class JavaPrinter {
                     return arrayCreation.orElseThrow();
                 }
             }
+            if (initializer instanceof ObjectCreationExpr objectCreationExpr) {
+                Optional<Doc> objectCreation = variableWithBrokenObjectCreation(
+                        name,
+                        declarationPrefix + variable.getNameAsString(),
+                        objectCreationExpr);
+                if (objectCreation.isPresent()) {
+                    return objectCreation.orElseThrow();
+                }
+            }
             if (initializer instanceof BinaryExpr binaryExpr) {
                 if (shouldKeepCastDivisionContinuationFlat(binaryExpr)) {
                     return Doc.concat(
@@ -1516,6 +1525,64 @@ final class JavaPrinter {
         return Optional.of(Doc.concat(
                 Doc.text(name + " ="),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(prefix + " "), arrayInitializer(initializer, true)))));
+    }
+
+    private Optional<Doc> variableWithBrokenObjectCreation(
+            String name,
+            String flatName,
+            ObjectCreationExpr objectCreation) {
+        if (objectCreation.getAnonymousClassBody().isPresent()
+                || !objectCreation.getAllContainedComments().isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<Doc> typeArguments = variableWithBrokenObjectCreationTypeArguments(name, flatName, objectCreation);
+        if (typeArguments.isPresent()) {
+            return typeArguments;
+        }
+        return variableWithBrokenObjectCreationArguments(name, flatName, objectCreation);
+    }
+
+    private Optional<Doc> variableWithBrokenObjectCreationArguments(
+            String name,
+            String flatName,
+            ObjectCreationExpr objectCreation) {
+        if (objectCreation.getArguments().isEmpty()) {
+            return Optional.empty();
+        }
+        String prefix = objectCreationPrefix(objectCreation);
+        if (currentIndentedWidth(flatName + " = " + prefix + "(") > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+                Doc.text(name + " = " + prefix + "("),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), objectCreation.getArguments().stream()
+                                .map(this::expression)
+                                .toList()))),
+                Doc.HARD_LINE,
+                Doc.text(")")));
+    }
+
+    private Optional<Doc> variableWithBrokenObjectCreationTypeArguments(
+            String name,
+            String flatName,
+            ObjectCreationExpr objectCreation) {
+        if (!objectCreation.getArguments().isEmpty()
+                || objectCreation.getScope().isPresent()
+                || objectCreation.getTypeArguments().isPresent()
+                || !objectCreation.getType().isClassOrInterfaceType()) {
+            return Optional.empty();
+        }
+        ClassOrInterfaceType type = objectCreation.getType().asClassOrInterfaceType();
+        if (type.getTypeArguments().isEmpty()
+                || currentIndentedWidth(flatName + " = new " + typeNameWithoutArguments(type) + "<") > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+                Doc.text(name + " = new "),
+                brokenClassOrInterfaceType(type),
+                Doc.text("()")));
     }
 
     private Optional<Doc> variableWithBrokenMethodCallArguments(

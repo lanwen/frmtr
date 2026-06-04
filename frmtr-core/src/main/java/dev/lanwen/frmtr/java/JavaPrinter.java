@@ -3446,25 +3446,72 @@ final class JavaPrinter {
             return Doc.concat(
                     binaryLeftOperand(expression),
                     Doc.text(" " + expression.getOperator().asString() + " "),
-                    expression(expression.getRight()));
+                    binaryRightOperand(expression));
         }
         return Doc.concat(
                 Doc.text(compactWithoutOwnComment(expression.getLeft()) + " " + expression.getOperator().asString() + " "),
                 JavaFormatter.commentDoc(leftLineComment.orElseThrow()),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, expression(expression.getRight()))));
+                Doc.indent(Doc.concat(Doc.HARD_LINE, binaryRightOperand(expression))));
     }
 
     private Doc binaryLeftOperand(BinaryExpr expression) {
         if (expression.getLeft() instanceof BinaryExpr leftBinary
-                && shouldParenthesizeLeftBinary(expression.getOperator(), leftBinary.getOperator())) {
+                && (shouldParenthesizeLeftBinary(expression.getOperator(), leftBinary.getOperator())
+                        || shouldParenthesizeNestedBinary(expression.getOperator(), leftBinary.getOperator()))) {
             return Doc.concat(Doc.text("("), expression(leftBinary), Doc.text(")"));
         }
         return expression(expression.getLeft());
     }
 
+    private Doc binaryRightOperand(BinaryExpr expression) {
+        if (expression.getRight() instanceof BinaryExpr rightBinary
+                && shouldParenthesizeNestedBinary(expression.getOperator(), rightBinary.getOperator())) {
+            return Doc.concat(Doc.text("("), expression(rightBinary), Doc.text(")"));
+        }
+        return expression(expression.getRight());
+    }
+
     private boolean shouldParenthesizeLeftBinary(BinaryExpr.Operator outer, BinaryExpr.Operator inner) {
         return (outer == BinaryExpr.Operator.DIVIDE || outer == BinaryExpr.Operator.REMAINDER)
                 && (inner == BinaryExpr.Operator.MULTIPLY || inner == BinaryExpr.Operator.REMAINDER);
+    }
+
+    private boolean shouldParenthesizeNestedBinary(BinaryExpr.Operator outer, BinaryExpr.Operator inner) {
+        if (isShiftOperator(outer) && (isArithmeticOperator(inner) || isShiftOperator(inner))) {
+            return true;
+        }
+        if (isBitwiseOperator(outer)
+                && (isShiftOperator(inner)
+                        || outer == BinaryExpr.Operator.BINARY_OR
+                                && (inner == BinaryExpr.Operator.BINARY_AND || inner == BinaryExpr.Operator.XOR)
+                        || outer == BinaryExpr.Operator.XOR && inner == BinaryExpr.Operator.BINARY_AND)) {
+            return true;
+        }
+        return isEqualityOperator(outer) && isEqualityOperator(inner);
+    }
+
+    private boolean isShiftOperator(BinaryExpr.Operator operator) {
+        return operator == BinaryExpr.Operator.LEFT_SHIFT
+                || operator == BinaryExpr.Operator.SIGNED_RIGHT_SHIFT
+                || operator == BinaryExpr.Operator.UNSIGNED_RIGHT_SHIFT;
+    }
+
+    private boolean isArithmeticOperator(BinaryExpr.Operator operator) {
+        return operator == BinaryExpr.Operator.PLUS
+                || operator == BinaryExpr.Operator.MINUS
+                || operator == BinaryExpr.Operator.MULTIPLY
+                || operator == BinaryExpr.Operator.DIVIDE
+                || operator == BinaryExpr.Operator.REMAINDER;
+    }
+
+    private boolean isBitwiseOperator(BinaryExpr.Operator operator) {
+        return operator == BinaryExpr.Operator.BINARY_AND
+                || operator == BinaryExpr.Operator.XOR
+                || operator == BinaryExpr.Operator.BINARY_OR;
+    }
+
+    private boolean isEqualityOperator(BinaryExpr.Operator operator) {
+        return operator == BinaryExpr.Operator.EQUALS || operator == BinaryExpr.Operator.NOT_EQUALS;
     }
 
     private Doc methodCall(MethodCallExpr expression) {

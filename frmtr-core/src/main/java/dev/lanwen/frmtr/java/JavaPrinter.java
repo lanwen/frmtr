@@ -3213,7 +3213,7 @@ final class JavaPrinter {
     private Doc lambdaExpression(LambdaExpr expression) {
         String parameters = lambdaParameters(expression);
         if (expression.getBody().isBlockStmt()) {
-            return Doc.concat(Doc.text(parameters + " -> "), block(expression.getBody().asBlockStmt()));
+            return Doc.concat(lambdaParametersForHeader(expression, parameters), Doc.text(" -> "), block(expression.getBody().asBlockStmt()));
         }
         Doc body = expression.getExpressionBody()
                 .map(this::expression)
@@ -3225,8 +3225,29 @@ final class JavaPrinter {
             return Doc.text(flat);
         }
         return Doc.concat(
-                Doc.text(parameters + " ->"),
+                lambdaParametersForHeader(expression, parameters),
+                Doc.text(" ->"),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, body)));
+    }
+
+    private Doc lambdaParametersForHeader(LambdaExpr expression, String flatParameters) {
+        if (!lambdaParametersShouldBreak(expression, flatParameters)) {
+            return Doc.text(flatParameters);
+        }
+        return Doc.concat(
+                Doc.text("("),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), expression.getParameters().stream()
+                                .map(parameter -> Doc.text(compact(parameter)))
+                                .toList()))),
+                Doc.HARD_LINE,
+                Doc.text(")"));
+    }
+
+    private boolean lambdaParametersShouldBreak(LambdaExpr expression, String flatParameters) {
+        return expression.getParameters().size() > 1
+                && currentIndentedWidth(flatParameters + " -> {}") > options.lineWidth();
     }
 
     private String lambdaParameters(LambdaExpr expression) {
@@ -3254,6 +3275,9 @@ final class JavaPrinter {
         if (expression.getArguments().size() != 1
                 || !(expression.getArguments().get(0) instanceof LambdaExpr lambdaExpr)
                 || !lambdaExpr.getBody().isBlockStmt()) {
+            return Optional.empty();
+        }
+        if (lambdaParametersShouldBreak(lambdaExpr, lambdaParameters(lambdaExpr))) {
             return Optional.empty();
         }
         return Optional.of(Doc.concat(Doc.text(prefix + "("), lambdaExpression(lambdaExpr), Doc.text(")")));

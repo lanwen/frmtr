@@ -57,10 +57,19 @@ public class Lambda {
 
     public void lambdaWithLongListOfParameters() {
         final List<Integer> values = Stream.of(1, 2)
-            .map((aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter) -> {
-                // testing method
-                return n * 2;
-            })
+            .map(
+                (
+                    aVeryLongListOfParameter,
+                    aVeryLongListOfParameter,
+                    aVeryLongListOfParameter,
+                    aVeryLongListOfParameter,
+                    aVeryLongListOfParameter,
+                    aVeryLongListOfParameter
+                ) -> {
+                    // testing method
+                    return n * 2;
+                }
+            )
             .collect(Collectors.toList());
 
         final List<Integer> values = Stream.of(1, 2)
@@ -109,7 +118,14 @@ public class Lambda {
         );
 
         new Value(
-            (aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter) -> {
+            (
+                aVeryLongListOfParameter,
+                aVeryLongListOfParameter,
+                aVeryLongListOfParameter,
+                aVeryLongListOfParameter,
+                aVeryLongListOfParameter,
+                aVeryLongListOfParameter
+            ) -> {
                 // testing method
                 return n * 2;
             }
@@ -330,7 +346,14 @@ class T {
 
     T() {
         super(
-            (aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter) -> {
+            (
+                aVeryLongListOfParameter,
+                aVeryLongListOfParameter,
+                aVeryLongListOfParameter,
+                aVeryLongListOfParameter,
+                aVeryLongListOfParameter,
+                aVeryLongListOfParameter
+            ) -> {
                 // testing method
                 return n * 2;
             }

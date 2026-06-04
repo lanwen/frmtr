@@ -239,6 +239,31 @@ final class FrmtrTest {
     }
 
     @Test
+    void hugsExactWidthMethodCallExpressionLambdaBeforeBreakingBody() {
+        String source = """
+                class Demo {
+                    void method() {
+                        aaaaaaaaaa(bbbbbbbbbb -> cccccccccc("123456789012345678901234567890123456"));
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("aaaaaaaaaa(bbbbbbbbbb ->\n"
+                        + "      cccccccccc(\"123456789012345678901234567890123456\")\n"
+                        + "    );");
+    }
+
+    @Test
     void hugsNestedMethodCallExpressionLambdaBeforeBreakingBody() {
         String source = """
                 class Demo {
@@ -258,14 +283,15 @@ final class FrmtrTest {
         String formatted = Frmtr.format(source, options);
 
         assertThat(formatted)
-                .contains("a.b(c -> d ->\n"
-                        + "      eeeeeeeeee.ffffffffff(\n"
-                        + "        gggggggggg,\n"
-                        + "        hhhhhhhhhh,\n"
-                        + "        iiiiiiiiii,\n"
-                        + "        jjjjjjjjjj,\n"
-                        + "        kkkkkkkkkk\n"
-                        + "      )\n"
+                .contains("a.b(\n"
+                        + "      c -> d ->\n"
+                        + "        eeeeeeeeee.ffffffffff(\n"
+                        + "          gggggggggg,\n"
+                        + "          hhhhhhhhhh,\n"
+                        + "          iiiiiiiiii,\n"
+                        + "          jjjjjjjjjj,\n"
+                        + "          kkkkkkkkkk\n"
+                        + "        )\n"
                         + "    );");
     }
 

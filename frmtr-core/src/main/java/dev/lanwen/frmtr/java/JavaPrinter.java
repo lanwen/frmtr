@@ -4361,11 +4361,21 @@ final class JavaPrinter {
                 + (leadingArguments.isEmpty() ? "" : leadingArguments + ", ")
                 + huggableExpressionLambdaFirstLine(lambdaExpr, parameters);
         String flat = prefix + "(" + compactJoin(arguments) + ")";
-        if (blockStatementWidth(flat) <= options.lineWidth()
+        if (blockStatementWidth(flat) < options.lineWidth()
                 || blockStatementWidth(firstLine) > options.lineWidth()) {
             return Optional.empty();
         }
         MethodCallExpr methodCallBody = huggableExpressionLambdaMethodCallBody(lambdaExpr).orElseThrow();
+        if (nestedLambda.isPresent()) {
+            return Optional.of(Doc.concat(
+                    Doc.text(prefix + "("),
+                    Doc.indent(Doc.concat(
+                            Doc.HARD_LINE,
+                            Doc.text(huggableExpressionLambdaFirstLine(lambdaExpr, parameters)),
+                            Doc.indent(Doc.concat(Doc.HARD_LINE, expression(methodCallBody))))),
+                    Doc.HARD_LINE,
+                    Doc.text(")")));
+        }
         return Optional.of(Doc.concat(
                 Doc.text(firstLine),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, expression(methodCallBody))),

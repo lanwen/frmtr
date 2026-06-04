@@ -70,6 +70,7 @@ final class PrettierJavaFixtureTest {
             "constructors",
             "empty_statement",
             "enum",
+            "expressions",
             "extends_abstract_class",
             "extends_abstract_class_and_implements_interfaces",
             "formatter-on-off/begin_with_on",

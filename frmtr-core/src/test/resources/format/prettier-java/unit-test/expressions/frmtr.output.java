@@ -164,34 +164,17 @@ public class Expressions {
 
     public void unannTypePrimitiveWithMethodReferenceSuffix(String[] args) {
         List.of(
-            new double[][] {
-                1,
-                2,
-                3,
-                4.1,
-                5.6846465,
-            },
-            new double[][] {
-                1,
-                2,
-                3,
-                4.1,
-                5.6846465,
-            },
-            new double[][] {
-                1,
-                2,
-                3,
-                4.1,
-                5.6846465,
-            }
-        )
-            .toArray(double[][]::new);
+            new double[][] {1, 2, 3, 4.1, 5.6846465},
+            new double[][] {1, 2, 3, 4.1, 5.6846465},
+            new double[][] {1, 2, 3, 4.1, 5.6846465}
+        ).toArray(double[][]::new);
     }
 
     public void staticMethodInvocationWithSingleChainedMethodInvocation() {
-        List.of(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
-            .chained(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa);
+        List.of(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa).chained(
+            aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,
+            aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        );
     }
 
     public void staticMethodInvocationWithMultipleChainedMethodInvocation() {

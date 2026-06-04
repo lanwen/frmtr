@@ -91,6 +91,7 @@ final class PrettierJavaFixtureTest {
             "synchronized",
             "template-expression",
             "throws",
+            "try_catch",
             "types",
             "unnamed-class-compilation-unit",
             "while",

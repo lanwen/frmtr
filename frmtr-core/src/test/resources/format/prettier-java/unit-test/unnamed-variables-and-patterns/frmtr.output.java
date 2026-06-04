@@ -27,15 +27,26 @@ class T {
     }
 
     void catchClause() {
-        try { int i = Integer.parseInt(s); } catch (NumberFormatException _) { // Unnamed variable System.out.println("Bad number: " + s); }
+        try {
+            int i = Integer.parseInt(s);
+        } catch (NumberFormatException _) {
+            // Unnamed variable
+            System.out.println("Bad number: " + s);
+        }
     }
 
     void multipleCatchClauses() {
-        try {} catch (Exception _) {} // Unnamed variable catch (Throwable _) {}
+        try {
+        } catch (Exception _) {
+        } catch (Throwable _) {
+            // Unnamed variable
+        } // Unnamed variable
     }
 
     void tryWithResources() {
-        try (var _ = ScopedContext.acquire()) { // Unnamed variable }
+        try (var _ = ScopedContext.acquire()) {
+            // Unnamed variable
+        }
     }
 
     void lambda() {

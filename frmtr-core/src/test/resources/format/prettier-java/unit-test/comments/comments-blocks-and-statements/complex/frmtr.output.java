@@ -3,7 +3,15 @@ public class PrettierTest {
     int x = 0;
 
     public void myFunction(int arg1) {
-        try { ;// Empty Statement } /*catch*/catch ( EmptyStackException e){ throw new RuntimeException(e); } /*multi-catch*/catch ( /*1*/FirstException | /*2*/SecondException |/*3*/ ThirdException e2) { throw/*throw an exception*/ new/*don't forget new when throwing exceptions*/ RuntimeException(e2); } /*is always executed no matter what*/finally{ System.out.println("That's all folks !"); }
+        try {
+            ; // Empty Statement
+        } catch (EmptyStackException e) {
+            throw new RuntimeException(e);
+        } catch (FirstException | /*2*/SecondException |/*3*/ ThirdException e2) {
+            throw new RuntimeException(e2);
+        } finally {
+            System.out.println("That's all folks !");
+        }
     }
 
     private void myFunction(int arg1, int arg2, int arg3) {

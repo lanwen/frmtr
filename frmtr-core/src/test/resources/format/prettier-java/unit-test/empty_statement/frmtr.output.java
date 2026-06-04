@@ -14,7 +14,6 @@ public class EmptyStament {
     }
 
     public void simpleForWithEmptyStatement() {
-        /*test*//*test*/
         for (;;);
 
         for (;;);
@@ -25,7 +24,6 @@ public class EmptyStament {
     }
 
     public void simpleForWithEmptyStatement() {
-        /*test*//*test*/
         for (;;);
 
         for (;;);
@@ -36,7 +34,6 @@ public class EmptyStament {
     }
 
     public void forEachWithEmptyStatement(List<String> list) {
-        /*test*/
         for (String str : list) ;
 
         for (String str : list) /*test*/
@@ -58,7 +55,6 @@ public class EmptyStament {
     }
 
     public void ifElseWithEmptyStatementsWithComments() {
-        /*test*//*test*/
         if (test) /*test*/
         ; else {
             System.out.println("one");
@@ -87,7 +83,6 @@ public class EmptyStament {
     }
 
     public void simpleWhileWithEmptyStatement(boolean one) {
-        /*test*/
         while (one) ;
 
         while (one) /*test*/

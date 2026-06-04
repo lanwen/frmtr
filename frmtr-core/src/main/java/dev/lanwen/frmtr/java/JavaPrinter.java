@@ -38,6 +38,7 @@ import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
+import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.modules.ModuleDeclaration;
 import com.github.javaparser.ast.modules.ModuleDirective;
@@ -51,6 +52,7 @@ import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.BreakStmt;
 import com.github.javaparser.ast.stmt.ContinueStmt;
+import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.DoStmt;
 import com.github.javaparser.ast.stmt.EmptyStmt;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
@@ -66,6 +68,7 @@ import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.ast.stmt.SwitchStmt;
 import com.github.javaparser.ast.stmt.SynchronizedStmt;
 import com.github.javaparser.ast.stmt.ThrowStmt;
+import com.github.javaparser.ast.stmt.TryStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
 import com.github.javaparser.ast.stmt.YieldStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
@@ -844,7 +847,7 @@ final class JavaPrinter {
             return Doc.text("{}");
         }
         List<Doc> statements = new ArrayList<>();
-        statements.addAll(comments.orphanCommentStatements(block));
+        statements.addAll(blockOrphanCommentStatements(block));
         Statement previousStatement = null;
         for (Statement currentStatement : block.getStatements()) {
             if (currentStatement.isEmptyStmt() && previousStatement instanceof SwitchStmt) {
@@ -861,6 +864,19 @@ final class JavaPrinter {
                 Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.concat(statements))),
                 Doc.HARD_LINE,
                 Doc.text("}"));
+    }
+
+    private List<Doc> blockOrphanCommentStatements(BlockStmt block) {
+        return comments.orphanCommentStatements(block, comment -> !commentInsideChildStatement(block, comment));
+    }
+
+    private boolean commentInsideChildStatement(BlockStmt block, Comment comment) {
+        return comment.getRange()
+                .map(commentRange -> block.getStatements().stream()
+                        .flatMap(statement -> statement.getRange().stream())
+                        .anyMatch(statementRange -> commentRange.begin.line >= statementRange.begin.line
+                                && commentRange.begin.line <= statementRange.end.line))
+                .orElse(false);
     }
 
     private Doc statementSeparator(Statement previousStatement, Statement currentStatement) {
@@ -888,8 +904,8 @@ final class JavaPrinter {
 
     private Doc statement(Statement statement) {
         FormatterPragma formatterPragma = formatterPragma(statement);
-        Doc trailing = comments.trailingLineComment(statement);
-        Doc leading = trailing == Doc.EMPTY ? comments.leading(statement) : Doc.EMPTY;
+        Doc trailing = statement instanceof TryStmt ? Doc.EMPTY : comments.trailingLineComment(statement);
+        Doc leading = statement instanceof TryStmt ? Doc.EMPTY : trailing == Doc.EMPTY ? comments.leading(statement) : Doc.EMPTY;
         if (formatterPragma == FormatterPragma.ON) {
             formattingDisabled = false;
         } else if (formatterPragma == FormatterPragma.END) {
@@ -919,6 +935,7 @@ final class JavaPrinter {
             case IfStmt ifStmt -> ifStatement(ifStmt);
             case WhileStmt whileStmt -> Doc.concat(Doc.text("while (" + compact(whileStmt.getCondition()) + ") "), nestedStatement(whileStmt.getBody()));
             case DoStmt doStmt -> Doc.concat(Doc.text("do "), nestedStatement(doStmt.getBody()), Doc.text(" while (" + compact(doStmt.getCondition()) + ");"));
+            case TryStmt tryStmt -> tryStatement(tryStmt);
             case SynchronizedStmt synchronizedStmt -> Doc.concat(Doc.text("synchronized (" + compact(synchronizedStmt.getExpression()) + ") "), block(synchronizedStmt.getBody()));
             case SwitchStmt switchStmt -> switchStatement(switchStmt);
             case ForStmt forStmt -> forStatement(forStmt);
@@ -1058,6 +1075,199 @@ final class JavaPrinter {
             return Doc.concat(methodCall(methodCall, MethodCallMode.BREAK), Doc.text(";"));
         }
         return Doc.concat(expression(expression), Doc.text(";"));
+    }
+
+    private Doc tryStatement(TryStmt statement) {
+        List<Doc> docs = new ArrayList<>();
+        docs.add(Doc.text("try"));
+        docs.add(tryResources(statement));
+        docs.add(Doc.text(" "));
+        docs.add(tryBlock(statement.getTryBlock()));
+        Doc previousBlockTrailingComment = comments.trailingLineComment(statement.getTryBlock());
+        for (int i = 0; i < statement.getCatchClauses().size(); i++) {
+            CatchClause clause = statement.getCatchClauses().get(i);
+            docs.add(Doc.text(" "));
+            docs.add(catchClause(
+                    clause,
+                    statement.getCatchClauses().size(),
+                    statement.getFinallyBlock().isPresent(),
+                    Doc.concat(previousBlockTrailingComment, ownCommentBeforeNode(clause))));
+            previousBlockTrailingComment = trailingCommentAfterClause(clause);
+        }
+        if (statement.getFinallyBlock().isPresent()) {
+            BlockStmt finallyBlock = statement.getFinallyBlock().orElseThrow();
+            docs.add(Doc.text(" finally "));
+            docs.add(tryBlock(finallyBlock, Doc.concat(previousBlockTrailingComment, ownCommentBeforeNode(finallyBlock))));
+        }
+        Doc finalTrailingComment = statement.getFinallyBlock()
+                .map(comments::trailingLineComment)
+                .orElse(previousBlockTrailingComment);
+        if (finalTrailingComment == Doc.EMPTY) {
+            finalTrailingComment = rawTrailingLineComment(statement);
+        }
+        if (finalTrailingComment == Doc.EMPTY) {
+            finalTrailingComment = parentOrphanCommentOnEndLine(statement);
+        }
+        Doc tryStatementTrailingComment = comments.trailingLineComment(statement);
+        if (finalTrailingComment != Doc.EMPTY) {
+            docs.add(Doc.text(" "));
+            docs.add(finalTrailingComment);
+        }
+        if (tryStatementTrailingComment != Doc.EMPTY) {
+            docs.add(Doc.text(" "));
+            docs.add(tryStatementTrailingComment);
+        }
+        return Doc.concat(docs);
+    }
+
+    private Doc tryResources(TryStmt statement) {
+        if (statement.getResources().isEmpty()) {
+            return Doc.EMPTY;
+        }
+        boolean trailingSemicolon = tryResourcesHaveTrailingSemicolon(statement);
+        String flatResources = statement.getResources().stream()
+                .map(this::compact)
+                .reduce((left, right) -> left + "; " + right)
+                .orElse("");
+        if (trailingSemicolon) {
+            flatResources += ";";
+        }
+        String flat = "try (" + flatResources + ")";
+        if (statement.getResources().size() == 1 && currentIndentedWidth(flat + " {}") <= options.lineWidth()) {
+            return Doc.text(" (" + flatResources + ")");
+        }
+        return Doc.concat(
+                Doc.text(" ("),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(
+                                Doc.concat(Doc.text(";"), Doc.HARD_LINE),
+                                statement.getResources().stream().map(resource -> Doc.text(compact(resource))).toList()),
+                        trailingSemicolon ? Doc.text(";") : Doc.EMPTY)),
+                Doc.HARD_LINE,
+                Doc.text(")"));
+    }
+
+    private boolean tryResourcesHaveTrailingSemicolon(TryStmt statement) {
+        String raw = rawWithoutOwnComment(statement);
+        int resourceStart = raw.indexOf('(');
+        int blockStart = raw.indexOf('{', resourceStart);
+        if (resourceStart < 0 || blockStart < 0) {
+            return false;
+        }
+        int resourceEnd = raw.substring(resourceStart, blockStart).lastIndexOf(')');
+        if (resourceEnd < 0) {
+            return false;
+        }
+        return raw.substring(resourceStart + 1, resourceStart + resourceEnd).stripTrailing().endsWith(";");
+    }
+
+    private Doc trailingCommentAfterClause(CatchClause clause) {
+        Doc bodyTrailing = comments.trailingLineComment(clause.getBody());
+        if (bodyTrailing != Doc.EMPTY) {
+            return bodyTrailing;
+        }
+        return comments.trailingLineComment(clause);
+    }
+
+    private Doc ownCommentBeforeNode(Node node) {
+        return comments.ownComment(node, comment -> comment.getRange()
+                .flatMap(commentRange -> node.getRange()
+                        .map(nodeRange -> commentRange.begin.line < nodeRange.begin.line))
+                .orElse(false));
+    }
+
+    private Doc rawTrailingLineComment(Node node) {
+        String raw = node.getTokenRange().map(Object::toString).orElse("");
+        int lastBrace = raw.lastIndexOf('}');
+        if (lastBrace < 0) {
+            return Doc.EMPTY;
+        }
+        int commentStart = raw.indexOf("//", lastBrace);
+        if (commentStart < 0 || raw.substring(lastBrace, commentStart).contains("\n")) {
+            return Doc.EMPTY;
+        }
+        int commentEnd = raw.indexOf('\n', commentStart);
+        String comment = commentEnd < 0 ? raw.substring(commentStart) : raw.substring(commentStart, commentEnd);
+        return Doc.text(comment.stripTrailing());
+    }
+
+    private Doc parentOrphanCommentOnEndLine(Node node) {
+        return node.getParentNode()
+                .filter(BlockStmt.class::isInstance)
+                .map(BlockStmt.class::cast)
+                .map(parent -> Doc.concat(comments.orphanCommentStatements(parent, comment -> comment.getRange()
+                        .flatMap(commentRange -> node.getRange()
+                                .map(nodeRange -> commentRange.begin.line == nodeRange.end.line))
+                        .orElse(false))))
+                .orElse(Doc.EMPTY);
+    }
+
+    private Doc tryBlock(BlockStmt block) {
+        return tryBlock(block, Doc.EMPTY);
+    }
+
+    private Doc tryBlock(BlockStmt block, Doc leadingInside) {
+        if (block.getStatements().isEmpty() && block.getOrphanComments().isEmpty() && leadingInside == Doc.EMPTY) {
+            return Doc.concat(Doc.text("{"), Doc.HARD_LINE, Doc.text("}"));
+        }
+        return blockWithLeading(block, leadingInside);
+    }
+
+    private Doc blockWithLeading(BlockStmt block, Doc leadingInside) {
+        if (block.getStatements().isEmpty() && block.getOrphanComments().isEmpty() && leadingInside == Doc.EMPTY) {
+            return Doc.text("{}");
+        }
+        List<Doc> statements = new ArrayList<>();
+        if (leadingInside != Doc.EMPTY) {
+            statements.add(leadingInside);
+        }
+        statements.addAll(blockOrphanCommentStatements(block));
+        Statement previousStatement = null;
+        for (Statement currentStatement : block.getStatements()) {
+            if (currentStatement.isEmptyStmt() && previousStatement instanceof SwitchStmt) {
+                continue;
+            }
+            if (!statements.isEmpty()) {
+                statements.add(statementSeparator(previousStatement, currentStatement));
+            }
+            statements.add(statement(currentStatement));
+            previousStatement = currentStatement;
+        }
+        return Doc.concat(
+                Doc.text("{"),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.concat(statements))),
+                Doc.HARD_LINE,
+                Doc.text("}"));
+    }
+
+    private Doc catchClause(CatchClause clause, int catchCount, boolean hasFinally, Doc leadingInside) {
+        boolean compactEmptyBody = catchCount == 1
+                && !hasFinally
+                && clause.getBody().getStatements().isEmpty()
+                && clause.getBody().getOrphanComments().isEmpty()
+                && leadingInside == Doc.EMPTY;
+        return Doc.concat(
+                Doc.text("catch ("),
+                catchParameter(clause.getParameter()),
+                Doc.text(") "),
+                compactEmptyBody ? Doc.text("{}") : tryBlock(clause.getBody(), leadingInside));
+    }
+
+    private Doc catchParameter(Parameter parameter) {
+        String flat = compact(parameter);
+        if (!flat.contains("|") || currentIndentedWidth("catch (" + flat + ") {}") <= options.lineWidth()) {
+            return Doc.text(flat);
+        }
+        String type = compactTypeLike(parameter.getType());
+        List<String> parts = List.of(type.split("\\s*\\|\\s*"));
+        List<Doc> lines = new ArrayList<>();
+        for (int i = 0; i < parts.size(); i++) {
+            String prefix = i == 0 ? "" : "| ";
+            String suffix = i == parts.size() - 1 ? " " + parameter.getNameAsString() : "";
+            lines.add(Doc.text(prefix + parts.get(i) + suffix));
+        }
+        return Doc.concat(Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, lines))), Doc.HARD_LINE);
     }
 
     private Doc expression(Expression expression) {

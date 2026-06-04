@@ -200,10 +200,23 @@ public final class JavaFormatter {
         }
 
         List<Doc> orphanCommentStatements(Node node) {
+            return orphanCommentStatements(node, ignored -> true);
+        }
+
+        List<Doc> orphanCommentStatements(Node node, Predicate<Comment> predicate) {
             return node.getOrphanComments().stream()
+                    .filter(predicate)
                     .filter(printed::add)
                     .map(JavaFormatter::commentDoc)
                     .toList();
+        }
+
+        Doc ownComment(Node node, Predicate<Comment> predicate) {
+            return node.getComment()
+                    .filter(predicate)
+                    .filter(printed::add)
+                    .map(JavaFormatter::commentDoc)
+                    .orElse(Doc.EMPTY);
         }
 
         private boolean sameEndLine(Node node, Comment comment) {

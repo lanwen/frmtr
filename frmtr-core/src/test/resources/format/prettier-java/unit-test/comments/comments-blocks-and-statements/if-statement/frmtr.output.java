@@ -1,7 +1,6 @@
 class IfStatements {
 
     void commentsIfLineComment() {
-        // test
         if (t) {}
 
         if (t) {}
@@ -28,7 +27,6 @@ class IfStatements {
     }
 
     void commentsElseLineComment() {
-        // test
         if (t) {} else // test
         {}
 

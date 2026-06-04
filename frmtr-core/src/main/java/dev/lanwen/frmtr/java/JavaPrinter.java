@@ -3963,6 +3963,16 @@ final class JavaPrinter {
                         && !singleCommentedSegment)) {
             return Optional.empty();
         }
+        if (force
+                && calls.size() == 1
+                && root.getAllContainedComments().isEmpty()
+                && calls.getFirst().getAllContainedComments().isEmpty()
+                && !methodCallSegmentHasComment(calls.getFirst())) {
+            Optional<Doc> compactRootWithBrokenSegment = compactRootWithBrokenFinalSegment(root, calls.getFirst());
+            if (compactRootWithBrokenSegment.isPresent()) {
+                return compactRootWithBrokenSegment;
+            }
+        }
         if (calls.size() == 1 && root instanceof MethodCallExpr) {
             return Optional.of(Doc.concat(expression(root), methodCallChainSegment(calls.getFirst())));
         }
@@ -4009,6 +4019,28 @@ final class JavaPrinter {
                 Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, calls.stream()
                         .map(this::methodCallChainSegment)
                         .toList())))));
+    }
+
+    private Optional<Doc> compactRootWithBrokenFinalSegment(Expression root, MethodCallExpr call) {
+        if (!(root instanceof ObjectCreationExpr || root instanceof MethodCallExpr) || call.getArguments().isEmpty()) {
+            return Optional.empty();
+        }
+        String typeArguments = call.getTypeArguments()
+                .map(arguments -> "<" + compactJoinTypeLike(arguments) + ">")
+                .orElse("");
+        String prefix = compact(root) + "." + typeArguments + call.getNameAsString() + "(";
+        if (currentIndentedWidth(prefix + ")") > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+                Doc.text(prefix),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), call.getArguments().stream()
+                                .map(this::expression)
+                                .toList()))),
+                Doc.HARD_LINE,
+                Doc.text(")")));
     }
 
     private boolean methodCallChainHasComments(MethodCallExpr expression) {

@@ -127,10 +127,10 @@ public class BreakLongFunctionCall {
     }
 
     public void singleInvocationOnNewExpression() {
-        new Instance(
+        new Instance(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa).invocation(
             aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,
             aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-        ).invocation(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa);
+        );
     }
 
     public void multipleInvocationsOnNewExpression() {

@@ -342,9 +342,9 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
      *
      * @param valueClass class of values stored in the returned array
      */
-    @GwtIncompatible
+    @GwtIncompatible // reflection
     public V[][] toArray(Class<V> valueClass) {
-        @SuppressWarnings("unchecked")
+        @SuppressWarnings("unchecked") // TODO: safe?
         V[][] copy = (V[][]) Array.newInstance(valueClass, rowList.size(), columnList.size());
         for (int i = 0; i < rowList.size(); i++) {
             System.arraycopy(array[i], 0, copy[i], 0, array[i].length);

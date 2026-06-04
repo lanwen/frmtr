@@ -2567,13 +2567,19 @@ final class JavaPrinter {
     }
 
     private Doc annotation(AnnotationExpr annotation) {
+        Doc formatted;
         if (annotation instanceof NormalAnnotationExpr normalAnnotation) {
-            return normalAnnotation(normalAnnotation);
+            formatted = normalAnnotation(normalAnnotation);
+        } else if (annotation instanceof SingleMemberAnnotationExpr singleMemberAnnotation) {
+            formatted = singleMemberAnnotation(singleMemberAnnotation);
+        } else {
+            formatted = Doc.text("@" + compact(annotation.getName()));
         }
-        if (annotation instanceof SingleMemberAnnotationExpr singleMemberAnnotation) {
-            return singleMemberAnnotation(singleMemberAnnotation);
+        Doc trailing = comments.trailingLineComment(annotation);
+        if (trailing != Doc.EMPTY) {
+            return Doc.concat(formatted, Doc.text(" "), trailing);
         }
-        return Doc.text("@" + compact(annotation.getName()));
+        return formatted;
     }
 
     private Doc normalAnnotation(NormalAnnotationExpr annotation) {

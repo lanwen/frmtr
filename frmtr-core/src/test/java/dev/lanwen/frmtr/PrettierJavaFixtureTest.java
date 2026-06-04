@@ -31,6 +31,7 @@ final class PrettierJavaFixtureTest {
             FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
     private static final Set<String> PRETTIER_COMPATIBLE_FIXTURES = Set.of(
             "args",
+            "arrays",
             "assert",
             "char_literal",
             "comments/edge",

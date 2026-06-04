@@ -9,12 +9,20 @@ public class PrettierTest {
     private void myFunction(int arg1, int arg2, int arg3) {
         if (arg1 == 0 && arg2 == 0 && arg == 3) throw new RuntimeException("X Y Z cannot be all 0");
 
-        int var = arg1+arg2+arg3;
+        int var = arg1 + arg2 + arg3;
         if (var == 0) {
             System.out.println("The value is 0");
         } else /*false*/
         {
-            int[] arr = { /*One*/1,/*Two */2, /*zero*/0, /*One again*/1,-1 /*Minus One*/ ,0,2};
+            int[] arr = {
+                1,
+                2,
+                0,
+                1,
+                -1,
+                0,
+                2,
+            };
 
             loop: // Label statement //foreach for (int num /* num is every number in arr*/ : arr) { /*switch*/switch(num){//switch case 1: System.out.println("One "); System.out.println("One "); System.out.println("One "); /*just a break*/break; case 2: System.out.println("Two "); break; case 0: System.out.println("Zero "); continue/*labeled continued*/ loop; default/*def*/: /*labeled break*/break loop; } }
         }

@@ -1,97 +1,72 @@
 public class Variables {
 
     public static int STATIC_VARIABLE = 123;
-
     private static final Logger LOGGER = LoggerFactory.getLogger(ComplexFilterTest.class);
 
     int packageVariable = 234;
-
     private float privateVariable = 0.9f;
 
     private Integer nullVariable = null;
-
     private Integer createVariable = new Integer();
 
     private List<String> genericVariable1 = new ArrayList<>();
-
     private final Map<String, Button> buttonMap = new HashMap<>();
-
     private Bean<String> genericVariable2 = new Bean<String>("abc");
-
     private Bean<String> genericVariable2 = new Bean<String>("abc", "def", "ghi", "jkl");
-
     private Map<Integer, String> genericVariable4 = new HashMap<Integer, String>();
-
     private Map<Integer, String, Integer, String> genericVariable5 = new HashMap<Integer, String, Integer>();
 
     private Object variableWithComment1 = new Object();
-
     private Object variableWithComment2 = new Object();
-
     private Object variableWithComment3 = new Object();
-
     private Object variableWithComment4 = new Object();
 
-    private Object arrayVariable1 = new Object[3];
-
-    private Object arrayVariable2 = new Object[3][3];
-
-    private Object arrayVariable3 = new Object[] {};
-
-    private Object arrayVariable4 = new Object[] { "abc", "def", "ghi" };
-
-    private Object arrayVariable5 = new Object[] { "abc", "def", "ghi", "jkl", "mno" };
-
-    private Object arrayVariable6 = { "abc", "def", "ghi" };
+    private Object[] arrayVariable1 = new Object[3];
+    private Object[][] arrayVariable2 = new Object[3][3];
+    private Object[] arrayVariable3 = new Object[] {};
+    private Object[] arrayVariable4 = new Object[] {
+        "abc",
+        "def",
+        "ghi",
+    };
+    private Object[] arrayVariable5 = new Object[] {
+        "abc",
+        "def",
+        "ghi",
+        "jkl",
+        "mno",
+    };
+    private Object[] arrayVariable6 = {
+        "abc",
+        "def",
+        "ghi",
+    };
 
     private Range creator1 = this.dateRangeField.new Range(from, to);
-
-    private Range creator2 = this.dateRangeField.new <Integer>Range(from, to);
-
-    private Range<Date> creator3 = this.dateRangeField.new <Integer>Range<>(from, to);
-
-    private Range<Date> creator3 = new <Integer>Range<>(from, to);
+    private Range creator2 = this.dateRangeField.new <Integer> Range(from, to);
+    private Range<Date> creator3 = this.dateRangeField.new <Integer> Range<>(from, to);
+    private Range<Date> creator3 = new <Integer> Range<>(from, to);
 
     private int intLiteral = 1__0;
-
     private int intLiteral = 0_00_00;
-
     private int intLiteral = 0_7;
-
     private int intLiteral = 0__7;
-
     private int hexLiteral = 0x0000;
-
     private int hexLiteral = 0xa__b;
-
     private int hexLiteral = 0x1p0993;
-
     private int hexLiteral = 0x1p-0993;
-
     private int octLiteral = 001;
-
     private int binaryLiteral = 0b1__0;
-
     private double floatingPointLiteral = 0d;
-
     private double floatingPointLiteral = 0D;
-
     private double floatingPointLiteral = 00d;
-
     private double floatingPointLiteral = 1.0d;
-
     private double floatingPointLiteral = 1.0D;
-
     private float floatingPointLiteral = 1.0f;
-
     private float floatingPointLiteral = 1.0F;
-
     private float floatingPointLiteral = 1e4f;
-
     private double floatingPointLiteral = 1e4d;
-
     private float floatingPointLiteral = 007f;
-
     private double floatingPointLiteral = 00e1;
 
     private Interface anonymousClassVariable = new Interface(){ @Override void doSomething() { System.out.println("do something"); } };
@@ -147,9 +122,11 @@ public class Variables {
 
         Object.test.creation thisObject4 = classWithName.invocationOne(argument1, argument2, argument3).invocationTwo(argument1, argument2);
 
-        Object.test.creation thisObject5 = classWithName.invocationOne(argument1WithAVeryVeryVeryVeryLongName, argument2, argument3).attributeOne.attributeTwo .invocationTwo(argument1, argument2).attributeThree.invocationThree();
+        Object.test.creation thisObject5 =
+            classWithName.invocationOne(argument1WithAVeryVeryVeryVeryLongName, argument2, argument3).attributeOne.attributeTwo .invocationTwo(argument1, argument2).attributeThree.invocationThree();
 
-        Object.test.creation thisObject6 = classWithName.invocationOne(argument1, argument2, argument3).attributeOne.attributeTwo.invocationTwo(argument1, argument2).attributeThree.invocationThree();
+        Object.test.creation thisObject6 =
+            classWithName.invocationOne(argument1, argument2, argument3).attributeOne.attributeTwo.invocationTwo(argument1, argument2).attributeThree.invocationThree();
     }
 
     public void breakMultipleMethods() {
@@ -162,25 +139,36 @@ public class Variables {
     public void breakAfterEquals() {
         Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object();
 
-        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object() .other() .methods();
+        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object() .other().methods();
 
-        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object() .a() .number() .of() .other() .methods() .that() .should() .cause() .a() .wrap();
+        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
+            new Object() .a() .number() .of() .other() .methods() .that() .should() .cause() .a().wrap();
 
         Object[] aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object[10];
 
-        Object[] aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object[] { new Object(), new Object() };
+        Object[] aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object[] {
+            new Object(),
+            new Object(),
+        };
 
-        Object[] aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object[] { new Object(), new Object(), new Object(), new Object(), new Object() };
+        Object[] aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object[] {
+            new Object(),
+            new Object(),
+            new Object(),
+            new Object(),
+            new Object(),
+        };
 
         Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = SomeClass.someStaticMethod();
 
         Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = someMethod();
 
-        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = someMethod() .anotherMethod();
+        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = someMethod().anotherMethod();
 
         Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = someBooleanVariable ? new Object() : null;
 
-        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = anotherVeryLongNameForIllustrativePurposes != null ? anotherVeryLongNameForIllustrativePurposes : new Object();
+        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
+            anotherVeryLongNameForIllustrativePurposes != null ? anotherVeryLongNameForIllustrativePurposes : new Object();
     }
 
     public <A extends ShortClassName & ShortClassName & ShortClassName & ShortClassName, B extends ShortClassName & ShortClassName & ShortClassName & ShortClassName & ShortClassName, C extends ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> & ExtremelyLongAndObnoxiousInterfaceName & ExtremelyLongAndObnoxiousInterfaceName & ExtremelyLongAndObnoxiousInterfaceName> void breakOnTypeArguments(
@@ -193,15 +181,17 @@ public class Variables {
 
         ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> variable = new MyExtremelyLongAndObnoxiousClassName<>();
 
-        ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> variable = new MyExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName>();
+        ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> variable =
+            new MyExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName>();
 
-        ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new MyExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName>();
+        ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
+            new MyExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName>();
 
         new MyExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName>().method();
     }
 
     public methodWithVariableInitializationWithComments() {
-        Map<String, String> map = new HashMap<>( someRandomMethodThatReturnsTheInitialMapThatWeWantToMutate() );
+        Map<String, String> map = new HashMap<>(someRandomMethodThatReturnsTheInitialMapThatWeWantToMutate());
     }
 
     void assignment() {
@@ -222,7 +212,15 @@ public class Variables {
             "ffffffffffffffffffff"
         );
 
-        final Foo bar = new Foo("aaaaaaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbbbbb", "cccccccccccccccccccc", "dddddddddddddddddddd", "eeeeeeeeeeeeeeeeeeee", "ffffffffffffffffffff");
+        final Foo bar =
+            new Foo(
+                "aaaaaaaaaaaaaaaaaaaa",
+                "bbbbbbbbbbbbbbbbbbbb",
+                "cccccccccccccccccccc",
+                "dddddddddddddddddddd",
+                "eeeeeeeeeeeeeeeeeeee",
+                "ffffffffffffffffffff"
+            );
 
         int a, b, c = 1;
     }

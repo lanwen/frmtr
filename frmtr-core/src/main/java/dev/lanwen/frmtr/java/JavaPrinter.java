@@ -1,6 +1,7 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.ArrayCreationLevel;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
@@ -18,12 +19,16 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.ArrayAccessExpr;
+import com.github.javaparser.ast.expr.ArrayCreationExpr;
+import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
@@ -319,17 +324,64 @@ final class JavaPrinter {
         docs.add(comments.leading(declaration));
         docs.add(annotations(declaration));
         docs.add(Doc.text(modifiers(declaration)));
-        docs.add(Doc.text(compact(declaration.getElementType()) + " "));
+        String declarationPrefix = modifiers(declaration);
+        if (!declaration.getVariables().isEmpty()) {
+            String type = compactTypeLike(declaration.getVariables().get(0).getType()) + " ";
+            declarationPrefix += type;
+            docs.add(Doc.text(type));
+        }
+        String variableDeclarationPrefix = declarationPrefix;
         docs.add(Doc.group(Doc.join(Doc.concat(Doc.text(","), Doc.LINE), declaration.getVariables().stream()
-                .map(this::variable)
+                .map(variable -> variable(variable, variableDeclarationPrefix))
                 .toList())));
         docs.add(Doc.text(";"));
         return Doc.concat(docs);
     }
 
     private Doc variable(VariableDeclarator variable) {
-        String initializer = variable.getInitializer().map(expression -> " = " + compact(expression)).orElse("");
-        return Doc.text(variable.getNameAsString() + initializer);
+        return variable(variable, "");
+    }
+
+    private Doc variable(VariableDeclarator variable, String declarationPrefix) {
+        return variable.getInitializer()
+                .map(expression -> variableWithInitializer(variable, expression, declarationPrefix))
+                .orElseGet(() -> Doc.text(variable.getNameAsString()));
+    }
+
+    private Doc variableWithInitializer(
+            VariableDeclarator variable,
+            Expression initializer,
+            String declarationPrefix) {
+        String flat = declarationPrefix + variable.getNameAsString() + " = " + compact(initializer) + ";";
+        if (currentIndentedWidth(flat) > options.lineWidth()
+                && !(initializer instanceof StringLiteralExpr)
+                && !initializerHasOwnBreak(initializer)) {
+            return Doc.concat(
+                    Doc.text(variable.getNameAsString() + " ="),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, expression(initializer))));
+        }
+        return Doc.concat(Doc.text(variable.getNameAsString() + " = "), expression(initializer));
+    }
+
+    private boolean initializerHasOwnBreak(Expression initializer) {
+        if (initializer instanceof ArrayCreationExpr arrayCreationExpr) {
+            return arrayCreationHasOwnBreak(arrayCreationExpr);
+        }
+        if (initializer instanceof ArrayAccessExpr) {
+            return true;
+        }
+        if (initializer instanceof MethodCallExpr methodCallExpr) {
+            return methodCallExpr.getScope()
+                    .filter(ArrayCreationExpr.class::isInstance)
+                    .map(ArrayCreationExpr.class::cast)
+                    .map(this::arrayCreationHasOwnBreak)
+                    .orElse(false);
+        }
+        return false;
+    }
+
+    private boolean arrayCreationHasOwnBreak(ArrayCreationExpr expression) {
+        return expression.getInitializer().isPresent() || arrayCreationTypeBreaks(expression);
     }
 
     private Doc method(MethodDeclaration declaration) {
@@ -423,7 +475,7 @@ final class JavaPrinter {
                     Doc.HARD_LINE,
                     Doc.text("}"));
         }
-        Doc contents = Doc.join(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE), memberDocs);
+        Doc contents = memberContents(members, memberDocs);
         if (!orphanComments.isEmpty()) {
             contents = Doc.concat(contents, Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, orphanComments));
         }
@@ -432,6 +484,28 @@ final class JavaPrinter {
                 Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE, contents)),
                 Doc.HARD_LINE,
                 Doc.text("}"));
+    }
+
+    private Doc memberContents(NodeList<BodyDeclaration<?>> members, List<Doc> memberDocs) {
+        List<Doc> contents = new ArrayList<>();
+        for (int i = 0; i < memberDocs.size(); i++) {
+            if (i > 0) {
+                contents.add(memberSeparator(members.get(i - 1), members.get(i)));
+            }
+            contents.add(memberDocs.get(i));
+        }
+        return Doc.concat(contents);
+    }
+
+    private Doc memberSeparator(BodyDeclaration<?> previous, BodyDeclaration<?> current) {
+        if (!(previous instanceof FieldDeclaration) || !(current instanceof FieldDeclaration)) {
+            return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
+        }
+        boolean hasBlankLineBetween = previous.getRange()
+                .flatMap(previousRange -> current.getRange()
+                        .map(currentRange -> currentRange.begin.line > previousRange.end.line + 1))
+                .orElse(true);
+        return hasBlankLineBetween ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;
     }
 
     private Doc parameters(NodeList<Parameter> parameters) {
@@ -684,6 +758,15 @@ final class JavaPrinter {
                     Doc.text(" " + assignExpr.getOperator().asString() + " "),
                     expression(assignExpr.getValue()));
         }
+        if (expression instanceof ArrayAccessExpr arrayAccessExpr) {
+            return arrayAccess(arrayAccessExpr);
+        }
+        if (expression instanceof ArrayCreationExpr arrayCreationExpr) {
+            return arrayCreation(arrayCreationExpr);
+        }
+        if (expression instanceof ArrayInitializerExpr arrayInitializerExpr) {
+            return arrayInitializer(arrayInitializerExpr);
+        }
         if (expression instanceof BinaryExpr binaryExpr) {
             return binaryExpression(binaryExpr);
         }
@@ -697,6 +780,72 @@ final class JavaPrinter {
             return switchExpression(switchExpr);
         }
         return Doc.text(compact(expression));
+    }
+
+    private Doc arrayAccess(ArrayAccessExpr expression) {
+        return Doc.group(Doc.concat(
+                expression(expression.getName()),
+                Doc.text("["),
+                Doc.indent(Doc.concat(Doc.SOFT_LINE, expression(expression.getIndex()))),
+                Doc.SOFT_LINE,
+                Doc.text("]")));
+    }
+
+    private Doc arrayCreation(ArrayCreationExpr expression) {
+        Doc prefix = Doc.concat(
+                Doc.text("new "),
+                arrayCreationType(expression),
+                Doc.text(compactJoinArrayLevels(expression.getLevels())));
+        return expression.getInitializer()
+                .map(initializer -> Doc.concat(prefix, Doc.text(" "), arrayInitializer(initializer)))
+                .orElse(prefix);
+    }
+
+    private Doc arrayCreationType(ArrayCreationExpr expression) {
+        if (!arrayCreationTypeBreaks(expression)) {
+            return Doc.text(compactTypeLike(expression.getElementType()));
+        }
+        ClassOrInterfaceType type = expression.getElementType().asClassOrInterfaceType();
+        NodeList<com.github.javaparser.ast.type.Type> typeArguments = type.getTypeArguments().orElse(new NodeList<>());
+        return Doc.concat(
+                Doc.text(type.getNameWithScope()),
+                Doc.text("<"),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), typeArguments.stream()
+                        .map(argument -> Doc.text(compactTypeLike(argument)))
+                        .toList()))),
+                Doc.HARD_LINE,
+                Doc.text(">"));
+    }
+
+    private boolean arrayCreationTypeBreaks(ArrayCreationExpr expression) {
+        return expression.getElementType().isClassOrInterfaceType()
+                && expression.getElementType().asClassOrInterfaceType().getTypeArguments().isPresent()
+                && !expression.getLevels().isEmpty();
+    }
+
+    private Doc arrayInitializer(ArrayInitializerExpr expression) {
+        List<Doc> comments = JavaPrinter.this.comments.orphanCommentStatements(expression);
+        if (expression.getValues().isEmpty() && comments.isEmpty()) {
+            return Doc.text("{}");
+        }
+        List<Doc> values = new ArrayList<>(comments);
+        values.addAll(expression.getValues().stream()
+                .map(value -> Doc.concat(expression(value), Doc.text(",")))
+                .toList());
+        return Doc.concat(
+                Doc.text("{"),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, values))),
+                Doc.HARD_LINE,
+                Doc.text("}"));
+    }
+
+    private String compactJoinArrayLevels(NodeList<ArrayCreationLevel> levels) {
+        return levels.stream()
+                .map(level -> level.getDimension()
+                        .map(dimension -> "[" + compact(dimension) + "]")
+                        .orElse("[]"))
+                .reduce(String::concat)
+                .orElse("");
     }
 
     private Doc binaryExpression(BinaryExpr expression) {
@@ -726,8 +875,35 @@ final class JavaPrinter {
         if (chain.isPresent()) {
             return chain.orElseThrow();
         }
+        if (expression.getScope().filter(this::shouldPrintScopeAsDoc).isPresent()) {
+            return Doc.concat(
+                    expression(expression.getScope().orElseThrow()),
+                    Doc.text("."),
+                    methodCallWithoutScope(expression));
+        }
         String prefix = expression.getScope().map(scope -> compact(scope) + ".").orElse("")
                 + expression.getTypeArguments().map(typeArguments -> "<" + compactJoin(typeArguments) + ">").orElse("")
+                + expression.getNameAsString();
+        if (expression.getArguments().isEmpty()) {
+            return Doc.text(prefix + "()");
+        }
+        return Doc.group(Doc.concat(
+                Doc.text(prefix + "("),
+                Doc.indent(Doc.concat(
+                        Doc.SOFT_LINE,
+                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), expression.getArguments().stream()
+                                .map(this::expression)
+                                .toList()))),
+                Doc.SOFT_LINE,
+                Doc.text(")")));
+    }
+
+    private boolean shouldPrintScopeAsDoc(Expression expression) {
+        return expression instanceof ArrayCreationExpr || expression instanceof ArrayAccessExpr;
+    }
+
+    private Doc methodCallWithoutScope(MethodCallExpr expression) {
+        String prefix = expression.getTypeArguments().map(typeArguments -> "<" + compactJoin(typeArguments) + ">").orElse("")
                 + expression.getNameAsString();
         if (expression.getArguments().isEmpty()) {
             return Doc.text(prefix + "()");
@@ -862,7 +1038,7 @@ final class JavaPrinter {
         docs.add(annotations(declaration));
         docs.add(Doc.text(modifiers(declaration)));
         if (!declaration.getVariables().isEmpty()) {
-            docs.add(Doc.text(compact(declaration.getVariables().get(0).getType()) + " "));
+            docs.add(Doc.text(compactTypeLike(declaration.getVariables().get(0).getType()) + " "));
         }
         docs.add(Doc.group(Doc.join(Doc.concat(Doc.text(","), Doc.LINE), declaration.getVariables().stream()
                 .map(this::variable)

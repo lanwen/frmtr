@@ -18,11 +18,14 @@ public class BinaryOperations {
     }
 
     public boolean binaryOperationWithComments() {
-        boolean a = one || two >> 1 // one // two // three || // five // four three;
+        boolean a = one || two >> 1 || // one
+            three;
 
-        boolean b = one || two >> 1 // one // two // three || three;
+        boolean b = one || two >> 1 || // one
+            three;
 
-        boolean c = one || two >> 1 // one // two // three || three;
+        boolean c = one || two >> 1 || // one
+            three;
 
         return a || b || c;
     }

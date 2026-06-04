@@ -1,7 +1,6 @@
 public sealed class Rectangle implements Shape {
 
     private final double length;
-
     private final double height;
 
     public Rectangle(double length, double height) {
@@ -18,7 +17,6 @@ public sealed class Rectangle implements Shape {
 public non-sealed class RightTriangle implements Triangle {
 
     private final double adjacent;
-
     private final double opposite;
 
     public RightTriangle(double adjacent, double opposite) {

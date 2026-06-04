@@ -39,9 +39,17 @@ public class Lambda {
     }
 
     public void lambdaWithLongListOfParameters() {
-        final List<Integer> values = Stream .of(1, 2) .map(( aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter ) -> { // testing method return n * 2; }) .collect(Collectors.toList());
+        final List<Integer> values =
+            Stream
+                .of(1, 2)
+                .map(( aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter ) -> { // testing method return n * 2; })
+                .collect(Collectors.toList());
 
-        final List<Integer> values = Stream .of(1, 2) .map(( aVeryLongListOfParameter, aVeryLongListOfParameter, aParameterTha ) -> { // testing method return n * 2; }) .collect(Collectors.toList());
+        final List<Integer> values =
+            Stream
+                .of(1, 2)
+                .map(( aVeryLongListOfParameter, aVeryLongListOfParameter, aParameterTha ) -> { // testing method return n * 2; })
+                .collect(Collectors.toList());
     }
 
     public void shortLambdaAssignation() {
@@ -49,7 +57,8 @@ public class Lambda {
     }
 
     public void longLambdaAssignation() {
-        V t = ( aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParaa ) -> { // testing method return n * 2; };
+        V t =
+            ( aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParaa ) -> { // testing method return n * 2; };
     }
 
     public void callWithLambdaAndExtraParameter() {

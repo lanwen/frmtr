@@ -1,34 +1,24 @@
 public class BlankLines {
 
     public int i = 1;
-
     public int j = 2;
 
     public int k = 3;
-
     public int l = 4;
 
     // Bug Fix: https://github.com/jhipster/prettier-java/issues/368
     private String fieldOne;
-
     private String fieldTwo;
-
     @Nullable
     private String shouldAddLineBeforeAndAfter;
-
     private String fieldThree;
-
     private String fieldFour;
 
     private String a;
-
     private String b;
-
     @Nullable
     private String shouldNotAddBlankLines;
-
     private String d;
-
     private String e;
 
     public int m = 4;
@@ -71,14 +61,10 @@ interface BlankLinesInInterfaces {
 
     // Bug Fix: https://github.com/jhipster/prettier-java/issues/368
     String fieldOne;
-
     String fieldTwo;
-
     @Nullable
     String shouldAddLineBeforeAndAfter;
-
     String fieldThree;
-
     String fieldFour;
 
     @Nullable

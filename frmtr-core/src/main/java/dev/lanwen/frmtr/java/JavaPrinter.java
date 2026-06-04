@@ -2442,6 +2442,10 @@ final class JavaPrinter {
                 && binaryOperand.getOperator() == BinaryExpr.Operator.AND) {
             return Doc.concat(Doc.text("("), expression(binaryOperand), Doc.text(")"));
         }
+        if (operand instanceof BinaryExpr binaryOperand
+                && shouldParenthesizeNestedBinary(operator, binaryOperand.getOperator())) {
+            return Doc.concat(Doc.text("("), expression(binaryOperand), Doc.text(")"));
+        }
         return expression(operand);
     }
 
@@ -3188,6 +3192,14 @@ final class JavaPrinter {
     private Doc conditionalExpression(ConditionalExpr expression, boolean forceBreak) {
         String flat = compact(expression);
         if (!forceBreak && currentIndentedWidth(flat) <= options.lineWidth()) {
+            if (expressionHasParenthesizedNestedBinary(expression)) {
+                return Doc.concat(
+                        conditionalCondition(expression.getCondition()),
+                        Doc.text(" ? "),
+                        conditionalBranch(expression.getThenExpr()),
+                        Doc.text(" : "),
+                        conditionalBranch(expression.getElseExpr()));
+            }
             return Doc.text(flat);
         }
         return Doc.concat(
@@ -3477,11 +3489,20 @@ final class JavaPrinter {
     }
 
     private boolean shouldParenthesizeNestedBinary(BinaryExpr.Operator outer, BinaryExpr.Operator inner) {
+        if (isMultiplicativeOperator(outer)
+                && (inner == BinaryExpr.Operator.DIVIDE || inner == BinaryExpr.Operator.REMAINDER)) {
+            return true;
+        }
+        if (isAdditiveOperator(outer) && inner == BinaryExpr.Operator.REMAINDER) {
+            return true;
+        }
         if (isShiftOperator(outer) && (isArithmeticOperator(inner) || isShiftOperator(inner))) {
             return true;
         }
         if (isBitwiseOperator(outer)
                 && (isShiftOperator(inner)
+                        || isRelationalOperator(inner)
+                        || isEqualityOperator(inner)
                         || outer == BinaryExpr.Operator.BINARY_OR
                                 && (inner == BinaryExpr.Operator.BINARY_AND || inner == BinaryExpr.Operator.XOR)
                         || outer == BinaryExpr.Operator.XOR && inner == BinaryExpr.Operator.BINARY_AND)) {
@@ -3504,6 +3525,23 @@ final class JavaPrinter {
                 || operator == BinaryExpr.Operator.REMAINDER;
     }
 
+    private boolean isAdditiveOperator(BinaryExpr.Operator operator) {
+        return operator == BinaryExpr.Operator.PLUS || operator == BinaryExpr.Operator.MINUS;
+    }
+
+    private boolean isMultiplicativeOperator(BinaryExpr.Operator operator) {
+        return operator == BinaryExpr.Operator.MULTIPLY
+                || operator == BinaryExpr.Operator.DIVIDE
+                || operator == BinaryExpr.Operator.REMAINDER;
+    }
+
+    private boolean isRelationalOperator(BinaryExpr.Operator operator) {
+        return operator == BinaryExpr.Operator.LESS
+                || operator == BinaryExpr.Operator.GREATER
+                || operator == BinaryExpr.Operator.LESS_EQUALS
+                || operator == BinaryExpr.Operator.GREATER_EQUALS;
+    }
+
     private boolean isBitwiseOperator(BinaryExpr.Operator operator) {
         return operator == BinaryExpr.Operator.BINARY_AND
                 || operator == BinaryExpr.Operator.XOR
@@ -3512,6 +3550,15 @@ final class JavaPrinter {
 
     private boolean isEqualityOperator(BinaryExpr.Operator operator) {
         return operator == BinaryExpr.Operator.EQUALS || operator == BinaryExpr.Operator.NOT_EQUALS;
+    }
+
+    private boolean expressionHasParenthesizedNestedBinary(Expression expression) {
+        return expression.findAll(BinaryExpr.class).stream().anyMatch(binary ->
+                binary.getLeft() instanceof BinaryExpr leftBinary
+                                && (shouldParenthesizeLeftBinary(binary.getOperator(), leftBinary.getOperator())
+                                        || shouldParenthesizeNestedBinary(binary.getOperator(), leftBinary.getOperator()))
+                        || binary.getRight() instanceof BinaryExpr rightBinary
+                                && shouldParenthesizeNestedBinary(binary.getOperator(), rightBinary.getOperator()));
     }
 
     private Doc methodCall(MethodCallExpr expression) {
@@ -4529,6 +4576,9 @@ final class JavaPrinter {
         }
         String flat = compact(condition);
         if (currentIndentedWidth("if (" + flat + ") {}") <= options.lineWidth()) {
+            if (expressionHasParenthesizedNestedBinary(condition)) {
+                return Doc.concat(Doc.text("if ("), expression(condition), Doc.text(") "));
+            }
             return Doc.text("if (" + flat + ") ");
         }
         return Doc.concat(

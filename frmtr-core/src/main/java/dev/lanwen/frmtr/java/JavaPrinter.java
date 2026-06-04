@@ -214,6 +214,10 @@ final class JavaPrinter {
         return comment.getRange().map(range -> range.begin.line).orElse(Integer.MAX_VALUE);
     }
 
+    private int commentEndLine(com.github.javaparser.ast.comments.Comment comment) {
+        return comment.getRange().map(range -> range.end.line).orElse(Integer.MAX_VALUE);
+    }
+
     private Optional<Doc> imports(CompilationUnit unit) {
         List<ImportDeclaration> normal = unit.getImports().stream()
                 .filter(importDeclaration -> !importDeclaration.isStatic())
@@ -1344,6 +1348,16 @@ final class JavaPrinter {
             }
         }
         if (currentIndentedWidth(flat) > options.lineWidth()
+                && initializer instanceof CastExpr castExpr
+                && castExpr.getExpression() instanceof MethodCallExpr methodCall
+                && !initializerHasOwnBreak(initializer)) {
+            return Doc.concat(
+                    Doc.text(variable.getNameAsString() + " = "),
+                    castType(castExpr.getType()),
+                    Doc.text(" "),
+                    methodCall(methodCall, MethodCallMode.BREAK));
+        }
+        if (currentIndentedWidth(flat) > options.lineWidth()
                 && !(initializer instanceof StringLiteralExpr)
                 && !initializerHasOwnBreak(initializer)) {
             return Doc.concat(
@@ -1411,7 +1425,7 @@ final class JavaPrinter {
                 + declaration.getNameAsString();
         prefix += signature;
         docs.add(Doc.text(signature));
-        docs.add(parameters(declaration, parametersBreak(prefix, declaration, declaration.getBody().isPresent() ? " {}" : ";")));
+        docs.add(parameters(declaration, parametersBreak(prefix, declaration, methodParameterSuffix(declaration))));
         if (!declaration.getThrownExceptions().isEmpty()) {
             docs.add(throwsClause(
                     prefix,
@@ -1421,6 +1435,12 @@ final class JavaPrinter {
         }
         docs.add(declaration.getBody().map(body -> Doc.concat(Doc.text(" "), block(body))).orElse(Doc.text(";")));
         return Doc.concat(docs);
+    }
+
+    private String methodParameterSuffix(MethodDeclaration declaration) {
+        return declaration.getBody()
+                .map(body -> body.getStatements().isEmpty() && body.getOrphanComments().isEmpty() ? " {}" : " {")
+                .orElse(";");
     }
 
     private boolean hasCommentedMethodSignature(String rawMethod) {
@@ -1671,8 +1691,8 @@ final class JavaPrinter {
     private Doc memberBlock(NodeList<BodyDeclaration<?>> members, Node owner) {
         List<Doc> memberDocs = new ArrayList<>(members.stream().map(this::body).toList());
         Doc openingBraceTrailingComment = openingBraceTrailingLineComment(owner);
-        List<Doc> orphanComments = comments.orphanCommentStatements(owner);
         if (memberDocs.isEmpty()) {
+            List<Doc> orphanComments = comments.orphanCommentStatements(owner);
             if (openingBraceTrailingComment == Doc.EMPTY && orphanComments.isEmpty()) {
                 return Doc.text("{}");
             }
@@ -1691,12 +1711,6 @@ final class JavaPrinter {
         if (openingBraceTrailingComment != Doc.EMPTY) {
             contents = Doc.concat(openingBraceTrailingComment, Doc.HARD_LINE, contents);
         }
-        if (!orphanComments.isEmpty()) {
-            Doc separator = hasBlankLineBeforeFirstOrphanComment(owner, members)
-                    ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE)
-                    : Doc.HARD_LINE;
-            contents = Doc.concat(contents, separator, Doc.join(Doc.HARD_LINE, orphanComments));
-        }
         return Doc.concat(
                 Doc.text("{"),
                 Doc.indent(Doc.concat(memberBlockOpeningBreak(owner), contents)),
@@ -1712,33 +1726,79 @@ final class JavaPrinter {
         return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
     }
 
-    private boolean hasBlankLineBeforeFirstOrphanComment(Node owner, NodeList<BodyDeclaration<?>> members) {
-        if (members.isEmpty() || owner.getOrphanComments().isEmpty()) {
-            return false;
-        }
-        Optional<Integer> lastMemberEnd = members.stream()
-                .map(BodyDeclaration::getRange)
-                .flatMap(Optional::stream)
-                .map(range -> range.end.line)
-                .max(Integer::compareTo);
-        Optional<Integer> firstOrphanStart = owner.getOrphanComments().stream()
-                .map(Comment::getRange)
-                .flatMap(Optional::stream)
-                .map(range -> range.begin.line)
-                .min(Integer::compareTo);
-        return lastMemberEnd.flatMap(memberEnd -> firstOrphanStart.map(orphanStart -> orphanStart > memberEnd + 1))
-                .orElse(false);
-    }
-
     private Doc memberContents(Node owner, NodeList<BodyDeclaration<?>> members, List<Doc> memberDocs) {
         List<Doc> contents = new ArrayList<>();
+        List<Comment> orphanComments = owner.getOrphanComments().stream()
+                .sorted(Comparator.comparingInt(this::commentBeginLine))
+                .toList();
+        int orphanIndex = 0;
+        int previousEndLine = Integer.MIN_VALUE;
+        BodyDeclaration<?> previousMember = null;
+        boolean previousWasMember = false;
         for (int i = 0; i < memberDocs.size(); i++) {
-            if (i > 0) {
-                contents.add(memberSeparator(owner, members.get(i - 1), members.get(i)));
+            BodyDeclaration<?> currentMember = members.get(i);
+            int currentBeginLine = beginLine(currentMember);
+            while (orphanIndex < orphanComments.size()
+                    && commentBeginLine(orphanComments.get(orphanIndex)) < currentBeginLine) {
+                Comment comment = orphanComments.get(orphanIndex++);
+                addMemberContentSeparator(
+                        contents, owner, previousEndLine, commentBeginLine(comment), previousWasMember, null, null);
+                Doc commentDoc = comments.comment(comment);
+                if (commentDoc != Doc.EMPTY) {
+                    contents.add(commentDoc);
+                    previousEndLine = commentEndLine(comment);
+                    previousWasMember = false;
+                }
             }
+            addMemberContentSeparator(
+                    contents, owner, previousEndLine, currentBeginLine, previousWasMember, previousMember, currentMember);
             contents.add(memberDocs.get(i));
+            previousEndLine = endLine(currentMember);
+            previousMember = currentMember;
+            previousWasMember = true;
+        }
+        while (orphanIndex < orphanComments.size()) {
+            Comment comment = orphanComments.get(orphanIndex++);
+            addMemberContentSeparator(
+                    contents, owner, previousEndLine, commentBeginLine(comment), previousWasMember, null, null);
+            Doc commentDoc = comments.comment(comment);
+            if (commentDoc != Doc.EMPTY) {
+                contents.add(commentDoc);
+                previousEndLine = commentEndLine(comment);
+                previousWasMember = false;
+            }
         }
         return Doc.concat(contents);
+    }
+
+    private void addMemberContentSeparator(
+            List<Doc> contents,
+            Node owner,
+            int previousEndLine,
+            int currentBeginLine,
+            boolean previousWasMember,
+            BodyDeclaration<?> previousMember,
+            BodyDeclaration<?> currentMember) {
+        if (contents.isEmpty()) {
+            return;
+        }
+        if (previousWasMember && previousMember != null && currentMember != null) {
+            contents.add(memberSeparator(owner, previousMember, currentMember));
+            return;
+        }
+        contents.add(sourceLineSeparator(previousEndLine, currentBeginLine));
+    }
+
+    private Doc sourceLineSeparator(int previousEndLine, int currentBeginLine) {
+        return currentBeginLine > previousEndLine + 1 ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;
+    }
+
+    private int beginLine(Node node) {
+        return node.getRange().map(range -> range.begin.line).orElse(Integer.MAX_VALUE);
+    }
+
+    private int endLine(Node node) {
+        return node.getRange().map(range -> range.end.line).orElse(Integer.MAX_VALUE);
     }
 
     private Doc memberSeparator(Node owner, BodyDeclaration<?> previous, BodyDeclaration<?> current) {
@@ -1868,7 +1928,10 @@ final class JavaPrinter {
             return Doc.text("{}");
         }
         List<Doc> statements = new ArrayList<>();
-        statements.addAll(blockOrphanCommentStatements(block));
+        List<Doc> orphanComments = blockOrphanCommentStatements(block);
+        if (!orphanComments.isEmpty()) {
+            statements.add(Doc.join(Doc.HARD_LINE, orphanComments));
+        }
         Statement previousStatement = null;
         for (Statement currentStatement : block.getStatements()) {
             if (currentStatement.isEmptyStmt() && previousStatement instanceof SwitchStmt) {
@@ -1945,8 +2008,6 @@ final class JavaPrinter {
 
     private Doc statement(Statement statement) {
         FormatterPragma formatterPragma = formatterPragma(statement);
-        Doc trailing = statement instanceof TryStmt ? Doc.EMPTY : comments.trailingLineComment(statement);
-        Doc leading = statement instanceof TryStmt ? Doc.EMPTY : trailing == Doc.EMPTY ? comments.leading(statement) : Doc.EMPTY;
         if (formatterPragma == FormatterPragma.ON) {
             formattingDisabled = false;
         } else if (formatterPragma == FormatterPragma.END) {
@@ -1956,11 +2017,15 @@ final class JavaPrinter {
         } else if (formatterPragma == FormatterPragma.START) {
             formattingDisabled = true;
         } else if (formatterPragma == FormatterPragma.IGNORE) {
+            Doc leading = statement instanceof TryStmt ? Doc.EMPTY : comments.leading(statement);
             return Doc.concat(leading, Doc.text(rawWithoutOwnComment(statement)), Doc.HARD_LINE);
         }
         if (formattingDisabled) {
+            Doc leading = statement instanceof TryStmt ? Doc.EMPTY : comments.leading(statement);
             return Doc.concat(leading, Doc.text(rawWithoutOwnComment(statement)));
         }
+        Doc trailing = statement instanceof TryStmt ? Doc.EMPTY : comments.trailingLineComment(statement);
+        Doc leading = statement instanceof TryStmt ? Doc.EMPTY : trailing == Doc.EMPTY ? comments.leading(statement) : Doc.EMPTY;
         Doc body = switch (statement) {
             case BlockStmt blockStmt -> block(blockStmt);
             case ReturnStmt returnStmt -> returnStatement(returnStmt);
@@ -2071,6 +2136,9 @@ final class JavaPrinter {
         String flatReturn = "return " + compact(expression) + ";";
         if (currentIndentedWidth(flatReturn) <= options.lineWidth()) {
             return expression(expression);
+        }
+        if (expression instanceof ConditionalExpr conditionalExpr) {
+            return conditionalExpression(conditionalExpr, true);
         }
         if (expression instanceof UnaryExpr unaryExpr
                 && unaryExpr.getOperator() == UnaryExpr.Operator.LOGICAL_COMPLEMENT
@@ -2501,8 +2569,12 @@ final class JavaPrinter {
     }
 
     private Doc conditionalExpression(ConditionalExpr expression) {
+        return conditionalExpression(expression, false);
+    }
+
+    private Doc conditionalExpression(ConditionalExpr expression, boolean forceBreak) {
         String flat = compact(expression);
-        if (currentIndentedWidth(flat) <= options.lineWidth()) {
+        if (!forceBreak && currentIndentedWidth(flat) <= options.lineWidth()) {
             return Doc.text(flat);
         }
         return Doc.concat(
@@ -3865,6 +3937,9 @@ final class JavaPrinter {
     }
 
     private String compact(Node node) {
+        if (node instanceof StringLiteralExpr) {
+            return raw(node);
+        }
         return node.getTokenRange()
                 .map(Object::toString)
                 .map(this::normalizeWhitespace)

@@ -103,6 +103,13 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
         return new ArrayTable<>(rowKeys, columnKeys);
     }
 
+    /*
+     * TODO(jlevy): Add factory methods taking an Enum class, instead of an
+     * iterable, to specify the allowed row keys and/or column keys. Note that
+     * custom serialization logic is needed to support different enum sizes during
+     * serialization and deserialization.
+     */
+
     /**
      * Creates an {@code ArrayTable} with the mappings in the provided table.
      *
@@ -239,6 +246,8 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
             return CollectSpliterators.indexed(size(), Spliterator.ORDERED, this::getEntry);
         }
 
+        // TODO(lowasser): consider an optimized values() implementation
+
         @Override
         public boolean containsKey(@Nullable Object key) {
             return keyIndex.containsKey(key);
@@ -272,7 +281,6 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
         public void clear() {
             throw new UnsupportedOperationException();
         }
-        // TODO(lowasser): consider an optimized values() implementation
     }
 
     /**
@@ -364,9 +372,7 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
         throw new UnsupportedOperationException();
     }
 
-    /**
-     * Associates the value {@code null} with every pair of allowed row and column keys.
-     */
+    /** Associates the value {@code null} with every pair of allowed row and column keys. */
     public void eraseAll() {
         for (V[] row : array) {
             Arrays.fill(row, null);
@@ -445,6 +451,11 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
         return set(rowIndex, columnIndex, value);
     }
 
+    /*
+     * TODO(jlevy): Consider creating a merge() method, similar to putAll() but
+     * copying non-null values only.
+     */
+
     /**
      * {@inheritDoc}
      *
@@ -495,6 +506,8 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
         }
         return set(rowIndex, columnIndex, null);
     }
+
+    // TODO(jlevy): Add eraseRow and eraseColumn methods?
 
     @Override
     public int size() {
@@ -773,7 +786,9 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
 
     @Override
     public Optional<String> getCurrentAuditor() {
-        // There is currently no reactive AuditorAware implementation so we can't// extract the currently logged-in user from the Reactor Context.// Therefore createdBy and lastModifiedBy will have to be set explicitly.
+        // There is currently no reactive AuditorAware implementation so we can't
+        // extract the currently logged-in user from the Reactor Context.
+        // Therefore createdBy and lastModifiedBy will have to be set explicitly.
         // See https://jira.spring.io/browse/DATACMNS-1231
         return Optional.of(Constants.SYSTEM_ACCOUNT);
     }
@@ -787,7 +802,7 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
 
         // Get all the countryList
         restCountryMockMvc
-            .perform(get("/api/countries?sort = id,desc"))
+            .perform(get("/api/countries?sort=id,desc"))
             .andExpect(status().isOk())
             .andExpect(content().contentType(MediaType.APPLICATION_JSON_UTF8_VALUE))
             .andExpect(jsonPath("$.[*].id").value(hasItem(country.getId().intValue())))
@@ -796,15 +811,4 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
             .andExpect(jsonPath("$.[*].display").value(hasItem(DEFAULT_DISPLAY.booleanValue())))
             .andExpect(jsonPath("$.[*].internationalDialingCode").value(hasItem(DEFAULT_INTERNATIONAL_DIALING_CODE.toString())));
     }
-    /*
-     * TODO(jlevy): Add factory methods taking an Enum class, instead of an
-     * iterable, to specify the allowed row keys and/or column keys. Note that
-     * custom serialization logic is needed to support different enum sizes during
-     * serialization and deserialization.
-     */
-    /*
-     * TODO(jlevy): Consider creating a merge() method, similar to putAll() but
-     * copying non-null values only.
-     */
-    // TODO(jlevy): Add eraseRow and eraseColumn methods?
 }

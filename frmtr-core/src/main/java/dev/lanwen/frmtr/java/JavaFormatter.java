@@ -233,9 +233,18 @@ public final class JavaFormatter {
 
     static Doc commentDoc(Comment comment) {
         if (comment instanceof LineComment lineComment) {
-            return Doc.text("//" + lineComment.getContent().stripTrailing());
+            String text = lineComment.toString().stripTrailing();
+            if (text.contains("\n")) {
+                return lineDoc(text);
+            }
+            text = splitAdjacentLineComments("//" + lineComment.getContent().stripTrailing());
+            return text.contains("\n") ? lineDoc(text) : Doc.text(text);
         }
         if (comment instanceof JavadocComment javadocComment) {
+            String raw = comment.getTokenRange().map(Object::toString).orElseGet(javadocComment::toString).strip();
+            if (raw.lines().count() == 1) {
+                return Doc.text(raw);
+            }
             return lineDoc(javadocComment.toString().stripTrailing());
         }
         if (comment instanceof BlockComment blockComment) {
@@ -249,6 +258,11 @@ public final class JavaFormatter {
     private static Doc lineDoc(String value) {
         List<Doc> lines = value.lines().map(Doc::text).toList();
         return Doc.join(Doc.HARD_LINE, lines);
+    }
+
+    private static String splitAdjacentLineComments(String value) {
+        String split = value.replaceAll("(?<!:)//", System.lineSeparator() + "//");
+        return split.startsWith(System.lineSeparator()) ? split.substring(System.lineSeparator().length()) : split;
     }
 
     private static String normalizeBlockComment(String value) {

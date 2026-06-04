@@ -2440,6 +2440,9 @@ final class JavaPrinter {
         if (operator == BinaryExpr.Operator.OR
                 && operand instanceof BinaryExpr binaryOperand
                 && binaryOperand.getOperator() == BinaryExpr.Operator.AND) {
+            if (parenthesizedInnerWidth(compact(binaryOperand)) > options.lineWidth()) {
+                return Doc.concat(Doc.text("("), nestedBinaryExpressionLines(binaryOperand, true), Doc.text(")"));
+            }
             return Doc.concat(Doc.text("("), expression(binaryOperand), Doc.text(")"));
         }
         if (operand instanceof BinaryExpr binaryOperand

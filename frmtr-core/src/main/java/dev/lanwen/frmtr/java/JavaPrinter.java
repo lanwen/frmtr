@@ -43,6 +43,7 @@ import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.TypePatternExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
+import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.modules.ModuleDeclaration;
@@ -1159,17 +1160,37 @@ final class JavaPrinter {
             if (currentStatement.isEmptyStmt() && previousStatement instanceof SwitchStmt) {
                 continue;
             }
+            if (currentStatement instanceof EmptyStmt emptyStmt) {
+                Optional<Doc> emptyStatementComment = blockEmptyStatementComment(emptyStmt);
+                if (emptyStatementComment.isEmpty()) {
+                    continue;
+                }
+                if (!statements.isEmpty()) {
+                    statements.add(statementSeparator(previousStatement, currentStatement));
+                }
+                statements.add(emptyStatementComment.orElseThrow());
+                previousStatement = currentStatement;
+                continue;
+            }
             if (!statements.isEmpty()) {
                 statements.add(statementSeparator(previousStatement, currentStatement));
             }
             statements.add(statement(currentStatement));
             previousStatement = currentStatement;
         }
+        if (statements.isEmpty()) {
+            return Doc.text("{}");
+        }
         return Doc.concat(
                 Doc.text("{"),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.concat(statements))),
                 Doc.HARD_LINE,
                 Doc.text("}"));
+    }
+
+    private Optional<Doc> blockEmptyStatementComment(EmptyStmt statement) {
+        Doc lineComment = comments.ownComment(statement, LineComment.class::isInstance);
+        return lineComment == Doc.EMPTY ? Optional.empty() : Optional.of(lineComment);
     }
 
     private List<Doc> blockOrphanCommentStatements(BlockStmt block) {
@@ -1239,8 +1260,8 @@ final class JavaPrinter {
             case LocalClassDeclarationStmt localClassDeclaration -> body(localClassDeclaration.getClassDeclaration());
             case LocalRecordDeclarationStmt localRecordDeclaration -> body(localRecordDeclaration.getRecordDeclaration());
             case IfStmt ifStmt -> ifStatement(ifStmt);
-            case WhileStmt whileStmt -> Doc.concat(Doc.text("while (" + compact(whileStmt.getCondition()) + ") "), nestedStatement(whileStmt.getBody()));
-            case DoStmt doStmt -> Doc.concat(Doc.text("do "), nestedStatement(doStmt.getBody()), Doc.text(" while (" + compact(doStmt.getCondition()) + ");"));
+            case WhileStmt whileStmt -> whileStatement(whileStmt);
+            case DoStmt doStmt -> doStatement(doStmt);
             case TryStmt tryStmt -> tryStatement(tryStmt);
             case SynchronizedStmt synchronizedStmt -> Doc.concat(Doc.text("synchronized (" + compact(synchronizedStmt.getExpression()) + ") "), block(synchronizedStmt.getBody()));
             case SwitchStmt switchStmt -> switchStatement(switchStmt);
@@ -2288,14 +2309,80 @@ final class JavaPrinter {
     }
 
     private Doc ifStatement(IfStmt statement) {
+        if (statement.getThenStmt().isEmptyStmt()) {
+            return ifWithEmptyThenStatement(statement);
+        }
         List<Doc> docs = new ArrayList<>();
         docs.add(ifCondition(statement.getCondition()));
         docs.add(ifThenStatement(statement));
         statement.getElseStmt().ifPresent(elseStatement -> {
+            if (elseStatement.isEmptyStmt()) {
+                docs.add(emptyElseStatement(statement, elseStatement));
+                return;
+            }
             docs.add(elseChainSeparator(statement, elseStatement));
             docs.add(elseStatement.isIfStmt() ? statement(elseStatement) : nestedStatement(elseStatement));
         });
         return Doc.concat(docs);
+    }
+
+    private Doc ifWithEmptyThenStatement(IfStmt statement) {
+        List<Doc> docs = new ArrayList<>();
+        docs.add(Doc.text("if (" + ifEmptyThenCondition(statement) + ");"));
+        statement.getElseStmt().ifPresent(elseStatement -> {
+            docs.add(Doc.HARD_LINE);
+            docs.add(elseStatement.isEmptyStmt()
+                    ? Doc.text("else;" + trailingEmptyBodyBlockComment(elseStatement))
+                    : Doc.concat(Doc.text("else "), nestedStatement(elseStatement)));
+        });
+        return Doc.concat(docs);
+    }
+
+    private String ifEmptyThenCondition(IfStmt statement) {
+        List<String> parts = new ArrayList<>();
+        parts.add(compact(statement.getCondition()));
+        String thenComment = commentText(emptyBodyOwnBlockComment(statement.getThenStmt()));
+        if (!thenComment.isEmpty()) {
+            parts.add(thenComment);
+        }
+        String betweenThenAndElse = commentText(blockCommentBetweenThenAndElse(statement));
+        if (!betweenThenAndElse.isEmpty()) {
+            parts.add(betweenThenAndElse);
+        }
+        statement.getElseStmt()
+                .filter(Statement::isEmptyStmt)
+                .map(this::emptyBodyOwnBlockComment)
+                .map(this::commentText)
+                .filter(comment -> !comment.isEmpty())
+                .ifPresent(parts::add);
+        return String.join(" ", parts);
+    }
+
+    private Doc blockCommentBetweenThenAndElse(IfStmt statement) {
+        if (statement.getElseStmt().isEmpty()) {
+            return Doc.EMPTY;
+        }
+        Statement thenStatement = statement.getThenStmt();
+        Statement elseStatement = statement.getElseStmt().orElseThrow();
+        return statement.getAllContainedComments().stream()
+                .filter(BlockComment.class::isInstance)
+                .filter(comment -> comment.getRange()
+                        .flatMap(commentRange -> thenStatement.getRange()
+                                .flatMap(thenRange -> elseStatement.getRange()
+                                        .map(elseRange -> commentRange.begin.line == thenRange.end.line
+                                                && commentRange.begin.column > thenRange.end.column
+                                                && commentRange.begin.line == elseRange.begin.line
+                                                && commentRange.begin.column < elseRange.begin.column)))
+                        .orElse(false))
+                .findFirst()
+                .map(comments::comment)
+                .orElse(Doc.EMPTY);
+    }
+
+    private Doc emptyElseStatement(IfStmt statement, Statement elseStatement) {
+        String elseComment = commentText(emptyBodyOwnBlockComment(elseStatement));
+        String prefix = elseComment.isEmpty() ? " else;" : " " + elseComment + " else;";
+        return Doc.text(prefix + trailingEmptyBodyBlockComment(elseStatement));
     }
 
     private Doc ifCondition(Expression condition) {
@@ -2343,6 +2430,11 @@ final class JavaPrinter {
     }
 
     private Doc forEachStatement(ForEachStmt statement) {
+        if (statement.getBody().isEmptyStmt()) {
+            return Doc.text("for (" + compact(statement.getVariable()) + " : "
+                    + emptyBodyHeaderExpression(statement.getIterable(), statement.getBody()) + ");"
+                    + trailingEmptyBodyBlockComment(statement));
+        }
         String header = "for (" + compact(statement.getVariable()) + " : " + compact(statement.getIterable()) + ")";
         Optional<Doc> lineComment = lineCommentBeforeNestedBody(statement);
         if (lineComment.isPresent() && !statement.getBody().isBlockStmt()) {
@@ -2382,9 +2474,97 @@ final class JavaPrinter {
 
     private Doc forStatement(ForStmt statement) {
         if (statement.getBody().isEmptyStmt()) {
-            return Doc.text(forHeader(statement) + ";");
+            return loopWithEmptyBody(forHeader(statement), statement);
         }
         return Doc.concat(Doc.text(forHeader(statement) + " "), nestedStatement(statement.getBody()));
+    }
+
+    private Doc whileStatement(WhileStmt statement) {
+        if (statement.getBody().isEmptyStmt()) {
+            return Doc.text("while (" + emptyBodyHeaderExpression(statement.getCondition(), statement.getBody()) + ");"
+                    + trailingEmptyBodyBlockComment(statement));
+        }
+        return Doc.concat(Doc.text("while (" + compact(statement.getCondition()) + ") "), nestedStatement(statement.getBody()));
+    }
+
+    private Doc doStatement(DoStmt statement) {
+        if (statement.getBody().isEmptyStmt()) {
+            String condition = compact(statement.getCondition());
+            Doc bodyComment = emptyBodyOwnBlockComment(statement.getBody());
+            Doc conditionComment = comments.ownComment(statement.getCondition(), BlockComment.class::isInstance);
+            if (bodyComment != Doc.EMPTY || conditionComment != Doc.EMPTY) {
+                String comment = bodyComment != Doc.EMPTY ? commentText(bodyComment) : commentText(conditionComment);
+                return Doc.text("do; while (" + comment + " " + condition + ");");
+            }
+            return Doc.text("do; while (" + condition + ");");
+        }
+        return Doc.concat(Doc.text("do "), nestedStatement(statement.getBody()), Doc.text(" while (" + compact(statement.getCondition()) + ");"));
+    }
+
+    private Doc loopWithEmptyBody(String header, Node statement) {
+        Doc bodyComment = statement instanceof ForStmt forStmt ? emptyBodyOwnBlockComment(forStmt.getBody()) : Doc.EMPTY;
+        if (bodyComment == Doc.EMPTY) {
+            return Doc.text(header + ";" + trailingEmptyBodyBlockComment(statement));
+        }
+        return Doc.concat(bodyComment, Doc.HARD_LINE, Doc.text(header + ";" + trailingEmptyBodyBlockComment(statement)));
+    }
+
+    private String emptyBodyHeaderExpression(Expression expression, Statement body) {
+        Doc bodyComment = emptyBodyOwnBlockComment(body);
+        if (bodyComment == Doc.EMPTY) {
+            return compact(expression);
+        }
+        return compact(expression) + " " + commentText(bodyComment);
+    }
+
+    private Doc emptyBodyOwnBlockComment(Statement body) {
+        return comments.ownComment(body, BlockComment.class::isInstance);
+    }
+
+    private String commentText(Doc comment) {
+        if (comment instanceof Doc.Text text) {
+            return text.value();
+        }
+        return "";
+    }
+
+    private String trailingEmptyBodyBlockComment(Node node) {
+        Doc unattached = unattachedTrailingBlockComment(node);
+        if (unattached != Doc.EMPTY) {
+            return " " + commentText(unattached);
+        }
+        String raw = raw(node);
+        int semicolon = raw.lastIndexOf(';');
+        if (semicolon < 0 || semicolon + 1 >= raw.length()) {
+            return "";
+        }
+        String trailing = raw.substring(semicolon + 1).strip();
+        return trailing.startsWith("/*") ? " " + trailing : "";
+    }
+
+    private Doc unattachedTrailingBlockComment(Node node) {
+        Optional<Node> parent = node.getParentNode();
+        while (parent.isPresent()) {
+            Optional<Doc> trailing = parent.orElseThrow().getAllContainedComments().stream()
+                    .filter(BlockComment.class::isInstance)
+                    .filter(comment -> comment.getCommentedNode().isEmpty())
+                    .filter(comment -> startsAfterNodeOnSameLine(node, comment))
+                    .findFirst()
+                    .map(comments::comment);
+            if (trailing.isPresent()) {
+                return trailing.orElseThrow();
+            }
+            parent = parent.orElseThrow().getParentNode();
+        }
+        return Doc.EMPTY;
+    }
+
+    private boolean startsAfterNodeOnSameLine(Node node, Comment comment) {
+        return node.getRange()
+                .flatMap(nodeRange -> comment.getRange()
+                        .map(commentRange -> commentRange.begin.line == nodeRange.end.line
+                                && commentRange.begin.column > nodeRange.end.column))
+                .orElse(false);
     }
 
     private String forHeaderExpression(Expression expression) {
@@ -2668,6 +2848,11 @@ final class JavaPrinter {
         Node clone = node.clone();
         clone.removeComment();
         String raw = clone.getTokenRange().map(Object::toString).orElseGet(clone::toString).strip();
+        return options.preserveRawTrailingWhitespace() ? raw : stripTrailingHorizontalWhitespace(raw);
+    }
+
+    private String raw(Node node) {
+        String raw = node.getTokenRange().map(Object::toString).orElseGet(node::toString).strip();
         return options.preserveRawTrailingWhitespace() ? raw : stripTrailingHorizontalWhitespace(raw);
     }
 

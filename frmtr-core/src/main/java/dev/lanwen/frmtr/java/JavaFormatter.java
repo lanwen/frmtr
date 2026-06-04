@@ -219,6 +219,10 @@ public final class JavaFormatter {
                     .orElse(Doc.EMPTY);
         }
 
+        Doc comment(Comment comment) {
+            return printed.add(comment) ? JavaFormatter.commentDoc(comment) : Doc.EMPTY;
+        }
+
         private boolean sameEndLine(Node node, Comment comment) {
             return node.getRange()
                     .flatMap(nodeRange -> comment.getRange()

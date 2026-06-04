@@ -1489,6 +1489,10 @@ final class JavaPrinter {
         if (currentIndentedWidth(flat) > options.lineWidth()
                 && initializer instanceof MethodCallExpr methodCall
                 && !initializerHasOwnBreak(initializer)) {
+            Optional<Doc> compactObjectCreationChain = variableWithCompactObjectCreationChain(name, methodCall);
+            if (compactObjectCreationChain.isPresent()) {
+                return compactObjectCreationChain.orElseThrow();
+            }
             Optional<Doc> chain = methodCallChain(methodCall, true);
             if (chain.isPresent()) {
                 return variableWithMethodCallChain(
@@ -1540,6 +1544,16 @@ final class JavaPrinter {
                     Doc.indent(Doc.concat(Doc.HARD_LINE, brokenInitializer(initializer))));
         }
         return Doc.concat(Doc.text(name + " = "), expression(initializer));
+    }
+
+    private Optional<Doc> variableWithCompactObjectCreationChain(String name, MethodCallExpr methodCall) {
+        if (!methodCallChainRootIsObjectCreation(methodCall)
+                || continuationStatementWidth(compact(methodCall) + ";") > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+                Doc.text(name + " ="),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(compact(methodCall))))));
     }
 
     private Optional<Doc> preEqualsBlockComment(VariableDeclarator variable, Expression initializer) {
@@ -1703,6 +1717,10 @@ final class JavaPrinter {
             MethodCallExpr methodCall,
             Doc chain) {
         String firstLine = methodCallChainFirstLine(methodCall);
+        if (methodCallChainRootIsObjectCreation(methodCall)
+                && blockStatementWidth(flatName + " = " + firstLine + ";") > options.lineWidth()) {
+            return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
+        }
         if (currentIndentedWidth(flatName + " = " + firstLine) > options.lineWidth()) {
             return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
         }

@@ -132,17 +132,8 @@ public class Variables {
 
         Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object().other().methods();
 
-        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object()
-            .a()
-            .number()
-            .of()
-            .other()
-            .methods()
-            .that()
-            .should()
-            .cause()
-            .a()
-            .wrap();
+        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
+            new Object().a().number().of().other().methods().that().should().cause().a().wrap();
 
         Object[] aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object[10];
 

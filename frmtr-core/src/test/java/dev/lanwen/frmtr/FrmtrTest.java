@@ -96,6 +96,43 @@ final class FrmtrTest {
                 .isEqualTo(FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
         assertThat(FormatterOptions.defaults().preserveRawTrailingWhitespace()).isFalse();
         assertThat(FormatterOptions.defaults().requirePragma()).isFalse();
+        assertThat(FormatterOptions.defaults().lambdaArrowParens())
+                .isEqualTo(FormatterOptions.LambdaArrowParens.PRESERVE);
+    }
+
+    @Test
+    void lambdaArrowParensOptionControlsSingleParameterLambdas() {
+        String source = """
+                class Demo {
+                    void method() {
+                        call((value) -> value);
+                    }
+                }
+                """;
+
+        FormatterOptions avoid = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                false,
+                false,
+                FormatterOptions.LambdaArrowParens.AVOID,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+        FormatterOptions always = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                false,
+                false,
+                FormatterOptions.LambdaArrowParens.ALWAYS,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        assertThat(Frmtr.format(source, avoid)).contains("call(value -> value);");
+        assertThat(Frmtr.format(source.replace("(value) ->", "value ->"), always)).contains("call((value) -> value);");
     }
 
     @Test

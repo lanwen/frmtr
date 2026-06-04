@@ -3230,10 +3230,24 @@ final class JavaPrinter {
     }
 
     private String lambdaParameters(LambdaExpr expression) {
-        if (expression.isEnclosingParameters() || expression.getParameters().size() != 1) {
+        if (expression.getParameters().size() != 1) {
             return "(" + compactJoin(expression.getParameters()) + ")";
         }
-        return compact(expression.getParameters().get(0));
+        String parameter = compact(expression.getParameters().get(0));
+        if (options.lambdaArrowParens() == FormatterOptions.LambdaArrowParens.ALWAYS) {
+            return "(" + parameter + ")";
+        }
+        if (options.lambdaArrowParens() == FormatterOptions.LambdaArrowParens.AVOID && lambdaParameterCanAvoidParens(expression)) {
+            return parameter;
+        }
+        return expression.isEnclosingParameters() ? "(" + parameter + ")" : parameter;
+    }
+
+    private boolean lambdaParameterCanAvoidParens(LambdaExpr expression) {
+        return expression.getParameters().size() == 1
+                && expression.getParameters().get(0).getAnnotations().isEmpty()
+                && expression.getParameters().get(0).getModifiers().isEmpty()
+                && expression.getParameters().get(0).getType().isUnknownType();
     }
 
     private Optional<Doc> singleHuggableLambdaArgument(String prefix, MethodCallExpr expression) {

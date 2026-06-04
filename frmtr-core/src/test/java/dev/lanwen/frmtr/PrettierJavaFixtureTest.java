@@ -46,6 +46,26 @@ final class PrettierJavaFixtureTest {
             true,
             true,
             FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+    private static final FormatterOptions PRETTIER_ARROW_PARENS_AVOID_OPTIONS = new FormatterOptions(
+            80,
+            FormatterOptions.IndentStyle.SPACE,
+            2,
+            FormatterOptions.LineEnding.LF,
+            true,
+            true,
+            false,
+            FormatterOptions.LambdaArrowParens.AVOID,
+            FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+    private static final FormatterOptions PRETTIER_ARROW_PARENS_ALWAYS_OPTIONS = new FormatterOptions(
+            80,
+            FormatterOptions.IndentStyle.SPACE,
+            2,
+            FormatterOptions.LineEnding.LF,
+            true,
+            true,
+            false,
+            FormatterOptions.LambdaArrowParens.ALWAYS,
+            FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
     private static final Set<String> PRETTIER_COMPATIBLE_FIXTURES = Set.of(
             "args",
             "arrays",
@@ -183,6 +203,12 @@ final class PrettierJavaFixtureTest {
         }
         if (fixture.name().equals("unnamed-variables-and-patterns")) {
             return PRETTIER_WIDE_COMPATIBILITY_OPTIONS;
+        }
+        if (fixture.name().equals("lambda/arrow-parens-avoid")) {
+            return PRETTIER_ARROW_PARENS_AVOID_OPTIONS;
+        }
+        if (fixture.name().equals("lambda/arrow-parens-always")) {
+            return PRETTIER_ARROW_PARENS_ALWAYS_OPTIONS;
         }
         return PRETTIER_COMPATIBILITY_OPTIONS;
     }

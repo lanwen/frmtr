@@ -3243,6 +3243,10 @@ final class JavaPrinter {
                     Doc.HARD_LINE,
                     Doc.text(")"));
         }
+        if (expression.getInner() instanceof ConditionalExpr conditionalExpr
+                && continuationStatementWidth(compact(expression)) >= options.lineWidth()) {
+            return Doc.concat(Doc.text("("), conditionalExpression(conditionalExpr, true), Doc.text(")"));
+        }
         if (currentIndentedWidth(compact(expression)) <= options.lineWidth()) {
             return Doc.text(compact(expression));
         }
@@ -3308,7 +3312,7 @@ final class JavaPrinter {
         if (!forceBreak && currentIndentedWidth(flat) <= options.lineWidth()) {
             if (expressionHasParenthesizedNestedBinary(expression)) {
                 return Doc.concat(
-                        conditionalCondition(expression.getCondition()),
+                        conditionalCondition(expression),
                         Doc.text(" ? "),
                         conditionalBranch(expression.getThenExpr()),
                         Doc.text(" : "),
@@ -3317,7 +3321,7 @@ final class JavaPrinter {
             return Doc.text(flat);
         }
         return Doc.concat(
-                conditionalCondition(expression.getCondition()),
+                conditionalCondition(expression),
                 Doc.indent(Doc.concat(
                         Doc.HARD_LINE,
                         Doc.text("? "),
@@ -3327,12 +3331,33 @@ final class JavaPrinter {
                         conditionalBranch(expression.getElseExpr()))));
     }
 
-    private Doc conditionalCondition(Expression condition) {
+    private Doc conditionalCondition(ConditionalExpr expression) {
+        Expression condition = expression.getCondition();
         if (condition instanceof BinaryExpr
-                && currentIndentedWidth(compact(condition)) > options.lineWidth()) {
-            return binaryExpressionLines(condition, true);
+                && continuationStatementWidth(compact(condition)) > options.lineWidth()) {
+            if (conditionalIsAssignmentValue(expression) || conditionalIsVariableInitializer(expression)) {
+                return binaryExpressionLines(condition, true);
+            }
+            return nestedBinaryExpressionLines(condition, true);
         }
         return expression(condition);
+    }
+
+    private boolean conditionalIsAssignmentValue(ConditionalExpr expression) {
+        return expression.getParentNode()
+                .filter(AssignExpr.class::isInstance)
+                .map(AssignExpr.class::cast)
+                .filter(assignExpr -> assignExpr.getValue() == expression)
+                .isPresent();
+    }
+
+    private boolean conditionalIsVariableInitializer(ConditionalExpr expression) {
+        return expression.getParentNode()
+                .filter(VariableDeclarator.class::isInstance)
+                .map(VariableDeclarator.class::cast)
+                .flatMap(VariableDeclarator::getInitializer)
+                .filter(initializer -> initializer == expression)
+                .isPresent();
     }
 
     private Doc conditionalBranch(Expression branch) {

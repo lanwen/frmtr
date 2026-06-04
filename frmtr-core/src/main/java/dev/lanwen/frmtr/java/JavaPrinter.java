@@ -1469,6 +1469,17 @@ final class JavaPrinter {
             return conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr);
         }
         if (currentIndentedWidth(flat) > options.lineWidth()
+                && initializer instanceof LambdaExpr lambdaExpr
+                && !initializerHasOwnBreak(initializer)) {
+            Optional<Doc> lambdaInitializer = variableWithBrokenLambdaParameters(
+                    name,
+                    declarationPrefix + variable.getNameAsString(),
+                    lambdaExpr);
+            if (lambdaInitializer.isPresent()) {
+                return lambdaInitializer.orElseThrow();
+            }
+        }
+        if (currentIndentedWidth(flat) > options.lineWidth()
                 && !(initializer instanceof StringLiteralExpr)
                 && !(initializer instanceof TextBlockLiteralExpr)
                 && !initializerHasOwnBreak(initializer)) {
@@ -1522,6 +1533,19 @@ final class JavaPrinter {
     private boolean shouldBreakBeforeConditionalInitializer(ConditionalExpr initializer) {
         return initializer.getCondition() instanceof BinaryExpr
                 && (initializer.getThenExpr() instanceof BinaryExpr || initializer.getElseExpr() instanceof BinaryExpr);
+    }
+
+    private Optional<Doc> variableWithBrokenLambdaParameters(
+            String name,
+            String flatName,
+            LambdaExpr lambdaExpr) {
+        String parameters = lambdaParameters(lambdaExpr);
+        if (!lambdaExpr.getBody().isBlockStmt()
+                || !lambdaParametersShouldBreak(lambdaExpr, parameters)
+                || currentIndentedWidth(flatName + " = (") > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(Doc.text(name + " = "), lambdaExpression(lambdaExpr)));
     }
 
     private Optional<Doc> leadingInitializerComments(VariableDeclarator variable, Expression initializer) {

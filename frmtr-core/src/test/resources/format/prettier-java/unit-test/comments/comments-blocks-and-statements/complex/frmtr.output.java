@@ -59,5 +59,5 @@ enum Cards {
     //The Heart and the Spade
     HEART,
     /*the heart*/
-    SPADES,
+    SPADES /*and the spade*/,
 }

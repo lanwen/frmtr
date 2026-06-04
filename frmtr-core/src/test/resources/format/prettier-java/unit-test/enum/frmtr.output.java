@@ -25,13 +25,13 @@ public enum EnumWithExtraCommaAndExtraSemicolon {
 public enum EnumWithExtraCommaAndComment {
     SOME_ENUM,
     ANOTHER_ENUM,
-    LAST_ENUM,
+    LAST_ENUM /* comment */,
 }
 
 public enum EnumWithExtraSemicolonAndComment {
     SOME_ENUM,
     ANOTHER_ENUM,
-    LAST_ENUM,
+    LAST_ENUM /* comment */,
 }
 
 public enum EnumWithManyValues {
@@ -121,21 +121,30 @@ class CLassWithEnum {
 public enum OtherEnum {
     ONE,
     TWO,
+
     THREE,
+
     FOUR,
     /* Five */
     FIVE,
+
     /* Six */
     SIX,
 }
 
 public enum EmptyEnum {}
 
-public enum EmptyEnumWithComment {}
+public enum EmptyEnumWithComment {
+    // comment
+}
 
 enum PrettierErrors {
     WE_LOVE_PRETTIER;
 
+    // And I can't believe
+    // it is free
+    // why are people
+    // so damn generous
     void printTest() {
         System.out.println("Hey there");
     }
@@ -143,6 +152,11 @@ enum PrettierErrors {
 
 enum PrettierErrors {
     WE_LOVE_PRETTIER;
+
+    // And I can't believe
+    // it is free
+    // why are people
+    // so damn generous
 
     void printTest() {
         System.out.println("Hey there");
@@ -150,6 +164,7 @@ enum PrettierErrors {
 }
 
 enum A {
+    ;
 
     /**/
     void b() {}

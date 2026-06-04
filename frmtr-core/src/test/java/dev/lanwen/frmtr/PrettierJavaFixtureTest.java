@@ -51,6 +51,7 @@ final class PrettierJavaFixtureTest {
             "comments/expression",
             "comments/comments-only",
             "constructors",
+            "enum",
             "extends_abstract_class",
             "extends_abstract_class_and_implements_interfaces",
             "formatter-on-off/begin_with_on",

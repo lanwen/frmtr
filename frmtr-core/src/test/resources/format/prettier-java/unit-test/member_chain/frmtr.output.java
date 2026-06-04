@@ -67,7 +67,13 @@ public class BreakLongFunctionCall {
     }
 
     public void doSomethingLongWithArgument() {
-        return something().more(firstArgument, secondArgument).and(firstArgument, secondArgument, thirdArgument, fourthArgument, fifthArgument);
+        return something().more(firstArgument, secondArgument).and(
+            firstArgument,
+            secondArgument,
+            thirdArgument,
+            fourthArgument,
+            fifthArgument
+        );
     }
 
     public void doSomethingLongNew2() {

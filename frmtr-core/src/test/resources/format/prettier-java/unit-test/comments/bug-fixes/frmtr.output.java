@@ -2,23 +2,23 @@
 class T {
 
     /*
-                  * comment
-          */
+ * comment
+ */
     void t() {}
 
     /*
  * comment
-*/
+ */
     void t() {}
 
     /*
-   * comment
-   */
+ * comment
+ */
     void t() {}
 
     /*
-   * comment
-        */
+ * comment
+ */
     void t() {}
 
     /*

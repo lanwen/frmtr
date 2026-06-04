@@ -206,8 +206,28 @@ public final class JavaFormatter {
             return Doc.text(javadocComment.toString().stripTrailing());
         }
         if (comment instanceof BlockComment blockComment) {
-            return Doc.text(blockComment.toString().stripTrailing());
+            return Doc.text(normalizeBlockComment(blockComment.toString()));
         }
         return Doc.text(comment.toString().stripTrailing());
+    }
+
+    private static String normalizeBlockComment(String value) {
+        String text = value.stripTrailing();
+        List<String> lines = text.lines().toList();
+        if (lines.size() < 3 || lines.stream().skip(1).limit(lines.size() - 2)
+                .map(String::stripLeading)
+                .anyMatch(line -> !line.startsWith("*"))) {
+            return text;
+        }
+        List<String> normalized = new java.util.ArrayList<>();
+        normalized.add(lines.getFirst());
+        lines.stream()
+                .skip(1)
+                .limit(lines.size() - 2)
+                .map(String::stripLeading)
+                .map(line -> " " + line)
+                .forEach(normalized::add);
+        normalized.add(" */");
+        return String.join(System.lineSeparator(), normalized);
     }
 }

@@ -35,6 +35,7 @@ final class PrettierJavaFixtureTest {
             "char_literal",
             "comments/edge",
             "comments/expression",
+            "comments/comments-only",
             "constructors",
             "extends_abstract_class",
             "extends_abstract_class_and_implements_interfaces",
@@ -68,7 +69,8 @@ final class PrettierJavaFixtureTest {
             "synchronized",
             "template-expression",
             "types",
-            "while");
+            "while",
+            "yield-statement");
     private static final JavaParser PARSER = new JavaParser(new ParserConfiguration()
             .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
             .setStoreTokens(true)

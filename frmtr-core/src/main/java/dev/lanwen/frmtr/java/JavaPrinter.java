@@ -23,6 +23,7 @@ import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.modules.ModuleDeclaration;
@@ -40,9 +41,12 @@ import com.github.javaparser.ast.stmt.ForStmt;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.stmt.SwitchEntry;
+import com.github.javaparser.ast.stmt.SwitchStmt;
 import com.github.javaparser.ast.stmt.SynchronizedStmt;
 import com.github.javaparser.ast.stmt.ThrowStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
+import com.github.javaparser.ast.stmt.YieldStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.TypeParameter;
 import dev.lanwen.frmtr.FormatterOptions;
@@ -436,6 +440,9 @@ final class JavaPrinter {
         statements.addAll(comments.orphanCommentStatements(block));
         Statement previousStatement = null;
         for (Statement currentStatement : block.getStatements()) {
+            if (currentStatement.isEmptyStmt() && previousStatement instanceof SwitchStmt) {
+                continue;
+            }
             if (!statements.isEmpty()) {
                 statements.add(statementSeparator(previousStatement, currentStatement));
             }
@@ -484,8 +491,9 @@ final class JavaPrinter {
         }
         Doc body = switch (statement) {
             case BlockStmt blockStmt -> block(blockStmt);
-            case ReturnStmt returnStmt -> Doc.text(returnStmt.getExpression().map(expression -> "return " + compact(expression) + ";").orElse("return;"));
-            case ThrowStmt throwStmt -> Doc.text("throw " + compact(throwStmt.getExpression()) + ";");
+            case ReturnStmt returnStmt -> returnStatement(returnStmt);
+            case ThrowStmt throwStmt -> Doc.concat(Doc.text("throw "), expression(throwStmt.getExpression()), Doc.text(";"));
+            case YieldStmt yieldStmt -> yieldStatement(yieldStmt);
             case ExplicitConstructorInvocationStmt constructorInvocation -> Doc.concat(explicitConstructorInvocation(constructorInvocation), Doc.text(";"));
             case ExpressionStmt expressionStmt -> expressionStatement(expressionStmt);
             case EmptyStmt ignored -> Doc.text(";");
@@ -495,6 +503,7 @@ final class JavaPrinter {
             case WhileStmt whileStmt -> Doc.concat(Doc.text("while (" + compact(whileStmt.getCondition()) + ") "), nestedStatement(whileStmt.getBody()));
             case DoStmt doStmt -> Doc.concat(Doc.text("do "), nestedStatement(doStmt.getBody()), Doc.text(" while (" + compact(doStmt.getCondition()) + ");"));
             case SynchronizedStmt synchronizedStmt -> Doc.concat(Doc.text("synchronized (" + compact(synchronizedStmt.getExpression()) + ") "), block(synchronizedStmt.getBody()));
+            case SwitchStmt switchStmt -> switchStatement(switchStmt);
             case ForStmt forStmt -> Doc.concat(Doc.text(forHeader(forStmt) + " "), nestedStatement(forStmt.getBody()));
             case ForEachStmt forEachStmt -> Doc.concat(
                     Doc.text("for (" + compact(forEachStmt.getVariable()) + " : " + compact(forEachStmt.getIterable()) + ") "),
@@ -502,6 +511,19 @@ final class JavaPrinter {
             default -> Doc.text(compact(statement));
         };
         return Doc.concat(leading, body, trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing));
+    }
+
+    private Doc returnStatement(ReturnStmt statement) {
+        return statement.getExpression()
+                .map(expression -> Doc.concat(Doc.text("return "), expression(expression), Doc.text(";")))
+                .orElse(Doc.text("return;"));
+    }
+
+    private Doc yieldStatement(YieldStmt statement) {
+        if (compact(statement.getExpression()).equals("()")) {
+            return Doc.text("yield();");
+        }
+        return Doc.concat(Doc.text("yield "), expression(statement.getExpression()), Doc.text(";"));
     }
 
     private Doc explicitConstructorInvocation(ExplicitConstructorInvocationStmt statement) {
@@ -570,6 +592,9 @@ final class JavaPrinter {
         if (expression instanceof ObjectCreationExpr objectCreationExpr) {
             return objectCreation(objectCreationExpr);
         }
+        if (expression instanceof SwitchExpr switchExpr) {
+            return switchExpression(switchExpr);
+        }
         return Doc.text(compact(expression));
     }
 
@@ -579,7 +604,10 @@ final class JavaPrinter {
                 .filter(LineComment.class::isInstance)
                 .map(LineComment.class::cast);
         if (leftLineComment.isEmpty()) {
-            return Doc.text(compact(expression));
+            return Doc.concat(
+                    expression(expression.getLeft()),
+                    Doc.text(" " + expression.getOperator().asString() + " "),
+                    expression(expression.getRight()));
         }
         return Doc.concat(
                 Doc.text(compactWithoutOwnComment(expression.getLeft()) + " " + expression.getOperator().asString() + " "),
@@ -588,6 +616,11 @@ final class JavaPrinter {
     }
 
     private Doc methodCall(MethodCallExpr expression) {
+        if (expression.getScope().isEmpty()
+                && expression.getNameAsString().equals("yield")
+                && !expression.getArguments().isEmpty()) {
+            return Doc.text("yield (" + compactJoin(expression.getArguments()) + ")");
+        }
         Optional<Doc> chain = methodCallChain(expression);
         if (chain.isPresent()) {
             return chain.orElseThrow();
@@ -667,6 +700,60 @@ final class JavaPrinter {
                                 .toList()))),
                 Doc.SOFT_LINE,
                 Doc.text(")")));
+    }
+
+    private Doc switchStatement(SwitchStmt statement) {
+        return Doc.concat(
+                Doc.text("switch (" + compact(statement.getSelector()) + ") "),
+                switchBlock(statement.getEntries()));
+    }
+
+    private Doc switchExpression(SwitchExpr expression) {
+        return Doc.concat(
+                Doc.text("switch (" + compact(expression.getSelector()) + ") "),
+                switchBlock(expression.getEntries()));
+    }
+
+    private Doc switchBlock(NodeList<SwitchEntry> entries) {
+        if (entries.isEmpty()) {
+            return Doc.text("{}");
+        }
+        return Doc.concat(
+                Doc.text("{"),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, entries.stream()
+                        .map(this::switchEntry)
+                        .toList()))),
+                Doc.HARD_LINE,
+                Doc.text("}"));
+    }
+
+    private Doc switchEntry(SwitchEntry entry) {
+        String label = entry.isDefault() ? "default" : "case " + compactJoin(entry.getLabels());
+        String guard = entry.getGuard().map(expression -> " when " + compact(expression)).orElse("");
+        if (entry.getType() == SwitchEntry.Type.STATEMENT_GROUP) {
+            return Doc.concat(Doc.text(label + guard + ":"), switchEntryStatements(entry.getStatements()));
+        }
+        if (entry.getStatements().isEmpty()) {
+            return Doc.text(label + guard + " ->");
+        }
+        Statement statement = entry.getStatements().get(0);
+        return Doc.concat(Doc.text(label + guard + " -> "), switchEntryBody(statement));
+    }
+
+    private Doc switchEntryBody(Statement statement) {
+        if (statement.isBlockStmt()) {
+            return block(statement.asBlockStmt());
+        }
+        return Doc.concat(statement(statement));
+    }
+
+    private Doc switchEntryStatements(NodeList<Statement> statements) {
+        if (statements.isEmpty()) {
+            return Doc.EMPTY;
+        }
+        return Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, statements.stream()
+                .map(this::statement)
+                .toList())));
     }
 
     private Doc variableDeclaration(VariableDeclarationExpr declaration) {

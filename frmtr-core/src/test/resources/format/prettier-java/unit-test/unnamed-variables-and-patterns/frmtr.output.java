@@ -43,19 +43,36 @@ class T {
     }
 
     void switchTypePattern() {
-        switch (ball) { case RedBall _ -> process(ball); // Unnamed pattern variable case BlueBall _ -> process(ball); // Unnamed pattern variable case GreenBall _ -> stopProcessing(); // Unnamed pattern variable }
+        switch (ball) {
+            case RedBall _ -> process(ball);
+            case BlueBall _ -> process(ball);
+            case GreenBall _ -> stopProcessing();
+        }
     }
 
     void switchRecordPattern() {
-        switch (box) { case Box(RedBall _) -> processBox(box); // Unnamed pattern variable case Box(BlueBall _) -> processBox(box); // Unnamed pattern variable case Box(GreenBall _) -> stopProcessing(); // Unnamed pattern variable case Box(var _) -> pickAnotherBox(); // Unnamed pattern variable }
+        switch (box) {
+            case Box(RedBall _) -> processBox(box);
+            case Box(BlueBall _) -> processBox(box);
+            case Box(GreenBall _) -> stopProcessing();
+            case Box(var _) -> pickAnotherBox();
+        }
     }
 
     void multipleSwitchPatterns() {
-        switch (box) { case Box(RedBall _) -> processBox(box); case Box(BlueBall _) -> processBox(box); case Box(GreenBall _) -> stopProcessing(); case Box(var _) -> pickAnotherBox(); }
+        switch (box) {
+            case Box(RedBall _) -> processBox(box);
+            case Box(BlueBall _) -> processBox(box);
+            case Box(GreenBall _) -> stopProcessing();
+            case Box(var _) -> pickAnotherBox();
+        }
     }
 
     void multipleSwitchPatternsWithGuard() {
-        switch (box) { case Box(RedBall _) when x == 42 -> processBox(b); case Box(BlueBall _) when x == 42 -> processBox(b); }
+        switch (box) {
+            case Box(RedBall _) when x == 42 -> processBox(b);
+            case Box(BlueBall _) when x == 42 -> processBox(b);
+        }
     }
 
     void instanceofExpressions() {
@@ -65,10 +82,30 @@ class T {
     }
 
     void switchLabelWithMatchAllPattern() {
-        switch (box) { case Box(RedBall _) -> processBox(box); case Box(BlueBall _) -> processBox(box); case Box(GreenBall _) -> stopProcessing(); case Box(_) -> pickAnotherBox(); }
+        switch (box) {
+            case Box(RedBall _) -> processBox(box);
+            case Box(BlueBall _) -> processBox(box);
+            case Box(GreenBall _) -> stopProcessing();
+            case Box(_) -> pickAnotherBox();
+        }
     }
 
     int wrappingMultipleSwitchPatterns() {
-        return switch ("") { case LongTypeName longVariableName -> 0; case LongTypeName longVariableName -> 0; case LongTypeName longVariableName -> 0; case MyRecord(A a) -> 0; case MyRecord(B b) -> 0; case MyRecord(A a) when true -> 0; case MyRecord(B b) when true -> 0; case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) -> 0; case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when this.longVariableName > longVariableName && this.longVariableName > longVariableName -> longMethodName(longVariableName, longVariableName, longVariableName, longVariableName); };
+        return switch ("") {
+            case LongTypeName longVariableName -> 0;
+            case LongTypeName longVariableName -> 0;
+            case LongTypeName longVariableName -> 0;
+            case MyRecord(A a) -> 0;
+            case MyRecord(B b) -> 0;
+            case MyRecord(A a) when true -> 0;
+            case MyRecord(B b) when true -> 0;
+            case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) -> 0;
+            case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when this.longVariableName > longVariableName && this.longVariableName > longVariableName -> longMethodName(
+                longVariableName,
+                longVariableName,
+                longVariableName,
+                longVariableName
+            );
+        };
     }
 }

@@ -91,13 +91,13 @@ public class Expressions {
     }
 
     public void printSwitch() {
-        switch(myValue == 42 || myValue == 42 && myValue == 42 && myValue == 42 || myValue == 42 && myValue == 42) { }
+        switch (myValue == 42 || myValue == 42 && myValue == 42 && myValue == 42 || myValue == 42 && myValue == 42) {}
 
-        switch(myValue != 42 && 42/42 || myValue & 42 && myValue > 42 || myValue < 42 && myValue == 42) { }
+        switch (myValue != 42 && 42/42 || myValue & 42 && myValue > 42 || myValue < 42 && myValue == 42) {}
 
-        switch(myValue != 42) { }
+        switch (myValue != 42) {}
 
-        switch(myValue != 42 && myValue == 42) { }
+        switch (myValue != 42 && myValue == 42) {}
     }
 
     public void printWhile() {
@@ -196,7 +196,9 @@ public class Expressions {
         Aaaaaaaaaa aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
         Aaaaaaaaaa aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
 
-        switch (a) { case Bbbbbbbbbb bbbbbbbbbb when (cccccccccc && dddddddddd && eeeeeeeeee) -> ffffffffff; }
+        switch (a) {
+            case Bbbbbbbbbb bbbbbbbbbb when (cccccccccc && dddddddddd && eeeeeeeeee) -> ffffffffff;
+        }
 
         return (aaaaaaaaaa && bbbbbbbbbb && cccccccccc && dddddddddd && eeeeeeeeee && ffffffffff);
     }

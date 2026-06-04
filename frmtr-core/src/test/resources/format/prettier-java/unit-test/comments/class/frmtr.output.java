@@ -125,11 +125,11 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
         checkArgument(rowList.isEmpty() == columnList.isEmpty());
 
         /*
-     * TODO(jlevy): Support only one of rowKey / columnKey being empty? If we
-     * do, when columnKeys is empty but rowKeys isn't, rowKeyList() can contain
-     * elements but rowKeySet() will be empty and containsRow() won't
-     * acknolwedge them.
-     */
+ * TODO(jlevy): Support only one of rowKey / columnKey being empty? If we
+ * do, when columnKeys is empty but rowKeys isn't, rowKeyList() can contain
+ * elements but rowKeySet() will be empty and containsRow() won't
+ * acknolwedge them.
+ */
         rowKeyToIndex = Maps.indexMap(rowList);
         columnKeyToIndex = Maps.indexMap(columnList);
 
@@ -228,7 +228,7 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
         public V put(K key, V value) {
             Integer index = keyIndex.get(key);
             if (index == null) {
-                throw new IllegalArgumentException( getKeyRole() + " " + key + " not in " + keyIndex.keySet());
+                throw new IllegalArgumentException(getKeyRole() + " " + key + " not in " + keyIndex.keySet());
             }
             return setValue(index, value);
         }
@@ -494,7 +494,7 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
 
     @Override
     Spliterator<Cell<R, C, V>> cellSpliterator() {
-        return CollectSpliterators.indexed( size(), Spliterator.ORDERED | Spliterator.NONNULL | Spliterator.DISTINCT, this::getCell);
+        return CollectSpliterators.indexed(size(), Spliterator.ORDERED | Spliterator.NONNULL | Spliterator.DISTINCT, this::getCell);
     }
 
     private Cell<R, C, V> getCell(final int index) {
@@ -741,14 +741,14 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
             .andExpect(jsonPath("$.[*].internationalDialingCode").value(hasItem(DEFAULT_INTERNATIONAL_DIALING_CODE.toString())));
     }
     /*
-   * TODO(jlevy): Add factory methods taking an Enum class, instead of an
-   * iterable, to specify the allowed row keys and/or column keys. Note that
-   * custom serialization logic is needed to support different enum sizes during
-   * serialization and deserialization.
-   */
+ * TODO(jlevy): Add factory methods taking an Enum class, instead of an
+ * iterable, to specify the allowed row keys and/or column keys. Note that
+ * custom serialization logic is needed to support different enum sizes during
+ * serialization and deserialization.
+ */
     /*
-   * TODO(jlevy): Consider creating a merge() method, similar to putAll() but
-   * copying non-null values only.
-   */
+ * TODO(jlevy): Consider creating a merge() method, similar to putAll() but
+ * copying non-null values only.
+ */
     // TODO(jlevy): Add eraseRow and eraseColumn methods?
 }

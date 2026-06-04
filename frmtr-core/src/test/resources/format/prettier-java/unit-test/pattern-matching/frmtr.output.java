@@ -19,12 +19,47 @@ class T {
     }
 
     void test(Buyer other) {
-        return switch (other) { case null -> true; case Buyer b when this.bestPrice > b.bestPrice -> true; case Buyer b when this.bestPrice > b.bestPrice -> { return true; } case Buyer titi when this.bestPriceaaaaaaaazzzzzaaaaaaaaaq > b.bestPrice -> true; case Buyer titi when this.bestPriceaaaaaazzzaaaaaaaaaq > b.bestPrice -> true; case Buyer b when this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice -> true; case Buyer b when this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice -> { return true; } case Buyer b when ( this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice ) -> { return true; } default -> false; };
+        return switch (other) {
+            case null -> true;
+            case Buyer b when this.bestPrice > b.bestPrice -> true;
+            case Buyer b when this.bestPrice > b.bestPrice -> {
+                return true;
+            }
+            case Buyer titi when this.bestPriceaaaaaaaazzzzzaaaaaaaaaq > b.bestPrice -> true;
+            case Buyer titi when this.bestPriceaaaaaazzzaaaaaaaaaq > b.bestPrice -> true;
+            case Buyer b when this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice -> true;
+            case Buyer b when this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice -> {
+                return true;
+            }
+            case Buyer b when ( this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice ) -> {
+                return true;
+            }
+            default -> false;
+        };
     }
 
     int recordPatterns(MyRecord r) {
         if (o instanceof Foo(@Bar String s)) {}
-        switch (obj) { case final String s: break; }
-        return switch (r) { case null, default -> 0; case MyRecord(A a) -> 0; case MyRecord(A a, B b) -> 0; case MyRecord(MyRecord(A a), B b) -> 0; case MyRecord(MyLongRecordTypeName(LongTypeName longVariableName, LongTypeName longVariableName), MyLongRecordTypeName(LongTypeName longVariableName, LongTypeName longVariableName)) -> 0; case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) -> 0; case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when this.longVariableName > longVariableName && this.longVariableName > longVariableName -> 0; case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when this.longVariableName > longVariableName && this.longVariableName > longVariableName -> longMethodName(longVariableName, longVariableName, longVariableName, longVariableName); case Outer.Inner(String s) -> {} case final String s -> s; };
+        switch (obj) {
+            case String s:
+                break;
+        }
+        return switch (r) {
+            default -> 0;
+            case MyRecord(A a) -> 0;
+            case MyRecord(A a, B b) -> 0;
+            case MyRecord(MyRecord(A a), B b) -> 0;
+            case MyRecord(MyLongRecordTypeName(LongTypeName longVariableName, LongTypeName longVariableName), MyLongRecordTypeName(LongTypeName longVariableName, LongTypeName longVariableName)) -> 0;
+            case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) -> 0;
+            case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when this.longVariableName > longVariableName && this.longVariableName > longVariableName -> 0;
+            case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when this.longVariableName > longVariableName && this.longVariableName > longVariableName -> longMethodName(
+                longVariableName,
+                longVariableName,
+                longVariableName,
+                longVariableName
+            );
+            case Outer.Inner(String s) -> {}
+            case String s -> s;
+        };
     }
 }

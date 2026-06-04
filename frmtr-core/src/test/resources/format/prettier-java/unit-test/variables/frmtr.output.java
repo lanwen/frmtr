@@ -43,9 +43,9 @@ public class Variables {
     };
 
     private Range creator1 = this.dateRangeField.new Range(from, to);
-    private Range creator2 = this.dateRangeField.new <Integer> Range(from, to);
-    private Range<Date> creator3 = this.dateRangeField.new <Integer> Range<>(from, to);
-    private Range<Date> creator3 = new <Integer> Range<>(from, to);
+    private Range creator2 = this.dateRangeField.new <Integer>Range(from, to);
+    private Range<Date> creator3 = this.dateRangeField.new <Integer>Range<>(from, to);
+    private Range<Date> creator3 = new <Integer>Range<>(from, to);
 
     private int intLiteral = 1__0;
     private int intLiteral = 0_00_00;

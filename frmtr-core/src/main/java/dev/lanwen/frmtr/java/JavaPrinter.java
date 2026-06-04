@@ -2061,7 +2061,7 @@ final class JavaPrinter {
         }
         String prefix = expression.getScope().map(scope -> compact(scope) + ".").orElse("")
                 + "new "
-                + expression.getTypeArguments().map(typeArguments -> "<" + compactJoinTypeLike(typeArguments) + "> ").orElse("")
+                + expression.getTypeArguments().map(typeArguments -> "<" + compactJoinTypeLike(typeArguments) + ">").orElse("")
                 + compactTypeLike(expression.getType());
         if (expression.getArguments().isEmpty()) {
             return Doc.text(prefix + "()");

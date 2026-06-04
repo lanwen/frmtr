@@ -211,7 +211,7 @@ public class Expressions {
     }
 
     public void typeExpressionsInFqnParts() {
-        var map = new <String, Integer> HashMap<String, Integer>(Map.of("A", 1));
+        var map = new <String, Integer>HashMap<String, Integer>(Map.of("A", 1));
     }
 
     void parenthesesWithLeadingAndTrailingBreak() {

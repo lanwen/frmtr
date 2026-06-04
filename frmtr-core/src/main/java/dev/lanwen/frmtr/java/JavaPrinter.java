@@ -91,6 +91,7 @@ import java.util.regex.Pattern;
 
 final class JavaPrinter {
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
+    private static final String COMMENTED_TOKEN_PUNCTUATION = "{};,().";
 
     private final JavaFormatter.CommentTracker comments = new JavaFormatter.CommentTracker();
     private final FormatterOptions options;
@@ -560,7 +561,7 @@ final class JavaPrinter {
                 tokens.add(line.substring(cursor).stripTrailing());
                 break;
             }
-            if ("{};,.".indexOf(current) >= 0) {
+            if (COMMENTED_TOKEN_PUNCTUATION.indexOf(current) >= 0) {
                 tokens.add(String.valueOf(current));
                 cursor++;
                 continue;
@@ -568,7 +569,7 @@ final class JavaPrinter {
             int end = cursor + 1;
             while (end < line.length()
                     && !Character.isWhitespace(line.charAt(end))
-                    && "{};,.".indexOf(line.charAt(end)) < 0
+                    && COMMENTED_TOKEN_PUNCTUATION.indexOf(line.charAt(end)) < 0
                     && !line.startsWith("/*", end)
                     && !line.startsWith("//", end)) {
                 end++;
@@ -699,6 +700,10 @@ final class JavaPrinter {
     }
 
     private Doc classOrInterface(ClassOrInterfaceDeclaration declaration) {
+        String raw = raw(declaration);
+        if (declaration.isInterface() && commentedInterfaceHeader(raw).contains("/*")) {
+            return Doc.concat(comments.leading(declaration), Doc.text(formatCommentedInterface(raw)));
+        }
         if (shouldBreakClassOrInterfaceHeader(declaration)) {
             return brokenClassOrInterface(declaration);
         }
@@ -717,6 +722,139 @@ final class JavaPrinter {
         header.add(Doc.text(" "));
         header.add(memberBlock(declaration.getMembers(), declaration));
         return Doc.concat(header);
+    }
+
+    private String formatCommentedInterface(String rawInterface) {
+        String[] lines = rawInterface.strip().split("\\R");
+        List<String> formatted = new ArrayList<>();
+        int headerLine = -1;
+        for (int i = 0; i < lines.length; i++) {
+            if (lines[i].contains("interface")) {
+                headerLine = i;
+                break;
+            }
+            formatted.add(lines[i].stripTrailing());
+        }
+        if (headerLine < 0) {
+            return rawInterface.strip();
+        }
+        formatted.add(formatCommentedInterfaceHeader(lines[headerLine].strip()));
+        for (int i = headerLine + 1; i < lines.length; i++) {
+            String line = lines[i].strip();
+            if (line.isEmpty()) {
+                continue;
+            }
+            if (line.equals("}")) {
+                formatted.add("}");
+            } else if (line.endsWith(";") || line.contains(";/*")) {
+                formatted.add(formatCommentedAbstractMethod(line));
+            } else if (line.startsWith("*") || line.equals("*/")) {
+                formatted.add("   " + line);
+            } else {
+                formatted.add("  " + line);
+            }
+        }
+        return String.join("\n", formatted);
+    }
+
+    private String commentedInterfaceHeader(String rawInterface) {
+        int openBrace = rawInterface.indexOf('{');
+        return openBrace < 0 ? rawInterface : rawInterface.substring(0, openBrace);
+    }
+
+    private String formatCommentedInterfaceHeader(String line) {
+        List<String> tokens = new ArrayList<>(moduleTokens(line));
+        int openBrace = tokens.indexOf("{");
+        if (openBrace < 0) {
+            return line;
+        }
+        List<String> beforeBrace = new ArrayList<>();
+        for (int i = openBrace - 1; i >= 0 && isCommentToken(tokens.get(i)); i--) {
+            beforeBrace.add(0, tokens.get(i));
+        }
+        tokens = new ArrayList<>(tokens.subList(0, openBrace - beforeBrace.size()));
+        int extendsIndex = tokens.indexOf("extends");
+        if (extendsIndex < 0) {
+            return formatCommentedTokenLine(tokens) + " {";
+        }
+        List<String> beforeExtends = new ArrayList<>(tokens.subList(0, extendsIndex));
+        List<String> clauseLeading = new ArrayList<>();
+        while (!beforeExtends.isEmpty() && isCommentToken(beforeExtends.getLast())) {
+            clauseLeading.add(0, beforeExtends.removeLast());
+        }
+        List<String> clause = new ArrayList<>(clauseLeading);
+        clause.addAll(tokens.subList(extendsIndex, tokens.size()));
+        return String.join(
+                "\n",
+                formatCommentedTokenLine(beforeExtends),
+                "  " + formatCommentedTokenLine(clause),
+                formatCommentedTokenLine(beforeBrace) + " {");
+    }
+
+    private String formatCommentedAbstractMethod(String line) {
+        List<String> tokens = moduleTokens(line);
+        int open = tokens.indexOf("(");
+        int close = tokens.lastIndexOf(")");
+        int semicolon = tokens.indexOf(";");
+        if (open < 0 || close < open || semicolon < close) {
+            return "  " + formatCommentedTokenLine(tokens);
+        }
+        List<String> docs = new ArrayList<>();
+        docs.add("  " + formatCommentedTokenLine(tokens.subList(0, open)) + "(");
+        List<String> parameterTokens = tokens.subList(open + 1, close);
+        if (!parameterTokens.isEmpty()) {
+            for (List<String> parameter : commaSeparated(parameterTokens)) {
+                docs.add("    " + formatCommentedTokenLine(parameter) + ",");
+            }
+            String lastParameter = docs.removeLast();
+            docs.add(lastParameter.substring(0, lastParameter.length() - 1));
+        }
+        String suffix = formatCommentedTokenLine(tokens.subList(close + 1, semicolon));
+        String trailing = formatCommentedTokenLine(tokens.subList(semicolon + 1, tokens.size()));
+        docs.add("  )" + (suffix.isEmpty() ? "" : " " + suffix) + ";" + (trailing.isEmpty() ? "" : " " + trailing));
+        return String.join("\n", docs);
+    }
+
+    private List<List<String>> commaSeparated(List<String> tokens) {
+        List<List<String>> parts = new ArrayList<>();
+        List<String> current = new ArrayList<>();
+        for (String token : tokens) {
+            if (token.equals(",")) {
+                parts.add(current);
+                current = new ArrayList<>();
+            } else {
+                current.add(token);
+            }
+        }
+        parts.add(current);
+        return parts;
+    }
+
+    private String formatCommentedTokenLine(List<String> tokens) {
+        StringBuilder out = new StringBuilder();
+        for (String token : tokens) {
+            if (token.equals(",")) {
+                stripTrailingSpace(out);
+                out.append(", ");
+                continue;
+            }
+            if (token.equals(".")) {
+                stripTrailingSpace(out);
+                out.append('.');
+                continue;
+            }
+            if (!out.isEmpty() && out.charAt(out.length() - 1) != ' ' && out.charAt(out.length() - 1) != '.') {
+                out.append(' ');
+            }
+            out.append(token);
+        }
+        return out.toString().strip();
+    }
+
+    private void stripTrailingSpace(StringBuilder out) {
+        while (!out.isEmpty() && out.charAt(out.length() - 1) == ' ') {
+            out.deleteCharAt(out.length() - 1);
+        }
     }
 
     private boolean shouldBreakClassOrInterfaceHeader(ClassOrInterfaceDeclaration declaration) {

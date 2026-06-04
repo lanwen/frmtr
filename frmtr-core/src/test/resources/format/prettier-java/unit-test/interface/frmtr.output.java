@@ -76,16 +76,54 @@ class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc> extends Dddddddddd<Eeeeeeeeee, Ffffffff
     void a() {}
 }
 
-sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj> permits Kkkkkkkkkk, Llllllllll {
+sealed class Aaaaaaaaaa<
+        Bbbbbbbbbb,
+        Cccccccccc,
+        Dddddddddd,
+        Eeeeeeeeee,
+        Ffffffffff,
+        Gggggggggg
+    >
+    extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj>
+    permits Kkkkkkkkkk, Llllllllll
+{
 
     void a() {}
 }
 
-sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj> permits Kkkkkkkkkk, Llllllllll {}
+sealed class Aaaaaaaaaa<
+        Bbbbbbbbbb,
+        Cccccccccc,
+        Dddddddddd,
+        Eeeeeeeeee,
+        Ffffffffff,
+        Gggggggggg
+    >
+    extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj>
+    permits Kkkkkkkkkk, Llllllllll {}
 
-sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj, Kkkkkkkkkk, Llllllllll, Mmmmmmmmmm, Nnnnnnnnnn> permits Oooooooooo, Pppppppppp, Qqqqqqqqqq, Rrrrrrrrrr, Ssssssssss, Tttttttttt, Uuuuuuuuuu {
+sealed class Aaaaaaaaaa<
+        Bbbbbbbbbb,
+        Cccccccccc,
+        Dddddddddd,
+        Eeeeeeeeee,
+        Ffffffffff,
+        Gggggggggg
+    >
+    extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj, Kkkkkkkkkk, Llllllllll, Mmmmmmmmmm, Nnnnnnnnnn>
+    permits Oooooooooo, Pppppppppp, Qqqqqqqqqq, Rrrrrrrrrr, Ssssssssss, Tttttttttt, Uuuuuuuuuu
+{
 
     void a() {}
 }
 
-sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj, Kkkkkkkkkk, Llllllllll, Mmmmmmmmmm, Nnnnnnnnnn> permits Oooooooooo, Pppppppppp, Qqqqqqqqqq, Rrrrrrrrrr, Ssssssssss, Tttttttttt, Uuuuuuuuuu {}
+sealed class Aaaaaaaaaa<
+        Bbbbbbbbbb,
+        Cccccccccc,
+        Dddddddddd,
+        Eeeeeeeeee,
+        Ffffffffff,
+        Gggggggggg
+    >
+    extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj, Kkkkkkkkkk, Llllllllll, Mmmmmmmmmm, Nnnnnnnnnn>
+    permits Oooooooooo, Pppppppppp, Qqqqqqqqqq, Rrrrrrrrrr, Ssssssssss, Tttttttttt, Uuuuuuuuuu {}

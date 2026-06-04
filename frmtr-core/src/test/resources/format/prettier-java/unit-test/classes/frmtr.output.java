@@ -54,16 +54,54 @@ class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc> extends Dddddddddd<Eeeeeeeeee, Ffffffff
 
 class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc> extends Dddddddddd<Eeeeeeeeee, Ffffffffff> implements Gggggggggg, Hhhhhhhhhh {}
 
-class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj> implements Kkkkkkkkkk, Llllllllll {
+class Aaaaaaaaaa<
+        Bbbbbbbbbb,
+        Cccccccccc,
+        Dddddddddd,
+        Eeeeeeeeee,
+        Ffffffffff,
+        Gggggggggg
+    >
+    extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj>
+    implements Kkkkkkkkkk, Llllllllll
+{
 
     void a() {}
 }
 
-class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj> implements Kkkkkkkkkk, Llllllllll {}
+class Aaaaaaaaaa<
+        Bbbbbbbbbb,
+        Cccccccccc,
+        Dddddddddd,
+        Eeeeeeeeee,
+        Ffffffffff,
+        Gggggggggg
+    >
+    extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj>
+    implements Kkkkkkkkkk, Llllllllll {}
 
-class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj, Kkkkkkkkkk, Llllllllll, Mmmmmmmmmm, Nnnnnnnnnn> implements Oooooooooo, Pppppppppp, Qqqqqqqqqq, Rrrrrrrrrr, Ssssssssss, Tttttttttt, Uuuuuuuuuu {
+class Aaaaaaaaaa<
+        Bbbbbbbbbb,
+        Cccccccccc,
+        Dddddddddd,
+        Eeeeeeeeee,
+        Ffffffffff,
+        Gggggggggg
+    >
+    extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj, Kkkkkkkkkk, Llllllllll, Mmmmmmmmmm, Nnnnnnnnnn>
+    implements Oooooooooo, Pppppppppp, Qqqqqqqqqq, Rrrrrrrrrr, Ssssssssss, Tttttttttt, Uuuuuuuuuu
+{
 
     void a() {}
 }
 
-class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj, Kkkkkkkkkk, Llllllllll, Mmmmmmmmmm, Nnnnnnnnnn> implements Oooooooooo, Pppppppppp, Qqqqqqqqqq, Rrrrrrrrrr, Ssssssssss, Tttttttttt, Uuuuuuuuuu {}
+class Aaaaaaaaaa<
+        Bbbbbbbbbb,
+        Cccccccccc,
+        Dddddddddd,
+        Eeeeeeeeee,
+        Ffffffffff,
+        Gggggggggg
+    >
+    extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj, Kkkkkkkkkk, Llllllllll, Mmmmmmmmmm, Nnnnnnnnnn>
+    implements Oooooooooo, Pppppppppp, Qqqqqqqqqq, Rrrrrrrrrr, Ssssssssss, Tttttttttt, Uuuuuuuuuu {}

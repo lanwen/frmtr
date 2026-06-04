@@ -349,9 +349,6 @@ final class JavaPrinter {
     }
 
     private boolean shouldBreakClassOrInterfaceHeader(ClassOrInterfaceDeclaration declaration) {
-        if (!declaration.getTypeParameters().isEmpty()) {
-            return false;
-        }
         if (declaration.getExtendedTypes().isEmpty()
                 && declaration.getImplementedTypes().isEmpty()
                 && declaration.getPermittedTypes().isEmpty()) {
@@ -374,15 +371,52 @@ final class JavaPrinter {
         header.add(Doc.text(modifiers(declaration)));
         header.add(Doc.text(declaration.isInterface() ? "interface " : "class "));
         header.add(Doc.text(declaration.getNameAsString()));
-        if (!declaration.getTypeParameters().isEmpty()) {
+        boolean breakTypeParameters = classOrInterfaceTypeParametersBreak(declaration);
+        if (breakTypeParameters) {
+            header.add(brokenTypeParameters(declaration.getTypeParameters(), classOrInterfaceHeaderClauses(declaration) > 1));
+        } else if (!declaration.getTypeParameters().isEmpty()) {
             header.add(typeParameters(declaration.getTypeParameters()));
         }
-        typeClause("extends", declaration.getExtendedTypes()).ifPresent(header::add);
-        typeClause("implements", declaration.getImplementedTypes()).ifPresent(header::add);
-        typeClause("permits", declaration.getPermittedTypes()).ifPresent(header::add);
-        header.add(emptyMemberBlock(declaration) ? Doc.text(" ") : Doc.HARD_LINE);
+        boolean breakClauses = classOrInterfaceHeaderClauses(declaration) > 1 || !breakTypeParameters;
+        typeClause("extends", declaration.getExtendedTypes(), breakClauses).ifPresent(header::add);
+        typeClause("implements", declaration.getImplementedTypes(), breakClauses).ifPresent(header::add);
+        typeClause("permits", declaration.getPermittedTypes(), breakClauses).ifPresent(header::add);
+        header.add(emptyMemberBlock(declaration) || !breakClauses ? Doc.text(" ") : Doc.HARD_LINE);
         header.add(memberBlock(declaration.getMembers(), declaration));
         return Doc.concat(header);
+    }
+
+    private boolean classOrInterfaceTypeParametersBreak(ClassOrInterfaceDeclaration declaration) {
+        if (declaration.getTypeParameters().isEmpty()) {
+            return false;
+        }
+        if (declaration.getTypeParameters().size() > 2) {
+            return true;
+        }
+        return classOrInterfaceHeaderClauses(declaration) == 1
+                && declaration.getExtendedTypes().stream().anyMatch(this::hasTypeArguments);
+    }
+
+    private int classOrInterfaceHeaderClauses(ClassOrInterfaceDeclaration declaration) {
+        int clauses = 0;
+        if (!declaration.getExtendedTypes().isEmpty()) {
+            clauses++;
+        }
+        if (!declaration.getImplementedTypes().isEmpty()) {
+            clauses++;
+        }
+        if (!declaration.getPermittedTypes().isEmpty()) {
+            clauses++;
+        }
+        return clauses;
+    }
+
+    private boolean hasTypeArguments(ClassOrInterfaceType type) {
+        return type.getTypeArguments().map(arguments -> !arguments.isEmpty()).orElse(false);
+    }
+
+    private int typeArgumentCount(ClassOrInterfaceType type) {
+        return type.getTypeArguments().map(NodeList::size).orElse(0);
     }
 
     private Doc record(RecordDeclaration declaration) {
@@ -776,6 +810,19 @@ final class JavaPrinter {
                                 .toList()))),
                 Doc.SOFT_LINE,
                 Doc.text(">")));
+    }
+
+    private Doc brokenTypeParameters(NodeList<TypeParameter> typeParameters, boolean indentClosingBracket) {
+        Doc parameters = Doc.concat(
+                Doc.text("<"),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), typeParameters.stream()
+                                .map(typeParameter -> Doc.text(compactTypeLike(typeParameter)))
+                                .toList()))),
+                Doc.HARD_LINE,
+                Doc.text(">"));
+        return indentClosingBracket ? Doc.indent(parameters) : parameters;
     }
 
     private Doc parameter(Parameter parameter) {
@@ -1509,12 +1556,32 @@ final class JavaPrinter {
     }
 
     private <T extends Node> Optional<Doc> typeClause(String keyword, NodeList<T> types) {
+        return typeClause(keyword, types, true);
+    }
+
+    private <T extends Node> Optional<Doc> typeClause(String keyword, NodeList<T> types, boolean breakBeforeClause) {
         if (types.isEmpty()) {
             return Optional.empty();
         }
         String flat = keyword + " " + compactJoinTypeLike(types);
+        if (!breakBeforeClause) {
+            if (types.size() == 1
+                    && types.get(0) instanceof ClassOrInterfaceType type
+                    && typeArgumentCount(type) > 2) {
+                return Optional.of(Doc.concat(Doc.text(" " + keyword + " "), brokenClassOrInterfaceType(type)));
+            }
+            return Optional.of(Doc.text(" " + flat));
+        }
         if (flat.length() + options.indentUnit().length() <= options.lineWidth()) {
             return Optional.of(Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(flat))));
+        }
+        if (types.size() == 1
+                && types.get(0) instanceof ClassOrInterfaceType type
+                && typeArgumentCount(type) > 2) {
+            return Optional.of(Doc.indent(Doc.concat(
+                    Doc.HARD_LINE,
+                    Doc.text(keyword + " "),
+                    brokenClassOrInterfaceType(type))));
         }
         return Optional.of(Doc.indent(Doc.concat(
                 Doc.HARD_LINE,
@@ -1524,6 +1591,25 @@ final class JavaPrinter {
                         Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), types.stream()
                                 .map(type -> Doc.text(compactTypeLike(type)))
                                 .toList()))))));
+    }
+
+    private Doc brokenClassOrInterfaceType(ClassOrInterfaceType type) {
+        return Doc.concat(
+                Doc.text(typeNameWithoutArguments(type) + "<"),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), type.getTypeArguments().stream()
+                                .flatMap(NodeList::stream)
+                                .map(argument -> Doc.text(compactTypeLike(argument)))
+                                .toList()))),
+                Doc.HARD_LINE,
+                Doc.text(">"));
+    }
+
+    private String typeNameWithoutArguments(ClassOrInterfaceType type) {
+        String text = compactTypeLike(type);
+        int argumentsStart = text.indexOf('<');
+        return argumentsStart < 0 ? text : text.substring(0, argumentsStart);
     }
 
     private <T extends Node> String flatTypeClause(String keyword, NodeList<T> types) {

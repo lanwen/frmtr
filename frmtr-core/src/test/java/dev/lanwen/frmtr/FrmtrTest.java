@@ -239,6 +239,66 @@ final class FrmtrTest {
     }
 
     @Test
+    void hugsNestedMethodCallExpressionLambdaBeforeBreakingBody() {
+        String source = """
+                class Demo {
+                    void method() {
+                        a.b(c -> d -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("a.b(c -> d ->\n"
+                        + "      eeeeeeeeee.ffffffffff(\n"
+                        + "        gggggggggg,\n"
+                        + "        hhhhhhhhhh,\n"
+                        + "        iiiiiiiiii,\n"
+                        + "        jjjjjjjjjj,\n"
+                        + "        kkkkkkkkkk\n"
+                        + "      )\n"
+                        + "    );");
+    }
+
+    @Test
+    void keepsBrokenLambdaParametersWithCompactMethodCallBody() {
+        String source = """
+                class Demo {
+                    void method() {
+                        aaaaaaaaaaaaaaaaaaaaaaaa((bbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccccccc, dddddddddddddddddddddddd) -> eeeeeeeeeeeeeeeeeeeeeeee.ffffffffffffffffffffffff());
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("aaaaaaaaaaaaaaaaaaaaaaaa(\n"
+                        + "      (\n"
+                        + "        bbbbbbbbbbbbbbbbbbbbbbbb,\n"
+                        + "        cccccccccccccccccccccccc,\n"
+                        + "        dddddddddddddddddddddddd\n"
+                        + "      ) -> eeeeeeeeeeeeeeeeeeeeeeee.ffffffffffffffffffffffff()\n"
+                        + "    );");
+    }
+
+    @Test
     void keepsRelationalLambdaBodyOperatorWithBrokenLeftExpression() {
         String source = """
                 class Demo {

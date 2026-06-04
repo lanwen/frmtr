@@ -4227,11 +4227,24 @@ final class JavaPrinter {
         if (currentIndentedWidth(flat) <= options.lineWidth()) {
             return Doc.text(flat);
         }
+        if (lambdaParametersShouldBreak(expression, parameters)
+                && expression.getExpressionBody().filter(this::shouldHugBrokenLambdaBody).isPresent()) {
+            return Doc.concat(
+                    lambdaParametersForHeader(expression, parameters),
+                    Doc.text(" -> "),
+                    expression(expression.getExpressionBody().orElseThrow()));
+        }
         Doc body = brokenLambdaExpressionBody(expression);
         return Doc.concat(
                 lambdaParametersForHeader(expression, parameters),
                 Doc.text(" ->"),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, body)));
+    }
+
+    private boolean shouldHugBrokenLambdaBody(Expression body) {
+        return body instanceof MethodCallExpr methodCall
+                && methodCall.getArguments().isEmpty()
+                && currentIndentedWidth(") -> " + compact(methodCall)) <= options.lineWidth();
     }
 
     private Doc brokenLambdaExpressionBody(LambdaExpr expression) {
@@ -4324,9 +4337,11 @@ final class JavaPrinter {
         }
         LambdaExpr lambdaExpr = (LambdaExpr) arguments.get(lambdaIndex);
         Optional<Expression> body = lambdaExpr.getExpressionBody();
+        Optional<LambdaExpr> nestedLambda = body
+                .filter(LambdaExpr.class::isInstance)
+                .map(LambdaExpr.class::cast);
         if (body.isEmpty()
-                || !(body.orElseThrow() instanceof MethodCallExpr methodCallBody)
-                || methodCallBody.getArguments().isEmpty()
+                || !huggableExpressionLambdaBody(body.orElseThrow())
                 || !lambdaExpr.getAllContainedComments().isEmpty()) {
             return Optional.empty();
         }
@@ -4334,21 +4349,58 @@ final class JavaPrinter {
         if (lambdaParametersShouldBreak(lambdaExpr, parameters)) {
             return Optional.empty();
         }
+        if (nestedLambda.isPresent()) {
+            LambdaExpr nested = nestedLambda.orElseThrow();
+            if (!nested.getAllContainedComments().isEmpty()
+                    || lambdaParametersShouldBreak(nested, lambdaParameters(nested))) {
+                return Optional.empty();
+            }
+        }
         String leadingArguments = compactJoin(arguments.subList(0, lambdaIndex));
         String firstLine = prefix + "("
                 + (leadingArguments.isEmpty() ? "" : leadingArguments + ", ")
-                + parameters
-                + " ->";
+                + huggableExpressionLambdaFirstLine(lambdaExpr, parameters);
         String flat = prefix + "(" + compactJoin(arguments) + ")";
         if (blockStatementWidth(flat) <= options.lineWidth()
                 || blockStatementWidth(firstLine) > options.lineWidth()) {
             return Optional.empty();
         }
+        MethodCallExpr methodCallBody = huggableExpressionLambdaMethodCallBody(lambdaExpr).orElseThrow();
         return Optional.of(Doc.concat(
                 Doc.text(firstLine),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, expression(methodCallBody))),
                 Doc.HARD_LINE,
                 Doc.text(")")));
+    }
+
+    private boolean huggableExpressionLambdaBody(Expression body) {
+        if (body instanceof MethodCallExpr methodCall) {
+            return !methodCall.getArguments().isEmpty();
+        }
+        if (body instanceof LambdaExpr lambdaExpr && lambdaExpr.getExpressionBody().isPresent()) {
+            return huggableExpressionLambdaBody(lambdaExpr.getExpressionBody().orElseThrow());
+        }
+        return false;
+    }
+
+    private String huggableExpressionLambdaFirstLine(LambdaExpr lambdaExpr, String parameters) {
+        return lambdaExpr.getExpressionBody()
+                .filter(LambdaExpr.class::isInstance)
+                .map(LambdaExpr.class::cast)
+                .map(nested -> parameters + " -> " + lambdaParameters(nested) + " ->")
+                .orElse(parameters + " ->");
+    }
+
+    private Optional<MethodCallExpr> huggableExpressionLambdaMethodCallBody(LambdaExpr lambdaExpr) {
+        return lambdaExpr.getExpressionBody().flatMap(body -> {
+            if (body instanceof MethodCallExpr methodCall) {
+                return Optional.of(methodCall);
+            }
+            if (body instanceof LambdaExpr nested) {
+                return huggableExpressionLambdaMethodCallBody(nested);
+            }
+            return Optional.empty();
+        });
     }
 
     private int expressionLambdaArgumentIndex(NodeList<Expression> arguments) {

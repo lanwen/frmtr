@@ -34,6 +34,7 @@ import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.InstanceOfExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.expr.MethodCallExpr;
@@ -2415,6 +2416,12 @@ final class JavaPrinter {
         }
         List<Expression> operands = new ArrayList<>();
         flattenBinaryExpression(binaryExpr, binaryExpr.getOperator(), operands);
+        if (binaryExpr.getOperator() == BinaryExpr.Operator.AND
+                && operands.size() == 2
+                && operands.getFirst() instanceof InstanceOfExpr instanceOfExpr
+                && parenthesizedInnerWidth(compact(instanceOfExpr)) > options.lineWidth()) {
+            return Doc.concat(expression(instanceOfExpr), Doc.text(" && "), expression(operands.getLast()));
+        }
         List<Doc> lines = new ArrayList<>();
         for (int i = 0; i < operands.size(); i++) {
             Doc operand = binaryExpressionLineOperand(binaryExpr.getOperator(), operands.get(i));
@@ -2914,6 +2921,9 @@ final class JavaPrinter {
         }
         if (expression instanceof FieldAccessExpr fieldAccessExpr) {
             return fieldAccess(fieldAccessExpr);
+        }
+        if (expression instanceof InstanceOfExpr instanceOfExpr) {
+            return instanceOfExpression(instanceOfExpr);
         }
         if (expression instanceof LambdaExpr lambdaExpr) {
             return lambdaExpression(lambdaExpr);
@@ -3566,6 +3576,19 @@ final class JavaPrinter {
 
     private Doc methodCall(MethodCallExpr expression) {
         return methodCall(expression, MethodCallMode.AUTO);
+    }
+
+    private Doc instanceOfExpression(InstanceOfExpr expression) {
+        String flat = compact(expression);
+        if (currentIndentedWidth(flat) <= options.lineWidth()) {
+            return Doc.text(flat);
+        }
+        Doc left = expression(expression.getExpression());
+        String right = expression.getPattern().map(this::compact).orElseGet(() -> compactTypeLike(expression.getType()));
+        if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.START) {
+            return Doc.concat(left, Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text("instanceof " + right))));
+        }
+        return Doc.concat(left, Doc.text(" instanceof"), Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(right))));
     }
 
     private Doc methodCall(MethodCallExpr expression, MethodCallMode mode) {

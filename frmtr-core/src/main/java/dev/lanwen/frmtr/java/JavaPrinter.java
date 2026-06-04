@@ -338,6 +338,7 @@ final class JavaPrinter {
         }
         extendsTypes(declaration.getExtendedTypes()).ifPresent(header::add);
         implementsTypes(declaration.getImplementedTypes()).ifPresent(header::add);
+        permitsTypes(declaration.getPermittedTypes()).ifPresent(header::add);
         header.add(Doc.text(" "));
         header.add(memberBlock(declaration.getMembers(), declaration));
         return Doc.concat(header);
@@ -347,7 +348,9 @@ final class JavaPrinter {
         if (!declaration.getTypeParameters().isEmpty()) {
             return false;
         }
-        if (declaration.getExtendedTypes().isEmpty() && declaration.getImplementedTypes().isEmpty()) {
+        if (declaration.getExtendedTypes().isEmpty()
+                && declaration.getImplementedTypes().isEmpty()
+                && declaration.getPermittedTypes().isEmpty()) {
             return false;
         }
         String flatHeader = modifiers(declaration)
@@ -355,7 +358,8 @@ final class JavaPrinter {
                 + declaration.getNameAsString()
                 + flatTypeParameters(declaration.getTypeParameters())
                 + flatTypeClause("extends", declaration.getExtendedTypes())
-                + flatTypeClause("implements", declaration.getImplementedTypes());
+                + flatTypeClause("implements", declaration.getImplementedTypes())
+                + flatTypeClause("permits", declaration.getPermittedTypes());
         return flatHeader.length() + 1 + flatMemberBlockWidth(declaration) > options.lineWidth();
     }
 
@@ -371,6 +375,7 @@ final class JavaPrinter {
         }
         typeClause("extends", declaration.getExtendedTypes()).ifPresent(header::add);
         typeClause("implements", declaration.getImplementedTypes()).ifPresent(header::add);
+        typeClause("permits", declaration.getPermittedTypes()).ifPresent(header::add);
         header.add(emptyMemberBlock(declaration) ? Doc.text(" ") : Doc.HARD_LINE);
         header.add(memberBlock(declaration.getMembers(), declaration));
         return Doc.concat(header);
@@ -1327,6 +1332,13 @@ final class JavaPrinter {
         return Optional.of(Doc.text(" implements " + compactJoinTypeLike(types)));
     }
 
+    private Optional<Doc> permitsTypes(NodeList<ClassOrInterfaceType> types) {
+        if (types.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.text(" permits " + compactJoinTypeLike(types)));
+    }
+
     private <T extends Node> Optional<Doc> typeClause(String keyword, NodeList<T> types) {
         if (types.isEmpty()) {
             return Optional.empty();
@@ -1381,11 +1393,35 @@ final class JavaPrinter {
         if (node.getModifiers().isEmpty()) {
             return "";
         }
-        return String.join(" ", node.getModifiers().stream().map(this::modifier).toList()) + " ";
+        return String.join(" ", node.getModifiers().stream()
+                        .sorted(Comparator.comparingInt(this::modifierRank))
+                        .map(this::modifier)
+                        .toList())
+                + " ";
     }
 
     private String modifier(Modifier modifier) {
         return modifier.getKeyword().asString();
+    }
+
+    private int modifierRank(Modifier modifier) {
+        return switch (modifier.getKeyword()) {
+            case PUBLIC -> 0;
+            case PROTECTED -> 1;
+            case PRIVATE -> 2;
+            case ABSTRACT -> 3;
+            case STATIC -> 4;
+            case FINAL -> 5;
+            case SEALED -> 6;
+            case NON_SEALED -> 7;
+            case SYNCHRONIZED -> 8;
+            case NATIVE -> 9;
+            case STRICTFP -> 10;
+            case TRANSIENT -> 11;
+            case VOLATILE -> 12;
+            case TRANSITIVE -> 13;
+            default -> 100;
+        };
     }
 
     private String compactJoin(List<? extends Node> nodes) {

@@ -1,4 +1,4 @@
-public sealed class Rectangle implements Shape {
+public sealed class Rectangle implements Shape permits Square {
 
     private final double length;
     private final double height;
@@ -36,7 +36,7 @@ public non-sealed class RightTriangle implements Triangle {
     }
 }
 
-public sealed interface Shape {
+public sealed interface Shape permits Circle, Rectangle, Triangle, Unicorn {
     double area();
 
     default Shape rotate(double angle) {
@@ -53,36 +53,40 @@ public sealed interface Shape {
 
 public non-sealed interface Triangle extends Shape {}
 
-public sealed interface Shape {}
+public sealed interface Shape permits ALongVeryLongCircle, ALongVeryLongRectangle, ALongVeryLongTriangle, ALongVeryLongUnicorn {}
 
-public sealed interface Shape extends AbstractShape {}
+public sealed interface Shape
+    extends AbstractShape
+    permits ALongVeryLongCircle, ALongVeryLongRectangle, ALongVeryLongTriangle, ALongVeryLongUnicorn {}
 
-public sealed class Shape {}
+public sealed class Shape permits ALongVeryLongCircle, ALongVeryLongRectangle, ALongVeryLongTriangle, ALongVeryLongUnicorn {}
 
-public sealed class Shape extends AbstractShape {}
+public sealed class Shape
+    extends AbstractShape
+    permits ALongVeryLongCircle, ALongVeryLongRectangle, ALongVeryLongTriangle, ALongVeryLongUnicorn {}
 
 public class NestedSealedClasses {
 
-    public static sealed abstract class SealedParent {}
+    public abstract static sealed class SealedParent permits SealedChild {}
 
-    final static class SealedChild extends SealedParent {}
+    static final class SealedChild extends SealedParent {}
 }
 
 public class NestedNonSealedClasses {
 
-    public static non-sealed abstract class NonSealedParent {}
+    public abstract static non-sealed class NonSealedParent {}
 
-    final static class SealedChild extends NonSealedParent {}
+    static final class SealedChild extends NonSealedParent {}
 }
 
 public interface Test {
     sealed interface Inner {}
 
-    public static sealed abstract class SealedParent {}
+    public abstract static sealed class SealedParent {}
 
     non-sealed interface Inner {}
 
-    public static non-sealed abstract class SealedParent {}
+    public abstract static non-sealed class SealedParent {}
 
-    final static class SealedChild extends SealedParent {}
+    static final class SealedChild extends SealedParent {}
 }

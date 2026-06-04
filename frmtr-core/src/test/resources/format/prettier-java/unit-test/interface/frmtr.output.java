@@ -54,17 +54,17 @@ public interface Filterer<G, E> {
     //
 }
 
-sealed class Aaaaaaaaaa<Bbbbbbbbbb> extends Cccccccccc {
+sealed class Aaaaaaaaaa<Bbbbbbbbbb> extends Cccccccccc permits Dddddddddd {
 
     void a() {}
 }
 
-sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc> extends Dddddddddd {
+sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc> extends Dddddddddd permits Eeeeeeeeee {
 
     void a() {}
 }
 
-sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc> extends Dddddddddd {}
+sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc> extends Dddddddddd permits Eeeeeeeeee {}
 
 class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc> extends Dddddddddd<Eeeeeeeeee, Ffffffffff> {
 
@@ -76,16 +76,16 @@ class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc> extends Dddddddddd<Eeeeeeeeee, Ffffffff
     void a() {}
 }
 
-sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj> {
+sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj> permits Kkkkkkkkkk, Llllllllll {
 
     void a() {}
 }
 
-sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj> {}
+sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj> permits Kkkkkkkkkk, Llllllllll {}
 
-sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj, Kkkkkkkkkk, Llllllllll, Mmmmmmmmmm, Nnnnnnnnnn> {
+sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj, Kkkkkkkkkk, Llllllllll, Mmmmmmmmmm, Nnnnnnnnnn> permits Oooooooooo, Pppppppppp, Qqqqqqqqqq, Rrrrrrrrrr, Ssssssssss, Tttttttttt, Uuuuuuuuuu {
 
     void a() {}
 }
 
-sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj, Kkkkkkkkkk, Llllllllll, Mmmmmmmmmm, Nnnnnnnnnn> {}
+sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj, Kkkkkkkkkk, Llllllllll, Mmmmmmmmmm, Nnnnnnnnnn> permits Oooooooooo, Pppppppppp, Qqqqqqqqqq, Rrrrrrrrrr, Ssssssssss, Tttttttttt, Uuuuuuuuuu {}

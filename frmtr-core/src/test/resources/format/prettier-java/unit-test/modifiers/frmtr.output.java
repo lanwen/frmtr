@@ -3,18 +3,18 @@
 @AnnotationThree
 public interface InterfaceWithModifiers {
     @AnnotationOne
-    static final public String INTERFACE_CONSTANT = "abc";
+    public static final String INTERFACE_CONSTANT = "abc";
 
     @AnnotationOne
     @AnnotationTwo
     @AnnotationThree
-    default public String defaultMethod() {
+    public default String defaultMethod() {
         return INTERFACE_CONSTANT;
     }
 
     @AnnotationOne
     @AnnotationTwo
-    static public String staticMethod() {
+    public static String staticMethod() {
         return INTERFACE_CONSTANT;
     }
 
@@ -28,15 +28,15 @@ public interface InterfaceWithModifiers {
 
 @AnnotationOne
 @AnnotationTwo
-abstract public class AbstractClassWithModifiers {
+public abstract class AbstractClassWithModifiers {
 
     @Annotation
-    volatile private static String field;
+    private static volatile String field;
 
     @AnnotationOne
     @AnnotationTwo
     @AnnotationThree
-    abstract protected String method();
+    protected abstract String method();
 
     @AnnotationOne
     @AnnotationTwo
@@ -48,20 +48,20 @@ abstract public class AbstractClassWithModifiers {
 
 @AnnotationOne
 @AnnotationTwo
-final public class ClassWithModifiers {
+public final class ClassWithModifiers {
 
     @AnnotationOne
     @AnnotationTwo
-    transient final private static String CONSTANT = "abc";
+    private static final transient String CONSTANT = "abc";
 
     @AnnotationOne
     @AnnotationTwo
     @AnnotationThree
-    final static protected String CONSTANT_2 = "123";
+    protected static final String CONSTANT_2 = "123";
 
     @AnnotationOne
     @AnnotationTwo
-    static public String staticField;
+    public static String staticField;
 
     @AnnotationOne
     @AnnotationTwo
@@ -73,7 +73,7 @@ final public class ClassWithModifiers {
     @AnnotationOne
     @AnnotationTwo
     @AnnotationThree
-    final static synchronized protected String method() {
+    protected static final synchronized String method() {
         return CONSTANT;
     }
 

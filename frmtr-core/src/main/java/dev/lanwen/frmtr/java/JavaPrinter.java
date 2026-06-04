@@ -3263,6 +3263,10 @@ final class JavaPrinter {
         if (huggableLambda.isPresent()) {
             return huggableLambda.orElseThrow();
         }
+        Optional<Doc> singleTextBlockArgument = singleTextBlockArgument(prefix, expression);
+        if (singleTextBlockArgument.isPresent()) {
+            return singleTextBlockArgument.orElseThrow();
+        }
         Optional<Doc> singleBinaryArgument = singleBinaryArgument(prefix, expression.getArguments(), mode);
         if (singleBinaryArgument.isPresent()) {
             return singleBinaryArgument.orElseThrow();
@@ -3446,6 +3450,40 @@ final class JavaPrinter {
                 Doc.text(prefix + "(" + (leadingArguments.isEmpty() ? "" : leadingArguments + ", ")),
                 lambdaExpression(lambdaExpr),
                 Doc.text((trailingArguments.isEmpty() ? "" : ", " + trailingArguments) + ")")));
+    }
+
+    private Optional<Doc> singleTextBlockArgument(String prefix, MethodCallExpr expression) {
+        if (expression.getArguments().size() != 1
+                || !(expression.getArguments().get(0) instanceof TextBlockLiteralExpr textBlockLiteralExpr)) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+                Doc.text(prefix + "("),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, textBlockArgument(textBlockLiteralExpr, expression))),
+                Doc.HARD_LINE,
+                Doc.text(")")));
+    }
+
+    private Doc textBlockArgument(TextBlockLiteralExpr textBlockLiteralExpr, MethodCallExpr expression) {
+        Doc leading = comments.ownComment(textBlockLiteralExpr, LineComment.class::isInstance);
+        Doc literal = Doc.text(rawWithoutOwnComment(textBlockLiteralExpr));
+        Doc trailing = textBlockSameLineTrailingComment(textBlockLiteralExpr, expression);
+        if (leading != Doc.EMPTY) {
+            return Doc.concat(leading, Doc.HARD_LINE, literal, trailing);
+        }
+        return Doc.concat(literal, trailing);
+    }
+
+    private Doc textBlockSameLineTrailingComment(TextBlockLiteralExpr textBlockLiteralExpr, MethodCallExpr expression) {
+        int textBlockEndLine = textBlockLiteralExpr.getRange().map(range -> range.end.line).orElse(Integer.MIN_VALUE);
+        return expression.getOrphanComments().stream()
+                .filter(LineComment.class::isInstance)
+                .filter(comment -> comment.getRange()
+                        .map(range -> range.begin.line == textBlockEndLine)
+                        .orElse(false))
+                .findFirst()
+                .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
+                .orElse(Doc.EMPTY);
     }
 
     private Optional<Doc> singleBinaryArgument(String prefix, NodeList<Expression> arguments, MethodCallMode mode) {

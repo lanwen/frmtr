@@ -309,6 +309,40 @@ final class FrmtrTest {
     }
 
     @Test
+    void breaksSingleTextBlockMethodCallArgumentAndPreservesArgumentComments() {
+        String source = """
+                class Demo {
+                    void method() {
+                        System.out.println(
+                            // leading comment
+                            \"""
+                            text
+                            \""" // trailing comment
+                        );
+                    }
+                }
+                """;
+
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("System.out.println(\n"
+                        + "      // leading comment\n"
+                        + "      \"\"\"\n"
+                        + "            text\n"
+                        + "            \"\"\" // trailing comment\n"
+                        + "    );");
+    }
+
+    @Test
     void preservesCommentsInBrokenBinaryContinuationLines() {
         String source = """
                 class Demo {

@@ -28,22 +28,25 @@ public class TextBlock {
         """;
 
         System.out.println(
+            // leading comment
             """
                abaoeu
                  euaoeu
               aoeu
 
                oaeu
-                    abc"""
+                    abc""" // trailing comment
         );
 
-        System.out.println("""
+        System.out.println(
+            """
  abaoeu
    euaoeu
 aoeu
 
  oaeu
-      abc""");
+      abc"""
+        );
     }
 
     String escapes = """

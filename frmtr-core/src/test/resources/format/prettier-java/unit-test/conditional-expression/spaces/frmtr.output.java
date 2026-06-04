@@ -2,8 +2,12 @@ class ConditionalExpression {
 
     int ternaryOperationThatShouldBreak() {
         int shortInteger =
-            thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne ? thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne : thisIsAShortInteger;
-        return thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne ? thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne : thisIsAShortInteger;
+            thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne
+                ? thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne
+                : thisIsAShortInteger;
+        return thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne
+            ? thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne
+            : thisIsAShortInteger;
     }
 
     int ternaryOperationThatShouldBreak2() {

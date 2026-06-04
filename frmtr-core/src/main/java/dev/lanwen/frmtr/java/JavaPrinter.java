@@ -29,6 +29,7 @@ import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.CastExpr;
+import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MemberValuePair;
@@ -1598,6 +1599,9 @@ final class JavaPrinter {
         if (expression instanceof CastExpr castExpr) {
             return castExpression(castExpr);
         }
+        if (expression instanceof ConditionalExpr conditionalExpr) {
+            return conditionalExpression(conditionalExpr);
+        }
         if (expression instanceof EnclosedExpr enclosedExpr) {
             return enclosedExpression(enclosedExpr);
         }
@@ -1668,6 +1672,22 @@ final class JavaPrinter {
                     Doc.text(")"));
         }
         return Doc.text("(" + compactTypeLike(type) + ")");
+    }
+
+    private Doc conditionalExpression(ConditionalExpr expression) {
+        String flat = compact(expression);
+        if (currentIndentedWidth(flat) <= options.lineWidth()) {
+            return Doc.text(flat);
+        }
+        return Doc.concat(
+                expression(expression.getCondition()),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.text("? "),
+                        expression(expression.getThenExpr()),
+                        Doc.HARD_LINE,
+                        Doc.text(": "),
+                        expression(expression.getElseExpr()))));
     }
 
     private Doc arrayAccess(ArrayAccessExpr expression) {

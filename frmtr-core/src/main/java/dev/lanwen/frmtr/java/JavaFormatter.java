@@ -41,11 +41,27 @@ public final class JavaFormatter {
     }
 
     public String format(String source) {
+        if (options.requirePragma() && !hasFormatPragma(source)) {
+            return source;
+        }
         CompilationUnit unit = parse(source);
         SyntaxNodeView.from(unit);
         JavaPrinter printer = new JavaPrinter(options);
         Doc doc = printer.print(unit);
         return new DocRenderer(options).render(doc);
+    }
+
+    private boolean hasFormatPragma(String source) {
+        String stripped = source.stripLeading();
+        if (!stripped.startsWith("/**")) {
+            return false;
+        }
+        int end = stripped.indexOf("*/");
+        if (end < 0) {
+            return false;
+        }
+        String leadingDocComment = stripped.substring(0, end + 2);
+        return leadingDocComment.contains("@format") || leadingDocComment.contains("@prettier");
     }
 
     private CompilationUnit parse(String source) {

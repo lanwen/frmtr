@@ -34,11 +34,12 @@ Shared subproject conventions configure Java 25, UTF-8 compilation, `-Xlint:all`
 Single-source formatting starts at `Frmtr.format(...)`.
 
 1. `Frmtr` applies default or caller-provided `FormatterOptions`.
-2. `JavaFormatter` parses source with JavaParser using stored tokens and attributed comments.
-3. Syntactically invalid Java is rejected with `FormatterException`; v1 formats parseable compilation units only.
-4. The parsed tree is adapted into `SyntaxNodeView` to keep formatter-owned syntax metadata separate from JavaParser APIs.
-5. `JavaPrinter` walks JavaParser declarations and statements and emits `Doc` values.
-6. `DocRenderer` renders the document IR using line width, indentation, line ending, and trailing-newline options.
+2. If `FormatterOptions.requirePragma` is enabled, `JavaFormatter` first checks the leading Javadoc comment for `@format` or `@prettier` and returns source unchanged when neither pragma is present.
+3. `JavaFormatter` parses source with JavaParser using stored tokens and attributed comments.
+4. Syntactically invalid Java is rejected with `FormatterException`; v1 formats parseable compilation units only.
+5. The parsed tree is adapted into `SyntaxNodeView` to keep formatter-owned syntax metadata separate from JavaParser APIs.
+6. `JavaPrinter` walks JavaParser declarations and statements and emits `Doc` values.
+7. `DocRenderer` renders the document IR using line width, indentation, line ending, and trailing-newline options.
 
 JavaParser printers are not the formatter engine. They may be useful as references, but final formatting is owned by the `Doc` pipeline.
 
@@ -67,7 +68,7 @@ The runner owns deterministic path ordering and de-duplication for file lists su
 
 ## Java Formatter
 
-`JavaFormatter` owns JavaParser configuration and parse-error handling. It enables token storage and comment attribution because formatter rules need syntax-adjacent trivia. `FormatterOptions.JavaLanguageLevel` is the public parser-level setting; `JavaFormatter` converts it to JavaParser's own language-level enum internally. The default is `LATEST_AVAILABLE`, which resolves through JavaParser's latest available stable alias at runtime, while `UNSET` deliberately selects JavaParser raw mode. Parse failures are reported with nearby source lines and a caret marker at JavaParser's reported line and column.
+`JavaFormatter` owns JavaParser configuration, pragma gating, and parse-error handling. It enables token storage and comment attribution because formatter rules need syntax-adjacent trivia. `FormatterOptions.JavaLanguageLevel` is the public parser-level setting; `JavaFormatter` converts it to JavaParser's own language-level enum internally. The default is `LATEST_AVAILABLE`, which resolves through JavaParser's latest available stable alias at runtime, while `UNSET` deliberately selects JavaParser raw mode. `FormatterOptions.requirePragma` is an opt-in API setting that mirrors Prettier's require-pragma behavior by formatting only files whose leading Javadoc comment contains `@format` or `@prettier`. Parse failures are reported with nearby source lines and a caret marker at JavaParser's reported line and column.
 
 The public `Frmtr` API wraps recoverable internal formatter failures, including parser dependency linkage failures and assertions, as `FormatterException.internal(...)` so adapters can report concise failures without treating them as VM-level crashes.
 
@@ -135,7 +136,7 @@ The test suite covers:
 - `:frmtr-native-image-support`: JavaParser metamodel coverage for native-image reflection registration, including known-risk AST fields used by field and variable declarations.
 - `:frmtr-cli:nativeTest`: native-image compatibility coverage for JavaParser reflection-sensitive syntax. It is explicit native coverage and is not wired into the default JVM `check` lifecycle.
 - Golden resources under `frmtr-core/src/test/resources/format`.
-- The adopted upstream `prettier-java` fixture set under `frmtr-core/src/test/resources/format/prettier-java`, with parseable inputs, parseable Prettier Java reference outputs, checked-in `frmtr.output.java` snapshots for current formatter output, and an explicit Prettier-compatible subset compared directly against `prettier.output.java` using Prettier-style 80-column, two-space options plus raw trailing-whitespace preservation for ignored regions.
+- The adopted upstream `prettier-java` fixture set under `frmtr-core/src/test/resources/format/prettier-java`, with parseable inputs, parseable Prettier Java reference outputs, checked-in `frmtr.output.java` snapshots for current formatter output, and an explicit Prettier-compatible subset compared directly against `prettier.output.java` using Prettier-style 80-column, two-space options, raw trailing-whitespace preservation for ignored regions, and require-pragma mode for require-pragma fixtures.
 - The full upstream `prettier-java` fixture corpus under `frmtr-core/src/test/resources/upstream/prettier-java`.
 
 New formatter rules should include golden coverage plus idempotence and reparse checks where practical.

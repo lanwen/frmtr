@@ -95,6 +95,53 @@ final class FrmtrTest {
         assertThat(FormatterOptions.defaults().javaLanguageLevel())
                 .isEqualTo(FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
         assertThat(FormatterOptions.defaults().preserveRawTrailingWhitespace()).isFalse();
+        assertThat(FormatterOptions.defaults().requirePragma()).isFalse();
+    }
+
+    @Test
+    void requirePragmaLeavesSourceWithoutLeadingFormatPragmaUnchanged() {
+        String source = """
+                /**
+                 * @surely this is invalid
+                 */
+                 public class Demo{int value;}\
+                """;
+        FormatterOptions options = new FormatterOptions(
+                FormatterOptions.DEFAULT_LINE_WIDTH,
+                FormatterOptions.IndentStyle.SPACE,
+                FormatterOptions.DEFAULT_INDENT_WIDTH,
+                FormatterOptions.LineEnding.LF,
+                true,
+                false,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted).isEqualTo(source);
+    }
+
+    @Test
+    void requirePragmaFormatsSourceWithLeadingFormatPragma() {
+        String source = """
+                /**
+                 * @format
+                 */
+                 public class Demo{int value;}\
+                """;
+        FormatterOptions options = new FormatterOptions(
+                FormatterOptions.DEFAULT_LINE_WIDTH,
+                FormatterOptions.IndentStyle.SPACE,
+                FormatterOptions.DEFAULT_INDENT_WIDTH,
+                FormatterOptions.LineEnding.LF,
+                true,
+                false,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted).isNotEqualTo(source).contains("public class Demo {");
     }
 
     @Test

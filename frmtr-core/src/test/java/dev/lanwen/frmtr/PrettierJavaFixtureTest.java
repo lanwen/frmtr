@@ -29,6 +29,15 @@ final class PrettierJavaFixtureTest {
             true,
             true,
             FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+    private static final FormatterOptions PRETTIER_REQUIRE_PRAGMA_OPTIONS = new FormatterOptions(
+            80,
+            FormatterOptions.IndentStyle.SPACE,
+            2,
+            FormatterOptions.LineEnding.LF,
+            true,
+            true,
+            true,
+            FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
     private static final Set<String> PRETTIER_COMPATIBLE_FIXTURES = Set.of(
             "args",
             "arrays",
@@ -67,6 +76,7 @@ final class PrettierJavaFixtureTest {
             "prettier-ignore/classDeclaration",
             "prettier-ignore/multiple-ignore",
             "require-pragma/format-pragma",
+            "require-pragma/invalid-pragma",
             "require-pragma/prettier-pragma",
             "return",
             "synchronized",
@@ -102,7 +112,7 @@ final class PrettierJavaFixtureTest {
     void currentFormatterOutputMatchesPrettierReference(Fixture fixture) throws IOException {
         String input = read(fixture.input());
 
-        String formatted = Frmtr.format(input, PRETTIER_COMPATIBILITY_OPTIONS);
+        String formatted = Frmtr.format(input, prettierCompatibilityOptions(fixture));
 
         assertThat(formatted).isEqualTo(read(fixture.prettierOutput()));
     }
@@ -129,6 +139,13 @@ final class PrettierJavaFixtureTest {
 
     private static Stream<Fixture> prettierCompatibleFixtures() throws IOException, URISyntaxException {
         return fixtures().filter(fixture -> PRETTIER_COMPATIBLE_FIXTURES.contains(fixture.name()));
+    }
+
+    private static FormatterOptions prettierCompatibilityOptions(Fixture fixture) {
+        if (fixture.name().startsWith("require-pragma/")) {
+            return PRETTIER_REQUIRE_PRAGMA_OPTIONS;
+        }
+        return PRETTIER_COMPATIBILITY_OPTIONS;
     }
 
     private static Fixture fixture(Path root, Path input) {

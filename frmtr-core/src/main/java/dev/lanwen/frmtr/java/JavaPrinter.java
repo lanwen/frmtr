@@ -3611,19 +3611,25 @@ final class JavaPrinter {
         if (expression.getBody().isBlockStmt()) {
             return Doc.concat(lambdaParametersForHeader(expression, parameters), Doc.text(" -> "), block(expression.getBody().asBlockStmt()));
         }
-        Doc body = expression.getExpressionBody()
-                .map(this::expression)
-                .orElseGet(() -> statement(expression.getBody()));
         String flat = parameters + " -> " + expression.getExpressionBody()
                 .map(this::compact)
                 .orElseGet(() -> compact(expression.getBody()));
         if (currentIndentedWidth(flat) <= options.lineWidth()) {
             return Doc.text(flat);
         }
+        Doc body = brokenLambdaExpressionBody(expression);
         return Doc.concat(
                 lambdaParametersForHeader(expression, parameters),
                 Doc.text(" ->"),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, body)));
+    }
+
+    private Doc brokenLambdaExpressionBody(LambdaExpr expression) {
+        return expression.getExpressionBody()
+                .map(body -> body instanceof BinaryExpr
+                        ? binaryExpressionLines(body, true)
+                        : expression(body))
+                .orElseGet(() -> statement(expression.getBody()));
     }
 
     private Doc lambdaParametersForHeader(LambdaExpr expression, String flatParameters) {

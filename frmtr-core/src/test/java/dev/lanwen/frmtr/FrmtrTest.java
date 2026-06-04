@@ -183,6 +183,31 @@ final class FrmtrTest {
     }
 
     @Test
+    void breaksLongBinaryLambdaExpressionBody() {
+        String source = """
+                class Demo {
+                    void method() {
+                        call(value -> firstVeryLongConditionName && secondVeryLongConditionName);
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                60,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("value ->\n"
+                        + "        firstVeryLongConditionName &&\n"
+                        + "        secondVeryLongConditionName");
+    }
+
+    @Test
     void binaryOperatorPositionOptionControlsBrokenContinuationLines() {
         String source = """
                 class Demo {

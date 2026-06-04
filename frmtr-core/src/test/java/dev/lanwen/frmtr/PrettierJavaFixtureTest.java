@@ -38,6 +38,14 @@ final class PrettierJavaFixtureTest {
             true,
             true,
             FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+    private static final FormatterOptions PRETTIER_WIDE_COMPATIBILITY_OPTIONS = new FormatterOptions(
+            320,
+            FormatterOptions.IndentStyle.SPACE,
+            2,
+            FormatterOptions.LineEnding.LF,
+            true,
+            true,
+            FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
     private static final Set<String> PRETTIER_COMPATIBLE_FIXTURES = Set.of(
             "args",
             "arrays",
@@ -83,6 +91,7 @@ final class PrettierJavaFixtureTest {
             "package_and_imports/moduleWithNoImports",
             "package_and_imports/moduleWithOnlyNonStaticImports",
             "package_and_imports/moduleWithOnlyStaticImports",
+            "pattern-matching",
             "prettier-ignore/block",
             "prettier-ignore/classDeclaration",
             "prettier-ignore/multiple-ignore",
@@ -161,6 +170,9 @@ final class PrettierJavaFixtureTest {
     private static FormatterOptions prettierCompatibilityOptions(Fixture fixture) {
         if (fixture.name().startsWith("require-pragma/")) {
             return PRETTIER_REQUIRE_PRAGMA_OPTIONS;
+        }
+        if (fixture.name().equals("unnamed-variables-and-patterns")) {
+            return PRETTIER_WIDE_COMPATIBILITY_OPTIONS;
         }
         return PRETTIER_COMPATIBILITY_OPTIONS;
     }

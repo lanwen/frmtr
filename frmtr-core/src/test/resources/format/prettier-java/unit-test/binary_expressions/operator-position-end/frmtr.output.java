@@ -106,7 +106,11 @@ public class BinaryOperations {
 
         if (a * b + c << d < e == f & g ^ h | i && j || k && l | m ^ n & o != p > q >> r - s / t) {}
 
-        if (aaaaaaaaaa + bbbbbbbbbb == cccccccccc + dddddddddd && eeeeeeeeee + ffffffffff == gggggggggg + hhhhhhhhhh || iiiiiiiiii + jjjjjjjjjj == kkkkkkkkkk + llllllllll && mmmmmmmmmm + nnnnnnnnnn == oooooooooo + pppppppppp || qqqqqqqqqq + rrrrrrrrrr == ssssssssss + tttttttttt && uuuuuuuuuu + vvvvvvvvvv == wwwwwwwwww + xxxxxxxxxxx) {}
+        if (
+            aaaaaaaaaa + bbbbbbbbbb == cccccccccc + dddddddddd && eeeeeeeeee + ffffffffff == gggggggggg + hhhhhhhhhh ||
+            iiiiiiiiii + jjjjjjjjjj == kkkkkkkkkk + llllllllll && mmmmmmmmmm + nnnnnnnnnn == oooooooooo + pppppppppp ||
+            qqqqqqqqqq + rrrrrrrrrr == ssssssssss + tttttttttt && uuuuuuuuuu + vvvvvvvvvv == wwwwwwwwww + xxxxxxxxxxx
+        ) {}
     }
 
     void instanceOf() {

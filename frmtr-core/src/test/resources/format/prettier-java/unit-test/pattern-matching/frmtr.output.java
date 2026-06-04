@@ -27,11 +27,17 @@ class T {
             }
             case Buyer titi when this.bestPriceaaaaaaaazzzzzaaaaaaaaaq > b.bestPrice -> true;
             case Buyer titi when this.bestPriceaaaaaazzzaaaaaaaaaq > b.bestPrice -> true;
-            case Buyer b when this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice -> true;
-            case Buyer b when this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice -> {
+            case Buyer b when (
+                this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice
+            ) -> true;
+            case Buyer b when (
+                this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice
+            ) -> {
                 return true;
             }
-            case Buyer b when ( this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice ) -> {
+            case Buyer b when (
+                this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice
+            ) -> {
                 return true;
             }
             default -> false;
@@ -42,7 +48,7 @@ class T {
         if (o instanceof Foo(@Bar String s)) {
         }
         switch (obj) {
-            case String s:
+            case final String s:
                 break;
         }
         return switch (r) {
@@ -50,13 +56,20 @@ class T {
             case MyRecord(A a) -> 0;
             case MyRecord(A a, B b) -> 0;
             case MyRecord(MyRecord(A a), B b) -> 0;
-            case MyRecord(MyLongRecordTypeName(LongTypeName longVariableName, LongTypeName longVariableName), MyLongRecordTypeName(LongTypeName longVariableName, LongTypeName longVariableName)) -> 0;
+            case MyRecord(
+                MyLongRecordTypeName(LongTypeName longVariableName, LongTypeName longVariableName),
+                MyLongRecordTypeName(LongTypeName longVariableName, LongTypeName longVariableName)
+            ) -> 0;
             case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) -> 0;
-            case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when this.longVariableName > longVariableName && this.longVariableName > longVariableName -> 0;
-            case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when this.longVariableName > longVariableName && this.longVariableName > longVariableName -> longMethodName(longVariableName, longVariableName, longVariableName, longVariableName);
+            case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when (
+                this.longVariableName > longVariableName && this.longVariableName > longVariableName
+            ) -> 0;
+            case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when (
+                this.longVariableName > longVariableName && this.longVariableName > longVariableName
+            ) -> longMethodName(longVariableName, longVariableName, longVariableName, longVariableName);
             case Outer.Inner(String s) -> {
             }
-            case String s -> s;
+            case final String s -> s;
         };
     }
 }

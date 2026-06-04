@@ -115,7 +115,9 @@ class T {
             case MyRecord(A a) when true -> 0;
             case MyRecord(B b) when true -> 0;
             case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) -> 0;
-            case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when this.longVariableName > longVariableName && this.longVariableName > longVariableName -> longMethodName(longVariableName, longVariableName, longVariableName, longVariableName);
+            case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when (
+                this.longVariableName > longVariableName && this.longVariableName > longVariableName
+            ) -> longMethodName(longVariableName, longVariableName, longVariableName, longVariableName);
         };
     }
 }

@@ -223,7 +223,9 @@ public class Expressions {
         Aaaaaaaaaa aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
 
         switch (a) {
-            case Bbbbbbbbbb bbbbbbbbbb when (cccccccccc && dddddddddd && eeeeeeeeee) -> ffffffffff;
+            case Bbbbbbbbbb bbbbbbbbbb when (
+                cccccccccc && dddddddddd && eeeeeeeeee
+            ) -> ffffffffff;
         }
 
         return (aaaaaaaaaa && bbbbbbbbbb && cccccccccc && dddddddddd && eeeeeeeeee && ffffffffff);

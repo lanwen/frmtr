@@ -35,9 +35,11 @@ import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.RecordPatternExpr;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
+import com.github.javaparser.ast.expr.TypePatternExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.comments.Comment;
@@ -2073,21 +2075,22 @@ final class JavaPrinter {
             }
         }
         Doc label = switchEntryLabel(entry);
-        String guard = entry.getGuard().map(expression -> " when " + compact(expression)).orElse("");
+        Doc guard = switchEntryGuard(entry);
         Doc entryDoc;
         if (entry.getType() == SwitchEntry.Type.STATEMENT_GROUP) {
             entryDoc = switchStatementGroupEntry(label, guard, entry.getStatements());
         } else if (entry.getStatements().isEmpty()) {
-            entryDoc = Doc.concat(label, Doc.text(guard + " ->"));
+            entryDoc = Doc.concat(label, guard, Doc.text(" ->"));
         } else {
             Statement statement = entry.getStatements().get(0);
             if (hasLeadingOwnComment(statement)) {
                 entryDoc = Doc.concat(
                         label,
-                        Doc.text(guard + " ->"),
+                        guard,
+                        Doc.text(" ->"),
                         Doc.indent(Doc.concat(Doc.HARD_LINE, statement(statement))));
             } else {
-                entryDoc = Doc.concat(label, Doc.text(guard + " -> "), switchEntryBody(statement));
+                entryDoc = Doc.concat(label, guard, Doc.text(" -> "), switchEntryBody(statement));
             }
         }
         entryDoc = trailingComment == Doc.EMPTY ? entryDoc : Doc.concat(entryDoc, Doc.text(" "), trailingComment);
@@ -2098,10 +2101,14 @@ final class JavaPrinter {
         if (entry.isDefault()) {
             return Doc.text("default");
         }
-        String flatLabels = compactJoin(entry.getLabels());
+        String flatLabels = entry.getLabels().stream().map(this::switchLabelText).reduce((left, right) -> left + ", " + right).orElse("");
         String flat = "case " + flatLabels;
-        if (entry.getLabels().size() == 1 || currentIndentedWidth(flat + " -> {}") <= options.lineWidth()) {
+        if (entry.getLabels().size() == 1 && !switchLabelBreaks(entry.getLabels().get(0))
+                || currentIndentedWidth(flat + " -> {}") <= options.lineWidth()) {
             return Doc.text(flat);
+        }
+        if (entry.getLabels().size() == 1) {
+            return Doc.concat(Doc.text("case "), switchLabel(entry.getLabels().get(0)));
         }
         return Doc.concat(
                 Doc.text("case"),
@@ -2109,14 +2116,82 @@ final class JavaPrinter {
                         Doc.HARD_LINE,
                         Doc.join(
                                 Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                                entry.getLabels().stream().map(label -> Doc.text(compact(label))).toList()))));
+                                entry.getLabels().stream().map(label -> Doc.text(switchLabelText(label))).toList()))));
     }
 
-    private Doc switchStatementGroupEntry(Doc label, String guard, NodeList<Statement> statements) {
-        if (statements.size() == 1 && statements.get(0).isBlockStmt()) {
-            return Doc.concat(label, Doc.text(guard + ": "), switchStatementGroupBlock(statements.get(0).asBlockStmt()));
+    private boolean switchLabelBreaks(Expression label) {
+        return label instanceof RecordPatternExpr && currentIndentedWidth("case " + switchLabelText(label) + " -> {}") > options.lineWidth();
+    }
+
+    private Doc switchLabel(Expression label) {
+        if (label instanceof RecordPatternExpr recordPattern && switchLabelBreaks(label)) {
+            return recordPattern(recordPattern);
         }
-        return Doc.concat(label, Doc.text(guard + ":"), switchEntryStatements(statements));
+        return Doc.text(switchLabelText(label));
+    }
+
+    private String switchLabelText(Expression label) {
+        if (label instanceof TypePatternExpr) {
+            return normalizeWhitespace(label.toString());
+        }
+        if (label instanceof RecordPatternExpr) {
+            return normalizeWhitespace(label.toString());
+        }
+        return compact(label);
+    }
+
+    private Doc recordPattern(RecordPatternExpr pattern) {
+        return Doc.concat(
+                Doc.text(modifiers(pattern) + compactTypeLike(pattern.getType()) + "("),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), pattern.getPatternList().stream()
+                                .map(this::recordPatternComponent)
+                                .toList()))),
+                Doc.HARD_LINE,
+                Doc.text(")"));
+    }
+
+    private Doc recordPatternComponent(Expression pattern) {
+        if (pattern instanceof RecordPatternExpr recordPattern && switchLabelBreaks(pattern)) {
+            return recordPattern(recordPattern);
+        }
+        return Doc.text(switchLabelText(pattern));
+    }
+
+    private Doc switchEntryGuard(SwitchEntry entry) {
+        if (entry.getGuard().isEmpty()) {
+            return Doc.EMPTY;
+        }
+        Expression guard = entry.getGuard().orElseThrow();
+        String flat = " when " + compact(guard);
+        if (!switchGuardBreaks(entry, guard, flat)) {
+            return Doc.text(flat);
+        }
+        Expression guardedExpression = guard instanceof EnclosedExpr enclosedExpr ? enclosedExpr.getInner() : guard;
+        return Doc.concat(
+                Doc.text(" when ("),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines(guardedExpression))),
+                Doc.HARD_LINE,
+                Doc.text(")"));
+    }
+
+    private boolean switchGuardBreaks(SwitchEntry entry, Expression guard, String flat) {
+        String label = "case " + entry.getLabels().stream().map(this::switchLabelText).reduce((left, right) -> left + ", " + right).orElse("");
+        return guard instanceof EnclosedExpr
+                || switchEntryWidth(label + flat + " -> {}") >= options.lineWidth()
+                        && !rawSingleLineSwitchEntry(entry).isPresent();
+    }
+
+    private int switchEntryWidth(String text) {
+        return (options.indentUnit().length() * 3) + text.length();
+    }
+
+    private Doc switchStatementGroupEntry(Doc label, Doc guard, NodeList<Statement> statements) {
+        if (statements.size() == 1 && statements.get(0).isBlockStmt()) {
+            return Doc.concat(label, guard, Doc.text(": "), switchStatementGroupBlock(statements.get(0).asBlockStmt()));
+        }
+        return Doc.concat(label, guard, Doc.text(":"), switchEntryStatements(statements));
     }
 
     private Doc switchStatementGroupBlock(BlockStmt block) {
@@ -2147,7 +2222,7 @@ final class JavaPrinter {
         if (!preservesSourceOnlySyntax && currentIndentedWidth(raw) <= options.lineWidth()) {
             return Optional.empty();
         }
-        if (!preservesSourceOnlySyntax && !raw.contains(" when ")) {
+        if (!preservesSourceOnlySyntax) {
             return Optional.empty();
         }
         return Optional.of(Doc.text(raw));
@@ -2194,13 +2269,25 @@ final class JavaPrinter {
 
     private Doc ifStatement(IfStmt statement) {
         List<Doc> docs = new ArrayList<>();
-        docs.add(Doc.text("if (" + compact(statement.getCondition()) + ") "));
+        docs.add(ifCondition(statement.getCondition()));
         docs.add(ifThenStatement(statement));
         statement.getElseStmt().ifPresent(elseStatement -> {
             docs.add(elseChainSeparator(statement, elseStatement));
             docs.add(elseStatement.isIfStmt() ? statement(elseStatement) : nestedStatement(elseStatement));
         });
         return Doc.concat(docs);
+    }
+
+    private Doc ifCondition(Expression condition) {
+        String flat = compact(condition);
+        if (currentIndentedWidth("if (" + flat + ") {}") <= options.lineWidth()) {
+            return Doc.text("if (" + flat + ") ");
+        }
+        return Doc.concat(
+                Doc.text("if ("),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines(condition))),
+                Doc.HARD_LINE,
+                Doc.text(") "));
     }
 
     private Doc ifThenStatement(IfStmt statement) {

@@ -20,10 +20,12 @@ import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
+import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
+import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.modules.ModuleDeclaration;
@@ -551,8 +553,71 @@ final class JavaPrinter {
 
     private Doc returnStatement(ReturnStmt statement) {
         return statement.getExpression()
-                .map(expression -> Doc.concat(Doc.text("return "), expression(expression), Doc.text(";")))
+                .map(expression -> Doc.concat(Doc.text("return "), returnExpression(expression), Doc.text(";")))
                 .orElse(Doc.text("return;"));
+    }
+
+    private Doc returnExpression(Expression expression) {
+        String flatReturn = "return " + compact(expression) + ";";
+        if (currentIndentedWidth(flatReturn) <= options.lineWidth()) {
+            return expression(expression);
+        }
+        if (expression instanceof UnaryExpr unaryExpr
+                && unaryExpr.getOperator() == UnaryExpr.Operator.LOGICAL_COMPLEMENT
+                && unaryExpr.getExpression() instanceof EnclosedExpr enclosedExpr) {
+            return Doc.concat(Doc.text("!"), parenthesizedBreak(enclosedExpr.getInner()));
+        }
+        if (expression instanceof EnclosedExpr enclosedExpr) {
+            return parenthesizedBreak(enclosedExpr.getInner());
+        }
+        if (expression instanceof BinaryExpr binaryExpr) {
+            return parenthesizedBreak(binaryExpr);
+        }
+        return expression(expression);
+    }
+
+    private Doc parenthesizedBreak(Expression expression) {
+        return Doc.concat(
+                Doc.text("("),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines(expression))),
+                Doc.HARD_LINE,
+                Doc.text(")"));
+    }
+
+    private Doc binaryExpressionLines(Expression expression) {
+        if (!(expression instanceof BinaryExpr binaryExpr)) {
+            return expression(expression);
+        }
+        if (parenthesizedInnerWidth(compact(binaryExpr)) <= options.lineWidth()) {
+            return expression(binaryExpr);
+        }
+        List<Expression> operands = new ArrayList<>();
+        flattenBinaryExpression(binaryExpr, binaryExpr.getOperator(), operands);
+        List<Doc> lines = new ArrayList<>();
+        for (int i = 0; i < operands.size(); i++) {
+            Doc operand = expression(operands.get(i));
+            if (i < operands.size() - 1) {
+                operand = Doc.concat(operand, Doc.text(" " + binaryExpr.getOperator().asString()));
+            }
+            lines.add(operand);
+        }
+        return Doc.join(Doc.HARD_LINE, lines);
+    }
+
+    private int parenthesizedInnerWidth(String text) {
+        return (options.indentUnit().length() * 2) + text.length();
+    }
+
+    private void flattenBinaryExpression(
+            Expression expression,
+            BinaryExpr.Operator operator,
+            List<Expression> operands) {
+        if (expression instanceof BinaryExpr binaryExpr && binaryExpr.getOperator() == operator) {
+            flattenBinaryExpression(binaryExpr.getLeft(), operator, operands);
+            flattenBinaryExpression(binaryExpr.getRight(), operator, operands);
+            return;
+        }
+        operands.add(expression);
     }
 
     private Doc yieldStatement(YieldStmt statement) {

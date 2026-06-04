@@ -66,6 +66,7 @@ final class PrettierJavaFixtureTest {
             "prettier-ignore/multiple-ignore",
             "require-pragma/format-pragma",
             "require-pragma/prettier-pragma",
+            "return",
             "synchronized",
             "template-expression",
             "throws",

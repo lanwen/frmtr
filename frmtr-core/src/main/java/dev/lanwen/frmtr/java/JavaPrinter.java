@@ -4789,13 +4789,30 @@ final class JavaPrinter {
         List<Doc> docs = new ArrayList<>();
         docs.add(annotations(declaration));
         docs.add(Doc.text(modifiers(declaration)));
+        String declarationPrefix = modifiers(declaration);
         if (!declaration.getVariables().isEmpty()) {
-            docs.add(Doc.text(compactTypeLike(declaration.getVariables().get(0).getType()) + " "));
+            String type = compactTypeLike(declaration.getVariables().get(0).getType()) + " ";
+            declarationPrefix += type;
+            docs.add(Doc.text(type));
         }
+        String variableDeclarationPrefix = declarationPrefix;
         docs.add(Doc.group(Doc.join(Doc.concat(Doc.text(","), Doc.LINE), declaration.getVariables().stream()
-                .map(this::variable)
+                .map(variable -> variable(variable, localVariableDeclarationPrefix(variable, variableDeclarationPrefix)))
                 .toList())));
         return Doc.concat(docs);
+    }
+
+    private String localVariableDeclarationPrefix(VariableDeclarator variable, String declarationPrefix) {
+        return variable.getInitializer()
+                .filter(initializer -> initializer instanceof ArrayCreationExpr
+                        || initializer instanceof BinaryExpr
+                        || initializer instanceof CastExpr
+                        || initializer instanceof ConditionalExpr
+                        || initializer instanceof LambdaExpr
+                        || initializer instanceof MethodCallExpr
+                        || initializer instanceof ObjectCreationExpr)
+                .map(ignored -> declarationPrefix)
+                .orElse("");
     }
 
     private Doc ifStatement(IfStmt statement) {

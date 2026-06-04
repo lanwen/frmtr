@@ -180,17 +180,14 @@ public class Variables {
 
         ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> variable;
 
-        ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> variable = new MyExtremelyLongAndObnoxiousClassName<>();
+        ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> variable =
+            new MyExtremelyLongAndObnoxiousClassName<>();
 
-        ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> variable = new MyExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
-            ExtremelyLongAndObnoxiousClassName
-        >();
+        ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> variable =
+            new MyExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName>();
 
-        ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new MyExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
-            ExtremelyLongAndObnoxiousClassName
-        >();
+        ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
+            new MyExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName>();
 
         new MyExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName>().method();
     }

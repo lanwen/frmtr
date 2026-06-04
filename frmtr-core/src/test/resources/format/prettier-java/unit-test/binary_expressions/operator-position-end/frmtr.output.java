@@ -55,7 +55,13 @@ public class BinaryOperations {
     }
 
     void declarationVsAssignment() {
-        var lineLengthInAssignmentMoreThanPrintWidth = "1234567890" + "1234567890" + "1234567890" + "1234567890" + "1234567890" + "1234567890";
+        var lineLengthInAssignmentMoreThanPrintWidth =
+            "1234567890" +
+            "1234567890" +
+            "1234567890" +
+            "1234567890" +
+            "1234567890" +
+            "1234567890";
         lineLengthInAssignmentMoreThanPrintWidth = "1234567890" + "1234567890" + "1234567890" + "1234567890" + "1234567890" + "1234567890";
 
         aaaaaaaaaa += bbbbbbbbbbb + ccccccccccc + ddddddddddd + eeeeeeeeee + ffffffffff + gggggggggg;

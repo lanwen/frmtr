@@ -3,8 +3,15 @@ public record Pet(@NotNull String name) {}
 public record Pet(@NotNull String name, int age) {}
 
 public record Pet(@NotNull String name, int age, String... others, Object @Nullable... errorMessageArgs) {
+    public Pet {
+        if (age < 0) {
+            throw new IllegalArgumentException("Age cannot be negative");
+        }
 
-    public Pet { if (age < 0) { throw new IllegalArgumentException("Age cannot be negative"); } if (name == null || name.isBlank()) { throw new IllegalArgumentException("Name cannot be blank"); } }
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Name cannot be blank");
+        }
+    }
 
     public void test() {}
 }
@@ -14,7 +21,6 @@ public record Pet(@NotNull String name, int age, String... others, Object @Nulla
 public record Pet() {}
 
 public record Pet() {
-
     public void test() {}
 }
 
@@ -29,15 +35,21 @@ class T {
     class MyRecordSimplifiedConstructor {
 
         record MyRecord(String name, int age) {
+            public MyRecord {
+                if (age < 0) {
+                    throw new IllegalArgumentException("Age cannot be negative");
+                }
 
-            public MyRecord { if (age < 0) { throw new IllegalArgumentException("Age cannot be negative"); } if (name == null || name.isBlank()) { throw new IllegalArgumentException("Name cannot be blank"); } }
+                if (name == null || name.isBlank()) {
+                    throw new IllegalArgumentException("Name cannot be blank");
+                }
+            }
         }
     }
 
     class MyRecordConstructor {
 
         record MyRecord(String name, int age) {
-
             public MyRecord(String name, int age) {
                 if (age < 0) {
                     throw new IllegalArgumentException("Age cannot be negative");
@@ -52,8 +64,17 @@ class T {
     public class MyRecordWithAnnotationAndModifiers {
 
         public record MyRecord(String name, int age) {
+            @Annotation
+            @Annotation2
+            public MyRecord {
+                if (age < 0) {
+                    throw new IllegalArgumentException("Age cannot be negative");
+                }
 
-            @Annotation @Annotation2 public MyRecord { if ( age < 0) { throw new IllegalArgumentException("Age cannot be negative"); } if (name == null || name.isBlank()) { throw new IllegalArgumentException("Name cannot be blank"); } }
+                if (name == null || name.isBlank()) {
+                    throw new IllegalArgumentException("Name cannot be blank");
+                }
+            }
         }
     }
 }
@@ -61,7 +82,6 @@ class T {
 class MySplitRecordConstructor {
 
     record MyRecord(String name, int age, String name, int age, String name, int age) {
-
         public MyRecord(String name, int age) {
             if (age < 0) {
                 throw new IllegalArgumentException("Age cannot be negative");
@@ -82,41 +102,53 @@ public interface MyInterface {
 }
 
 public record Record(
-    @JsonSerialize(using = StatusSerializer.class, nullsUsing = NullSerializer.class) @Schema(type = "integer", description = "Some fancy description") Status status,
+    @JsonSerialize(using = StatusSerializer.class, nullsUsing = NullSerializer.class)
+    @Schema(type = "integer", description = "Some fancy description")
+    Status status,
+
     @NotNull Integer number,
+
     Integer anotherNumber
 ) {}
 
 public record Record(
-    @JsonSerialize(using = StatusSerializer.class, nullsUsing = NullSerializer.class) @Schema(type = "integer", description = "Some fancy description") Status status,
+    @JsonSerialize(using = StatusSerializer.class, nullsUsing = NullSerializer.class)
+    @Schema(type = "integer", description = "Some fancy description")
+    // comment
+    Status status,
+
+    // comment
     @NotNull Integer number
 ) {}
 
 public record Record(
     @Schema(type = "integer", description = "A small description ") Status status,
-    @Schema(type = "integer", description = "A longer description ") Status status
+
+    @Schema(type = "integer", description = "A longer description  ") Status status
 ) {}
 
 record Aaaaaaaaaa<Bbbbbbbbbb>(Cccccccccc cccccccccc) implements Dddddddddd {
-
     void a() {}
 }
 
 record Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc>(Dddddddddd dddddddddd) implements Eeeeeeeeee {
-
     void a() {}
 }
 
 record Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc>(Dddddddddd dddddddddd) implements Eeeeeeeeee {}
 
-record Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg>(Hhhhhhhhhh Hhhhhhhhhh) implements Iiiiiiiiii {
-
+record Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg>(
+    Hhhhhhhhhh Hhhhhhhhhh
+) implements Iiiiiiiiii {
     void a() {}
 }
 
-record Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg>(Hhhhhhhhhh Hhhhhhhhhh) implements Iiiiiiiiii {}
+record Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg>(
+    Hhhhhhhhhh Hhhhhhhhhh
+) implements Iiiiiiiiii {}
 
-record Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg>(Hhhhhhhhhh Hhhhhhhhhh) implements Iiiiiiiiii, Jjjjjjjjjj, Kkkkkkkkkk, Llllllllll, Mmmmmmmmmm, Nnnnnnnnnn {
-
+record Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg>(
+    Hhhhhhhhhh Hhhhhhhhhh
+) implements Iiiiiiiiii, Jjjjjjjjjj, Kkkkkkkkkk, Llllllllll, Mmmmmmmmmm, Nnnnnnnnnn {
     void a() {}
 }

@@ -1491,7 +1491,11 @@ final class JavaPrinter {
                 && !initializerHasOwnBreak(initializer)) {
             Optional<Doc> chain = methodCallChain(methodCall, true);
             if (chain.isPresent()) {
-                return Doc.concat(Doc.text(name + " = "), chain.orElseThrow());
+                return variableWithMethodCallChain(
+                        name,
+                        declarationPrefix + variable.getNameAsString(),
+                        methodCall,
+                        chain.orElseThrow());
             }
             Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
                     name,
@@ -1667,6 +1671,27 @@ final class JavaPrinter {
                                 .toList()))),
                 Doc.HARD_LINE,
                 Doc.text(")")));
+    }
+
+    private Doc variableWithMethodCallChain(
+            String name,
+            String flatName,
+            MethodCallExpr methodCall,
+            Doc chain) {
+        String firstLine = methodCallChainFirstLine(methodCall);
+        if (currentIndentedWidth(flatName + " = " + firstLine) > options.lineWidth()) {
+            return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
+        }
+        return Doc.concat(Doc.text(name + " = "), chain);
+    }
+
+    private String methodCallChainFirstLine(MethodCallExpr methodCall) {
+        List<MethodCallExpr> calls = new ArrayList<>();
+        Expression root = methodCallChainRoot(methodCall, calls);
+        if (root instanceof MethodCallExpr && calls.size() == 1) {
+            return compact(methodCall);
+        }
+        return compact(root);
     }
 
     private Doc conditionalInitializer(String name, String flatName, ConditionalExpr initializer) {

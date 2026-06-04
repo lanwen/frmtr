@@ -26,11 +26,12 @@ final class FrmtrTest {
         assertThat(formatted).isEqualTo("""
                 package dev.example;
 
-                import java.util.List;
-
                 import static java.util.Collections.emptyList;
 
+                import java.util.List;
+
                 public class Demo {
+
                     private final int value = 1;
 
                     public Demo(int value) {
@@ -63,6 +64,7 @@ final class FrmtrTest {
 
                 // demo type
                 class Demo {
+
                     // value comment
                     int value;
                 }
@@ -92,6 +94,7 @@ final class FrmtrTest {
     void defaultsToLatestAvailableJavaLanguageLevel() {
         assertThat(FormatterOptions.defaults().javaLanguageLevel())
                 .isEqualTo(FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+        assertThat(FormatterOptions.defaults().preserveRawTrailingWhitespace()).isFalse();
     }
 
     @Test

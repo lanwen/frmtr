@@ -1,4 +1,5 @@
 class ConditionalExpression {
+
     int ternaryOperationThatShouldBreak() {
         int shortInteger = thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne ? thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne : thisIsAShortInteger;
         return thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne ? thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne : thisIsAShortInteger;
@@ -39,10 +40,15 @@ class ConditionalExpression {
 
     void assignment() {
         Aaaaaaaaaa aaaaaaaaaa = bbbbbbbbbb(cccccccccc, dddddddddd, eeeeeeeeee) != ffffffffff ? gggggggggg : hhhhhhhhhh;
+
         Aaaaaaaaaa aaaaaaaaaa = bbbbbbbbbb(cccccccccccccccccccc, dddddddddd, eeeeeeeeee) != ffffffffff ? gggggggggg : hhhhhhhhhh;
+
         Aaaaaaaaaa aaaaaaaaaa = bbbbbbbbbb(cccccccccccccccccccc, dddddddddddddddddddd, eeeeeeeeee) != ffffffffff ? gggggggggg : hhhhhhhhhh;
+
         aaaaaaaaaa = bbbbbbbbbb(cccccccccc, dddddddddd, eeeeeeeeee) != ffffffffff ? gggggggggg : hhhhhhhhhh;
+
         aaaaaaaaaa = bbbbbbbbbb(cccccccccccccccccccc, dddddddddd, eeeeeeeeee) != ffffffffff ? gggggggggg : hhhhhhhhhh;
+
         aaaaaaaaaa = bbbbbbbbbb(cccccccccccccccccccc, dddddddddddddddddddd, eeeeeeeeee) != ffffffffff ? gggggggggg : hhhhhhhhhh;
     }
 }

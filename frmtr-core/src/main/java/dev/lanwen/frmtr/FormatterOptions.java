@@ -8,6 +8,7 @@ public record FormatterOptions(
         int indentWidth,
         LineEnding lineEnding,
         boolean trailingNewline,
+        boolean preserveRawTrailingWhitespace,
         JavaLanguageLevel javaLanguageLevel) {
     public static final int DEFAULT_LINE_WIDTH = 140;
     public static final int DEFAULT_INDENT_WIDTH = 4;
@@ -19,6 +20,16 @@ public record FormatterOptions(
             LineEnding lineEnding,
             boolean trailingNewline) {
         this(lineWidth, indentStyle, indentWidth, lineEnding, trailingNewline, JavaLanguageLevel.LATEST_AVAILABLE);
+    }
+
+    public FormatterOptions(
+            int lineWidth,
+            IndentStyle indentStyle,
+            int indentWidth,
+            LineEnding lineEnding,
+            boolean trailingNewline,
+            JavaLanguageLevel javaLanguageLevel) {
+        this(lineWidth, indentStyle, indentWidth, lineEnding, trailingNewline, false, javaLanguageLevel);
     }
 
     public FormatterOptions {
@@ -40,6 +51,7 @@ public record FormatterOptions(
                 DEFAULT_INDENT_WIDTH,
                 LineEnding.LF,
                 true,
+                false,
                 JavaLanguageLevel.LATEST_AVAILABLE);
     }
 

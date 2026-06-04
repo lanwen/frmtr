@@ -1,4 +1,5 @@
 public abstract class Throws {
+
     void throwException1() throws RuntimeException {
         throw new RuntimeException();
     }

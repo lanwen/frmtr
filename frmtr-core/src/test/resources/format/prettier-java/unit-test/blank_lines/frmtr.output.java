@@ -1,4 +1,5 @@
 public class BlankLines {
+
     public int i = 1;
 
     public int j = 2;
@@ -54,18 +55,21 @@ public class BlankLines {
     public void shouldHandleBlankLinesInBlock() {
         int i = 1;
         int j = 2;
+
         int k = 3;
         int l = 4;
+
         int m = 4;
+
         // Add a line before comment
         int n = 4;
-        for (int p = 0; p<3; p++) {
-            ;
-        }
+        for (int p = 0; p<3; p++) ;
     }
 }
 
 interface BlankLinesInInterfaces {
+
+    // Bug Fix: https://github.com/jhipster/prettier-java/issues/368
     String fieldOne;
 
     String fieldTwo;

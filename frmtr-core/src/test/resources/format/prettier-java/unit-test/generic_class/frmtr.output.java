@@ -1,4 +1,5 @@
 public class GenericClass<BEAN> {
+
     private BEAN bean;
 
     public GenericClass(BEAN bean) {
@@ -15,13 +16,19 @@ public class GenericClass<BEAN> {
     }
 }
 
-public class ComplexGenericClass<BEAN extends AbstractBean & BeanItemSelect<BEANTYPE>, BEANTYPE, CONFIG extends BeanConfig< BEAN, BEANTYPE, CONFIG >> extends AbstractBeanConfig< BEAN, CONFIG > {
+public class ComplexGenericClass<
+    BEAN extends AbstractBean & BeanItemSelect<BEANTYPE>,
+    BEANTYPE,
+    CONFIG extends BeanConfig<BEAN, BEANTYPE, CONFIG>
+> extends AbstractBeanConfig<BEAN, CONFIG> {
+
     public <BEAN> List<? super BEAN> getBean(final Class<BEAN> beanClass) {
         return new ArrayList<>();
     }
 }
 
 public class Foo<T> {
+
     public <U extends @NotNull T> void example(U u) {}
 
     public <U extends com.java.Any.@NotNull T> void example(U u) {}

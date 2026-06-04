@@ -1,4 +1,5 @@
 public class Args {
+
     public static void main(String[] args) {}
 
     public void none() {}
@@ -11,13 +12,13 @@ public class Args {
 
     void lastParameterDotDotDot(String str1, String... str2) {}
 
-    void variableArityParameters(Object... errorMessageArgs) {}
+    void variableArityParameters(Object @Nullable... errorMessageArgs) {}
 
-    void variableArityParameters(Object[]... errorMessageArgs) {}
+    void variableArityParameters(Object[] @Nullable... errorMessageArgs) {}
 
-    void variableArityParameters(byte[]... errorMessageArgs) {}
+    void variableArityParameters(byte[] @Nullable... errorMessageArgs) {}
 
-    void variableArityParameters(byte... errorMessageArgs) {}
+    void variableArityParameters(byte @Nullable... errorMessageArgs) {}
 
     void variableArityParameters(final String... strings) {}
 

@@ -1,4 +1,5 @@
 public class PrettierTest {
+
     int x = 0;
 
     public void myFunction(int arg1) {
@@ -6,33 +7,34 @@ public class PrettierTest {
     }
 
     private void myFunction(int arg1, int arg2, int arg3) {
-        if (arg1 == 0 && arg2 == 0 && arg == 3) {
-            throw new RuntimeException("X Y Z cannot be all 0");
-        }
-        int /*variable name is of value var */var = arg1+arg2+arg3;
+        if (arg1 == 0 && arg2 == 0 && arg == 3) throw new RuntimeException("X Y Z cannot be all 0");
+
+        int var = arg1+arg2+arg3;
         if (var == 0) {
             System.out.println("The value is 0");
         } else /*false*/
         {
             int[] arr = { /*One*/1,/*Two */2, /*zero*/0, /*One again*/1,-1 /*Minus One*/ ,0,2};
+
             loop: // Label statement //foreach for (int num /* num is every number in arr*/ : arr) { /*switch*/switch(num){//switch case 1: System.out.println("One "); System.out.println("One "); System.out.println("One "); /*just a break*/break; case 2: System.out.println("Two "); break; case 0: System.out.println("Zero "); continue/*labeled continued*/ loop; default/*def*/: /*labeled break*/break loop; } }
         }
     }
 
     private synchronized void myFunction(int arg1, int arg2) {
-        for (int i = 0; i</* = */arg1; i++) {
+        for (int i = 0; i</* = */arg1; i++)
             do /*dodododo*/
             {
                 //do whiles
-
                 //asserting
                 assert/*true*/ true == true;
                 continue;
                 break;
                 return;
             } while (false);
+        synchronized (this) {
+            while (true) /*stop the program*/
+            throw new RuntimeException();
         }
-        synchronized/*declares synchronizd statement*/ (this){ while/*infinite*/ (true) /*stop the program*/throw new RuntimeException(); }
     }
 }
 
@@ -41,5 +43,5 @@ enum Cards {
     //The Heart and the Spade
     HEART,
     /*the heart*/
-    SPADES
+    SPADES,
 }

@@ -1,9 +1,8 @@
 class T {
+
     static int count(Iterable<Order> orders) {
         int total = 0;
-        for (Order _ : orders) {
-            total++;
-        }
+        for (Order _ : orders) total++;
         return total;
     }
 
@@ -15,16 +14,15 @@ class T {
         while (q.size() >= 3) {
             var x = q.remove();
             var y = q.remove();
-            // Unnamed variable
-            var _ = q.remove();
+            var _ = q.remove(); // Unnamed variable
         }
     }
 
     void multipleAssignment() {
         while (q.size() >= 3) {
             var x = q.remove();
-            var _ = q.remove();
-            var _ = q.remove();
+            var _ = q.remove(); // Unnamed variable
+            var _ = q.remove(); // Unnamed variable
         }
     }
 
@@ -41,7 +39,7 @@ class T {
     }
 
     void lambda() {
-        stream.collect(Collectors.toMap(String::toUpperCase, _ -> "NODATA"));
+        stream.collect(Collectors.toMap(String::toUpperCase, _ -> "NODATA")); // Unnamed variable
     }
 
     void switchTypePattern() {

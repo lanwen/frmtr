@@ -14,12 +14,61 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Stream;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 final class PrettierJavaFixtureTest {
     private static final String FIXTURE_ROOT = "format/prettier-java/unit-test";
+    private static final FormatterOptions PRETTIER_COMPATIBILITY_OPTIONS = new FormatterOptions(
+            80,
+            FormatterOptions.IndentStyle.SPACE,
+            2,
+            FormatterOptions.LineEnding.LF,
+            true,
+            true,
+            FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+    private static final Set<String> PRETTIER_COMPATIBLE_FIXTURES = Set.of(
+            "args",
+            "assert",
+            "char_literal",
+            "comments/edge",
+            "comments/expression",
+            "constructors",
+            "extends_abstract_class",
+            "extends_abstract_class_and_implements_interfaces",
+            "formatter-on-off/begin_with_on",
+            "formatter-on-off/class",
+            "formatter-on-off/end_with_off",
+            "formatter-on-off/inside_block",
+            "formatter-on-off/method",
+            "formatter-on-off/multiple",
+            "for",
+            "generic_class",
+            "generic_questionmark",
+            "hello-world",
+            "if",
+            "instantiation",
+            "method_reference",
+            "package_and_imports/classWithMixedImports",
+            "package_and_imports/classWithMixedCaseImports",
+            "package_and_imports/classWithNoImports",
+            "package_and_imports/classWithOnlyNonStaticImports",
+            "package_and_imports/classWithOnlyStaticImports",
+            "package_and_imports/moduleWithMixedImports",
+            "package_and_imports/moduleWithNoImports",
+            "package_and_imports/moduleWithOnlyNonStaticImports",
+            "package_and_imports/moduleWithOnlyStaticImports",
+            "prettier-ignore/block",
+            "prettier-ignore/classDeclaration",
+            "prettier-ignore/multiple-ignore",
+            "require-pragma/format-pragma",
+            "require-pragma/prettier-pragma",
+            "synchronized",
+            "template-expression",
+            "types",
+            "while");
     private static final JavaParser PARSER = new JavaParser(new ParserConfiguration()
             .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
             .setStoreTokens(true)
@@ -43,6 +92,16 @@ final class PrettierJavaFixtureTest {
     }
 
     @ParameterizedTest(name = "{0}")
+    @MethodSource("prettierCompatibleFixtures")
+    void currentFormatterOutputMatchesPrettierReference(Fixture fixture) throws IOException {
+        String input = read(fixture.input());
+
+        String formatted = Frmtr.format(input, PRETTIER_COMPATIBILITY_OPTIONS);
+
+        assertThat(formatted).isEqualTo(read(fixture.prettierOutput()));
+    }
+
+    @ParameterizedTest(name = "{0}")
     @MethodSource("fixtures")
     void adoptedPrettierJavaFixtureCompanionsArePresent(Fixture fixture) {
         assertThat(fixture.input()).isRegularFile();
@@ -60,6 +119,10 @@ final class PrettierJavaFixtureTest {
                     .toList()
                     .stream();
         }
+    }
+
+    private static Stream<Fixture> prettierCompatibleFixtures() throws IOException, URISyntaxException {
+        return fixtures().filter(fixture -> PRETTIER_COMPATIBLE_FIXTURES.contains(fixture.name()));
     }
 
     private static Fixture fixture(Path root, Path input) {

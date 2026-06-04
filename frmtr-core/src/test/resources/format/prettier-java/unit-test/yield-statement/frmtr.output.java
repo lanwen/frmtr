@@ -1,4 +1,5 @@
 class Test {
+
     enum Day {
         MONDAY,
         TUESDAY,
@@ -6,12 +7,13 @@ class Test {
         THURSDAY,
         FRIDAY,
         SATURDAY,
-        SUNDAY
+        SUNDAY,
     }
 
     public int calculate(Day d) {
         switch (d) { case SATURDAY, SUNDAY -> d.ordinal(); default -> { int len = d.toString().length(); yield len*len; } }
         ;
+
         return;
     }
 
@@ -20,7 +22,7 @@ class Test {
     }
 
     void should_not_throw_on_yield_static_imports() {
-        Thread.yield ();
+        Thread.yield();
         yield();
         yield(a);
     }

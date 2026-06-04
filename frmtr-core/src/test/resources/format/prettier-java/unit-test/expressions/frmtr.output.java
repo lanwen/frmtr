@@ -1,4 +1,5 @@
 public class Expressions {
+
     public void equals(int i) {
         if (i == 1) {
             System.out.println("i equals 1");
@@ -73,6 +74,7 @@ public class Expressions {
 
     public void printSimple() {
         if (myValue == 42) {}
+
         if (myValue != 42) {
             System.out.println("Why not 42 !");
         }
@@ -80,26 +82,34 @@ public class Expressions {
 
     public void printIf() {
         Object myObject = new PrettierObject().getSingleton().getAuthentication().getCredentials().getRights().getName();
+
         if (myValue == 42 || myValue == 42 && myValue == 42 && myValue == 42 || myValue == 42 && myValue == 42) {}
+
         if (myValue != 42 && 42/42 || myValue & 42 && myValue > 42 || myValue < 42 && myValue == 42) {}
+
         if (myValue != 42 && myValue == 42) {}
     }
 
     public void printSwitch() {
         switch(myValue == 42 || myValue == 42 && myValue == 42 && myValue == 42 || myValue == 42 && myValue == 42) { }
+
         switch(myValue != 42 && 42/42 || myValue & 42 && myValue > 42 || myValue < 42 && myValue == 42) { }
+
         switch(myValue != 42) { }
+
         switch(myValue != 42 && myValue == 42) { }
     }
 
     public void printWhile() {
-        while (true) {
-            /*stop the program*/
-            throw new RuntimeException();
-        }
+        while (true) /*stop the program*/
+        throw new RuntimeException();
+
         while (myValue == 42 || myValue == 42 && myValue == 42 && myValue == 42 || myValue == 42 && myValue == 42) {}
+
         while (myValue != 42 && 42/42 || myValue & 42 && myValue > 42 || myValue < 42 && myValue == 42) {}
+
         while (myValue != 42) {}
+
         while (myValue != 42 && myValue == 42) {}
     }
 
@@ -107,43 +117,67 @@ public class Expressions {
         do {
             System.out.println("Prettier-java is cool !");
         } while (myValue == 42 || myValue == 42 && myValue == 42 && myValue == 42 || myValue == 42 && myValue == 42);
+
         do {
             System.out.println("Prettier-java is cool !");
         } while (myValue != 42 && 42/42 || myValue & 42 && myValue > 42 || myValue < 42 && myValue == 42);
+
         do {
             System.out.println("Prettier-java is cool !");
         } while (myValue != 42);
+
         do {
             System.out.println("Prettier-java is cool !");
         } while (myValue != 42 && myValue == 42);
     }
 
     public void printSynchronized() {
-        synchronized(myValue == 42 || myValue == 42 && myValue == 42 && myValue == 42 || myValue == 42 && myValue == 42) { System.out.println("Prettier-java is cool !"); }
-        synchronized(myValue != 42 && 42/42 || myValue & 42 && myValue > 42 || myValue < 42 && myValue == 42) { System.out.println("Prettier-java is cool !"); }
-        synchronized(myValue == 42) { System.out.println("Prettier-java is cool !"); }
-        synchronized(myValue != 42 && myValue == 42) { System.out.println("Prettier-java is cool !"); }
+        synchronized (myValue == 42 || myValue == 42 && myValue == 42 && myValue == 42 || myValue == 42 && myValue == 42) {
+            System.out.println("Prettier-java is cool !");
+        }
+
+        synchronized (myValue != 42 && 42/42 || myValue & 42 && myValue > 42 || myValue < 42 && myValue == 42) {
+            System.out.println("Prettier-java is cool !");
+        }
+
+        synchronized (myValue == 42) {
+            System.out.println("Prettier-java is cool !");
+        }
+
+        synchronized (myValue != 42 && myValue == 42) {
+            System.out.println("Prettier-java is cool !");
+        }
     }
 
     public void longFullyQualifiedName() {
-        com .me.very.very.very.very.very.very.very.very.very.very.very.very.very.longg.fully.qualified.name.FullyQualifiedName.builder() .build();
+        com .me.very.very.very.very.very.very.very.very.very.very.very.very.very.longg.fully.qualified.name.FullyQualifiedName.builder().build();
+
         com.FullyQualifiedName.builder();
     }
 
     public void unannTypePrimitiveWithMethodReferenceSuffix(String[] args) {
-        List.of(new double[][] { 1,2,3,4.1,5.6846465}, new double[][] { 1,2,3,4.1,5.6846465}, new double[][] { 1,2,3,4.1,5.6846465}).toArray(double[][]::new);
+        List
+            .of(new double[][] { 1,2,3,4.1,5.6846465}, new double[][] { 1,2,3,4.1,5.6846465}, new double[][] { 1,2,3,4.1,5.6846465})
+            .toArray(double[][]::new);
     }
 
     public void staticMethodInvocationWithSingleChainedMethodInvocation() {
-        List.of(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa).chained(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa);
+        List
+            .of(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
+            .chained(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa);
     }
 
     public void staticMethodInvocationWithMultipleChainedMethodInvocation() {
-        List.of(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa).chained(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa).another();
+        List
+            .of(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
+            .chained(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
+            .another();
     }
 
     public void nonStaticMultipleChainedMethodInvocations() {
-        something.of( aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ).chained( aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa );
+        something
+            .of(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
+            .chained(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa);
     }
 
     public void typeExpressionsInFqnParts() {
@@ -153,13 +187,17 @@ public class Expressions {
     void parenthesesWithLeadingAndTrailingBreak() {
         (aaaaaaaaaa + bbbbbbbbbb + cccccccccc + dddddddddd + eeeeeeeeee).ffffffffff();
         value = (aaaaaaaaaa + bbbbbbbbbb + cccccccccc + dddddddddd + eeeeeeeeee)::ffffffffff;
+
         aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
         aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
         aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
+
         Aaaaaaaaaa aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
         Aaaaaaaaaa aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
         Aaaaaaaaaa aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
+
         switch (a) { case Bbbbbbbbbb bbbbbbbbbb when (cccccccccc && dddddddddd && eeeeeeeeee) -> ffffffffff; }
+
         return (aaaaaaaaaa && bbbbbbbbbb && cccccccccc && dddddddddd && eeeeeeeeee && ffffffffff);
     }
 
@@ -173,9 +211,11 @@ public class Expressions {
         (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
         value = (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
         value = (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
+
         aaaaaaaaaa = (bbbbbbbbbb -> cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
         aaaaaaaaaa = (bbbbbbbbbb -> cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
         aaaaaaaaaa = (bbbbbbbbbb -> cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
+
         Aaaaaaaaaa aaaaaaaaaa = (bbbbbbbbbb -> cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
         Aaaaaaaaaa aaaaaaaaaa = (bbbbbbbbbb -> cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
         Aaaaaaaaaa aaaaaaaaaa = (bbbbbbbbbb -> cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];

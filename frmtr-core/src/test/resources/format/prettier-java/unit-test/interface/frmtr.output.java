@@ -1,22 +1,26 @@
 public interface Interfaces {
+
     boolean isAvailable(Object propertyId);
 
     public static final Method METHOD = SomeStatic.findMethod();
 }
 
 public interface Interfaces extends Interface1, Interface2, Interface3, Interface4 {
+
     boolean isAvailable(Object propertyId);
 
     public static final Method METHOD = SomeStatic.findMethod();
 }
 
 public interface Interfaces extends Interface1, Interface2, Interface3, Interface4, Interface5, Interface6, Interface7, Interface8 {
+
     boolean isAvailable(Object propertyId);
 
     public static final Method METHOD = SomeStatic.findMethod();
 }
 
 interface Interface {
+
     String STRING_1 = "STRING_1";
 
     String STRING_2 = "STRING_2";
@@ -48,37 +52,46 @@ interface Interface {
 public interface EmptyInterface {}
 
 public interface InterfaceWithSemicolon {
+
     String STRING_1 = "STRING_1";
 }
 
 @FunctionalInterface
-public interface Filterer<G, E> {}
+public interface Filterer<G, E> {
+    //
+}
 
 sealed class Aaaaaaaaaa<Bbbbbbbbbb> extends Cccccccccc {
+
     void a() {}
 }
 
 sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc> extends Dddddddddd {
+
     void a() {}
 }
 
 sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc> extends Dddddddddd {}
 
 class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc> extends Dddddddddd<Eeeeeeeeee, Ffffffffff> {
+
     void a() {}
 }
 
 class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc> extends Dddddddddd<Eeeeeeeeee, Ffffffffff, Gggggggggg, Hhhhhhhhhh, Iiiiiiiiii> {
+
     void a() {}
 }
 
 sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj> {
+
     void a() {}
 }
 
 sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj> {}
 
 sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg> extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj, Kkkkkkkkkk, Llllllllll, Mmmmmmmmmm, Nnnnnnnnnn> {
+
     void a() {}
 }
 

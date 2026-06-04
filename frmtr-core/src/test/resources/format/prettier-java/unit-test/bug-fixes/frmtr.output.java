@@ -1,4 +1,5 @@
 class T {
+
     // Fix for https://github.com/jhipster/prettier-java/issues/453
     SomeClass.@Valid SomeInnerClass someInnerClass = someClass.getInteractions().get(0);
 
@@ -8,6 +9,7 @@ class T {
 
 // Fix for https://github.com/jhipster/prettier-java/issues/607
 class Currency {
+
     Currency() {}
 
     Currency(Currency other) {}
@@ -25,6 +27,7 @@ class Currency {
     int compareTo(String aaaaaaaaaa, String bbbbbbbbbb) {}
 
     class Inner {
+
         Inner() {}
 
         String getCode() {}

@@ -1,37 +1,37 @@
 public enum Enum {
     SOME_ENUM,
     ANOTHER_ENUM,
-    LAST_ENUM
+    LAST_ENUM,
 }
 
 public enum EnumWithExtraSemicolon {
     SOME_ENUM,
     ANOTHER_ENUM,
-    LAST_ENUM
+    LAST_ENUM,
 }
 
 public enum EnumWithExtraComma {
     SOME_ENUM,
     ANOTHER_ENUM,
-    LAST_ENUM
+    LAST_ENUM,
 }
 
 public enum EnumWithExtraCommaAndExtraSemicolon {
     SOME_ENUM,
     ANOTHER_ENUM,
-    LAST_ENUM
+    LAST_ENUM,
 }
 
 public enum EnumWithExtraCommaAndComment {
     SOME_ENUM,
     ANOTHER_ENUM,
-    LAST_ENUM
+    LAST_ENUM,
 }
 
 public enum EnumWithExtraSemicolonAndComment {
     SOME_ENUM,
     ANOTHER_ENUM,
-    LAST_ENUM
+    LAST_ENUM,
 }
 
 public enum EnumWithManyValues {
@@ -44,7 +44,7 @@ public enum EnumWithManyValues {
     SEVEN_VALUE,
     EIGTH_VALUE,
     NINE_VALUE,
-    TEN_VALUE
+    TEN_VALUE,
 }
 
 public enum EnumWithManyValuesWithExtraSemicolon {
@@ -57,7 +57,7 @@ public enum EnumWithManyValuesWithExtraSemicolon {
     SEVEN_VALUE,
     EIGTH_VALUE,
     NINE_VALUE,
-    TEN_VALUE
+    TEN_VALUE,
 }
 
 public enum EnumWithManyValuesWithExtraComma {
@@ -70,7 +70,7 @@ public enum EnumWithManyValuesWithExtraComma {
     SEVEN_VALUE,
     EIGTH_VALUE,
     NINE_VALUE,
-    TEN_VALUE
+    TEN_VALUE,
 }
 
 public enum EnumWithManyValuesWithExtraCommaAndExtraSemicolon {
@@ -83,7 +83,7 @@ public enum EnumWithManyValuesWithExtraCommaAndExtraSemicolon {
     SEVEN_VALUE,
     EIGTH_VALUE,
     NINE_VALUE,
-    TEN_VALUE
+    TEN_VALUE,
 }
 
 public enum EnumWithExtraCommaAndEnumBodyDeclarations {
@@ -111,9 +111,10 @@ public enum Enum {
 }
 
 class CLassWithEnum {
+
     public static enum VALID_THINGS {
         FIRST,
-        SECOND
+        SECOND,
     }
 }
 
@@ -122,10 +123,10 @@ public enum OtherEnum {
     TWO,
     THREE,
     FOUR,
-    /* Five*/
+    /* Five */
     FIVE,
-    /* Six*/
-    SIX
+    /* Six */
+    SIX,
 }
 
 public enum EmptyEnum {}
@@ -155,17 +156,17 @@ enum A {
 }
 
 enum Aaaaaaaaaa implements Bbbbbbbbbb {
-    A
+    A,
 }
 
 enum Aaaaaaaaaa implements Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff {
-    A
+    A,
 }
 
 enum Aaaaaaaaaa implements Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff {}
 
 enum Aaaaaaaaaa implements Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg {
-    A
+    A,
 }
 
 enum Aaaaaaaaaa implements Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg {}

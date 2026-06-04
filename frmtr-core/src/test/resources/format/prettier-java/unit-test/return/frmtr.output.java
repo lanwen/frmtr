@@ -1,4 +1,5 @@
 public abstract class Return {
+
     Object returnThis() {
         return this;
     }

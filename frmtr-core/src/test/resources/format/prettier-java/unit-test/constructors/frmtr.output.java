@@ -1,4 +1,5 @@
 public class Constructors {
+
     public Constructors() {
         this(true);
         System.out.println("empty constructor");

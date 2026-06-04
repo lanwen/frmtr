@@ -1,4 +1,5 @@
 public class Assert {
+
     public void assertBooleanExpression(String myVar) {
         assert (myVar != null);
     }

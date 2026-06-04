@@ -1,4 +1,5 @@
 public class Cast {
+
     void should_cast_with_single_element() {
         var myElem = (int) othrElement;
         var myElem = (A) othrElement;
@@ -10,11 +11,15 @@ public class Cast {
         foo((A & B) obj);
         foo((A & B & C) obj);
         foo((Aaeaozeaonzeoazneaozenazone & Bazoieoainzeonaozenoazne & Cjneazeanezoanezoanzeoaneonazeono) obj);
-        foo((Aaeaozeaonzeoazneaozenazone & Bazoieoainzeonaozenoazne & Cjneazeanezoanezoanzeoaneonazeono) (othrElement, value) -> othrElement + value);
+        foo(
+            (Aaeaozeaonzeoazneaozenazone & Bazoieoainzeonaozenoazne & Cjneazeanezoanezoanzeoaneonazeono) (othrElement, value) -> othrElement + value
+        );
     }
 
     void many_nested_casts() {
-        ((Map)((Map)((Map)((Map)((Map)((Map)((Map)((Map)((Map)((Map)((Map)((Map)((Map)((Map)((Map) ((Map) map).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1);
+        ((Map)((Map)((Map)((Map)((Map)((Map)((Map)((Map)((Map)((Map)((Map)((Map)((Map)((Map)((Map) ((Map) map).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(1)).get(
+            1
+        );
     }
 
     void intersectionCastExpression() {

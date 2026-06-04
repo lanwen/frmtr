@@ -1,4 +1,5 @@
 public class EmptyStament {
+
     class EmptyStament2 {}
 
     public void emptyStatementWithoutComment() {
@@ -8,133 +9,108 @@ public class EmptyStament {
     }
 
     public void emptyStatementWithComment() {
-        //EmptyStatement
-        ;
+        ; //EmptyStatement
         ;
     }
 
     public void simpleForWithEmptyStatement() {
-        /*test*/
+        /*test*//*test*/
+        for (;;) ;
 
-        for (; ; ) {
-            ;
-        }
-        for (; ; ) {
-            ;
-        }
-        for (; ; ) {
-            ;
-        }
-        for (; ; ) {
-            ;
-        }
+        for (;;) /*test*/
+        ;
+
+        for (;;) ;
+
+        for (;;) /*test*/
+        ;
     }
 
     public void simpleForWithEmptyStatement() {
-        for (; ; ) {
-            ;
-        }
-        for (; ; ) {
-            ;
-        }
-        for (; ; ) {
-            ;
-        }
-        for (; ; ) {
-            ;
-        }
+        /*test*//*test*/
+        for (;;) ;
+
+        for (;;) /*test*/
+        ;
+
+        for (;;) ;
+
+        for (;;) /*test*/
+        ;
     }
 
     public void forEachWithEmptyStatement(List<String> list) {
-        for (String str : list) {
-            ;
-        }
-        for (String str : list) {
-            ;
-        }
-        for (String str : list) {
-            ;
-        }
+        /*test*/
+        for (String str : list) ;
+
+        for (String str : list) /*test*/
+        ;
+
+        for (String str : list) ;
     }
 
     public void ifElseWithEmptyStatements() {
-        if (test) {
-            ;
-        } else {
+        if (test) ; else {
             System.out.println("one");
         }
+
         if (test) {
             System.out.println("two");
-        } else {
-            ;
-        }
-        if (test) {
-            ;
-        } else {
-            ;
-        }
+        } else ;
+
+        if (test) ; else ;
     }
 
     public void ifElseWithEmptyStatementsWithComments() {
-        if (test) {
-            ;
-        } else {
+        /*test*//*test*/
+        if (test) /*test*/
+        ; else {
             System.out.println("one");
         }
-        if (test) {
-            ;
-        } else {
+
+        if (test) ; else /*test*/
+        {
             System.out.println("one");
         }
+
         if (test) {
             System.out.println("two");
-        } else {
-            ;
-        }
+        } else /*test*/
+        ;
+
         if (test) {
             System.out.println("two");
-        } else {
-            ;
-        }
-        if (test) {
-            ;
-        } else {
-            ;
-        }
-        if (test) {
-            ;
-        } else {
-            ;
-        }
+        } else ;
+
+        if (test) ; else /*test*/
+        ;
+
+        if (test) /*test*/
+        ; else /*test*/
+        ;
     }
 
     public void simpleWhileWithEmptyStatement(boolean one) {
-        while (one) {
-            ;
-        }
-        while (one) {
-            ;
-        }
-        while (one) {
-            ;
-        }
+        /*test*/
+        while (one) ;
+
+        while (one) /*test*/
+        ;
+
+        while (one) ;
     }
 
     public void doWhileWithEmptyStatement(boolean one) {
-        do {
-            ;
-        } while (one);
-        do {
-            ;
-        } while (one);
-        do {
-            ;
-        } while (one);
+        do ; while (one);
+        do /*test*/
+        ; while (one);
+        do ; while (one);
     }
 }
 
 // Bug Fix: #356
 public class Test {
+
     public TestField testField;
 
     @Override

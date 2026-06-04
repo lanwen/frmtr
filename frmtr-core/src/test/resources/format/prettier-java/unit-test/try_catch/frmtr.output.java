@@ -1,4 +1,5 @@
 public class TryCatch {
+
     void tryFinally() {
         try { System.out.println("Try something"); } finally { System.out.println("Finally do something"); }
     }
@@ -41,12 +42,13 @@ public class TryCatch {
     }
 
     void lineComments() {
-        // b2
-        // d2
-
+        // b2// d2
         try {} // a finally {}
+
         try {} // a catch (Exception b) {} // b catch (Exception c) {} // c finally {}
+
         try { // a1 a; } // a2 finally { // b1 b; }
+
         try { // a1 a; } // a2 catch (Exception b) { // b1 b; } // b2 catch (Exception c) { // c1 c; } // c2 finally { // d1 d; }
     }
 }

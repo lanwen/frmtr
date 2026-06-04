@@ -1,4 +1,5 @@
 class Array {
+
     boolean skip = new boolean[candidates.length];
 
     Class<?> aaaaaaaaaaaaaaaa = new Aaaaaaaaaaaaaaaa<Bbbbbbbbbbbbbbbb>[1].getClass();

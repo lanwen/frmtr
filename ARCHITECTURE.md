@@ -135,7 +135,7 @@ The test suite covers:
 - `:frmtr-native-image-support`: JavaParser metamodel coverage for native-image reflection registration, including known-risk AST fields used by field and variable declarations.
 - `:frmtr-cli:nativeTest`: native-image compatibility coverage for JavaParser reflection-sensitive syntax. It is explicit native coverage and is not wired into the default JVM `check` lifecycle.
 - Golden resources under `frmtr-core/src/test/resources/format`.
-- The adopted upstream `prettier-java` fixture set under `frmtr-core/src/test/resources/format/prettier-java`, with parseable inputs, parseable Prettier Java reference outputs, and checked-in `frmtr.output.java` snapshots for current formatter output.
+- The adopted upstream `prettier-java` fixture set under `frmtr-core/src/test/resources/format/prettier-java`, with parseable inputs, parseable Prettier Java reference outputs, checked-in `frmtr.output.java` snapshots for current formatter output, and an explicit Prettier-compatible subset compared directly against `prettier.output.java` using Prettier-style 80-column, two-space options plus raw trailing-whitespace preservation for ignored regions.
 - The full upstream `prettier-java` fixture corpus under `frmtr-core/src/test/resources/upstream/prettier-java`.
 
 New formatter rules should include golden coverage plus idempotence and reparse checks where practical.

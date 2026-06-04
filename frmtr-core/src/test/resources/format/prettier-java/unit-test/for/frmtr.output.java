@@ -1,4 +1,5 @@
 public class For {
+
     public void simpleFor(String[] array) {
         for (int i = 0; i < array.length; i++) {
             System.out.println(array[i]);
@@ -6,7 +7,7 @@ public class For {
     }
 
     public void emptyFor(String[] array) {
-        for (; ; ) {
+        for (;;) {
             System.out.println(array[i]);
         }
     }
@@ -36,13 +37,9 @@ public class For {
     }
 
     void nested() {
-        for (SomeClass<?> elem : elements) {
-            for (SomeClass<?> elem : elements) {
-                for (SomeClass<?> elem : elements) {
-                    doSomeThing();
-                }
-            }
-        }
+        for (SomeClass<?> elem : elements)
+            for (SomeClass<?> elem : elements)
+                for (SomeClass<?> elem : elements) doSomeThing();
     }
 
     void noUpdate() {

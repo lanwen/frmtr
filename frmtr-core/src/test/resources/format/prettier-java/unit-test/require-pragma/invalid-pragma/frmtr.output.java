@@ -1,9 +1,10 @@
 /**
- * @surely this is invalid*/
+ * @surely this is invalid
+ */
 public enum Enum {
     SOME_ENUM,
     ANOTHER_ENUM,
-    LAST_ENUM
+    LAST_ENUM,
 }
 
 public enum Enum {
@@ -24,8 +25,9 @@ public enum Enum {
 }
 
 class CLassWithEnum {
+
     public static enum VALID_THINGS {
         FIRST,
-        SECOND
+        SECOND,
     }
 }

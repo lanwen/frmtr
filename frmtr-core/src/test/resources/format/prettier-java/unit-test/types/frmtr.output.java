@@ -1,4 +1,5 @@
 public class Types {
+
     public void primitiveTypes() {
         byte byteVariable;
         short shortVariable;
@@ -23,6 +24,7 @@ public class Types {
     }
 
     public void complexTypes() {
-        @A B.C<D>.@E @F G.H h;
+        @A
+        B.C<D>.@E @F G.H h;
     }
 }

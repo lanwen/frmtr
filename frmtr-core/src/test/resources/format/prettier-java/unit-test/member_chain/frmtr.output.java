@@ -1,31 +1,53 @@
 public class BreakLongFunctionCall {
+
     public void doSomething() {
         return new Object().something().more();
     }
 
     public void doSomethingNewWithComment() {
         new Object() // comment .something().more();
-        new Object().something() // comment .more();
+
+        new Object().something().more();
     }
 
     public void doSomethingWithComment() {
         Object // comment .something().more();
+
         java.Object // comment .something().more();
-        java.averyveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylong.Object // comment .something().more();
-        java // comment .averyveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylong.Object .something().more();
-        java .averyveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylong // comment .Object .something().more();
-        java.averyveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylong.Object .something().more();
-        Object.something() // comment .more();
+
+        java.averyveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylong.Object
+            .something()
+            .more();
+
+        java // comment .averyveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylong.Object
+            .something()
+            .more();
+
+        java .averyveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylong // comment .Object
+            .something()
+            .more();
+
+        java.averyveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylong.Object
+            .something()
+            .more();
+
+        Object.something().more();
+
         averyveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylong.java // comment .util() .java.java();
+
         averyveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylong // comment .java .util() .java.java();
+
         averyveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylong.java /* comment */ .util() .java.java();
+
         averyveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylong.java/* comment */ .util() .java.java();
+
         averyveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylong.java /* comment */.util() .java.java();
     }
 
     public void doSomethingWithComment() {
         object // comment .something().more();
-        object.something() // comment .more();
+
+        object.something().more();
     }
 
     public void doSomethingNewWithComment() {
@@ -57,11 +79,16 @@ public class BreakLongFunctionCall {
     }
 
     public void singleInvocationOnNewExpression() {
-        new Instance(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa).invocation(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa);
+        new Instance(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa).invocation(
+            aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,
+            aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        );
     }
 
     public void multipleInvocationsOnNewExpression() {
-        new Instance(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa).invocation(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa).andAnother();
+        new Instance(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
+            .invocation(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
+            .andAnother();
     }
 
     void methodReferences() {

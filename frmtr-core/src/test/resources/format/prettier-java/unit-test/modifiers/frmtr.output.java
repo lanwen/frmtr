@@ -2,6 +2,7 @@
 @AnnotationTwo
 @AnnotationThree
 public interface InterfaceWithModifiers {
+
     @AnnotationOne
     static final public String INTERFACE_CONSTANT = "abc";
 
@@ -29,6 +30,7 @@ public interface InterfaceWithModifiers {
 @AnnotationOne
 @AnnotationTwo
 abstract public class AbstractClassWithModifiers {
+
     @Annotation
     volatile private static String field;
 
@@ -48,6 +50,7 @@ abstract public class AbstractClassWithModifiers {
 @AnnotationOne
 @AnnotationTwo
 final public class ClassWithModifiers {
+
     @AnnotationOne
     @AnnotationTwo
     transient final private static String CONSTANT = "abc";

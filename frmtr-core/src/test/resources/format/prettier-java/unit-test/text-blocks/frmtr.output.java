@@ -1,11 +1,17 @@
 public class TextBlock {
+
     void method() {
         String myTextBlock = """ my text sentence\""" """;
+
         String source = """ public void print(%s object) { System.out.println(Objects.toString(object)); } """.formatted(type);
+
         String html = """ <html>\r <body>\r <p>Hello, world</p>\r </body>\r </html>\r """;
+
         html = """ <html>\r <body>\r <p>Hello, world</p>\r </body>\r </html>\r """;
-        System.out.println( // leading comment """ abaoeu euaoeu aoeu oaeu abc""" // trailing comment );
-        System.out.println( """ abaoeu euaoeu aoeu oaeu abc""" );
+
+        System.out.println(""" abaoeu euaoeu aoeu oaeu abc""");
+
+        System.out.println(""" abaoeu euaoeu aoeu oaeu abc""");
     }
 
     String escapes = """ 1+1 equals \ 2 maybe """;
@@ -17,9 +23,11 @@ public class TextBlock {
     void json() {
         // language = json
         String someJson = """ {"glossary":{"title": "example \'glossary\'"}} """;
+
         // language=json
         String config = """ { \t "name":"example", "enabled" :true, "timeout":30} """;
-        /* language = JSON*/
+
+        /* language = JSON */
         String query = """ { "sql":"SELECT * FROM users \ WHERE active = 1 \ AND deleted = 0", "limit":10} """;
     }
 
@@ -36,6 +44,8 @@ public class TextBlock {
     void typescript() {
         // language=typescript
         String typescript = """ const s = `\"""`; """;
+
+        // language=typescript
         String typescript = """ const s = ""; // \"""";
     }
 

@@ -1,4 +1,5 @@
 public sealed class Rectangle implements Shape {
+
     private final double length;
 
     private final double height;
@@ -15,6 +16,7 @@ public sealed class Rectangle implements Shape {
 }
 
 public non-sealed class RightTriangle implements Triangle {
+
     private final double adjacent;
 
     private final double opposite;
@@ -29,12 +31,15 @@ public non-sealed class RightTriangle implements Triangle {
         interface People { String name(); }
         record Person(String name) implements People { }
         record Persons(String... names) { }
+
         People p = new Person("John Doe");
+
         return adjacent * opposite / 2;
     }
 }
 
 public sealed interface Shape {
+
     double area();
 
     default Shape rotate(double angle) {
@@ -42,17 +47,8 @@ public sealed interface Shape {
     }
 
     default String areaMessage() {
-        if (this instanceof Circle) {
-            return "Circle: " + area();
-        } else {
-            if (this instanceof Rectangle) {
-                return "Rectangle: " + area();
-            } else {
-                if (this instanceof RightTriangle) {
-                    return "Triangle: " + area();
-                }
-            }
-        }
+        if (this instanceof Circle) return "Circle: " + area(); else if (this instanceof Rectangle) return "Rectangle: " + area(); else if (this instanceof RightTriangle) return "Triangle: " + area();
+
         // :(
         throw new IllegalArgumentException();
     }
@@ -69,18 +65,21 @@ public sealed class Shape {}
 public sealed class Shape extends AbstractShape {}
 
 public class NestedSealedClasses {
+
     public static sealed abstract class SealedParent {}
 
     final static class SealedChild extends SealedParent {}
 }
 
 public class NestedNonSealedClasses {
+
     public static non-sealed abstract class NonSealedParent {}
 
     final static class SealedChild extends NonSealedParent {}
 }
 
 public interface Test {
+
     sealed interface Inner {}
 
     public static sealed abstract class SealedParent {}

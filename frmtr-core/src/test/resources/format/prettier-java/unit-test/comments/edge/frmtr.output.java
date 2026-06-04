@@ -200,11 +200,11 @@
    distributed under the License is distributed on an "AS IS" BASIS,
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
-   limitations under the License.*/
-// Comment on line
-/**
- * Comments*/
-
-
+   limitations under the License.
+*/
 // This is edge class
 public class Edge {}
+// Comment on line
+/**
+ * Comments
+ */

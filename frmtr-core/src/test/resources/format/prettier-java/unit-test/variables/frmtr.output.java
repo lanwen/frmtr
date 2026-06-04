@@ -1,4 +1,5 @@
 public class Variables {
+
     public static int STATIC_VARIABLE = 123;
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ComplexFilterTest.class);
@@ -110,27 +111,44 @@ public class Variables {
     }
 
     public boolean localVariableDeclarationWhichBreak() {
-        @Nullable final BackupStatus lastStatus = BackupStatus.fromDbValue(backupRepository.getLastStatus());
+        @Nullable
         final BackupStatus lastStatus = BackupStatus.fromDbValue(backupRepository.getLastStatus());
-        @Nullable BackupStatus lastStatus = BackupStatus.fromDbValue(backupRepository.getLastStatus());
+
+        final BackupStatus lastStatus = BackupStatus.fromDbValue(backupRepository.getLastStatus());
+
+        @Nullable
+        BackupStatus lastStatus = BackupStatus.fromDbValue(backupRepository.getLastStatus());
+
         BackupStatus lastStatus = BackupStatus.fromDbValue(backupRepository.getLastStatus());
     }
 
     public boolean localVariableDeclarationWhichDoNotBreak() {
-        @Nullable final BackupStatus lastStatus = value;
+        @Nullable
         final BackupStatus lastStatus = value;
-        @Nullable BackupStatus lastStatus = value;
+
+        final BackupStatus lastStatus = value;
+
+        @Nullable
+        BackupStatus lastStatus = value;
+
         BackupStatus lastStatus = value;
     }
 
     public void breakVariables() {
         Obj newObject = new Object().something().more().and().that().as().well().but().not().something();
+
         Object.test.creation thisObject = classWithName.invocationOne().invocationTwo();
+
         Object.test.creation thisObject1 = classWithName.invocationOne(argument1, argument2, argument3);
+
         Object.test.creation thisObject2 = classWithName.invocationOne(argument1, argument2, argument3).invocationTwo();
+
         Object.test.creation thisObject3 = classWithName.invocationOne().invocationTwo(argument1, argument2, argument3);
+
         Object.test.creation thisObject4 = classWithName.invocationOne(argument1, argument2, argument3).invocationTwo(argument1, argument2);
+
         Object.test.creation thisObject5 = classWithName.invocationOne(argument1WithAVeryVeryVeryVeryLongName, argument2, argument3).attributeOne.attributeTwo .invocationTwo(argument1, argument2).attributeThree.invocationThree();
+
         Object.test.creation thisObject6 = classWithName.invocationOne(argument1, argument2, argument3).attributeOne.attributeTwo.invocationTwo(argument1, argument2).attributeThree.invocationThree();
     }
 
@@ -143,15 +161,25 @@ public class Variables {
 
     public void breakAfterEquals() {
         Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object();
+
         Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object() .other() .methods();
+
         Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object() .a() .number() .of() .other() .methods() .that() .should() .cause() .a() .wrap();
+
         Object[] aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object[10];
+
         Object[] aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object[] { new Object(), new Object() };
+
         Object[] aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object[] { new Object(), new Object(), new Object(), new Object(), new Object() };
+
         Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = SomeClass.someStaticMethod();
+
         Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = someMethod();
+
         Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = someMethod() .anotherMethod();
+
         Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = someBooleanVariable ? new Object() : null;
+
         Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = anotherVeryLongNameForIllustrativePurposes != null ? anotherVeryLongNameForIllustrativePurposes : new Object();
     }
 
@@ -160,23 +188,42 @@ public class Variables {
         ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> parameter
     ) {
         ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName> variable;
+
         ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> variable;
+
         ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> variable = new MyExtremelyLongAndObnoxiousClassName<>();
+
         ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> variable = new MyExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName>();
+
         ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new MyExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName>();
-        new MyExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName>() .method();
+
+        new MyExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName>().method();
     }
 
     public methodWithVariableInitializationWithComments() {
-        Map<String, String> map = // there is a random comment on this line up here // and then there is a separate comment on this line down here new HashMap<>( someRandomMethodThatReturnsTheInitialMapThatWeWantToMutate() );
+        Map<String, String> map = new HashMap<>( someRandomMethodThatReturnsTheInitialMapThatWeWantToMutate() );
     }
 
     void assignment() {
-        fileSystemDetails = FileHandlerDetails .builder() .fileSystemType( EntityUtils.update( entity.getFileSystemDetails().getFileSystemType(), update.getFileSystemDetails().getFileSystemType() ) );
+        fileSystemDetails = FileHandlerDetails
+            .builder()
+            .fileSystemType(EntityUtils.update( entity.getFileSystemDetails().getFileSystemType(), update.getFileSystemDetails().getFileSystemType() ));
+
         aaaaaaaaaaaaaaaaa = bbbbbbbbbbbbbbbbb ? ccccccccccccccccc : ddddddddddddddddd;
+
         aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa = bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb = ccccccccccccccccccccccccccccccccccccccc + ddddddddddddddddddddddddddddddddd;
-        foo = new Foo("aaaaaaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbbbbb", "cccccccccccccccccccc", "dddddddddddddddddddd", "eeeeeeeeeeeeeeeeeeee", "ffffffffffffffffffff");
+
+        foo = new Foo(
+            "aaaaaaaaaaaaaaaaaaaa",
+            "bbbbbbbbbbbbbbbbbbbb",
+            "cccccccccccccccccccc",
+            "dddddddddddddddddddd",
+            "eeeeeeeeeeeeeeeeeeee",
+            "ffffffffffffffffffff"
+        );
+
         final Foo bar = new Foo("aaaaaaaaaaaaaaaaaaaa", "bbbbbbbbbbbbbbbbbbbb", "cccccccccccccccccccc", "dddddddddddddddddddd", "eeeeeeeeeeeeeeeeeeee", "ffffffffffffffffffff");
+
         int a, b, c = 1;
     }
 }

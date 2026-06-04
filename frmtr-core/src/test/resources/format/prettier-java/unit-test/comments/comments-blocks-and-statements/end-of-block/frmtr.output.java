@@ -1,25 +1,47 @@
 class A {}
 
-class B {}
+class B {
+    // alpha
+}
 
-class C {}
+class C {
+    // alpha
+    // beta
+}
 
-class D {}
+class D {
+    // alpha
+    // beta
+    /* gamma */
+}
 
 class E {}
 
-class F {}
+class F {
+    /* alpha */
+}
 
-class G {}
+class G {
+    /* alpha */
+    /* beta */
+}
 
-class H {}
+class H {
+    /* alpha */
+    // beta
+}
 
 class I {
+
     // beta
     int i;
+    // one
+    // two
+    /* three */
 }
 
 class J {
+
     void one() {}
 
     void two() {}

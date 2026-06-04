@@ -2,23 +2,23 @@
 class T {
 
     /*
- * comment
- */
+     * comment
+     */
     void t() {}
 
     /*
- * comment
- */
+     * comment
+     */
     void t() {}
 
     /*
- * comment
- */
+     * comment
+     */
     void t() {}
 
     /*
- * comment
- */
+     * comment
+     */
     void t() {}
 
     /*
@@ -33,11 +33,28 @@ class T {
                */
     void t() {}
 
-    public static final List<Object> XXXXXXXXXXXXXXXXXX = Collections.unmodifiableList(Arrays.asList());
+    public static final List<Object> XXXXXXXXXXXXXXXXXX = Collections.unmodifiableList(
+        Arrays.asList(
+            // a
+            // b
+            // c
+            // d
+        )
+    );
 
-    public static final List<Object> XXXXXXXXXXXXXXXXXX = Collections.unmodifiableList(Arrays.asList());
+    public static final List<Object> XXXXXXXXXXXXXXXXXX = Collections.unmodifiableList(
+        Arrays.asList(
+            // a
+            // b
+            // c
+            // d
+            /*e*/
+        )
+    );
 
     void danglingArgumentList() {
-        a();
+        a(
+            // a
+        );
     }
 }

@@ -48,6 +48,7 @@ final class PrettierJavaFixtureTest {
             "cast",
             "char_literal",
             "classes",
+            "comments/bug-fixes",
             "comments/edge",
             "comments/expression",
             "comments/comments-only",

@@ -1716,6 +1716,10 @@ final class JavaPrinter {
                 + expression.getTypeArguments().map(typeArguments -> "<" + compactJoin(typeArguments) + ">").orElse("")
                 + expression.getNameAsString();
         if (expression.getArguments().isEmpty()) {
+            Optional<Doc> commentedArguments = emptyMethodCallArguments(prefix, expression);
+            if (commentedArguments.isPresent()) {
+                return commentedArguments.orElseThrow();
+            }
             return Doc.text(prefix + "()");
         }
         Doc call = Doc.concat(
@@ -1745,6 +1749,10 @@ final class JavaPrinter {
         String prefix = expression.getTypeArguments().map(typeArguments -> "<" + compactJoin(typeArguments) + ">").orElse("")
                 + expression.getNameAsString();
         if (expression.getArguments().isEmpty()) {
+            Optional<Doc> commentedArguments = emptyMethodCallArguments(prefix, expression);
+            if (commentedArguments.isPresent()) {
+                return commentedArguments.orElseThrow();
+            }
             return Doc.text(prefix + "()");
         }
         return Doc.group(Doc.concat(
@@ -1800,6 +1808,10 @@ final class JavaPrinter {
                 .orElse("");
         String prefix = "." + typeArguments + expression.getNameAsString();
         if (expression.getArguments().isEmpty()) {
+            Optional<Doc> commentedArguments = emptyMethodCallArguments(prefix, expression);
+            if (commentedArguments.isPresent()) {
+                return commentedArguments.orElseThrow();
+            }
             return Doc.text(prefix + "()");
         }
         return Doc.group(Doc.concat(
@@ -1808,6 +1820,35 @@ final class JavaPrinter {
                         .map(this::expression)
                         .toList()))),
                 Doc.SOFT_LINE,
+                Doc.text(")")));
+    }
+
+    private Optional<Doc> emptyMethodCallArguments(String prefix, MethodCallExpr expression) {
+        List<Doc> argumentComments = new ArrayList<>();
+        Doc firstArgumentComment = comments.ownComment(expression, comment -> comment instanceof LineComment
+                && comment.getRange()
+                        .flatMap(commentRange -> expression.getRange()
+                                .map(expressionRange -> commentRange.begin.line == expressionRange.begin.line))
+                        .orElse(false));
+        if (firstArgumentComment != Doc.EMPTY) {
+            argumentComments.add(firstArgumentComment);
+        }
+        expression.getScope()
+                .map(scope -> comments.ownComment(scope, comment -> comment instanceof LineComment
+                        && comment.getRange()
+                                .flatMap(commentRange -> expression.getRange()
+                                        .map(expressionRange -> commentRange.begin.line == expressionRange.begin.line))
+                                .orElse(false)))
+                .filter(comment -> comment != Doc.EMPTY)
+                .ifPresent(argumentComments::add);
+        argumentComments.addAll(comments.orphanCommentStatements(expression));
+        if (argumentComments.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+                Doc.text(prefix + "("),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, argumentComments))),
+                Doc.HARD_LINE,
                 Doc.text(")")));
     }
 

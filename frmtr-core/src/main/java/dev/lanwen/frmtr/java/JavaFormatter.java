@@ -232,12 +232,19 @@ public final class JavaFormatter {
             return Doc.text("//" + lineComment.getContent().stripTrailing());
         }
         if (comment instanceof JavadocComment javadocComment) {
-            return Doc.text(javadocComment.toString().stripTrailing());
+            return lineDoc(javadocComment.toString().stripTrailing());
         }
         if (comment instanceof BlockComment blockComment) {
-            return Doc.text(normalizeBlockComment(blockComment.toString()));
+            String text = blockComment.toString();
+            String normalized = normalizeBlockComment(text);
+            return normalized.equals(text.stripTrailing()) ? Doc.text(normalized) : lineDoc(normalized);
         }
-        return Doc.text(comment.toString().stripTrailing());
+        return lineDoc(comment.toString().stripTrailing());
+    }
+
+    private static Doc lineDoc(String value) {
+        List<Doc> lines = value.lines().map(Doc::text).toList();
+        return Doc.join(Doc.HARD_LINE, lines);
     }
 
     private static String normalizeBlockComment(String value) {

@@ -66,6 +66,7 @@ import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.ForEachStmt;
 import com.github.javaparser.ast.stmt.ForStmt;
 import com.github.javaparser.ast.stmt.IfStmt;
+import com.github.javaparser.ast.stmt.LabeledStmt;
 import com.github.javaparser.ast.stmt.LocalClassDeclarationStmt;
 import com.github.javaparser.ast.stmt.LocalRecordDeclarationStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
@@ -1958,6 +1959,7 @@ final class JavaPrinter {
             case EmptyStmt ignored -> Doc.text(";");
             case BreakStmt breakStmt -> Doc.text("break" + breakStmt.getLabel().map(label -> " " + label.asString()).orElse("") + ";");
             case ContinueStmt continueStmt -> Doc.text("continue" + continueStmt.getLabel().map(label -> " " + label.asString()).orElse("") + ";");
+            case LabeledStmt labeledStmt -> labeledStatement(labeledStmt);
             case LocalClassDeclarationStmt localClassDeclaration -> body(localClassDeclaration.getClassDeclaration());
             case LocalRecordDeclarationStmt localRecordDeclaration -> body(localRecordDeclaration.getRecordDeclaration());
             case IfStmt ifStmt -> ifStatement(ifStmt);
@@ -1981,6 +1983,76 @@ final class JavaPrinter {
         return statement.getExpression()
                 .map(expression -> Doc.concat(Doc.text("return "), returnExpression(expression), Doc.text(";")))
                 .orElse(Doc.text("return;"));
+    }
+
+    private Doc labeledStatement(LabeledStmt statement) {
+        Doc label = Doc.text(statement.getLabel().asString() + ": ");
+        Doc labeledBody = labeledStatementBody(statement.getStatement());
+        Doc body = Doc.concat(label, labeledBody);
+        List<String> leadingComments = labeledStatementLeadingComments(statement);
+        if (leadingComments.isEmpty()) {
+            return body;
+        }
+        return Doc.concat(
+                Doc.join(Doc.HARD_LINE, leadingComments.stream().map(Doc::text).toList()),
+                Doc.HARD_LINE,
+                body);
+    }
+
+    private Doc labeledStatementBody(Statement statement) {
+        if (statement instanceof ForEachStmt forEachStmt
+                && forEachStmt.getBody().isBlockStmt()
+                && forEachStmt.getBody().asBlockStmt().getStatements().isEmpty()
+                && forEachStmt.getBody().asBlockStmt().getOrphanComments().isEmpty()) {
+            return Doc.text("for (" + compact(forEachStmt.getVariable()) + " : " + compact(forEachStmt.getIterable()) + ") {}");
+        }
+        if (statement instanceof BlockStmt blockStmt) {
+            return block(blockStmt);
+        }
+        return statement(statement);
+    }
+
+    private List<String> labeledStatementLeadingComments(LabeledStmt statement) {
+        String raw = raw(statement);
+        int colon = raw.indexOf(':');
+        if (colon < 0) {
+            return List.of();
+        }
+        String labelBody = raw.substring(colon + 1);
+        int statementStart = labeledNestedStatementStart(labelBody);
+        if (statementStart < 0) {
+            return List.of();
+        }
+        String comments = labelBody.substring(0, statementStart);
+        List<String> lines = new ArrayList<>();
+        for (String line : comments.split("\\R", -1)) {
+            String stripped = line.strip();
+            if (stripped.isEmpty()) {
+                if (!lines.isEmpty() && !lines.getLast().isEmpty()) {
+                    lines.add("");
+                }
+                continue;
+            }
+            if (isCommentOnlyLine(stripped)) {
+                lines.add(stripped);
+            }
+        }
+        while (!lines.isEmpty() && lines.getLast().isEmpty()) {
+            lines.removeLast();
+        }
+        return lines;
+    }
+
+    private int labeledNestedStatementStart(String labelBody) {
+        int forStart = labelBody.indexOf("for");
+        int blockStart = labelBody.indexOf('{');
+        if (forStart < 0) {
+            return blockStart;
+        }
+        if (blockStart < 0) {
+            return forStart;
+        }
+        return Math.min(forStart, blockStart);
     }
 
     private Doc returnExpression(Expression expression) {

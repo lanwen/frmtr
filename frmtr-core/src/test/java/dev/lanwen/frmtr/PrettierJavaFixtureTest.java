@@ -59,6 +59,7 @@ final class PrettierJavaFixtureTest {
             "comments/bug-fixes",
             "comments/comments-blocks-and-statements/end-of-block",
             "comments/comments-blocks-and-statements/if-statement",
+            "comments/comments-blocks-and-statements/labeled-statement",
             "comments/edge",
             "comments/expression",
             "comments/comments-only",

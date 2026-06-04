@@ -32,7 +32,30 @@ public class PrettierTest {
                 2,
             };
 
-            loop: // Label statement //foreach for (int num /* num is every number in arr*/ : arr) { /*switch*/switch(num){//switch case 1: System.out.println("One "); System.out.println("One "); System.out.println("One "); /*just a break*/break; case 2: System.out.println("Two "); break; case 0: System.out.println("Zero "); continue/*labeled continued*/ loop; default/*def*/: /*labeled break*/break loop; } }
+            // Label statement
+
+            //
+            loop: //foreach
+            for (int num : arr) {
+                /*switch*/
+                switch (num) {
+                    case 1:
+                        System.out.println("One ");
+                        System.out.println("One ");
+                        System.out.println("One ");
+                        /*just a break*/
+                        break;
+                    case 2:
+                        System.out.println("Two ");
+                        break;
+                    case 0:
+                        System.out.println("Zero ");
+                        continue loop;
+                    default:
+                        /*labeled break*/
+                        break loop;
+                }
+            }
         }
     }
 

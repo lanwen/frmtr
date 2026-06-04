@@ -172,7 +172,11 @@ public class Variables {
             : new Object();
     }
 
-    public <A extends ShortClassName & ShortClassName & ShortClassName & ShortClassName, B extends ShortClassName & ShortClassName & ShortClassName & ShortClassName & ShortClassName, C extends ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> & ExtremelyLongAndObnoxiousInterfaceName & ExtremelyLongAndObnoxiousInterfaceName & ExtremelyLongAndObnoxiousInterfaceName> void breakOnTypeArguments(
+    public <
+        A extends ShortClassName & ShortClassName & ShortClassName & ShortClassName,
+        B extends ShortClassName & ShortClassName & ShortClassName & ShortClassName & ShortClassName,
+        C extends ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> & ExtremelyLongAndObnoxiousInterfaceName & ExtremelyLongAndObnoxiousInterfaceName & ExtremelyLongAndObnoxiousInterfaceName
+    > void breakOnTypeArguments(
         ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName> parameter,
         ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>, ExtremelyLongAndObnoxiousClassName> parameter
     ) {

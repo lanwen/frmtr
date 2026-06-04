@@ -1827,9 +1827,10 @@ final class JavaPrinter {
         String prefix = modifiers(declaration);
         docs.add(Doc.text(prefix));
         if (!declaration.getTypeParameters().isEmpty()) {
-            String typeParameters = "<" + compactJoin(declaration.getTypeParameters()) + "> ";
+            String typeParameters = flatTypeParameters(declaration.getTypeParameters()) + " ";
             prefix += typeParameters;
-            docs.add(Doc.text(typeParameters));
+            docs.add(typeParameters(declaration.getTypeParameters()));
+            docs.add(Doc.text(" "));
         }
         String signature = inlineAnnotations(declaration)
                 + compact(declaration.getType())

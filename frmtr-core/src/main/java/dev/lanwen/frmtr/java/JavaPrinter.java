@@ -4111,6 +4111,10 @@ final class JavaPrinter {
         if (huggableLambda.isPresent()) {
             return huggableLambda.orElseThrow();
         }
+        Optional<Doc> commentedExpressionLambda = commentedExpressionLambdaArgument(prefix, expression);
+        if (commentedExpressionLambda.isPresent()) {
+            return commentedExpressionLambda.orElseThrow();
+        }
         Optional<Doc> huggableExpressionLambda = huggableMethodCallExpressionLambdaArguments(prefix, expression.getArguments());
         if (huggableExpressionLambda.isPresent()) {
             return huggableExpressionLambda.orElseThrow();
@@ -4332,6 +4336,46 @@ final class JavaPrinter {
                 Doc.text(prefix + "(" + (leadingArguments.isEmpty() ? "" : leadingArguments + ", ")),
                 lambdaExpression(lambdaExpr),
                 Doc.text((trailingArguments.isEmpty() ? "" : ", " + trailingArguments) + ")")));
+    }
+
+    private Optional<Doc> commentedExpressionLambdaArgument(String prefix, MethodCallExpr expression) {
+        if (expression.getArguments().size() != 1
+                || !(expression.getArgument(0) instanceof LambdaExpr lambdaExpr)
+                || lambdaExpr.getExpressionBody().isEmpty()) {
+            return Optional.empty();
+        }
+        List<Comment> commentsAroundLambda = new ArrayList<>();
+        expression.getOrphanComments().stream()
+                .filter(LineComment.class::isInstance)
+                .forEach(commentsAroundLambda::add);
+        lambdaExpr.getComment()
+                .filter(LineComment.class::isInstance)
+                .ifPresent(commentsAroundLambda::add);
+        if (commentsAroundLambda.isEmpty()) {
+            return Optional.empty();
+        }
+        commentsAroundLambda.sort(Comparator.comparing(comment -> comment.getRange()
+                .map(range -> range.begin)
+                .orElse(Position.HOME)));
+        List<Doc> leading = commentsAroundLambda.stream()
+                .filter(comment -> startsBefore(comment, lambdaExpr))
+                .map(comments::comment)
+                .filter(comment -> comment != Doc.EMPTY)
+                .toList();
+        List<Doc> trailing = commentsAroundLambda.stream()
+                .filter(comment -> !startsBefore(comment, lambdaExpr))
+                .map(comments::comment)
+                .filter(comment -> comment != Doc.EMPTY)
+                .toList();
+        List<Doc> argumentLines = new ArrayList<>();
+        argumentLines.addAll(leading);
+        argumentLines.add(lambdaExpression(lambdaExpr));
+        argumentLines.addAll(trailing);
+        return Optional.of(Doc.concat(
+                Doc.text(prefix + "("),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, argumentLines))),
+                Doc.HARD_LINE,
+                Doc.text(")")));
     }
 
     private Optional<Doc> huggableMethodCallExpressionLambdaArguments(String prefix, NodeList<Expression> arguments) {
@@ -4824,6 +4868,10 @@ final class JavaPrinter {
         Optional<Doc> huggableLambda = huggableBlockLambdaArguments(prefix, expression.getArguments());
         if (huggableLambda.isPresent()) {
             return Doc.concat(segmentPrefix, huggableLambda.orElseThrow());
+        }
+        Optional<Doc> commentedExpressionLambda = commentedExpressionLambdaArgument(prefix, expression);
+        if (commentedExpressionLambda.isPresent()) {
+            return Doc.concat(segmentPrefix, commentedExpressionLambda.orElseThrow());
         }
         return Doc.concat(segmentPrefix, Doc.group(Doc.concat(
                 Doc.text(prefix + "("),

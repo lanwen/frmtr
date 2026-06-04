@@ -381,6 +381,68 @@ final class FrmtrTest {
     }
 
     @Test
+    void preservesLeadingLineCommentsOnExpressionLambdaArgument() {
+        String source = """
+                class Demo {
+                    void method() {
+                        list.map(
+                            // first
+                            // second
+                            v -> v * 2
+                        );
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("list.map(\n"
+                        + "      // first\n"
+                        + "      // second\n"
+                        + "      v -> v * 2\n"
+                        + "    );");
+    }
+
+    @Test
+    void preservesTrailingLineCommentsOnExpressionLambdaArgument() {
+        String source = """
+                class Demo {
+                    void method() {
+                        list.map(
+                            v -> v * 2
+                            // first
+                            // second
+                        );
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("list.map(\n"
+                        + "      v -> v * 2\n"
+                        + "      // first\n"
+                        + "      // second\n"
+                        + "    );");
+    }
+
+    @Test
     void keepsBrokenLambdaParametersWithCompactMethodCallBody() {
         String source = """
                 class Demo {

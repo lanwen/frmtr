@@ -61,6 +61,7 @@ final class PrettierJavaFixtureTest {
             "generic_questionmark",
             "hello-world",
             "if",
+            "indent",
             "instantiation",
             "method_reference",
             "marker_annotations",

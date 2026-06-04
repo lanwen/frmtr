@@ -1121,36 +1121,47 @@ final class JavaPrinter {
         }
         List<MethodCallExpr> calls = new ArrayList<>();
         Expression root = methodCallChainRoot(expression, calls);
-        if (calls.size() < 2) {
+        if (calls.isEmpty() || (calls.size() < 2 && !(root instanceof MethodCallExpr))) {
             return Optional.empty();
         }
+        if (calls.size() == 1 && root instanceof MethodCallExpr) {
+            return Optional.of(Doc.concat(expression(root), methodCallChainSegment(calls.getFirst())));
+        }
         return Optional.of(Doc.concat(
-                Doc.text(compact(root)),
+                expression(root),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, calls.stream()
                         .map(this::methodCallChainSegment)
                         .toList())))));
     }
 
     private Expression methodCallChainRoot(MethodCallExpr expression, List<MethodCallExpr> calls) {
-        expression.getScope().ifPresent(scope -> {
-            if (scope instanceof MethodCallExpr methodCallExpr) {
-                methodCallChainRoot(methodCallExpr, calls);
-            }
-        });
+        if (expression.getScope().orElse(null) instanceof MethodCallExpr methodCallExpr) {
+            Expression root = methodCallChainRoot(methodCallExpr, calls);
+            calls.add(expression);
+            return root;
+        }
+        if (expression.getScope().isEmpty()) {
+            return expression;
+        }
         calls.add(expression);
-        return expression.getScope()
-                .filter(scope -> !(scope instanceof MethodCallExpr))
-                .orElseGet(() -> calls.getFirst().getScope().orElse(expression));
+        return expression.getScope().orElseThrow();
     }
 
     private Doc methodCallChainSegment(MethodCallExpr expression) {
         String typeArguments = expression.getTypeArguments()
                 .map(arguments -> "<" + compactJoinTypeLike(arguments) + ">")
                 .orElse("");
-        String arguments = expression.getArguments().isEmpty()
-                ? ""
-                : compactJoin(expression.getArguments());
-        return Doc.text("." + typeArguments + expression.getNameAsString() + "(" + arguments + ")");
+        String prefix = "." + typeArguments + expression.getNameAsString();
+        if (expression.getArguments().isEmpty()) {
+            return Doc.text(prefix + "()");
+        }
+        return Doc.group(Doc.concat(
+                Doc.text(prefix + "("),
+                Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.join(Doc.concat(Doc.text(","), Doc.LINE), expression.getArguments().stream()
+                        .map(this::expression)
+                        .toList()))),
+                Doc.SOFT_LINE,
+                Doc.text(")")));
     }
 
     private Doc objectCreation(ObjectCreationExpr expression) {

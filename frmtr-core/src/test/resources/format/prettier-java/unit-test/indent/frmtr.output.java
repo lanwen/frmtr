@@ -7,14 +7,23 @@ class Indent {
             useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa
         );
 
-        assertThat( useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa, useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa, useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa ) .isEqualTo()
-            .assertThat(useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa, useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa, useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa)
-            .isEqualTo();
+        assertThat(
+            useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa,
+            useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa,
+            useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa
+        ).isEqualTo();
 
-        assertThat( useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa, useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa, useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa ) .isEqualTo() .anotherInvocation( useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa, useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa, useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa )
-            .assertThat(useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa, useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa, useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa)
+        assertThat(
+            useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa,
+            useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa,
+            useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa
+        )
             .isEqualTo()
-            .anotherInvocation(useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa, useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa, useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa);
+            .anotherInvocation(
+                useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa,
+                useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa,
+                useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa
+            );
 
         myinstanceobject .assertThat( useraaaaaaaaaaojzapjzpozjapjzpoajzpozaaaaaaaaaaaMapperlaaaaaaaaaaaaaaaaaaaaaaaa ).isEqualTo();
     }

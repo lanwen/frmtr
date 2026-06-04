@@ -197,7 +197,9 @@ public class Variables {
     void assignment() {
         fileSystemDetails = FileHandlerDetails
             .builder()
-            .fileSystemType(EntityUtils.update( entity.getFileSystemDetails().getFileSystemType(), update.getFileSystemDetails().getFileSystemType() ));
+            .fileSystemType(
+                EntityUtils.update(entity.getFileSystemDetails().getFileSystemType(), update.getFileSystemDetails().getFileSystemType())
+            );
 
         aaaaaaaaaaaaaaaaa = bbbbbbbbbbbbbbbbb ? ccccccccccccccccc : ddddddddddddddddd;
 

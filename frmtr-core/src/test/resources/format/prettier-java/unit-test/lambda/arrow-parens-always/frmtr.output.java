@@ -42,7 +42,9 @@ public class Lambda {
         final List<Integer> values =
             Stream
                 .of(1, 2)
-                .map(( aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter ) -> { // testing method return n * 2; })
+                .map(
+                    ( aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter ) -> { // testing method return n * 2; }
+                )
                 .collect(Collectors.toList());
 
         final List<Integer> values =

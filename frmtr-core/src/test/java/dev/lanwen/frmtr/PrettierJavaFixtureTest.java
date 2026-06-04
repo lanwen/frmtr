@@ -61,6 +61,7 @@ final class PrettierJavaFixtureTest {
             "comments/edge",
             "comments/expression",
             "comments/comments-only",
+            "comments/package",
             "constructors",
             "empty_statement",
             "enum",

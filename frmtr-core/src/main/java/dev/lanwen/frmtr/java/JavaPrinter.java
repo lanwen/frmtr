@@ -240,11 +240,343 @@ final class JavaPrinter {
     }
 
     private Doc moduleDeclaration(ModuleDeclaration declaration) {
+        String raw = raw(declaration);
+        if (raw.contains("/*") || raw.contains("//")) {
+            Doc leadingBlock = comments.ownComment(declaration, BlockComment.class::isInstance);
+            String leadingText = commentText(leadingBlock);
+            String commentedRaw = leadingText.isEmpty() ? raw : leadingText + raw;
+            return Doc.text(formatCommentedModule(commentedRaw));
+        }
         return Doc.concat(
                 comments.leading(declaration),
                 annotations(declaration),
                 Doc.text((declaration.isOpen() ? "open " : "") + "module " + compact(declaration.getName()) + " "),
                 moduleBlock(declaration));
+    }
+
+    private String formatCommentedModule(String rawModule) {
+        String[] lines = rawModule.strip().split("\\R");
+        if (lines.length == 0) {
+            return rawModule.strip();
+        }
+        List<String> formatted = new ArrayList<>();
+        formatted.add(formatCommentedModuleHeader(lines[0]));
+        boolean previousBlank = false;
+        for (int i = 1; i < lines.length - 1; i++) {
+            String line = lines[i].strip();
+            if (line.isEmpty()) {
+                if (!previousBlank && !formatted.isEmpty()) {
+                    formatted.add("");
+                }
+                previousBlank = true;
+                continue;
+            }
+            formatted.add("  " + formatCommentedModuleDirective(line));
+            previousBlank = false;
+        }
+        formatted.add("}");
+        return String.join("\n", formatted);
+    }
+
+    private String formatCommentedModuleHeader(String line) {
+        List<String> tokens = moduleTokens(line);
+        int cursor = 0;
+        List<String> leadingComments = new ArrayList<>();
+        while (cursor < tokens.size() && isCommentToken(tokens.get(cursor))) {
+            leadingComments.add(tokens.get(cursor++));
+        }
+        boolean open = cursor < tokens.size() && tokens.get(cursor).equals("open");
+        if (open) {
+            cursor++;
+        }
+        List<String> beforeNameComments = new ArrayList<>();
+        while (cursor < tokens.size() && !tokens.get(cursor).equals("module")) {
+            if (isCommentToken(tokens.get(cursor))) {
+                beforeNameComments.add(tokens.get(cursor));
+            }
+            cursor++;
+        }
+        if (cursor < tokens.size() && tokens.get(cursor).equals("module")) {
+            cursor++;
+        }
+        while (cursor < tokens.size() && isCommentToken(tokens.get(cursor))) {
+            beforeNameComments.add(tokens.get(cursor++));
+        }
+        int nameEnd = tokens.indexOf("{");
+        if (nameEnd < 0) {
+            nameEnd = tokens.size();
+        }
+        StringBuilder out = new StringBuilder();
+        appendSpaceSeparated(out, leadingComments);
+        if (!out.isEmpty()) {
+            out.append(' ');
+        }
+        if (open) {
+            out.append("open ");
+        }
+        out.append("module");
+        if (!beforeNameComments.isEmpty()) {
+            out.append(' ');
+            appendSpaceSeparated(out, beforeNameComments);
+        }
+        out.append(' ');
+        out.append(formatCommentedQualifiedName(tokens.subList(cursor, nameEnd), true));
+        out.append(" {");
+        return out.toString();
+    }
+
+    private String formatCommentedModuleDirective(String line) {
+        if (line.startsWith("//")) {
+            return line;
+        }
+        List<String> tokens = moduleTokens(line);
+        int semicolon = tokens.indexOf(";");
+        if (semicolon < 0) {
+            semicolon = tokens.size();
+        }
+        List<String> afterSemicolonComments = new ArrayList<>();
+        for (int i = semicolon + 1; i < tokens.size(); i++) {
+            if (isCommentToken(tokens.get(i))) {
+                afterSemicolonComments.add(tokens.get(i));
+            }
+        }
+        int cursor = 0;
+        List<String> leadingComments = new ArrayList<>();
+        while (cursor < semicolon && isCommentToken(tokens.get(cursor))) {
+            leadingComments.add(tokens.get(cursor++));
+        }
+        if (cursor >= semicolon) {
+            return line;
+        }
+        String keyword = tokens.get(cursor++);
+        String body = switch (keyword) {
+            case "requires" -> formatCommentedRequires(tokens, cursor, semicolon);
+            case "exports", "opens" -> formatCommentedModuleAccess(keyword, tokens, cursor, semicolon);
+            case "uses" -> formatCommentedUses(tokens, cursor, semicolon);
+            default -> line;
+        };
+        if (body.equals(line)) {
+            return line;
+        }
+        StringBuilder out = new StringBuilder();
+        appendSpaceSeparated(out, leadingComments);
+        if (!out.isEmpty()) {
+            out.append(' ');
+        }
+        out.append(keyword);
+        if (!body.isEmpty()) {
+            out.append(' ').append(body);
+        }
+        out.append(';');
+        if (!afterSemicolonComments.isEmpty()) {
+            out.append(' ');
+            appendSpaceSeparated(out, afterSemicolonComments);
+        }
+        return out.toString();
+    }
+
+    private String formatCommentedRequires(List<String> tokens, int cursor, int semicolon) {
+        List<String> beforeTransitiveOrName = new ArrayList<>();
+        while (cursor < semicolon && isCommentToken(tokens.get(cursor))) {
+            beforeTransitiveOrName.add(tokens.get(cursor++));
+        }
+        StringBuilder out = new StringBuilder();
+        if (cursor < semicolon && tokens.get(cursor).equals("transitive")) {
+            appendSpaceSeparated(out, beforeTransitiveOrName);
+            if (!out.isEmpty()) {
+                out.append(' ');
+            }
+            out.append("transitive");
+            cursor++;
+            List<String> beforeName = new ArrayList<>();
+            while (cursor < semicolon && isCommentToken(tokens.get(cursor))) {
+                beforeName.add(tokens.get(cursor++));
+            }
+            if (!beforeName.isEmpty()) {
+                out.append(' ');
+                appendSpaceSeparated(out, beforeName);
+            }
+            out.append(' ');
+        } else {
+            appendSpaceSeparated(out, beforeTransitiveOrName);
+            if (!out.isEmpty()) {
+                out.append(' ');
+            }
+        }
+        out.append(formatCommentedQualifiedName(tokens.subList(cursor, semicolon), false));
+        return out.toString();
+    }
+
+    private String formatCommentedModuleAccess(String keyword, List<String> tokens, int cursor, int semicolon) {
+        List<String> beforeName = new ArrayList<>();
+        while (cursor < semicolon && isCommentToken(tokens.get(cursor))) {
+            beforeName.add(tokens.get(cursor++));
+        }
+        int targetKeyword = tokens.subList(cursor, semicolon).indexOf("to");
+        if (targetKeyword < 0) {
+            StringBuilder out = new StringBuilder();
+            appendSpaceSeparated(out, beforeName);
+            if (!out.isEmpty()) {
+                out.append(' ');
+            }
+            out.append(formatCommentedQualifiedName(tokens.subList(cursor, semicolon), false));
+            return out.toString();
+        }
+        int toIndex = cursor + targetKeyword;
+        int nameEnd = toIndex;
+        while (nameEnd > cursor && isCommentToken(tokens.get(nameEnd - 1))) {
+            nameEnd--;
+        }
+        List<String> beforeTo = tokens.subList(nameEnd, toIndex);
+        StringBuilder out = new StringBuilder();
+        appendSpaceSeparated(out, beforeName);
+        if (!out.isEmpty()) {
+            out.append(' ');
+        }
+        out.append(formatCommentedQualifiedName(tokens.subList(cursor, nameEnd), false));
+        if (!beforeTo.isEmpty()) {
+            out.append(' ');
+            appendSpaceSeparated(out, beforeTo);
+        }
+        out.append('\n');
+        out.append("    to ");
+        out.append(formatCommentedModuleTargets(tokens.subList(toIndex + 1, semicolon)));
+        return out.toString();
+    }
+
+    private String formatCommentedUses(List<String> tokens, int cursor, int semicolon) {
+        List<String> beforeName = new ArrayList<>();
+        while (cursor < semicolon && isCommentToken(tokens.get(cursor))) {
+            beforeName.add(tokens.get(cursor++));
+        }
+        List<String> nameTokens = new ArrayList<>(tokens.subList(cursor, semicolon));
+        List<String> beforeSemicolon = new ArrayList<>();
+        while (!nameTokens.isEmpty() && isCommentToken(nameTokens.getLast())) {
+            beforeSemicolon.add(0, nameTokens.removeLast());
+        }
+        StringBuilder out = new StringBuilder();
+        appendSpaceSeparated(out, beforeName);
+        if (!out.isEmpty()) {
+            out.append(' ');
+        }
+        out.append(formatCommentedQualifiedName(nameTokens, false));
+        if (!beforeSemicolon.isEmpty()) {
+            out.append(' ');
+            appendSpaceSeparated(out, beforeSemicolon);
+        }
+        return out.toString();
+    }
+
+    private String formatCommentedModuleTargets(List<String> tokens) {
+        List<String> parts = new ArrayList<>();
+        List<String> current = new ArrayList<>();
+        for (String token : tokens) {
+            if (token.equals(",")) {
+                parts.add(formatCommentedQualifiedName(current, false));
+                current = new ArrayList<>();
+            } else {
+                current.add(token);
+            }
+        }
+        if (!current.isEmpty()) {
+            parts.add(formatCommentedQualifiedName(current, false));
+        }
+        return String.join(", ", parts);
+    }
+
+    private String formatCommentedQualifiedName(List<String> tokens, boolean moveCommentsAfterDotBeforeDot) {
+        StringBuilder out = new StringBuilder();
+        int cursor = 0;
+        while (cursor < tokens.size()) {
+            String token = tokens.get(cursor);
+            if (token.equals(".")) {
+                out.append('.');
+                cursor++;
+                continue;
+            }
+            if (isCommentToken(token)) {
+                if (!out.isEmpty() && out.charAt(out.length() - 1) != ' ' && out.charAt(out.length() - 1) != '.') {
+                    out.append(' ');
+                }
+                out.append(token);
+                if (moveCommentsAfterDotBeforeDot && cursor + 1 < tokens.size() && tokens.get(cursor + 1).equals(".")) {
+                    cursor += 2;
+                    while (cursor < tokens.size() && isCommentToken(tokens.get(cursor))) {
+                        out.append(' ').append(tokens.get(cursor++));
+                    }
+                    out.append('.');
+                    continue;
+                }
+                if (cursor + 1 < tokens.size() && tokens.get(cursor + 1).equals(".")) {
+                    cursor++;
+                    continue;
+                }
+                out.append(' ');
+                cursor++;
+                continue;
+            }
+            if (!out.isEmpty() && out.charAt(out.length() - 1) != '.' && out.charAt(out.length() - 1) != ' ') {
+                out.append(' ');
+            }
+            out.append(token);
+            cursor++;
+        }
+        return out.toString().strip();
+    }
+
+    private void appendSpaceSeparated(StringBuilder out, List<String> values) {
+        for (String value : values) {
+            if (!out.isEmpty() && out.charAt(out.length() - 1) != ' ') {
+                out.append(' ');
+            }
+            out.append(value);
+        }
+    }
+
+    private boolean isCommentToken(String token) {
+        return token.startsWith("/*") || token.startsWith("//");
+    }
+
+    private List<String> moduleTokens(String line) {
+        List<String> tokens = new ArrayList<>();
+        int cursor = 0;
+        while (cursor < line.length()) {
+            char current = line.charAt(cursor);
+            if (Character.isWhitespace(current)) {
+                cursor++;
+                continue;
+            }
+            if (cursor + 1 < line.length() && line.startsWith("/*", cursor)) {
+                int end = line.indexOf("*/", cursor + 2);
+                if (end < 0) {
+                    tokens.add(line.substring(cursor));
+                    break;
+                }
+                tokens.add(line.substring(cursor, end + 2));
+                cursor = end + 2;
+                continue;
+            }
+            if (cursor + 1 < line.length() && line.startsWith("//", cursor)) {
+                tokens.add(line.substring(cursor).stripTrailing());
+                break;
+            }
+            if ("{};,.".indexOf(current) >= 0) {
+                tokens.add(String.valueOf(current));
+                cursor++;
+                continue;
+            }
+            int end = cursor + 1;
+            while (end < line.length()
+                    && !Character.isWhitespace(line.charAt(end))
+                    && "{};,.".indexOf(line.charAt(end)) < 0
+                    && !line.startsWith("/*", end)
+                    && !line.startsWith("//", end)) {
+                end++;
+            }
+            tokens.add(line.substring(cursor, end));
+            cursor = end;
+        }
+        return tokens;
     }
 
     private Doc moduleBlock(ModuleDeclaration declaration) {

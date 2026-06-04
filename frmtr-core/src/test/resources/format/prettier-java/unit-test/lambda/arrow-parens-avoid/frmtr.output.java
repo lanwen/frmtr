@@ -1,56 +1,44 @@
 public class Lambda {
 
     public void singleArgumentWithParens() {
-        call(
-            (x) -> {
-                System.out.println(x);
-                System.out.println(x);
-            }
-        );
+        call((x) -> {
+            System.out.println(x);
+            System.out.println(x);
+        });
     }
 
     public void singleArgumentWithoutParens() {
-        call(
-            x -> {
-                System.out.println(x);
-                System.out.println(x);
-            }
-        );
+        call(x -> {
+            System.out.println(x);
+            System.out.println(x);
+        });
     }
 
     public void multiArguments() {
-        call(
-            (x, y) -> {
-                System.out.println(x);
-                System.out.println(y);
-            }
-        );
+        call((x, y) -> {
+            System.out.println(x);
+            System.out.println(y);
+        });
     }
 
     public void multiParameters() {
-        call(
-            (Object x, final String y) -> {
-                System.out.println(x);
-                System.out.println(y);
-            }
-        );
+        call((Object x, final String y) -> {
+            System.out.println(x);
+            System.out.println(y);
+        });
     }
 
     public void emptyArguments() {
-        call(
-            () -> {
-                System.out.println();
-                System.out.println();
-            }
-        );
+        call(() -> {
+            System.out.println();
+            System.out.println();
+        });
     }
 
     public void onlyOneMethodInBodyWithCurlyBraces() {
-        call(
-            x -> {
-                System.out.println(x);
-            }
-        );
+        call(x -> {
+            System.out.println(x);
+        });
     }
 
     public void onlyOneMethodInBody() {
@@ -69,21 +57,17 @@ public class Lambda {
 
     public void lambdaWithLongListOfParameters() {
         final List<Integer> values = Stream.of(1, 2)
-            .map(
-                (aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter) -> {
-                    // testing method
-                    return n * 2;
-                }
-            )
+            .map((aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter) -> {
+                // testing method
+                return n * 2;
+            })
             .collect(Collectors.toList());
 
         final List<Integer> values = Stream.of(1, 2)
-            .map(
-                (aVeryLongListOfParameter, aVeryLongListOfParameter, aParameterTha) -> {
-                    // testing method
-                    return n * 2;
-                }
-            )
+            .map((aVeryLongListOfParameter, aVeryLongListOfParameter, aParameterTha) -> {
+                // testing method
+                return n * 2;
+            })
             .collect(Collectors.toList());
     }
 
@@ -222,11 +206,9 @@ public class Lambda {
     }
 
     void huggableArguments() {
-        A.b().c(
-            () -> {
-                return d;
-            }
-        );
+        A.b().c(() -> {
+            return d;
+        });
 
         aaaaaaaaaaaaaaaaaaaaaaaa(
             (bbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccccccc, dddddddddddddddddddddddd) -> eeeeeeeeeeeeeeeeeeeeeeee.ffffffffffffffffffffffff()
@@ -250,11 +232,9 @@ public class Lambda {
 
         a.b(c -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
 
-        a.b(
-            c -> {
-                eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk);
-            }
-        );
+        a.b(c -> {
+            eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk);
+        });
 
         a.b((c0, c1) -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
 

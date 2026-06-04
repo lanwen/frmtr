@@ -3115,6 +3115,10 @@ final class JavaPrinter {
             }
             return Doc.text(prefix + "()");
         }
+        Optional<Doc> huggableLambda = singleHuggableLambdaArgument(prefix, expression);
+        if (huggableLambda.isPresent()) {
+            return huggableLambda.orElseThrow();
+        }
         Doc call = Doc.concat(
                 Doc.text(prefix + "("),
                 Doc.indent(Doc.concat(
@@ -3230,6 +3234,15 @@ final class JavaPrinter {
             return "(" + compactJoin(expression.getParameters()) + ")";
         }
         return compact(expression.getParameters().get(0));
+    }
+
+    private Optional<Doc> singleHuggableLambdaArgument(String prefix, MethodCallExpr expression) {
+        if (expression.getArguments().size() != 1
+                || !(expression.getArguments().get(0) instanceof LambdaExpr lambdaExpr)
+                || !lambdaExpr.getBody().isBlockStmt()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(Doc.text(prefix + "("), lambdaExpression(lambdaExpr), Doc.text(")")));
     }
 
     private String methodReferenceSuffix(MethodReferenceExpr expression) {
@@ -3421,6 +3434,10 @@ final class JavaPrinter {
                 return Doc.concat(segmentPrefix, commentedArguments.orElseThrow());
             }
             return Doc.concat(segmentPrefix, Doc.text(prefix + "()"));
+        }
+        Optional<Doc> huggableLambda = singleHuggableLambdaArgument(prefix, expression);
+        if (huggableLambda.isPresent()) {
+            return Doc.concat(segmentPrefix, huggableLambda.orElseThrow());
         }
         return Doc.concat(segmentPrefix, Doc.group(Doc.concat(
                 Doc.text(prefix + "("),

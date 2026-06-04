@@ -1303,14 +1303,41 @@ final class JavaPrinter {
             EnumConstantDeclaration declaration,
             EnumConstantDeclaration next,
             boolean last) {
-        String arguments = declaration.getArguments().isEmpty()
-                ? ""
-                : "(" + compactJoin(declaration.getArguments()) + ")";
         Doc trailing = enumConstantTrailingComment(owner, declaration, next, last);
         return Doc.concat(
                 comments.leading(declaration),
-                Doc.text(declaration.getNameAsString() + arguments),
+                Doc.text(declaration.getNameAsString()),
+                enumConstantArguments(declaration),
                 trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing));
+    }
+
+    private Doc enumConstantArguments(EnumConstantDeclaration declaration) {
+        if (declaration.getArguments().isEmpty()) {
+            return Doc.EMPTY;
+        }
+        if (declaration.getArguments().stream().noneMatch(this::enumConstantArgumentNeedsDoc)) {
+            return Doc.text("(" + compactJoin(declaration.getArguments()) + ")");
+        }
+        String flat = declaration.getNameAsString() + "(" + compactJoin(declaration.getArguments()) + ")";
+        if (currentIndentedWidth(flat) <= options.lineWidth()) {
+            return Doc.concat(
+                    Doc.text("("),
+                    Doc.join(Doc.text(", "), declaration.getArguments().stream().map(this::expression).toList()),
+                    Doc.text(")"));
+        }
+        return Doc.concat(
+                Doc.text("("),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), declaration.getArguments().stream()
+                                .map(this::expression)
+                                .toList()))),
+                Doc.HARD_LINE,
+                Doc.text(")"));
+    }
+
+    private boolean enumConstantArgumentNeedsDoc(Expression expression) {
+        return expression instanceof LambdaExpr || expression.findFirst(LambdaExpr.class).isPresent();
     }
 
     private Doc enumConstantTrailingComment(

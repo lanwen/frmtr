@@ -156,6 +156,33 @@ final class FrmtrTest {
     }
 
     @Test
+    void formatsEnumConstantLambdaArguments() {
+        String source = """
+                enum Demo {
+                    VALUE(x -> {
+                        // testing method
+                        return n * 2;
+                    }, other),
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("VALUE(x -> {\n"
+                        + "    // testing method\n"
+                        + "    return n * 2;\n"
+                        + "  }, other),");
+    }
+
+    @Test
     void binaryOperatorPositionOptionControlsBrokenContinuationLines() {
         String source = """
                 class Demo {

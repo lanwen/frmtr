@@ -345,9 +345,33 @@ class T {
 }
 
 enum Enum {
-    VALUE(x -> { // testing method return n * 2; }),
-    VALUE((x,y) -> { // testing method return n * 2; }),
-    VALUE((aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter) -> { // testing method return n * 2; }),
-    VALUE(( aVeryLongListOfParameter, aVeryLongListOfParameter, aParameterThatS ) -> { // testing method return n * 2; }),
-    VALUE(x -> { // testing method return n * 2; }, other),
+    VALUE(x -> {
+        // testing method
+        return n * 2;
+    }),
+    VALUE((x, y) -> {
+        // testing method
+        return n * 2;
+    }),
+    VALUE(
+        (
+            aVeryLongListOfParameter,
+            aVeryLongListOfParameter,
+            aVeryLongListOfParameter,
+            aVeryLongListOfParameter,
+            aVeryLongListOfParameter,
+            aVeryLongListOfParameter
+        ) -> {
+            // testing method
+            return n * 2;
+        }
+    ),
+    VALUE((aVeryLongListOfParameter, aVeryLongListOfParameter, aParameterThatS) -> {
+        // testing method
+        return n * 2;
+    }),
+    VALUE(x -> {
+        // testing method
+        return n * 2;
+    }, other),
 }

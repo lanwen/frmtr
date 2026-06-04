@@ -4594,7 +4594,7 @@ final class JavaPrinter {
                 root = calls.removeFirst();
                 inlinePromotedRoot = true;
             }
-        } else if (force && methodCallChainPromotesFirstCall(root) && !calls.isEmpty()) {
+        } else if (methodCallChainShouldPromoteFirstCall(force, root, calls)) {
             root = calls.removeFirst();
         }
         Doc rootDoc = inlinePromotedRoot && root instanceof MethodCallExpr methodCall
@@ -4764,6 +4764,14 @@ final class JavaPrinter {
     private boolean methodCallChainPromotesFirstCall(Expression root) {
         return root.isNameExpr() && !root.asNameExpr().getNameAsString().isEmpty()
                 && Character.isUpperCase(root.asNameExpr().getNameAsString().charAt(0));
+    }
+
+    private boolean methodCallChainShouldPromoteFirstCall(boolean force, Expression root, List<MethodCallExpr> calls) {
+        if (!methodCallChainPromotesFirstCall(root) || calls.isEmpty()) {
+            return false;
+        }
+        return force || calls.getFirst().getArguments().stream()
+                .anyMatch(argument -> argument instanceof LambdaExpr lambdaExpr && lambdaExpr.getBody().isBlockStmt());
     }
 
     private Doc inlineMethodCall(MethodCallExpr expression) {

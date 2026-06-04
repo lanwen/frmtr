@@ -323,6 +323,40 @@ final class FrmtrTest {
     }
 
     @Test
+    void promotesStaticChainRootWithBlockLambdaFirstCall() {
+        String source = """
+                class Demo {
+                    Object method() {
+                        return ctor -> Try.of(a, () -> {
+                            var ng = ctor.newInstance(entity.getId(), entity.getSystemGenerated(), entity.getVersionKey());
+                            return ng;
+                        }).getOrElseThrow(ex -> new RuntimeException(ex));
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("return ctor ->\n"
+                        + "      Try.of(a, () -> {\n"
+                        + "        var ng = ctor.newInstance(\n"
+                        + "          entity.getId(),\n"
+                        + "          entity.getSystemGenerated(),\n"
+                        + "          entity.getVersionKey()\n"
+                        + "        );\n"
+                        + "        return ng;\n"
+                        + "      }).getOrElseThrow(ex -> new RuntimeException(ex));");
+    }
+
+    @Test
     void keepsBrokenLambdaParametersWithCompactMethodCallBody() {
         String source = """
                 class Demo {

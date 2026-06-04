@@ -127,13 +127,11 @@ public class Lambda {
 
     private static <T extends Group> Function<Constructor<?>, T> createInstance(Group entity) {
         return ctor ->
-            Try
-                .of(a, () -> {
-                    @SuppressWarnings("unchecked")
-                    var ng = (T) ctor.newInstance(entity.getId(), entity.getSystemGenerated(), entity.getVersionKey());
-                    return ng;
-                })
-                .getOrElseThrow(ex -> new RuntimeException(ex));
+            Try.of(a, () -> {
+                @SuppressWarnings("unchecked")
+                var ng = (T) ctor.newInstance(entity.getId(), entity.getSystemGenerated(), entity.getVersionKey());
+                return ng;
+            }).getOrElseThrow(ex -> new RuntimeException(ex));
     }
 
     void singleLambdaWithBlockLastArgument() {

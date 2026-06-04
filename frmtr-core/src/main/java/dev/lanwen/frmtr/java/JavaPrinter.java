@@ -3584,6 +3584,10 @@ final class JavaPrinter {
                 && continuationStatementWidth(compact(expression)) >= options.lineWidth()) {
             return Doc.concat(Doc.text("("), conditionalExpression(conditionalExpr, true), Doc.text(")"));
         }
+        if (expression.getInner() instanceof LambdaExpr lambdaExpr
+                && expression.getParentNode().filter(ExpressionStmt.class::isInstance).isPresent()) {
+            return parenthesizedLambdaBreak(lambdaExpr);
+        }
         if (currentIndentedWidth(compact(expression)) <= options.lineWidth()) {
             return Doc.text(compact(expression));
         }

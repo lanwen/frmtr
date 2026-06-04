@@ -283,7 +283,8 @@ public class Lambda {
     }
 
     void lambdaInParentheses() {
-        (aaaaaaaaaa -> bbbbbbbbbb.cccccccccc().dddddddddd().eeeeeeeeee().ffffffffff());
+        (aaaaaaaaaa ->
+            bbbbbbbbbb.cccccccccc().dddddddddd().eeeeeeeeee().ffffffffff());
     }
 }
 

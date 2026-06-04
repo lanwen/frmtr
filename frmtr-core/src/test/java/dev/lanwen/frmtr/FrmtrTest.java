@@ -357,6 +357,30 @@ final class FrmtrTest {
     }
 
     @Test
+    void breaksParenthesizedExpressionLambdaBody() {
+        String source = """
+                class Demo {
+                    void method() {
+                        (aaaaaaaaaa -> bbbbbbbbbb.cccccccccc().dddddddddd().eeeeeeeeee().ffffffffff());
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("(aaaaaaaaaa ->\n"
+                        + "      bbbbbbbbbb.cccccccccc().dddddddddd().eeeeeeeeee().ffffffffff());");
+    }
+
+    @Test
     void keepsBrokenLambdaParametersWithCompactMethodCallBody() {
         String source = """
                 class Demo {

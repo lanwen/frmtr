@@ -1423,6 +1423,15 @@ final class JavaPrinter {
                     && arrayAccessExpr.getName().isEnclosedExpr()) {
                 return Doc.concat(Doc.text(name + " = "), arrayAccessWithBrokenEnclosedName(arrayAccessExpr));
             }
+            if (initializer instanceof ArrayCreationExpr arrayCreationExpr) {
+                Optional<Doc> arrayCreation = variableWithBrokenArrayCreation(
+                        name,
+                        declarationPrefix + variable.getNameAsString(),
+                        arrayCreationExpr);
+                if (arrayCreation.isPresent()) {
+                    return arrayCreation.orElseThrow();
+                }
+            }
             if (initializer instanceof BinaryExpr binaryExpr) {
                 if (shouldKeepCastDivisionContinuationFlat(binaryExpr)) {
                     return Doc.concat(
@@ -1488,6 +1497,25 @@ final class JavaPrinter {
                     Doc.indent(Doc.concat(Doc.HARD_LINE, brokenInitializer(initializer))));
         }
         return Doc.concat(Doc.text(name + " = "), expression(initializer));
+    }
+
+    private Optional<Doc> variableWithBrokenArrayCreation(
+            String name,
+            String flatName,
+            ArrayCreationExpr arrayCreation) {
+        if (arrayCreation.getInitializer().isEmpty()
+                || arrayCreationTypeBreaks(arrayCreation)
+                || !arrayCreation.getAllContainedComments().isEmpty()) {
+            return Optional.empty();
+        }
+        String prefix = arrayCreationPrefix(arrayCreation);
+        ArrayInitializerExpr initializer = arrayCreation.getInitializer().orElseThrow();
+        if (currentIndentedWidth(flatName + " = " + prefix + " {") <= options.lineWidth()) {
+            return Optional.of(Doc.concat(Doc.text(name + " = " + prefix + " "), arrayInitializer(initializer, true)));
+        }
+        return Optional.of(Doc.concat(
+                Doc.text(name + " ="),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(prefix + " "), arrayInitializer(initializer, true)))));
     }
 
     private Optional<Doc> variableWithBrokenMethodCallArguments(
@@ -3429,18 +3457,29 @@ final class JavaPrinter {
         if (initializer.getValues().stream().anyMatch(value -> !compactArrayInitializerValue(value))) {
             return Optional.empty();
         }
-        String prefix = "new "
+        return compactArrayInitializer(initializer).map(initializerText -> arrayCreationPrefix(expression) + " " + initializerText);
+    }
+
+    private String arrayCreationPrefix(ArrayCreationExpr expression) {
+        return "new "
                 + compactTypeLike(expression.getElementType())
                 + compactJoinArrayLevels(expression.getLevels());
+    }
+
+    private Optional<String> compactArrayInitializer(ArrayInitializerExpr initializer) {
+        if (!initializer.getAllContainedComments().isEmpty()
+                || initializer.getValues().stream().anyMatch(value -> !compactArrayInitializerValue(value))) {
+            return Optional.empty();
+        }
         String values = initializer.getValues().stream()
                 .map(this::compact)
                 .reduce((left, right) -> left + ", " + right)
                 .orElse("");
-        return Optional.of(prefix + " {" + values + "}");
+        return Optional.of("{" + values + "}");
     }
 
     private boolean compactArrayInitializerValue(Expression value) {
-        return value.isLiteralExpr() && !value.isStringLiteralExpr();
+        return value.isLiteralExpr();
     }
 
     private Doc arrayCreationType(ArrayCreationExpr expression) {
@@ -3466,9 +3505,17 @@ final class JavaPrinter {
     }
 
     private Doc arrayInitializer(ArrayInitializerExpr expression) {
+        return arrayInitializer(expression, false);
+    }
+
+    private Doc arrayInitializer(ArrayInitializerExpr expression, boolean forceBreak) {
         List<Doc> comments = JavaPrinter.this.comments.orphanCommentStatements(expression);
         if (expression.getValues().isEmpty() && comments.isEmpty()) {
             return Doc.text("{}");
+        }
+        Optional<String> compact = compactArrayInitializer(expression);
+        if (!forceBreak && compact.isPresent() && currentIndentedWidth(compact.orElseThrow()) <= options.lineWidth()) {
+            return Doc.text(compact.orElseThrow());
         }
         List<Doc> values = new ArrayList<>(comments);
         for (int i = 0; i < expression.getValues().size(); i++) {

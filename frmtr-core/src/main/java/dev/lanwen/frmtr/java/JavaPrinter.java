@@ -2889,6 +2889,13 @@ final class JavaPrinter {
                             Doc.text(" " + assignExpr.getOperator().asString()),
                             Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines(assignExpr.getValue(), true))));
                 }
+                if (assignExpr.getValue() instanceof ObjectCreationExpr objectCreationExpr
+                        && objectCreationExpr.getAnonymousClassBody().isEmpty()) {
+                    return Doc.concat(
+                            expression(assignExpr.getTarget()),
+                            Doc.text(" " + assignExpr.getOperator().asString() + " "),
+                            objectCreation(objectCreationExpr, MethodCallMode.BREAK));
+                }
             }
             return Doc.concat(
                     expression(assignExpr.getTarget()),

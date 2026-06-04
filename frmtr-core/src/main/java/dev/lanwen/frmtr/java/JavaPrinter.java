@@ -334,14 +334,23 @@ final class JavaPrinter {
         List<Doc> docs = new ArrayList<>();
         docs.add(comments.leading(declaration));
         docs.add(annotations(declaration));
-        docs.add(Doc.text(modifiers(declaration)));
+        String prefix = modifiers(declaration);
+        docs.add(Doc.text(prefix));
         if (!declaration.getTypeParameters().isEmpty()) {
-            docs.add(Doc.text("<" + compactJoin(declaration.getTypeParameters()) + "> "));
+            String typeParameters = "<" + compactJoin(declaration.getTypeParameters()) + "> ";
+            prefix += typeParameters;
+            docs.add(Doc.text(typeParameters));
         }
-        docs.add(Doc.text(compact(declaration.getType()) + " " + declaration.getNameAsString()));
+        String signature = compact(declaration.getType()) + " " + declaration.getNameAsString();
+        prefix += signature;
+        docs.add(Doc.text(signature));
         docs.add(parameters(declaration.getParameters()));
         if (!declaration.getThrownExceptions().isEmpty()) {
-            docs.add(Doc.text(" throws " + compactJoin(declaration.getThrownExceptions())));
+            docs.add(throwsClause(
+                    prefix,
+                    declaration.getParameters(),
+                    declaration.getThrownExceptions(),
+                    declaration.getBody().isPresent() ? " {" : ";"));
         }
         docs.add(declaration.getBody().map(body -> Doc.concat(Doc.text(" "), block(body))).orElse(Doc.text(";")));
         return Doc.concat(docs);
@@ -351,18 +360,45 @@ final class JavaPrinter {
         List<Doc> docs = new ArrayList<>();
         docs.add(comments.leading(declaration));
         docs.add(annotations(declaration));
-        docs.add(Doc.text(modifiers(declaration)));
+        String prefix = modifiers(declaration);
+        docs.add(Doc.text(prefix));
         if (!declaration.getTypeParameters().isEmpty()) {
-            docs.add(Doc.text("<" + compactJoin(declaration.getTypeParameters()) + "> "));
+            String typeParameters = "<" + compactJoin(declaration.getTypeParameters()) + "> ";
+            prefix += typeParameters;
+            docs.add(Doc.text(typeParameters));
         }
+        prefix += declaration.getNameAsString();
         docs.add(Doc.text(declaration.getNameAsString()));
         docs.add(parameters(declaration.getParameters()));
         if (!declaration.getThrownExceptions().isEmpty()) {
-            docs.add(Doc.text(" throws " + compactJoin(declaration.getThrownExceptions())));
+            docs.add(throwsClause(prefix, declaration.getParameters(), declaration.getThrownExceptions(), " {"));
         }
         docs.add(Doc.text(" "));
         docs.add(block(declaration.getBody()));
         return Doc.concat(docs);
+    }
+
+    private Doc throwsClause(
+            String prefix,
+            NodeList<Parameter> parameters,
+            NodeList<? extends Node> thrownExceptions,
+            String suffix) {
+        String exceptions = compactJoin(thrownExceptions);
+        String flatParameters = "(" + parameters.stream().map(this::compact).reduce((left, right) -> left + ", " + right).orElse("") + ")";
+        String flatSignature = prefix + flatParameters;
+        String throwsText = "throws " + exceptions;
+        boolean parametersBreak = currentIndentedWidth(flatSignature) > options.lineWidth();
+        int sameLineWidth = parametersBreak
+                ? currentIndentedWidth(") " + throwsText + suffix)
+                : currentIndentedWidth(flatSignature + " " + throwsText + suffix);
+        if (sameLineWidth <= options.lineWidth()) {
+            return Doc.text(" " + throwsText);
+        }
+        return Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(throwsText)));
+    }
+
+    private int currentIndentedWidth(String text) {
+        return options.indentUnit().length() + text.length();
     }
 
     private Doc initializer(InitializerDeclaration declaration) {

@@ -68,6 +68,7 @@ final class PrettierJavaFixtureTest {
             "require-pragma/prettier-pragma",
             "synchronized",
             "template-expression",
+            "throws",
             "types",
             "while",
             "yield-statement");

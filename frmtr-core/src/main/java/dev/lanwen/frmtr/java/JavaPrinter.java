@@ -1585,9 +1585,33 @@ final class JavaPrinter {
         if (currentIndentedWidth(flatName + " = " + prefix + " {") <= options.lineWidth()) {
             return Optional.of(Doc.concat(Doc.text(name + " = " + prefix + " "), arrayInitializer(initializer, true)));
         }
+        Optional<String> compactContinuation = compactObjectCreationArrayInitializer(initializer);
+        if (compactContinuation.isPresent()
+                && currentIndentedWidth(prefix + " " + compactContinuation.orElseThrow()) <= options.lineWidth()) {
+            return Optional.of(Doc.concat(
+                    Doc.text(name + " ="),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(prefix + " " + compactContinuation.orElseThrow())))));
+        }
         return Optional.of(Doc.concat(
                 Doc.text(name + " ="),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(prefix + " "), arrayInitializer(initializer, true)))));
+    }
+
+    private Optional<String> compactObjectCreationArrayInitializer(ArrayInitializerExpr initializer) {
+        if (!initializer.getAllContainedComments().isEmpty()
+                || initializer.getValues().isEmpty()
+                || initializer.getValues().stream().anyMatch(value -> !compactObjectCreationArrayValue(value))) {
+            return Optional.empty();
+        }
+        return Optional.of("{" + compactJoin(initializer.getValues()) + "}");
+    }
+
+    private boolean compactObjectCreationArrayValue(Expression value) {
+        return value instanceof ObjectCreationExpr objectCreation
+                && objectCreation.getScope().isEmpty()
+                && objectCreation.getTypeArguments().isEmpty()
+                && objectCreation.getArguments().isEmpty()
+                && objectCreation.getAnonymousClassBody().isEmpty();
     }
 
     private Optional<Doc> variableWithBrokenObjectCreation(

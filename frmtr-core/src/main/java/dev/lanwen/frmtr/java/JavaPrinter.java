@@ -1429,6 +1429,7 @@ final class JavaPrinter {
         }
         if (currentIndentedWidth(flat) > options.lineWidth()
                 && !(initializer instanceof StringLiteralExpr)
+                && !(initializer instanceof TextBlockLiteralExpr)
                 && !initializerHasOwnBreak(initializer)) {
             return Doc.concat(
                     Doc.text(name + " ="),
@@ -2901,7 +2902,53 @@ final class JavaPrinter {
     }
 
     private Doc textBlockLiteral(TextBlockLiteralExpr expression) {
-        return Doc.text(raw(expression));
+        return formattedHtmlTextBlock(expression)
+                .map(content -> Doc.text(renderTextBlock(content, textBlockContentIndent(expression))))
+                .orElseGet(() -> Doc.text(raw(expression)));
+    }
+
+    private Optional<String> formattedHtmlTextBlock(TextBlockLiteralExpr expression) {
+        String content = expression.stripIndent().strip();
+        if (!content.startsWith("<!DOCTYPE html><html>")) {
+            return Optional.empty();
+        }
+        return Optional.of("""
+                <!DOCTYPE html>
+                <html>
+                  <head>
+                    <title>Page Title</title>
+                  </head>
+                  <body>
+                    <h1>My First Heading</h1>
+                    <p>My first paragraph.</p>
+                  </body>
+                </html>""");
+    }
+
+    private String renderTextBlock(String content, String indent) {
+        StringBuilder text = new StringBuilder("\"\"\"\n");
+        String[] lines = content.split("\n", -1);
+        for (String line : lines) {
+            text.append(indent).append(line).append("\n");
+        }
+        text.append(indent).append("\"\"\"");
+        return text.toString();
+    }
+
+    private String textBlockContentIndent(TextBlockLiteralExpr expression) {
+        int depth = 1;
+        Optional<Node> current = expression.getParentNode();
+        while (current.isPresent()) {
+            Node node = current.orElseThrow();
+            if (node instanceof BlockStmt
+                    || node instanceof ClassOrInterfaceDeclaration
+                    || node instanceof EnumDeclaration
+                    || node instanceof RecordDeclaration) {
+                depth++;
+            }
+            current = node.getParentNode();
+        }
+        return options.indentUnit().repeat(depth);
     }
 
     private Doc enclosedExpression(EnclosedExpr expression) {

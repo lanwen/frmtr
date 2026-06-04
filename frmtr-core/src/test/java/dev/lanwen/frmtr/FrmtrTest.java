@@ -374,6 +374,67 @@ final class FrmtrTest {
     }
 
     @Test
+    void keepsTextBlockInitializerOpeningAfterEquals() {
+        String source = """
+                class Demo {
+                    void method() {
+                        String html = \"""
+                                  <html>012345678901234567890123456789012345678901234567890123456789</html>
+                                  \""";
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted).contains("String html = \"\"\"");
+    }
+
+    @Test
+    void formatsCompactHtmlTextBlock() {
+        String source = """
+                class Demo {
+                    void method() {
+                        String html = \"""
+                                  <!DOCTYPE html><html><head><title>Page Title</title></head><body><h1>My First Heading</h1><p>My first paragraph.</p></body></html>
+                                  \""";
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("""
+                        String html = \"\"\"
+                              <!DOCTYPE html>
+                              <html>
+                                <head>
+                                  <title>Page Title</title>
+                                </head>
+                                <body>
+                                  <h1>My First Heading</h1>
+                                  <p>My first paragraph.</p>
+                                </body>
+                              </html>
+                              \"\"\";""");
+    }
+
+    @Test
     void breaksLongBinaryConditionalCondition() {
         String source = """
                 class Demo {

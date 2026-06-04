@@ -15,7 +15,9 @@ class D {
     /* gamma */
 }
 
-class E {}
+class E {
+    // alpha
+}
 
 class F {
     /* alpha */
@@ -33,8 +35,10 @@ class H {
 
 class I {
 
+    // alpha
     // beta
     int i;
+
     // one
     // two
     /* three */
@@ -44,41 +48,71 @@ class J {
 
     void one() {}
 
-    void two() {}
+    void two() // alpha
+    {}
 
-    void three() {}
+    void three() // alpha
+    // beta
+    {}
 
-    void four() {}
+    void four() // alpha
+    // beta
+    /* gamma */
+    {}
 
-    void five() {}
+    void five() {} // alpha
 
-    void fiveBis() {
-        int i;
+    void fiveBis() { // alpha
+      int i;
     }
 
-    void six() {}
+    void six /* alpha */() {}
 
-    void seven() {}
+    void seven() /* alpha */
+    /* beta */
+    {}
 
-    void eight() {}
+    void eight() /* alpha */
+    // beta
+    {}
 
-    void nine() {}
+    void nine() /* alpha */
+    {}
 
     void one(String one) {}
 
-    void two(String one) {}
+    void two(String one) // alpha
+    {}
 
-    void three(String one) {}
+    void three(String one) // alpha
+    // beta
+    {}
 
-    void four(String one) {}
+    void four(
+      // alpha
+      String one
+    ) // beta
+    /* gamma */
+    {}
 
-    void five(String one) {}
+    void five(
+      String one // alpha
+    ) {}
 
-    void six(String one) {}
+    void six(String one /* alpha */) {}
 
-    void seven(String one) {}
+    void seven(
+      /* alpha */
+      String one
+    ) /* beta */
+    {}
 
-    void eight(String one) {}
+    void eight(
+      /* alpha */
+      String one
+    ) // beta
+    {}
 
-    void nine(String one) {}
+    void nine(String one) /* alpha */
+    {}
 }

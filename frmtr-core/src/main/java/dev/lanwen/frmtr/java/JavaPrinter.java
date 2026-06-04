@@ -1376,6 +1376,12 @@ final class JavaPrinter {
     }
 
     private Doc method(MethodDeclaration declaration) {
+        String raw = raw(declaration);
+        if (declaration.getBody().isPresent()
+                && hasCommentedMethodSignature(raw)
+                && canFormatCommentedMethodSignatureFromRaw(declaration)) {
+            return Doc.concat(comments.leading(declaration), Doc.text(indentEmbeddedLines(formatCommentedMethod(raw))));
+        }
         List<Doc> docs = new ArrayList<>();
         docs.add(comments.leading(declaration));
         docs.add(declarationAnnotations(declaration));
@@ -1402,6 +1408,159 @@ final class JavaPrinter {
         }
         docs.add(declaration.getBody().map(body -> Doc.concat(Doc.text(" "), block(body))).orElse(Doc.text(";")));
         return Doc.concat(docs);
+    }
+
+    private boolean hasCommentedMethodSignature(String rawMethod) {
+        int bodyStart = rawMethod.indexOf('{');
+        if (bodyStart < 0) {
+            return false;
+        }
+        String signature = rawMethod.substring(0, bodyStart);
+        return signature.contains("//") || signature.contains("/*");
+    }
+
+    private boolean canFormatCommentedMethodSignatureFromRaw(MethodDeclaration declaration) {
+        return declaration.getBody().map(body -> body.getStatements().size() <= 1).orElse(false);
+    }
+
+    private String formatCommentedMethod(String rawMethod) {
+        String method = rawMethod.strip();
+        int bodyStart = method.indexOf('{');
+        int bodyEnd = method.lastIndexOf('}');
+        if (bodyStart < 0 || bodyEnd < bodyStart) {
+            return method;
+        }
+        String signature = method.substring(0, bodyStart).stripTrailing();
+        String body = method.substring(bodyStart + 1, bodyEnd).strip();
+        int open = signature.indexOf('(');
+        int close = signature.lastIndexOf(')');
+        if (open < 0 || close < open) {
+            return method;
+        }
+        String prefix = formatCommentedTokenLine(moduleTokens(signature.substring(0, open)));
+        String parameters = signature.substring(open + 1, close);
+        List<String> parameterLines = nonBlankLines(parameters);
+        String inlineOpeningLineComment = inlineOpeningLineComment(parameters);
+        if (parameterLines.isEmpty()) {
+            return formatMethodWithBody(prefix + "()", List.of(), inlineOpeningLineComment, body);
+        }
+        if (parameterLines.size() == 1 && isCommentToken(parameterLines.getFirst()) && parameterLines.getFirst().startsWith("/*")
+                && !parameters.contains("\n")) {
+            return formatMethodWithBody(prefix + " " + parameterLines.getFirst() + "()", List.of(), "", body);
+        }
+        List<String> leadingComments = new ArrayList<>();
+        int cursor = 0;
+        while (cursor < parameterLines.size() && isCommentOnlyLine(parameterLines.get(cursor))) {
+            leadingComments.add(parameterLines.get(cursor++));
+        }
+        List<String> trailingComments = new ArrayList<>();
+        int end = parameterLines.size();
+        while (end > cursor && isCommentOnlyLine(parameterLines.get(end - 1))) {
+            trailingComments.add(0, parameterLines.get(--end));
+        }
+        List<String> parameterParts = parameterLines.subList(cursor, end);
+        if (parameterParts.isEmpty()) {
+            if (!inlineOpeningLineComment.isEmpty()) {
+                return formatMethodWithInlineOpeningComment(prefix + "()", inlineOpeningLineComment, body);
+            }
+            return formatMethodWithBody(prefix + "()", parameterLines, inlineOpeningLineComment, body);
+        }
+        String parameter = formatCommentedTokenLine(moduleTokens(String.join(" ", parameterParts)));
+        if (leadingComments.isEmpty() && !containsLineComment(parameter)) {
+            List<String> suffixComments = new ArrayList<>(trailingComments);
+            return formatMethodWithBody(prefix + "(" + parameter + ")", suffixComments, "", body);
+        }
+        List<String> lines = new ArrayList<>();
+        lines.add(prefix + "(");
+        leadingComments.forEach(comment -> lines.add("  " + comment));
+        lines.add("  " + parameter);
+        lines.add(")");
+        return formatMethodWithBody(String.join("\n", lines), trailingComments, "", body);
+    }
+
+    private String formatMethodWithBody(String signature, List<String> suffixComments, String inlineOpeningComment, String body) {
+        List<String> lines = new ArrayList<>();
+        if (suffixComments.isEmpty()) {
+            if (body.isEmpty()) {
+                lines.add(signature + " {}");
+            } else if (inlineOpeningComment.isEmpty()) {
+                lines.add(signature + " {");
+                lines.addAll(formatMethodBodyLines(body));
+                lines.add("}");
+            } else {
+                lines.add(signature + " { " + inlineOpeningComment);
+                lines.addAll(formatMethodBodyLines(body));
+                lines.add("}");
+            }
+            return String.join("\n", lines);
+        }
+        lines.add(signature + " " + suffixComments.getFirst());
+        lines.addAll(suffixComments.subList(1, suffixComments.size()));
+        if (body.isEmpty()) {
+            lines.add("{}");
+        } else {
+            lines.add("{");
+            lines.addAll(formatMethodBodyLines(body));
+            lines.add("}");
+        }
+        return String.join("\n", lines);
+    }
+
+    private String formatMethodWithInlineOpeningComment(String signature, String comment, String body) {
+        if (body.isEmpty()) {
+            return signature + " {} " + comment;
+        }
+        List<String> lines = new ArrayList<>();
+        lines.add(signature + " { " + comment);
+        lines.addAll(formatMethodBodyLines(body));
+        lines.add("}");
+        return String.join("\n", lines);
+    }
+
+    private List<String> formatMethodBodyLines(String body) {
+        return body.lines()
+                .map(String::strip)
+                .filter(line -> !line.isEmpty())
+                .map(line -> "  " + line)
+                .toList();
+    }
+
+    private List<String> nonBlankLines(String text) {
+        return text.lines().map(String::strip).filter(line -> !line.isEmpty()).toList();
+    }
+
+    private String inlineOpeningLineComment(String parameters) {
+        String stripped = parameters.stripLeading();
+        if (!stripped.startsWith("//")) {
+            return "";
+        }
+        int commentStart = parameters.indexOf("//");
+        if (parameters.substring(0, commentStart).contains("\n")) {
+            return "";
+        }
+        int commentEnd = stripped.indexOf('\n');
+        return commentEnd < 0 ? stripped.stripTrailing() : stripped.substring(0, commentEnd).stripTrailing();
+    }
+
+    private boolean isCommentOnlyLine(String line) {
+        return line.startsWith("//") || line.startsWith("/*") && line.endsWith("*/");
+    }
+
+    private boolean containsLineComment(String line) {
+        return line.contains("//");
+    }
+
+    private String indentEmbeddedLines(String text) {
+        String[] lines = text.split("\n", -1);
+        if (lines.length <= 1) {
+            return text;
+        }
+        List<String> indented = new ArrayList<>();
+        indented.add(lines[0]);
+        for (int i = 1; i < lines.length; i++) {
+            indented.add(options.indentUnit() + lines[i]);
+        }
+        return String.join("\n", indented);
     }
 
     private Doc constructor(ConstructorDeclaration declaration) {
@@ -1481,22 +1640,49 @@ final class JavaPrinter {
                 block(declaration.getBody()));
     }
 
+    private Doc openingBraceTrailingLineComment(Node node) {
+        String raw = raw(node);
+        int openingBrace = raw.indexOf('{');
+        if (openingBrace < 0) {
+            return Doc.EMPTY;
+        }
+        int commentStart = raw.indexOf("//", openingBrace);
+        if (commentStart < 0 || raw.substring(openingBrace, commentStart).contains("\n")) {
+            return Doc.EMPTY;
+        }
+        int commentEnd = raw.indexOf('\n', commentStart);
+        String comment = commentEnd < 0 ? raw.substring(commentStart) : raw.substring(commentStart, commentEnd);
+        return Doc.text(comment.stripTrailing());
+    }
+
     private Doc memberBlock(NodeList<BodyDeclaration<?>> members, Node owner) {
         List<Doc> memberDocs = new ArrayList<>(members.stream().map(this::body).toList());
+        Doc openingBraceTrailingComment = openingBraceTrailingLineComment(owner);
         List<Doc> orphanComments = comments.orphanCommentStatements(owner);
         if (memberDocs.isEmpty()) {
-            if (orphanComments.isEmpty()) {
+            if (openingBraceTrailingComment == Doc.EMPTY && orphanComments.isEmpty()) {
                 return Doc.text("{}");
             }
+            List<Doc> comments = new ArrayList<>();
+            if (openingBraceTrailingComment != Doc.EMPTY) {
+                comments.add(openingBraceTrailingComment);
+            }
+            comments.addAll(orphanComments);
             return Doc.concat(
                     Doc.text("{"),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, orphanComments))),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, comments))),
                     Doc.HARD_LINE,
                     Doc.text("}"));
         }
         Doc contents = memberContents(owner, members, memberDocs);
+        if (openingBraceTrailingComment != Doc.EMPTY) {
+            contents = Doc.concat(openingBraceTrailingComment, Doc.HARD_LINE, contents);
+        }
         if (!orphanComments.isEmpty()) {
-            contents = Doc.concat(contents, Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, orphanComments));
+            Doc separator = hasBlankLineBeforeFirstOrphanComment(owner, members)
+                    ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE)
+                    : Doc.HARD_LINE;
+            contents = Doc.concat(contents, separator, Doc.join(Doc.HARD_LINE, orphanComments));
         }
         return Doc.concat(
                 Doc.text("{"),
@@ -1511,6 +1697,24 @@ final class JavaPrinter {
             return Doc.HARD_LINE;
         }
         return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
+    }
+
+    private boolean hasBlankLineBeforeFirstOrphanComment(Node owner, NodeList<BodyDeclaration<?>> members) {
+        if (members.isEmpty() || owner.getOrphanComments().isEmpty()) {
+            return false;
+        }
+        Optional<Integer> lastMemberEnd = members.stream()
+                .map(BodyDeclaration::getRange)
+                .flatMap(Optional::stream)
+                .map(range -> range.end.line)
+                .max(Integer::compareTo);
+        Optional<Integer> firstOrphanStart = owner.getOrphanComments().stream()
+                .map(Comment::getRange)
+                .flatMap(Optional::stream)
+                .map(range -> range.begin.line)
+                .min(Integer::compareTo);
+        return lastMemberEnd.flatMap(memberEnd -> firstOrphanStart.map(orphanStart -> orphanStart > memberEnd + 1))
+                .orElse(false);
     }
 
     private Doc memberContents(Node owner, NodeList<BodyDeclaration<?>> members, List<Doc> memberDocs) {

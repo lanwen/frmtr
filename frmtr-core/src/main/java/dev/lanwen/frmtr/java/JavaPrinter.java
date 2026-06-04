@@ -103,9 +103,19 @@ final class JavaPrinter {
     Doc print(CompilationUnit unit) {
         List<Doc> parts = new ArrayList<>();
         boolean hasStructuralParts = false;
+        Doc sourceLeadingComments = sourceLeadingCommentsBeforePackage(unit);
+        if (sourceLeadingComments != Doc.EMPTY) {
+            parts.add(sourceLeadingComments);
+            parts.add(Doc.HARD_LINE);
+            parts.add(Doc.HARD_LINE);
+        }
         int firstTypeLine = firstTypeLine(unit);
         Doc orphanComments = comments.orphanComments(unit, comment -> commentBeginLine(comment) < firstTypeLine);
         if (orphanComments != Doc.EMPTY) {
+            if (!parts.isEmpty()) {
+                parts.add(Doc.HARD_LINE);
+                parts.add(Doc.HARD_LINE);
+            }
             parts.add(orphanComments);
         }
         unit.getPackageDeclaration().ifPresent(packageDeclaration -> {
@@ -147,6 +157,23 @@ final class JavaPrinter {
             parts.add(trailingOrphanComments);
         }
         return Doc.concat(parts);
+    }
+
+    private Doc sourceLeadingCommentsBeforePackage(CompilationUnit unit) {
+        if (unit.getPackageDeclaration().isEmpty()) {
+            return Doc.EMPTY;
+        }
+        String packagePrefix = "package " + unit.getPackageDeclaration().orElseThrow().getNameAsString();
+        String rawUnit = unit.getTokenRange().map(Object::toString).orElse("");
+        int packageStart = rawUnit.indexOf(packagePrefix);
+        if (packageStart <= 0) {
+            return Doc.EMPTY;
+        }
+        String leading = rawUnit.substring(0, packageStart).stripTrailing();
+        if (!leading.startsWith("/*") && !leading.startsWith("//")) {
+            return Doc.EMPTY;
+        }
+        return Doc.text(options.preserveRawTrailingWhitespace() ? leading : stripTrailingHorizontalWhitespace(leading));
     }
 
     private List<Doc> topLevelDeclarations(CompilationUnit unit) {

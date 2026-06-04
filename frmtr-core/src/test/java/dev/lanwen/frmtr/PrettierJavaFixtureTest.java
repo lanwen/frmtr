@@ -41,6 +41,7 @@ final class PrettierJavaFixtureTest {
     private static final Set<String> PRETTIER_COMPATIBLE_FIXTURES = Set.of(
             "args",
             "arrays",
+            "annotation_interface_declaration",
             "assert",
             "char_literal",
             "comments/edge",
@@ -62,6 +63,7 @@ final class PrettierJavaFixtureTest {
             "if",
             "instantiation",
             "method_reference",
+            "marker_annotations",
             "modules",
             "package_and_imports/classWithMixedImports",
             "package_and_imports/classWithMixedCaseImports",

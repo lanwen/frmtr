@@ -2962,7 +2962,7 @@ final class JavaPrinter {
             return Doc.text(flat);
         }
         return Doc.concat(
-                expression(expression.getCondition()),
+                conditionalCondition(expression.getCondition()),
                 Doc.indent(Doc.concat(
                         Doc.HARD_LINE,
                         Doc.text("? "),
@@ -2970,6 +2970,14 @@ final class JavaPrinter {
                         Doc.HARD_LINE,
                         Doc.text(": "),
                         expression(expression.getElseExpr()))));
+    }
+
+    private Doc conditionalCondition(Expression condition) {
+        if (condition instanceof BinaryExpr
+                && currentIndentedWidth(compact(condition)) > options.lineWidth()) {
+            return binaryExpressionLines(condition, true);
+        }
+        return expression(condition);
     }
 
     private Doc arrayAccess(ArrayAccessExpr expression) {

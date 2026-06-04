@@ -343,6 +343,36 @@ final class FrmtrTest {
     }
 
     @Test
+    void breaksLongBinaryConditionalCondition() {
+        String source = """
+                class Demo {
+                    void method() {
+                        value = aaaaaaaaaa && bbbbbbbbbb && cccccccccc && dddddddddd && eeeeeeeeee && ffffffffff ? gggggggggg : hhhhhhhhhh;
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("value = aaaaaaaaaa &&\n"
+                        + "    bbbbbbbbbb &&\n"
+                        + "    cccccccccc &&\n"
+                        + "    dddddddddd &&\n"
+                        + "    eeeeeeeeee &&\n"
+                        + "    ffffffffff\n"
+                        + "      ? gggggggggg\n"
+                        + "      : hhhhhhhhhh;");
+    }
+
+    @Test
     void preservesCommentsInBrokenBinaryContinuationLines() {
         String source = """
                 class Demo {

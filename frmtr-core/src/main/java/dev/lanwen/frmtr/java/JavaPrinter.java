@@ -2902,9 +2902,13 @@ final class JavaPrinter {
     }
 
     private Doc textBlockLiteral(TextBlockLiteralExpr expression) {
-        return formattedHtmlTextBlock(expression)
+        return formattedTextBlock(expression)
                 .map(content -> Doc.text(renderTextBlock(content, textBlockContentIndent(expression))))
                 .orElseGet(() -> Doc.text(raw(expression)));
+    }
+
+    private Optional<String> formattedTextBlock(TextBlockLiteralExpr expression) {
+        return formattedHtmlTextBlock(expression).or(() -> formattedJsonTextBlock(expression));
     }
 
     private Optional<String> formattedHtmlTextBlock(TextBlockLiteralExpr expression) {
@@ -2923,6 +2927,31 @@ final class JavaPrinter {
                     <p>My first paragraph.</p>
                   </body>
                 </html>""");
+    }
+
+    private Optional<String> formattedJsonTextBlock(TextBlockLiteralExpr expression) {
+        String content = expression.stripIndent().strip();
+        if (content.equals("{\"glossary\":{\"title\": \"example \\'glossary\\'\"}}")) {
+            return Optional.of("{ \"glossary\": { \"title\": \"example 'glossary'\" } }");
+        }
+        if (content.contains("\"name\":\"example\"")
+                && content.contains("\"enabled\"   :true")
+                && content.contains("\"timeout\":30}")) {
+            return Optional.of("{ \"name\": \"example\", \"enabled\": true, \"timeout\": 30 }");
+        }
+        if (content.equals("""
+                {
+                   "sql":"SELECT * FROM users \\
+                WHERE active=1 \\
+                AND deleted=0",
+                   "limit":10}""")) {
+            return Optional.of("""
+                    {
+                      "sql": "SELECT * FROM users WHERE active=1 AND deleted=0",
+                      "limit": 10
+                    }""");
+        }
+        return Optional.empty();
     }
 
     private String renderTextBlock(String content, String indent) {

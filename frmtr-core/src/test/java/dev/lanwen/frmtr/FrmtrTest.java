@@ -435,6 +435,49 @@ final class FrmtrTest {
     }
 
     @Test
+    void formatsCompactJsonTextBlocks() {
+        String source = """
+                class Demo {
+                    void method() {
+                        String someJson = \"""
+                            {"glossary":{"title": "example \\'glossary\\'"}}
+                            \""";
+                        String config = \"""
+                              { \\t "name":"example",
+                          "enabled"   :true,
+                                "timeout":30}
+                            \""";
+                        String query = \"""
+                             {
+                           "sql":"SELECT * FROM users \\
+                        WHERE active=1 \\
+                        AND deleted=0",
+                           "limit":10}
+                            \""";
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("{ \"glossary\": { \"title\": \"example 'glossary'\" } }")
+                .contains("{ \"name\": \"example\", \"enabled\": true, \"timeout\": 30 }")
+                .contains("""
+                        {
+                                "sql": "SELECT * FROM users WHERE active=1 AND deleted=0",
+                                "limit": 10
+                              }""");
+    }
+
+    @Test
     void breaksLongBinaryConditionalCondition() {
         String source = """
                 class Demo {

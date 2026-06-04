@@ -70,24 +70,21 @@ aoeu
     void json() {
         // language = json
         String someJson = """
-    {"glossary":{"title": "example \'glossary\'"}}
-    """;
+            { "glossary": { "title": "example 'glossary'" } }
+            """;
 
         // language=json
         String config = """
-          { \t "name":"example",
-      "enabled"   :true,
-            "timeout":30}
-    """;
+            { "name": "example", "enabled": true, "timeout": 30 }
+            """;
 
         /* language = JSON */
         String query = """
-         {
-       "sql":"SELECT * FROM users \
-    WHERE active=1 \
-    AND deleted=0",
-       "limit":10}
-    """;
+            {
+              "sql": "SELECT * FROM users WHERE active=1 AND deleted=0",
+              "limit": 10
+            }
+            """;
     }
 
     void java() {

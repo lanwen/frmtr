@@ -69,10 +69,10 @@ public class PrettierTest {
                 continue;
                 break;
                 return;
-            } while (false);
-        synchronized (this) {
-            while (true) /*stop the program*/
-            throw new RuntimeException();
+            } while (/*at least one iteration !*/ false);
+        synchronized (/*declares synchronizd statement*/ this) {
+            while (/*infinite*/ true)
+                /*stop the program*/ throw new RuntimeException();
         }
     }
 }

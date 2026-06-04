@@ -3399,7 +3399,33 @@ final class JavaPrinter {
             return Doc.text("while (" + emptyBodyHeaderExpression(statement.getCondition(), statement.getBody()) + ");"
                     + trailingEmptyBodyBlockComment(statement));
         }
+        Optional<Doc> commentedBody = commentedLoopBody(statement, statement.getBody());
+        if (commentedBody.isPresent()) {
+            return Doc.concat(Doc.text("while "), controlCondition(statement.getCondition()), commentedBody.orElseThrow());
+        }
         return Doc.concat(Doc.text("while "), controlCondition(statement.getCondition()), Doc.text(" "), nestedStatement(statement.getBody()));
+    }
+
+    private Optional<Doc> commentedLoopBody(Node loop, Statement body) {
+        if (body.isBlockStmt()) {
+            return Optional.empty();
+        }
+        Doc comment = comments.ownComment(body, BlockComment.class::isInstance);
+        if (comment == Doc.EMPTY) {
+            return Optional.empty();
+        }
+        Doc commentedStatement = Doc.concat(comment, Doc.text(" "), statement(body));
+        if (sameBeginLine(loop, body)) {
+            return Optional.of(Doc.concat(Doc.text(" "), commentedStatement));
+        }
+        return Optional.of(Doc.indent(Doc.concat(Doc.HARD_LINE, commentedStatement)));
+    }
+
+    private boolean sameBeginLine(Node left, Node right) {
+        return left.getRange()
+                .flatMap(leftRange -> right.getRange()
+                        .map(rightRange -> leftRange.begin.line == rightRange.begin.line))
+                .orElse(false);
     }
 
     private Doc doStatement(DoStmt statement) {
@@ -3417,7 +3443,7 @@ final class JavaPrinter {
     }
 
     private Doc controlCondition(Expression expression) {
-        String flat = compact(expression);
+        String flat = compactWithOwnBlockComment(expression);
         if (currentIndentedWidth("(" + flat + ") {}") <= options.lineWidth()) {
             return Doc.text("(" + flat + ")");
         }
@@ -3426,6 +3452,19 @@ final class JavaPrinter {
                 Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines(expression))),
                 Doc.HARD_LINE,
                 Doc.text(")"));
+    }
+
+    private String compactWithOwnBlockComment(Expression expression) {
+        Optional<Comment> ownComment = expression.getComment().filter(BlockComment.class::isInstance);
+        if (ownComment.isEmpty()) {
+            return compact(expression);
+        }
+        Comment comment = ownComment.orElseThrow();
+        String commentText = commentText(comments.comment(comment));
+        String expressionText = compactWithoutOwnComment(expression);
+        return conditionCommentStartsBeforeExpression(expression, comment)
+                ? commentText + " " + expressionText
+                : expressionText + " " + commentText;
     }
 
     private Doc loopWithEmptyBody(String header, Node statement) {

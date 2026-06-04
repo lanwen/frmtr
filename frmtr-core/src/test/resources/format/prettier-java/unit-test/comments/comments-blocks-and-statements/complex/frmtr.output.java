@@ -29,7 +29,7 @@ public class PrettierTest {
     }
 
     private synchronized void myFunction(int arg1, int arg2) {
-        for (int i = 0; i</* = */arg1; i++)
+        for (int i = 0; i < arg1; i++)
             do /*dodododo*/
             {
                 //do whiles

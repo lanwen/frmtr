@@ -610,6 +610,10 @@ final class JavaPrinter {
         return options.indentUnit().length() + text.length();
     }
 
+    private int blockStatementWidth(String text) {
+        return (options.indentUnit().length() * 2) + text.length();
+    }
+
     private Doc initializer(InitializerDeclaration declaration) {
         return Doc.concat(
                 comments.leading(declaration),
@@ -630,7 +634,7 @@ final class JavaPrinter {
                     Doc.HARD_LINE,
                     Doc.text("}"));
         }
-        Doc contents = memberContents(members, memberDocs);
+        Doc contents = memberContents(owner, members, memberDocs);
         if (!orphanComments.isEmpty()) {
             contents = Doc.concat(contents, Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, orphanComments));
         }
@@ -648,18 +652,28 @@ final class JavaPrinter {
         return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
     }
 
-    private Doc memberContents(NodeList<BodyDeclaration<?>> members, List<Doc> memberDocs) {
+    private Doc memberContents(Node owner, NodeList<BodyDeclaration<?>> members, List<Doc> memberDocs) {
         List<Doc> contents = new ArrayList<>();
         for (int i = 0; i < memberDocs.size(); i++) {
             if (i > 0) {
-                contents.add(memberSeparator(members.get(i - 1), members.get(i)));
+                contents.add(memberSeparator(owner, members.get(i - 1), members.get(i)));
             }
             contents.add(memberDocs.get(i));
         }
         return Doc.concat(contents);
     }
 
-    private Doc memberSeparator(BodyDeclaration<?> previous, BodyDeclaration<?> current) {
+    private Doc memberSeparator(Node owner, BodyDeclaration<?> previous, BodyDeclaration<?> current) {
+        if (owner instanceof ClassOrInterfaceDeclaration declaration
+                && declaration.isInterface()
+                && previous instanceof MethodDeclaration previousMethod
+                && current instanceof MethodDeclaration currentMethod
+                && previousMethod.getBody().isEmpty()
+                && currentMethod.getBody().isEmpty()
+                && !hasDeclarationAnnotations(previous)
+                && !hasDeclarationAnnotations(current)) {
+            return Doc.HARD_LINE;
+        }
         if (!(previous instanceof FieldDeclaration) || !(current instanceof FieldDeclaration)) {
             return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
         }
@@ -667,7 +681,9 @@ final class JavaPrinter {
                 .flatMap(previousRange -> current.getRange()
                         .map(currentRange -> currentRange.begin.line > previousRange.end.line + 1))
                 .orElse(true);
-        return hasBlankLineBetween ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;
+        return hasBlankLineBetween || hasDeclarationAnnotations(previous) || hasDeclarationAnnotations(current)
+                ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE)
+                : Doc.HARD_LINE;
     }
 
     private Doc parameters(NodeList<Parameter> parameters) {
@@ -788,7 +804,7 @@ final class JavaPrinter {
             case DoStmt doStmt -> Doc.concat(Doc.text("do "), nestedStatement(doStmt.getBody()), Doc.text(" while (" + compact(doStmt.getCondition()) + ");"));
             case SynchronizedStmt synchronizedStmt -> Doc.concat(Doc.text("synchronized (" + compact(synchronizedStmt.getExpression()) + ") "), block(synchronizedStmt.getBody()));
             case SwitchStmt switchStmt -> switchStatement(switchStmt);
-            case ForStmt forStmt -> Doc.concat(Doc.text(forHeader(forStmt) + " "), nestedStatement(forStmt.getBody()));
+            case ForStmt forStmt -> forStatement(forStmt);
             case ForEachStmt forEachStmt -> Doc.concat(
                     Doc.text("for (" + compact(forEachStmt.getVariable()) + " : " + compact(forEachStmt.getIterable()) + ") "),
                     nestedStatement(forEachStmt.getBody()));
@@ -919,6 +935,10 @@ final class JavaPrinter {
         Expression expression = statement.getExpression();
         if (expression instanceof VariableDeclarationExpr variableDeclaration) {
             return Doc.concat(variableDeclaration(variableDeclaration), Doc.text(";"));
+        }
+        if (expression instanceof MethodCallExpr methodCall
+                && blockStatementWidth(compact(expression) + ";") > options.lineWidth()) {
+            return Doc.concat(methodCall(methodCall, MethodCallMode.BREAK), Doc.text(";"));
         }
         return Doc.concat(expression(expression), Doc.text(";"));
     }
@@ -1118,6 +1138,10 @@ final class JavaPrinter {
     }
 
     private Doc methodCall(MethodCallExpr expression) {
+        return methodCall(expression, MethodCallMode.AUTO);
+    }
+
+    private Doc methodCall(MethodCallExpr expression, MethodCallMode mode) {
         if (expression.getScope().isEmpty()
                 && expression.getNameAsString().equals("yield")
                 && !expression.getArguments().isEmpty()) {
@@ -1139,15 +1163,20 @@ final class JavaPrinter {
         if (expression.getArguments().isEmpty()) {
             return Doc.text(prefix + "()");
         }
-        return Doc.group(Doc.concat(
+        Doc call = Doc.concat(
                 Doc.text(prefix + "("),
                 Doc.indent(Doc.concat(
-                        Doc.SOFT_LINE,
+                        methodCallLine(mode),
                         Doc.join(Doc.concat(Doc.text(","), Doc.LINE), expression.getArguments().stream()
                                 .map(this::expression)
                                 .toList()))),
-                Doc.SOFT_LINE,
-                Doc.text(")")));
+                methodCallLine(mode),
+                Doc.text(")"));
+        return mode == MethodCallMode.BREAK ? call : Doc.group(call);
+    }
+
+    private Doc methodCallLine(MethodCallMode mode) {
+        return mode == MethodCallMode.BREAK ? Doc.HARD_LINE : Doc.SOFT_LINE;
     }
 
     private boolean shouldPrintScopeAsDoc(Expression expression) {
@@ -1342,13 +1371,42 @@ final class JavaPrinter {
     }
 
     private String forHeader(ForStmt statement) {
-        String init = compactJoin(statement.getInitialization());
-        String compare = statement.getCompare().map(this::compact).orElse("");
+        String init = statement.getInitialization().stream()
+                .map(this::forHeaderExpression)
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("");
+        String compare = statement.getCompare().map(this::forHeaderExpression).orElse("");
         String update = compactJoin(statement.getUpdate());
         if (init.isEmpty() && compare.isEmpty() && update.isEmpty()) {
             return "for (;;)";
         }
         return "for (" + init + "; " + compare + "; " + update + ")";
+    }
+
+    private Doc forStatement(ForStmt statement) {
+        if (statement.getBody().isEmptyStmt()) {
+            return Doc.text(forHeader(statement) + ";");
+        }
+        return Doc.concat(Doc.text(forHeader(statement) + " "), nestedStatement(statement.getBody()));
+    }
+
+    private String forHeaderExpression(Expression expression) {
+        if (expression instanceof BinaryExpr binaryExpr) {
+            return compact(binaryExpr.getLeft())
+                    + " "
+                    + binaryExpr.getOperator().asString()
+                    + " "
+                    + compact(binaryExpr.getRight());
+        }
+        if (expression instanceof VariableDeclarationExpr variableDeclaration
+                && variableDeclaration.getVariables().size() == 1) {
+            VariableDeclarator variable = variableDeclaration.getVariables().get(0);
+            return compactTypeLike(variable.getType())
+                    + " "
+                    + variable.getNameAsString()
+                    + variable.getInitializer().map(initializer -> " = " + compact(initializer)).orElse("");
+        }
+        return compact(expression);
     }
 
     private Doc rawDeclaration(BodyDeclaration<?> declaration) {
@@ -1427,6 +1485,14 @@ final class JavaPrinter {
         return annotations(node.getAnnotations().stream()
                 .filter(annotation -> !afterAllModifiers(annotation, nodeWithModifiers))
                 .toList());
+    }
+
+    private boolean hasDeclarationAnnotations(NodeWithAnnotations<?> node) {
+        if (!(node instanceof NodeWithModifiers<?> nodeWithModifiers)) {
+            return !node.getAnnotations().isEmpty();
+        }
+        return node.getAnnotations().stream()
+                .anyMatch(annotation -> !afterAllModifiers(annotation, nodeWithModifiers));
     }
 
     private Doc annotations(List<AnnotationExpr> annotations) {
@@ -1580,6 +1646,11 @@ final class JavaPrinter {
         END,
         IGNORE,
         NONE
+    }
+
+    private enum MethodCallMode {
+        AUTO,
+        BREAK
     }
 
     private String normalizeWhitespace(String text) {

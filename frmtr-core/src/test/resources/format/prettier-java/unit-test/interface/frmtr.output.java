@@ -23,7 +23,6 @@ interface Interface {
     class T {}
 
     CustomClass myFirstInterfaceMethod(String string);
-
     CustomOtherClass mySecondInterfaceMethodWithAVeryLongName(String aVeryLongString);
 
     interface I {}
@@ -40,6 +39,7 @@ interface Interface {
 
     @Annotation(annotationAttribute = CONSTANT_STRING)
     String STRING_3 = "STRING_3";
+
     String STRING_4 = "STRING_4";
 }
 

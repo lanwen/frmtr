@@ -15,28 +15,24 @@ public class EmptyStament {
 
     public void simpleForWithEmptyStatement() {
         /*test*//*test*/
-        for (;;) ;
+        for (;;);
 
-        for (;;) /*test*/
-        ;
+        for (;;);
 
-        for (;;) ;
+        for (;;);
 
-        for (;;) /*test*/
-        ;
+        for (;;);
     }
 
     public void simpleForWithEmptyStatement() {
         /*test*//*test*/
-        for (;;) ;
+        for (;;);
 
-        for (;;) /*test*/
-        ;
+        for (;;);
 
-        for (;;) ;
+        for (;;);
 
-        for (;;) /*test*/
-        ;
+        for (;;);
     }
 
     public void forEachWithEmptyStatement(List<String> list) {

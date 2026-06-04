@@ -118,6 +118,8 @@ Gradle exposes parser language level as semantic DSL choices instead of mirrorin
 
 `frmtr-cli` applies GraalVM Native Build Tools and configures the native executable name as `frmtr`. It adds `:frmtr-native-image-support` to `nativeImageCompileOnly` and `nativeImageTestCompileOnly` so the companion module is visible to native-image builds and native tests without becoming part of `implementation` or ordinary JVM runtime classpaths.
 
+Picocli's annotation processor generates CLI reflection and resource metadata during `:frmtr-cli:compileJava`. Proxy metadata generation is disabled because the CLI does not require dynamic proxy entries and GraalVM 25 deprecates `proxy-config.json` files discovered under `META-INF/native-image`.
+
 `:frmtr-native-image-support` contributes `dev.lanwen.frmtr.nativeimage.JavaParserReflectionFeature` through native-image metadata. The feature iterates `JavaParserMetaModel.getNodeMetaModels()` and registers every declared field on each JavaParser AST node type with GraalVM hosted reflection APIs.
 
 Docker is the default Linux native build path. `Dockerfile.native` builds inside `ghcr.io/graalvm/native-image-community:25` and emits a glibc-linked Linux binary. Docker on macOS still produces a Linux binary because native-image targets the build operating system and toolchain.

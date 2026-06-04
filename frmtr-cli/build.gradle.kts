@@ -68,6 +68,7 @@ tasks.named<JavaCompile>("compileJava") {
                     "-processor",
                     "picocli.codegen.aot.graalvm.processor.NativeImageConfigGeneratorProcessor",
                     "-Aproject=dev.lanwen.frmtr/frmtr-cli",
+                    "-Adisable.proxy.config",
                     "-Xlint:-processing"))
 }
 

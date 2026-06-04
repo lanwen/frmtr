@@ -12,7 +12,7 @@ public class PrettierTest {
             | /*2*/ SecondException
             | /*3*/ ThirdException e2
         ) {
-            throw new RuntimeException(e2);
+            throw /*throw an exception*/ new /*don't forget new when throwing exceptions*/ RuntimeException(e2);
         } /*is always executed no matter what*/ finally {
             System.out.println("That's all folks !");
         }
@@ -24,8 +24,7 @@ public class PrettierTest {
         int /*variable name is of value var */ var = arg1 + arg2 + arg3;
         if (/*true*/ var == 0) {
             System.out.println("The value is 0");
-        } else /*false*/
-        {
+        } else /*false*/ {
             int[] arr = {
                 /*One*/ 1,
                 /*Two */ 2,
@@ -38,26 +37,23 @@ public class PrettierTest {
 
             // Label statement
 
-            //
-            loop: //foreach
-            for (int num : arr) {
-                /*switch*/
-                switch (num) {
+            //foreach
+            loop: for (int num /* num is every number in arr*/ : arr) {
+                /*switch*/ switch (num) {
+                    //switch
                     case 1:
                         System.out.println("One ");
                         System.out.println("One ");
                         System.out.println("One ");
-                        /*just a break*/
-                        break;
+                        /*just a break*/ break;
                     case 2:
                         System.out.println("Two ");
                         break;
                     case 0:
                         System.out.println("Zero ");
-                        continue loop;
-                    default:
-                        /*labeled break*/
-                        break loop;
+                        continue /*labeled continued*/ loop;
+                    default /*def*/:
+                        /*labeled break*/ break loop;
                 }
             }
         }

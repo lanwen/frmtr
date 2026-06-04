@@ -2043,8 +2043,14 @@ final class JavaPrinter {
             Doc leading = statement instanceof TryStmt ? Doc.EMPTY : comments.leading(statement);
             return Doc.concat(leading, Doc.text(rawWithoutOwnComment(statement)));
         }
+        boolean inlineBreakBlockComment = statement instanceof BreakStmt
+                && statement.getComment().filter(BlockComment.class::isInstance).isPresent();
+        boolean inlineSwitchBlockComment = statement instanceof SwitchStmt
+                && statement.getComment().filter(BlockComment.class::isInstance).isPresent();
         Doc trailing = statement instanceof TryStmt ? Doc.EMPTY : comments.trailingLineComment(statement);
-        Doc leading = statement instanceof TryStmt ? Doc.EMPTY : trailing == Doc.EMPTY ? comments.leading(statement) : Doc.EMPTY;
+        Doc leading = statement instanceof TryStmt || inlineBreakBlockComment || inlineSwitchBlockComment
+                ? Doc.EMPTY
+                : trailing == Doc.EMPTY ? comments.leading(statement) : Doc.EMPTY;
         Doc body = switch (statement) {
             case BlockStmt blockStmt -> block(blockStmt);
             case ReturnStmt returnStmt -> returnStatement(returnStmt);
@@ -2053,8 +2059,8 @@ final class JavaPrinter {
             case ExplicitConstructorInvocationStmt constructorInvocation -> Doc.concat(explicitConstructorInvocation(constructorInvocation), Doc.text(";"));
             case ExpressionStmt expressionStmt -> expressionStatement(expressionStmt);
             case EmptyStmt ignored -> Doc.text(";");
-            case BreakStmt breakStmt -> Doc.text("break" + breakStmt.getLabel().map(label -> " " + label.asString()).orElse("") + ";");
-            case ContinueStmt continueStmt -> Doc.text("continue" + continueStmt.getLabel().map(label -> " " + label.asString()).orElse("") + ";");
+            case BreakStmt breakStmt -> breakStatement(breakStmt);
+            case ContinueStmt continueStmt -> continueStatement(continueStmt);
             case LabeledStmt labeledStmt -> labeledStatement(labeledStmt);
             case LocalClassDeclarationStmt localClassDeclaration -> body(localClassDeclaration.getClassDeclaration());
             case LocalRecordDeclarationStmt localRecordDeclaration -> body(localRecordDeclaration.getRecordDeclaration());
@@ -2075,6 +2081,23 @@ final class JavaPrinter {
         return Doc.concat(leading, body, trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing));
     }
 
+    private Doc breakStatement(BreakStmt statement) {
+        Doc leadingBlockComment = comments.ownComment(statement, BlockComment.class::isInstance);
+        String prefix = leadingBlockComment == Doc.EMPTY ? "" : commentText(leadingBlockComment) + " ";
+        return Doc.text(prefix + "break" + statement.getLabel().map(label -> " " + label.asString()).orElse("") + ";");
+    }
+
+    private Doc continueStatement(ContinueStmt statement) {
+        return Doc.text("continue" + statement.getLabel().map(this::continueLabel).orElse("") + ";");
+    }
+
+    private String continueLabel(com.github.javaparser.ast.expr.SimpleName label) {
+        Doc labelComment = comments.ownComment(label, BlockComment.class::isInstance);
+        return labelComment == Doc.EMPTY
+                ? " " + label.asString()
+                : " " + commentText(labelComment) + " " + label.asString();
+    }
+
     private Doc returnStatement(ReturnStmt statement) {
         return statement.getExpression()
                 .map(expression -> Doc.concat(Doc.text("return "), returnExpression(expression), Doc.text(";")))
@@ -2083,9 +2106,12 @@ final class JavaPrinter {
 
     private Doc labeledStatement(LabeledStmt statement) {
         Doc label = Doc.text(statement.getLabel().asString() + ": ");
+        List<String> leadingComments = labeledStatementLeadingComments(statement);
+        if (!leadingComments.isEmpty()) {
+            consumeLabeledBodyLeadingLineComment(statement.getStatement());
+        }
         Doc labeledBody = labeledStatementBody(statement.getStatement());
         Doc body = Doc.concat(label, labeledBody);
-        List<String> leadingComments = labeledStatementLeadingComments(statement);
         if (leadingComments.isEmpty()) {
             return body;
         }
@@ -2093,6 +2119,10 @@ final class JavaPrinter {
                 Doc.join(Doc.HARD_LINE, leadingComments.stream().map(Doc::text).toList()),
                 Doc.HARD_LINE,
                 body);
+    }
+
+    private void consumeLabeledBodyLeadingLineComment(Statement statement) {
+        comments.ownComment(statement, LineComment.class::isInstance);
     }
 
     private Doc labeledStatementBody(Statement statement) {
@@ -2140,15 +2170,15 @@ final class JavaPrinter {
     }
 
     private int labeledNestedStatementStart(String labelBody) {
-        int forStart = labelBody.indexOf("for");
-        int blockStart = labelBody.indexOf('{');
-        if (forStart < 0) {
-            return blockStart;
+        int cursor = 0;
+        for (String line : labelBody.split("\\R", -1)) {
+            String stripped = line.stripLeading();
+            if (stripped.startsWith("for") || stripped.startsWith("{")) {
+                return cursor + line.indexOf(stripped);
+            }
+            cursor += line.length() + 1;
         }
-        if (blockStart < 0) {
-            return forStart;
-        }
-        return Math.min(forStart, blockStart);
+        return -1;
     }
 
     private Doc returnExpression(Expression expression) {
@@ -2408,6 +2438,15 @@ final class JavaPrinter {
         return comments.ownComment(node, comment -> comment instanceof BlockComment
                 && comment.getRange()
                         .flatMap(commentRange -> node.getRange().map(nodeRange -> startsBefore(commentRange, nodeRange)))
+                        .orElse(false));
+    }
+
+    private Doc ownSameLineBlockCommentBeforeNode(Node node) {
+        return comments.ownComment(node, comment -> comment instanceof BlockComment
+                && comment.getRange()
+                        .flatMap(commentRange -> node.getRange()
+                                .map(nodeRange -> commentRange.begin.line == nodeRange.begin.line
+                                        && startsBefore(commentRange, nodeRange)))
                         .orElse(false));
     }
 
@@ -3178,10 +3217,7 @@ final class JavaPrinter {
     }
 
     private Doc objectCreation(ObjectCreationExpr expression, MethodCallMode mode) {
-        String prefix = expression.getScope().map(scope -> compact(scope) + ".").orElse("")
-                + "new "
-                + expression.getTypeArguments().map(typeArguments -> "<" + compactJoinTypeLike(typeArguments) + ">").orElse("")
-                + compactTypeLike(expression.getType());
+        String prefix = objectCreationPrefix(expression);
         if (expression.getAnonymousClassBody().isPresent()) {
             return anonymousObjectCreation(expression, prefix);
         }
@@ -3198,6 +3234,18 @@ final class JavaPrinter {
                 methodCallLine(mode),
                 Doc.text(")"));
         return mode == MethodCallMode.BREAK ? call : Doc.group(call);
+    }
+
+    private String objectCreationPrefix(ObjectCreationExpr expression) {
+        Doc creationComment = comments.ownComment(expression, BlockComment.class::isInstance);
+        Doc typeComment = comments.ownComment(expression.getType(), BlockComment.class::isInstance);
+        String type = typeComment == Doc.EMPTY
+                ? compactTypeLike(expression.getType())
+                : commentText(typeComment) + " " + compactTypeLikeWithoutOwnComment(expression.getType());
+        return expression.getScope().map(scope -> compact(scope) + ".").orElse("")
+                + (creationComment == Doc.EMPTY ? "new " : commentText(creationComment) + " new ")
+                + expression.getTypeArguments().map(typeArguments -> "<" + compactJoinTypeLike(typeArguments) + ">").orElse("")
+                + type;
     }
 
     private Doc anonymousObjectCreation(ObjectCreationExpr expression, String prefix) {
@@ -3232,19 +3280,24 @@ final class JavaPrinter {
     }
 
     private Doc switchStatement(SwitchStmt statement) {
+        Doc leadingBlockComment = ownSameLineBlockCommentBeforeNode(statement);
+        Doc prefix = leadingBlockComment == Doc.EMPTY ? Doc.EMPTY : Doc.concat(leadingBlockComment, Doc.text(" "));
         if (statement.getEntries().isEmpty()) {
             return Doc.concat(
+                    prefix,
                     Doc.text("switch "),
                     controlCondition(statement.getSelector()),
                     Doc.text(" {"),
                     Doc.HARD_LINE,
                     Doc.text("}"));
         }
+        Doc selectorLineComment = comments.ownComment(statement.getSelector(), LineComment.class::isInstance);
         return Doc.concat(
+                prefix,
                 Doc.text("switch "),
                 controlCondition(statement.getSelector()),
                 Doc.text(" "),
-                switchBlock(statement.getEntries()));
+                switchBlock(statement.getEntries(), selectorLineComment));
     }
 
     private Doc switchExpression(SwitchExpr expression) {
@@ -3254,14 +3307,21 @@ final class JavaPrinter {
     }
 
     private Doc switchBlock(NodeList<SwitchEntry> entries) {
+        return switchBlock(entries, Doc.EMPTY);
+    }
+
+    private Doc switchBlock(NodeList<SwitchEntry> entries, Doc leadingInside) {
         if (entries.isEmpty()) {
             return Doc.text("{}");
         }
+        List<Doc> entryDocs = new ArrayList<>();
+        if (leadingInside != Doc.EMPTY) {
+            entryDocs.add(leadingInside);
+        }
+        entryDocs.addAll(entries.stream().map(this::switchEntry).toList());
         return Doc.concat(
                 Doc.text("{"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, entries.stream()
-                        .map(this::switchEntry)
-                        .toList()))),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, entryDocs))),
                 Doc.HARD_LINE,
                 Doc.text("}"));
     }
@@ -3311,7 +3371,7 @@ final class JavaPrinter {
 
     private Doc switchEntryLabel(SwitchEntry entry) {
         if (entry.isDefault()) {
-            return Doc.text("default");
+            return Doc.text(defaultSwitchEntryLabel(entry));
         }
         String flatLabels = entry.getLabels().stream().map(this::switchLabelText).reduce((left, right) -> left + ", " + right).orElse("");
         String flat = "case " + flatLabels;
@@ -3350,6 +3410,16 @@ final class JavaPrinter {
             return normalizeWhitespace(label.toString());
         }
         return compact(label);
+    }
+
+    private String defaultSwitchEntryLabel(SwitchEntry entry) {
+        String raw = raw(entry);
+        int colon = raw.indexOf(':');
+        if (colon < 0) {
+            return "default";
+        }
+        String label = formatCommentedTokenLine(moduleTokens(raw.substring(0, colon)));
+        return label.isEmpty() ? "default" : label;
     }
 
     private Doc recordPattern(RecordPatternExpr pattern) {
@@ -3494,13 +3564,15 @@ final class JavaPrinter {
                 return;
             }
             Doc elseLeadingLineComment = comments.ownComment(elseStatement, LineComment.class::isInstance);
+            Doc elseLeadingBlockComment = ownSameLineBlockCommentBeforeNode(elseStatement);
             Doc elseTrailingLineComment = trailingLineComment(elseStatement);
             docs.add(elseChainSeparator(
                     statement,
                     elseStatement,
                     thenTrailingLineComment,
                     betweenThenAndElseBlockComment,
-                    elseLeadingLineComment));
+                    elseLeadingLineComment,
+                    elseLeadingBlockComment));
             docs.add(elseStatement.isIfStmt() ? statement(elseStatement) : nestedStatement(elseStatement));
             if (elseTrailingLineComment != Doc.EMPTY) {
                 docs.add(Doc.text(" "));
@@ -3672,7 +3744,8 @@ final class JavaPrinter {
             Statement elseStatement,
             Doc thenTrailingLineComment,
             Doc betweenThenAndElseBlockComment,
-            Doc elseLeadingLineComment) {
+            Doc elseLeadingLineComment,
+            Doc elseLeadingBlockComment) {
         if (thenTrailingLineComment != Doc.EMPTY) {
             return Doc.concat(Doc.HARD_LINE, thenTrailingLineComment, Doc.HARD_LINE, Doc.text("else "));
         }
@@ -3681,6 +3754,9 @@ final class JavaPrinter {
         }
         if (elseLeadingLineComment != Doc.EMPTY) {
             return Doc.concat(Doc.HARD_LINE, elseLeadingLineComment, Doc.HARD_LINE, Doc.text("else "));
+        }
+        if (elseLeadingBlockComment != Doc.EMPTY) {
+            return Doc.concat(Doc.text(" else "), elseLeadingBlockComment, Doc.text(" "));
         }
         if (elseStatement.isIfStmt() && !statement.getThenStmt().isBlockStmt()) {
             return Doc.concat(Doc.HARD_LINE, Doc.text("else "));
@@ -3723,7 +3799,7 @@ final class JavaPrinter {
                     + emptyBodyHeaderExpression(statement.getIterable(), statement.getBody()) + ");"
                     + trailingEmptyBodyBlockComment(statement));
         }
-        String header = "for (" + compact(statement.getVariable()) + " : " + compact(statement.getIterable()) + ")";
+        String header = "for (" + forEachVariable(statement) + " : " + compact(statement.getIterable()) + ")";
         Optional<Doc> lineComment = lineCommentBeforeNestedBody(statement);
         if (lineComment.isPresent() && !statement.getBody().isBlockStmt()) {
             return Doc.concat(
@@ -3732,6 +3808,19 @@ final class JavaPrinter {
                     Doc.indent(Doc.concat(Doc.HARD_LINE, statement(statement.getBody()))));
         }
         return Doc.concat(Doc.text(header + " "), nestedStatement(statement.getBody()));
+    }
+
+    private String forEachVariable(ForEachStmt statement) {
+        String raw = raw(statement);
+        int open = raw.indexOf('(');
+        int colon = raw.indexOf(':', open);
+        if (open < 0 || colon < open) {
+            return compact(statement.getVariable());
+        }
+        String variable = raw.substring(open + 1, colon);
+        return variable.contains("/*")
+                ? formatCommentedTokenLine(moduleTokens(variable))
+                : compact(statement.getVariable());
     }
 
     private Optional<Doc> lineCommentBeforeNestedBody(Statement statement) {
@@ -4214,6 +4303,12 @@ final class JavaPrinter {
 
     private String compactTypeLike(Node node) {
         return compact(node)
+                .replaceAll("<\\s+", "<")
+                .replaceAll("\\s+>", ">");
+    }
+
+    private String compactTypeLikeWithoutOwnComment(Node node) {
+        return compactWithoutOwnComment(node)
                 .replaceAll("<\\s+", "<")
                 .replaceAll("\\s+>", ">");
     }

@@ -16,10 +16,10 @@ public class Variables {
     private Map<Integer, String> genericVariable4 = new HashMap<Integer, String>();
     private Map<Integer, String, Integer, String> genericVariable5 = new HashMap<Integer, String, Integer>();
 
-    private Object variableWithComment1 = new Object();
-    private Object variableWithComment2 = new Object();
-    private Object variableWithComment3 = new Object();
-    private Object variableWithComment4 = new Object();
+    private Object variableWithComment1 = /* comment */ new Object();
+    private Object variableWithComment2 = /* comment */ new Object();
+    private Object variableWithComment3 = /* very very very long comment */ new Object();
+    private Object variableWithComment4 = /* very very very long comment */ new Object();
 
     private Object[] arrayVariable1 = new Object[3];
     private Object[][] arrayVariable2 = new Object[3][3];

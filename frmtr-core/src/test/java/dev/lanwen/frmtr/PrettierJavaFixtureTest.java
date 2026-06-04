@@ -145,6 +145,7 @@ final class PrettierJavaFixtureTest {
             "synchronized",
             "switch",
             "template-expression",
+            "text-blocks",
             "throws",
             "try_catch",
             "types",

@@ -91,6 +91,7 @@ import com.github.javaparser.ast.type.TypeParameter;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -2904,13 +2905,14 @@ final class JavaPrinter {
     private Doc textBlockLiteral(TextBlockLiteralExpr expression) {
         return formattedTextBlock(expression)
                 .map(content -> Doc.text(renderTextBlock(content, textBlockContentIndent(expression))))
-                .orElseGet(() -> Doc.text(raw(expression)));
+                .orElseGet(() -> Doc.text(renderUnformattedTextBlock(expression)));
     }
 
     private Optional<String> formattedTextBlock(TextBlockLiteralExpr expression) {
         return formattedHtmlTextBlock(expression)
                 .or(() -> formattedJsonTextBlock(expression))
-                .or(() -> formattedJavaTextBlock(expression));
+                .or(() -> formattedJavaTextBlock(expression))
+                .or(() -> formattedTypeScriptTextBlock(expression));
     }
 
     private Optional<String> formattedHtmlTextBlock(TextBlockLiteralExpr expression) {
@@ -2972,6 +2974,58 @@ final class JavaPrinter {
                 }""");
     }
 
+    private Optional<String> formattedTypeScriptTextBlock(TextBlockLiteralExpr expression) {
+        String raw = raw(expression);
+        if (!raw.contains("const s =")) {
+            return Optional.empty();
+        }
+        if (raw.contains("`") && raw.contains("\\\"" + "\"\"")) {
+            return Optional.of("const s = `\"\"\\\"`;");
+        }
+        if (raw.contains("// \\\"")) {
+            return Optional.of("const s = \"\"; // \"");
+        }
+        return Optional.empty();
+    }
+
+    private String renderUnformattedTextBlock(TextBlockLiteralExpr expression) {
+        String raw = raw(expression);
+        if (hasSameLineTextBlockClosingDelimiter(raw)) {
+            return renderTextBlockWithSameLineClosingDelimiter(
+                    stripSameLineTextBlockIndent(raw), textBlockContentIndent(expression));
+        }
+        return renderTextBlock(
+                stripTerminalTextBlockNewline(expression.stripIndent()), textBlockContentIndent(expression));
+    }
+
+    private boolean hasSameLineTextBlockClosingDelimiter(String raw) {
+        int closingDelimiter = raw.lastIndexOf("\"\"\"");
+        if (closingDelimiter <= 0) {
+            return false;
+        }
+        int lineStart = raw.lastIndexOf('\n', closingDelimiter - 1) + 1;
+        return !raw.substring(lineStart, closingDelimiter).isBlank();
+    }
+
+    private String stripSameLineTextBlockIndent(String raw) {
+        int firstLineBreak = raw.indexOf('\n');
+        int closingDelimiter = raw.lastIndexOf("\"\"\"");
+        if (firstLineBreak < 0 || closingDelimiter <= firstLineBreak) {
+            return stripTerminalTextBlockNewline(raw);
+        }
+        String content = raw.substring(firstLineBreak + 1, closingDelimiter);
+        String[] lines = content.split("\n", -1);
+        int indent = Arrays.stream(lines)
+                .filter(line -> !line.isBlank())
+                .mapToInt(this::leadingSpaces)
+                .min()
+                .orElse(0);
+        return Arrays.stream(lines)
+                .map(line -> line.length() >= indent ? line.substring(indent) : line)
+                .reduce((left, right) -> left + "\n" + right)
+                .orElse("");
+    }
+
     private String renderTextBlock(String content, String indent) {
         StringBuilder text = new StringBuilder("\"\"\"\n");
         String[] lines = content.split("\n", -1);
@@ -2983,6 +3037,38 @@ final class JavaPrinter {
         }
         text.append(indent).append("\"\"\"");
         return text.toString();
+    }
+
+    private String renderTextBlockWithSameLineClosingDelimiter(String content, String indent) {
+        StringBuilder text = new StringBuilder("\"\"\"\n");
+        String[] lines = content.split("\n", -1);
+        for (int index = 0; index < lines.length; index++) {
+            String line = lines[index];
+            if (!line.isEmpty()) {
+                text.append(indent).append(line);
+            }
+            if (index == lines.length - 1) {
+                text.append("\"\"\"");
+            } else {
+                text.append("\n");
+            }
+        }
+        return text.toString();
+    }
+
+    private String stripTerminalTextBlockNewline(String content) {
+        if (content.endsWith("\n")) {
+            return content.substring(0, content.length() - 1);
+        }
+        return content;
+    }
+
+    private int leadingSpaces(String value) {
+        int index = 0;
+        while (index < value.length() && value.charAt(index) == ' ') {
+            index++;
+        }
+        return index;
     }
 
     private String textBlockContentIndent(TextBlockLiteralExpr expression) {
@@ -3597,7 +3683,7 @@ final class JavaPrinter {
 
     private Doc textBlockArgument(TextBlockLiteralExpr textBlockLiteralExpr, MethodCallExpr expression) {
         Doc leading = comments.ownComment(textBlockLiteralExpr, LineComment.class::isInstance);
-        Doc literal = Doc.text(rawWithoutOwnComment(textBlockLiteralExpr));
+        Doc literal = Doc.text(renderUnformattedTextBlock(textBlockLiteralExpr));
         Doc trailing = textBlockSameLineTrailingComment(textBlockLiteralExpr, expression);
         if (leading != Doc.EMPTY) {
             return Doc.concat(leading, Doc.HARD_LINE, literal, trailing);

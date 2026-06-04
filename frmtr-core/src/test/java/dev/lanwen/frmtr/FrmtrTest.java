@@ -337,8 +337,8 @@ final class FrmtrTest {
                 .contains("System.out.println(\n"
                         + "      // leading comment\n"
                         + "      \"\"\"\n"
-                        + "            text\n"
-                        + "            \"\"\" // trailing comment\n"
+                        + "      text\n"
+                        + "      \"\"\" // trailing comment\n"
                         + "    );");
     }
 
@@ -367,10 +367,10 @@ final class FrmtrTest {
 
         assertThat(formatted)
                 .contains("String source = \"\"\"\n"
-                        + "                    public void print(%s object) {\n"
-                        + "                        System.out.println(Objects.toString(object));\n"
-                        + "                    }\n"
-                        + "                    \"\"\".formatted(type);");
+                        + "      public void print(%s object) {\n"
+                        + "          System.out.println(Objects.toString(object));\n"
+                        + "      }\n"
+                        + "      \"\"\".formatted(type);");
     }
 
     @Test

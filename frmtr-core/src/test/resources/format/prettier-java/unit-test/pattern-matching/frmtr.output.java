@@ -39,7 +39,8 @@ class T {
     }
 
     int recordPatterns(MyRecord r) {
-        if (o instanceof Foo(@Bar String s)) {}
+        if (o instanceof Foo(@Bar String s)) {
+        }
         switch (obj) {
             case String s:
                 break;
@@ -52,12 +53,7 @@ class T {
             case MyRecord(MyLongRecordTypeName(LongTypeName longVariableName, LongTypeName longVariableName), MyLongRecordTypeName(LongTypeName longVariableName, LongTypeName longVariableName)) -> 0;
             case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) -> 0;
             case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when this.longVariableName > longVariableName && this.longVariableName > longVariableName -> 0;
-            case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when this.longVariableName > longVariableName && this.longVariableName > longVariableName -> longMethodName(
-                longVariableName,
-                longVariableName,
-                longVariableName,
-                longVariableName
-            );
+            case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when this.longVariableName > longVariableName && this.longVariableName > longVariableName -> longMethodName(longVariableName, longVariableName, longVariableName, longVariableName);
             case Outer.Inner(String s) -> {}
             case String s -> s;
         };

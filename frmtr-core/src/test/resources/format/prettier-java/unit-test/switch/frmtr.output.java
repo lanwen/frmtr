@@ -23,7 +23,7 @@ class Switch {
             case "c":
                 return 3;
             default:
-                return 3;
+                return 3; // default case
         }
     }
 
@@ -35,7 +35,7 @@ class Switch {
             case "b":
                 return 2;
             case "c":
-                return 3;
+                return 3; // case c
             default:
                 return 3;
         }
@@ -146,7 +146,7 @@ class Switch {
                 return new Location(this.x - SnakeUtils.GRID_SIZE, this.y);
             case NONE:
             default:
-                return this;
+                return this; // fall through
         }
     }
 
@@ -154,9 +154,7 @@ class Switch {
         switch (testEnum) {
             case FOO -> System.out.println("Foo!");
             case BAR, BAZ -> System.out.println("Not Foo!");
-            case BAR, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ -> System.out.println(
-                "Not Foo!"
-            );
+            case BAR, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ -> System.out.println("Not Foo!");
         }
     }
 
@@ -205,10 +203,8 @@ class Switch {
 
     void switchRulesWithComments() {
         switch (a) {
-            case b -> // comment
-            c;
-            case Dd d -> // comment
-            e;
+            case b -> c;
+            case Dd d -> e;
             case f -> // comment
             throw new RuntimeException();
         }

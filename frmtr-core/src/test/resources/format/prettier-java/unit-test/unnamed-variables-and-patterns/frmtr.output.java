@@ -2,7 +2,8 @@ class T {
 
     static int count(Iterable<Order> orders) {
         int total = 0;
-        for (Order _ : orders) total++;
+        for (Order _ : orders) // Unnamed variable
+            total++;
         return total;
     }
 
@@ -55,18 +56,18 @@ class T {
 
     void switchTypePattern() {
         switch (ball) {
-            case RedBall _ -> process(ball);
-            case BlueBall _ -> process(ball);
-            case GreenBall _ -> stopProcessing();
+            case RedBall _ -> process(ball); // Unnamed pattern variable
+            case BlueBall _ -> process(ball); // Unnamed pattern variable
+            case GreenBall _ -> stopProcessing(); // Unnamed pattern variable
         }
     }
 
     void switchRecordPattern() {
         switch (box) {
-            case Box(RedBall _) -> processBox(box);
-            case Box(BlueBall _) -> processBox(box);
-            case Box(GreenBall _) -> stopProcessing();
-            case Box(var _) -> pickAnotherBox();
+            case Box(RedBall _) -> processBox(box); // Unnamed pattern variable
+            case Box(BlueBall _) -> processBox(box); // Unnamed pattern variable
+            case Box(GreenBall _) -> stopProcessing(); // Unnamed pattern variable
+            case Box(var _) -> pickAnotherBox(); // Unnamed pattern variable
         }
     }
 
@@ -87,9 +88,12 @@ class T {
     }
 
     void instanceofExpressions() {
-        if (r instanceof ColoredPoint(Point(int x, int y), _)) {}
-        if (r instanceof ColoredPoint(_, Color c)) {}
-        if (r instanceof ColoredPoint(Point(int x, _), _)) {}
+        if (r instanceof ColoredPoint(Point(int x, int y), _)) {
+        }
+        if (r instanceof ColoredPoint(_, Color c)) {
+        }
+        if (r instanceof ColoredPoint(Point(int x, _), _)) {
+        }
     }
 
     void switchLabelWithMatchAllPattern() {
@@ -111,12 +115,7 @@ class T {
             case MyRecord(A a) when true -> 0;
             case MyRecord(B b) when true -> 0;
             case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) -> 0;
-            case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when this.longVariableName > longVariableName && this.longVariableName > longVariableName -> longMethodName(
-                longVariableName,
-                longVariableName,
-                longVariableName,
-                longVariableName
-            );
+            case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when this.longVariableName > longVariableName && this.longVariableName > longVariableName -> longMethodName(longVariableName, longVariableName, longVariableName, longVariableName);
         };
     }
 }

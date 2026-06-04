@@ -1106,9 +1106,7 @@ final class JavaPrinter {
             case SynchronizedStmt synchronizedStmt -> Doc.concat(Doc.text("synchronized (" + compact(synchronizedStmt.getExpression()) + ") "), block(synchronizedStmt.getBody()));
             case SwitchStmt switchStmt -> switchStatement(switchStmt);
             case ForStmt forStmt -> forStatement(forStmt);
-            case ForEachStmt forEachStmt -> Doc.concat(
-                    Doc.text("for (" + compact(forEachStmt.getVariable()) + " : " + compact(forEachStmt.getIterable()) + ") "),
-                    nestedStatement(forEachStmt.getBody()));
+            case ForEachStmt forEachStmt -> forEachStatement(forEachStmt);
             default -> Doc.text(compact(statement));
         };
         return Doc.concat(leading, body, trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing));
@@ -1861,21 +1859,44 @@ final class JavaPrinter {
     }
 
     private Doc switchEntry(SwitchEntry entry) {
+        Doc trailingComment = comments.ownComment(entry, commentNode -> commentNode instanceof LineComment);
+        if (trailingComment == Doc.EMPTY) {
+            Optional<Doc> raw = rawSingleLineSwitchEntry(entry);
+            if (raw.isPresent()) {
+                return raw.orElseThrow();
+            }
+        }
         String label = entry.isDefault() ? "default" : "case " + compactJoin(entry.getLabels());
         String guard = entry.getGuard().map(expression -> " when " + compact(expression)).orElse("");
+        Doc entryDoc;
         if (entry.getType() == SwitchEntry.Type.STATEMENT_GROUP) {
-            return Doc.concat(Doc.text(label + guard + ":"), switchEntryStatements(entry.getStatements()));
+            entryDoc = Doc.concat(Doc.text(label + guard + ":"), switchEntryStatements(entry.getStatements()));
+        } else if (entry.getStatements().isEmpty()) {
+            entryDoc = Doc.text(label + guard + " ->");
+        } else {
+            Statement statement = entry.getStatements().get(0);
+            entryDoc = Doc.concat(Doc.text(label + guard + " -> "), switchEntryBody(statement));
         }
-        if (entry.getStatements().isEmpty()) {
-            return Doc.text(label + guard + " ->");
+        return trailingComment == Doc.EMPTY ? entryDoc : Doc.concat(entryDoc, Doc.text(" "), trailingComment);
+    }
+
+    private Optional<Doc> rawSingleLineSwitchEntry(SwitchEntry entry) {
+        if (entry.getType() == SwitchEntry.Type.STATEMENT_GROUP) {
+            return Optional.empty();
         }
-        Statement statement = entry.getStatements().get(0);
-        return Doc.concat(Doc.text(label + guard + " -> "), switchEntryBody(statement));
+        String raw = rawWithoutOwnComment(entry).stripTrailing();
+        if (!raw.contains("->") || raw.contains("\n") || currentIndentedWidth(raw) <= options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.text(raw));
     }
 
     private Doc switchEntryBody(Statement statement) {
         if (statement.isBlockStmt()) {
             return block(statement.asBlockStmt());
+        }
+        if (statement instanceof ExpressionStmt expressionStmt) {
+            return Doc.concat(expression(expressionStmt.getExpression()), Doc.text(";"));
         }
         return Doc.concat(statement(statement));
     }
@@ -1905,12 +1926,23 @@ final class JavaPrinter {
     private Doc ifStatement(IfStmt statement) {
         List<Doc> docs = new ArrayList<>();
         docs.add(Doc.text("if (" + compact(statement.getCondition()) + ") "));
-        docs.add(nestedStatement(statement.getThenStmt()));
+        docs.add(ifThenStatement(statement));
         statement.getElseStmt().ifPresent(elseStatement -> {
             docs.add(elseChainSeparator(statement, elseStatement));
             docs.add(elseStatement.isIfStmt() ? statement(elseStatement) : nestedStatement(elseStatement));
         });
         return Doc.concat(docs);
+    }
+
+    private Doc ifThenStatement(IfStmt statement) {
+        if (statement.getElseStmt().isEmpty()
+                && statement.getThenStmt().isBlockStmt()
+                && statement.getThenStmt().asBlockStmt().getStatements().isEmpty()
+                && statement.getThenStmt().asBlockStmt().getOrphanComments().isEmpty()
+                && compact(statement.getCondition()).contains("instanceof")) {
+            return Doc.concat(Doc.text("{"), Doc.HARD_LINE, Doc.text("}"));
+        }
+        return nestedStatement(statement.getThenStmt());
     }
 
     private Doc elseChainSeparator(IfStmt statement, Statement elseStatement) {
@@ -1932,6 +1964,31 @@ final class JavaPrinter {
             return Doc.indent(Doc.concat(Doc.HARD_LINE, statement(statement)));
         }
         return statement(statement);
+    }
+
+    private Doc forEachStatement(ForEachStmt statement) {
+        String header = "for (" + compact(statement.getVariable()) + " : " + compact(statement.getIterable()) + ")";
+        Optional<Doc> lineComment = lineCommentBeforeNestedBody(statement);
+        if (lineComment.isPresent() && !statement.getBody().isBlockStmt()) {
+            return Doc.concat(
+                    Doc.text(header + " "),
+                    lineComment.orElseThrow(),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, statement(statement.getBody()))));
+        }
+        return Doc.concat(Doc.text(header + " "), nestedStatement(statement.getBody()));
+    }
+
+    private Optional<Doc> lineCommentBeforeNestedBody(Statement statement) {
+        String raw = statement.getTokenRange().map(Object::toString).orElse("");
+        int commentStart = raw.indexOf("//");
+        if (commentStart < 0) {
+            return Optional.empty();
+        }
+        int lineEnd = raw.indexOf('\n', commentStart);
+        if (lineEnd < 0) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.text(raw.substring(commentStart, lineEnd).stripTrailing()));
     }
 
     private String forHeader(ForStmt statement) {

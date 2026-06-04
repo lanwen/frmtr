@@ -4365,20 +4365,20 @@ final class JavaPrinter {
                 || blockStatementWidth(firstLine) > options.lineWidth()) {
             return Optional.empty();
         }
-        MethodCallExpr methodCallBody = huggableExpressionLambdaMethodCallBody(lambdaExpr).orElseThrow();
+        Expression bodyExpression = huggableExpressionLambdaBodyExpression(lambdaExpr).orElseThrow();
         if (nestedLambda.isPresent()) {
             return Optional.of(Doc.concat(
                     Doc.text(prefix + "("),
                     Doc.indent(Doc.concat(
                             Doc.HARD_LINE,
                             Doc.text(huggableExpressionLambdaFirstLine(lambdaExpr, parameters)),
-                            Doc.indent(Doc.concat(Doc.HARD_LINE, expression(methodCallBody))))),
+                            Doc.indent(Doc.concat(Doc.HARD_LINE, expression(bodyExpression))))),
                     Doc.HARD_LINE,
                     Doc.text(")")));
         }
         return Optional.of(Doc.concat(
                 Doc.text(firstLine),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, expression(methodCallBody))),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, expression(bodyExpression))),
                 Doc.HARD_LINE,
                 Doc.text(")")));
     }
@@ -4386,6 +4386,9 @@ final class JavaPrinter {
     private boolean huggableExpressionLambdaBody(Expression body) {
         if (body instanceof MethodCallExpr methodCall) {
             return !methodCall.getArguments().isEmpty();
+        }
+        if (body instanceof ConditionalExpr) {
+            return true;
         }
         if (body instanceof LambdaExpr lambdaExpr && lambdaExpr.getExpressionBody().isPresent()) {
             return huggableExpressionLambdaBody(lambdaExpr.getExpressionBody().orElseThrow());
@@ -4401,13 +4404,13 @@ final class JavaPrinter {
                 .orElse(parameters + " ->");
     }
 
-    private Optional<MethodCallExpr> huggableExpressionLambdaMethodCallBody(LambdaExpr lambdaExpr) {
+    private Optional<Expression> huggableExpressionLambdaBodyExpression(LambdaExpr lambdaExpr) {
         return lambdaExpr.getExpressionBody().flatMap(body -> {
-            if (body instanceof MethodCallExpr methodCall) {
-                return Optional.of(methodCall);
+            if (body instanceof MethodCallExpr || body instanceof ConditionalExpr) {
+                return Optional.of(body);
             }
             if (body instanceof LambdaExpr nested) {
-                return huggableExpressionLambdaMethodCallBody(nested);
+                return huggableExpressionLambdaBodyExpression(nested);
             }
             return Optional.empty();
         });

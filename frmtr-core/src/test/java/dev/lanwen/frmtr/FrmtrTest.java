@@ -296,6 +296,33 @@ final class FrmtrTest {
     }
 
     @Test
+    void hugsConditionalExpressionLambdaBeforeBreakingBody() {
+        String source = """
+                class Demo {
+                    void method() {
+                        a.b(c -> d && eeeeeeeeee.ffffffffff() ? g && hhhhhhhhhh.iiiiiiiiii() : j && kkkkkkkkkk.llllllllll());
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("a.b(c ->\n"
+                        + "      d && eeeeeeeeee.ffffffffff()\n"
+                        + "        ? g && hhhhhhhhhh.iiiiiiiiii()\n"
+                        + "        : j && kkkkkkkkkk.llllllllll()\n"
+                        + "    );");
+    }
+
+    @Test
     void keepsBrokenLambdaParametersWithCompactMethodCallBody() {
         String source = """
                 class Demo {

@@ -167,9 +167,8 @@ public class Variables {
 
         Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = someBooleanVariable ? new Object() : null;
 
-        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = anotherVeryLongNameForIllustrativePurposes != null
-            ? anotherVeryLongNameForIllustrativePurposes
-            : new Object();
+        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
+            anotherVeryLongNameForIllustrativePurposes != null ? anotherVeryLongNameForIllustrativePurposes : new Object();
     }
 
     public <
@@ -286,6 +285,8 @@ public class Variables {
             "ffffffffffffffffffff"
         );
 
-        int a, b, c = 1;
+        int a,
+            b,
+            c = 1;
     }
 }

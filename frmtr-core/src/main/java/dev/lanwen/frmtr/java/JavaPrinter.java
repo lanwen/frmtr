@@ -1720,6 +1720,12 @@ final class JavaPrinter {
 
     private Doc conditionalInitializer(String name, String flatName, ConditionalExpr initializer) {
         String conditionLine = flatName + " = " + compact(initializer.getCondition());
+        String compactInitializer = compact(initializer);
+        if (continuationStatementWidth(compactInitializer + ";") <= options.lineWidth()) {
+            return Doc.concat(
+                    Doc.text(name + " ="),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(compactInitializer))));
+        }
         if (shouldBreakBeforeConditionalInitializer(initializer)) {
             return Doc.concat(
                     Doc.text(name + " ="),
@@ -4953,10 +4959,20 @@ final class JavaPrinter {
             docs.add(Doc.text(flatType));
         }
         String variableDeclarationPrefix = declarationPrefix;
+        if (localVariableDeclaratorsShouldBreak(declaration.getVariables())) {
+            docs.add(Doc.indent(Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), declaration.getVariables().stream()
+                    .map(variable -> variable(variable, localVariableDeclarationPrefix(variable, variableDeclarationPrefix)))
+                    .toList())));
+            return Doc.concat(docs);
+        }
         docs.add(Doc.group(Doc.join(Doc.concat(Doc.text(","), Doc.LINE), declaration.getVariables().stream()
                 .map(variable -> variable(variable, localVariableDeclarationPrefix(variable, variableDeclarationPrefix)))
                 .toList())));
         return Doc.concat(docs);
+    }
+
+    private boolean localVariableDeclaratorsShouldBreak(NodeList<VariableDeclarator> variables) {
+        return variables.size() > 1 && variables.stream().anyMatch(variable -> variable.getInitializer().isPresent());
     }
 
     private boolean localVariableTypeShouldBreak(

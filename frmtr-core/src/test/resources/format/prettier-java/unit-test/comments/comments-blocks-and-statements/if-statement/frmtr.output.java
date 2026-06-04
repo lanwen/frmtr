@@ -1,43 +1,66 @@
 class IfStatements {
 
     void commentsIfLineComment() {
-        if (t) {}
+        if (
+            // test
+            t
+        ) {
+        }
 
-        if (t) {}
+        if (
+            t // test
+        ) {
+        }
 
-        if (t) {}
+        if (t) {
+        } // test
 
-        if (t) {}
+        if (
+            // test
+            t
+        ) {
+        }
 
-        if (true) {
+        if (
+            true // comment
+        ) {
             System.out.println("Oops");
         }
     }
 
     void commentsIfBlockComment() {
-        if (t) {}
+        if (/* test */ t) {
+        }
 
-        if (t) /* test */
-        {}
+        if (t /* test */) {
+        }
 
-        if (t) /* test */
-        {}
+        if (t) /* test */ {
+        }
 
-        if (t) {}
+        if (/* test */ t) {
+        }
     }
 
     void commentsElseLineComment() {
-        if (t) {} else // test
-        {}
+        if (t) {
+        }
+        // test
+        else {
+        }
 
-        if (t) {} else {}
+        if (t) {
+        } else {
+        } // test
     }
 
     void commentsElseBlockComment() {
-        if (t) {} else /* test */
-        {}
+        if (t) {
+        } /* test */ else {
+        }
 
-        if (t) {} else /* test */
-        {}
+        if (t) {
+        } else /* test */ {
+        }
     }
 }

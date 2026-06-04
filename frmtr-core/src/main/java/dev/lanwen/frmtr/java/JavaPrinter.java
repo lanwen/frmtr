@@ -2313,6 +2313,8 @@ final class JavaPrinter {
             return ifWithEmptyThenStatement(statement);
         }
         List<Doc> docs = new ArrayList<>();
+        Doc thenTrailingLineComment = trailingLineComment(statement.getThenStmt());
+        Doc betweenThenAndElseBlockComment = blockCommentBetweenThenAndElse(statement);
         docs.add(ifCondition(statement.getCondition()));
         docs.add(ifThenStatement(statement));
         statement.getElseStmt().ifPresent(elseStatement -> {
@@ -2320,9 +2322,24 @@ final class JavaPrinter {
                 docs.add(emptyElseStatement(statement, elseStatement));
                 return;
             }
-            docs.add(elseChainSeparator(statement, elseStatement));
+            Doc elseLeadingLineComment = comments.ownComment(elseStatement, LineComment.class::isInstance);
+            Doc elseTrailingLineComment = trailingLineComment(elseStatement);
+            docs.add(elseChainSeparator(
+                    statement,
+                    elseStatement,
+                    thenTrailingLineComment,
+                    betweenThenAndElseBlockComment,
+                    elseLeadingLineComment));
             docs.add(elseStatement.isIfStmt() ? statement(elseStatement) : nestedStatement(elseStatement));
+            if (elseTrailingLineComment != Doc.EMPTY) {
+                docs.add(Doc.text(" "));
+                docs.add(elseTrailingLineComment);
+            }
         });
+        if (statement.getElseStmt().isEmpty() && thenTrailingLineComment != Doc.EMPTY) {
+            docs.add(Doc.text(" "));
+            docs.add(thenTrailingLineComment);
+        }
         return Doc.concat(docs);
     }
 
@@ -2371,6 +2388,7 @@ final class JavaPrinter {
                                 .flatMap(thenRange -> elseStatement.getRange()
                                         .map(elseRange -> commentRange.begin.line == thenRange.end.line
                                                 && commentRange.begin.column > thenRange.end.column
+                                                && commentRange.begin.column <= thenRange.end.column + 2
                                                 && commentRange.begin.line == elseRange.begin.line
                                                 && commentRange.begin.column < elseRange.begin.column)))
                         .orElse(false))
@@ -2386,6 +2404,10 @@ final class JavaPrinter {
     }
 
     private Doc ifCondition(Expression condition) {
+        Doc commented = commentedIfCondition(condition);
+        if (commented != Doc.EMPTY) {
+            return commented;
+        }
         String flat = compact(condition);
         if (currentIndentedWidth("if (" + flat + ") {}") <= options.lineWidth()) {
             return Doc.text("if (" + flat + ") ");
@@ -2395,6 +2417,72 @@ final class JavaPrinter {
                 Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines(condition))),
                 Doc.HARD_LINE,
                 Doc.text(") "));
+    }
+
+    private Doc commentedIfCondition(Expression condition) {
+        Optional<Comment> ownComment = condition.getComment();
+        if (ownComment.filter(LineComment.class::isInstance).isPresent()) {
+            Comment comment = ownComment.orElseThrow();
+            Doc printedComment = comments.comment(comment);
+            Doc conditionDoc = conditionCommentStartsBeforeExpression(condition, comment)
+                    ? Doc.join(Doc.HARD_LINE, List.of(printedComment, Doc.text(compactWithoutOwnComment(condition))))
+                    : Doc.text(compactWithoutOwnComment(condition) + " " + commentText(printedComment));
+            return Doc.concat(
+                    Doc.text("if ("),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, conditionDoc)),
+                    Doc.HARD_LINE,
+                    Doc.text(") "));
+        }
+        if (ownComment.filter(BlockComment.class::isInstance).isPresent()) {
+            Comment comment = ownComment.orElseThrow();
+            String text = commentText(comments.comment(comment));
+            String expressionText = compactWithoutOwnComment(condition);
+            String conditionText = conditionCommentStartsBeforeExpression(condition, comment)
+                    ? text + " " + expressionText
+                    : expressionText + " " + text;
+            return Doc.text("if (" + conditionText + ") ");
+        }
+        Doc trailingBlock = trailingBlockCommentBeforeCloseParen(condition);
+        if (trailingBlock != Doc.EMPTY) {
+            return Doc.text("if (" + compact(condition) + " " + commentText(trailingBlock) + ") ");
+        }
+        return Doc.EMPTY;
+    }
+
+    private boolean conditionCommentStartsBeforeExpression(Expression condition, Comment comment) {
+        return comment.getRange()
+                .flatMap(commentRange -> condition.getRange()
+                        .map(conditionRange -> startsBefore(commentRange, conditionRange)))
+                .orElse(false);
+    }
+
+    private boolean startsBefore(com.github.javaparser.Range left, com.github.javaparser.Range right) {
+        if (left.begin.line != right.begin.line) {
+            return left.begin.line < right.begin.line;
+        }
+        return left.begin.column < right.begin.column;
+    }
+
+    private Doc trailingBlockCommentBeforeCloseParen(Expression condition) {
+        return condition.getParentNode()
+                .stream()
+                .flatMap(parent -> parent.getAllContainedComments().stream())
+                .filter(BlockComment.class::isInstance)
+                .filter(comment -> comment.getCommentedNode()
+                        .map(BlockStmt.class::isInstance)
+                        .orElse(false))
+                .filter(comment -> startsImmediatelyAfterNodeOnSameLine(condition, comment))
+                .findFirst()
+                .map(comments::comment)
+                .orElse(Doc.EMPTY);
+    }
+
+    private boolean startsImmediatelyAfterNodeOnSameLine(Node node, Comment comment) {
+        return node.getRange()
+                .flatMap(nodeRange -> comment.getRange()
+                        .map(commentRange -> commentRange.begin.line == nodeRange.end.line
+                                && commentRange.begin.column == nodeRange.end.column + 1))
+                .orElse(false);
     }
 
     private Doc ifThenStatement(IfStmt statement) {
@@ -2408,7 +2496,21 @@ final class JavaPrinter {
         return nestedStatement(statement.getThenStmt());
     }
 
-    private Doc elseChainSeparator(IfStmt statement, Statement elseStatement) {
+    private Doc elseChainSeparator(
+            IfStmt statement,
+            Statement elseStatement,
+            Doc thenTrailingLineComment,
+            Doc betweenThenAndElseBlockComment,
+            Doc elseLeadingLineComment) {
+        if (thenTrailingLineComment != Doc.EMPTY) {
+            return Doc.concat(Doc.HARD_LINE, thenTrailingLineComment, Doc.HARD_LINE, Doc.text("else "));
+        }
+        if (betweenThenAndElseBlockComment != Doc.EMPTY) {
+            return Doc.concat(Doc.text(" "), betweenThenAndElseBlockComment, Doc.text(" else "));
+        }
+        if (elseLeadingLineComment != Doc.EMPTY) {
+            return Doc.concat(Doc.HARD_LINE, elseLeadingLineComment, Doc.HARD_LINE, Doc.text("else "));
+        }
         if (elseStatement.isIfStmt() && !statement.getThenStmt().isBlockStmt()) {
             return Doc.concat(Doc.HARD_LINE, Doc.text("else "));
         }
@@ -2416,6 +2518,12 @@ final class JavaPrinter {
     }
 
     private Doc nestedStatement(Statement statement) {
+        if (statement.isBlockStmt()
+                && statement.asBlockStmt().getStatements().isEmpty()
+                && statement.asBlockStmt().getOrphanComments().isEmpty()
+                && statement.getParentNode().filter(IfStmt.class::isInstance).isPresent()) {
+            return emptyControlBlock(statement.asBlockStmt());
+        }
         if (statement.isBlockStmt()) {
             return statement(statement);
         }
@@ -2427,6 +2535,15 @@ final class JavaPrinter {
             return Doc.indent(Doc.concat(Doc.HARD_LINE, statement(statement)));
         }
         return statement(statement);
+    }
+
+    private Doc emptyControlBlock(BlockStmt block) {
+        Doc inlineBlockComment = comments.ownComment(block, BlockComment.class::isInstance);
+        if (inlineBlockComment != Doc.EMPTY) {
+            return Doc.concat(inlineBlockComment, Doc.text(" {"), Doc.HARD_LINE, Doc.text("}"));
+        }
+        Doc leading = comments.leading(block);
+        return Doc.concat(leading, Doc.text("{"), Doc.HARD_LINE, Doc.text("}"));
     }
 
     private Doc forEachStatement(ForEachStmt statement) {
@@ -2528,6 +2645,14 @@ final class JavaPrinter {
         return "";
     }
 
+    private Doc trailingLineComment(Node node) {
+        Doc own = comments.trailingLineComment(node);
+        if (own != Doc.EMPTY) {
+            return own;
+        }
+        return unattachedTrailingLineComment(node);
+    }
+
     private String trailingEmptyBodyBlockComment(Node node) {
         Doc unattached = unattachedTrailingBlockComment(node);
         if (unattached != Doc.EMPTY) {
@@ -2540,6 +2665,23 @@ final class JavaPrinter {
         }
         String trailing = raw.substring(semicolon + 1).strip();
         return trailing.startsWith("/*") ? " " + trailing : "";
+    }
+
+    private Doc unattachedTrailingLineComment(Node node) {
+        Optional<Node> parent = node.getParentNode();
+        while (parent.isPresent()) {
+            Optional<Doc> trailing = parent.orElseThrow().getAllContainedComments().stream()
+                    .filter(LineComment.class::isInstance)
+                    .filter(comment -> comment.getCommentedNode().isEmpty())
+                    .filter(comment -> startsAfterNodeOnSameLine(node, comment))
+                    .findFirst()
+                    .map(comments::comment);
+            if (trailing.isPresent()) {
+                return trailing.orElseThrow();
+            }
+            parent = parent.orElseThrow().getParentNode();
+        }
+        return Doc.EMPTY;
     }
 
     private Doc unattachedTrailingBlockComment(Node node) {

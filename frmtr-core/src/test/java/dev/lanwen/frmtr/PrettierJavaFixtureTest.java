@@ -57,6 +57,7 @@ final class PrettierJavaFixtureTest {
             "char_literal",
             "classes",
             "comments/bug-fixes",
+            "comments/comments-blocks-and-statements/if-statement",
             "comments/edge",
             "comments/expression",
             "comments/comments-only",

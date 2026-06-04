@@ -73,7 +73,8 @@ public class Expressions {
     }
 
     public void printSimple() {
-        if (myValue == 42) {}
+        if (myValue == 42) {
+        }
 
         if (myValue != 42) {
             System.out.println("Why not 42 !");
@@ -83,11 +84,14 @@ public class Expressions {
     public void printIf() {
         Object myObject = new PrettierObject().getSingleton().getAuthentication().getCredentials().getRights().getName();
 
-        if (myValue == 42 || myValue == 42 && myValue == 42 && myValue == 42 || myValue == 42 && myValue == 42) {}
+        if (myValue == 42 || myValue == 42 && myValue == 42 && myValue == 42 || myValue == 42 && myValue == 42) {
+        }
 
-        if (myValue != 42 && 42/42 || myValue & 42 && myValue > 42 || myValue < 42 && myValue == 42) {}
+        if (myValue != 42 && 42/42 || myValue & 42 && myValue > 42 || myValue < 42 && myValue == 42) {
+        }
 
-        if (myValue != 42 && myValue == 42) {}
+        if (myValue != 42 && myValue == 42) {
+        }
     }
 
     public void printSwitch() {

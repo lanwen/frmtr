@@ -18,7 +18,7 @@ public class PrettierTest {
         if (arg1 == 0 && arg2 == 0 && arg == 3) throw new RuntimeException("X Y Z cannot be all 0");
 
         int var = arg1 + arg2 + arg3;
-        if (var == 0) {
+        if (/*true*/ var == 0) {
             System.out.println("The value is 0");
         } else /*false*/
         {

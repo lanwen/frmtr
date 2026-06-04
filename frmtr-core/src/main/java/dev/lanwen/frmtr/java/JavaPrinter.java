@@ -2351,6 +2351,14 @@ final class JavaPrinter {
     }
 
     private Doc binaryExpressionLines(Expression expression, boolean forceBreak) {
+        return binaryExpressionLines(expression, forceBreak, false);
+    }
+
+    private Doc nestedBinaryExpressionLines(Expression expression, boolean forceBreak) {
+        return binaryExpressionLines(expression, forceBreak, true);
+    }
+
+    private Doc binaryExpressionLines(Expression expression, boolean forceBreak, boolean nestedContinuation) {
         if (!(expression instanceof BinaryExpr binaryExpr)) {
             return expression(expression);
         }
@@ -2368,6 +2376,14 @@ final class JavaPrinter {
                 operand = Doc.concat(operand, Doc.text(" " + binaryExpr.getOperator().asString()));
             }
             lines.add(operand);
+        }
+        if (nestedContinuation) {
+            List<Doc> nestedLines = new ArrayList<>();
+            for (int i = 0; i < lines.size(); i++) {
+                Doc line = lines.get(i);
+                nestedLines.add(i == 0 ? line : Doc.indent(Doc.concat(Doc.HARD_LINE, line)));
+            }
+            return Doc.concat(nestedLines);
         }
         return Doc.join(Doc.HARD_LINE, lines);
     }
@@ -3151,7 +3167,7 @@ final class JavaPrinter {
             return annotationArrayInitializer(arrayInitializerExpr);
         }
         if (value instanceof BinaryExpr) {
-            return binaryExpressionLines(value, true);
+            return nestedBinaryExpressionLines(value, true);
         }
         return expression(value);
     }
@@ -3246,6 +3262,10 @@ final class JavaPrinter {
         Optional<Doc> huggableLambda = huggableBlockLambdaArguments(prefix, expression.getArguments());
         if (huggableLambda.isPresent()) {
             return huggableLambda.orElseThrow();
+        }
+        Optional<Doc> singleBinaryArgument = singleBinaryArgument(prefix, expression.getArguments(), mode);
+        if (singleBinaryArgument.isPresent()) {
+            return singleBinaryArgument.orElseThrow();
         }
         Doc call = Doc.concat(
                 Doc.text(prefix + "("),
@@ -3426,6 +3446,20 @@ final class JavaPrinter {
                 Doc.text(prefix + "(" + (leadingArguments.isEmpty() ? "" : leadingArguments + ", ")),
                 lambdaExpression(lambdaExpr),
                 Doc.text((trailingArguments.isEmpty() ? "" : ", " + trailingArguments) + ")")));
+    }
+
+    private Optional<Doc> singleBinaryArgument(String prefix, NodeList<Expression> arguments, MethodCallMode mode) {
+        if (arguments.size() != 1 || !(arguments.get(0) instanceof BinaryExpr binaryExpr)) {
+            return Optional.empty();
+        }
+        if (mode != MethodCallMode.BREAK && currentIndentedWidth(prefix + "(" + compact(binaryExpr) + ")") <= options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+                Doc.text(prefix + "("),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, nestedBinaryExpressionLines(binaryExpr, true))),
+                Doc.HARD_LINE,
+                Doc.text(")")));
     }
 
     private int blockLambdaArgumentIndex(NodeList<Expression> arguments) {

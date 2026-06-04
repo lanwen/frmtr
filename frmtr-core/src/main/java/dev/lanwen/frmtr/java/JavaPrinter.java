@@ -116,14 +116,13 @@ final class JavaPrinter {
             parts.add(moduleDeclaration(moduleDeclaration));
         });
         hasStructuralParts = hasStructuralParts || module.isPresent();
-        if (!unit.getTypes().isEmpty()) {
+        List<Doc> topLevelDeclarations = topLevelDeclarations(unit);
+        if (!topLevelDeclarations.isEmpty()) {
             if (hasStructuralParts) {
                 parts.add(Doc.HARD_LINE);
                 parts.add(Doc.HARD_LINE);
             }
-            parts.add(Doc.join(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE), unit.getTypes().stream()
-                    .map(this::body)
-                    .toList()));
+            parts.add(Doc.join(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE), topLevelDeclarations));
         }
         Doc trailingOrphanComments = comments.orphanComments(unit, comment -> commentBeginLine(comment) > lastTypeLine(unit));
         if (trailingOrphanComments != Doc.EMPTY) {
@@ -133,6 +132,21 @@ final class JavaPrinter {
             parts.add(trailingOrphanComments);
         }
         return Doc.concat(parts);
+    }
+
+    private List<Doc> topLevelDeclarations(CompilationUnit unit) {
+        Optional<ClassOrInterfaceDeclaration> compactClass = compactClass(unit);
+        if (compactClass.isPresent()) {
+            return compactClass.orElseThrow().getMembers().stream().map(this::body).toList();
+        }
+        return unit.getTypes().stream().map(this::body).toList();
+    }
+
+    private Optional<ClassOrInterfaceDeclaration> compactClass(CompilationUnit unit) {
+        if (unit.getTypes().size() != 1 || !(unit.getTypes().get(0) instanceof ClassOrInterfaceDeclaration declaration)) {
+            return Optional.empty();
+        }
+        return declaration.isCompact() ? Optional.of(declaration) : Optional.empty();
     }
 
     private int firstTypeLine(CompilationUnit unit) {
@@ -610,9 +624,16 @@ final class JavaPrinter {
         }
         return Doc.concat(
                 Doc.text("{"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE, contents)),
+                Doc.indent(Doc.concat(memberBlockOpeningBreak(owner), contents)),
                 Doc.HARD_LINE,
                 Doc.text("}"));
+    }
+
+    private Doc memberBlockOpeningBreak(Node owner) {
+        if (owner instanceof ClassOrInterfaceDeclaration declaration && declaration.isInterface()) {
+            return Doc.HARD_LINE;
+        }
+        return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
     }
 
     private Doc memberContents(NodeList<BodyDeclaration<?>> members, List<Doc> memberDocs) {

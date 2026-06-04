@@ -37,7 +37,6 @@ public non-sealed class RightTriangle implements Triangle {
 }
 
 public sealed interface Shape {
-
     double area();
 
     default Shape rotate(double angle) {
@@ -77,7 +76,6 @@ public class NestedNonSealedClasses {
 }
 
 public interface Test {
-
     sealed interface Inner {}
 
     public static sealed abstract class SealedParent {}

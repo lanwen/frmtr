@@ -5,7 +5,6 @@ import com.other.interfaces.RequiredI;
  * This is the comment describing the interface
  */
 public interface MyInterface extends OfferedI, RequiredI {
-
     /**
  * Javadoc
  * @param p1 parameter 1

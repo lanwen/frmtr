@@ -1,26 +1,22 @@
 public interface Interfaces {
-
     boolean isAvailable(Object propertyId);
 
     public static final Method METHOD = SomeStatic.findMethod();
 }
 
 public interface Interfaces extends Interface1, Interface2, Interface3, Interface4 {
-
     boolean isAvailable(Object propertyId);
 
     public static final Method METHOD = SomeStatic.findMethod();
 }
 
 public interface Interfaces extends Interface1, Interface2, Interface3, Interface4, Interface5, Interface6, Interface7, Interface8 {
-
     boolean isAvailable(Object propertyId);
 
     public static final Method METHOD = SomeStatic.findMethod();
 }
 
 interface Interface {
-
     String STRING_1 = "STRING_1";
     String STRING_2 = "STRING_2";
 
@@ -50,7 +46,6 @@ interface Interface {
 public interface EmptyInterface {}
 
 public interface InterfaceWithSemicolon {
-
     String STRING_1 = "STRING_1";
 }
 

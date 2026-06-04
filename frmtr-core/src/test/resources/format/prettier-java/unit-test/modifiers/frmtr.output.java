@@ -2,7 +2,6 @@
 @AnnotationTwo
 @AnnotationThree
 public interface InterfaceWithModifiers {
-
     @AnnotationOne
     static final public String INTERFACE_CONSTANT = "abc";
 

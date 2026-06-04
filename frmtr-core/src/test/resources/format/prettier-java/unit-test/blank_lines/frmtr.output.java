@@ -58,7 +58,6 @@ public class BlankLines {
 }
 
 interface BlankLinesInInterfaces {
-
     // Bug Fix: https://github.com/jhipster/prettier-java/issues/368
     String fieldOne;
     String fieldTwo;

@@ -74,12 +74,10 @@ class MySplitRecordConstructor {
 }
 
 public interface MyInterface {
-
     record MyRecord(String param) implements MyInterface {}
 }
 
 public interface MyInterface {
-
     record MySplitRecord(String param, String param, String param, String param, String param, String param) implements MyInterface {}
 }
 

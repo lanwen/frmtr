@@ -3115,7 +3115,7 @@ final class JavaPrinter {
             }
             return Doc.text(prefix + "()");
         }
-        Optional<Doc> huggableLambda = singleHuggableLambdaArgument(prefix, expression);
+        Optional<Doc> huggableLambda = huggableBlockLambdaArguments(prefix, expression.getArguments());
         if (huggableLambda.isPresent()) {
             return huggableLambda.orElseThrow();
         }
@@ -3271,16 +3271,55 @@ final class JavaPrinter {
                 && expression.getParameters().get(0).getType().isUnknownType();
     }
 
-    private Optional<Doc> singleHuggableLambdaArgument(String prefix, MethodCallExpr expression) {
-        if (expression.getArguments().size() != 1
-                || !(expression.getArguments().get(0) instanceof LambdaExpr lambdaExpr)
-                || !lambdaExpr.getBody().isBlockStmt()) {
+    private Optional<Doc> huggableBlockLambdaArguments(String prefix, NodeList<Expression> arguments) {
+        int lambdaIndex = blockLambdaArgumentIndex(arguments);
+        if (lambdaIndex < 0) {
             return Optional.empty();
         }
+        if (lambdaIndex > 0 && lambdaIndex < arguments.size() - 1) {
+            return Optional.empty();
+        }
+        if (hasOtherLambdaArgument(arguments, lambdaIndex)) {
+            return Optional.empty();
+        }
+        LambdaExpr lambdaExpr = (LambdaExpr) arguments.get(lambdaIndex);
         if (lambdaParametersShouldBreak(lambdaExpr, lambdaParameters(lambdaExpr))) {
             return Optional.empty();
         }
-        return Optional.of(Doc.concat(Doc.text(prefix + "("), lambdaExpression(lambdaExpr), Doc.text(")")));
+        String leadingArguments = compactJoin(arguments.subList(0, lambdaIndex));
+        String firstLine = prefix + "("
+                + (leadingArguments.isEmpty() ? "" : leadingArguments + ", ")
+                + lambdaParameters(lambdaExpr) + " -> {";
+        if (blockStatementWidth(firstLine) > options.lineWidth()) {
+            return Optional.empty();
+        }
+        String trailingArguments = compactJoin(arguments.subList(lambdaIndex + 1, arguments.size()));
+        return Optional.of(Doc.concat(
+                Doc.text(prefix + "(" + (leadingArguments.isEmpty() ? "" : leadingArguments + ", ")),
+                lambdaExpression(lambdaExpr),
+                Doc.text((trailingArguments.isEmpty() ? "" : ", " + trailingArguments) + ")")));
+    }
+
+    private int blockLambdaArgumentIndex(NodeList<Expression> arguments) {
+        int lambdaIndex = -1;
+        for (int i = 0; i < arguments.size(); i++) {
+            if (arguments.get(i) instanceof LambdaExpr lambdaExpr && lambdaExpr.getBody().isBlockStmt()) {
+                if (lambdaIndex >= 0) {
+                    return -1;
+                }
+                lambdaIndex = i;
+            }
+        }
+        return lambdaIndex;
+    }
+
+    private boolean hasOtherLambdaArgument(NodeList<Expression> arguments, int lambdaIndex) {
+        for (int i = 0; i < arguments.size(); i++) {
+            if (i != lambdaIndex && arguments.get(i) instanceof LambdaExpr) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String methodReferenceSuffix(MethodReferenceExpr expression) {
@@ -3473,7 +3512,7 @@ final class JavaPrinter {
             }
             return Doc.concat(segmentPrefix, Doc.text(prefix + "()"));
         }
-        Optional<Doc> huggableLambda = singleHuggableLambdaArgument(prefix, expression);
+        Optional<Doc> huggableLambda = huggableBlockLambdaArguments(prefix, expression.getArguments());
         if (huggableLambda.isPresent()) {
             return Doc.concat(segmentPrefix, huggableLambda.orElseThrow());
         }
@@ -3546,6 +3585,10 @@ final class JavaPrinter {
         }
         if (expression.getArguments().isEmpty()) {
             return Doc.text(prefix + "()");
+        }
+        Optional<Doc> huggableLambda = huggableBlockLambdaArguments(prefix, expression.getArguments());
+        if (huggableLambda.isPresent()) {
+            return huggableLambda.orElseThrow();
         }
         Doc call = Doc.concat(
                 Doc.text(prefix + "("),

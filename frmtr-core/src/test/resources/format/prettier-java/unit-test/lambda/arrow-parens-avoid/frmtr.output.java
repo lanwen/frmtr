@@ -93,29 +93,22 @@ public class Lambda {
     }
 
     public void callWithLambdaAndExtraParameter() {
-        CompletableFuture.supplyAsync(
-            () -> {
-                // some processing
-                return 2;
-            },
-            executor
-        );
+        CompletableFuture.supplyAsync(() -> {
+            // some processing
+            return 2;
+        }, executor);
     }
 
     public void testConstructor() {
-        new Value(
-            (x) -> {
-                // testing method
-                return n * 2;
-            }
-        );
+        new Value((x) -> {
+            // testing method
+            return n * 2;
+        });
 
-        new Value(
-            (aVeryLongListOfParameter, aVeryLongListOfParameter) -> {
-                // testing method
-                return n * 2;
-            }
-        );
+        new Value((aVeryLongListOfParameter, aVeryLongListOfParameter) -> {
+            // testing method
+            return n * 2;
+        });
 
         new Value(
             (
@@ -135,68 +128,40 @@ public class Lambda {
     private static <T extends Group> Function<Constructor<?>, T> createInstance(Group entity) {
         return ctor ->
             Try
-                .of(
-                    a,
-                    () -> {
-                        @SuppressWarnings("unchecked")
-                        var ng = (T) ctor.newInstance(entity.getId(), entity.getSystemGenerated(), entity.getVersionKey());
-                        return ng;
-                    }
-                )
+                .of(a, () -> {
+                    @SuppressWarnings("unchecked")
+                    var ng = (T) ctor.newInstance(entity.getId(), entity.getSystemGenerated(), entity.getVersionKey());
+                    return ng;
+                })
                 .getOrElseThrow(ex -> new RuntimeException(ex));
     }
 
     void singleLambdaWithBlockLastArgument() {
-        a.of(
-            b,
-            c,
-            d,
-            e -> {
-                return f;
-            }
-        );
+        a.of(b, c, d, e -> {
+            return f;
+        });
     }
 
     void singleLambdaWithBlockLastArgumentAndLongArguments() {
-        a.of(
-            aaaaaaaaaaaaaaaaaaaaaaaaaa,
-            bbbbbbbbbbbbbbbbbbbbbbbbbb,
-            cccccccccccccccccccccccccc,
-            dddddddddddddddddddddddddd,
-            e -> {
-                return f;
-            }
-        );
+        a.of(aaaaaaaaaaaaaaaaaaaaaaaaaa, bbbbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccccccccc, dddddddddddddddddddddddddd, e -> {
+            return f;
+        });
 
-        this.a(
-            aaaaaaaaaaaaaaaaaaaaaaaaaa,
-            bbbbbbbbbbbbbbbbbbbbbbbbbb,
-            cccccccccccccccccccccccccc,
-            dddddddddddddddddddddddddd,
-            e -> {
-                return f;
-            }
-        );
+        this.a(aaaaaaaaaaaaaaaaaaaaaaaaaa, bbbbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccccccccc, dddddddddddddddddddddddddd, e -> {
+            return f;
+        });
     }
 
     void singleLambdaWithBlockLastArgumentAndLongLambdaArgument() {
-        a.of(
-            b,
-            c,
-            d,
-            eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee -> {
-                return f;
-            }
-        );
+        a.of(b, c, d, eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee -> {
+            return f;
+        });
     }
 
     void singleLambdaWithBlockLastArgumentAndLongLambdaArguments() {
-        a.of(
-            b,
-            (cccccccccccccccccccccccccc, dddddddddddddddddddddddddd, eeeeeeeeeeeeeeeeeeeeeeeeee) -> {
-                return f;
-            }
-        );
+        a.of(b, (cccccccccccccccccccccccccc, dddddddddddddddddddddddddd, eeeeeeeeeeeeeeeeeeeeeeeeee) -> {
+            return f;
+        });
     }
 
     void multipleLambdaArguments() {

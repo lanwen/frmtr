@@ -46,7 +46,7 @@ class T {
                 break;
         }
         return switch (r) {
-            default -> 0;
+            case null, default -> 0;
             case MyRecord(A a) -> 0;
             case MyRecord(A a, B b) -> 0;
             case MyRecord(MyRecord(A a), B b) -> 0;
@@ -54,7 +54,8 @@ class T {
             case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) -> 0;
             case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when this.longVariableName > longVariableName && this.longVariableName > longVariableName -> 0;
             case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when this.longVariableName > longVariableName && this.longVariableName > longVariableName -> longMethodName(longVariableName, longVariableName, longVariableName, longVariableName);
-            case Outer.Inner(String s) -> {}
+            case Outer.Inner(String s) -> {
+            }
             case String s -> s;
         };
     }

@@ -91,13 +91,17 @@ public class Expressions {
     }
 
     public void printSwitch() {
-        switch (myValue == 42 || myValue == 42 && myValue == 42 && myValue == 42 || myValue == 42 && myValue == 42) {}
+        switch (myValue == 42 || myValue == 42 && myValue == 42 && myValue == 42 || myValue == 42 && myValue == 42) {
+        }
 
-        switch (myValue != 42 && 42/42 || myValue & 42 && myValue > 42 || myValue < 42 && myValue == 42) {}
+        switch (myValue != 42 && 42/42 || myValue & 42 && myValue > 42 || myValue < 42 && myValue == 42) {
+        }
 
-        switch (myValue != 42) {}
+        switch (myValue != 42) {
+        }
 
-        switch (myValue != 42 && myValue == 42) {}
+        switch (myValue != 42 && myValue == 42) {
+        }
     }
 
     public void printWhile() {

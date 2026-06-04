@@ -91,6 +91,7 @@ final class PrettierJavaFixtureTest {
             "return",
             "sealed",
             "synchronized",
+            "switch",
             "template-expression",
             "throws",
             "try_catch",

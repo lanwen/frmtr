@@ -22,8 +22,9 @@ class Switch {
                 return 2;
             case "c":
                 return 3;
+            // default case
             default:
-                return 3; // default case
+                return 3;
         }
     }
 
@@ -34,8 +35,9 @@ class Switch {
                 return 1;
             case "b":
                 return 2;
+            // case c
             case "c":
-                return 3; // case c
+                return 3;
             default:
                 return 3;
         }
@@ -53,23 +55,21 @@ class Switch {
 
     void switchCaseWithBlock1() {
         switch (a) {
-            case 0:
-                {}
-            default:
-                {}
+            case 0: {
+            }
+            default: {
+            }
         }
     }
 
     void switchCaseWithBlock2() {
         switch (a) {
-            case 0:
-                {
-                    b();
-                }
-            default:
-                {
-                    c();
-                }
+            case 0: {
+                b();
+            }
+            default: {
+                c();
+            }
         }
     }
 
@@ -145,8 +145,9 @@ class Switch {
             case WEST:
                 return new Location(this.x - SnakeUtils.GRID_SIZE, this.y);
             case NONE:
+            // fall through
             default:
-                return this; // fall through
+                return this;
         }
     }
 
@@ -154,15 +155,17 @@ class Switch {
         switch (testEnum) {
             case FOO -> System.out.println("Foo!");
             case BAR, BAZ -> System.out.println("Not Foo!");
-            case BAR, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ -> System.out.println("Not Foo!");
+            case BAR, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ -> System.out.println(
+                "Not Foo!"
+            );
         }
     }
 
     public void caseConstantsWithComments(TestEnum testEnum) {
         switch (testEnum) {
-            case BAR, BAZ -> System.out.println("Not Foo!");
-            case BAR, BAZ -> System.out.println("Not Foo!");
-            case BAR, BAZ -> System.out.println("Not Foo!");
+            case BAR /* foo */, BAZ -> System.out.println("Not Foo!");
+            case BAR /* foo */, /* bar */ BAZ -> System.out.println("Not Foo!");
+            case BAR, /* bar */ BAZ -> System.out.println("Not Foo!");
         }
     }
 
@@ -174,7 +177,7 @@ class Switch {
             case String s -> String.format("String %s", s);
             case TOTO -> String.format("TOTO %s", o);
             case null -> String.format("Null !");
-            default -> String.format("Default !");
+            case null, default -> String.format("Default !");
             default -> o.toString();
         };
     }
@@ -203,21 +206,28 @@ class Switch {
 
     void switchRulesWithComments() {
         switch (a) {
-            case b -> c;
-            case Dd d -> e;
-            case f -> // comment
-            throw new RuntimeException();
+            case b ->
+                // comment
+                c;
+            case Dd d ->
+                // comment
+                e;
+            case f ->
+                // comment
+                throw new RuntimeException();
         }
     }
 
     void emptyBlocks() {
-        switch (a) {}
         switch (a) {
-            case 1:
-                {}
         }
         switch (a) {
-            case 1 -> {}
+            case 1: {
+            }
+        }
+        switch (a) {
+            case 1 -> {
+            }
         }
     }
 }

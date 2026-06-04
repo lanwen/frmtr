@@ -1834,6 +1834,12 @@ final class JavaPrinter {
     }
 
     private Doc switchStatement(SwitchStmt statement) {
+        if (statement.getEntries().isEmpty()) {
+            return Doc.concat(
+                    Doc.text("switch (" + compact(statement.getSelector()) + ") {"),
+                    Doc.HARD_LINE,
+                    Doc.text("}"));
+        }
         return Doc.concat(
                 Doc.text("switch (" + compact(statement.getSelector()) + ") "),
                 switchBlock(statement.getEntries()));
@@ -1859,33 +1865,101 @@ final class JavaPrinter {
     }
 
     private Doc switchEntry(SwitchEntry entry) {
-        Doc trailingComment = comments.ownComment(entry, commentNode -> commentNode instanceof LineComment);
+        Doc leadingComment = comments.ownComment(entry, commentNode -> commentNode instanceof LineComment
+                && commentNode.getRange()
+                        .flatMap(commentRange -> entry.getRange()
+                                .map(entryRange -> commentRange.begin.line < entryRange.begin.line))
+                        .orElse(false));
+        if (leadingComment != Doc.EMPTY) {
+            leadingComment = Doc.concat(leadingComment, Doc.HARD_LINE);
+        }
+        Doc trailingComment = comments.ownComment(entry, commentNode -> commentNode instanceof LineComment
+                && commentNode.getRange()
+                        .flatMap(commentRange -> entry.getRange()
+                                .map(entryRange -> commentRange.begin.line == entryRange.begin.line))
+                        .orElse(false));
         if (trailingComment == Doc.EMPTY) {
             Optional<Doc> raw = rawSingleLineSwitchEntry(entry);
             if (raw.isPresent()) {
-                return raw.orElseThrow();
+                return Doc.concat(leadingComment, raw.orElseThrow());
             }
         }
-        String label = entry.isDefault() ? "default" : "case " + compactJoin(entry.getLabels());
+        Doc label = switchEntryLabel(entry);
         String guard = entry.getGuard().map(expression -> " when " + compact(expression)).orElse("");
         Doc entryDoc;
         if (entry.getType() == SwitchEntry.Type.STATEMENT_GROUP) {
-            entryDoc = Doc.concat(Doc.text(label + guard + ":"), switchEntryStatements(entry.getStatements()));
+            entryDoc = switchStatementGroupEntry(label, guard, entry.getStatements());
         } else if (entry.getStatements().isEmpty()) {
-            entryDoc = Doc.text(label + guard + " ->");
+            entryDoc = Doc.concat(label, Doc.text(guard + " ->"));
         } else {
             Statement statement = entry.getStatements().get(0);
-            entryDoc = Doc.concat(Doc.text(label + guard + " -> "), switchEntryBody(statement));
+            if (hasLeadingOwnComment(statement)) {
+                entryDoc = Doc.concat(
+                        label,
+                        Doc.text(guard + " ->"),
+                        Doc.indent(Doc.concat(Doc.HARD_LINE, statement(statement))));
+            } else {
+                entryDoc = Doc.concat(label, Doc.text(guard + " -> "), switchEntryBody(statement));
+            }
         }
-        return trailingComment == Doc.EMPTY ? entryDoc : Doc.concat(entryDoc, Doc.text(" "), trailingComment);
+        entryDoc = trailingComment == Doc.EMPTY ? entryDoc : Doc.concat(entryDoc, Doc.text(" "), trailingComment);
+        return Doc.concat(leadingComment, entryDoc);
+    }
+
+    private Doc switchEntryLabel(SwitchEntry entry) {
+        if (entry.isDefault()) {
+            return Doc.text("default");
+        }
+        String flatLabels = compactJoin(entry.getLabels());
+        String flat = "case " + flatLabels;
+        if (entry.getLabels().size() == 1 || currentIndentedWidth(flat + " -> {}") <= options.lineWidth()) {
+            return Doc.text(flat);
+        }
+        return Doc.concat(
+                Doc.text("case"),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(
+                                Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                                entry.getLabels().stream().map(label -> Doc.text(compact(label))).toList()))));
+    }
+
+    private Doc switchStatementGroupEntry(Doc label, String guard, NodeList<Statement> statements) {
+        if (statements.size() == 1 && statements.get(0).isBlockStmt()) {
+            return Doc.concat(label, Doc.text(guard + ": "), switchStatementGroupBlock(statements.get(0).asBlockStmt()));
+        }
+        return Doc.concat(label, Doc.text(guard + ":"), switchEntryStatements(statements));
+    }
+
+    private Doc switchStatementGroupBlock(BlockStmt block) {
+        if (block.getStatements().isEmpty() && block.getOrphanComments().isEmpty()) {
+            return Doc.concat(Doc.text("{"), Doc.HARD_LINE, Doc.text("}"));
+        }
+        return block(block);
+    }
+
+    private boolean hasLeadingOwnComment(Statement statement) {
+        return statement.getComment()
+                .filter(comment -> comment.getRange()
+                        .flatMap(commentRange -> statement.getRange()
+                                .map(statementRange -> commentRange.begin.line < statementRange.begin.line))
+                        .orElse(false))
+                .isPresent();
     }
 
     private Optional<Doc> rawSingleLineSwitchEntry(SwitchEntry entry) {
         if (entry.getType() == SwitchEntry.Type.STATEMENT_GROUP) {
             return Optional.empty();
         }
-        String raw = rawWithoutOwnComment(entry).stripTrailing();
-        if (!raw.contains("->") || raw.contains("\n") || currentIndentedWidth(raw) <= options.lineWidth()) {
+        String raw = entry.getTokenRange().map(Object::toString).orElseGet(() -> rawWithoutOwnComment(entry)).stripTrailing();
+        if (!raw.contains("->") || raw.contains("\n")) {
+            return Optional.empty();
+        }
+        boolean preservesSourceOnlySyntax = raw.contains("/*") || raw.contains("null, default");
+        if (!preservesSourceOnlySyntax && currentIndentedWidth(raw) <= options.lineWidth()) {
+            return Optional.empty();
+        }
+        if (!preservesSourceOnlySyntax && !raw.contains(" when ")) {
             return Optional.empty();
         }
         return Optional.of(Doc.text(raw));
@@ -1893,12 +1967,19 @@ final class JavaPrinter {
 
     private Doc switchEntryBody(Statement statement) {
         if (statement.isBlockStmt()) {
-            return block(statement.asBlockStmt());
+            return switchRuleBlock(statement.asBlockStmt());
         }
         if (statement instanceof ExpressionStmt expressionStmt) {
             return Doc.concat(expression(expressionStmt.getExpression()), Doc.text(";"));
         }
         return Doc.concat(statement(statement));
+    }
+
+    private Doc switchRuleBlock(BlockStmt block) {
+        if (block.getStatements().isEmpty() && block.getOrphanComments().isEmpty()) {
+            return Doc.concat(Doc.text("{"), Doc.HARD_LINE, Doc.text("}"));
+        }
+        return block(block);
     }
 
     private Doc switchEntryStatements(NodeList<Statement> statements) {

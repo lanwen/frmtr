@@ -1399,6 +1399,36 @@ final class JavaPrinter {
             String declarationPrefix) {
         String flat = declarationPrefix + variable.getNameAsString() + " = " + compact(initializer) + ";";
         String name = variableName(variable);
+        Optional<Doc> preEqualsBlockComment = preEqualsBlockComment(variable, initializer);
+        if (preEqualsBlockComment.isPresent()) {
+            String commentedName = name + " " + commentText(preEqualsBlockComment.orElseThrow());
+            String commentedFlat = declarationPrefix
+                    + commentedName
+                    + " = "
+                    + compactWithoutOwnComment(initializer)
+                    + ";";
+            if (blockStatementWidth(commentedFlat) > options.lineWidth()) {
+                return Doc.concat(
+                        Doc.text(commentedName + " ="),
+                        Doc.indent(Doc.concat(Doc.HARD_LINE, expressionWithoutOwnComment(initializer))));
+            }
+            return Doc.concat(Doc.text(commentedName + " = "), expressionWithoutOwnComment(initializer));
+        }
+        Optional<String> postEqualsBlockComment = postEqualsBlockComment(variable, initializer);
+        if (postEqualsBlockComment.isPresent()) {
+            String commentedFlat = declarationPrefix
+                    + name
+                    + " = "
+                    + postEqualsBlockComment.orElseThrow()
+                    + " "
+                    + compactWithoutOwnComment(initializer)
+                    + ";";
+            if (blockStatementWidth(commentedFlat) > options.lineWidth()) {
+                return Doc.concat(
+                        Doc.text(name + " ="),
+                        Doc.indent(Doc.concat(Doc.HARD_LINE, expression(initializer))));
+            }
+        }
         Optional<Doc> leadingInitializerComments = leadingInitializerComments(variable, initializer);
         if (leadingInitializerComments.isPresent()) {
             return Doc.concat(
@@ -1506,6 +1536,35 @@ final class JavaPrinter {
                     Doc.indent(Doc.concat(Doc.HARD_LINE, brokenInitializer(initializer))));
         }
         return Doc.concat(Doc.text(name + " = "), expression(initializer));
+    }
+
+    private Optional<Doc> preEqualsBlockComment(VariableDeclarator variable, Expression initializer) {
+        String raw = raw(variable);
+        int equals = raw.indexOf('=');
+        int blockComment = raw.indexOf("/*");
+        if (blockComment < 0 || equals < 0 || blockComment > equals) {
+            return Optional.empty();
+        }
+        Doc comment = comments.ownComment(initializer, BlockComment.class::isInstance);
+        return comment == Doc.EMPTY ? Optional.empty() : Optional.of(comment);
+    }
+
+    private Optional<String> postEqualsBlockComment(VariableDeclarator variable, Expression initializer) {
+        String raw = raw(variable);
+        int equals = raw.indexOf('=');
+        int blockComment = raw.indexOf("/*");
+        if (blockComment < 0 || equals < 0 || blockComment < equals) {
+            return Optional.empty();
+        }
+        return initializer.getComment()
+                .filter(BlockComment.class::isInstance)
+                .map(comment -> comment.getTokenRange().map(Object::toString).orElseGet(comment::toString).strip());
+    }
+
+    private Doc expressionWithoutOwnComment(Expression expression) {
+        Expression clone = expression.clone();
+        clone.removeComment();
+        return expression(clone);
     }
 
     private Optional<Doc> variableWithBrokenArrayCreation(

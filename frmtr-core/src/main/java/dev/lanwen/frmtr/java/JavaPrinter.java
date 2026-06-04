@@ -2922,6 +2922,10 @@ final class JavaPrinter {
         if (statement.getArguments().isEmpty()) {
             return Doc.text(prefix + "()");
         }
+        Optional<Doc> huggableLambda = huggableBlockLambdaArguments(prefix, statement.getArguments());
+        if (huggableLambda.isPresent()) {
+            return huggableLambda.orElseThrow();
+        }
         return Doc.group(Doc.concat(
                 Doc.text(prefix + "("),
                 Doc.indent(Doc.concat(

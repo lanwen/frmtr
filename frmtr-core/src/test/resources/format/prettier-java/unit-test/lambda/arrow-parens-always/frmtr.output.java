@@ -292,21 +292,17 @@ public class Lambda {
 class T {
 
     T() {
-        super(
-            x -> {
-                // testing method
-                return n * 2;
-            }
-        );
+        super(x -> {
+            // testing method
+            return n * 2;
+        });
     }
 
     T() {
-        super(
-            (x, y) -> {
-                // testing method
-                return n * 2;
-            }
-        );
+        super((x, y) -> {
+            // testing method
+            return n * 2;
+        });
     }
 
     T() {
@@ -326,21 +322,16 @@ class T {
     }
 
     T() {
-        super(
-            (aVeryLongListOfParameter, aVeryLongListOfParameter, aParameterThatS) -> {
-                // testing method
-                return n * 2;
-            }
-        );
+        super((aVeryLongListOfParameter, aVeryLongListOfParameter, aParameterThatS) -> {
+            // testing method
+            return n * 2;
+        });
     }
 
     T() {
-        super(
-            a,
-            () -> {
-                return b;
-            }
-        );
+        super(a, () -> {
+            return b;
+        });
     }
 }
 

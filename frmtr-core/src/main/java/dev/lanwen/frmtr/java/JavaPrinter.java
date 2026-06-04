@@ -1423,7 +1423,12 @@ final class JavaPrinter {
                     && arrayAccessExpr.getName().isEnclosedExpr()) {
                 return Doc.concat(Doc.text(name + " = "), arrayAccessWithBrokenEnclosedName(arrayAccessExpr));
             }
-            if (initializer instanceof BinaryExpr) {
+            if (initializer instanceof BinaryExpr binaryExpr) {
+                if (shouldKeepCastDivisionContinuationFlat(binaryExpr)) {
+                    return Doc.concat(
+                            Doc.text(name + " ="),
+                            Doc.indent(Doc.concat(Doc.HARD_LINE, expression(binaryExpr))));
+                }
                 return Doc.concat(
                         Doc.text(name + " ="),
                         Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines(initializer, true))));
@@ -1439,6 +1444,13 @@ final class JavaPrinter {
             Optional<Doc> chain = methodCallChain(methodCall, true);
             if (chain.isPresent()) {
                 return Doc.concat(Doc.text(name + " = "), chain.orElseThrow());
+            }
+            Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
+                    name,
+                    declarationPrefix + variable.getNameAsString(),
+                    methodCall);
+            if (directCall.isPresent()) {
+                return directCall.orElseThrow();
             }
         }
         if (currentIndentedWidth(flat) > options.lineWidth()
@@ -1467,14 +1479,49 @@ final class JavaPrinter {
         return Doc.concat(Doc.text(name + " = "), expression(initializer));
     }
 
+    private Optional<Doc> variableWithBrokenMethodCallArguments(
+            String name,
+            String flatName,
+            MethodCallExpr methodCall) {
+        if (methodCall.getArguments().isEmpty()
+                || !methodCall.getAllContainedComments().isEmpty()
+                || methodCall.getScope().filter(this::shouldPrintScopeAsDoc).isPresent()) {
+            return Optional.empty();
+        }
+        String callPrefix = methodCallPrefix(methodCall);
+        String firstLine = flatName + " = " + callPrefix + "(";
+        if (currentIndentedWidth(firstLine) > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+                Doc.text(name + " = " + callPrefix + "("),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), methodCall.getArguments().stream()
+                                .map(this::expression)
+                                .toList()))),
+                Doc.HARD_LINE,
+                Doc.text(")")));
+    }
+
     private Doc conditionalInitializer(String name, String flatName, ConditionalExpr initializer) {
         String conditionLine = flatName + " = " + compact(initializer.getCondition());
+        if (shouldBreakBeforeConditionalInitializer(initializer)) {
+            return Doc.concat(
+                    Doc.text(name + " ="),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, conditionalExpression(initializer, true))));
+        }
         if (blockStatementWidth(conditionLine + ";") <= options.lineWidth()) {
             return Doc.concat(Doc.text(name + " = "), conditionalExpression(initializer, true));
         }
         return Doc.concat(
                 Doc.text(name + " ="),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, conditionalExpression(initializer, true))));
+    }
+
+    private boolean shouldBreakBeforeConditionalInitializer(ConditionalExpr initializer) {
+        return initializer.getCondition() instanceof BinaryExpr
+                && (initializer.getThenExpr() instanceof BinaryExpr || initializer.getElseExpr() instanceof BinaryExpr);
     }
 
     private Optional<Doc> leadingInitializerComments(VariableDeclarator variable, Expression initializer) {
@@ -1802,6 +1849,10 @@ final class JavaPrinter {
 
     private int blockStatementWidth(String text) {
         return (options.indentUnit().length() * 2) + text.length();
+    }
+
+    private int continuationStatementWidth(String text) {
+        return (options.indentUnit().length() * 3) + text.length();
     }
 
     private Doc initializer(InitializerDeclaration declaration) {
@@ -2422,9 +2473,27 @@ final class JavaPrinter {
                 && parenthesizedInnerWidth(compact(instanceOfExpr)) > options.lineWidth()) {
             return Doc.concat(expression(instanceOfExpr), Doc.text(" && "), expression(operands.getLast()));
         }
+        if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END
+                && operands.size() == 2
+                && operands.getFirst() instanceof MethodCallExpr methodCall
+                && shouldBreakEndPositionMethodCallOperand(binaryExpr.getOperator(), methodCall)
+                && continuationStatementWidth(") " + binaryExpr.getOperator().asString() + " " + compact(operands.getLast()))
+                        <= options.lineWidth()) {
+            return Doc.concat(
+                    methodCall(methodCall, MethodCallMode.BREAK),
+                    Doc.text(" " + binaryExpr.getOperator().asString() + " "),
+                    expression(operands.getLast()));
+        }
         List<Doc> lines = new ArrayList<>();
         for (int i = 0; i < operands.size(); i++) {
-            Doc operand = binaryExpressionLineOperand(binaryExpr.getOperator(), operands.get(i));
+            Expression operandExpression = operands.get(i);
+            Doc operand = binaryExpressionLineOperand(binaryExpr.getOperator(), operandExpression);
+            if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END
+                    && i < operands.size() - 1
+                    && shouldBreakEndPositionMethodCallOperand(binaryExpr.getOperator(), operandExpression)) {
+                MethodCallExpr methodCall = (MethodCallExpr) operandExpression;
+                operand = methodCall(methodCall, MethodCallMode.BREAK);
+            }
             if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.START && i > 0) {
                 operand = Doc.concat(Doc.text(binaryExpr.getOperator().asString() + " "), operand);
             } else if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END && i < operands.size() - 1) {
@@ -2457,6 +2526,18 @@ final class JavaPrinter {
             return Doc.concat(Doc.text("("), expression(binaryOperand), Doc.text(")"));
         }
         return expression(operand);
+    }
+
+    private boolean shouldKeepCastDivisionContinuationFlat(BinaryExpr expression) {
+        return expression.getOperator() == BinaryExpr.Operator.DIVIDE
+                && expression.getLeft() instanceof CastExpr
+                && blockStatementWidth(compact(expression)) <= options.lineWidth();
+    }
+
+    private boolean shouldBreakEndPositionMethodCallOperand(BinaryExpr.Operator operator, Expression operand) {
+        return operand instanceof MethodCallExpr methodCall
+                && !methodCall.getArguments().isEmpty()
+                && continuationStatementWidth(compact(methodCall) + " " + operator.asString()) > options.lineWidth();
     }
 
     private boolean binaryExpressionHasLineComments(BinaryExpr expression) {
@@ -2883,7 +2964,13 @@ final class JavaPrinter {
                             Doc.text(" " + assignExpr.getOperator().asString() + " "),
                             suffixedEnclosedValue.orElseThrow());
                 }
-                if (assignExpr.getValue() instanceof BinaryExpr) {
+                if (assignExpr.getValue() instanceof BinaryExpr binaryExpr) {
+                    if (shouldKeepCastDivisionContinuationFlat(binaryExpr)) {
+                        return Doc.concat(
+                                expression(assignExpr.getTarget()),
+                                Doc.text(" " + assignExpr.getOperator().asString()),
+                                Doc.indent(Doc.concat(Doc.HARD_LINE, expression(binaryExpr))));
+                    }
                     return Doc.concat(
                             expression(assignExpr.getTarget()),
                             Doc.text(" " + assignExpr.getOperator().asString()),
@@ -2895,6 +2982,13 @@ final class JavaPrinter {
                             expression(assignExpr.getTarget()),
                             Doc.text(" " + assignExpr.getOperator().asString() + " "),
                             objectCreation(objectCreationExpr, MethodCallMode.BREAK));
+                }
+                if (assignExpr.getValue() instanceof ConditionalExpr conditionalExpr
+                        && shouldBreakBeforeConditionalInitializer(conditionalExpr)) {
+                    return Doc.concat(
+                            expression(assignExpr.getTarget()),
+                            Doc.text(" " + assignExpr.getOperator().asString()),
+                            Doc.indent(Doc.concat(Doc.HARD_LINE, conditionalExpression(conditionalExpr, true))));
                 }
             }
             return Doc.concat(
@@ -3620,9 +3714,7 @@ final class JavaPrinter {
         if (suffixedEnclosed.isPresent()) {
             return suffixedEnclosed.orElseThrow();
         }
-        String prefix = expression.getScope().map(scope -> compact(scope) + ".").orElse("")
-                + expression.getTypeArguments().map(typeArguments -> "<" + compactJoin(typeArguments) + ">").orElse("")
-                + expression.getNameAsString();
+        String prefix = methodCallPrefix(expression);
         if (expression.getArguments().isEmpty()) {
             Optional<Doc> commentedArguments = emptyMethodCallArguments(prefix, expression);
             if (commentedArguments.isPresent()) {
@@ -3652,6 +3744,12 @@ final class JavaPrinter {
                 methodCallLine(mode),
                 Doc.text(")"));
         return mode == MethodCallMode.BREAK ? call : Doc.group(call);
+    }
+
+    private String methodCallPrefix(MethodCallExpr expression) {
+        return expression.getScope().map(scope -> compact(scope) + ".").orElse("")
+                + expression.getTypeArguments().map(typeArguments -> "<" + compactJoin(typeArguments) + ">").orElse("")
+                + expression.getNameAsString();
     }
 
     private Optional<Doc> suffixedEnclosedExpression(Expression expression, boolean leadingBreak) {

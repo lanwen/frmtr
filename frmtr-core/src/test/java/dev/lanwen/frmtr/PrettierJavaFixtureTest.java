@@ -82,6 +82,8 @@ final class PrettierJavaFixtureTest {
             "arrays",
             "annotation_interface_declaration",
             "assert",
+            "binary_expressions/operator-position-end",
+            "binary_expressions/operator-position-start",
             "blank_lines",
             "bug-fixes",
             "cast",

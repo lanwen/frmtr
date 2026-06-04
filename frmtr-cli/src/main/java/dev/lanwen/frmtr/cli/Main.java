@@ -22,6 +22,7 @@ import picocli.CommandLine.Parameters;
 @Command(
         name = "frmtr",
         mixinStandardHelpOptions = true,
+        versionProvider = Main.BuildVersionProvider.class,
         description = "Formats Java source.")
 public final class Main implements Callable<Integer> {
     @Option(names = "--check", description = "Check whether files are already formatted.")
@@ -75,7 +76,10 @@ public final class Main implements Callable<Integer> {
     }
 
     static CommandLine commandLine(Main main) {
-        return new CommandLine(main).setExecutionExceptionHandler(Main::handleExecutionException);
+        return new CommandLine(main)
+                .setOut(main.out)
+                .setErr(main.err)
+                .setExecutionExceptionHandler(Main::handleExecutionException);
     }
 
     private static int handleExecutionException(
@@ -221,6 +225,17 @@ public final class Main implements Callable<Integer> {
                 normalized = "JAVA_" + normalized;
             }
             return FormatterOptions.JavaLanguageLevel.valueOf(normalized);
+        }
+    }
+
+    static final class BuildVersionProvider implements CommandLine.IVersionProvider {
+        @Override
+        public String[] getVersion() {
+            return new String[] {
+                "frmtr version " + BuildInfo.VERSION,
+                "commit " + BuildInfo.COMMIT_SHA,
+                "built " + BuildInfo.BUILD_TIMESTAMP
+            };
         }
     }
 }

@@ -34,6 +34,24 @@ final class MainTest {
     }
 
     @Test
+    void printsVersionBuildShaAndTimestamp() {
+        StringWriter out = new StringWriter();
+        StringWriter err = new StringWriter();
+        Main main = new Main(new PrintWriter(out, true), new PrintWriter(err, true), "");
+
+        int exitCode = Main.commandLine(main).execute("--version");
+
+        assertThat(exitCode).isZero();
+        assertThat(out.toString())
+                .contains("frmtr version ")
+                .contains("commit ")
+                .contains(BuildInfo.COMMIT_SHA)
+                .contains("built ")
+                .contains(BuildInfo.BUILD_TIMESTAMP);
+        assertThat(err.toString()).isEmpty();
+    }
+
+    @Test
     void rejectsCheckAndWriteTogether() {
         StringWriter out = new StringWriter();
         StringWriter err = new StringWriter();

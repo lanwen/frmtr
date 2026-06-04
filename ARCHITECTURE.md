@@ -16,6 +16,8 @@ The project is a Gradle multi-module build:
 
 Shared subproject conventions configure Java 25, UTF-8 compilation, `-Xlint:all`, JUnit Platform, and JaCoCo. External dependency versions and the GraalVM Native Build Tools plugin are managed through the Gradle version catalog in `gradle/libs.versions.toml`.
 
+`:frmtr-cli` generates a small `BuildInfo` source file during compilation. It embeds the project version, current Git commit SHA, and build timestamp so JVM and native CLI binaries report the same build identity through `--version`.
+
 ## Package Layout
 
 - `frmtr-core/src/main/java/dev/lanwen/frmtr`: public API and configuration.
@@ -77,6 +79,7 @@ The CLI is an adapter over the public formatter API:
 - `--check`: report each checked Java file with a status marker and exit non-zero when changes are needed. `✓` means already formatted, `✗` means formatting would change, and `!` means parsing or reading failed.
 - `--diff`: when combined with `--check`, print unified diffs for files marked `✗`; passed files and parse/read failures do not produce diff blocks.
 - `--write`: rewrite files in place.
+- `--version`: print the project version, Git commit SHA, and build timestamp.
 - `--java-level`: select the core Java parser language level; accepts enum names such as `LATEST_AVAILABLE` and `UNSET`, plus release shorthands such as `21` or `JAVA_21`.
 - `--stacktrace`: include formatter or I/O stack traces in failure output; default CLI failures stay concise.
 - Selectors may be repeated, comma-separated, files, directories, or glob patterns.

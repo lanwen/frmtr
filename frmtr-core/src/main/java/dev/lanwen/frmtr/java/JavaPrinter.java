@@ -1332,7 +1332,7 @@ final class JavaPrinter {
     private Doc variable(VariableDeclarator variable, String declarationPrefix) {
         return variable.getInitializer()
                 .map(expression -> variableWithInitializer(variable, expression, declarationPrefix))
-                .orElseGet(() -> Doc.text(variable.getNameAsString()));
+                .orElseGet(() -> Doc.text(variableName(variable)));
     }
 
     private Doc variableWithInitializer(
@@ -1340,12 +1340,13 @@ final class JavaPrinter {
             Expression initializer,
             String declarationPrefix) {
         String flat = declarationPrefix + variable.getNameAsString() + " = " + compact(initializer) + ";";
+        String name = variableName(variable);
         if (currentIndentedWidth(flat) > options.lineWidth()
                 && initializer instanceof MethodCallExpr methodCall
                 && !initializerHasOwnBreak(initializer)) {
             Optional<Doc> chain = methodCallChain(methodCall, true);
             if (chain.isPresent()) {
-                return Doc.concat(Doc.text(variable.getNameAsString() + " = "), chain.orElseThrow());
+                return Doc.concat(Doc.text(name + " = "), chain.orElseThrow());
             }
         }
         if (currentIndentedWidth(flat) > options.lineWidth()
@@ -1353,7 +1354,7 @@ final class JavaPrinter {
                 && castExpr.getExpression() instanceof MethodCallExpr methodCall
                 && !initializerHasOwnBreak(initializer)) {
             return Doc.concat(
-                    Doc.text(variable.getNameAsString() + " = "),
+                    Doc.text(name + " = "),
                     castType(castExpr.getType()),
                     Doc.text(" "),
                     methodCall(methodCall, MethodCallMode.BREAK));
@@ -1362,10 +1363,18 @@ final class JavaPrinter {
                 && !(initializer instanceof StringLiteralExpr)
                 && !initializerHasOwnBreak(initializer)) {
             return Doc.concat(
-                    Doc.text(variable.getNameAsString() + " ="),
+                    Doc.text(name + " ="),
                     Doc.indent(Doc.concat(Doc.HARD_LINE, brokenInitializer(initializer))));
         }
-        return Doc.concat(Doc.text(variable.getNameAsString() + " = "), expression(initializer));
+        return Doc.concat(Doc.text(name + " = "), expression(initializer));
+    }
+
+    private String variableName(VariableDeclarator variable) {
+        Doc leadingBlockComment = comments.ownComment(variable, BlockComment.class::isInstance);
+        if (leadingBlockComment == Doc.EMPTY) {
+            return variable.getNameAsString();
+        }
+        return commentText(leadingBlockComment) + " " + variable.getNameAsString();
     }
 
     private Doc brokenInitializer(Expression initializer) {
@@ -1921,7 +1930,16 @@ final class JavaPrinter {
         }
         parts.add(type);
         parts.add(parameter.getNameAsString());
-        return Doc.text(String.join(" ", parts));
+        String text = String.join(" ", parts);
+        Doc leadingBlockComment = comments.ownComment(parameter, BlockComment.class::isInstance);
+        if (leadingBlockComment != Doc.EMPTY) {
+            text = commentText(leadingBlockComment) + " " + text;
+        }
+        Doc trailingBlockComment = unattachedTrailingBlockComment(parameter);
+        if (trailingBlockComment != Doc.EMPTY) {
+            text += " " + commentText(trailingBlockComment);
+        }
+        return Doc.text(text);
     }
 
     private Doc block(BlockStmt block) {
@@ -2291,18 +2309,29 @@ final class JavaPrinter {
         Doc previousBlockTrailingComment = comments.trailingLineComment(statement.getTryBlock());
         for (int i = 0; i < statement.getCatchClauses().size(); i++) {
             CatchClause clause = statement.getCatchClauses().get(i);
+            Doc catchPrefixComment = ownBlockCommentBeforeNode(clause);
             docs.add(Doc.text(" "));
+            if (catchPrefixComment != Doc.EMPTY) {
+                docs.add(catchPrefixComment);
+                docs.add(Doc.text(" "));
+            }
             docs.add(catchClause(
                     clause,
                     statement.getCatchClauses().size(),
                     statement.getFinallyBlock().isPresent(),
-                    Doc.concat(previousBlockTrailingComment, ownCommentBeforeNode(clause))));
+                    Doc.concat(previousBlockTrailingComment, ownLineCommentBeforeNode(clause))));
             previousBlockTrailingComment = trailingCommentAfterClause(clause);
         }
         if (statement.getFinallyBlock().isPresent()) {
             BlockStmt finallyBlock = statement.getFinallyBlock().orElseThrow();
-            docs.add(Doc.text(" finally "));
-            docs.add(tryBlock(finallyBlock, Doc.concat(previousBlockTrailingComment, ownCommentBeforeNode(finallyBlock))));
+            Doc finallyPrefixComment = ownBlockCommentBeforeNode(finallyBlock);
+            docs.add(Doc.text(" "));
+            if (finallyPrefixComment != Doc.EMPTY) {
+                docs.add(finallyPrefixComment);
+                docs.add(Doc.text(" "));
+            }
+            docs.add(Doc.text("finally "));
+            docs.add(tryBlock(finallyBlock, Doc.concat(previousBlockTrailingComment, ownLineCommentBeforeNode(finallyBlock))));
         }
         Doc finalTrailingComment = statement.getFinallyBlock()
                 .map(comments::trailingLineComment)
@@ -2375,11 +2404,19 @@ final class JavaPrinter {
         return comments.trailingLineComment(clause);
     }
 
-    private Doc ownCommentBeforeNode(Node node) {
-        return comments.ownComment(node, comment -> comment.getRange()
-                .flatMap(commentRange -> node.getRange()
-                        .map(nodeRange -> commentRange.begin.line < nodeRange.begin.line))
-                .orElse(false));
+    private Doc ownBlockCommentBeforeNode(Node node) {
+        return comments.ownComment(node, comment -> comment instanceof BlockComment
+                && comment.getRange()
+                        .flatMap(commentRange -> node.getRange().map(nodeRange -> startsBefore(commentRange, nodeRange)))
+                        .orElse(false));
+    }
+
+    private Doc ownLineCommentBeforeNode(Node node) {
+        return comments.ownComment(node, comment -> comment instanceof LineComment
+                && comment.getRange()
+                        .flatMap(commentRange -> node.getRange()
+                                .map(nodeRange -> commentRange.begin.line < nodeRange.begin.line))
+                        .orElse(false));
     }
 
     private Doc rawTrailingLineComment(Node node) {
@@ -2433,6 +2470,18 @@ final class JavaPrinter {
             if (currentStatement.isEmptyStmt() && previousStatement instanceof SwitchStmt) {
                 continue;
             }
+            if (currentStatement instanceof EmptyStmt emptyStmt) {
+                Optional<Doc> emptyStatementComment = blockEmptyStatementComment(emptyStmt);
+                if (emptyStatementComment.isEmpty()) {
+                    continue;
+                }
+                if (!statements.isEmpty()) {
+                    statements.add(statementSeparator(previousStatement, currentStatement));
+                }
+                statements.add(emptyStatementComment.orElseThrow());
+                previousStatement = currentStatement;
+                continue;
+            }
             if (!statements.isEmpty()) {
                 statements.add(statementSeparator(previousStatement, currentStatement));
             }
@@ -2460,6 +2509,9 @@ final class JavaPrinter {
     }
 
     private Doc catchParameter(Parameter parameter) {
+        if (parameterHasComments(parameter) && compact(parameter).contains("|")) {
+            return commentedCatchParameter(parameter);
+        }
         String flat = compact(parameter);
         if (!flat.contains("|") || currentIndentedWidth("catch (" + flat + ") {}") <= options.lineWidth()) {
             return Doc.text(flat);
@@ -2471,6 +2523,30 @@ final class JavaPrinter {
             String prefix = i == 0 ? "" : "| ";
             String suffix = i == parts.size() - 1 ? " " + parameter.getNameAsString() : "";
             lines.add(Doc.text(prefix + parts.get(i) + suffix));
+        }
+        return Doc.concat(Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, lines))), Doc.HARD_LINE);
+    }
+
+    private boolean parameterHasComments(Parameter parameter) {
+        return parameter.getComment().filter(BlockComment.class::isInstance).isPresent()
+                || !parameter.getAllContainedComments().isEmpty();
+    }
+
+    private Doc commentedCatchParameter(Parameter parameter) {
+        String rawType = parameter.getType().getTokenRange()
+                .map(Object::toString)
+                .orElseGet(() -> compactTypeLike(parameter.getType()));
+        List<String> parts = List.of(rawType.split("\\s*\\|\\s*"));
+        Doc leading = comments.ownComment(parameter, BlockComment.class::isInstance);
+        List<Doc> lines = new ArrayList<>();
+        for (int i = 0; i < parts.size(); i++) {
+            String type = formatCommentedTokenLine(moduleTokens(parts.get(i).strip()));
+            if (i == 0 && leading != Doc.EMPTY) {
+                type = commentText(leading) + " " + type;
+            }
+            String prefix = i == 0 ? "" : "| ";
+            String suffix = i == parts.size() - 1 ? " " + parameter.getNameAsString() : "";
+            lines.add(Doc.text(prefix + type + suffix));
         }
         return Doc.concat(Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, lines))), Doc.HARD_LINE);
     }
@@ -2662,14 +2738,45 @@ final class JavaPrinter {
             return Doc.text("{}");
         }
         List<Doc> values = new ArrayList<>(comments);
-        values.addAll(expression.getValues().stream()
-                .map(value -> Doc.concat(expression(value), Doc.text(",")))
-                .toList());
+        for (int i = 0; i < expression.getValues().size(); i++) {
+            Expression value = expression.getValues().get(i);
+            Expression next = i + 1 < expression.getValues().size() ? expression.getValues().get(i + 1) : null;
+            values.add(Doc.concat(arrayInitializerValue(value, next), Doc.text(",")));
+        }
         return Doc.concat(
                 Doc.text("{"),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, values))),
                 Doc.HARD_LINE,
                 Doc.text("}"));
+    }
+
+    private Doc arrayInitializerValue(Expression value, Expression next) {
+        List<Doc> parts = new ArrayList<>();
+        Doc leadingComment = comments.ownComment(value, comment -> comment instanceof BlockComment
+                && comment.getRange()
+                        .flatMap(commentRange -> value.getRange().map(valueRange -> startsBefore(commentRange, valueRange)))
+                        .orElse(false));
+        if (leadingComment != Doc.EMPTY) {
+            parts.add(leadingComment);
+            parts.add(Doc.text(" "));
+        }
+        parts.add(expression(value));
+        if (next != null) {
+            Doc trailingComment = next.getComment()
+                    .filter(BlockComment.class::isInstance)
+                    .filter(comment -> startsAfterNodeOnSameLine(value, comment))
+                    .filter(comment -> comment.getRange()
+                            .flatMap(commentRange -> next.getRange()
+                                    .map(nextRange -> commentRange.begin.line < nextRange.begin.line))
+                            .orElse(false))
+                    .map(comments::comment)
+                    .orElse(Doc.EMPTY);
+            if (trailingComment != Doc.EMPTY) {
+                parts.add(Doc.text(" "));
+                parts.add(trailingComment);
+            }
+        }
+        return Doc.concat(parts);
     }
 
     private Doc annotation(AnnotationExpr annotation) {

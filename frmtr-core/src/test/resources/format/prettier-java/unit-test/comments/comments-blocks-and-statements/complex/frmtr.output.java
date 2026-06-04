@@ -4,30 +4,34 @@ public class PrettierTest {
 
     public void myFunction(int arg1) {
         try {
-            ; // Empty Statement
-        } catch (EmptyStackException e) {
+            // Empty Statement
+        } /*catch*/ catch (EmptyStackException e) {
             throw new RuntimeException(e);
-        } catch (FirstException | /*2*/SecondException |/*3*/ ThirdException e2) {
+        } /*multi-catch*/ catch (
+            /*1*/ FirstException
+            | /*2*/ SecondException
+            | /*3*/ ThirdException e2
+        ) {
             throw new RuntimeException(e2);
-        } finally {
+        } /*is always executed no matter what*/ finally {
             System.out.println("That's all folks !");
         }
     }
 
-    private void myFunction(int arg1, int arg2, int arg3) {
+    private void myFunction(/* axis x */ int arg1, /* axis y */ int arg2, /* axis z */ int arg3) {
         if (arg1 == 0 && arg2 == 0 && arg == 3) throw new RuntimeException("X Y Z cannot be all 0");
 
-        int var = arg1 + arg2 + arg3;
+        int /*variable name is of value var */ var = arg1 + arg2 + arg3;
         if (/*true*/ var == 0) {
             System.out.println("The value is 0");
         } else /*false*/
         {
             int[] arr = {
-                1,
-                2,
-                0,
-                1,
-                -1,
+                /*One*/ 1,
+                /*Two */ 2,
+                /*zero*/ 0,
+                /*One again*/ 1,
+                -1 /*Minus One*/,
                 0,
                 2,
             };

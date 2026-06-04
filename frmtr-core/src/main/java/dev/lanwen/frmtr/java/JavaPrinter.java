@@ -1263,7 +1263,11 @@ final class JavaPrinter {
             case WhileStmt whileStmt -> whileStatement(whileStmt);
             case DoStmt doStmt -> doStatement(doStmt);
             case TryStmt tryStmt -> tryStatement(tryStmt);
-            case SynchronizedStmt synchronizedStmt -> Doc.concat(Doc.text("synchronized (" + compact(synchronizedStmt.getExpression()) + ") "), block(synchronizedStmt.getBody()));
+            case SynchronizedStmt synchronizedStmt -> Doc.concat(
+                    Doc.text("synchronized "),
+                    controlCondition(synchronizedStmt.getExpression()),
+                    Doc.text(" "),
+                    block(synchronizedStmt.getBody()));
             case SwitchStmt switchStmt -> switchStatement(switchStmt);
             case ForStmt forStmt -> forStatement(forStmt);
             case ForEachStmt forEachStmt -> forEachStatement(forEachStmt);
@@ -1316,13 +1320,22 @@ final class JavaPrinter {
         flattenBinaryExpression(binaryExpr, binaryExpr.getOperator(), operands);
         List<Doc> lines = new ArrayList<>();
         for (int i = 0; i < operands.size(); i++) {
-            Doc operand = expression(operands.get(i));
+            Doc operand = binaryExpressionLineOperand(binaryExpr.getOperator(), operands.get(i));
             if (i < operands.size() - 1) {
                 operand = Doc.concat(operand, Doc.text(" " + binaryExpr.getOperator().asString()));
             }
             lines.add(operand);
         }
         return Doc.join(Doc.HARD_LINE, lines);
+    }
+
+    private Doc binaryExpressionLineOperand(BinaryExpr.Operator operator, Expression operand) {
+        if (operator == BinaryExpr.Operator.OR
+                && operand instanceof BinaryExpr binaryOperand
+                && binaryOperand.getOperator() == BinaryExpr.Operator.AND) {
+            return Doc.concat(Doc.text("("), expression(binaryOperand), Doc.text(")"));
+        }
+        return expression(operand);
     }
 
     private int parenthesizedInnerWidth(String text) {
@@ -2067,12 +2080,16 @@ final class JavaPrinter {
     private Doc switchStatement(SwitchStmt statement) {
         if (statement.getEntries().isEmpty()) {
             return Doc.concat(
-                    Doc.text("switch (" + compact(statement.getSelector()) + ") {"),
+                    Doc.text("switch "),
+                    controlCondition(statement.getSelector()),
+                    Doc.text(" {"),
                     Doc.HARD_LINE,
                     Doc.text("}"));
         }
         return Doc.concat(
-                Doc.text("switch (" + compact(statement.getSelector()) + ") "),
+                Doc.text("switch "),
+                controlCondition(statement.getSelector()),
+                Doc.text(" "),
                 switchBlock(statement.getEntries()));
     }
 
@@ -2601,7 +2618,7 @@ final class JavaPrinter {
             return Doc.text("while (" + emptyBodyHeaderExpression(statement.getCondition(), statement.getBody()) + ");"
                     + trailingEmptyBodyBlockComment(statement));
         }
-        return Doc.concat(Doc.text("while (" + compact(statement.getCondition()) + ") "), nestedStatement(statement.getBody()));
+        return Doc.concat(Doc.text("while "), controlCondition(statement.getCondition()), Doc.text(" "), nestedStatement(statement.getBody()));
     }
 
     private Doc doStatement(DoStmt statement) {
@@ -2615,7 +2632,19 @@ final class JavaPrinter {
             }
             return Doc.text("do; while (" + condition + ");");
         }
-        return Doc.concat(Doc.text("do "), nestedStatement(statement.getBody()), Doc.text(" while (" + compact(statement.getCondition()) + ");"));
+        return Doc.concat(Doc.text("do "), nestedStatement(statement.getBody()), Doc.text(" while "), controlCondition(statement.getCondition()), Doc.text(";"));
+    }
+
+    private Doc controlCondition(Expression expression) {
+        String flat = compact(expression);
+        if (currentIndentedWidth("(" + flat + ") {}") <= options.lineWidth()) {
+            return Doc.text("(" + flat + ")");
+        }
+        return Doc.concat(
+                Doc.text("("),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines(expression))),
+                Doc.HARD_LINE,
+                Doc.text(")"));
     }
 
     private Doc loopWithEmptyBody(String header, Node statement) {

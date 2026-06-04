@@ -110,9 +110,9 @@ public class BinaryOperations {
         }
 
         if (
-            aaaaaaaaaa + bbbbbbbbbb == cccccccccc + dddddddddd && eeeeeeeeee + ffffffffff == gggggggggg + hhhhhhhhhh ||
-            iiiiiiiiii + jjjjjjjjjj == kkkkkkkkkk + llllllllll && mmmmmmmmmm + nnnnnnnnnn == oooooooooo + pppppppppp ||
-            qqqqqqqqqq + rrrrrrrrrr == ssssssssss + tttttttttt && uuuuuuuuuu + vvvvvvvvvv == wwwwwwwwww + xxxxxxxxxxx
+            (aaaaaaaaaa + bbbbbbbbbb == cccccccccc + dddddddddd && eeeeeeeeee + ffffffffff == gggggggggg + hhhhhhhhhh) ||
+            (iiiiiiiiii + jjjjjjjjjj == kkkkkkkkkk + llllllllll && mmmmmmmmmm + nnnnnnnnnn == oooooooooo + pppppppppp) ||
+            (qqqqqqqqqq + rrrrrrrrrr == ssssssssss + tttttttttt && uuuuuuuuuu + vvvvvvvvvv == wwwwwwwwww + xxxxxxxxxxx)
         ) {
         }
     }

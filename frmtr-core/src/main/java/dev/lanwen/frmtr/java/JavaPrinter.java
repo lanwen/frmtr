@@ -4107,6 +4107,10 @@ final class JavaPrinter {
         if (huggableLambda.isPresent()) {
             return huggableLambda.orElseThrow();
         }
+        Optional<Doc> huggableExpressionLambda = huggableMethodCallExpressionLambdaArguments(prefix, expression.getArguments());
+        if (huggableExpressionLambda.isPresent()) {
+            return huggableExpressionLambda.orElseThrow();
+        }
         Optional<Doc> singleTextBlockArgument = singleTextBlockArgument(prefix, expression);
         if (singleTextBlockArgument.isPresent()) {
             return singleTextBlockArgument.orElseThrow();
@@ -4311,6 +4315,49 @@ final class JavaPrinter {
                 Doc.text(prefix + "(" + (leadingArguments.isEmpty() ? "" : leadingArguments + ", ")),
                 lambdaExpression(lambdaExpr),
                 Doc.text((trailingArguments.isEmpty() ? "" : ", " + trailingArguments) + ")")));
+    }
+
+    private Optional<Doc> huggableMethodCallExpressionLambdaArguments(String prefix, NodeList<Expression> arguments) {
+        int lambdaIndex = expressionLambdaArgumentIndex(arguments);
+        if (lambdaIndex < 0 || lambdaIndex < arguments.size() - 1 || hasOtherLambdaArgument(arguments, lambdaIndex)) {
+            return Optional.empty();
+        }
+        LambdaExpr lambdaExpr = (LambdaExpr) arguments.get(lambdaIndex);
+        Optional<Expression> body = lambdaExpr.getExpressionBody();
+        if (body.isEmpty()
+                || !(body.orElseThrow() instanceof MethodCallExpr methodCallBody)
+                || methodCallBody.getArguments().isEmpty()
+                || !lambdaExpr.getAllContainedComments().isEmpty()) {
+            return Optional.empty();
+        }
+        String parameters = lambdaParameters(lambdaExpr);
+        if (lambdaParametersShouldBreak(lambdaExpr, parameters)) {
+            return Optional.empty();
+        }
+        String leadingArguments = compactJoin(arguments.subList(0, lambdaIndex));
+        String firstLine = prefix + "("
+                + (leadingArguments.isEmpty() ? "" : leadingArguments + ", ")
+                + parameters
+                + " ->";
+        String flat = prefix + "(" + compactJoin(arguments) + ")";
+        if (blockStatementWidth(flat) <= options.lineWidth()
+                || blockStatementWidth(firstLine) > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+                Doc.text(firstLine),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, expression(methodCallBody))),
+                Doc.HARD_LINE,
+                Doc.text(")")));
+    }
+
+    private int expressionLambdaArgumentIndex(NodeList<Expression> arguments) {
+        for (int i = 0; i < arguments.size(); i++) {
+            if (arguments.get(i) instanceof LambdaExpr lambdaExpr && lambdaExpr.getExpressionBody().isPresent()) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private Optional<Doc> singleTextBlockArgument(String prefix, MethodCallExpr expression) {

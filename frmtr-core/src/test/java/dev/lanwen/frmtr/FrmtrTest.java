@@ -208,6 +208,37 @@ final class FrmtrTest {
     }
 
     @Test
+    void hugsMethodCallExpressionLambdaBeforeBreakingBody() {
+        String source = """
+                class Demo {
+                    void method() {
+                        a.b(c -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("a.b(c ->\n"
+                        + "      eeeeeeeeee.ffffffffff(\n"
+                        + "        gggggggggg,\n"
+                        + "        hhhhhhhhhh,\n"
+                        + "        iiiiiiiiii,\n"
+                        + "        jjjjjjjjjj,\n"
+                        + "        kkkkkkkkkk\n"
+                        + "      )\n"
+                        + "    );");
+    }
+
+    @Test
     void keepsRelationalLambdaBodyOperatorWithBrokenLeftExpression() {
         String source = """
                 class Demo {

@@ -10,9 +10,27 @@ import com.github.javaparser.ParseStart;
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.Providers;
 import com.github.javaparser.StaticJavaParser;
+import java.io.IOException;
+import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Objects;
 import org.junit.jupiter.api.Test;
 
 final class FrmtrTest {
+    @Test
+    void formatsBasicGoldenFixtureAndIsIdempotent() throws Exception {
+        String source = readResource("format/basic/input.java");
+        String expected = readResource("format/basic/frmtr.output.java");
+
+        String formatted = Frmtr.format(source);
+
+        assertThat(formatted).isEqualTo(expected);
+        assertThat(Frmtr.format(formatted)).isEqualTo(formatted);
+        assertThatCode(() -> StaticJavaParser.parse(formatted)).doesNotThrowAnyException();
+    }
+
     @Test
     void formatsCommonJavaAndIsIdempotent() {
         String source = """
@@ -425,5 +443,11 @@ final class FrmtrTest {
                         };
                     }
                 }""";
+    }
+
+    private static String readResource(String name) throws IOException, URISyntaxException {
+        return Files.readString(
+                Path.of(Objects.requireNonNull(FrmtrTest.class.getClassLoader().getResource(name), name).toURI()),
+                StandardCharsets.UTF_8);
     }
 }

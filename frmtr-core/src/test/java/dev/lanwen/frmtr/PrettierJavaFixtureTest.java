@@ -53,6 +53,7 @@ final class PrettierJavaFixtureTest {
             "if",
             "instantiation",
             "method_reference",
+            "modules",
             "package_and_imports/classWithMixedImports",
             "package_and_imports/classWithMixedCaseImports",
             "package_and_imports/classWithNoImports",

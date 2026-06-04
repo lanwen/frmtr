@@ -34,6 +34,12 @@ import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.modules.ModuleDeclaration;
+import com.github.javaparser.ast.modules.ModuleDirective;
+import com.github.javaparser.ast.modules.ModuleExportsDirective;
+import com.github.javaparser.ast.modules.ModuleOpensDirective;
+import com.github.javaparser.ast.modules.ModuleProvidesDirective;
+import com.github.javaparser.ast.modules.ModuleRequiresDirective;
+import com.github.javaparser.ast.modules.ModuleUsesDirective;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.stmt.BlockStmt;
@@ -174,7 +180,91 @@ final class JavaPrinter {
     }
 
     private Doc moduleDeclaration(ModuleDeclaration declaration) {
-        return Doc.concat(comments.leading(declaration), Doc.text(compact(declaration)));
+        return Doc.concat(
+                comments.leading(declaration),
+                annotations(declaration),
+                Doc.text((declaration.isOpen() ? "open " : "") + "module " + compact(declaration.getName()) + " "),
+                moduleBlock(declaration));
+    }
+
+    private Doc moduleBlock(ModuleDeclaration declaration) {
+        if (declaration.getDirectives().isEmpty()) {
+            return Doc.text("{}");
+        }
+        return Doc.concat(
+                Doc.text("{"),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, moduleContents(declaration.getDirectives()))),
+                Doc.HARD_LINE,
+                Doc.text("}"));
+    }
+
+    private Doc moduleContents(NodeList<ModuleDirective> directives) {
+        List<Doc> contents = new ArrayList<>();
+        for (int i = 0; i < directives.size(); i++) {
+            if (i > 0) {
+                contents.add(moduleDirectiveSeparator(directives.get(i - 1), directives.get(i)));
+            }
+            contents.add(moduleDirective(directives.get(i)));
+        }
+        return Doc.concat(contents);
+    }
+
+    private Doc moduleDirectiveSeparator(ModuleDirective previous, ModuleDirective current) {
+        boolean hasBlankLineBetween = previous.getRange()
+                .flatMap(previousRange -> current.getRange()
+                        .map(currentRange -> currentRange.begin.line > previousRange.end.line + 1))
+                .orElse(false);
+        return hasBlankLineBetween ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;
+    }
+
+    private Doc moduleDirective(ModuleDirective directive) {
+        Doc body = switch (directive) {
+            case ModuleRequiresDirective requiresDirective -> moduleRequiresDirective(requiresDirective);
+            case ModuleExportsDirective exportsDirective -> moduleAccessDirective(
+                    "exports", exportsDirective.getName(), "to", exportsDirective.getModuleNames());
+            case ModuleOpensDirective opensDirective -> moduleAccessDirective(
+                    "opens", opensDirective.getName(), "to", opensDirective.getModuleNames());
+            case ModuleUsesDirective usesDirective -> Doc.text("uses " + compact(usesDirective.getName()) + ";");
+            case ModuleProvidesDirective providesDirective -> moduleAccessDirective(
+                    "provides", providesDirective.getName(), "with", providesDirective.getWith());
+            default -> Doc.text(compact(directive));
+        };
+        return Doc.concat(comments.leading(directive), body);
+    }
+
+    private Doc moduleRequiresDirective(ModuleRequiresDirective directive) {
+        return Doc.text("requires " + modifiers(directive) + compact(directive.getName()) + ";");
+    }
+
+    private Doc moduleAccessDirective(
+            String keyword,
+            com.github.javaparser.ast.expr.Name name,
+            String targetKeyword,
+            NodeList<com.github.javaparser.ast.expr.Name> targets) {
+        String prefix = keyword + " " + compact(name);
+        if (targets.isEmpty()) {
+            return Doc.text(prefix + ";");
+        }
+        String flatTargets = compactJoin(targets);
+        String flat = prefix + " " + targetKeyword + " " + flatTargets + ";";
+        if (currentIndentedWidth(flat) <= options.lineWidth()) {
+            return Doc.text(flat);
+        }
+        String targetLine = targetKeyword + " " + flatTargets + ";";
+        if (currentIndentedWidth(targetLine) <= options.lineWidth()) {
+            return Doc.concat(Doc.text(prefix), Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(targetLine))));
+        }
+        return Doc.concat(
+                Doc.text(prefix),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.text(targetKeyword),
+                        Doc.indent(Doc.concat(
+                                Doc.HARD_LINE,
+                                Doc.join(
+                                        Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                                        targets.stream().map(target -> Doc.text(compact(target))).toList()),
+                                Doc.text(";"))))));
     }
 
     private Doc body(BodyDeclaration<?> declaration) {

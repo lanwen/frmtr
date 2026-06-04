@@ -128,7 +128,7 @@ public class Variables {
         Object.test.creation thisObject4 = classWithName.invocationOne(argument1, argument2, argument3).invocationTwo(argument1, argument2);
 
         Object.test.creation thisObject5 =
-            classWithName.invocationOne(argument1WithAVeryVeryVeryVeryLongName, argument2, argument3).attributeOne.attributeTwo .invocationTwo(argument1, argument2).attributeThree.invocationThree();
+            classWithName.invocationOne(argument1WithAVeryVeryVeryVeryLongName, argument2, argument3).attributeOne.attributeTwo.invocationTwo(argument1, argument2).attributeThree.invocationThree();
 
         Object.test.creation thisObject6 =
             classWithName.invocationOne(argument1, argument2, argument3).attributeOne.attributeTwo.invocationTwo(argument1, argument2).attributeThree.invocationThree();
@@ -144,7 +144,7 @@ public class Variables {
     public void breakAfterEquals() {
         Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object();
 
-        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object() .other().methods();
+        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object().other().methods();
 
         Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object()
             .a()

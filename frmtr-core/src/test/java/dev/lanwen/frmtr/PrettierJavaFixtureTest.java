@@ -85,6 +85,7 @@ final class PrettierJavaFixtureTest {
             "indent",
             "instantiation",
             "interface",
+            "member_chain",
             "method_reference",
             "marker_annotations",
             "modifiers",

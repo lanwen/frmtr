@@ -113,6 +113,7 @@ final class MainTest {
         assertThat(result.out()).isEqualTo("""
                 ✓ Formatted.java
                 ✗ src/Main.java
+                Checked 2 files: 1 unchanged, 1 would change.
                 """);
         assertThat(result.err()).isEmpty();
     }
@@ -141,6 +142,15 @@ final class MainTest {
         assertThat(exitCode).isEqualTo(2);
         assertThat(out.toString()).isEmpty();
         assertThat(err.toString()).isEqualTo("--stdin cannot be combined with --write or selectors\n");
+    }
+
+    @Test
+    void missingExplicitJavaFileSelectorIsToolError(@TempDir Path dir) {
+        Result result = run(dir, null, "--check", "--diff", "src/Missing.java");
+
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.out()).isEmpty();
+        assertThat(result.err()).isEqualTo("File selector does not exist: src/Missing.java\n");
     }
 
     @Test
@@ -176,7 +186,7 @@ final class MainTest {
         Result result = run(dir, null, "--write");
 
         assertThat(result.exitCode()).isZero();
-        assertThat(result.out()).isEmpty();
+        assertThat(result.out()).isEqualTo("Formatted 1 file: 1 written.\n");
         assertThat(result.err()).isEmpty();
         assertThat(Files.readString(dir.resolve("src/Main.java"))).isEqualTo("""
                 class Main {
@@ -194,7 +204,7 @@ final class MainTest {
         Result result = run(dir, null, "--write", "src/**/*.java, examples/*.java");
 
         assertThat(result.exitCode()).isZero();
-        assertThat(result.out()).isEmpty();
+        assertThat(result.out()).isEqualTo("Formatted 2 files: 2 written.\n");
         assertThat(result.err()).isEmpty();
         assertThat(Files.readString(dir.resolve("src/Main.java"))).isEqualTo("""
                 class Main {
@@ -220,7 +230,7 @@ final class MainTest {
                     int value;
                 }
                 """);
-        assertThat(result.err()).isEmpty();
+        assertThat(result.err()).isEqualTo("Formatted 1 file: 1 printed.\n");
     }
 
     @Test
@@ -242,7 +252,7 @@ final class MainTest {
                     int value;
                 }
                 """);
-        assertThat(result.err()).isEmpty();
+        assertThat(result.err()).isEqualTo("Formatted 2 files: 2 printed.\n");
     }
 
     @Test
@@ -262,6 +272,7 @@ final class MainTest {
         assertThat(result.out()).isEqualTo("""
                 ✓ src/Formatted.java
                 ✗ src/Main.java
+                Checked 2 files: 1 unchanged, 1 would change.
                 """);
         assertThat(result.err()).isEmpty();
     }
@@ -304,7 +315,10 @@ final class MainTest {
         Result result = run(dir, null, "--check", "src");
 
         assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.out()).isEqualTo("! src/Broken.java\n");
+        assertThat(result.out()).isEqualTo("""
+                ! src/Broken.java
+                Checked 1 file: 1 failed.
+                """);
         assertThat(result.err())
                 .contains("src/Broken.java: Unable to parse Java source:")
                 .contains("Parse error")
@@ -320,7 +334,10 @@ final class MainTest {
         Result result = run(dir, null, "--stacktrace", "--check", "src");
 
         assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.out()).isEqualTo("! src/Broken.java\n");
+        assertThat(result.out()).isEqualTo("""
+                ! src/Broken.java
+                Checked 1 file: 1 failed.
+                """);
         assertThat(result.err())
                 .contains("src/Broken.java: Unable to parse Java source:")
                 .contains("Problem stacktrace")
@@ -334,7 +351,10 @@ final class MainTest {
         Result result = run(dir, null, "--check", "--java-level", "unset", "src");
 
         assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.out()).isEqualTo("! src/Switch.java\n");
+        assertThat(result.out()).isEqualTo("""
+                ! src/Switch.java
+                Checked 1 file: 1 failed.
+                """);
         assertThat(result.err())
                 .contains("src/Switch.java: Unable to parse Java source:")
                 .contains("yield")
@@ -348,19 +368,22 @@ final class MainTest {
         Result result = run(dir, null, "--check", "--java-level", "25", "src");
 
         assertThat(result.exitCode()).isEqualTo(1);
-        assertThat(result.out()).isEqualTo("✗ src/Switch.java\n");
+        assertThat(result.out()).isEqualTo("""
+                ✗ src/Switch.java
+                Checked 1 file: 1 would change.
+                """);
         assertThat(result.err()).isEmpty();
     }
 
     @Test
-    void skipsUnknownExtensionsAndUnmatchedSelectorsSilently(@TempDir Path dir) throws IOException {
+    void reportsNoJavaFilesForUnknownExtensionsAndUnmatchedGlobs(@TempDir Path dir) throws IOException {
         write(dir.resolve("src/notes.txt"), "class Main{int value;}");
 
         Result result = run(dir, null, "src/**/*.txt,missing/**/*.java");
 
         assertThat(result.exitCode()).isZero();
         assertThat(result.out()).isEmpty();
-        assertThat(result.err()).isEmpty();
+        assertThat(result.err()).isEqualTo("No Java files matched.\n");
     }
 
     @Test
@@ -372,7 +395,10 @@ final class MainTest {
         Result result = run(dir, null, "--check", ".");
 
         assertThat(result.exitCode()).isEqualTo(1);
-        assertThat(result.out()).isEqualTo("✗ kept/Kept.java\n");
+        assertThat(result.out()).isEqualTo("""
+                ✗ kept/Kept.java
+                Checked 1 file: 1 would change.
+                """);
         assertThat(result.err()).isEmpty();
     }
 

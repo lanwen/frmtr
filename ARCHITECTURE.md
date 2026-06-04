@@ -81,15 +81,16 @@ The CLI is an adapter over the public formatter API:
 
 - No selectors: discover `./**/*.java` and check formatting by default.
 - `--stdin`: read Java source from stdin and write formatted source to stdout; when combined with `--check` or `--diff`, compare stdin against formatter output using `stdin` as the display path. This mode is separate from file selectors and `--write`.
-- `--check`: report each checked Java file with a status marker and exit non-zero when changes are needed. `✓` means already formatted, `✗` means formatting would change, and `!` means parsing or reading failed.
-- `--diff`: in check mode, print unified diffs for sources marked `✗`; passed sources and parse/read failures do not produce diff blocks. With no selectors or `--stdin`, `--diff` implies check mode.
-- `--write`: rewrite files in place.
+- `--check`: report each checked Java file with a status marker and exit non-zero when changes are needed. `✓` means already formatted, `✗` means formatting would change, and `!` means parsing or reading failed. File check runs end with a concise stdout summary counting unchanged, would-change, and failed files.
+- `--diff`: in check mode, print unified diffs for sources marked `✗`; passed sources and parse/read failures do not produce diff blocks. With no selectors or `--stdin`, `--diff` implies check mode. Diff output is followed by the same check summary.
+- `--write`: rewrite files in place and print a concise stdout summary counting written, unchanged, and failed files.
 - `--version`: print the project version, Git commit SHA, and build timestamp.
 - `--java-level`: select the core Java parser language level; accepts enum names such as `LATEST_AVAILABLE` and `UNSET`, plus release shorthands such as `21` or `JAVA_21`.
 - `--stacktrace`: include formatter or I/O stack traces in failure output; default CLI failures stay concise. Internal formatter failures are reported as internal bugs with the original failure summary and a stacktrace hint.
 - Selectors may be repeated, comma-separated, files, directories, or glob patterns.
 - Directory and glob traversal formats `.java` files, skips unknown extensions silently, and respects `.gitignore`.
-- Multiple matched files without `--write` or `--check` are printed to stdout with filename headers.
+- Missing explicit `.java` file selectors are tool errors reported on stderr with exit code 2. Empty glob or directory matches are not tool errors, but the CLI reports `No Java files matched.` on stderr instead of exiting silently.
+- Multiple matched files without `--write` or `--check` are printed to stdout with filename headers. Because stdout is formatted source in this mode, the final formatting summary is printed to stderr.
 
 CLI behavior should not own formatting policy. New formatting behavior belongs in the API and Java formatter pipeline first.
 
@@ -129,7 +130,7 @@ The test suite covers:
 
 - `:frmtr-core`: Doc rendering behavior, formatter output, idempotence, reparse validity, comments, parse errors, and fixture corpus checks.
 - `:frmtr-tooling`: file-oriented run summaries, deterministic ordering, de-duplication, diffs, write behavior, and per-file failure handling.
-- `:frmtr-cli`: CLI selector parsing, glob/directory discovery, ignore handling, stdout/write/check behavior, option validation, and exit codes.
+- `:frmtr-cli`: CLI selector parsing, glob/directory discovery, ignore handling, stdout/write/check behavior, end-of-run summaries, explicit no-file diagnostics, option validation, and exit codes.
 - `:frmtr-gradle-plugin`: TestKit functional coverage for task registration, zero-configuration Java defaults, `check` lifecycle wiring, no-op non-Java projects, Gradle and source-set source filters, build-directory exclusion, check diff output, Java language-level inference, and explicit Gradle language-level overrides.
 - `:frmtr-native-image-support`: JavaParser metamodel coverage for native-image reflection registration, including known-risk AST fields used by field and variable declarations.
 - `:frmtr-cli:nativeTest`: native-image compatibility coverage for JavaParser reflection-sensitive syntax. It is explicit native coverage and is not wired into the default JVM `check` lifecycle.

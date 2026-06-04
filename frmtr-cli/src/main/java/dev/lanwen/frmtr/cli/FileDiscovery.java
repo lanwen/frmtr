@@ -21,13 +21,18 @@ final class FileDiscovery {
         this.root = root.toAbsolutePath().normalize();
     }
 
-    List<Path> discover(List<String> selectorArgs) throws IOException {
+    Result discover(List<String> selectorArgs) throws IOException {
         Set<Path> files = new LinkedHashSet<>();
+        List<String> missingFileSelectors = new ArrayList<>();
         GitIgnoreMatcher ignores = new GitIgnoreMatcher(root);
         for (String selector : selectors(selectorArgs)) {
+            if (missingExplicitJavaFileSelector(selector)) {
+                missingFileSelectors.add(selector);
+                continue;
+            }
             files.addAll(discoverSelector(selector, ignores));
         }
-        return files.stream().sorted(Comparator.naturalOrder()).toList();
+        return new Result(files.stream().sorted(Comparator.naturalOrder()).toList(), missingFileSelectors);
     }
 
     private List<Path> discoverSelector(String selector, GitIgnoreMatcher ignores) throws IOException {
@@ -137,6 +142,23 @@ final class FileDiscovery {
 
     private static boolean isJavaFile(Path path) {
         return path.getFileName().toString().endsWith(".java");
+    }
+
+    private boolean missingExplicitJavaFileSelector(String selector) {
+        return !hasGlobSyntax(selector)
+                && selector.endsWith(".java")
+                && Files.notExists(root.resolve(selector).normalize());
+    }
+
+    record Result(List<Path> files, List<String> missingFileSelectors) {
+        Result {
+            files = List.copyOf(files);
+            missingFileSelectors = List.copyOf(missingFileSelectors);
+        }
+
+        boolean hasMissingFileSelectors() {
+            return !missingFileSelectors.isEmpty();
+        }
     }
 
     private static final class GitIgnoreMatcher {

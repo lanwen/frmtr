@@ -13,6 +13,7 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 import picocli.CommandLine;
@@ -119,7 +120,15 @@ public final class Main implements Callable<Integer> {
             return 2;
         }
         FormatterOptions options = formatterOptions();
-        List<Path> files = new FileDiscovery(workingDirectory).discover(usingDefaultSelectors ? DEFAULT_SELECTORS : selectors);
+        FileDiscovery.Result discovery = new FileDiscovery(workingDirectory)
+                .discover(usingDefaultSelectors ? DEFAULT_SELECTORS : selectors);
+        if (discovery.hasMissingFileSelectors()) {
+            return printMissingFileSelectors(discovery.missingFileSelectors());
+        }
+        List<Path> files = discovery.files();
+        if (files.isEmpty()) {
+            return noFilesMatched();
+        }
         if (effectiveCheck) {
             return checkFiles(files, options);
         }
@@ -181,6 +190,7 @@ public final class Main implements Callable<Integer> {
                 result.failureException().ifPresent(exception -> printFailure(result.displayPath().toString(), exception));
             }
         }
+        printCheckSummary(run);
         out.flush();
         if (run.hasFailures()) {
             return 2;
@@ -193,22 +203,27 @@ public final class Main implements Callable<Integer> {
         run.failedResults().stream()
                 .forEach(result -> result.failureException()
                         .ifPresent(exception -> printFailure(result.displayPath().toString(), exception)));
+        printWriteSummary(run);
+        out.flush();
         return run.hasFailures() ? 2 : 0;
     }
 
     private int printFiles(List<Path> files, FormatterOptions options) {
-        boolean failed = false;
+        long failed = 0;
+        long printed = 0;
         for (int i = 0; i < files.size(); i++) {
             Path file = files.get(i);
             try {
                 String formatted = Frmtr.format(Files.readString(file, StandardCharsets.UTF_8), options);
                 printFormatted(files, i, file, formatted);
+                printed++;
             } catch (FormatterException | IOException exception) {
-                failed = true;
+                failed++;
                 printFailure(displayPath(file).toString(), exception);
             }
         }
-        return failed ? 2 : 0;
+        printPrintSummary(files.size(), printed, failed);
+        return failed > 0 ? 2 : 0;
     }
 
     private String readStdin() throws IOException {
@@ -227,6 +242,66 @@ public final class Main implements Callable<Integer> {
         }
         out.print(formatted);
         out.flush();
+    }
+
+    private int printMissingFileSelectors(List<String> selectors) {
+        for (String selector : selectors) {
+            err.println("File selector does not exist: " + selector);
+        }
+        err.flush();
+        return 2;
+    }
+
+    private int noFilesMatched() {
+        err.println("No Java files matched.");
+        err.flush();
+        return 0;
+    }
+
+    private void printCheckSummary(FormatRunResult run) {
+        List<String> parts = new ArrayList<>();
+        addCount(parts, statusCount(run, FormatFileStatus.UNCHANGED), "unchanged");
+        addCount(parts, statusCount(run, FormatFileStatus.CHANGED), "would change");
+        addCount(parts, run.failureCount(), "failed");
+        out.println(summaryLine("Checked", run.results().size(), parts));
+    }
+
+    private void printWriteSummary(FormatRunResult run) {
+        List<String> parts = new ArrayList<>();
+        addCount(parts, statusCount(run, FormatFileStatus.WRITTEN), "written");
+        addCount(parts, statusCount(run, FormatFileStatus.UNCHANGED), "unchanged");
+        addCount(parts, run.failureCount(), "failed");
+        out.println(summaryLine("Formatted", run.results().size(), parts));
+    }
+
+    private void printPrintSummary(long total, long printed, long failed) {
+        List<String> parts = new ArrayList<>();
+        addCount(parts, printed, "printed");
+        addCount(parts, failed, "failed");
+        err.println(summaryLine("Formatted", total, parts));
+        err.flush();
+    }
+
+    private long statusCount(FormatRunResult run, FormatFileStatus status) {
+        return run.results().stream().filter(result -> result.status() == status).count();
+    }
+
+    private void addCount(List<String> parts, long count, String label) {
+        if (count > 0) {
+            parts.add(count + " " + label);
+        }
+    }
+
+    private String summaryLine(String action, long count, List<String> parts) {
+        String summary = action + " " + count + " " + plural(count, "file");
+        if (!parts.isEmpty()) {
+            summary += ": " + String.join(", ", parts);
+        }
+        return summary + ".";
+    }
+
+    private String plural(long count, String singular) {
+        return count == 1 ? singular : singular + "s";
     }
 
     private String statusLine(String marker, Path file) {

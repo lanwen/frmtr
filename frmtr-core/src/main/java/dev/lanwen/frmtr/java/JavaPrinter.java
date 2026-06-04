@@ -901,6 +901,13 @@ final class JavaPrinter {
         if (declaration.getTypeParameters().isEmpty()) {
             return false;
         }
+        if (classOrInterfaceHeaderClauses(declaration) > 1) {
+            String headerHead = modifiers(declaration)
+                    + (declaration.isInterface() ? "interface " : "class ")
+                    + declaration.getNameAsString()
+                    + flatTypeParameters(declaration.getTypeParameters());
+            return currentIndentedWidth(headerHead) > options.lineWidth();
+        }
         if (declaration.getTypeParameters().size() > 2) {
             return true;
         }

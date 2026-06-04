@@ -76,14 +76,7 @@ class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc> extends Dddddddddd<Eeeeeeeeee, Ffffffff
     void a() {}
 }
 
-sealed class Aaaaaaaaaa<
-        Bbbbbbbbbb,
-        Cccccccccc,
-        Dddddddddd,
-        Eeeeeeeeee,
-        Ffffffffff,
-        Gggggggggg
-    >
+sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg>
     extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj>
     permits Kkkkkkkkkk, Llllllllll
 {
@@ -91,25 +84,11 @@ sealed class Aaaaaaaaaa<
     void a() {}
 }
 
-sealed class Aaaaaaaaaa<
-        Bbbbbbbbbb,
-        Cccccccccc,
-        Dddddddddd,
-        Eeeeeeeeee,
-        Ffffffffff,
-        Gggggggggg
-    >
+sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg>
     extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj>
     permits Kkkkkkkkkk, Llllllllll {}
 
-sealed class Aaaaaaaaaa<
-        Bbbbbbbbbb,
-        Cccccccccc,
-        Dddddddddd,
-        Eeeeeeeeee,
-        Ffffffffff,
-        Gggggggggg
-    >
+sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg>
     extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj, Kkkkkkkkkk, Llllllllll, Mmmmmmmmmm, Nnnnnnnnnn>
     permits Oooooooooo, Pppppppppp, Qqqqqqqqqq, Rrrrrrrrrr, Ssssssssss, Tttttttttt, Uuuuuuuuuu
 {
@@ -117,13 +96,6 @@ sealed class Aaaaaaaaaa<
     void a() {}
 }
 
-sealed class Aaaaaaaaaa<
-        Bbbbbbbbbb,
-        Cccccccccc,
-        Dddddddddd,
-        Eeeeeeeeee,
-        Ffffffffff,
-        Gggggggggg
-    >
+sealed class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg>
     extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj, Kkkkkkkkkk, Llllllllll, Mmmmmmmmmm, Nnnnnnnnnn>
     permits Oooooooooo, Pppppppppp, Qqqqqqqqqq, Rrrrrrrrrr, Ssssssssss, Tttttttttt, Uuuuuuuuuu {}

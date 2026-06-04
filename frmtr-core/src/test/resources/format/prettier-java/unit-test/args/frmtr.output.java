@@ -1,0 +1,29 @@
+public class Args {
+    public static void main(String[] args) {}
+
+    public void none() {}
+
+    public void one(String one) {}
+
+    public void three(String one, Integer two, String three) {}
+
+    public void longListOfParametersThatShouldBreak(String one, Integer two, String three, Integer four, String five, Integer six) {}
+
+    void lastParameterDotDotDot(String str1, String... str2) {}
+
+    void variableArityParameters(Object... errorMessageArgs) {}
+
+    void variableArityParameters(Object[]... errorMessageArgs) {}
+
+    void variableArityParameters(byte[]... errorMessageArgs) {}
+
+    void variableArityParameters(byte... errorMessageArgs) {}
+
+    void variableArityParameters(final String... strings) {}
+
+    void variableArityParameters(byte... bytes) {}
+
+    void variableArityParameters(final String[]... strings) {}
+
+    void variableArityParameters(byte[]... bytes) {}
+}

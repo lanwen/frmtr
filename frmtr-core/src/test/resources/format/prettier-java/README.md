@@ -5,8 +5,8 @@ This directory contains the adopted Java formatting fixtures copied from
 
 Source paths inspected:
 
-- `test/unit-test/*/_input.java`
-- `test/unit-test/*/_output.java`
+- `test/unit-test/*/input.java`
+- `test/unit-test/*/prettier.output.java`
 - `test/repository-test/*.ts`
 - `test-samples/`
 - `LICENSE`
@@ -24,4 +24,5 @@ Each adopted fixture directory contains:
 Some upstream samples are not JavaParser compilation units as copied. The adopted copies keep
 the original expression or language-feature intent while adjusting the surrounding Java source
 shape so `input.java` and `prettier.output.java` parse as compilation units. The verbatim
-upstream copy remains under `../../upstream/prettier-java`.
+upstream copy remains under `../../upstream/prettier-java` with matching fixture file
+names.

@@ -25,8 +25,8 @@ final class PrettierJavaCorpusTest {
         assertThat(count(adoptedUnitTests, "input.java")).isEqualTo(84);
         assertThat(count(adoptedUnitTests, "prettier.output.java")).isEqualTo(84);
         assertThat(count(adoptedUnitTests, "frmtr.output.java")).isEqualTo(84);
-        assertThat(count(unitTests, "_input.java")).isEqualTo(84);
-        assertThat(count(unitTests, "_output.java")).isEqualTo(84);
+        assertThat(count(unitTests, "input.java")).isEqualTo(84);
+        assertThat(count(unitTests, "prettier.output.java")).isEqualTo(84);
     }
 
     private static java.net.URL resource(String name) {

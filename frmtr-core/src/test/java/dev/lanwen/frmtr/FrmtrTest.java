@@ -343,6 +343,37 @@ final class FrmtrTest {
     }
 
     @Test
+    void preservesTextBlockMethodCallScope() {
+        String source = """
+                class Demo {
+                    void method() {
+                        String source = \"""
+                                    public void print(%s object) {
+                                        System.out.println(Objects.toString(object));
+                                    }
+                                    \""".formatted(type);
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("String source = \"\"\"\n"
+                        + "                    public void print(%s object) {\n"
+                        + "                        System.out.println(Objects.toString(object));\n"
+                        + "                    }\n"
+                        + "                    \"\"\".formatted(type);");
+    }
+
+    @Test
     void breaksLongBinaryConditionalCondition() {
         String source = """
                 class Demo {

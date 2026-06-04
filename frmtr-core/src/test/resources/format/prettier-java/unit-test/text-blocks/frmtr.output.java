@@ -9,7 +9,11 @@ public class TextBlock {
 
     """;
 
-        String source = """ public void print(%s object) { System.out.println(Objects.toString(object)); } """.formatted(type);
+        String source = """
+                public void print(%s object) {
+                    System.out.println(Objects.toString(object));
+                }
+                """.formatted(type);
 
         String html = """
               <html>\r

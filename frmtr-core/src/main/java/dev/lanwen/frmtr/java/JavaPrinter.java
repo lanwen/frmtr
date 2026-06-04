@@ -1400,6 +1400,10 @@ final class JavaPrinter {
                         Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines(initializer, true))));
             }
         }
+        if (initializer instanceof MethodCallExpr methodCall
+                && methodCall.getScope().filter(TextBlockLiteralExpr.class::isInstance).isPresent()) {
+            return Doc.concat(Doc.text(name + " = "), methodCall(methodCall));
+        }
         if (currentIndentedWidth(flat) > options.lineWidth()
                 && initializer instanceof MethodCallExpr methodCall
                 && !initializerHasOwnBreak(initializer)) {
@@ -3263,6 +3267,12 @@ final class JavaPrinter {
                 && !expression.getArguments().isEmpty()) {
             return Doc.text("yield (" + compactJoin(expression.getArguments()) + ")");
         }
+        if (expression.getScope().filter(this::shouldPrintScopeAsDoc).isPresent()) {
+            return Doc.concat(
+                    expression(expression.getScope().orElseThrow()),
+                    Doc.text("."),
+                    methodCallWithoutScope(expression));
+        }
         if (mode == MethodCallMode.AUTO) {
             Optional<Doc> chain = methodCallChain(expression);
             if (chain.isPresent()) {
@@ -3272,12 +3282,6 @@ final class JavaPrinter {
         Optional<Doc> suffixedEnclosed = suffixedEnclosedMethodCall(expression, false);
         if (suffixedEnclosed.isPresent()) {
             return suffixedEnclosed.orElseThrow();
-        }
-        if (expression.getScope().filter(this::shouldPrintScopeAsDoc).isPresent()) {
-            return Doc.concat(
-                    expression(expression.getScope().orElseThrow()),
-                    Doc.text("."),
-                    methodCallWithoutScope(expression));
         }
         String prefix = expression.getScope().map(scope -> compact(scope) + ".").orElse("")
                 + expression.getTypeArguments().map(typeArguments -> "<" + compactJoin(typeArguments) + ">").orElse("")
@@ -3565,6 +3569,7 @@ final class JavaPrinter {
     private boolean shouldPrintScopeAsDoc(Expression expression) {
         return expression instanceof ArrayCreationExpr
                 || expression instanceof ArrayAccessExpr
+                || expression instanceof TextBlockLiteralExpr
                 || expression instanceof EnclosedExpr enclosedExpr
                         && enclosedExpr.getInner() instanceof CastExpr;
     }

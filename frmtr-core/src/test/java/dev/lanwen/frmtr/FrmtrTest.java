@@ -247,6 +247,58 @@ final class FrmtrTest {
     }
 
     @Test
+    void preservesCommentsInBrokenBinaryContinuationLines() {
+        String source = """
+                class Demo {
+                    void method() {
+                        boolean value = one || two >> 1 // one
+                            // two
+                            // three
+                            || three;
+                    }
+                }
+                """;
+        FormatterOptions start = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                false,
+                false,
+                FormatterOptions.LambdaArrowParens.PRESERVE,
+                FormatterOptions.BinaryOperatorPosition.START,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+        FormatterOptions end = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                false,
+                false,
+                FormatterOptions.LambdaArrowParens.PRESERVE,
+                FormatterOptions.BinaryOperatorPosition.END,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        assertThat(Frmtr.format(source, start))
+                .contains("boolean value =\n"
+                        + "      one\n"
+                        + "      || two >> 1\n"
+                        + "      // one\n"
+                        + "      // two\n"
+                        + "      // three\n"
+                        + "      || three;");
+        assertThat(Frmtr.format(source, end))
+                .contains("boolean value =\n"
+                        + "      one ||\n"
+                        + "      two >> 1 || // one\n"
+                        + "      // two\n"
+                        + "      // three\n"
+                        + "      three;");
+    }
+
+    @Test
     void requirePragmaLeavesSourceWithoutLeadingFormatPragmaUnchanged() {
         String source = """
                 /**

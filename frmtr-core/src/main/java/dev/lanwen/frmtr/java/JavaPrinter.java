@@ -1380,6 +1380,11 @@ final class JavaPrinter {
                             Doc.HARD_LINE,
                             expression(initializer))));
         }
+        if (initializer instanceof BinaryExpr binaryExpr && binaryExpressionHasLineComments(binaryExpr)) {
+            return Doc.concat(
+                    Doc.text(name + " ="),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLinesWithComments(binaryExpr))));
+        }
         if (blockStatementWidth(flat) > options.lineWidth()) {
             Optional<Doc> suffixedEnclosedInitializer = suffixedEnclosedExpression(initializer, true);
             if (suffixedEnclosedInitializer.isPresent()) {
@@ -2374,6 +2379,75 @@ final class JavaPrinter {
             return Doc.concat(Doc.text("("), expression(binaryOperand), Doc.text(")"));
         }
         return expression(operand);
+    }
+
+    private boolean binaryExpressionHasLineComments(BinaryExpr expression) {
+        return expression.getAllContainedComments().stream().anyMatch(LineComment.class::isInstance);
+    }
+
+    private Doc binaryExpressionLinesWithComments(BinaryExpr expression) {
+        List<Expression> operands = new ArrayList<>();
+        flattenBinaryExpression(expression, expression.getOperator(), operands);
+        List<Doc> lines = new ArrayList<>();
+        for (int i = 0; i < operands.size(); i++) {
+            Expression operand = operands.get(i);
+            Doc line = Doc.text(binaryLineOperandText(expression.getOperator(), operand, i, operands.size()));
+            List<Comment> between = i < operands.size() - 1
+                    ? binaryCommentsBetween(expression, operand, operands.get(i + 1))
+                    : List.of();
+            if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END) {
+                List<Comment> sameLineComments = sameLineComments(operand, between);
+                for (Comment comment : sameLineComments) {
+                    line = Doc.concat(line, Doc.text(" "), comments.comment(comment));
+                }
+                between = between.stream()
+                        .filter(comment -> !sameLineComments.contains(comment))
+                        .toList();
+            }
+            lines.add(line);
+            if (i < operands.size() - 1) {
+                lines.addAll(commentDocs(between));
+            }
+        }
+        return Doc.join(Doc.HARD_LINE, lines);
+    }
+
+    private String binaryLineOperandText(BinaryExpr.Operator operator, Expression operand, int index, int operandCount) {
+        String text = compactWithoutOwnComment(operand);
+        if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.START) {
+            return index == 0 ? text : operator.asString() + " " + text;
+        }
+        return index < operandCount - 1 ? text + " " + operator.asString() : text;
+    }
+
+    private List<Comment> binaryCommentsBetween(BinaryExpr expression, Expression previous, Expression next) {
+        int previousLine = previous.getRange().map(range -> range.end.line).orElse(Integer.MIN_VALUE);
+        int nextLine = next.getRange().map(range -> range.begin.line).orElse(Integer.MAX_VALUE);
+        return expression.getAllContainedComments().stream()
+                .filter(LineComment.class::isInstance)
+                .filter(comment -> comment.getRange()
+                        .map(range -> range.begin.line >= previousLine && range.begin.line < nextLine)
+                        .orElse(false))
+                .sorted(Comparator.comparing(comment -> comment.getRange()
+                        .map(range -> range.begin)
+                        .orElse(Position.HOME)))
+                .toList();
+    }
+
+    private List<Comment> sameLineComments(Expression expression, List<Comment> comments) {
+        int expressionEndLine = expression.getRange().map(range -> range.end.line).orElse(Integer.MIN_VALUE);
+        return comments.stream()
+                .filter(comment -> comment.getRange()
+                        .map(range -> range.begin.line == expressionEndLine)
+                        .orElse(false))
+                .toList();
+    }
+
+    private List<Doc> commentDocs(List<Comment> sourceComments) {
+        return sourceComments.stream()
+                .map(comments::comment)
+                .filter(doc -> doc != Doc.EMPTY)
+                .toList();
     }
 
     private int parenthesizedInnerWidth(String text) {

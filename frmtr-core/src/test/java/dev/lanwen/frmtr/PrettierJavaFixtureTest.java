@@ -153,6 +153,7 @@ final class PrettierJavaFixtureTest {
             "types",
             "unnamed-class-compilation-unit",
             "unnamed-variables-and-patterns",
+            "variables",
             "while",
             "yield-statement");
     private static final JavaParser PARSER = new JavaParser(new ParserConfiguration()

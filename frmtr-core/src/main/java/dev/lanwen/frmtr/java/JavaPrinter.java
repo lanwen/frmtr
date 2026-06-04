@@ -3266,12 +3266,23 @@ final class JavaPrinter {
                             Doc.text(" " + assignExpr.getOperator().asString() + " "),
                             objectCreation(objectCreationExpr, MethodCallMode.BREAK));
                 }
-                if (assignExpr.getValue() instanceof ConditionalExpr conditionalExpr
-                        && shouldBreakBeforeConditionalInitializer(conditionalExpr)) {
+                if (assignExpr.getValue() instanceof MethodCallExpr methodCall) {
+                    Optional<Doc> methodCallAssignment = assignmentWithBrokenMethodCallArguments(assignExpr, methodCall);
+                    if (methodCallAssignment.isPresent()) {
+                        return methodCallAssignment.orElseThrow();
+                    }
+                }
+                if (assignExpr.getValue() instanceof ConditionalExpr conditionalExpr) {
+                    Optional<Doc> conditionalAssignment = assignmentWithConditionalValue(assignExpr, conditionalExpr);
+                    if (conditionalAssignment.isPresent()) {
+                        return conditionalAssignment.orElseThrow();
+                    }
+                }
+                if (assignExpr.getValue() instanceof AssignExpr nestedAssignment) {
                     return Doc.concat(
                             expression(assignExpr.getTarget()),
                             Doc.text(" " + assignExpr.getOperator().asString()),
-                            Doc.indent(Doc.concat(Doc.HARD_LINE, conditionalExpression(conditionalExpr, true))));
+                            Doc.indent(Doc.concat(Doc.HARD_LINE, expression(nestedAssignment))));
                 }
             }
             return Doc.concat(
@@ -3328,6 +3339,45 @@ final class JavaPrinter {
             return textBlockLiteral(textBlockLiteralExpr);
         }
         return Doc.text(compact(expression));
+    }
+
+    private Optional<Doc> assignmentWithBrokenMethodCallArguments(AssignExpr assignExpr, MethodCallExpr methodCall) {
+        if (methodCall.getArguments().isEmpty() || !methodCall.getAllContainedComments().isEmpty()) {
+            return Optional.empty();
+        }
+        String firstLine = compact(assignExpr.getTarget()) + " "
+                + assignExpr.getOperator().asString()
+                + " "
+                + methodCallPrefix(methodCall)
+                + "(";
+        if (blockStatementWidth(firstLine) > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+                expression(assignExpr.getTarget()),
+                Doc.text(" " + assignExpr.getOperator().asString() + " "),
+                methodCall(methodCall, MethodCallMode.BREAK)));
+    }
+
+    private Optional<Doc> assignmentWithConditionalValue(AssignExpr assignExpr, ConditionalExpr conditionalExpr) {
+        if (shouldBreakBeforeConditionalInitializer(conditionalExpr)) {
+            return Optional.of(Doc.concat(
+                    expression(assignExpr.getTarget()),
+                    Doc.text(" " + assignExpr.getOperator().asString()),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, conditionalExpression(conditionalExpr, true)))));
+        }
+        String conditionLine = compact(assignExpr.getTarget()) + " "
+                + assignExpr.getOperator().asString()
+                + " "
+                + compact(conditionalExpr.getCondition())
+                + ";";
+        if (blockStatementWidth(conditionLine) <= options.lineWidth()) {
+            return Optional.of(Doc.concat(
+                    expression(assignExpr.getTarget()),
+                    Doc.text(" " + assignExpr.getOperator().asString() + " "),
+                    conditionalExpression(conditionalExpr, true)));
+        }
+        return Optional.empty();
     }
 
     private Doc textBlockLiteral(TextBlockLiteralExpr expression) {

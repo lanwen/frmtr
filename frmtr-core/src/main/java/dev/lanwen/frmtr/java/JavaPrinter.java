@@ -27,6 +27,7 @@ import com.github.javaparser.ast.expr.ArrayCreationExpr;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
+import com.github.javaparser.ast.expr.CastExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MemberValuePair;
@@ -72,6 +73,8 @@ import com.github.javaparser.ast.stmt.TryStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
 import com.github.javaparser.ast.stmt.YieldStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.ast.type.IntersectionType;
+import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
@@ -1456,6 +1459,12 @@ final class JavaPrinter {
         if (expression instanceof BinaryExpr binaryExpr) {
             return binaryExpression(binaryExpr);
         }
+        if (expression instanceof CastExpr castExpr) {
+            return castExpression(castExpr);
+        }
+        if (expression instanceof EnclosedExpr enclosedExpr) {
+            return enclosedExpression(enclosedExpr);
+        }
         if (expression instanceof MethodCallExpr methodCallExpr) {
             return methodCall(methodCallExpr);
         }
@@ -1466,6 +1475,63 @@ final class JavaPrinter {
             return switchExpression(switchExpr);
         }
         return Doc.text(compact(expression));
+    }
+
+    private Doc enclosedExpression(EnclosedExpr expression) {
+        if (expression.getInner() instanceof CastExpr) {
+            if (nestedCastDepth(expression.getInner()) <= 2) {
+                return Doc.concat(Doc.text("("), expression(expression.getInner()), Doc.text(")"));
+            }
+            return Doc.concat(
+                    Doc.text("("),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, expression(expression.getInner()))),
+                    Doc.HARD_LINE,
+                    Doc.text(")"));
+        }
+        if (currentIndentedWidth(compact(expression)) <= options.lineWidth()) {
+            return Doc.text(compact(expression));
+        }
+        return Doc.concat(Doc.text("("), expression(expression.getInner()), Doc.text(")"));
+    }
+
+    private int nestedCastDepth(Expression expression) {
+        if (!(expression instanceof CastExpr castExpr)) {
+            return 0;
+        }
+        return 1 + castExpr.getExpression()
+                .toMethodCallExpr()
+                .flatMap(MethodCallExpr::getScope)
+                .filter(EnclosedExpr.class::isInstance)
+                .map(EnclosedExpr.class::cast)
+                .map(EnclosedExpr::getInner)
+                .map(this::nestedCastDepth)
+                .orElse(0);
+    }
+
+    private Doc castExpression(CastExpr expression) {
+        return Doc.concat(
+                castType(expression.getType()),
+                Doc.text(" "),
+                expression(expression.getExpression()));
+    }
+
+    private Doc castType(Type type) {
+        if (type instanceof IntersectionType intersectionType
+                && currentIndentedWidth("(" + compactTypeLike(type) + ")") > options.lineWidth()) {
+            List<Doc> elements = new ArrayList<>();
+            for (int i = 0; i < intersectionType.getElements().size(); i++) {
+                Type element = intersectionType.getElements().get(i);
+                elements.add(Doc.text((i == 0 ? "" : "& ") + compactTypeLike(element)));
+            }
+            return Doc.concat(
+                    Doc.text("("),
+                    Doc.indent(Doc.concat(
+                            Doc.HARD_LINE,
+                            Doc.join(Doc.HARD_LINE, elements))),
+                    Doc.HARD_LINE,
+                    Doc.text(")"));
+        }
+        return Doc.text("(" + compactTypeLike(type) + ")");
     }
 
     private Doc arrayAccess(ArrayAccessExpr expression) {
@@ -1671,7 +1737,10 @@ final class JavaPrinter {
     }
 
     private boolean shouldPrintScopeAsDoc(Expression expression) {
-        return expression instanceof ArrayCreationExpr || expression instanceof ArrayAccessExpr;
+        return expression instanceof ArrayCreationExpr
+                || expression instanceof ArrayAccessExpr
+                || expression instanceof EnclosedExpr enclosedExpr
+                        && enclosedExpr.getInner() instanceof CastExpr;
     }
 
     private Doc methodCallWithoutScope(MethodCallExpr expression) {

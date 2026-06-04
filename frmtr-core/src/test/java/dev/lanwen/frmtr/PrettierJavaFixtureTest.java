@@ -45,6 +45,7 @@ final class PrettierJavaFixtureTest {
             "assert",
             "blank_lines",
             "bug-fixes",
+            "cast",
             "char_literal",
             "classes",
             "comments/edge",

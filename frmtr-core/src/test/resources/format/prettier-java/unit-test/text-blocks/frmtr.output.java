@@ -1,57 +1,120 @@
 public class TextBlock {
 
     void method() {
-        String myTextBlock = """ my text sentence\""" """;
+        String myTextBlock = """
+         my text
+
+
+    sentence\"""
+
+    """;
 
         String source = """ public void print(%s object) { System.out.println(Objects.toString(object)); } """.formatted(type);
 
-        String html = """ <html>\r <body>\r <p>Hello, world</p>\r </body>\r </html>\r """;
+        String html = """
+              <html>\r
+                  <body>\r
+                      <p>Hello, world</p>\r
+                  </body>\r
+              </html>\r
+              """;
 
-        html = """ <html>\r <body>\r <p>Hello, world</p>\r </body>\r </html>\r """;
+        html = """
+        <html>\r
+            <body>\r
+                <p>Hello, world</p>\r
+            </body>\r
+        </html>\r
+        """;
 
-        System.out.println(""" abaoeu euaoeu aoeu oaeu abc""");
+        System.out.println(
+            """
+               abaoeu
+                 euaoeu
+              aoeu
 
-        System.out.println(""" abaoeu euaoeu aoeu oaeu abc""");
+               oaeu
+                    abc"""
+        );
+
+        System.out.println("""
+ abaoeu
+   euaoeu
+aoeu
+
+ oaeu
+      abc""");
     }
 
-    String escapes = """ 1+1 equals \ 2 maybe """;
+    String escapes = """
+    1+1 equals \
+    2 maybe
+    """;
 
-    String escapes = """ \"""var msg = hello world!\"""; """;
+    String escapes = """
+    \"""var msg = hello world!\""";
+    """;
 
-    String escapes = """ \n\t\r\f\b\s\\ \077 \u0041""";
+    String escapes = """
+    \n\t\r\f\b\s\\
+    \077
+    \u0041""";
 
     void json() {
         // language = json
-        String someJson = """ {"glossary":{"title": "example \'glossary\'"}} """;
+        String someJson = """
+    {"glossary":{"title": "example \'glossary\'"}}
+    """;
 
         // language=json
-        String config = """ { \t "name":"example", "enabled" :true, "timeout":30} """;
+        String config = """
+          { \t "name":"example",
+      "enabled"   :true,
+            "timeout":30}
+    """;
 
         /* language = JSON */
-        String query = """ { "sql":"SELECT * FROM users \ WHERE active = 1 \ AND deleted = 0", "limit":10} """;
+        String query = """
+         {
+       "sql":"SELECT * FROM users \
+    WHERE active=1 \
+    AND deleted=0",
+       "limit":10}
+    """;
     }
 
     void java() {
         // language=Java
-        String java = """ class Class{void method() { // comment }} """;
+        String java = """
+    class Class{void method() {
+    // comment
+    }}
+    """;
     }
 
     void html() {
         // language=html
         String html =
-            """ <!DOCTYPE html><html><head><title>Page Title</title></head><body><h1>My First Heading</h1><p>My first paragraph.</p></body></html> """;
+            """
+      <!DOCTYPE html><html><head><title>Page Title</title></head><body><h1>My First Heading</h1><p>My first paragraph.</p></body></html>
+    """;
     }
 
     void typescript() {
         // language=typescript
-        String typescript = """ const s = `\"""`; """;
+        String typescript = """
+      const s = `\"""`;
+    """;
 
         // language=typescript
-        String typescript = """ const s = ""; // \"""";
+        String typescript = """
+      const s = ""; // \"""";
     }
 
     void unsupported() {
         // language=unsupported
-        String unsupported = """ function f(){let i = 0;} """;
+        String unsupported = """
+    function f(){let i=0;}
+    """;
     }
 }

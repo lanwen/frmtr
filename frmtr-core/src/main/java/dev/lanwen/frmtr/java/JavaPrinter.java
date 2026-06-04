@@ -40,6 +40,7 @@ import com.github.javaparser.ast.expr.RecordPatternExpr;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
+import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.expr.TypePatternExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
@@ -2421,7 +2422,14 @@ final class JavaPrinter {
         if (expression instanceof SwitchExpr switchExpr) {
             return switchExpression(switchExpr);
         }
+        if (expression instanceof TextBlockLiteralExpr textBlockLiteralExpr) {
+            return textBlockLiteral(textBlockLiteralExpr);
+        }
         return Doc.text(compact(expression));
+    }
+
+    private Doc textBlockLiteral(TextBlockLiteralExpr expression) {
+        return Doc.text(raw(expression));
     }
 
     private Doc enclosedExpression(EnclosedExpr expression) {

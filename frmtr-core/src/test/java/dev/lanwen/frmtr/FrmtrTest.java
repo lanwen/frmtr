@@ -373,6 +373,60 @@ final class FrmtrTest {
     }
 
     @Test
+    void breaksNestedConditionalBranches() {
+        String source = """
+                class Demo {
+                    void method() {
+                        value = aaaaaaaaaa ? bbbbbbbbbb : cccccccccc ? dddddddddd : eeeeeeeeee ? ffffffffff : gggggggggg;
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("value = aaaaaaaaaa\n"
+                        + "      ? bbbbbbbbbb\n"
+                        + "      : cccccccccc\n"
+                        + "        ? dddddddddd\n"
+                        + "        : eeeeeeeeee\n"
+                        + "          ? ffffffffff\n"
+                        + "          : gggggggggg;");
+    }
+
+    @Test
+    void keepsShortConditionalInitializerConditionAfterEquals() {
+        String source = """
+                class Demo {
+                    void method() {
+                        int shortInteger = thisIsAVeryLongInteger ? thisIsAnotherVeryLongOne : thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne;
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("int shortInteger = thisIsAVeryLongInteger\n"
+                        + "      ? thisIsAnotherVeryLongOne\n"
+                        + "      : thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne;");
+    }
+
+    @Test
     void preservesCommentsInBrokenBinaryContinuationLines() {
         String source = """
                 class Demo {

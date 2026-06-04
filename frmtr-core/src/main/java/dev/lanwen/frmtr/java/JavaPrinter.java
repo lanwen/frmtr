@@ -1419,6 +1419,11 @@ final class JavaPrinter {
                     methodCall(methodCall, MethodCallMode.BREAK));
         }
         if (currentIndentedWidth(flat) > options.lineWidth()
+                && initializer instanceof ConditionalExpr conditionalExpr
+                && !initializerHasOwnBreak(initializer)) {
+            return conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr);
+        }
+        if (currentIndentedWidth(flat) > options.lineWidth()
                 && !(initializer instanceof StringLiteralExpr)
                 && !initializerHasOwnBreak(initializer)) {
             return Doc.concat(
@@ -1426,6 +1431,16 @@ final class JavaPrinter {
                     Doc.indent(Doc.concat(Doc.HARD_LINE, brokenInitializer(initializer))));
         }
         return Doc.concat(Doc.text(name + " = "), expression(initializer));
+    }
+
+    private Doc conditionalInitializer(String name, String flatName, ConditionalExpr initializer) {
+        String conditionLine = flatName + " = " + compact(initializer.getCondition());
+        if (blockStatementWidth(conditionLine + ";") <= options.lineWidth()) {
+            return Doc.concat(Doc.text(name + " = "), conditionalExpression(initializer, true));
+        }
+        return Doc.concat(
+                Doc.text(name + " ="),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, conditionalExpression(initializer, true))));
     }
 
     private Optional<Doc> leadingInitializerComments(VariableDeclarator variable, Expression initializer) {
@@ -2966,10 +2981,10 @@ final class JavaPrinter {
                 Doc.indent(Doc.concat(
                         Doc.HARD_LINE,
                         Doc.text("? "),
-                        expression(expression.getThenExpr()),
+                        conditionalBranch(expression.getThenExpr()),
                         Doc.HARD_LINE,
                         Doc.text(": "),
-                        expression(expression.getElseExpr()))));
+                        conditionalBranch(expression.getElseExpr()))));
     }
 
     private Doc conditionalCondition(Expression condition) {
@@ -2978,6 +2993,13 @@ final class JavaPrinter {
             return binaryExpressionLines(condition, true);
         }
         return expression(condition);
+    }
+
+    private Doc conditionalBranch(Expression branch) {
+        if (branch instanceof ConditionalExpr conditionalExpr) {
+            return conditionalExpression(conditionalExpr, true);
+        }
+        return expression(branch);
     }
 
     private Doc arrayAccess(ArrayAccessExpr expression) {

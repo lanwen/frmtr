@@ -10,26 +10,26 @@ class T {
 // Fix for https://github.com/jhipster/prettier-java/issues/607
 class Currency {
 
-    Currency() {}
+    Currency(Currency this) {}
 
-    Currency(Currency other) {}
+    Currency(Currency this, Currency other) {}
 
-    Currency(Currency other) {}
+    Currency(@AnnotatedUsage Currency this, Currency other) {}
 
-    Currency(String aaaaaaaaaa, String bbbbbbbbbb) {}
+    Currency(@AnnotatedUsage Currency this, String aaaaaaaaaa, String bbbbbbbbbb) {}
 
-    String getCode() {}
+    String getCode(Currency this) {}
 
-    int compareTo(Currency other) {}
+    int compareTo(Currency this, Currency other) {}
 
-    int compareTo(Currency other) {}
+    int compareTo(@AnnotatedUsage Currency this, Currency other) {}
 
-    int compareTo(String aaaaaaaaaa, String bbbbbbbbbb) {}
+    int compareTo(@AnnotatedUsage Currency this, String aaaaaaaaaa, String bbbbbbbbbb) {}
 
     class Inner {
 
-        Inner() {}
+        Inner(Currency Currency.this) {}
 
-        String getCode() {}
+        String getCode(Currency Currency.this) {}
     }
 }

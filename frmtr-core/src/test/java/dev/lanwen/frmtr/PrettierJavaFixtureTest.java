@@ -44,6 +44,7 @@ final class PrettierJavaFixtureTest {
             "annotation_interface_declaration",
             "assert",
             "blank_lines",
+            "bug-fixes",
             "char_literal",
             "comments/edge",
             "comments/expression",

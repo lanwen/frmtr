@@ -9,6 +9,7 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.AnnotationMemberDeclaration;
 import com.github.javaparser.ast.body.BodyDeclaration;
+import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
@@ -17,6 +18,7 @@ import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.InitializerDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.body.ReceiverParameter;
 import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
@@ -506,13 +508,28 @@ final class JavaPrinter {
             String declarationPrefix) {
         String flat = declarationPrefix + variable.getNameAsString() + " = " + compact(initializer) + ";";
         if (currentIndentedWidth(flat) > options.lineWidth()
+                && initializer instanceof MethodCallExpr methodCall
+                && !initializerHasOwnBreak(initializer)) {
+            Optional<Doc> chain = methodCallChain(methodCall, true);
+            if (chain.isPresent()) {
+                return Doc.concat(Doc.text(variable.getNameAsString() + " = "), chain.orElseThrow());
+            }
+        }
+        if (currentIndentedWidth(flat) > options.lineWidth()
                 && !(initializer instanceof StringLiteralExpr)
                 && !initializerHasOwnBreak(initializer)) {
             return Doc.concat(
                     Doc.text(variable.getNameAsString() + " ="),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, expression(initializer))));
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, brokenInitializer(initializer))));
         }
         return Doc.concat(Doc.text(variable.getNameAsString() + " = "), expression(initializer));
+    }
+
+    private Doc brokenInitializer(Expression initializer) {
+        if (initializer instanceof MethodCallExpr methodCall) {
+            return methodCallChain(methodCall, true).orElseGet(() -> expression(initializer));
+        }
+        return expression(initializer);
     }
 
     private boolean initializerHasOwnBreak(Expression initializer) {
@@ -523,6 +540,9 @@ final class JavaPrinter {
             return true;
         }
         if (initializer instanceof MethodCallExpr methodCallExpr) {
+            if (methodCallExpr.getScope().filter(ArrayAccessExpr.class::isInstance).isPresent()) {
+                return true;
+            }
             return methodCallExpr.getScope()
                     .filter(ArrayCreationExpr.class::isInstance)
                     .map(ArrayCreationExpr.class::cast)
@@ -553,7 +573,7 @@ final class JavaPrinter {
                 + declaration.getNameAsString();
         prefix += signature;
         docs.add(Doc.text(signature));
-        docs.add(parameters(declaration.getParameters()));
+        docs.add(parameters(declaration, parametersBreak(prefix, declaration, declaration.getBody().isPresent() ? " {}" : ";")));
         if (!declaration.getThrownExceptions().isEmpty()) {
             docs.add(throwsClause(
                     prefix,
@@ -578,7 +598,7 @@ final class JavaPrinter {
         }
         prefix += declaration.getNameAsString();
         docs.add(Doc.text(declaration.getNameAsString()));
-        docs.add(parameters(declaration.getParameters()));
+        docs.add(parameters(declaration, parametersBreak(prefix, declaration, " {}")));
         if (!declaration.getThrownExceptions().isEmpty()) {
             docs.add(throwsClause(prefix, declaration.getParameters(), declaration.getThrownExceptions(), " {"));
         }
@@ -694,6 +714,56 @@ final class JavaPrinter {
                         Doc.join(Doc.concat(Doc.text(","), Doc.LINE), parameters.stream().map(this::parameter).toList()))),
                 Doc.SOFT_LINE,
                 Doc.text(")")));
+    }
+
+    private Doc parameters(CallableDeclaration<?> declaration) {
+        return parameters(declaration, false);
+    }
+
+    private Doc parameters(CallableDeclaration<?> declaration, boolean forceBreak) {
+        List<Doc> parameters = new ArrayList<>();
+        declaration.getReceiverParameter().map(this::receiverParameter).ifPresent(parameters::add);
+        declaration.getParameters().stream().map(this::parameter).forEach(parameters::add);
+        Doc doc = Doc.concat(
+                Doc.text("("),
+                Doc.indent(Doc.concat(
+                        forceBreak ? Doc.HARD_LINE : Doc.SOFT_LINE,
+                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), parameters))),
+                forceBreak ? Doc.HARD_LINE : Doc.SOFT_LINE,
+                Doc.text(")"));
+        return forceBreak ? doc : Doc.group(doc);
+    }
+
+    private Doc receiverParameter(ReceiverParameter parameter) {
+        return Doc.text(compactReceiverParameter(parameter));
+    }
+
+    private String compactReceiverParameter(ReceiverParameter parameter) {
+        List<String> parts = new ArrayList<>();
+        parameter.getAnnotations().stream().map(this::compact).forEach(parts::add);
+        parts.add(compactTypeLike(parameter.getType()));
+        parts.add(receiverName(parameter));
+        return String.join(" ", parts);
+    }
+
+    private String receiverName(ReceiverParameter parameter) {
+        return parameter.getTokenRange()
+                .map(Object::toString)
+                .map(this::normalizeWhitespace)
+                .map(text -> text.substring(text.lastIndexOf(' ') + 1))
+                .orElseGet(() -> compact(parameter.getName()));
+    }
+
+    private boolean parametersBreak(String prefix, CallableDeclaration<?> declaration, String suffix) {
+        String parameters = callableParameterText(declaration);
+        return currentIndentedWidth(prefix + "(" + parameters + ")" + suffix) > options.lineWidth();
+    }
+
+    private String callableParameterText(CallableDeclaration<?> declaration) {
+        List<String> parameters = new ArrayList<>();
+        declaration.getReceiverParameter().map(this::compactReceiverParameter).ifPresent(parameters::add);
+        declaration.getParameters().stream().map(this::compact).forEach(parameters::add);
+        return String.join(", ", parameters);
     }
 
     private Doc typeParameters(NodeList<TypeParameter> typeParameters) {
@@ -1201,7 +1271,11 @@ final class JavaPrinter {
     }
 
     private Optional<Doc> methodCallChain(MethodCallExpr expression) {
-        if (compact(expression).length() <= options.lineWidth() || expression.getScope().isEmpty()) {
+        return methodCallChain(expression, false);
+    }
+
+    private Optional<Doc> methodCallChain(MethodCallExpr expression, boolean force) {
+        if ((!force && compact(expression).length() <= options.lineWidth()) || expression.getScope().isEmpty()) {
             return Optional.empty();
         }
         List<MethodCallExpr> calls = new ArrayList<>();

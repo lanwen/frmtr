@@ -3043,7 +3043,14 @@ final class JavaPrinter {
         if (currentIndentedWidth(flat) <= options.lineWidth()) {
             return Doc.text(flat);
         }
-        return Doc.concat(Doc.text(prefix + "("), annotationValue(annotation.getMemberValue()), Doc.text(")"));
+        if (!(annotation.getMemberValue() instanceof BinaryExpr)) {
+            return Doc.concat(Doc.text(prefix + "("), annotationValue(annotation.getMemberValue()), Doc.text(")"));
+        }
+        return Doc.concat(
+                Doc.text(prefix + "("),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, annotationValue(annotation.getMemberValue()))),
+                Doc.HARD_LINE,
+                Doc.text(")"));
     }
 
     private Doc annotationPair(MemberValuePair pair) {
@@ -3068,6 +3075,9 @@ final class JavaPrinter {
                 return Doc.text(flat);
             }
             return annotationArrayInitializer(arrayInitializerExpr);
+        }
+        if (value instanceof BinaryExpr) {
+            return binaryExpressionLines(value, true);
         }
         return expression(value);
     }

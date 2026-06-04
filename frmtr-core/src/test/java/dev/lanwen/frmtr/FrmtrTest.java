@@ -204,6 +204,49 @@ final class FrmtrTest {
     }
 
     @Test
+    void binaryOperatorPositionOptionControlsBrokenAnnotationValues() {
+        String source = """
+                class Demo {
+                    @Annotation("This operation with two very long string should break" + "in a very nice way")
+                    void method() {}
+                }
+                """;
+        FormatterOptions start = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                false,
+                false,
+                FormatterOptions.LambdaArrowParens.PRESERVE,
+                FormatterOptions.BinaryOperatorPosition.START,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+        FormatterOptions end = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                false,
+                false,
+                FormatterOptions.LambdaArrowParens.PRESERVE,
+                FormatterOptions.BinaryOperatorPosition.END,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        assertThat(Frmtr.format(source, start))
+                .contains("@Annotation(\n"
+                        + "    \"This operation with two very long string should break\"\n"
+                        + "    + \"in a very nice way\"\n"
+                        + "  )");
+        assertThat(Frmtr.format(source, end))
+                .contains("@Annotation(\n"
+                        + "    \"This operation with two very long string should break\" +\n"
+                        + "    \"in a very nice way\"\n"
+                        + "  )");
+    }
+
+    @Test
     void requirePragmaLeavesSourceWithoutLeadingFormatPragmaUnchanged() {
         String source = """
                 /**

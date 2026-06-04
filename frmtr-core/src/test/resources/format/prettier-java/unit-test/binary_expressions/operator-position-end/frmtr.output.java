@@ -73,14 +73,14 @@ public class BinaryOperations {
         exponent = b[3] << 1 & 0xff | b[2] >> 7 - 127;
         mantissa = b[2] & 0x7f << 16 | b[1] << 8 | b[0];
 
-        ignored = 2 / 3 * 10 / 2 + 2;
-        ignored = 2 * 3 * 10 / 2 + 2;
+        ignored = (2 / 3 * 10) / 2 + 2;
+        ignored = (2 * 3 * 10) / 2 + 2;
         var rotateX = RANGE / rect.height * refY - RANGE / 2 * getXMultiplication(rect.width);
         var rotateY = RANGE / rect.width * refX - RANGE / 2 * getYMultiplication(rect.width);
 
         ignored = a % 10 - 5;
         ignored = a - 10 % 5;
-        ignored = a * b % 10;
+        ignored = (a * b) % 10;
         ignored = a % b * 10;
         ignored = a % 10 > 5;
         ignored = a % 10 == 0;

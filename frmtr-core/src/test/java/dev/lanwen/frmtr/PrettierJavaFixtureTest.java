@@ -82,6 +82,7 @@ final class PrettierJavaFixtureTest {
             "require-pragma/invalid-pragma",
             "require-pragma/prettier-pragma",
             "return",
+            "sealed",
             "synchronized",
             "template-expression",
             "throws",

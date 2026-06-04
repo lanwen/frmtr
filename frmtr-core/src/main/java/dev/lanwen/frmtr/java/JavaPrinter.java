@@ -56,6 +56,8 @@ import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.ForEachStmt;
 import com.github.javaparser.ast.stmt.ForStmt;
 import com.github.javaparser.ast.stmt.IfStmt;
+import com.github.javaparser.ast.stmt.LocalClassDeclarationStmt;
+import com.github.javaparser.ast.stmt.LocalRecordDeclarationStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.stmt.SwitchEntry;
@@ -733,9 +735,17 @@ final class JavaPrinter {
         }
         boolean hasBlankLineBetween = previousStatement.getRange()
                 .flatMap(previousRange -> currentStatement.getRange()
-                        .map(currentRange -> currentRange.begin.line > previousRange.end.line + 1))
+                        .map(currentRange -> effectiveBeginLine(currentStatement, currentRange.begin.line)
+                                > previousRange.end.line + 1))
                 .orElse(false);
         return hasBlankLineBetween ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;
+    }
+
+    private int effectiveBeginLine(Statement statement, int fallback) {
+        return statement.getComment()
+                .flatMap(Node::getRange)
+                .map(range -> range.begin.line)
+                .orElse(fallback);
     }
 
     private Doc statement(Statement statement) {
@@ -766,6 +776,8 @@ final class JavaPrinter {
             case EmptyStmt ignored -> Doc.text(";");
             case BreakStmt breakStmt -> Doc.text("break" + breakStmt.getLabel().map(label -> " " + label.asString()).orElse("") + ";");
             case ContinueStmt continueStmt -> Doc.text("continue" + continueStmt.getLabel().map(label -> " " + label.asString()).orElse("") + ";");
+            case LocalClassDeclarationStmt localClassDeclaration -> body(localClassDeclaration.getClassDeclaration());
+            case LocalRecordDeclarationStmt localRecordDeclaration -> body(localRecordDeclaration.getRecordDeclaration());
             case IfStmt ifStmt -> ifStatement(ifStmt);
             case WhileStmt whileStmt -> Doc.concat(Doc.text("while (" + compact(whileStmt.getCondition()) + ") "), nestedStatement(whileStmt.getBody()));
             case DoStmt doStmt -> Doc.concat(Doc.text("do "), nestedStatement(doStmt.getBody()), Doc.text(" while (" + compact(doStmt.getCondition()) + ");"));
@@ -1077,7 +1089,7 @@ final class JavaPrinter {
                 .map(LineComment.class::cast);
         if (leftLineComment.isEmpty()) {
             return Doc.concat(
-                    expression(expression.getLeft()),
+                    binaryLeftOperand(expression),
                     Doc.text(" " + expression.getOperator().asString() + " "),
                     expression(expression.getRight()));
         }
@@ -1085,6 +1097,19 @@ final class JavaPrinter {
                 Doc.text(compactWithoutOwnComment(expression.getLeft()) + " " + expression.getOperator().asString() + " "),
                 JavaFormatter.commentDoc(leftLineComment.orElseThrow()),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, expression(expression.getRight()))));
+    }
+
+    private Doc binaryLeftOperand(BinaryExpr expression) {
+        if (expression.getLeft() instanceof BinaryExpr leftBinary
+                && shouldParenthesizeLeftBinary(expression.getOperator(), leftBinary.getOperator())) {
+            return Doc.concat(Doc.text("("), expression(leftBinary), Doc.text(")"));
+        }
+        return expression(expression.getLeft());
+    }
+
+    private boolean shouldParenthesizeLeftBinary(BinaryExpr.Operator outer, BinaryExpr.Operator inner) {
+        return (outer == BinaryExpr.Operator.DIVIDE || outer == BinaryExpr.Operator.REMAINDER)
+                && (inner == BinaryExpr.Operator.MULTIPLY || inner == BinaryExpr.Operator.REMAINDER);
     }
 
     private Doc methodCall(MethodCallExpr expression) {
@@ -1284,10 +1309,17 @@ final class JavaPrinter {
         docs.add(Doc.text("if (" + compact(statement.getCondition()) + ") "));
         docs.add(nestedStatement(statement.getThenStmt()));
         statement.getElseStmt().ifPresent(elseStatement -> {
-            docs.add(Doc.text(" else "));
+            docs.add(elseChainSeparator(statement, elseStatement));
             docs.add(elseStatement.isIfStmt() ? statement(elseStatement) : nestedStatement(elseStatement));
         });
         return Doc.concat(docs);
+    }
+
+    private Doc elseChainSeparator(IfStmt statement, Statement elseStatement) {
+        if (elseStatement.isIfStmt() && !statement.getThenStmt().isBlockStmt()) {
+            return Doc.concat(Doc.HARD_LINE, Doc.text("else "));
+        }
+        return Doc.text(" else ");
     }
 
     private Doc nestedStatement(Statement statement) {

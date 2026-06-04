@@ -26,13 +26,15 @@ public non-sealed class RightTriangle implements Triangle {
 
     @Override
     public double area() {
-        interface People { String name(); }
-        record Person(String name) implements People { }
-        record Persons(String... names) { }
+        interface People {
+            String name();
+        }
+        record Person(String name) implements People {}
+        record Persons(String... names) {}
 
         People p = new Person("John Doe");
 
-        return adjacent * opposite / 2;
+        return (adjacent * opposite) / 2;
     }
 }
 
@@ -44,8 +46,9 @@ public sealed interface Shape permits Circle, Rectangle, Triangle, Unicorn {
     }
 
     default String areaMessage() {
-        if (this instanceof Circle) return "Circle: " + area(); else if (this instanceof Rectangle) return "Rectangle: " + area(); else if (this instanceof RightTriangle) return "Triangle: " + area();
-
+        if (this instanceof Circle) return "Circle: " + area();
+        else if (this instanceof Rectangle) return "Rectangle: " + area();
+        else if (this instanceof RightTriangle) return "Triangle: " + area();
         // :(
         throw new IllegalArgumentException();
     }

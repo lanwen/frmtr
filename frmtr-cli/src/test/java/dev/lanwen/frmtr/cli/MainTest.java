@@ -14,7 +14,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 final class MainTest {
     @Test
-    void formatsStdinToStdout() {
+    void formatsStdinToStdoutWithStdinOption() {
         StringWriter out = new StringWriter();
         StringWriter err = new StringWriter();
         Main main = new Main(
@@ -22,7 +22,7 @@ final class MainTest {
                 new PrintWriter(err, true),
                 "class Demo{int value;}");
 
-        int exitCode = Main.commandLine(main).execute();
+        int exitCode = Main.commandLine(main).execute("--stdin");
 
         assertThat(exitCode).isZero();
         assertThat(out.toString()).isEqualTo("""
@@ -52,6 +52,98 @@ final class MainTest {
     }
 
     @Test
+    void checkStdinReportsUnchangedSource() {
+        Result result = run(
+                Path.of("."),
+                """
+                class Demo {
+                    int value;
+                }
+                """,
+                "--stdin",
+                "--check");
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.out()).isEqualTo("✓ stdin\n");
+        assertThat(result.err()).isEmpty();
+    }
+
+    @Test
+    void checkStdinReportsChangedSource() {
+        Result result = run(Path.of("."), "class Demo{int value;}", "--stdin", "--check");
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.out()).isEqualTo("✗ stdin\n");
+        assertThat(result.err()).isEmpty();
+    }
+
+    @Test
+    void diffStdinPrintsUnifiedDiff() {
+        Result result = run(Path.of("."), "class Demo{int value;}", "--stdin", "--diff");
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.out())
+                .startsWith("✗ stdin\n")
+                .contains("diff --git a/stdin b/stdin\n")
+                .contains("--- a/stdin\n+++ b/stdin\n")
+                .contains("-class Demo{int value;}\n")
+                .contains("""
+                        +class Demo {
+                        +    int value;
+                        +}
+                        """);
+        assertThat(result.err()).isEmpty();
+    }
+
+    @Test
+    void noArgsChecksJavaFilesByDefault(@TempDir Path dir) throws IOException {
+        write(
+                dir.resolve("Formatted.java"),
+                """
+                class Formatted {
+                    int value;
+                }
+                """);
+        write(dir.resolve("src/Main.java"), "class Main{int value;}");
+        write(dir.resolve("README.md"), "# ignored\n");
+
+        Result result = run(dir, "class Input{int value;}");
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.out()).isEqualTo("""
+                ✓ Formatted.java
+                ✗ src/Main.java
+                """);
+        assertThat(result.err()).isEmpty();
+    }
+
+    @Test
+    void diffUsesDefaultCheckWhenSelectorsAreEmpty(@TempDir Path dir) {
+        write(dir.resolve("src/Main.java"), "class Main{int value;}");
+
+        Result result = run(dir, null, "--diff");
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.out())
+                .startsWith("✗ src/Main.java\n")
+                .contains("diff --git a/src/Main.java b/src/Main.java\n");
+        assertThat(result.err()).isEmpty();
+    }
+
+    @Test
+    void rejectsStdinWithWriteOrSelectors() {
+        StringWriter out = new StringWriter();
+        StringWriter err = new StringWriter();
+        Main main = new Main(new PrintWriter(out, true), new PrintWriter(err, true), "class Demo{}");
+
+        int exitCode = Main.commandLine(main).execute("--stdin", "--write", "src");
+
+        assertThat(exitCode).isEqualTo(2);
+        assertThat(out.toString()).isEmpty();
+        assertThat(err.toString()).isEqualTo("--stdin cannot be combined with --write or selectors\n");
+    }
+
+    @Test
     void rejectsCheckAndWriteTogether() {
         StringWriter out = new StringWriter();
         StringWriter err = new StringWriter();
@@ -77,16 +169,20 @@ final class MainTest {
     }
 
     @Test
-    void rejectsFileOrientedOptionsWithoutSelectors() {
-        StringWriter out = new StringWriter();
-        StringWriter err = new StringWriter();
-        Main main = new Main(new PrintWriter(out, true), new PrintWriter(err, true), "");
+    void writeUsesDefaultSelectorsWhenSelectorsAreEmpty(@TempDir Path dir) throws IOException {
+        write(dir.resolve("src/Main.java"), "class Main{int value;}");
+        write(dir.resolve("README.md"), "# ignored\n");
 
-        int exitCode = Main.commandLine(main).execute("--check", "--diff");
+        Result result = run(dir, null, "--write");
 
-        assertThat(exitCode).isEqualTo(2);
-        assertThat(out.toString()).isEmpty();
-        assertThat(err.toString()).isEqualTo("file-oriented options require at least one file or directory\n");
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.out()).isEmpty();
+        assertThat(result.err()).isEmpty();
+        assertThat(Files.readString(dir.resolve("src/Main.java"))).isEqualTo("""
+                class Main {
+                    int value;
+                }
+                """);
     }
 
     @Test

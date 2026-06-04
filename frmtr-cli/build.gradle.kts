@@ -69,6 +69,11 @@ tasks.named<JavaCompile>("compileJava") {
                     "-Xlint:-processing"))
 }
 
+tasks.named<JavaExec>("run") {
+    workingDir = rootProject.projectDir
+    standardInput = System.`in`
+}
+
 graalvmNative {
     binaries {
         named("main") {

@@ -58,10 +58,16 @@ Java source files under the Gradle build directory are excluded by default. The 
 
 ## CLI
 
+Check all Java files under the current directory:
+
+```bash
+./gradlew :frmtr-cli:run
+```
+
 Format stdin to stdout:
 
 ```bash
-./gradlew :frmtr-cli:run --args='' < Example.java
+./gradlew :frmtr-cli:run --args='--stdin' < Example.java
 ```
 
 Format selectors in place:
@@ -71,6 +77,8 @@ Format selectors in place:
 ```
 
 Selectors can be repeated, comma-separated, files, directories, or glob patterns. The CLI formats `.java` files, skips unknown extensions silently, and respects `.gitignore`.
+
+With no selectors, the CLI uses `./**/*.java` and checks formatting by default. Pass `--stdin` to read Java source from stdin and write formatted source to stdout, or combine `--stdin` with `--check` or `--diff` to compare piped source against formatter output.
 
 `--check` prints `✓` for files that are already formatted, `✗` for files that need formatting, and `!` for files that failed to parse or could not be read. Add `--diff` to render unified diffs for files marked `✗`. Failure output is concise by default; add `--stacktrace` when debugging formatter or I/O failures.
 

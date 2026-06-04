@@ -75,9 +75,10 @@ The runner owns deterministic path ordering and de-duplication for file lists su
 
 The CLI is an adapter over the public formatter API:
 
-- No paths: read Java source from stdin and write formatted source to stdout.
+- No selectors: discover `./**/*.java` and check formatting by default.
+- `--stdin`: read Java source from stdin and write formatted source to stdout; when combined with `--check` or `--diff`, compare stdin against formatter output using `stdin` as the display path. This mode is separate from file selectors and `--write`.
 - `--check`: report each checked Java file with a status marker and exit non-zero when changes are needed. `✓` means already formatted, `✗` means formatting would change, and `!` means parsing or reading failed.
-- `--diff`: when combined with `--check`, print unified diffs for files marked `✗`; passed files and parse/read failures do not produce diff blocks.
+- `--diff`: in check mode, print unified diffs for sources marked `✗`; passed sources and parse/read failures do not produce diff blocks. With no selectors or `--stdin`, `--diff` implies check mode.
 - `--write`: rewrite files in place.
 - `--version`: print the project version, Git commit SHA, and build timestamp.
 - `--java-level`: select the core Java parser language level; accepts enum names such as `LATEST_AVAILABLE` and `UNSET`, plus release shorthands such as `21` or `JAVA_21`.
@@ -88,7 +89,7 @@ The CLI is an adapter over the public formatter API:
 
 CLI behavior should not own formatting policy. New formatting behavior belongs in the API and Java formatter pipeline first.
 
-The CLI module owns application packaging and Gradle `run` wiring. Local execution uses `./gradlew :frmtr-cli:run --args='...'`.
+The CLI module owns application packaging and Gradle `run` wiring. Local execution uses `./gradlew :frmtr-cli:run --args='...'`; the `run` task uses the root project as its working directory and forwards `System.in` so selectors, default discovery, and `--stdin` behave like the native binary during local development.
 
 ## Gradle Plugin
 

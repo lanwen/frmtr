@@ -7,6 +7,7 @@ import dev.lanwen.frmtr.tooling.FormatFileResult;
 import dev.lanwen.frmtr.tooling.FormatFileStatus;
 import dev.lanwen.frmtr.tooling.FormatRunResult;
 import dev.lanwen.frmtr.tooling.FormatterRunner;
+import dev.lanwen.frmtr.tooling.UnifiedDiffRenderer;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
@@ -25,10 +26,15 @@ import picocli.CommandLine.Parameters;
         versionProvider = Main.BuildVersionProvider.class,
         description = "Formats Java source.")
 public final class Main implements Callable<Integer> {
+    private static final List<String> DEFAULT_SELECTORS = List.of("./**/*.java");
+
+    @Option(names = "--stdin", description = "Read Java source from stdin and print formatted source to stdout.")
+    boolean stdinMode;
+
     @Option(names = "--check", description = "Check whether files are already formatted.")
     boolean check;
 
-    @Option(names = "--diff", description = "With --check, print unified diffs for files that need formatting.")
+    @Option(names = "--diff", description = "Print unified diffs for checked sources that need formatting.")
     boolean diff;
 
     @Option(names = "--write", description = "Rewrite files in place.")
@@ -91,7 +97,20 @@ public final class Main implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-        if (diff && !check) {
+        if (stdinMode) {
+            if (write || !selectors.isEmpty()) {
+                err.println("--stdin cannot be combined with --write or selectors");
+                return 2;
+            }
+            FormatterOptions options = formatterOptions();
+            if (check || diff) {
+                return checkStdin(options);
+            }
+            return formatStdin(options);
+        }
+        boolean usingDefaultSelectors = selectors.isEmpty();
+        boolean effectiveCheck = check || (usingDefaultSelectors && !write);
+        if (diff && !effectiveCheck) {
             err.println("--diff requires --check");
             return 2;
         }
@@ -99,35 +118,58 @@ public final class Main implements Callable<Integer> {
             err.println("--check and --write cannot be used together");
             return 2;
         }
-        FormatterOptions options = new FormatterOptions(
-                lineWidth,
-                FormatterOptions.IndentStyle.SPACE,
-                FormatterOptions.DEFAULT_INDENT_WIDTH,
-                FormatterOptions.LineEnding.LF,
-                true,
-                javaLanguageLevel);
-        if (selectors.isEmpty()) {
-            if (check || write) {
-                err.println("file-oriented options require at least one file or directory");
-                return 2;
-            }
-            try {
-                out.print(Frmtr.format(readStdin(), options));
-                out.flush();
-                return 0;
-            } catch (FormatterException | IOException exception) {
-                printFailure("stdin", exception);
-                return 2;
-            }
-        }
-        List<Path> files = new FileDiscovery(workingDirectory).discover(selectors);
-        if (check) {
+        FormatterOptions options = formatterOptions();
+        List<Path> files = new FileDiscovery(workingDirectory).discover(usingDefaultSelectors ? DEFAULT_SELECTORS : selectors);
+        if (effectiveCheck) {
             return checkFiles(files, options);
         }
         if (write) {
             return writeFiles(files, options);
         }
         return printFiles(files, options);
+    }
+
+    private FormatterOptions formatterOptions() {
+        return new FormatterOptions(
+                lineWidth,
+                FormatterOptions.IndentStyle.SPACE,
+                FormatterOptions.DEFAULT_INDENT_WIDTH,
+                FormatterOptions.LineEnding.LF,
+                true,
+                javaLanguageLevel);
+    }
+
+    private int formatStdin(FormatterOptions options) {
+        try {
+            out.print(Frmtr.format(readStdin(), options));
+            out.flush();
+            return 0;
+        } catch (FormatterException | IOException exception) {
+            printFailure("stdin", exception);
+            return 2;
+        }
+    }
+
+    private int checkStdin(FormatterOptions options) {
+        Path displayPath = Path.of("stdin");
+        try {
+            String original = readStdin();
+            String formatted = Frmtr.format(original, options);
+            if (formatted.equals(original)) {
+                out.println(statusLine(statusMarker(FormatFileStatus.UNCHANGED), displayPath));
+                out.flush();
+                return 0;
+            }
+            out.println(statusLine(statusMarker(FormatFileStatus.CHANGED), displayPath));
+            if (diff) {
+                out.print(UnifiedDiffRenderer.render(displayPath, original, formatted));
+            }
+            out.flush();
+            return 1;
+        } catch (FormatterException | IOException exception) {
+            printFailure("stdin", exception);
+            return 2;
+        }
     }
 
     private int checkFiles(List<Path> files, FormatterOptions options) {

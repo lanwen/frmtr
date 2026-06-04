@@ -1360,6 +1360,10 @@ final class JavaPrinter {
         if (initializer instanceof ArrayAccessExpr) {
             return true;
         }
+        if (initializer instanceof ObjectCreationExpr objectCreationExpr
+                && objectCreationExpr.getAnonymousClassBody().isPresent()) {
+            return true;
+        }
         if (initializer instanceof MethodCallExpr methodCallExpr) {
             if (methodCallExpr.getScope().filter(ArrayAccessExpr.class::isInstance).isPresent()) {
                 return true;
@@ -2837,13 +2841,13 @@ final class JavaPrinter {
     }
 
     private Doc objectCreation(ObjectCreationExpr expression) {
-        if (expression.getAnonymousClassBody().isPresent()) {
-            return Doc.text(compact(expression));
-        }
         String prefix = expression.getScope().map(scope -> compact(scope) + ".").orElse("")
                 + "new "
                 + expression.getTypeArguments().map(typeArguments -> "<" + compactJoinTypeLike(typeArguments) + ">").orElse("")
                 + compactTypeLike(expression.getType());
+        if (expression.getAnonymousClassBody().isPresent()) {
+            return anonymousObjectCreation(expression, prefix);
+        }
         if (expression.getArguments().isEmpty()) {
             return Doc.text(prefix + "()");
         }
@@ -2856,6 +2860,37 @@ final class JavaPrinter {
                                 .toList()))),
                 Doc.SOFT_LINE,
                 Doc.text(")")));
+    }
+
+    private Doc anonymousObjectCreation(ObjectCreationExpr expression, String prefix) {
+        String arguments = expression.getArguments().isEmpty()
+                ? ""
+                : compactJoin(expression.getArguments());
+        Doc header = Doc.text(prefix + "(" + arguments + ") ");
+        List<BodyDeclaration<?>> declarations = expression.getAnonymousClassBody().orElseThrow();
+        List<Doc> members = declarations.stream().map(this::body).toList();
+        if (members.isEmpty()) {
+            return Doc.concat(header, Doc.text("{}"));
+        }
+        return Doc.concat(
+                header,
+                Doc.text("{"),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, anonymousClassMembers(declarations, members))),
+                Doc.HARD_LINE,
+                Doc.text("}"));
+    }
+
+    private Doc anonymousClassMembers(List<BodyDeclaration<?>> declarations, List<Doc> members) {
+        List<Doc> docs = new ArrayList<>();
+        for (int index = 0; index < members.size(); index++) {
+            if (index > 0) {
+                boolean adjacentFields = declarations.get(index - 1) instanceof FieldDeclaration
+                        && declarations.get(index) instanceof FieldDeclaration;
+                docs.add(adjacentFields ? Doc.HARD_LINE : Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE));
+            }
+            docs.add(members.get(index));
+        }
+        return Doc.concat(docs);
     }
 
     private Doc switchStatement(SwitchStmt statement) {

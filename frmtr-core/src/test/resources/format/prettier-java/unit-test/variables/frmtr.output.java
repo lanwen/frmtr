@@ -69,7 +69,12 @@ public class Variables {
     private float floatingPointLiteral = 007f;
     private double floatingPointLiteral = 00e1;
 
-    private Interface anonymousClassVariable = new Interface(){ @Override void doSomething() { System.out.println("do something"); } };
+    private Interface anonymousClassVariable = new Interface() {
+        @Override
+        void doSomething() {
+            System.out.println("do something");
+        }
+    };
 
     public void variableMethod(final int finalVariable) {
         int localVariable = 456;

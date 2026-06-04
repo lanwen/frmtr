@@ -18,3 +18,5 @@
 - **Stdout aggregate mode**: CLI mode used when multiple Java files are matched without `--write` or `--check`; formatted contents are printed to stdout with filename headers.
 - **Unknown extension**: A matched file whose extension is not supported by the formatter. Unknown extensions are skipped silently.
 - **Ignored file**: A file excluded from selector discovery by `.gitignore` rules.
+- **Native-image companion module**: Build-time support module used only while producing a GraalVM native executable. It belongs on the native-image build path only and must not be part of the normal formatter runtime or build integration dependency graph.
+- **Native compatibility fixture**: Java source sample used to prove formatter behavior survives GraalVM native-image compilation. It should exercise parser features whose implementation depends on native-image metadata.

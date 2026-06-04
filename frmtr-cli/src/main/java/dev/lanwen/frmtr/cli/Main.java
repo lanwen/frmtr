@@ -244,11 +244,20 @@ public final class Main implements Callable<Integer> {
     }
 
     private void printFailure(String target, Exception exception) {
-        err.println(target + ": " + exception.getMessage());
+        err.println(target + ": " + failureMessage(exception));
         if (stacktrace) {
             exception.printStackTrace(err);
         }
         err.flush();
+    }
+
+    private String failureMessage(Exception exception) {
+        if (exception instanceof FormatterException formatterException
+                && formatterException.internal()
+                && !stacktrace) {
+            return exception.getMessage() + " (run with --stacktrace for details)";
+        }
+        return exception.getMessage();
     }
 
     private Path displayPath(Path file) {

@@ -58,6 +58,8 @@ dependencies {
     implementation(libs.picocli)
     runtimeOnly(libs.slf4j.nop)
     annotationProcessor(libs.picocli.codegen)
+    nativeImageCompileOnly(project(":frmtr-native-image-support"))
+    nativeImageTestCompileOnly(project(":frmtr-native-image-support"))
 }
 
 tasks.named<JavaCompile>("compileJava") {

@@ -13,6 +13,7 @@ The project is a Gradle multi-module build:
 - `:frmtr-tooling`: reusable file-oriented runner, result summaries, and diff rendering for adapters.
 - `:frmtr-cli`: Picocli application and native executable entrypoint that depends on `:frmtr-core` and `:frmtr-tooling`.
 - `:frmtr-gradle-plugin`: Gradle plugin with project-local formatting tasks that depends on `:frmtr-core` and `:frmtr-tooling`.
+- `:frmtr-native-image-support`: GraalVM native-image build-time companion module for JavaParser reflection metadata. It is wired only through native-image configurations, not normal JVM runtime classpaths.
 
 Shared subproject conventions configure Java 25, UTF-8 compilation, `-Xlint:all`, JUnit Platform, and JaCoCo. External dependency versions and the GraalVM Native Build Tools plugin are managed through the Gradle version catalog in `gradle/libs.versions.toml`.
 
@@ -26,6 +27,7 @@ Shared subproject conventions configure Java 25, UTF-8 compilation, `-Xlint:all`
 - `frmtr-tooling/src/main/java/dev/lanwen/frmtr/tooling`: reusable file-oriented check/write runner, run summaries, per-file results, and unified diff rendering shared by adapters.
 - `frmtr-cli/src/main/java/dev/lanwen/frmtr/cli`: Picocli command-line adapter, selector discovery, ignore handling, and output modes.
 - `frmtr-gradle-plugin/src/main/java/dev/lanwen/frmtr/gradle`: Gradle extension, Java source-set integration, and formatter tasks.
+- `frmtr-native-image-support/src/main/java/dev/lanwen/frmtr/nativeimage`: native-image feature code that registers JavaParser AST node fields for hosted reflection.
 
 ## Formatting Pipeline
 
@@ -67,6 +69,8 @@ The runner owns deterministic path ordering and de-duplication for file lists su
 
 `JavaFormatter` owns JavaParser configuration and parse-error handling. It enables token storage and comment attribution because formatter rules need syntax-adjacent trivia. `FormatterOptions.JavaLanguageLevel` is the public parser-level setting; `JavaFormatter` converts it to JavaParser's own language-level enum internally. The default is `LATEST_AVAILABLE`, which resolves through JavaParser's latest available stable alias at runtime, while `UNSET` deliberately selects JavaParser raw mode. Parse failures are reported with nearby source lines and a caret marker at JavaParser's reported line and column.
 
+The public `Frmtr` API wraps recoverable internal formatter failures, including parser dependency linkage failures and assertions, as `FormatterException.internal(...)` so adapters can report concise failures without treating them as VM-level crashes.
+
 `JavaPrinter` contains the current Java formatting rules for packages, imports, common type declarations, fields, methods, constructors, blocks, and basic statements. It keeps the v1 style deliberately opinionated and sparse on options.
 
 `CommentTracker` preserves comments currently exposed by JavaParser as leading or orphan comments. Comment handling is expected to become more precise as the formatter grows.
@@ -82,7 +86,7 @@ The CLI is an adapter over the public formatter API:
 - `--write`: rewrite files in place.
 - `--version`: print the project version, Git commit SHA, and build timestamp.
 - `--java-level`: select the core Java parser language level; accepts enum names such as `LATEST_AVAILABLE` and `UNSET`, plus release shorthands such as `21` or `JAVA_21`.
-- `--stacktrace`: include formatter or I/O stack traces in failure output; default CLI failures stay concise.
+- `--stacktrace`: include formatter or I/O stack traces in failure output; default CLI failures stay concise. Internal formatter failures are reported as internal bugs with the original failure summary and a stacktrace hint.
 - Selectors may be repeated, comma-separated, files, directories, or glob patterns.
 - Directory and glob traversal formats `.java` files, skips unknown extensions silently, and respects `.gitignore`.
 - Multiple matched files without `--write` or `--check` are printed to stdout with filename headers.
@@ -111,7 +115,9 @@ Gradle exposes parser language level as semantic DSL choices instead of mirrorin
 
 ## Native Binary
 
-`frmtr-cli` applies GraalVM Native Build Tools and configures the native executable name as `frmtr`.
+`frmtr-cli` applies GraalVM Native Build Tools and configures the native executable name as `frmtr`. It adds `:frmtr-native-image-support` to `nativeImageCompileOnly` and `nativeImageTestCompileOnly` so the companion module is visible to native-image builds and native tests without becoming part of `implementation` or ordinary JVM runtime classpaths.
+
+`:frmtr-native-image-support` contributes `dev.lanwen.frmtr.nativeimage.JavaParserReflectionFeature` through native-image metadata. The feature iterates `JavaParserMetaModel.getNodeMetaModels()` and registers every declared field on each JavaParser AST node type with GraalVM hosted reflection APIs.
 
 Docker is the default Linux native build path. `Dockerfile.native` builds inside `ghcr.io/graalvm/native-image-community:25` and emits a glibc-linked Linux binary. Docker on macOS still produces a Linux binary because native-image targets the build operating system and toolchain.
 
@@ -125,6 +131,8 @@ The test suite covers:
 - `:frmtr-tooling`: file-oriented run summaries, deterministic ordering, de-duplication, diffs, write behavior, and per-file failure handling.
 - `:frmtr-cli`: CLI selector parsing, glob/directory discovery, ignore handling, stdout/write/check behavior, option validation, and exit codes.
 - `:frmtr-gradle-plugin`: TestKit functional coverage for task registration, zero-configuration Java defaults, `check` lifecycle wiring, no-op non-Java projects, Gradle and source-set source filters, build-directory exclusion, check diff output, Java language-level inference, and explicit Gradle language-level overrides.
+- `:frmtr-native-image-support`: JavaParser metamodel coverage for native-image reflection registration, including known-risk AST fields used by field and variable declarations.
+- `:frmtr-cli:nativeTest`: native-image compatibility coverage for JavaParser reflection-sensitive syntax. It is explicit native coverage and is not wired into the default JVM `check` lifecycle.
 - Golden resources under `frmtr-core/src/test/resources/format`.
 - A representative active subset of upstream `prettier-java` fixtures under `frmtr-core/src/test/resources/format/prettier-java`.
 - The full upstream `prettier-java` fixture corpus under `frmtr-core/src/test/resources/upstream/prettier-java`.

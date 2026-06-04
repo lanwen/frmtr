@@ -75,6 +75,20 @@ final class FrmtrTest {
     }
 
     @Test
+    void internalFormatterFailuresKeepCauseAndExplainTheFailure() {
+        NoSuchFieldError cause = new NoSuchFieldError("variables");
+
+        FormatterException exception = FormatterException.internal(cause);
+
+        assertThat(exception)
+                .hasMessage(
+                        "Internal formatter error. This is a bug in frmtr or one of its parser dependencies: "
+                                + "NoSuchFieldError: variables")
+                .hasCause(cause);
+        assertThat(exception.internal()).isTrue();
+    }
+
+    @Test
     void defaultsToLatestAvailableJavaLanguageLevel() {
         assertThat(FormatterOptions.defaults().javaLanguageLevel())
                 .isEqualTo(FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);

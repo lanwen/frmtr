@@ -10,6 +10,12 @@ public final class Frmtr {
     }
 
     public static String format(String source, FormatterOptions options) {
-        return new JavaFormatter(options).format(source);
+        try {
+            return new JavaFormatter(options).format(source);
+        } catch (FormatterException exception) {
+            throw exception;
+        } catch (RuntimeException | LinkageError | AssertionError exception) {
+            throw FormatterException.internal(exception);
+        }
     }
 }

@@ -176,6 +176,34 @@ final class FrmtrTest {
     }
 
     @Test
+    void preservesLineCommentsBetweenVariableEqualsAndInitializer() {
+        String source = """
+                class Demo {
+                    void method() {
+                        Map<String, String> map =
+                            // first comment
+                            // second comment
+                            new HashMap<>(
+                                initialValues()
+                            );
+                    }
+                }
+                """;
+
+        assertThat(Frmtr.format(source, new FormatterOptions(
+                        80,
+                        FormatterOptions.IndentStyle.SPACE,
+                        2,
+                        FormatterOptions.LineEnding.LF,
+                        true,
+                        FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE)))
+                .contains("Map<String, String> map =\n"
+                        + "      // first comment\n"
+                        + "      // second comment\n"
+                        + "      new HashMap<>(initialValues());");
+    }
+
+    @Test
     void requirePragmaLeavesSourceWithoutLeadingFormatPragmaUnchanged() {
         String source = """
                 /**

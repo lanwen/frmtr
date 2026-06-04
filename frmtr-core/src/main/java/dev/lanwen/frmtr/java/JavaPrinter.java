@@ -1,5 +1,6 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.Position;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ArrayCreationLevel;
 import com.github.javaparser.ast.ImportDeclaration;
@@ -1369,6 +1370,16 @@ final class JavaPrinter {
             String declarationPrefix) {
         String flat = declarationPrefix + variable.getNameAsString() + " = " + compact(initializer) + ";";
         String name = variableName(variable);
+        Optional<Doc> leadingInitializerComments = leadingInitializerComments(variable, initializer);
+        if (leadingInitializerComments.isPresent()) {
+            return Doc.concat(
+                    Doc.text(name + " ="),
+                    Doc.indent(Doc.concat(
+                            Doc.HARD_LINE,
+                            leadingInitializerComments.orElseThrow(),
+                            Doc.HARD_LINE,
+                            expression(initializer))));
+        }
         if (blockStatementWidth(flat) > options.lineWidth()) {
             Optional<Doc> suffixedEnclosedInitializer = suffixedEnclosedExpression(initializer, true);
             if (suffixedEnclosedInitializer.isPresent()) {
@@ -1410,6 +1421,26 @@ final class JavaPrinter {
                     Doc.indent(Doc.concat(Doc.HARD_LINE, brokenInitializer(initializer))));
         }
         return Doc.concat(Doc.text(name + " = "), expression(initializer));
+    }
+
+    private Optional<Doc> leadingInitializerComments(VariableDeclarator variable, Expression initializer) {
+        List<Comment> leadingComments = new ArrayList<>();
+        variable.getOrphanComments().stream()
+                .filter(LineComment.class::isInstance)
+                .filter(comment -> startsBefore(comment, initializer))
+                .forEach(leadingComments::add);
+        initializer.getComment()
+                .filter(LineComment.class::isInstance)
+                .filter(comment -> startsBefore(comment, initializer))
+                .ifPresent(leadingComments::add);
+        List<Doc> docs = leadingComments.stream()
+                .sorted(Comparator.comparing(comment -> comment.getRange()
+                        .map(range -> range.begin)
+                        .orElse(Position.HOME)))
+                .map(comments::comment)
+                .filter(doc -> doc != Doc.EMPTY)
+                .toList();
+        return docs.isEmpty() ? Optional.empty() : Optional.of(Doc.join(Doc.HARD_LINE, docs));
     }
 
     private String variableName(VariableDeclarator variable) {

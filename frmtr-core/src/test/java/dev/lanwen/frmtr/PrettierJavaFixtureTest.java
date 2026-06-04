@@ -66,6 +66,17 @@ final class PrettierJavaFixtureTest {
             false,
             FormatterOptions.LambdaArrowParens.ALWAYS,
             FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+    private static final FormatterOptions PRETTIER_BINARY_OPERATOR_POSITION_START_OPTIONS = new FormatterOptions(
+            80,
+            FormatterOptions.IndentStyle.SPACE,
+            2,
+            FormatterOptions.LineEnding.LF,
+            true,
+            true,
+            false,
+            FormatterOptions.LambdaArrowParens.PRESERVE,
+            FormatterOptions.BinaryOperatorPosition.START,
+            FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
     private static final Set<String> PRETTIER_COMPATIBLE_FIXTURES = Set.of(
             "args",
             "arrays",
@@ -209,6 +220,9 @@ final class PrettierJavaFixtureTest {
         }
         if (fixture.name().equals("lambda/arrow-parens-always")) {
             return PRETTIER_ARROW_PARENS_ALWAYS_OPTIONS;
+        }
+        if (fixture.name().equals("binary_expressions/operator-position-start")) {
+            return PRETTIER_BINARY_OPERATOR_POSITION_START_OPTIONS;
         }
         return PRETTIER_COMPATIBILITY_OPTIONS;
     }

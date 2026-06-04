@@ -98,6 +98,8 @@ final class FrmtrTest {
         assertThat(FormatterOptions.defaults().requirePragma()).isFalse();
         assertThat(FormatterOptions.defaults().lambdaArrowParens())
                 .isEqualTo(FormatterOptions.LambdaArrowParens.PRESERVE);
+        assertThat(FormatterOptions.defaults().binaryOperatorPosition())
+                .isEqualTo(FormatterOptions.BinaryOperatorPosition.END);
     }
 
     @Test
@@ -133,6 +135,44 @@ final class FrmtrTest {
 
         assertThat(Frmtr.format(source, avoid)).contains("call(value -> value);");
         assertThat(Frmtr.format(source.replace("(value) ->", "value ->"), always)).contains("call((value) -> value);");
+    }
+
+    @Test
+    void binaryOperatorPositionOptionControlsBrokenContinuationLines() {
+        String source = """
+                class Demo {
+                    void method() {
+                        value = aaaaaaaaaa && bbbbbbbbbb && cccccccccc && dddddddddd;
+                    }
+                }
+                """;
+        FormatterOptions start = new FormatterOptions(
+                40,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                false,
+                false,
+                FormatterOptions.LambdaArrowParens.PRESERVE,
+                FormatterOptions.BinaryOperatorPosition.START,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+        FormatterOptions end = new FormatterOptions(
+                40,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                false,
+                false,
+                FormatterOptions.LambdaArrowParens.PRESERVE,
+                FormatterOptions.BinaryOperatorPosition.END,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        assertThat(Frmtr.format(source, start))
+                .contains("value =\n      aaaaaaaaaa\n      && bbbbbbbbbb\n      && cccccccccc\n      && dddddddddd;");
+        assertThat(Frmtr.format(source, end))
+                .contains("value =\n      aaaaaaaaaa &&\n      bbbbbbbbbb &&\n      cccccccccc &&\n      dddddddddd;");
     }
 
     @Test

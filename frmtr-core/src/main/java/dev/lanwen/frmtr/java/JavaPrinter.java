@@ -1378,6 +1378,11 @@ final class JavaPrinter {
                     && arrayAccessExpr.getName().isEnclosedExpr()) {
                 return Doc.concat(Doc.text(name + " = "), arrayAccessWithBrokenEnclosedName(arrayAccessExpr));
             }
+            if (initializer instanceof BinaryExpr) {
+                return Doc.concat(
+                        Doc.text(name + " ="),
+                        Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines(initializer, true))));
+            }
         }
         if (currentIndentedWidth(flat) > options.lineWidth()
                 && initializer instanceof MethodCallExpr methodCall
@@ -2321,7 +2326,9 @@ final class JavaPrinter {
         List<Doc> lines = new ArrayList<>();
         for (int i = 0; i < operands.size(); i++) {
             Doc operand = binaryExpressionLineOperand(binaryExpr.getOperator(), operands.get(i));
-            if (i < operands.size() - 1) {
+            if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.START && i > 0) {
+                operand = Doc.concat(Doc.text(binaryExpr.getOperator().asString() + " "), operand);
+            } else if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END && i < operands.size() - 1) {
                 operand = Doc.concat(operand, Doc.text(" " + binaryExpr.getOperator().asString()));
             }
             lines.add(operand);
@@ -2692,6 +2699,12 @@ final class JavaPrinter {
                             expression(assignExpr.getTarget()),
                             Doc.text(" " + assignExpr.getOperator().asString() + " "),
                             suffixedEnclosedValue.orElseThrow());
+                }
+                if (assignExpr.getValue() instanceof BinaryExpr) {
+                    return Doc.concat(
+                            expression(assignExpr.getTarget()),
+                            Doc.text(" " + assignExpr.getOperator().asString()),
+                            Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines(assignExpr.getValue(), true))));
                 }
             }
             return Doc.concat(

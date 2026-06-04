@@ -1,27 +1,56 @@
 public class Lambda {
 
     public void singleArgumentWithParens() {
-        call((x) -> { System.out.println(x); System.out.println(x); });
+        call(
+            (x) -> {
+                System.out.println(x);
+                System.out.println(x);
+            }
+        );
     }
 
     public void singleArgumentWithoutParens() {
-        call(x -> { System.out.println(x); System.out.println(x); });
+        call(
+            x -> {
+                System.out.println(x);
+                System.out.println(x);
+            }
+        );
     }
 
     public void multiArguments() {
-        call((x, y) -> { System.out.println(x); System.out.println(y); });
+        call(
+            (x, y) -> {
+                System.out.println(x);
+                System.out.println(y);
+            }
+        );
     }
 
     public void multiParameters() {
-        call((Object x, final String y) -> { System.out.println(x); System.out.println(y); });
+        call(
+            (Object x, final String y) -> {
+                System.out.println(x);
+                System.out.println(y);
+            }
+        );
     }
 
     public void emptyArguments() {
-        call(() -> { System.out.println(); System.out.println(); });
+        call(
+            () -> {
+                System.out.println();
+                System.out.println();
+            }
+        );
     }
 
     public void onlyOneMethodInBodyWithCurlyBraces() {
-        call(x -> { System.out.println(x); });
+        call(
+            x -> {
+                System.out.println(x);
+            }
+        );
     }
 
     public void onlyOneMethodInBody() {
@@ -41,12 +70,20 @@ public class Lambda {
     public void lambdaWithLongListOfParameters() {
         final List<Integer> values = Stream.of(1, 2)
             .map(
-                ( aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter ) -> { // testing method return n * 2; }
+                (aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter) -> {
+                    // testing method
+                    return n * 2;
+                }
             )
             .collect(Collectors.toList());
 
         final List<Integer> values = Stream.of(1, 2)
-            .map(( aVeryLongListOfParameter, aVeryLongListOfParameter, aParameterTha ) -> { // testing method return n * 2; })
+            .map(
+                (aVeryLongListOfParameter, aVeryLongListOfParameter, aParameterTha) -> {
+                    // testing method
+                    return n * 2;
+                }
+            )
             .collect(Collectors.toList());
     }
 
@@ -56,29 +93,68 @@ public class Lambda {
 
     public void longLambdaAssignation() {
         V t =
-            ( aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParaa ) -> { // testing method return n * 2; };
+            (aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParaa) -> {
+                // testing method
+                return n * 2;
+            };
     }
 
     public void callWithLambdaAndExtraParameter() {
-        CompletableFuture.supplyAsync(() -> { // some processing return 2; }, executor);
+        CompletableFuture.supplyAsync(
+            () -> {
+                // some processing
+                return 2;
+            },
+            executor
+        );
     }
 
     public void testConstructor() {
-        new Value(( x ) -> { // testing method return n * 2; });
-
-        new Value(( aVeryLongListOfParameter, aVeryLongListOfParameter ) -> { // testing method return n * 2; });
+        new Value(
+            (x) -> {
+                // testing method
+                return n * 2;
+            }
+        );
 
         new Value(
-            ( aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter ) -> { // testing method return n * 2; }
+            (aVeryLongListOfParameter, aVeryLongListOfParameter) -> {
+                // testing method
+                return n * 2;
+            }
+        );
+
+        new Value(
+            (aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter) -> {
+                // testing method
+                return n * 2;
+            }
         );
     }
 
     private static <T extends Group> Function<Constructor<?>, T> createInstance(Group entity) {
-        return ctor -> Try.of(a, () -> { @SuppressWarnings("unchecked") var ng = (T) ctor.newInstance( entity.getId(), entity.getSystemGenerated(), entity.getVersionKey() ); return ng; }).getOrElseThrow(ex -> new RuntimeException(ex));
+        return ctor ->
+            Try
+                .of(
+                    a,
+                    () -> {
+                        @SuppressWarnings("unchecked")
+                        var ng = (T) ctor.newInstance(entity.getId(), entity.getSystemGenerated(), entity.getVersionKey());
+                        return ng;
+                    }
+                )
+                .getOrElseThrow(ex -> new RuntimeException(ex));
     }
 
     void singleLambdaWithBlockLastArgument() {
-        a.of(b, c, d, e -> { return f; });
+        a.of(
+            b,
+            c,
+            d,
+            e -> {
+                return f;
+            }
+        );
     }
 
     void singleLambdaWithBlockLastArgumentAndLongArguments() {
@@ -87,7 +163,9 @@ public class Lambda {
             bbbbbbbbbbbbbbbbbbbbbbbbbb,
             cccccccccccccccccccccccccc,
             dddddddddddddddddddddddddd,
-            e -> { return f; }
+            e -> {
+                return f;
+            }
         );
 
         this.a(
@@ -95,28 +173,60 @@ public class Lambda {
             bbbbbbbbbbbbbbbbbbbbbbbbbb,
             cccccccccccccccccccccccccc,
             dddddddddddddddddddddddddd,
-            e -> { return f; }
+            e -> {
+                return f;
+            }
         );
     }
 
     void singleLambdaWithBlockLastArgumentAndLongLambdaArgument() {
-        a.of(b, c, d, eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee -> { return f; });
+        a.of(
+            b,
+            c,
+            d,
+            eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee -> {
+                return f;
+            }
+        );
     }
 
     void singleLambdaWithBlockLastArgumentAndLongLambdaArguments() {
-        a.of(b, (cccccccccccccccccccccccccc, dddddddddddddddddddddddddd, eeeeeeeeeeeeeeeeeeeeeeeeee) -> { return f; });
+        a.of(
+            b,
+            (cccccccccccccccccccccccccc, dddddddddddddddddddddddddd, eeeeeeeeeeeeeeeeeeeeeeeeee) -> {
+                return f;
+            }
+        );
     }
 
     void multipleLambdaArguments() {
-        a.of(b, c -> d, e -> { return f; });
+        a.of(
+            b,
+            c -> d,
+            e -> {
+                return f;
+            }
+        );
     }
 
     void argumentAfterLambdaWithBlock() {
-        a.of(b, c, d, e -> { return f; }, g);
+        a.of(
+            b,
+            c,
+            d,
+            e -> {
+                return f;
+            },
+            g
+        );
     }
 
     void huggableArguments() {
-        A.b().c(() -> { return d; });
+        A.b().c(
+            () -> {
+                return d;
+            }
+        );
 
         aaaaaaaaaaaaaaaaaaaaaaaa(
             (bbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccccccc, dddddddddddddddddddddddd) -> eeeeeeeeeeeeeeeeeeeeeeee.ffffffffffffffffffffffff()
@@ -140,7 +250,11 @@ public class Lambda {
 
         a.b(c -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
 
-        a.b(c -> { eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk); });
+        a.b(
+            c -> {
+                eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk);
+            }
+        );
 
         a.b((c0, c1) -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
 
@@ -148,26 +262,26 @@ public class Lambda {
 
         a((b, c, d) -> e.f());
 
-        a(( // comment b, c, d) -> e.f());
-
-        a((b, // comment c, d) -> e.f());
-
-        a((b, c, d // comment ) -> e.f());
-
-        a((b, c, d // comment ) -> e.f());
+        a((b, c, d) -> e.f());
 
         a((b, c, d) -> e.f());
 
-        a(( /* comment */ b, c, d) -> e.f());
+        a((b, c, d) -> e.f());
 
-        a((b, /* comment */ c, d) -> e.f());
+        a((b, c, d) -> e.f());
 
-        a((b, c, d /* comment */ ) -> e.f());
+        a((b, c, d) -> e.f());
 
-        a((b, c, d /* comment */ ) -> e.f());
+        a((b, c, d) -> e.f());
+
+        a((b, c, d) -> e.f());
+
+        a((b, c, d) -> e.f());
+
+        a((b, c, d) -> e.f());
 
         aaaaaaaaaaaaaaaaaaaaaaaa(
-            (bbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccccccc, dddddddddddddddddddddddd // comment ) -> eeeeeeeeeeeeeeeeeeeeeeee.ffffffffffffffffffffffff()
+            (bbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccccccc, dddddddddddddddddddddddd) -> eeeeeeeeeeeeeeeeeeeeeeee.ffffffffffffffffffffffff()
         );
 
         aaaaaaaaaaaaaaaaaaaaaaaa(
@@ -178,15 +292,15 @@ public class Lambda {
             (bbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccccccc, dddddddddddddddddddddddd) -> eeeeeeeeeeeeeeeeeeeeeeee.ffffffffffffffffffffffff()
         );
 
-        a.b(c, (c0, c1 // comment ) -> d && eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk) > 0);
+        a.b(c, (c0, c1) -> d && eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk) > 0);
 
-        a.b(c, (c0, c1 // comment ) -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk) > 0);
+        a.b(c, (c0, c1) -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk) > 0);
 
-        a.b(c, (c0, c1 // comment ) -> d && eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
+        a.b(c, (c0, c1) -> d && eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
 
-        a.b((c0, c1 // comment ) -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
+        a.b((c0, c1) -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
 
-        a.b(c, (c0, c1 // comment ) -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
+        a.b(c, (c0, c1) -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
     }
 
     void lambdaWithLeadingComments() {
@@ -217,25 +331,48 @@ public class Lambda {
 class T {
 
     T() {
-        super(x -> { // testing method return n * 2; });
-    }
-
-    T() {
-        super((x,y) -> { // testing method return n * 2; });
-    }
-
-    T() {
         super(
-            (aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter) -> { // testing method return n * 2; }
+            x -> {
+                // testing method
+                return n * 2;
+            }
         );
     }
 
     T() {
-        super(( aVeryLongListOfParameter, aVeryLongListOfParameter, aParameterThatS ) -> { // testing method return n * 2; });
+        super(
+            (x, y) -> {
+                // testing method
+                return n * 2;
+            }
+        );
     }
 
     T() {
-        super(a, () -> { return b; });
+        super(
+            (aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter) -> {
+                // testing method
+                return n * 2;
+            }
+        );
+    }
+
+    T() {
+        super(
+            (aVeryLongListOfParameter, aVeryLongListOfParameter, aParameterThatS) -> {
+                // testing method
+                return n * 2;
+            }
+        );
+    }
+
+    T() {
+        super(
+            a,
+            () -> {
+                return b;
+            }
+        );
     }
 }
 

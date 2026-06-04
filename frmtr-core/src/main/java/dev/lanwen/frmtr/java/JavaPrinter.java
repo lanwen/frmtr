@@ -2726,6 +2726,9 @@ final class JavaPrinter {
         if (expression instanceof FieldAccessExpr fieldAccessExpr) {
             return fieldAccess(fieldAccessExpr);
         }
+        if (expression instanceof LambdaExpr lambdaExpr) {
+            return lambdaExpression(lambdaExpr);
+        }
         if (expression instanceof MethodCallExpr methodCallExpr) {
             return methodCall(methodCallExpr);
         }
@@ -3201,6 +3204,32 @@ final class JavaPrinter {
         return expression.getExpressionBody()
                 .map(this::expression)
                 .orElseGet(() -> statement(expression.getBody()));
+    }
+
+    private Doc lambdaExpression(LambdaExpr expression) {
+        String parameters = lambdaParameters(expression);
+        if (expression.getBody().isBlockStmt()) {
+            return Doc.concat(Doc.text(parameters + " -> "), block(expression.getBody().asBlockStmt()));
+        }
+        Doc body = expression.getExpressionBody()
+                .map(this::expression)
+                .orElseGet(() -> statement(expression.getBody()));
+        String flat = parameters + " -> " + expression.getExpressionBody()
+                .map(this::compact)
+                .orElseGet(() -> compact(expression.getBody()));
+        if (currentIndentedWidth(flat) <= options.lineWidth()) {
+            return Doc.text(flat);
+        }
+        return Doc.concat(
+                Doc.text(parameters + " ->"),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, body)));
+    }
+
+    private String lambdaParameters(LambdaExpr expression) {
+        if (expression.isEnclosingParameters() || expression.getParameters().size() != 1) {
+            return "(" + compactJoin(expression.getParameters()) + ")";
+        }
+        return compact(expression.getParameters().get(0));
     }
 
     private String methodReferenceSuffix(MethodReferenceExpr expression) {

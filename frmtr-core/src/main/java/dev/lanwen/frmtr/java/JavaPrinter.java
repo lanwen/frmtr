@@ -3649,6 +3649,10 @@ final class JavaPrinter {
     }
 
     private Doc conditionalExpression(ConditionalExpr expression, boolean forceBreak) {
+        Optional<Doc> commented = commentedConditionalExpression(expression);
+        if (commented.isPresent()) {
+            return commented.orElseThrow();
+        }
         String flat = compact(expression);
         if (!forceBreak && currentIndentedWidth(flat) <= options.lineWidth()) {
             if (expressionHasParenthesizedNestedBinary(expression)) {
@@ -3670,6 +3674,77 @@ final class JavaPrinter {
                         Doc.HARD_LINE,
                         Doc.text(": "),
                         conditionalBranch(expression.getElseExpr()))));
+    }
+
+    private Optional<Doc> commentedConditionalExpression(ConditionalExpr expression) {
+        if (expression.getAllContainedComments().stream().noneMatch(LineComment.class::isInstance)) {
+            return Optional.empty();
+        }
+        Optional<Comment> conditionComment = expression.getCondition().getComment()
+                .filter(LineComment.class::isInstance);
+        Optional<Comment> thenComment = expression.getThenExpr().getComment()
+                .filter(LineComment.class::isInstance);
+        Optional<Comment> elseComment = expression.getElseExpr().getComment()
+                .filter(LineComment.class::isInstance);
+        Optional<Comment> questionComment = conditionComment
+                .or(() -> thenComment.filter(comment -> startsBefore(comment, expression.getThenExpr())));
+        Optional<Comment> thenTrailingComment = thenComment
+                .filter(comment -> !startsBefore(comment, expression.getThenExpr()))
+                .filter(comment -> !commentAppearsAfterColon(expression, comment));
+        Optional<Comment> colonComment = thenComment
+                .filter(comment -> !questionComment.filter(question -> question == comment).isPresent())
+                .filter(comment -> commentAppearsAfterColon(expression, comment))
+                .or(() -> elseComment.filter(comment -> startsBefore(comment, expression.getElseExpr())));
+        Optional<Comment> elseTrailingComment = elseComment
+                .filter(comment -> !colonComment.filter(colon -> colon == comment).isPresent())
+                .filter(comment -> !startsBefore(comment, expression.getElseExpr()));
+        return Optional.of(Doc.concat(
+                expressionWithoutOwnComment(expression.getCondition()),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        conditionalCommentedBranch("?", expression.getThenExpr(), questionComment, thenTrailingComment),
+                        Doc.HARD_LINE,
+                        conditionalCommentedBranch(":", expression.getElseExpr(), colonComment, elseTrailingComment)))));
+    }
+
+    private Doc conditionalCommentedBranch(
+            String operator,
+            Expression branch,
+            Optional<Comment> leadingComment,
+            Optional<Comment> trailingComment) {
+        if (leadingComment.isPresent()) {
+            return Doc.concat(
+                    Doc.text(operator + " "),
+                    comments.comment(leadingComment.orElseThrow()),
+                    Doc.HARD_LINE,
+                    Doc.text("  "),
+                    expressionWithoutOwnComment(branch));
+        }
+        Doc trailing = trailingComment
+                .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
+                .orElse(Doc.EMPTY);
+        return Doc.concat(Doc.text(operator + " "), expressionWithoutOwnComment(branch), trailing);
+    }
+
+    private boolean commentAppearsAfterColon(ConditionalExpr expression, Comment comment) {
+        return expression.getTokenRange()
+                .flatMap(tokenRange -> expression.getRange().flatMap(expressionRange -> comment.getRange()
+                        .map(commentRange -> {
+                            List<String> lines = tokenRange.toString().lines().toList();
+                            int lineIndex = commentRange.begin.line - expressionRange.begin.line;
+                            if (lineIndex < 0 || lineIndex >= lines.size()) {
+                                return false;
+                            }
+                            int column = lineIndex == 0
+                                    ? commentRange.begin.column - expressionRange.begin.column
+                                    : commentRange.begin.column - 1;
+                            if (column <= 0) {
+                                return false;
+                            }
+                            String prefix = lines.get(lineIndex).substring(0, Math.min(column, lines.get(lineIndex).length()));
+                            return prefix.contains(":");
+                        })))
+                .orElse(false);
     }
 
     private Doc conditionalCondition(ConditionalExpr expression) {

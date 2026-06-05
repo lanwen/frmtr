@@ -32,10 +32,24 @@ class ConditionalExpression {
     }
 
     void ternaryWithComments() {
-        value = a ? // b b : // c c;
-        value = a // b ? b // c : c;
-        value = a ? // b b : // c c;
-        value = a ? b // b : c;
+        value = a
+            ? // b
+              b
+            : // c
+              c;
+        value = a
+            ? // b
+              b
+            : // c
+              c;
+        value = a
+            ? // b
+              b
+            : // c
+              c;
+        value = a
+            ? b // b
+            : c // c;
     }
 
     void ternaryInParentheses() {

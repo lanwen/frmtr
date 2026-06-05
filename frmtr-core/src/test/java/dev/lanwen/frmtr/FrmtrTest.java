@@ -323,6 +323,35 @@ final class FrmtrTest {
     }
 
     @Test
+    void preservesLineCommentsInBrokenConditionalExpression() {
+        String source = """
+                class Demo {
+                    void method() {
+                        value = a ? // b
+                            b : // c
+                            c;
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("value = a\n"
+                        + "      ? // b\n"
+                        + "        b\n"
+                        + "      : // c\n"
+                        + "        c;");
+    }
+
+    @Test
     void promotesStaticChainRootWithBlockLambdaFirstCall() {
         String source = """
                 class Demo {

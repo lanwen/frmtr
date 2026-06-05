@@ -103,11 +103,13 @@ final class JavaPrinter {
     private final RawSource rawSource;
     private final FormatterPragmas formatterPragmas = new FormatterPragmas();
     private final MemberBlockPrinter memberBlocks;
+    private final BlockPrinter blocks;
 
     JavaPrinter(FormatterOptions options) {
         this.options = options;
         this.rawSource = new RawSource(options);
         this.memberBlocks = new MemberBlockPrinter(rawSource, comments, this::hasDeclarationAnnotations);
+        this.blocks = new BlockPrinter(comments, this::statement, formatterPragmas::hasPragma);
     }
 
     Doc print(CompilationUnit unit) {
@@ -2136,85 +2138,7 @@ final class JavaPrinter {
     }
 
     private Doc block(BlockStmt block) {
-        if (block.getStatements().isEmpty() && block.getOrphanComments().isEmpty()) {
-            return Doc.text("{}");
-        }
-        List<Doc> statements = new ArrayList<>();
-        List<Doc> orphanComments = blockOrphanCommentStatements(block);
-        if (!orphanComments.isEmpty()) {
-            statements.add(Doc.join(Doc.HARD_LINE, orphanComments));
-        }
-        Statement previousStatement = null;
-        for (Statement currentStatement : block.getStatements()) {
-            if (currentStatement.isEmptyStmt() && previousStatement instanceof SwitchStmt) {
-                continue;
-            }
-            if (currentStatement instanceof EmptyStmt emptyStmt) {
-                Optional<Doc> emptyStatementComment = blockEmptyStatementComment(emptyStmt);
-                if (emptyStatementComment.isEmpty()) {
-                    continue;
-                }
-                if (!statements.isEmpty()) {
-                    statements.add(statementSeparator(previousStatement, currentStatement));
-                }
-                statements.add(emptyStatementComment.orElseThrow());
-                previousStatement = currentStatement;
-                continue;
-            }
-            if (!statements.isEmpty()) {
-                statements.add(statementSeparator(previousStatement, currentStatement));
-            }
-            statements.add(statement(currentStatement));
-            previousStatement = currentStatement;
-        }
-        if (statements.isEmpty()) {
-            return Doc.text("{}");
-        }
-        return Doc.concat(
-                Doc.text("{"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.concat(statements))),
-                Doc.HARD_LINE,
-                Doc.text("}"));
-    }
-
-    private Optional<Doc> blockEmptyStatementComment(EmptyStmt statement) {
-        Doc lineComment = comments.ownComment(statement, LineComment.class::isInstance);
-        return lineComment == Doc.EMPTY ? Optional.empty() : Optional.of(lineComment);
-    }
-
-    private List<Doc> blockOrphanCommentStatements(BlockStmt block) {
-        return comments.orphanCommentStatements(block, comment -> !commentInsideChildStatement(block, comment));
-    }
-
-    private boolean commentInsideChildStatement(BlockStmt block, Comment comment) {
-        return comment.getRange()
-                .map(commentRange -> block.getStatements().stream()
-                        .flatMap(statement -> statement.getRange().stream())
-                        .anyMatch(statementRange -> commentRange.begin.line >= statementRange.begin.line
-                                && commentRange.begin.line <= statementRange.end.line))
-                .orElse(false);
-    }
-
-    private Doc statementSeparator(Statement previousStatement, Statement currentStatement) {
-        if (previousStatement == null) {
-            return Doc.HARD_LINE;
-        }
-        if (formatterPragmas.hasPragma(previousStatement) || formatterPragmas.hasPragma(currentStatement)) {
-            return Doc.HARD_LINE;
-        }
-        boolean hasBlankLineBetween = previousStatement.getRange()
-                .flatMap(previousRange -> currentStatement.getRange()
-                        .map(currentRange -> effectiveBeginLine(currentStatement, currentRange.begin.line)
-                                > previousRange.end.line + 1))
-                .orElse(false);
-        return hasBlankLineBetween ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;
-    }
-
-    private int effectiveBeginLine(Statement statement, int fallback) {
-        return statement.getComment()
-                .flatMap(Node::getRange)
-                .map(range -> range.begin.line)
-                .orElse(fallback);
+        return blocks.block(block);
     }
 
     private Doc statement(Statement statement) {
@@ -2831,46 +2755,7 @@ final class JavaPrinter {
         if (block.getStatements().isEmpty() && block.getOrphanComments().isEmpty() && leadingInside == Doc.EMPTY) {
             return Doc.concat(Doc.text("{"), Doc.HARD_LINE, Doc.text("}"));
         }
-        return blockWithLeading(block, leadingInside);
-    }
-
-    private Doc blockWithLeading(BlockStmt block, Doc leadingInside) {
-        if (block.getStatements().isEmpty() && block.getOrphanComments().isEmpty() && leadingInside == Doc.EMPTY) {
-            return Doc.text("{}");
-        }
-        List<Doc> statements = new ArrayList<>();
-        if (leadingInside != Doc.EMPTY) {
-            statements.add(leadingInside);
-        }
-        statements.addAll(blockOrphanCommentStatements(block));
-        Statement previousStatement = null;
-        for (Statement currentStatement : block.getStatements()) {
-            if (currentStatement.isEmptyStmt() && previousStatement instanceof SwitchStmt) {
-                continue;
-            }
-            if (currentStatement instanceof EmptyStmt emptyStmt) {
-                Optional<Doc> emptyStatementComment = blockEmptyStatementComment(emptyStmt);
-                if (emptyStatementComment.isEmpty()) {
-                    continue;
-                }
-                if (!statements.isEmpty()) {
-                    statements.add(statementSeparator(previousStatement, currentStatement));
-                }
-                statements.add(emptyStatementComment.orElseThrow());
-                previousStatement = currentStatement;
-                continue;
-            }
-            if (!statements.isEmpty()) {
-                statements.add(statementSeparator(previousStatement, currentStatement));
-            }
-            statements.add(statement(currentStatement));
-            previousStatement = currentStatement;
-        }
-        return Doc.concat(
-                Doc.text("{"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.concat(statements))),
-                Doc.HARD_LINE,
-                Doc.text("}"));
+        return blocks.blockWithLeading(block, leadingInside);
     }
 
     private Doc catchClause(CatchClause clause, int catchCount, boolean hasFinally, Doc leadingInside) {
@@ -5293,7 +5178,7 @@ final class JavaPrinter {
         Statement previous = null;
         for (Statement current : statements) {
             if (previous != null) {
-                docs.add(statementSeparator(previous, current));
+                docs.add(blocks.statementSeparator(previous, current));
             }
             docs.add(statement(current));
             previous = current;

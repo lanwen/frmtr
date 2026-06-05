@@ -1,6 +1,5 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.Position;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ArrayCreationLevel;
 import com.github.javaparser.ast.Modifier;
@@ -94,6 +93,7 @@ final class JavaPrinter {
     private final BlockPrinter blocks;
     private final StatementPrinter statements;
     private final SwitchPrinter switches;
+    private final BinaryExpressionPrinter binaries;
     private final ConditionalExpressionPrinter conditionals;
     private final LambdaExpressionPrinter lambdas;
     private final MethodCallPrinter methodCalls;
@@ -124,6 +124,15 @@ final class JavaPrinter {
                 moduleBlocks::moduleBlock);
         this.memberBlocks = new MemberBlockPrinter(rawSource, comments, this::hasDeclarationAnnotations);
         this.blocks = new BlockPrinter(comments, this::statement, formatterPragmas::hasPragma);
+        this.binaries = new BinaryExpressionPrinter(
+                comments,
+                options,
+                this::expression,
+                this::brokenMethodCall,
+                this::compact,
+                this::compactWithoutOwnComment,
+                this::continuationStatementWidth,
+                this::blockStatementWidth);
         this.switches = new SwitchPrinter(
                 comments,
                 rawSource,
@@ -133,7 +142,7 @@ final class JavaPrinter {
                 this::block,
                 blocks::statementSeparator,
                 this::controlCondition,
-                this::binaryExpressionLines,
+                binaries::lines,
                 this::compact,
                 this::compactTypeLike,
                 this::modifiers,
@@ -148,9 +157,9 @@ final class JavaPrinter {
                 this::currentIndentedWidth,
                 this::blockStatementWidth,
                 this::continuationStatementWidth,
-                (expression, forceBreak) -> binaryExpressionLines(expression, forceBreak),
-                (expression, forceBreak) -> nestedBinaryExpressionLines(expression, forceBreak),
-                this::expressionHasParenthesizedNestedBinary);
+                (expression, forceBreak) -> binaries.lines(expression, forceBreak),
+                (expression, forceBreak) -> binaries.nestedLines(expression, forceBreak),
+                binaries::expressionHasParenthesizedNestedBinary);
         this.lambdas = new LambdaExpressionPrinter(
                 comments,
                 rawSource,
@@ -158,7 +167,7 @@ final class JavaPrinter {
                 this::expression,
                 this::statement,
                 this::block,
-                (expression, forceBreak) -> binaryExpressionLines(expression, forceBreak),
+                (expression, forceBreak) -> binaries.lines(expression, forceBreak),
                 this::compact,
                 this::compactWithoutOwnComment,
                 this::compactJoin,
@@ -177,7 +186,7 @@ final class JavaPrinter {
                 lambdas::commentedExpressionLambdaArgument,
                 lambdas::huggableMethodCallExpressionLambdaArguments,
                 this::renderUnformattedTextBlock,
-                binaryExpr -> nestedBinaryExpressionLines(binaryExpr, true),
+                binaryExpr -> binaries.nestedLines(binaryExpr, true),
                 this::compact,
                 this::compactJoin,
                 this::currentIndentedWidth,
@@ -204,12 +213,12 @@ final class JavaPrinter {
                 this::compactJoin,
                 this::expression,
                 this::expressionWithoutOwnComment,
-                this::binaryExpressionHasLineComments,
-                this::binaryExpressionLinesWithComments,
+                binaries::hasLineComments,
+                binaries::linesWithComments,
                 (expression, leadingBreak) -> suffixedEnclosedExpression(expression, leadingBreak),
                 this::arrayAccessWithBrokenEnclosedName,
-                this::shouldKeepCastDivisionContinuationFlat,
-                (expression, forceBreak) -> binaryExpressionLines(expression, forceBreak),
+                binaries::shouldKeepCastDivisionContinuationFlat,
+                (expression, forceBreak) -> binaries.lines(expression, forceBreak),
                 methodCalls::methodCall,
                 methodCalls::brokenMethodCall,
                 methodCalls::mixedFieldMethodCallChain,
@@ -331,8 +340,8 @@ final class JavaPrinter {
                 methodCalls::methodCallChainHasComments,
                 methodCalls::methodCallChainRootIsObjectCreation,
                 methodCalls::methodCallChainRootIsFieldAccess,
-                this::expressionHasParenthesizedNestedBinary,
-                this::binaryExpressionLines,
+                binaries::expressionHasParenthesizedNestedBinary,
+                binaries::lines,
                 this::controlCondition,
                 this::compactWithOwnBlockComment,
                 this::ownSameLineBlockCommentBeforeNode,
@@ -545,188 +554,13 @@ final class JavaPrinter {
     private Doc parenthesizedBreak(Expression expression, boolean forceBinaryBreak) {
         return Doc.concat(
                 Doc.text("("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines(expression, forceBinaryBreak))),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, binaries.lines(expression, forceBinaryBreak))),
                 Doc.HARD_LINE,
                 Doc.text(")"));
     }
 
-    private Doc binaryExpressionLines(Expression expression) {
-        return binaryExpressionLines(expression, false);
-    }
-
-    private Doc binaryExpressionLines(Expression expression, boolean forceBreak) {
-        return binaryExpressionLines(expression, forceBreak, false);
-    }
-
-    private Doc nestedBinaryExpressionLines(Expression expression, boolean forceBreak) {
-        return binaryExpressionLines(expression, forceBreak, true);
-    }
-
-    private Doc binaryExpressionLines(Expression expression, boolean forceBreak, boolean nestedContinuation) {
-        if (!(expression instanceof BinaryExpr binaryExpr)) {
-            return expression(expression);
-        }
-        if (!forceBreak && parenthesizedInnerWidth(compact(binaryExpr)) <= options.lineWidth()) {
-            return expression(binaryExpr);
-        }
-        List<Expression> operands = new ArrayList<>();
-        flattenBinaryExpression(binaryExpr, binaryExpr.getOperator(), operands);
-        if (binaryExpr.getOperator() == BinaryExpr.Operator.AND
-                && operands.size() == 2
-                && operands.getFirst() instanceof InstanceOfExpr instanceOfExpr
-                && parenthesizedInnerWidth(compact(instanceOfExpr)) > options.lineWidth()) {
-            return Doc.concat(expression(instanceOfExpr), Doc.text(" && "), expression(operands.getLast()));
-        }
-        if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END
-                && operands.size() == 2
-                && operands.getFirst() instanceof MethodCallExpr methodCall
-                && shouldBreakEndPositionMethodCallOperand(binaryExpr.getOperator(), methodCall)
-                && continuationStatementWidth(") " + binaryExpr.getOperator().asString() + " " + compact(operands.getLast()))
-                        <= options.lineWidth()) {
-            return Doc.concat(
-                    methodCalls.brokenMethodCall(methodCall),
-                    Doc.text(" " + binaryExpr.getOperator().asString() + " "),
-                    expression(operands.getLast()));
-        }
-        List<Doc> lines = new ArrayList<>();
-        for (int i = 0; i < operands.size(); i++) {
-            Expression operandExpression = operands.get(i);
-            Doc operand = binaryExpressionLineOperand(binaryExpr.getOperator(), operandExpression);
-            if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END
-                    && i < operands.size() - 1
-                    && shouldBreakEndPositionMethodCallOperand(binaryExpr.getOperator(), operandExpression)) {
-                MethodCallExpr methodCall = (MethodCallExpr) operandExpression;
-                operand = methodCalls.brokenMethodCall(methodCall);
-            }
-            if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.START && i > 0) {
-                operand = Doc.concat(Doc.text(binaryExpr.getOperator().asString() + " "), operand);
-            } else if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END && i < operands.size() - 1) {
-                operand = Doc.concat(operand, Doc.text(" " + binaryExpr.getOperator().asString()));
-            }
-            lines.add(operand);
-        }
-        if (nestedContinuation) {
-            List<Doc> nestedLines = new ArrayList<>();
-            for (int i = 0; i < lines.size(); i++) {
-                Doc line = lines.get(i);
-                nestedLines.add(i == 0 ? line : Doc.indent(Doc.concat(Doc.HARD_LINE, line)));
-            }
-            return Doc.concat(nestedLines);
-        }
-        return Doc.join(Doc.HARD_LINE, lines);
-    }
-
-    private Doc binaryExpressionLineOperand(BinaryExpr.Operator operator, Expression operand) {
-        if (operator == BinaryExpr.Operator.OR
-                && operand instanceof BinaryExpr binaryOperand
-                && binaryOperand.getOperator() == BinaryExpr.Operator.AND) {
-            if (parenthesizedInnerWidth(compact(binaryOperand)) > options.lineWidth()) {
-                return Doc.concat(Doc.text("("), nestedBinaryExpressionLines(binaryOperand, true), Doc.text(")"));
-            }
-            return Doc.concat(Doc.text("("), expression(binaryOperand), Doc.text(")"));
-        }
-        if (operand instanceof BinaryExpr binaryOperand
-                && shouldParenthesizeNestedBinary(operator, binaryOperand.getOperator())) {
-            return Doc.concat(Doc.text("("), expression(binaryOperand), Doc.text(")"));
-        }
-        return expression(operand);
-    }
-
-    private boolean shouldKeepCastDivisionContinuationFlat(BinaryExpr expression) {
-        return expression.getOperator() == BinaryExpr.Operator.DIVIDE
-                && expression.getLeft() instanceof CastExpr
-                && blockStatementWidth(compact(expression)) <= options.lineWidth();
-    }
-
-    private boolean shouldBreakEndPositionMethodCallOperand(BinaryExpr.Operator operator, Expression operand) {
-        return operand instanceof MethodCallExpr methodCall
-                && !methodCall.getArguments().isEmpty()
-                && continuationStatementWidth(compact(methodCall) + " " + operator.asString()) > options.lineWidth();
-    }
-
-    private boolean binaryExpressionHasLineComments(BinaryExpr expression) {
-        return expression.getAllContainedComments().stream().anyMatch(LineComment.class::isInstance);
-    }
-
-    private Doc binaryExpressionLinesWithComments(BinaryExpr expression) {
-        List<Expression> operands = new ArrayList<>();
-        flattenBinaryExpression(expression, expression.getOperator(), operands);
-        List<Doc> lines = new ArrayList<>();
-        for (int i = 0; i < operands.size(); i++) {
-            Expression operand = operands.get(i);
-            Doc line = Doc.text(binaryLineOperandText(expression.getOperator(), operand, i, operands.size()));
-            List<Comment> between = i < operands.size() - 1
-                    ? binaryCommentsBetween(expression, operand, operands.get(i + 1))
-                    : List.of();
-            if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END) {
-                List<Comment> sameLineComments = sameLineComments(operand, between);
-                for (Comment comment : sameLineComments) {
-                    line = Doc.concat(line, Doc.text(" "), comments.comment(comment));
-                }
-                between = between.stream()
-                        .filter(comment -> !sameLineComments.contains(comment))
-                        .toList();
-            }
-            lines.add(line);
-            if (i < operands.size() - 1) {
-                lines.addAll(commentDocs(between));
-            }
-        }
-        return Doc.join(Doc.HARD_LINE, lines);
-    }
-
-    private String binaryLineOperandText(BinaryExpr.Operator operator, Expression operand, int index, int operandCount) {
-        String text = compactWithoutOwnComment(operand);
-        if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.START) {
-            return index == 0 ? text : operator.asString() + " " + text;
-        }
-        return index < operandCount - 1 ? text + " " + operator.asString() : text;
-    }
-
-    private List<Comment> binaryCommentsBetween(BinaryExpr expression, Expression previous, Expression next) {
-        int previousLine = previous.getRange().map(range -> range.end.line).orElse(Integer.MIN_VALUE);
-        int nextLine = next.getRange().map(range -> range.begin.line).orElse(Integer.MAX_VALUE);
-        return expression.getAllContainedComments().stream()
-                .filter(LineComment.class::isInstance)
-                .filter(comment -> comment.getRange()
-                        .map(range -> range.begin.line >= previousLine && range.begin.line < nextLine)
-                        .orElse(false))
-                .sorted(Comparator.comparing(comment -> comment.getRange()
-                        .map(range -> range.begin)
-                        .orElse(Position.HOME)))
-                .toList();
-    }
-
-    private List<Comment> sameLineComments(Expression expression, List<Comment> comments) {
-        int expressionEndLine = expression.getRange().map(range -> range.end.line).orElse(Integer.MIN_VALUE);
-        return comments.stream()
-                .filter(comment -> comment.getRange()
-                        .map(range -> range.begin.line == expressionEndLine)
-                        .orElse(false))
-                .toList();
-    }
-
-    private List<Doc> commentDocs(List<Comment> sourceComments) {
-        return sourceComments.stream()
-                .map(comments::comment)
-                .filter(doc -> doc != Doc.EMPTY)
-                .toList();
-    }
-
-    private int parenthesizedInnerWidth(String text) {
-        return (options.indentUnit().length() * 2) + text.length();
-    }
-
-    private void flattenBinaryExpression(
-            Expression expression,
-            BinaryExpr.Operator operator,
-            List<Expression> operands) {
-        if (expression instanceof BinaryExpr binaryExpr && binaryExpr.getOperator() == operator) {
-            flattenBinaryExpression(binaryExpr.getLeft(), operator, operands);
-            flattenBinaryExpression(binaryExpr.getRight(), operator, operands);
-            return;
-        }
-        operands.add(expression);
+    private Doc brokenMethodCall(MethodCallExpr expression) {
+        return methodCalls.brokenMethodCall(expression);
     }
 
     private Doc ownSameLineBlockCommentBeforeNode(Node node) {
@@ -750,7 +584,7 @@ final class JavaPrinter {
                             suffixedEnclosedValue.orElseThrow());
                 }
                 if (assignExpr.getValue() instanceof BinaryExpr binaryExpr) {
-                    if (shouldKeepCastDivisionContinuationFlat(binaryExpr)) {
+                    if (binaries.shouldKeepCastDivisionContinuationFlat(binaryExpr)) {
                         return Doc.concat(
                                 expression(assignExpr.getTarget()),
                                 Doc.text(" " + assignExpr.getOperator().asString()),
@@ -759,7 +593,7 @@ final class JavaPrinter {
                     return Doc.concat(
                             expression(assignExpr.getTarget()),
                             Doc.text(" " + assignExpr.getOperator().asString()),
-                            Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines(assignExpr.getValue(), true))));
+                            Doc.indent(Doc.concat(Doc.HARD_LINE, binaries.lines(assignExpr.getValue(), true))));
                 }
                 if (assignExpr.getValue() instanceof ObjectCreationExpr objectCreationExpr
                         && objectCreationExpr.getAnonymousClassBody().isEmpty()) {
@@ -807,7 +641,7 @@ final class JavaPrinter {
             return annotation(annotationExpr);
         }
         if (expression instanceof BinaryExpr binaryExpr) {
-            return binaryExpression(binaryExpr);
+            return binaries.binaryExpression(binaryExpr);
         }
         if (expression instanceof CastExpr castExpr) {
             return castExpression(castExpr);
@@ -1319,7 +1153,7 @@ final class JavaPrinter {
             return annotationArrayInitializer(arrayInitializerExpr);
         }
         if (value instanceof BinaryExpr) {
-            return nestedBinaryExpressionLines(value, true);
+            return binaries.nestedLines(value, true);
         }
         return expression(value);
     }
@@ -1343,118 +1177,6 @@ final class JavaPrinter {
                         .orElse("[]"))
                 .reduce(String::concat)
                 .orElse("");
-    }
-
-    private Doc binaryExpression(BinaryExpr expression) {
-        Optional<LineComment> leftLineComment = expression.getLeft()
-                .getComment()
-                .filter(LineComment.class::isInstance)
-                .map(LineComment.class::cast);
-        if (leftLineComment.isEmpty()) {
-            return Doc.concat(
-                    binaryLeftOperand(expression),
-                    Doc.text(" " + expression.getOperator().asString() + " "),
-                    binaryRightOperand(expression));
-        }
-        return Doc.concat(
-                Doc.text(compactWithoutOwnComment(expression.getLeft()) + " " + expression.getOperator().asString() + " "),
-                JavaFormatter.commentDoc(leftLineComment.orElseThrow()),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, binaryRightOperand(expression))));
-    }
-
-    private Doc binaryLeftOperand(BinaryExpr expression) {
-        if (expression.getLeft() instanceof BinaryExpr leftBinary
-                && (shouldParenthesizeLeftBinary(expression.getOperator(), leftBinary.getOperator())
-                        || shouldParenthesizeNestedBinary(expression.getOperator(), leftBinary.getOperator()))) {
-            return Doc.concat(Doc.text("("), expression(leftBinary), Doc.text(")"));
-        }
-        return expression(expression.getLeft());
-    }
-
-    private Doc binaryRightOperand(BinaryExpr expression) {
-        if (expression.getRight() instanceof BinaryExpr rightBinary
-                && shouldParenthesizeNestedBinary(expression.getOperator(), rightBinary.getOperator())) {
-            return Doc.concat(Doc.text("("), expression(rightBinary), Doc.text(")"));
-        }
-        return expression(expression.getRight());
-    }
-
-    private boolean shouldParenthesizeLeftBinary(BinaryExpr.Operator outer, BinaryExpr.Operator inner) {
-        return (outer == BinaryExpr.Operator.DIVIDE || outer == BinaryExpr.Operator.REMAINDER)
-                && (inner == BinaryExpr.Operator.MULTIPLY || inner == BinaryExpr.Operator.REMAINDER);
-    }
-
-    private boolean shouldParenthesizeNestedBinary(BinaryExpr.Operator outer, BinaryExpr.Operator inner) {
-        if (isMultiplicativeOperator(outer)
-                && (inner == BinaryExpr.Operator.DIVIDE || inner == BinaryExpr.Operator.REMAINDER)) {
-            return true;
-        }
-        if (isAdditiveOperator(outer) && inner == BinaryExpr.Operator.REMAINDER) {
-            return true;
-        }
-        if (isShiftOperator(outer) && (isArithmeticOperator(inner) || isShiftOperator(inner))) {
-            return true;
-        }
-        if (isBitwiseOperator(outer)
-                && (isShiftOperator(inner)
-                        || isRelationalOperator(inner)
-                        || isEqualityOperator(inner)
-                        || outer == BinaryExpr.Operator.BINARY_OR
-                                && (inner == BinaryExpr.Operator.BINARY_AND || inner == BinaryExpr.Operator.XOR)
-                        || outer == BinaryExpr.Operator.XOR && inner == BinaryExpr.Operator.BINARY_AND)) {
-            return true;
-        }
-        return isEqualityOperator(outer) && isEqualityOperator(inner);
-    }
-
-    private boolean isShiftOperator(BinaryExpr.Operator operator) {
-        return operator == BinaryExpr.Operator.LEFT_SHIFT
-                || operator == BinaryExpr.Operator.SIGNED_RIGHT_SHIFT
-                || operator == BinaryExpr.Operator.UNSIGNED_RIGHT_SHIFT;
-    }
-
-    private boolean isArithmeticOperator(BinaryExpr.Operator operator) {
-        return operator == BinaryExpr.Operator.PLUS
-                || operator == BinaryExpr.Operator.MINUS
-                || operator == BinaryExpr.Operator.MULTIPLY
-                || operator == BinaryExpr.Operator.DIVIDE
-                || operator == BinaryExpr.Operator.REMAINDER;
-    }
-
-    private boolean isAdditiveOperator(BinaryExpr.Operator operator) {
-        return operator == BinaryExpr.Operator.PLUS || operator == BinaryExpr.Operator.MINUS;
-    }
-
-    private boolean isMultiplicativeOperator(BinaryExpr.Operator operator) {
-        return operator == BinaryExpr.Operator.MULTIPLY
-                || operator == BinaryExpr.Operator.DIVIDE
-                || operator == BinaryExpr.Operator.REMAINDER;
-    }
-
-    private boolean isRelationalOperator(BinaryExpr.Operator operator) {
-        return operator == BinaryExpr.Operator.LESS
-                || operator == BinaryExpr.Operator.GREATER
-                || operator == BinaryExpr.Operator.LESS_EQUALS
-                || operator == BinaryExpr.Operator.GREATER_EQUALS;
-    }
-
-    private boolean isBitwiseOperator(BinaryExpr.Operator operator) {
-        return operator == BinaryExpr.Operator.BINARY_AND
-                || operator == BinaryExpr.Operator.XOR
-                || operator == BinaryExpr.Operator.BINARY_OR;
-    }
-
-    private boolean isEqualityOperator(BinaryExpr.Operator operator) {
-        return operator == BinaryExpr.Operator.EQUALS || operator == BinaryExpr.Operator.NOT_EQUALS;
-    }
-
-    private boolean expressionHasParenthesizedNestedBinary(Expression expression) {
-        return expression.findAll(BinaryExpr.class).stream().anyMatch(binary ->
-                binary.getLeft() instanceof BinaryExpr leftBinary
-                                && (shouldParenthesizeLeftBinary(binary.getOperator(), leftBinary.getOperator())
-                                        || shouldParenthesizeNestedBinary(binary.getOperator(), leftBinary.getOperator()))
-                        || binary.getRight() instanceof BinaryExpr rightBinary
-                                && shouldParenthesizeNestedBinary(binary.getOperator(), rightBinary.getOperator()));
     }
 
     private Doc instanceOfExpression(InstanceOfExpr expression) {
@@ -1703,7 +1425,7 @@ final class JavaPrinter {
         }
         return Doc.concat(
                 Doc.text("("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines(expression))),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, binaries.lines(expression))),
                 Doc.HARD_LINE,
                 Doc.text(")"));
     }

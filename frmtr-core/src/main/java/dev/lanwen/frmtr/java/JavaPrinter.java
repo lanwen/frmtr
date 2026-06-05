@@ -106,6 +106,7 @@ final class JavaPrinter {
     private final CommentedMethodSignaturePrinter commentedMethodSignatures;
     private final CommentedModulePrinter commentedModules = new CommentedModulePrinter();
     private final CommentedInterfacePrinter commentedInterfaces = new CommentedInterfacePrinter();
+    private final ImportDeclarationPrinter importDeclarations;
     private final FieldDeclarationPrinter fields;
 
     JavaPrinter(FormatterOptions options) {
@@ -115,6 +116,7 @@ final class JavaPrinter {
         this.memberBlocks = new MemberBlockPrinter(rawSource, comments, this::hasDeclarationAnnotations);
         this.blocks = new BlockPrinter(comments, this::statement, formatterPragmas::hasPragma);
         this.commentedMethodSignatures = new CommentedMethodSignaturePrinter(options);
+        this.importDeclarations = new ImportDeclarationPrinter(comments);
         this.fields = new FieldDeclarationPrinter(
                 comments,
                 rawSource,
@@ -352,21 +354,15 @@ final class JavaPrinter {
                 .toList();
         List<Doc> blocks = new ArrayList<>();
         if (!statics.isEmpty()) {
-            blocks.add(Doc.join(Doc.HARD_LINE, statics.stream().map(this::importDoc).toList()));
+            blocks.add(Doc.join(Doc.HARD_LINE, statics.stream().map(importDeclarations::importDeclaration).toList()));
         }
         if (!normal.isEmpty() && !statics.isEmpty()) {
             blocks.add(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE));
         }
         if (!normal.isEmpty()) {
-            blocks.add(Doc.join(Doc.HARD_LINE, normal.stream().map(this::importDoc).toList()));
+            blocks.add(Doc.join(Doc.HARD_LINE, normal.stream().map(importDeclarations::importDeclaration).toList()));
         }
         return blocks.isEmpty() ? Optional.empty() : Optional.of(Doc.concat(blocks));
-    }
-
-    private Doc importDoc(ImportDeclaration declaration) {
-        String prefix = declaration.isStatic() ? "import static " : "import ";
-        String suffix = declaration.isAsterisk() ? ".*" : "";
-        return Doc.concat(comments.leading(declaration), Doc.text(prefix + declaration.getNameAsString() + suffix + ";"));
     }
 
     private Doc moduleDeclaration(ModuleDeclaration declaration) {

@@ -97,6 +97,7 @@ final class JavaPrinter {
     private final MemberBlockPrinter memberBlocks;
     private final BlockPrinter blocks;
     private final CallableSignaturePrinter callableSignatures;
+    private final ConstructorDeclarationPrinter constructors;
     private final EnumDeclarationPrinter enums;
     private final RecordDeclarationPrinter records;
     private final AnnotationDeclarationPrinter annotationDeclarations;
@@ -164,6 +165,14 @@ final class JavaPrinter {
                 this::unattachedTrailingBlockComment,
                 this::startsAfterNodeOnSameLine,
                 this::commentText);
+        this.constructors = new ConstructorDeclarationPrinter(
+                comments,
+                callableSignatures,
+                this::annotations,
+                this::modifiers,
+                this::compactJoin,
+                this::throwsClause,
+                this::block);
         this.enums = new EnumDeclarationPrinter(
                 comments,
                 rawSource,
@@ -583,48 +592,11 @@ final class JavaPrinter {
     }
 
     private Doc constructor(ConstructorDeclaration declaration) {
-        List<Doc> docs = new ArrayList<>();
-        docs.add(comments.leading(declaration));
-        docs.add(annotations(declaration));
-        String prefix = modifiers(declaration);
-        docs.add(Doc.text(prefix));
-        if (!declaration.getTypeParameters().isEmpty()) {
-            String typeParameters = "<" + compactJoin(declaration.getTypeParameters()) + "> ";
-            prefix += typeParameters;
-            docs.add(Doc.text(typeParameters));
-        }
-        prefix += declaration.getNameAsString();
-        docs.add(Doc.text(declaration.getNameAsString()));
-        docs.add(callableSignatures.parameters(
-                declaration,
-                callableSignatures.parametersBreak(prefix, declaration, " {}")));
-        if (!declaration.getThrownExceptions().isEmpty()) {
-            docs.add(throwsClause(prefix, declaration.getParameters(), declaration.getThrownExceptions(), " {"));
-        }
-        docs.add(Doc.text(" "));
-        docs.add(block(declaration.getBody()));
-        return Doc.concat(docs);
+        return constructors.constructor(declaration);
     }
 
     private Doc compactConstructor(CompactConstructorDeclaration declaration) {
-        List<Doc> docs = new ArrayList<>();
-        docs.add(comments.leading(declaration));
-        docs.add(annotations(declaration));
-        String prefix = modifiers(declaration);
-        docs.add(Doc.text(prefix));
-        if (!declaration.getTypeParameters().isEmpty()) {
-            String typeParameters = "<" + compactJoin(declaration.getTypeParameters()) + "> ";
-            prefix += typeParameters;
-            docs.add(Doc.text(typeParameters));
-        }
-        prefix += declaration.getNameAsString();
-        docs.add(Doc.text(declaration.getNameAsString()));
-        if (!declaration.getThrownExceptions().isEmpty()) {
-            docs.add(throwsClause(prefix, NodeList.nodeList(), declaration.getThrownExceptions(), " {"));
-        }
-        docs.add(Doc.text(" "));
-        docs.add(block(declaration.getBody()));
-        return Doc.concat(docs);
+        return constructors.compactConstructor(declaration);
     }
 
     private Doc throwsClause(

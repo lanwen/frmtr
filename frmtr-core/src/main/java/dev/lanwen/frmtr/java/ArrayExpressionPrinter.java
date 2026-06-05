@@ -1,0 +1,256 @@
+package dev.lanwen.frmtr.java;
+
+import com.github.javaparser.Range;
+import com.github.javaparser.ast.ArrayCreationLevel;
+import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.comments.BlockComment;
+import com.github.javaparser.ast.comments.Comment;
+import com.github.javaparser.ast.expr.ArrayAccessExpr;
+import com.github.javaparser.ast.expr.ArrayCreationExpr;
+import com.github.javaparser.ast.expr.ArrayInitializerExpr;
+import com.github.javaparser.ast.expr.EnclosedExpr;
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import dev.lanwen.frmtr.FormatterOptions;
+import dev.lanwen.frmtr.doc.Doc;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
+import java.util.function.Function;
+import java.util.function.ToIntFunction;
+
+/**
+ * Renders array expressions after broad expression dispatch has selected array syntax.
+ *
+ * <p>This helper owns array-access layout, array-creation prefixes and breakable element types, compact literal
+ * initializer acceptance, forced initializer breaks for declaration callers, orphan comments inside initializer braces,
+ * and source-position-sensitive block comments between initializer values. The boundary exists because array creation
+ * and initializer layout are reused by expression dispatch and field-initializer break decisions, while the formatter
+ * still needs one place to preserve compact/raw/comment behavior for array syntax.
+ *
+ * <p>{@link JavaPrinter} still owns broad expression dispatch, parenthesized suffix breaking, raw-source compact text,
+ * width calculations, and source-range predicates. Field declaration layout still decides when an initializer line has
+ * overflowed; this helper only provides the array-specific shapes after that caller decision.
+ */
+final class ArrayExpressionPrinter {
+    private final JavaFormatter.CommentTracker comments;
+    private final FormatterOptions options;
+    private final Function<Expression, Doc> expressionRenderer;
+    private final BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix;
+    private final Function<Node, String> compactTypeLike;
+    private final Function<Node, String> compact;
+    private final ToIntFunction<String> currentIndentedWidth;
+    private final BiPredicate<Range, Range> startsBefore;
+    private final BiPredicate<Node, Comment> startsAfterNodeOnSameLine;
+
+    ArrayExpressionPrinter(
+            JavaFormatter.CommentTracker comments,
+            FormatterOptions options,
+            Function<Expression, Doc> expressionRenderer,
+            BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix,
+            Function<Node, String> compactTypeLike,
+            Function<Node, String> compact,
+            ToIntFunction<String> currentIndentedWidth,
+            BiPredicate<Range, Range> startsBefore,
+            BiPredicate<Node, Comment> startsAfterNodeOnSameLine) {
+        this.comments = comments;
+        this.options = options;
+        this.expressionRenderer = expressionRenderer;
+        this.brokenEnclosedForSuffix = brokenEnclosedForSuffix;
+        this.compactTypeLike = compactTypeLike;
+        this.compact = compact;
+        this.currentIndentedWidth = currentIndentedWidth;
+        this.startsBefore = startsBefore;
+        this.startsAfterNodeOnSameLine = startsAfterNodeOnSameLine;
+    }
+
+    Doc arrayAccess(ArrayAccessExpr expression) {
+        return Doc.group(Doc.concat(
+                expressionRenderer.apply(expression.getName()),
+                Doc.text("["),
+                Doc.indent(Doc.concat(Doc.SOFT_LINE, expressionRenderer.apply(expression.getIndex()))),
+                Doc.SOFT_LINE,
+                Doc.text("]")));
+    }
+
+    /**
+     * Breaks an array access whose name is enclosed so suffix callers keep the parenthesized expression readable.
+     *
+     * <p>The enclosed name uses the shared suffix breaker because lambdas, conditionals, and binaries each have their
+     * own parenthesized multiline shape. The array index intentionally stays inline after the broken name, matching the
+     * legacy field-initializer overflow path.
+     */
+    Doc arrayAccessWithBrokenEnclosedName(ArrayAccessExpr expression) {
+        EnclosedExpr enclosed = expression.getName().asEnclosedExpr();
+        return Doc.concat(
+                brokenEnclosedForSuffix.apply(enclosed, true),
+                Doc.text("["),
+                expressionRenderer.apply(expression.getIndex()),
+                Doc.text("]"));
+    }
+
+    Doc arrayCreation(ArrayCreationExpr expression) {
+        Doc prefix = Doc.concat(
+                Doc.text("new "),
+                arrayCreationType(expression),
+                Doc.text(compactJoinArrayLevels(expression.getLevels())));
+        return expression.getInitializer()
+                .map(initializer -> compactArrayCreation(expression, initializer)
+                        .filter(flat -> currentIndentedWidth.applyAsInt(flat) <= options.lineWidth())
+                        .map(Doc::text)
+                        .orElseGet(() -> Doc.concat(prefix, Doc.text(" "), arrayInitializer(initializer))))
+                .orElse(prefix);
+    }
+
+    /**
+     * Attempts the fully compact {@code new T[] {...}} shape only for arrays with literal values and no comments.
+     *
+     * <p>Array creation is rejected from the compact path when the element type itself must break, when the initializer
+     * contains any attached comments, or when a value is not a literal. Those cases need structured docs so comments,
+     * type-argument breaks, and nested expression formatting stay visible to the normal formatter pipeline.
+     */
+    private Optional<String> compactArrayCreation(ArrayCreationExpr expression, ArrayInitializerExpr initializer) {
+        if (arrayCreationTypeBreaks(expression) || !initializer.getAllContainedComments().isEmpty()) {
+            return Optional.empty();
+        }
+        if (initializer.getValues().stream().anyMatch(value -> !compactArrayInitializerValue(value))) {
+            return Optional.empty();
+        }
+        return compactArrayInitializer(initializer).map(initializerText -> arrayCreationPrefix(expression) + " " + initializerText);
+    }
+
+    String arrayCreationPrefix(ArrayCreationExpr expression) {
+        return "new "
+                + compactTypeLike.apply(expression.getElementType())
+                + compactJoinArrayLevels(expression.getLevels());
+    }
+
+    private Optional<String> compactArrayInitializer(ArrayInitializerExpr initializer) {
+        if (!initializer.getAllContainedComments().isEmpty()
+                || initializer.getValues().stream().anyMatch(value -> !compactArrayInitializerValue(value))) {
+            return Optional.empty();
+        }
+        String values = initializer.getValues().stream()
+                .map(compact)
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("");
+        return Optional.of("{" + values + "}");
+    }
+
+    private boolean compactArrayInitializerValue(Expression value) {
+        return value.isLiteralExpr();
+    }
+
+    /**
+     * Renders the array element type, breaking generic type arguments before array levels when needed.
+     *
+     * <p>Only class/interface element types with type arguments and array levels take the broken path. This preserves
+     * the legacy {@code new Type<...>[]} readability fork without asking the broader type printer to own array-creation
+     * suffixes.
+     */
+    private Doc arrayCreationType(ArrayCreationExpr expression) {
+        if (!arrayCreationTypeBreaks(expression)) {
+            return Doc.text(compactTypeLike.apply(expression.getElementType()));
+        }
+        ClassOrInterfaceType type = expression.getElementType().asClassOrInterfaceType();
+        NodeList<com.github.javaparser.ast.type.Type> typeArguments = type.getTypeArguments().orElse(new NodeList<>());
+        return Doc.concat(
+                Doc.text(type.getNameWithScope()),
+                Doc.text("<"),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), typeArguments.stream()
+                        .map(argument -> Doc.text(compactTypeLike.apply(argument)))
+                        .toList()))),
+                Doc.HARD_LINE,
+                Doc.text(">"));
+    }
+
+    /**
+     * Reports whether an array creation type owns a generic type-argument break before its array-level suffixes.
+     */
+    boolean arrayCreationTypeBreaks(ArrayCreationExpr expression) {
+        return expression.getElementType().isClassOrInterfaceType()
+                && expression.getElementType().asClassOrInterfaceType().getTypeArguments().isPresent()
+                && !expression.getLevels().isEmpty();
+    }
+
+    Doc arrayInitializer(ArrayInitializerExpr expression) {
+        return arrayInitializer(expression, false);
+    }
+
+    /**
+     * Renders array initializer braces while preserving orphan comments before values.
+     *
+     * <p>Orphan comments are inserted as their own initializer lines ahead of the values JavaParser exposes. The compact
+     * path is skipped when the caller forces a break or when comments/non-literal values need the structured value
+     * renderer.
+     */
+    Doc arrayInitializer(ArrayInitializerExpr expression, boolean forceBreak) {
+        List<Doc> comments = this.comments.orphanCommentStatements(expression);
+        if (expression.getValues().isEmpty() && comments.isEmpty()) {
+            return Doc.text("{}");
+        }
+        Optional<String> compact = compactArrayInitializer(expression);
+        if (!forceBreak && compact.isPresent() && currentIndentedWidth.applyAsInt(compact.orElseThrow()) <= options.lineWidth()) {
+            return Doc.text(compact.orElseThrow());
+        }
+        List<Doc> values = new ArrayList<>(comments);
+        for (int i = 0; i < expression.getValues().size(); i++) {
+            Expression value = expression.getValues().get(i);
+            Expression next = i + 1 < expression.getValues().size() ? expression.getValues().get(i + 1) : null;
+            values.add(Doc.concat(arrayInitializerValue(value, next), Doc.text(",")));
+        }
+        return Doc.concat(
+                Doc.text("{"),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, values))),
+                Doc.HARD_LINE,
+                Doc.text("}"));
+    }
+
+    /**
+     * Renders one array value and attaches block comments that JavaParser assigns to neighboring values.
+     *
+     * <p>A block comment before the value is kept before the expression, while a block comment attached to the next
+     * value but physically placed after the current value stays on the current line. That source-position check
+     * preserves trailing block comments between comma-separated values.
+     */
+    private Doc arrayInitializerValue(Expression value, Expression next) {
+        List<Doc> parts = new ArrayList<>();
+        Doc leadingComment = comments.ownComment(value, comment -> comment instanceof BlockComment
+                && comment.getRange()
+                        .flatMap(commentRange -> value.getRange().map(valueRange -> startsBefore.test(commentRange, valueRange)))
+                        .orElse(false));
+        if (leadingComment != Doc.EMPTY) {
+            parts.add(leadingComment);
+            parts.add(Doc.text(" "));
+        }
+        parts.add(expressionRenderer.apply(value));
+        if (next != null) {
+            Doc trailingComment = next.getComment()
+                    .filter(BlockComment.class::isInstance)
+                    .filter(comment -> startsAfterNodeOnSameLine.test(value, comment))
+                    .filter(comment -> comment.getRange()
+                            .flatMap(commentRange -> next.getRange()
+                                    .map(nextRange -> commentRange.begin.line < nextRange.begin.line))
+                            .orElse(false))
+                    .map(comments::comment)
+                    .orElse(Doc.EMPTY);
+            if (trailingComment != Doc.EMPTY) {
+                parts.add(Doc.text(" "));
+                parts.add(trailingComment);
+            }
+        }
+        return Doc.concat(parts);
+    }
+
+    private String compactJoinArrayLevels(NodeList<ArrayCreationLevel> levels) {
+        return levels.stream()
+                .map(level -> level.getDimension()
+                        .map(dimension -> "[" + compact.apply(dimension) + "]")
+                        .orElse("[]"))
+                .reduce(String::concat)
+                .orElse("");
+    }
+}

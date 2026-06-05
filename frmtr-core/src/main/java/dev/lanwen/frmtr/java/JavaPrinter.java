@@ -1,7 +1,6 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.ArrayCreationLevel;
 import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
@@ -96,6 +95,7 @@ final class JavaPrinter {
     private final BinaryExpressionPrinter binaries;
     private final ConditionalExpressionPrinter conditionals;
     private final LambdaExpressionPrinter lambdas;
+    private final ArrayExpressionPrinter arrays;
     private final MethodCallPrinter methodCalls;
     private final CallableSignaturePrinter callableSignatures;
     private final ConstructorDeclarationPrinter constructors;
@@ -175,6 +175,16 @@ final class JavaPrinter {
                 this::blockStatementWidth,
                 this::startsBefore,
                 this::startsOnSameLine);
+        this.arrays = new ArrayExpressionPrinter(
+                comments,
+                options,
+                this::expression,
+                this::brokenEnclosedForSuffix,
+                this::compactTypeLike,
+                this::compact,
+                this::currentIndentedWidth,
+                this::startsBefore,
+                this::startsAfterNodeOnSameLine);
         this.methodCalls = new MethodCallPrinter(
                 comments,
                 options,
@@ -216,7 +226,7 @@ final class JavaPrinter {
                 binaries::hasLineComments,
                 binaries::linesWithComments,
                 (expression, leadingBreak) -> suffixedEnclosedExpression(expression, leadingBreak),
-                this::arrayAccessWithBrokenEnclosedName,
+                arrays::arrayAccessWithBrokenEnclosedName,
                 binaries::shouldKeepCastDivisionContinuationFlat,
                 (expression, forceBreak) -> binaries.lines(expression, forceBreak),
                 methodCalls::methodCall,
@@ -229,9 +239,9 @@ final class JavaPrinter {
                 this::castType,
                 conditional -> conditionals.conditionalExpression(conditional, true),
                 conditionals::shouldBreakBeforeConditionalInitializer,
-                this::arrayCreationTypeBreaks,
-                this::arrayCreationPrefix,
-                (initializer, forceBreak) -> arrayInitializer(initializer, forceBreak),
+                arrays::arrayCreationTypeBreaks,
+                arrays::arrayCreationPrefix,
+                arrays::arrayInitializer,
                 this::objectCreationPrefix,
                 types::typeNameWithoutArguments,
                 types::brokenClassOrInterfaceType,
@@ -629,13 +639,13 @@ final class JavaPrinter {
                     expression(assignExpr.getValue()));
         }
         if (expression instanceof ArrayAccessExpr arrayAccessExpr) {
-            return arrayAccess(arrayAccessExpr);
+            return arrays.arrayAccess(arrayAccessExpr);
         }
         if (expression instanceof ArrayCreationExpr arrayCreationExpr) {
-            return arrayCreation(arrayCreationExpr);
+            return arrays.arrayCreation(arrayCreationExpr);
         }
         if (expression instanceof ArrayInitializerExpr arrayInitializerExpr) {
-            return arrayInitializer(arrayInitializerExpr);
+            return arrays.arrayInitializer(arrayInitializerExpr);
         }
         if (expression instanceof AnnotationExpr annotationExpr) {
             return annotation(annotationExpr);
@@ -939,146 +949,6 @@ final class JavaPrinter {
         return Doc.text("(" + compactTypeLike(type) + ")");
     }
 
-    private Doc arrayAccess(ArrayAccessExpr expression) {
-        return Doc.group(Doc.concat(
-                expression(expression.getName()),
-                Doc.text("["),
-                Doc.indent(Doc.concat(Doc.SOFT_LINE, expression(expression.getIndex()))),
-                Doc.SOFT_LINE,
-                Doc.text("]")));
-    }
-
-    private Doc arrayAccessWithBrokenEnclosedName(ArrayAccessExpr expression) {
-        EnclosedExpr enclosed = expression.getName().asEnclosedExpr();
-        return Doc.concat(
-                brokenEnclosedForSuffix(enclosed, true),
-                Doc.text("["),
-                expression(expression.getIndex()),
-                Doc.text("]"));
-    }
-
-    private Doc arrayCreation(ArrayCreationExpr expression) {
-        Doc prefix = Doc.concat(
-                Doc.text("new "),
-                arrayCreationType(expression),
-                Doc.text(compactJoinArrayLevels(expression.getLevels())));
-        return expression.getInitializer()
-                .map(initializer -> compactArrayCreation(expression, initializer)
-                        .filter(flat -> currentIndentedWidth(flat) <= options.lineWidth())
-                        .map(Doc::text)
-                        .orElseGet(() -> Doc.concat(prefix, Doc.text(" "), arrayInitializer(initializer))))
-                .orElse(prefix);
-    }
-
-    private Optional<String> compactArrayCreation(ArrayCreationExpr expression, ArrayInitializerExpr initializer) {
-        if (arrayCreationTypeBreaks(expression) || !initializer.getAllContainedComments().isEmpty()) {
-            return Optional.empty();
-        }
-        if (initializer.getValues().stream().anyMatch(value -> !compactArrayInitializerValue(value))) {
-            return Optional.empty();
-        }
-        return compactArrayInitializer(initializer).map(initializerText -> arrayCreationPrefix(expression) + " " + initializerText);
-    }
-
-    private String arrayCreationPrefix(ArrayCreationExpr expression) {
-        return "new "
-                + compactTypeLike(expression.getElementType())
-                + compactJoinArrayLevels(expression.getLevels());
-    }
-
-    private Optional<String> compactArrayInitializer(ArrayInitializerExpr initializer) {
-        if (!initializer.getAllContainedComments().isEmpty()
-                || initializer.getValues().stream().anyMatch(value -> !compactArrayInitializerValue(value))) {
-            return Optional.empty();
-        }
-        String values = initializer.getValues().stream()
-                .map(this::compact)
-                .reduce((left, right) -> left + ", " + right)
-                .orElse("");
-        return Optional.of("{" + values + "}");
-    }
-
-    private boolean compactArrayInitializerValue(Expression value) {
-        return value.isLiteralExpr();
-    }
-
-    private Doc arrayCreationType(ArrayCreationExpr expression) {
-        if (!arrayCreationTypeBreaks(expression)) {
-            return Doc.text(compactTypeLike(expression.getElementType()));
-        }
-        ClassOrInterfaceType type = expression.getElementType().asClassOrInterfaceType();
-        NodeList<com.github.javaparser.ast.type.Type> typeArguments = type.getTypeArguments().orElse(new NodeList<>());
-        return Doc.concat(
-                Doc.text(type.getNameWithScope()),
-                Doc.text("<"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), typeArguments.stream()
-                        .map(argument -> Doc.text(compactTypeLike(argument)))
-                        .toList()))),
-                Doc.HARD_LINE,
-                Doc.text(">"));
-    }
-
-    private boolean arrayCreationTypeBreaks(ArrayCreationExpr expression) {
-        return expression.getElementType().isClassOrInterfaceType()
-                && expression.getElementType().asClassOrInterfaceType().getTypeArguments().isPresent()
-                && !expression.getLevels().isEmpty();
-    }
-
-    private Doc arrayInitializer(ArrayInitializerExpr expression) {
-        return arrayInitializer(expression, false);
-    }
-
-    private Doc arrayInitializer(ArrayInitializerExpr expression, boolean forceBreak) {
-        List<Doc> comments = JavaPrinter.this.comments.orphanCommentStatements(expression);
-        if (expression.getValues().isEmpty() && comments.isEmpty()) {
-            return Doc.text("{}");
-        }
-        Optional<String> compact = compactArrayInitializer(expression);
-        if (!forceBreak && compact.isPresent() && currentIndentedWidth(compact.orElseThrow()) <= options.lineWidth()) {
-            return Doc.text(compact.orElseThrow());
-        }
-        List<Doc> values = new ArrayList<>(comments);
-        for (int i = 0; i < expression.getValues().size(); i++) {
-            Expression value = expression.getValues().get(i);
-            Expression next = i + 1 < expression.getValues().size() ? expression.getValues().get(i + 1) : null;
-            values.add(Doc.concat(arrayInitializerValue(value, next), Doc.text(",")));
-        }
-        return Doc.concat(
-                Doc.text("{"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, values))),
-                Doc.HARD_LINE,
-                Doc.text("}"));
-    }
-
-    private Doc arrayInitializerValue(Expression value, Expression next) {
-        List<Doc> parts = new ArrayList<>();
-        Doc leadingComment = comments.ownComment(value, comment -> comment instanceof BlockComment
-                && comment.getRange()
-                        .flatMap(commentRange -> value.getRange().map(valueRange -> startsBefore(commentRange, valueRange)))
-                        .orElse(false));
-        if (leadingComment != Doc.EMPTY) {
-            parts.add(leadingComment);
-            parts.add(Doc.text(" "));
-        }
-        parts.add(expression(value));
-        if (next != null) {
-            Doc trailingComment = next.getComment()
-                    .filter(BlockComment.class::isInstance)
-                    .filter(comment -> startsAfterNodeOnSameLine(value, comment))
-                    .filter(comment -> comment.getRange()
-                            .flatMap(commentRange -> next.getRange()
-                                    .map(nextRange -> commentRange.begin.line < nextRange.begin.line))
-                            .orElse(false))
-                    .map(comments::comment)
-                    .orElse(Doc.EMPTY);
-            if (trailingComment != Doc.EMPTY) {
-                parts.add(Doc.text(" "));
-                parts.add(trailingComment);
-            }
-        }
-        return Doc.concat(parts);
-    }
-
     private Doc annotation(AnnotationExpr annotation) {
         Doc formatted;
         if (annotation instanceof NormalAnnotationExpr normalAnnotation) {
@@ -1168,15 +1038,6 @@ final class JavaPrinter {
                         expression.getValues().stream().map(this::expression).toList()), Doc.text(","))),
                 Doc.HARD_LINE,
                 Doc.text("}"));
-    }
-
-    private String compactJoinArrayLevels(NodeList<ArrayCreationLevel> levels) {
-        return levels.stream()
-                .map(level -> level.getDimension()
-                        .map(dimension -> "[" + compact(dimension) + "]")
-                        .orElse("[]"))
-                .reduce(String::concat)
-                .orElse("");
     }
 
     private Doc instanceOfExpression(InstanceOfExpr expression) {

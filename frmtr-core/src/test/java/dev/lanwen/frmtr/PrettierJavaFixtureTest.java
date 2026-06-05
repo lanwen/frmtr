@@ -13,6 +13,7 @@ import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -160,6 +161,11 @@ final class PrettierJavaFixtureTest {
             "variables",
             "while",
             "yield-statement");
+    private static final Map<String, String> PRETTIER_INCOMPATIBLE_FIXTURE_REASONS = Map.of(
+            "conditional-expression/spaces",
+            "adopted parseable reference contains nested `value =` assignment tokens that are absent from input.java",
+            "conditional-expression/tabs",
+            "adopted parseable reference contains nested `value =` assignment tokens that are absent from input.java");
     private static final JavaParser PARSER = new JavaParser(new ParserConfiguration()
             .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
             .setStoreTokens(true)
@@ -198,6 +204,20 @@ final class PrettierJavaFixtureTest {
         assertThat(fixture.input()).isRegularFile();
         assertThat(fixture.prettierOutput()).isRegularFile();
         assertThat(fixture.frmtrOutput()).isRegularFile();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("fixtures")
+    void adoptedPrettierJavaFixtureCompatibilityStatusIsExplicit(Fixture fixture) {
+        boolean compatible = PRETTIER_COMPATIBLE_FIXTURES.contains(fixture.name());
+        String incompatibleReason = PRETTIER_INCOMPATIBLE_FIXTURE_REASONS.get(fixture.name());
+
+        assertThat(compatible)
+                .describedAs("%s must be either Prettier-compatible or documented as incompatible", fixture)
+                .isNotEqualTo(incompatibleReason != null);
+        if (incompatibleReason != null) {
+            assertThat(incompatibleReason).isNotBlank();
+        }
     }
 
     private static Stream<Fixture> fixtures() throws IOException, URISyntaxException {

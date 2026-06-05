@@ -16,7 +16,6 @@ import com.github.javaparser.ast.body.InitializerDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.RecordDeclaration;
-import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.ArrayAccessExpr;
 import com.github.javaparser.ast.expr.ArrayCreationExpr;
@@ -37,7 +36,6 @@ import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
-import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
@@ -107,6 +105,7 @@ final class JavaPrinter {
     private final CommentedMethodSignaturePrinter commentedMethodSignatures;
     private final CompilationUnitPrinter compilationUnits;
     private final FieldDeclarationPrinter fields;
+    private final VariableDeclarationPrinter variableDeclarations;
 
     JavaPrinter(FormatterOptions options) {
         this.options = options;
@@ -268,6 +267,15 @@ final class JavaPrinter {
                 lambdas::lambdaParameters,
                 lambdas::lambdaParametersShouldBreak,
                 lambdas::lambdaExpression);
+        this.variableDeclarations = new VariableDeclarationPrinter(
+                options,
+                this::annotations,
+                this::modifiers,
+                this::compactTypeLike,
+                types::typeBody,
+                types::typeCanBreak,
+                fields::variable,
+                this::currentIndentedWidth);
         this.callableSignatures = new CallableSignaturePrinter(
                 comments,
                 rawSource,
@@ -356,7 +364,7 @@ final class JavaPrinter {
                 this::body,
                 this::expression,
                 this::returnExpression,
-                this::variableDeclaration,
+                variableDeclarations::variableDeclaration,
                 this::compact,
                 this::compactWithoutOwnComment,
                 this::compactJoin,
@@ -436,14 +444,6 @@ final class JavaPrinter {
 
     private Doc field(FieldDeclaration declaration) {
         return fields.field(declaration);
-    }
-
-    private Doc variable(VariableDeclarator variable) {
-        return fields.variable(variable);
-    }
-
-    private Doc variable(VariableDeclarator variable, String declarationPrefix) {
-        return fields.variable(variable, declarationPrefix);
     }
 
     private Doc expressionWithoutOwnComment(Expression expression) {
@@ -875,64 +875,6 @@ final class JavaPrinter {
             return left.begin.line < right.begin.line;
         }
         return left.begin.column < right.begin.column;
-    }
-
-    private Doc variableDeclaration(VariableDeclarationExpr declaration) {
-        List<Doc> docs = new ArrayList<>();
-        docs.add(annotations(declaration));
-        docs.add(Doc.text(modifiers(declaration)));
-        String declarationPrefix = modifiers(declaration);
-        if (!declaration.getVariables().isEmpty()) {
-            Type type = declaration.getVariables().get(0).getType();
-            String flatType = compactTypeLike(type) + " ";
-            declarationPrefix += flatType;
-            if (localVariableTypeShouldBreak(type, declaration.getVariables(), declarationPrefix)) {
-                Doc variables = Doc.join(Doc.concat(Doc.text(","), Doc.LINE), declaration.getVariables().stream()
-                        .map(variable -> variable(variable, localVariableDeclarationPrefix(variable, "")))
-                        .toList());
-                docs.add(Doc.group(Doc.concat(types.typeBody(type), Doc.text(" "), variables)));
-                return Doc.concat(docs);
-            }
-            docs.add(Doc.text(flatType));
-        }
-        String variableDeclarationPrefix = declarationPrefix;
-        if (localVariableDeclaratorsShouldBreak(declaration.getVariables())) {
-            docs.add(Doc.indent(Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), declaration.getVariables().stream()
-                    .map(variable -> variable(variable, localVariableDeclarationPrefix(variable, variableDeclarationPrefix)))
-                    .toList())));
-            return Doc.concat(docs);
-        }
-        docs.add(Doc.group(Doc.join(Doc.concat(Doc.text(","), Doc.LINE), declaration.getVariables().stream()
-                .map(variable -> variable(variable, localVariableDeclarationPrefix(variable, variableDeclarationPrefix)))
-                .toList())));
-        return Doc.concat(docs);
-    }
-
-    private boolean localVariableDeclaratorsShouldBreak(NodeList<VariableDeclarator> variables) {
-        return variables.size() > 1 && variables.stream().anyMatch(variable -> variable.getInitializer().isPresent());
-    }
-
-    private boolean localVariableTypeShouldBreak(
-            Type type,
-            NodeList<VariableDeclarator> variables,
-            String declarationPrefix) {
-        return types.typeCanBreak(type)
-                && variables.stream()
-                        .anyMatch(variable -> currentIndentedWidth(declarationPrefix + variable.getNameAsString())
-                                > options.lineWidth());
-    }
-
-    private String localVariableDeclarationPrefix(VariableDeclarator variable, String declarationPrefix) {
-        return variable.getInitializer()
-                .filter(initializer -> initializer instanceof ArrayCreationExpr
-                        || initializer instanceof BinaryExpr
-                        || initializer instanceof CastExpr
-                        || initializer instanceof ConditionalExpr
-                        || initializer instanceof LambdaExpr
-                        || initializer instanceof MethodCallExpr
-                        || initializer instanceof ObjectCreationExpr)
-                .map(ignored -> declarationPrefix)
-                .orElse("");
     }
 
     private Doc controlCondition(Expression expression) {

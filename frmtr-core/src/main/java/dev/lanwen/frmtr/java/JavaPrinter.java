@@ -48,7 +48,6 @@ import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
-import com.github.javaparser.ast.modules.ModuleDeclaration;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.stmt.AssertStmt;
@@ -93,6 +92,7 @@ final class JavaPrinter {
     private final RawSource rawSource;
     private final FormatterPragmas formatterPragmas = new FormatterPragmas();
     private final ModuleBlockPrinter moduleBlocks;
+    private final ModuleDeclarationPrinter moduleDeclarations;
     private final MemberBlockPrinter memberBlocks;
     private final BlockPrinter blocks;
     private final CallableSignaturePrinter callableSignatures;
@@ -103,7 +103,6 @@ final class JavaPrinter {
     private final RecordDeclarationPrinter records;
     private final AnnotationDeclarationPrinter annotationDeclarations;
     private final CommentedMethodSignaturePrinter commentedMethodSignatures;
-    private final CommentedModulePrinter commentedModules = new CommentedModulePrinter();
     private final CommentedInterfacePrinter commentedInterfaces = new CommentedInterfacePrinter();
     private final CompilationUnitPrinter compilationUnits;
     private final FieldDeclarationPrinter fields;
@@ -112,6 +111,14 @@ final class JavaPrinter {
         this.options = options;
         this.rawSource = new RawSource(options);
         this.moduleBlocks = new ModuleBlockPrinter(comments, options, this::compact, this::compactJoin, this::modifiers);
+        this.moduleDeclarations = new ModuleDeclarationPrinter(
+                comments,
+                rawSource,
+                new CommentedModulePrinter(),
+                this::annotations,
+                this::commentText,
+                this::compact,
+                moduleBlocks::moduleBlock);
         this.memberBlocks = new MemberBlockPrinter(rawSource, comments, this::hasDeclarationAnnotations);
         this.blocks = new BlockPrinter(comments, this::statement, formatterPragmas::hasPragma);
         this.commentedMethodSignatures = new CommentedMethodSignaturePrinter(options);
@@ -121,7 +128,7 @@ final class JavaPrinter {
                 comments,
                 packageDeclarations,
                 importDeclarations,
-                this::moduleDeclaration,
+                moduleDeclarations::moduleDeclaration,
                 this::body);
         this.fields = new FieldDeclarationPrinter(
                 comments,
@@ -236,21 +243,6 @@ final class JavaPrinter {
 
     Doc print(CompilationUnit unit) {
         return compilationUnits.print(unit);
-    }
-
-    private Doc moduleDeclaration(ModuleDeclaration declaration) {
-        String raw = rawSource.raw(declaration);
-        if (raw.contains("/*") || raw.contains("//")) {
-            Doc leadingBlock = comments.ownComment(declaration, BlockComment.class::isInstance);
-            String leadingText = commentText(leadingBlock);
-            String commentedRaw = leadingText.isEmpty() ? raw : leadingText + raw;
-            return Doc.text(commentedModules.formatCommentedModule(commentedRaw));
-        }
-        return Doc.concat(
-                comments.leading(declaration),
-                annotations(declaration),
-                Doc.text((declaration.isOpen() ? "open " : "") + "module " + compact(declaration.getName()) + " "),
-                moduleBlocks.moduleBlock(declaration));
     }
 
     private Doc body(BodyDeclaration<?> declaration) {

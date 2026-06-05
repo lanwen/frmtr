@@ -21,33 +21,31 @@ class ConditionalExpression {
 
     void ternaryOperationThatShouldBreak3() {
         value = aaaaaaaaaa &&
-        bbbbbbbbbb &&
-        cccccccccc &&
-        dddddddddd &&
-        eeeeeeeeee &&
-        ffffffffff
+            bbbbbbbbbb &&
+            cccccccccc &&
+            dddddddddd &&
+            eeeeeeeeee &&
+            ffffffffff
             ? gggggggggg
             : hhhhhhhhhh;
-        var v =
-            value = aaaaaaaaaa &&
+        var v = aaaaaaaaaa &&
             bbbbbbbbbb &&
             cccccccccc &&
             dddddddddd &&
             eeeeeeeeee &&
             ffffffffff
-                ? gggggggggg
-                : hhhhhhhhhh;
-        v =
-            value = aaaaaaaaaa &&
+            ? gggggggggg
+            : hhhhhhhhhh;
+        v = aaaaaaaaaa &&
             bbbbbbbbbb &&
             cccccccccc &&
             dddddddddd &&
             eeeeeeeeee &&
             ffffffffff
-                ? gggggggggg
-                : hhhhhhhhhh;
+            ? gggggggggg
+            : hhhhhhhhhh;
         f(
-            value = aaaaaaaaaa &&
+            aaaaaaaaaa &&
                 bbbbbbbbbb &&
                 cccccccccc &&
                 dddddddddd &&
@@ -56,12 +54,14 @@ class ConditionalExpression {
                 ? gggggggggg
                 : hhhhhhhhhh
         );
-        return aaaaaaaaaa &&
-            bbbbbbbbbb &&
-            cccccccccc &&
-            dddddddddd &&
-            eeeeeeeeee &&
-            ffffffffff
+        return (
+                aaaaaaaaaa &&
+                bbbbbbbbbb &&
+                cccccccccc &&
+                dddddddddd &&
+                eeeeeeeeee &&
+                ffffffffff
+            )
             ? gggggggggg
             : hhhhhhhhhh;
     }
@@ -74,28 +74,21 @@ class ConditionalExpression {
     void nestedTernary() {
         value = aaaaaaaaaa
             ? bbbbbbbbbb
-            : cccccccccc
-                ? dddddddddd
-                : eeeeeeeeee
-                    ? ffffffffff
-                    : gggggggggg;
+            : cccccccccc ? dddddddddd : eeeeeeeeee ? ffffffffff : gggggggggg;
     }
 
     void ternaryWithComments() {
         value = a
-            ? // b
-              b
-            : // c
-              c;
+            ? b // b
+            : c; // c
         value = a
-            ? // b
-              b
-            : // c
-              c;
-        value = a // b
+            // b
             ? b
-            : // c
-              c;
+            // c
+            : c;
+        value = a
+            ? b // b
+            : c; // c
         value = a
             ? b // b
             : c; // c
@@ -103,49 +96,55 @@ class ConditionalExpression {
 
     void ternaryInParentheses() {
         value = (aaaaaaaaaa
-            ? bbbbbbbbbb
-            : cccccccccc.dddddddddd().eeeeeeeeee().ffffffffff());
+                ? bbbbbbbbbb
+                : cccccccccc.dddddddddd().eeeeeeeeee().ffffffffff());
     }
 
     void assignment() {
-        Aaaaaaaaaa aaaaaaaaaa =
-            bbbbbbbbbb(cccccccccc, dddddddddd, eeeeeeeeee) != ffffffffff
-                ? gggggggggg
-                : hhhhhhhhhh;
-
-        Aaaaaaaaaa aaaaaaaaaa =
-            bbbbbbbbbb(cccccccccccccccccccc, dddddddddd, eeeeeeeeee) !=
+        Aaaaaaaaaa aaaaaaaaaa = bbbbbbbbbb(
+                cccccccccc,
+                dddddddddd,
+                eeeeeeeeee
+            ) !=
             ffffffffff
-                ? gggggggggg
-                : hhhhhhhhhh;
+            ? gggggggggg
+            : hhhhhhhhhh;
 
-        Aaaaaaaaaa aaaaaaaaaa =
-            bbbbbbbbbb(
+        Aaaaaaaaaa aaaaaaaaaa = bbbbbbbbbb(
+                cccccccccccccccccccc,
+                dddddddddd,
+                eeeeeeeeee
+            ) !=
+            ffffffffff
+            ? gggggggggg
+            : hhhhhhhhhh;
+
+        Aaaaaaaaaa aaaaaaaaaa = bbbbbbbbbb(
                 cccccccccccccccccccc,
                 dddddddddddddddddddd,
                 eeeeeeeeee
-            ) != ffffffffff
-                ? gggggggggg
-                : hhhhhhhhhh;
-
-        aaaaaaaaaa =
-            bbbbbbbbbb(cccccccccc, dddddddddd, eeeeeeeeee) != ffffffffff
-                ? gggggggggg
-                : hhhhhhhhhh;
-
-        aaaaaaaaaa =
-            bbbbbbbbbb(cccccccccccccccccccc, dddddddddd, eeeeeeeeee) !=
+            ) !=
             ffffffffff
-                ? gggggggggg
-                : hhhhhhhhhh;
+            ? gggggggggg
+            : hhhhhhhhhh;
 
-        aaaaaaaaaa =
-            bbbbbbbbbb(
+        aaaaaaaaaa = bbbbbbbbbb(cccccccccc, dddddddddd, eeeeeeeeee) !=
+            ffffffffff
+            ? gggggggggg
+            : hhhhhhhhhh;
+
+        aaaaaaaaaa = bbbbbbbbbb(cccccccccccccccccccc, dddddddddd, eeeeeeeeee) !=
+            ffffffffff
+            ? gggggggggg
+            : hhhhhhhhhh;
+
+        aaaaaaaaaa = bbbbbbbbbb(
                 cccccccccccccccccccc,
                 dddddddddddddddddddd,
                 eeeeeeeeee
-            ) != ffffffffff
-                ? gggggggggg
-                : hhhhhhhhhh;
+            ) !=
+            ffffffffff
+            ? gggggggggg
+            : hhhhhhhhhh;
     }
 }

@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
@@ -161,11 +162,7 @@ final class PrettierJavaFixtureTest {
             "variables",
             "while",
             "yield-statement");
-    private static final Map<String, String> PRETTIER_INCOMPATIBLE_FIXTURE_REASONS = Map.of(
-            "conditional-expression/spaces",
-            "adopted parseable reference contains nested `value =` assignment tokens that are absent from input.java",
-            "conditional-expression/tabs",
-            "adopted parseable reference contains nested `value =` assignment tokens that are absent from input.java");
+    private static final Map<String, String> PRETTIER_INCOMPATIBLE_FIXTURE_REASONS = Map.of();
     private static final JavaParser PARSER = new JavaParser(new ParserConfiguration()
             .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
             .setStoreTokens(true)
@@ -206,18 +203,17 @@ final class PrettierJavaFixtureTest {
         assertThat(fixture.frmtrOutput()).isRegularFile();
     }
 
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("fixtures")
-    void adoptedPrettierJavaFixtureCompatibilityStatusIsExplicit(Fixture fixture) {
-        boolean compatible = PRETTIER_COMPATIBLE_FIXTURES.contains(fixture.name());
-        String incompatibleReason = PRETTIER_INCOMPATIBLE_FIXTURE_REASONS.get(fixture.name());
+    @Test
+    void documentedIncompatiblePrettierJavaFixturesAreAdoptedAndExcludedFromCompatibilitySet()
+            throws IOException, URISyntaxException {
+        var fixtureNames = fixtures().map(Fixture::name).toList();
 
-        assertThat(compatible)
-                .describedAs("%s must be either Prettier-compatible or documented as incompatible", fixture)
-                .isNotEqualTo(incompatibleReason != null);
-        if (incompatibleReason != null) {
-            assertThat(incompatibleReason).isNotBlank();
-        }
+        assertThat(PRETTIER_INCOMPATIBLE_FIXTURE_REASONS)
+                .allSatisfy((fixtureName, reason) -> {
+                    assertThat(fixtureNames).contains(fixtureName);
+                    assertThat(PRETTIER_COMPATIBLE_FIXTURES).doesNotContain(fixtureName);
+                    assertThat(reason).isNotBlank();
+                });
     }
 
     private static Stream<Fixture> fixtures() throws IOException, URISyntaxException {

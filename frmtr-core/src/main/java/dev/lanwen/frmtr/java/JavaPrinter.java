@@ -4,13 +4,11 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
-import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.Statement;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
-import java.util.Optional;
 
 final class JavaPrinter {
     private final JavaFormatter.CommentTracker comments = new JavaFormatter.CommentTracker();
@@ -41,6 +39,7 @@ final class JavaPrinter {
     private final FieldAccessPrinter fieldAccesses;
     private final MethodReferencePrinter methodReferences;
     private final MethodCallPrinter methodCalls;
+    private final EnclosedSuffixDispatcher enclosedSuffixes;
     private final AssignmentExpressionPrinter assignments;
     private final ReturnExpressionPrinter returnExpressions;
     private final CallableSignaturePrinter callableSignatures;
@@ -216,12 +215,13 @@ final class JavaPrinter {
                 compactSource::compactJoin,
                 this::currentIndentedWidth,
                 this::blockStatementWidth);
+        this.enclosedSuffixes = new EnclosedSuffixDispatcher(methodCalls, methodReferences);
         this.assignments = new AssignmentExpressionPrinter(
                 options,
                 this::expression,
                 compactSource::compact,
                 this::blockStatementWidth,
-                (expression, leadingBreak) -> suffixedEnclosedExpression(expression, leadingBreak),
+                enclosedSuffixes::suffixedEnclosedExpression,
                 binaries::shouldKeepCastDivisionContinuationFlat,
                 (expression, forceBreak) -> binaries.lines(expression, forceBreak),
                 objectCreations::brokenObjectCreation,
@@ -276,7 +276,7 @@ final class JavaPrinter {
                 this::expressionWithoutOwnComment,
                 binaries::hasLineComments,
                 binaries::linesWithComments,
-                (expression, leadingBreak) -> suffixedEnclosedExpression(expression, leadingBreak),
+                enclosedSuffixes::suffixedEnclosedExpression,
                 arrays::arrayAccessWithBrokenEnclosedName,
                 binaries::shouldKeepCastDivisionContinuationFlat,
                 (expression, forceBreak) -> binaries.lines(expression, forceBreak),
@@ -493,16 +493,6 @@ final class JavaPrinter {
 
     private Doc expression(Expression expression) {
         return expressionDispatcher.expression(expression);
-    }
-
-    private Optional<Doc> suffixedEnclosedExpression(Expression expression, boolean leadingBreak) {
-        if (expression instanceof MethodCallExpr methodCallExpr) {
-            return methodCalls.suffixedEnclosedMethodCall(methodCallExpr, leadingBreak);
-        }
-        if (expression instanceof MethodReferenceExpr methodReferenceExpr) {
-            return methodReferences.suffixedEnclosedMethodReference(methodReferenceExpr, leadingBreak);
-        }
-        return Optional.empty();
     }
 
     private String commentText(Doc comment) {

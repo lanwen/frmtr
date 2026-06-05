@@ -30,12 +30,9 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.InstanceOfExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
-import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
-import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
-import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
@@ -93,6 +90,7 @@ final class JavaPrinter {
     private final StatementPrinter statements;
     private final SwitchPrinter switches;
     private final BinaryExpressionPrinter binaries;
+    private final AnnotationExpressionPrinter annotationExpressions;
     private final ConditionalExpressionPrinter conditionals;
     private final LambdaExpressionPrinter lambdas;
     private final ArrayExpressionPrinter arrays;
@@ -134,6 +132,13 @@ final class JavaPrinter {
                 this::compactWithoutOwnComment,
                 this::continuationStatementWidth,
                 this::blockStatementWidth);
+        this.annotationExpressions = new AnnotationExpressionPrinter(
+                comments,
+                options,
+                this::expression,
+                binaries::nestedLines,
+                this::compact,
+                this::currentIndentedWidth);
         this.switches = new SwitchPrinter(
                 comments,
                 rawSource,
@@ -336,8 +341,8 @@ final class JavaPrinter {
                 this::compactJoin,
                 types::compactJoinTypeLike,
                 this::compactTypeLike,
-                this::annotation,
-                this::annotationFlatText,
+                annotationExpressions::annotation,
+                annotationExpressions::annotationFlatText,
                 this::currentIndentedWidth,
                 declaration -> memberBlocks.memberBlock(declaration.getMembers(), declaration, this::body));
         this.statements = new StatementPrinter(
@@ -660,7 +665,7 @@ final class JavaPrinter {
             return arrays.arrayInitializer(arrayInitializerExpr);
         }
         if (expression instanceof AnnotationExpr annotationExpr) {
-            return annotation(annotationExpr);
+            return annotationExpressions.annotation(annotationExpr);
         }
         if (expression instanceof BinaryExpr binaryExpr) {
             return binaries.binaryExpression(binaryExpr);
@@ -961,97 +966,6 @@ final class JavaPrinter {
         return Doc.text("(" + compactTypeLike(type) + ")");
     }
 
-    private Doc annotation(AnnotationExpr annotation) {
-        Doc formatted;
-        if (annotation instanceof NormalAnnotationExpr normalAnnotation) {
-            formatted = normalAnnotation(normalAnnotation);
-        } else if (annotation instanceof SingleMemberAnnotationExpr singleMemberAnnotation) {
-            formatted = singleMemberAnnotation(singleMemberAnnotation);
-        } else {
-            formatted = Doc.text("@" + compact(annotation.getName()));
-        }
-        Doc trailing = comments.trailingLineComment(annotation);
-        if (trailing != Doc.EMPTY) {
-            return Doc.concat(formatted, Doc.text(" "), trailing);
-        }
-        return formatted;
-    }
-
-    private Doc normalAnnotation(NormalAnnotationExpr annotation) {
-        String prefix = "@" + compact(annotation.getName());
-        if (annotation.getPairs().isEmpty()) {
-            return Doc.text(prefix + "()");
-        }
-        String flat = prefix + "(" + compactJoinAnnotationPairs(annotation.getPairs()) + ")";
-        if (currentIndentedWidth(flat) <= options.lineWidth()) {
-            return Doc.text(flat);
-        }
-        return Doc.concat(
-                Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                        annotation.getPairs().stream().map(this::annotationPair).toList()))),
-                Doc.HARD_LINE,
-                Doc.text(")"));
-    }
-
-    private Doc singleMemberAnnotation(SingleMemberAnnotationExpr annotation) {
-        String prefix = "@" + compact(annotation.getName());
-        String flatValue = compactAnnotationValue(annotation.getMemberValue());
-        String flat = prefix + "(" + flatValue + ")";
-        if (currentIndentedWidth(flat) <= options.lineWidth()) {
-            return Doc.text(flat);
-        }
-        if (!(annotation.getMemberValue() instanceof BinaryExpr)) {
-            return Doc.concat(Doc.text(prefix + "("), annotationValue(annotation.getMemberValue()), Doc.text(")"));
-        }
-        return Doc.concat(
-                Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, annotationValue(annotation.getMemberValue()))),
-                Doc.HARD_LINE,
-                Doc.text(")"));
-    }
-
-    private Doc annotationPair(MemberValuePair pair) {
-        return Doc.concat(Doc.text(pair.getNameAsString() + " = "), annotationValue(pair.getValue()));
-    }
-
-    private String annotationFlatText(AnnotationExpr annotation) {
-        if (annotation instanceof NormalAnnotationExpr normalAnnotation) {
-            return "@" + compact(normalAnnotation.getName()) + "(" + compactJoinAnnotationPairs(normalAnnotation.getPairs()) + ")";
-        }
-        if (annotation instanceof SingleMemberAnnotationExpr singleMemberAnnotation) {
-            return "@" + compact(singleMemberAnnotation.getName()) + "("
-                    + compactAnnotationValue(singleMemberAnnotation.getMemberValue()) + ")";
-        }
-        return "@" + compact(annotation.getName());
-    }
-
-    private Doc annotationValue(Expression value) {
-        if (value instanceof ArrayInitializerExpr arrayInitializerExpr) {
-            String flat = compactAnnotationArrayInitializer(arrayInitializerExpr);
-            if (currentIndentedWidth(flat) <= options.lineWidth()) {
-                return Doc.text(flat);
-            }
-            return annotationArrayInitializer(arrayInitializerExpr);
-        }
-        if (value instanceof BinaryExpr) {
-            return binaries.nestedLines(value, true);
-        }
-        return expression(value);
-    }
-
-    private Doc annotationArrayInitializer(ArrayInitializerExpr expression) {
-        if (expression.getValues().isEmpty()) {
-            return Doc.text("{}");
-        }
-        return Doc.concat(
-                Doc.text("{"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                        expression.getValues().stream().map(this::expression).toList()), Doc.text(","))),
-                Doc.HARD_LINE,
-                Doc.text("}"));
-    }
-
     private Doc instanceOfExpression(InstanceOfExpr expression) {
         String flat = compact(expression);
         if (currentIndentedWidth(flat) <= options.lineWidth()) {
@@ -1299,7 +1213,7 @@ final class JavaPrinter {
             return Doc.EMPTY;
         }
         return Doc.concat(annotations.stream()
-                .map(annotation -> Doc.concat(annotation(annotation), Doc.HARD_LINE))
+                .map(annotation -> Doc.concat(annotationExpressions.annotation(annotation), Doc.HARD_LINE))
                 .toList());
     }
 
@@ -1309,7 +1223,7 @@ final class JavaPrinter {
         }
         String annotations = node.getAnnotations().stream()
                 .filter(annotation -> afterAllModifiers(annotation, nodeWithModifiers))
-                .map(annotation -> compact(annotation) + " ")
+                .map(annotation -> annotationExpressions.annotationFlatText(annotation) + " ")
                 .reduce("", String::concat);
         return annotations;
     }
@@ -1379,29 +1293,6 @@ final class JavaPrinter {
 
     private String compactJoin(List<? extends Node> nodes) {
         return nodes.stream().map(this::compact).reduce((left, right) -> left + ", " + right).orElse("");
-    }
-
-    private String compactJoinAnnotationPairs(List<MemberValuePair> pairs) {
-        return pairs.stream().map(pair -> pair.getNameAsString() + " = " + compactAnnotationValue(pair.getValue()))
-                .reduce((left, right) -> left + ", " + right)
-                .orElse("");
-    }
-
-    private String compactAnnotationValue(Expression value) {
-        if (value instanceof StringLiteralExpr) {
-            return value.getTokenRange().map(Object::toString).orElseGet(value::toString);
-        }
-        if (value instanceof ArrayInitializerExpr arrayInitializerExpr) {
-            return compactAnnotationArrayInitializer(arrayInitializerExpr);
-        }
-        return compact(value);
-    }
-
-    private String compactAnnotationArrayInitializer(ArrayInitializerExpr expression) {
-        return "{" + expression.getValues().stream()
-                .map(this::compactAnnotationValue)
-                .reduce((left, right) -> left + ", " + right)
-                .orElse("") + "}";
     }
 
     private String compact(Node node) {

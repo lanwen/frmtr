@@ -3,7 +3,6 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.Position;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ArrayCreationLevel;
-import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
@@ -106,8 +105,7 @@ final class JavaPrinter {
     private final CommentedMethodSignaturePrinter commentedMethodSignatures;
     private final CommentedModulePrinter commentedModules = new CommentedModulePrinter();
     private final CommentedInterfacePrinter commentedInterfaces = new CommentedInterfacePrinter();
-    private final PackageDeclarationPrinter packageDeclarations;
-    private final ImportDeclarationPrinter importDeclarations;
+    private final CompilationUnitPrinter compilationUnits;
     private final FieldDeclarationPrinter fields;
 
     JavaPrinter(FormatterOptions options) {
@@ -117,8 +115,14 @@ final class JavaPrinter {
         this.memberBlocks = new MemberBlockPrinter(rawSource, comments, this::hasDeclarationAnnotations);
         this.blocks = new BlockPrinter(comments, this::statement, formatterPragmas::hasPragma);
         this.commentedMethodSignatures = new CommentedMethodSignaturePrinter(options);
-        this.packageDeclarations = new PackageDeclarationPrinter(comments, rawSource, options);
-        this.importDeclarations = new ImportDeclarationPrinter(comments);
+        PackageDeclarationPrinter packageDeclarations = new PackageDeclarationPrinter(comments, rawSource, options);
+        ImportDeclarationPrinter importDeclarations = new ImportDeclarationPrinter(comments);
+        this.compilationUnits = new CompilationUnitPrinter(
+                comments,
+                packageDeclarations,
+                importDeclarations,
+                this::moduleDeclaration,
+                this::body);
         this.fields = new FieldDeclarationPrinter(
                 comments,
                 rawSource,
@@ -231,122 +235,7 @@ final class JavaPrinter {
     }
 
     Doc print(CompilationUnit unit) {
-        List<Doc> parts = new ArrayList<>();
-        boolean hasStructuralParts = false;
-        Doc sourceLeadingComments = packageDeclarations.sourceLeadingCommentsBeforePackage(unit);
-        if (sourceLeadingComments != Doc.EMPTY) {
-            parts.add(sourceLeadingComments);
-            parts.add(Doc.HARD_LINE);
-            parts.add(Doc.HARD_LINE);
-        }
-        int firstTypeLine = firstTypeLine(unit);
-        Doc orphanComments = comments.orphanComments(unit, comment -> commentBeginLine(comment) < firstTypeLine);
-        if (orphanComments != Doc.EMPTY) {
-            if (!parts.isEmpty()) {
-                parts.add(Doc.HARD_LINE);
-                parts.add(Doc.HARD_LINE);
-            }
-            parts.add(orphanComments);
-        }
-        unit.getPackageDeclaration().ifPresent(packageDeclaration -> {
-            parts.add(packageDeclarations.packageDeclaration(packageDeclaration));
-        });
-        hasStructuralParts = unit.getPackageDeclaration().isPresent();
-        Optional<Doc> imports = imports(unit);
-        if (imports.isPresent()) {
-            if (!parts.isEmpty()) {
-                parts.add(Doc.HARD_LINE);
-                parts.add(Doc.HARD_LINE);
-            }
-            parts.add(imports.orElseThrow());
-            hasStructuralParts = true;
-        }
-        Optional<com.github.javaparser.ast.modules.ModuleDeclaration> module = unit.getModule();
-        module.ifPresent(moduleDeclaration -> {
-            if (!parts.isEmpty()) {
-                parts.add(Doc.HARD_LINE);
-                parts.add(Doc.HARD_LINE);
-            }
-            parts.add(moduleDeclaration(moduleDeclaration));
-        });
-        hasStructuralParts = hasStructuralParts || module.isPresent();
-        List<Doc> topLevelDeclarations = topLevelDeclarations(unit);
-        if (!topLevelDeclarations.isEmpty()) {
-            if (hasStructuralParts) {
-                parts.add(Doc.HARD_LINE);
-                parts.add(Doc.HARD_LINE);
-            }
-            parts.add(Doc.join(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE), topLevelDeclarations));
-        }
-        Doc trailingOrphanComments = comments.orphanComments(unit, comment -> commentBeginLine(comment) > lastTypeLine(unit));
-        if (trailingOrphanComments != Doc.EMPTY) {
-            if (!parts.isEmpty()) {
-                parts.add(Doc.HARD_LINE);
-            }
-            parts.add(trailingOrphanComments);
-        }
-        return Doc.concat(parts);
-    }
-
-    private List<Doc> topLevelDeclarations(CompilationUnit unit) {
-        Optional<ClassOrInterfaceDeclaration> compactClass = compactClass(unit);
-        if (compactClass.isPresent()) {
-            return compactClass.orElseThrow().getMembers().stream().map(this::body).toList();
-        }
-        return unit.getTypes().stream().map(this::body).toList();
-    }
-
-    private Optional<ClassOrInterfaceDeclaration> compactClass(CompilationUnit unit) {
-        if (unit.getTypes().size() != 1 || !(unit.getTypes().get(0) instanceof ClassOrInterfaceDeclaration declaration)) {
-            return Optional.empty();
-        }
-        return declaration.isCompact() ? Optional.of(declaration) : Optional.empty();
-    }
-
-    private int firstTypeLine(CompilationUnit unit) {
-        return unit.getTypes().stream()
-                .flatMap(type -> type.getRange().stream())
-                .mapToInt(range -> range.begin.line)
-                .min()
-                .orElse(Integer.MAX_VALUE);
-    }
-
-    private int lastTypeLine(CompilationUnit unit) {
-        return unit.getTypes().stream()
-                .flatMap(type -> type.getRange().stream())
-                .mapToInt(range -> range.end.line)
-                .max()
-                .orElse(Integer.MAX_VALUE);
-    }
-
-    private int commentBeginLine(com.github.javaparser.ast.comments.Comment comment) {
-        return comment.getRange().map(range -> range.begin.line).orElse(Integer.MAX_VALUE);
-    }
-
-    private int commentEndLine(com.github.javaparser.ast.comments.Comment comment) {
-        return comment.getRange().map(range -> range.end.line).orElse(Integer.MAX_VALUE);
-    }
-
-    private Optional<Doc> imports(CompilationUnit unit) {
-        List<ImportDeclaration> normal = unit.getImports().stream()
-                .filter(importDeclaration -> !importDeclaration.isStatic())
-                .sorted(Comparator.comparing(ImportDeclaration::getNameAsString))
-                .toList();
-        List<ImportDeclaration> statics = unit.getImports().stream()
-                .filter(ImportDeclaration::isStatic)
-                .sorted(Comparator.comparing(ImportDeclaration::getNameAsString))
-                .toList();
-        List<Doc> blocks = new ArrayList<>();
-        if (!statics.isEmpty()) {
-            blocks.add(Doc.join(Doc.HARD_LINE, statics.stream().map(importDeclarations::importDeclaration).toList()));
-        }
-        if (!normal.isEmpty() && !statics.isEmpty()) {
-            blocks.add(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE));
-        }
-        if (!normal.isEmpty()) {
-            blocks.add(Doc.join(Doc.HARD_LINE, normal.stream().map(importDeclarations::importDeclaration).toList()));
-        }
-        return blocks.isEmpty() ? Optional.empty() : Optional.of(Doc.concat(blocks));
+        return compilationUnits.print(unit);
     }
 
     private Doc moduleDeclaration(ModuleDeclaration declaration) {

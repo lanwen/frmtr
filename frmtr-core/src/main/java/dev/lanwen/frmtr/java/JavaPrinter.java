@@ -31,7 +31,6 @@ import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
-import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.comments.BlockComment;
@@ -58,16 +57,15 @@ import com.github.javaparser.ast.stmt.ThrowStmt;
 import com.github.javaparser.ast.stmt.TryStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
 import com.github.javaparser.ast.stmt.YieldStmt;
-import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
-import java.util.List;
 import java.util.Optional;
 
 final class JavaPrinter {
     private final JavaFormatter.CommentTracker comments = new JavaFormatter.CommentTracker();
     private final FormatterOptions options;
     private final RawSource rawSource;
+    private final CompactSourceText compactSource;
     private final TypePrinter types;
     private final FormatterPragmas formatterPragmas = new FormatterPragmas();
     private final ModuleBlockPrinter moduleBlocks;
@@ -109,15 +107,16 @@ final class JavaPrinter {
     JavaPrinter(FormatterOptions options) {
         this.options = options;
         this.rawSource = new RawSource(options);
-        this.types = new TypePrinter(options, this::compactTypeLike);
+        this.compactSource = new CompactSourceText(rawSource);
+        this.types = new TypePrinter(options, compactSource::compactTypeLike);
         this.blocks = new BlockPrinter(comments, this::statement, formatterPragmas::hasPragma);
         this.binaries = new BinaryExpressionPrinter(
                 comments,
                 options,
                 this::expression,
                 this::brokenMethodCall,
-                this::compact,
-                this::compactWithoutOwnComment,
+                compactSource::compact,
+                compactSource::compactWithoutOwnComment,
                 this::continuationStatementWidth,
                 this::blockStatementWidth);
         this.annotationExpressions = new AnnotationExpressionPrinter(
@@ -125,7 +124,7 @@ final class JavaPrinter {
                 options,
                 this::expression,
                 binaries::nestedLines,
-                this::compact,
+                compactSource::compact,
                 this::currentIndentedWidth);
         this.declarationPrefixes = new DeclarationPrefixPrinter(
                 annotationExpressions::annotation,
@@ -133,8 +132,8 @@ final class JavaPrinter {
         this.moduleBlocks = new ModuleBlockPrinter(
                 comments,
                 options,
-                this::compact,
-                this::compactJoin,
+                compactSource::compact,
+                compactSource::compactJoin,
                 declarationPrefixes::modifiers);
         this.moduleDeclarations = new ModuleDeclarationPrinter(
                 comments,
@@ -142,14 +141,14 @@ final class JavaPrinter {
                 new CommentedModulePrinter(),
                 declarationPrefixes::annotations,
                 this::commentText,
-                this::compact,
+                compactSource::compact,
                 moduleBlocks::moduleBlock);
         this.memberBlocks = new MemberBlockPrinter(rawSource, comments, declarationPrefixes::hasDeclarationAnnotations);
         this.controlConditions = new ControlConditionPrinter(
                 comments,
                 options,
-                this::compact,
-                this::compactWithoutOwnComment,
+                compactSource::compact,
+                compactSource::compactWithoutOwnComment,
                 binaries::lines,
                 this::currentIndentedWidth);
         this.switches = new SwitchPrinter(
@@ -162,8 +161,8 @@ final class JavaPrinter {
                 blocks::statementSeparator,
                 controlConditions::controlCondition,
                 binaries::lines,
-                this::compact,
-                this::compactTypeLike,
+                compactSource::compact,
+                compactSource::compactTypeLike,
                 declarationPrefixes::modifiers,
                 this::currentIndentedWidth,
                 this::ownSameLineBlockCommentBeforeNode);
@@ -172,7 +171,7 @@ final class JavaPrinter {
                 options,
                 this::expression,
                 this::expressionWithoutOwnComment,
-                this::compact,
+                compactSource::compact,
                 this::currentIndentedWidth,
                 this::blockStatementWidth,
                 this::continuationStatementWidth,
@@ -187,9 +186,9 @@ final class JavaPrinter {
                 this::statement,
                 this::block,
                 (expression, forceBreak) -> binaries.lines(expression, forceBreak),
-                this::compact,
-                this::compactWithoutOwnComment,
-                this::compactJoin,
+                compactSource::compact,
+                compactSource::compactWithoutOwnComment,
+                compactSource::compactJoin,
                 this::currentIndentedWidth,
                 this::blockStatementWidth,
                 this::startsBefore,
@@ -197,13 +196,13 @@ final class JavaPrinter {
         this.casts = new CastExpressionPrinter(
                 options,
                 this::expression,
-                this::compactTypeLike,
+                compactSource::compactTypeLike,
                 this::currentIndentedWidth);
         this.enclosedExpressions = new EnclosedExpressionPrinter(
                 options,
                 this::expression,
                 (expression, forceBreak) -> binaries.lines(expression, forceBreak),
-                this::compact,
+                compactSource::compact,
                 this::currentIndentedWidth,
                 this::continuationStatementWidth,
                 casts::nestedCastDepth,
@@ -214,8 +213,8 @@ final class JavaPrinter {
                 options,
                 this::expression,
                 enclosedExpressions::brokenEnclosedForSuffix,
-                this::compactTypeLike,
-                this::compact,
+                compactSource::compactTypeLike,
+                compactSource::compact,
                 this::currentIndentedWidth,
                 this::startsBefore,
                 this::startsAfterNodeOnSameLine);
@@ -225,22 +224,22 @@ final class JavaPrinter {
                 this::expression,
                 lambdas::huggableBlockLambdaArguments,
                 this::body,
-                this::compact,
-                this::compactJoin,
-                this::compactTypeLike,
-                this::compactTypeLikeWithoutOwnComment,
+                compactSource::compact,
+                compactSource::compactJoin,
+                compactSource::compactTypeLike,
+                compactSource::compactTypeLikeWithoutOwnComment,
                 this::commentText);
         this.textBlocks = new TextBlockPrinter(rawSource, options);
         this.instanceOfExpressions = new InstanceOfExpressionPrinter(
                 options,
                 this::expression,
-                this::compact,
-                this::compactTypeLike,
+                compactSource::compact,
+                compactSource::compactTypeLike,
                 this::currentIndentedWidth);
         this.fieldAccesses = new FieldAccessPrinter(comments, this::expression);
         this.methodReferences = new MethodReferencePrinter(
                 options,
-                this::compact,
+                compactSource::compact,
                 types::compactJoinTypeLike,
                 enclosedExpressions::brokenEnclosedForSuffix,
                 this::blockStatementWidth);
@@ -256,14 +255,14 @@ final class JavaPrinter {
                 lambdas::huggableMethodCallExpressionLambdaArguments,
                 textBlocks::renderUnformattedTextBlock,
                 binaryExpr -> binaries.nestedLines(binaryExpr, true),
-                this::compact,
-                this::compactJoin,
+                compactSource::compact,
+                compactSource::compactJoin,
                 this::currentIndentedWidth,
                 this::blockStatementWidth);
         this.assignments = new AssignmentExpressionPrinter(
                 options,
                 this::expression,
-                this::compact,
+                compactSource::compact,
                 this::blockStatementWidth,
                 (expression, leadingBreak) -> suffixedEnclosedExpression(expression, leadingBreak),
                 binaries::shouldKeepCastDivisionContinuationFlat,
@@ -274,7 +273,7 @@ final class JavaPrinter {
         this.returnExpressions = new ReturnExpressionPrinter(
                 options,
                 this::expression,
-                this::compact,
+                compactSource::compact,
                 this::currentIndentedWidth,
                 methodCalls::forcedMethodCallChain,
                 (expression, forceBreak) -> conditionals.conditionalExpression(expression, forceBreak),
@@ -295,10 +294,10 @@ final class JavaPrinter {
                 declarationPrefixes::declarationAnnotations,
                 declarationPrefixes::modifiers,
                 declarationPrefixes::inlineAnnotations,
-                this::compactTypeLike,
-                this::compact,
-                this::compactWithoutOwnComment,
-                this::compactJoin,
+                compactSource::compactTypeLike,
+                compactSource::compact,
+                compactSource::compactWithoutOwnComment,
+                compactSource::compactJoin,
                 this::expression,
                 this::expressionWithoutOwnComment,
                 binaries::hasLineComments,
@@ -332,7 +331,7 @@ final class JavaPrinter {
                 options,
                 declarationPrefixes::annotations,
                 declarationPrefixes::modifiers,
-                this::compactTypeLike,
+                compactSource::compactTypeLike,
                 types::typeBody,
                 types::typeCanBreak,
                 fields::variable,
@@ -341,8 +340,8 @@ final class JavaPrinter {
                 comments,
                 rawSource,
                 options,
-                this::compact,
-                this::compactTypeLike,
+                compactSource::compact,
+                compactSource::compactTypeLike,
                 types::typeBody,
                 declarationPrefixes::modifier,
                 types::typeCanBreak,
@@ -370,7 +369,7 @@ final class JavaPrinter {
                 callableSignatures,
                 declarationPrefixes::annotations,
                 declarationPrefixes::modifiers,
-                this::compactJoin,
+                compactSource::compactJoin,
                 this::throwsClause,
                 this::block);
         this.methods = new MethodDeclarationPrinter(
@@ -382,7 +381,7 @@ final class JavaPrinter {
                 declarationPrefixes::modifiers,
                 types::flatTypeParameters,
                 declarationPrefixes::inlineAnnotations,
-                this::compact,
+                compactSource::compact,
                 this::throwsClause,
                 this::block);
         this.initializers = new InitializerDeclarationPrinter(comments, this::block);
@@ -395,7 +394,7 @@ final class JavaPrinter {
                 enumTypes -> types.typeClause("implements", enumTypes),
                 types::implementsTypes,
                 enumTypes -> types.flatTypeClause("implements", enumTypes),
-                this::compactJoin,
+                compactSource::compactJoin,
                 this::expression,
                 this::currentIndentedWidth,
                 this::startsAfterNodeOnSameLine,
@@ -407,10 +406,10 @@ final class JavaPrinter {
                 declarationPrefixes::modifiers,
                 callableSignatures::typeParameters,
                 types::flatTypeParameters,
-                this::compact,
-                this::compactJoin,
+                compactSource::compact,
+                compactSource::compactJoin,
                 types::compactJoinTypeLike,
-                this::compactTypeLike,
+                compactSource::compactTypeLike,
                 annotationExpressions::annotation,
                 annotationExpressions::annotationFlatText,
                 this::currentIndentedWidth,
@@ -426,10 +425,10 @@ final class JavaPrinter {
                 this::expression,
                 returnExpressions::returnExpression,
                 variableDeclarations::variableDeclaration,
-                this::compact,
-                this::compactWithoutOwnComment,
-                this::compactJoin,
-                this::compactTypeLike,
+                compactSource::compact,
+                compactSource::compactWithoutOwnComment,
+                compactSource::compactJoin,
+                compactSource::compactTypeLike,
                 types::compactJoinTypeLike,
                 lambdas::huggableBlockLambdaArguments,
                 methodCalls::forcedMethodCallChain,
@@ -447,7 +446,7 @@ final class JavaPrinter {
                 comments,
                 declarationPrefixes::annotations,
                 declarationPrefixes::modifiers,
-                this::compactTypeLike,
+                compactSource::compactTypeLike,
                 this::expression,
                 this::body);
     }
@@ -534,8 +533,11 @@ final class JavaPrinter {
             NodeList<Parameter> parameters,
             NodeList<? extends Node> thrownExceptions,
             String suffix) {
-        String exceptions = compactJoin(thrownExceptions);
-        String flatParameters = "(" + parameters.stream().map(this::compact).reduce((left, right) -> left + ", " + right).orElse("") + ")";
+        String exceptions = compactSource.compactJoin(thrownExceptions);
+        String flatParameters = "(" + parameters.stream()
+                .map(compactSource::compact)
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("") + ")";
         String flatSignature = prefix + flatParameters;
         String throwsText = "throws " + exceptions;
         boolean parametersBreak = currentIndentedWidth(flatSignature) > options.lineWidth();
@@ -673,7 +675,7 @@ final class JavaPrinter {
         if (expression instanceof TextBlockLiteralExpr textBlockLiteralExpr) {
             return textBlocks.textBlockLiteral(textBlockLiteralExpr);
         }
-        return Doc.text(compact(expression));
+        return Doc.text(compactSource.compact(expression));
     }
 
     private Optional<Doc> suffixedEnclosedExpression(Expression expression, boolean leadingBreak) {
@@ -738,52 +740,7 @@ final class JavaPrinter {
     }
 
     private Doc rawDeclaration(BodyDeclaration<?> declaration) {
-        return Doc.concat(comments.leading(declaration), Doc.text(compact(declaration)));
-    }
-
-    private String compactJoin(List<? extends Node> nodes) {
-        return nodes.stream().map(this::compact).reduce((left, right) -> left + ", " + right).orElse("");
-    }
-
-    private String compact(Node node) {
-        if (node instanceof StringLiteralExpr) {
-            return rawSource.raw(node);
-        }
-        if (node instanceof FieldAccessExpr fieldAccessExpr) {
-            return compact(fieldAccessExpr.getScope()) + "." + fieldAccessExpr.getNameAsString();
-        }
-        if (node instanceof MethodCallExpr methodCallExpr && methodCallExpr.getAllContainedComments().isEmpty()) {
-            return compactMethodCall(methodCallExpr);
-        }
-        return node.getTokenRange()
-                .map(Object::toString)
-                .map(rawSource::normalizeWhitespace)
-                .orElseGet(() -> rawSource.normalizeWhitespace(node.toString()));
-    }
-
-    private String compactMethodCall(MethodCallExpr expression) {
-        String prefix = expression.getScope().map(scope -> compact(scope) + ".").orElse("")
-                + expression.getTypeArguments().map(typeArguments -> "<" + types.compactJoinTypeLike(typeArguments) + ">").orElse("")
-                + expression.getNameAsString();
-        return prefix + "(" + compactJoin(expression.getArguments()) + ")";
-    }
-
-    private String compactTypeLike(Node node) {
-        return compact(node)
-                .replaceAll("<\\s+", "<")
-                .replaceAll("\\s+>", ">");
-    }
-
-    private String compactTypeLikeWithoutOwnComment(Node node) {
-        return compactWithoutOwnComment(node)
-                .replaceAll("<\\s+", "<")
-                .replaceAll("\\s+>", ">");
-    }
-
-    private String compactWithoutOwnComment(Node node) {
-        Node clone = node.clone();
-        clone.removeComment();
-        return compact(clone);
+        return Doc.concat(comments.leading(declaration), Doc.text(compactSource.compact(declaration)));
     }
 
 }

@@ -16,7 +16,7 @@ import java.util.function.Function;
  *
  * <p>This helper owns {@code extends}, {@code implements}, and {@code permits} clause text, declaration type-parameter
  * flat text, and the two generic type document shapes shared by declaration headers, callable signatures, field
- * initializers, object creation, and local variables. It delegates compact type text back to {@link JavaPrinter}
+ * initializers, object creation, and local variables. It accepts compact type text from the caller's source-text policy
  * because that path is still tied to raw-source normalization, comment stripping, and expression compacting rules that
  * are not type-clause policy.
  *

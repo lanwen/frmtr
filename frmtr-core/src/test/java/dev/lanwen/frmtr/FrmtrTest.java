@@ -1295,7 +1295,7 @@ final class FrmtrTest {
 
     @Test
     void lexicalParseErrorsIncludeSourceContextFromMessagePosition() throws Exception {
-        String source = readResource("upstream/prettier-java/unit-test/template-expression/prettier.output.java");
+        String source = readResource("format/prettier-java/unit-test/template-expression/prettier.output.java");
 
         Throwable thrown = catchThrowable(() -> Frmtr.format(source));
 

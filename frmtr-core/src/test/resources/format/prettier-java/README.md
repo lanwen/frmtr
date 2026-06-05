@@ -24,6 +24,10 @@ When JavaParser supports parsing the upstream syntax, the fixture directory also
 `frmtr.output.java`: the current frmtr output snapshot for the input.
 
 The `input.java` and `prettier.output.java` files are kept byte-for-byte aligned with the
-preserved upstream copy under `../../upstream/prettier-java`. Some upstream samples use
-syntax that the bundled JavaParser dependency does not parse yet; formatter assertions skip
-those fixtures until JavaParser supports them.
+original upstream files. Some upstream samples use syntax that the bundled JavaParser
+dependency does not parse yet; those fixtures are explicitly enumerated by
+`PrettierJavaFixtureTest` and skipped by formatter assertions until JavaParser supports them.
+
+`frmtr-output-examples/unit-test` contains formatter snapshots that were produced from earlier
+parseable adaptations of unsupported upstream fixtures. They are examples only, not active
+compatibility snapshots.

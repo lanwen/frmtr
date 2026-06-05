@@ -13,9 +13,11 @@ import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
@@ -151,6 +153,30 @@ final class PrettierJavaFixtureTest {
             "variables",
             "while",
             "yield-statement");
+    private static final Map<String, String> JAVA_PARSER_UNSUPPORTED_FIXTURES = Map.ofEntries(
+            Map.entry(
+                    "binary_expressions/operator-position-end",
+                    "contains standalone binary expressions and pattern matching expressions that are not valid Java expression statements"),
+            Map.entry(
+                    "binary_expressions/operator-position-start",
+                    "contains standalone binary expressions and pattern matching expressions that are not valid Java expression statements"),
+            Map.entry(
+                    "comments/comments-blocks-and-statements/complex",
+                    "declares a class field with `var`, which JavaParser rejects because `var` is only valid for local variables"),
+            Map.entry("comments/expression", "contains a standalone numeric literal expression statement"),
+            Map.entry("conditional-expression/spaces", "contains standalone conditional expression statements"),
+            Map.entry("conditional-expression/tabs", "contains standalone conditional expression statements"),
+            Map.entry(
+                    "expressions",
+                    "contains standalone method-reference and array-access expression statements that JavaParser rejects"),
+            Map.entry("interface", "declares a top-level private interface"),
+            Map.entry("modifiers", "contains invalid top-level and member modifier combinations"),
+            Map.entry(
+                    "template-expression",
+                    "uses Java 21 preview string template syntax, which JavaParser 3.28.1 does not parse"),
+            Map.entry(
+                    "unnamed-variables-and-patterns",
+                    "uses multiple switch pattern labels, which JavaParser 3.28.1 does not parse"));
     private static final JavaParser PARSER = new JavaParser(new ParserConfiguration()
             .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
             .setStoreTokens(true)
@@ -197,6 +223,31 @@ final class PrettierJavaFixtureTest {
         assertThat(fixture.frmtrOutput()).isRegularFile();
     }
 
+    @Test
+    void javaParserUnsupportedPrettierJavaFixturesAreExplicitlyEnumerated()
+            throws IOException, URISyntaxException {
+        var fixtures = fixtures().toList();
+        var fixtureNames = fixtures.stream().map(Fixture::name).toList();
+
+        assertThat(JAVA_PARSER_UNSUPPORTED_FIXTURES)
+                .allSatisfy((fixtureName, reason) -> {
+                    Fixture fixture = fixtures.stream()
+                            .filter(candidate -> candidate.name().equals(fixtureName))
+                            .findFirst()
+                            .orElseThrow();
+                    assertThat(fixtureNames).contains(fixture.name());
+                    assertThat(PRETTIER_COMPATIBLE_FIXTURES).doesNotContain(fixtureName);
+                    assertThat(reason).isNotBlank();
+                    assertThat(fixture.frmtrOutput()).doesNotExist();
+                    assertThat(fixture.frmtrExampleOutput()).isRegularFile();
+                });
+
+        assertThat(fixtures.stream()
+                        .filter(fixture -> !isJavaParserSupported(fixture))
+                        .map(Fixture::name))
+                .containsExactlyInAnyOrderElementsOf(JAVA_PARSER_UNSUPPORTED_FIXTURES.keySet());
+    }
+
     private static Stream<Fixture> fixtures() throws IOException, URISyntaxException {
         Path root = fixtureRoot();
         try (var stream = Files.walk(root)) {
@@ -214,7 +265,7 @@ final class PrettierJavaFixtureTest {
     }
 
     private static Stream<Fixture> javaParserSupportedFixtures() throws IOException, URISyntaxException {
-        return fixtures().filter(PrettierJavaFixtureTest::isJavaParserSupported);
+        return fixtures().filter(fixture -> !JAVA_PARSER_UNSUPPORTED_FIXTURES.containsKey(fixture.name()));
     }
 
     private static FormatterOptions prettierCompatibilityOptions(Fixture fixture) {
@@ -238,11 +289,17 @@ final class PrettierJavaFixtureTest {
 
     private static Fixture fixture(Path root, Path input) {
         Path directory = input.getParent();
+        Path name = root.relativize(directory);
         return new Fixture(
-                root.relativize(directory).toString(),
+                name.toString(),
                 input,
                 directory.resolve("prettier.output.java"),
-                directory.resolve("frmtr.output.java"));
+                directory.resolve("frmtr.output.java"),
+                root.getParent()
+                        .resolve("frmtr-output-examples")
+                        .resolve("unit-test")
+                        .resolve(name)
+                        .resolve("frmtr.output.java"));
     }
 
     private static Path fixtureRoot() throws URISyntaxException {
@@ -279,7 +336,7 @@ final class PrettierJavaFixtureTest {
         return Files.readString(path, StandardCharsets.UTF_8);
     }
 
-    private record Fixture(String name, Path input, Path prettierOutput, Path frmtrOutput) {
+    private record Fixture(String name, Path input, Path prettierOutput, Path frmtrOutput, Path frmtrExampleOutput) {
         @Override
         public String toString() {
             return name;

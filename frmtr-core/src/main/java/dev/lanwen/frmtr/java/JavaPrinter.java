@@ -98,6 +98,7 @@ final class JavaPrinter {
     private final BlockPrinter blocks;
     private final CallableSignaturePrinter callableSignatures;
     private final ConstructorDeclarationPrinter constructors;
+    private final MethodDeclarationPrinter methods;
     private final EnumDeclarationPrinter enums;
     private final RecordDeclarationPrinter records;
     private final AnnotationDeclarationPrinter annotationDeclarations;
@@ -171,6 +172,18 @@ final class JavaPrinter {
                 this::annotations,
                 this::modifiers,
                 this::compactJoin,
+                this::throwsClause,
+                this::block);
+        this.methods = new MethodDeclarationPrinter(
+                comments,
+                rawSource,
+                commentedMethodSignatures,
+                callableSignatures,
+                this::declarationAnnotations,
+                this::modifiers,
+                this::flatTypeParameters,
+                this::inlineAnnotations,
+                this::compact,
                 this::throwsClause,
                 this::block);
         this.enums = new EnumDeclarationPrinter(
@@ -545,46 +558,7 @@ final class JavaPrinter {
     }
 
     private Doc method(MethodDeclaration declaration) {
-        String raw = rawSource.raw(declaration);
-        Optional<String> commentedMethod = commentedMethodSignatures.tryFormat(declaration, raw);
-        if (commentedMethod.isPresent()) {
-            return Doc.concat(comments.leading(declaration), Doc.text(commentedMethod.orElseThrow()));
-        }
-        List<Doc> docs = new ArrayList<>();
-        docs.add(comments.leading(declaration));
-        docs.add(declarationAnnotations(declaration));
-        String prefix = modifiers(declaration);
-        docs.add(Doc.text(prefix));
-        if (!declaration.getTypeParameters().isEmpty()) {
-            String typeParameters = flatTypeParameters(declaration.getTypeParameters()) + " ";
-            prefix += typeParameters;
-            docs.add(callableSignatures.typeParameters(declaration.getTypeParameters()));
-            docs.add(Doc.text(" "));
-        }
-        String signature = inlineAnnotations(declaration)
-                + compact(declaration.getType())
-                + " "
-                + declaration.getNameAsString();
-        prefix += signature;
-        docs.add(Doc.text(signature));
-        docs.add(callableSignatures.parameters(
-                declaration,
-                callableSignatures.parametersBreak(prefix, declaration, methodParameterSuffix(declaration))));
-        if (!declaration.getThrownExceptions().isEmpty()) {
-            docs.add(throwsClause(
-                    prefix,
-                    declaration.getParameters(),
-                    declaration.getThrownExceptions(),
-                    declaration.getBody().isPresent() ? " {" : ";"));
-        }
-        docs.add(declaration.getBody().map(body -> Doc.concat(Doc.text(" "), block(body))).orElse(Doc.text(";")));
-        return Doc.concat(docs);
-    }
-
-    private String methodParameterSuffix(MethodDeclaration declaration) {
-        return declaration.getBody()
-                .map(body -> body.getStatements().isEmpty() && body.getOrphanComments().isEmpty() ? " {}" : " {")
-                .orElse(";");
+        return methods.method(declaration);
     }
 
     private boolean isCommentOnlyLine(String line) {

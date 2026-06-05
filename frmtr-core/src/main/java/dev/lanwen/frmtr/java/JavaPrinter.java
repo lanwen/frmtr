@@ -103,12 +103,14 @@ final class JavaPrinter {
     private final MemberBlockPrinter memberBlocks;
     private final BlockPrinter blocks;
     private final CallableSignaturePrinter callableSignatures;
+    private final CommentedMethodSignaturePrinter commentedMethodSignatures;
 
     JavaPrinter(FormatterOptions options) {
         this.options = options;
         this.rawSource = new RawSource(options);
         this.memberBlocks = new MemberBlockPrinter(rawSource, comments, this::hasDeclarationAnnotations);
         this.blocks = new BlockPrinter(comments, this::statement, formatterPragmas::hasPragma);
+        this.commentedMethodSignatures = new CommentedMethodSignaturePrinter(options);
         this.callableSignatures = new CallableSignaturePrinter(
                 comments,
                 rawSource,
@@ -1712,10 +1714,9 @@ final class JavaPrinter {
 
     private Doc method(MethodDeclaration declaration) {
         String raw = rawSource.raw(declaration);
-        if (declaration.getBody().isPresent()
-                && hasCommentedMethodSignature(raw)
-                && canFormatCommentedMethodSignatureFromRaw(declaration)) {
-            return Doc.concat(comments.leading(declaration), Doc.text(indentEmbeddedLines(formatCommentedMethod(raw))));
+        Optional<String> commentedMethod = commentedMethodSignatures.tryFormat(declaration, raw);
+        if (commentedMethod.isPresent()) {
+            return Doc.concat(comments.leading(declaration), Doc.text(commentedMethod.orElseThrow()));
         }
         List<Doc> docs = new ArrayList<>();
         docs.add(comments.leading(declaration));
@@ -1754,159 +1755,8 @@ final class JavaPrinter {
                 .orElse(";");
     }
 
-    private boolean hasCommentedMethodSignature(String rawMethod) {
-        int bodyStart = rawMethod.indexOf('{');
-        if (bodyStart < 0) {
-            return false;
-        }
-        String signature = rawMethod.substring(0, bodyStart);
-        return signature.contains("//") || signature.contains("/*");
-    }
-
-    private boolean canFormatCommentedMethodSignatureFromRaw(MethodDeclaration declaration) {
-        return declaration.getBody().map(body -> body.getStatements().size() <= 1).orElse(false);
-    }
-
-    private String formatCommentedMethod(String rawMethod) {
-        String method = rawMethod.strip();
-        int bodyStart = method.indexOf('{');
-        int bodyEnd = method.lastIndexOf('}');
-        if (bodyStart < 0 || bodyEnd < bodyStart) {
-            return method;
-        }
-        String signature = method.substring(0, bodyStart).stripTrailing();
-        String body = method.substring(bodyStart + 1, bodyEnd).strip();
-        int open = signature.indexOf('(');
-        int close = signature.lastIndexOf(')');
-        if (open < 0 || close < open) {
-            return method;
-        }
-        String prefix = CommentedTokenText.tokenLine(CommentedTokenText.tokens(signature.substring(0, open)));
-        String parameters = signature.substring(open + 1, close);
-        List<String> parameterLines = nonBlankLines(parameters);
-        String inlineOpeningLineComment = inlineOpeningLineComment(parameters);
-        if (parameterLines.isEmpty()) {
-            return formatMethodWithBody(prefix + "()", List.of(), inlineOpeningLineComment, body);
-        }
-        if (parameterLines.size() == 1
-                && CommentedTokenText.isComment(parameterLines.getFirst())
-                && parameterLines.getFirst().startsWith("/*")
-                && !parameters.contains("\n")) {
-            return formatMethodWithBody(prefix + " " + parameterLines.getFirst() + "()", List.of(), "", body);
-        }
-        List<String> leadingComments = new ArrayList<>();
-        int cursor = 0;
-        while (cursor < parameterLines.size() && isCommentOnlyLine(parameterLines.get(cursor))) {
-            leadingComments.add(parameterLines.get(cursor++));
-        }
-        List<String> trailingComments = new ArrayList<>();
-        int end = parameterLines.size();
-        while (end > cursor && isCommentOnlyLine(parameterLines.get(end - 1))) {
-            trailingComments.add(0, parameterLines.get(--end));
-        }
-        List<String> parameterParts = parameterLines.subList(cursor, end);
-        if (parameterParts.isEmpty()) {
-            if (!inlineOpeningLineComment.isEmpty()) {
-                return formatMethodWithInlineOpeningComment(prefix + "()", inlineOpeningLineComment, body);
-            }
-            return formatMethodWithBody(prefix + "()", parameterLines, inlineOpeningLineComment, body);
-        }
-        String parameter = CommentedTokenText.tokenLine(CommentedTokenText.tokens(String.join(" ", parameterParts)));
-        if (leadingComments.isEmpty() && !containsLineComment(parameter)) {
-            List<String> suffixComments = new ArrayList<>(trailingComments);
-            return formatMethodWithBody(prefix + "(" + parameter + ")", suffixComments, "", body);
-        }
-        List<String> lines = new ArrayList<>();
-        lines.add(prefix + "(");
-        leadingComments.forEach(comment -> lines.add("  " + comment));
-        lines.add("  " + parameter);
-        lines.add(")");
-        return formatMethodWithBody(String.join("\n", lines), trailingComments, "", body);
-    }
-
-    private String formatMethodWithBody(String signature, List<String> suffixComments, String inlineOpeningComment, String body) {
-        List<String> lines = new ArrayList<>();
-        if (suffixComments.isEmpty()) {
-            if (body.isEmpty()) {
-                lines.add(signature + " {}");
-            } else if (inlineOpeningComment.isEmpty()) {
-                lines.add(signature + " {");
-                lines.addAll(formatMethodBodyLines(body));
-                lines.add("}");
-            } else {
-                lines.add(signature + " { " + inlineOpeningComment);
-                lines.addAll(formatMethodBodyLines(body));
-                lines.add("}");
-            }
-            return String.join("\n", lines);
-        }
-        lines.add(signature + " " + suffixComments.getFirst());
-        lines.addAll(suffixComments.subList(1, suffixComments.size()));
-        if (body.isEmpty()) {
-            lines.add("{}");
-        } else {
-            lines.add("{");
-            lines.addAll(formatMethodBodyLines(body));
-            lines.add("}");
-        }
-        return String.join("\n", lines);
-    }
-
-    private String formatMethodWithInlineOpeningComment(String signature, String comment, String body) {
-        if (body.isEmpty()) {
-            return signature + " {} " + comment;
-        }
-        List<String> lines = new ArrayList<>();
-        lines.add(signature + " { " + comment);
-        lines.addAll(formatMethodBodyLines(body));
-        lines.add("}");
-        return String.join("\n", lines);
-    }
-
-    private List<String> formatMethodBodyLines(String body) {
-        return body.lines()
-                .map(String::strip)
-                .filter(line -> !line.isEmpty())
-                .map(line -> "  " + line)
-                .toList();
-    }
-
-    private List<String> nonBlankLines(String text) {
-        return text.lines().map(String::strip).filter(line -> !line.isEmpty()).toList();
-    }
-
-    private String inlineOpeningLineComment(String parameters) {
-        String stripped = parameters.stripLeading();
-        if (!stripped.startsWith("//")) {
-            return "";
-        }
-        int commentStart = parameters.indexOf("//");
-        if (parameters.substring(0, commentStart).contains("\n")) {
-            return "";
-        }
-        int commentEnd = stripped.indexOf('\n');
-        return commentEnd < 0 ? stripped.stripTrailing() : stripped.substring(0, commentEnd).stripTrailing();
-    }
-
     private boolean isCommentOnlyLine(String line) {
         return line.startsWith("//") || line.startsWith("/*") && line.endsWith("*/");
-    }
-
-    private boolean containsLineComment(String line) {
-        return line.contains("//");
-    }
-
-    private String indentEmbeddedLines(String text) {
-        String[] lines = text.split("\n", -1);
-        if (lines.length <= 1) {
-            return text;
-        }
-        List<String> indented = new ArrayList<>();
-        indented.add(lines[0]);
-        for (int i = 1; i < lines.length; i++) {
-            indented.add(options.indentUnit() + lines[i]);
-        }
-        return String.join("\n", indented);
     }
 
     private Doc constructor(ConstructorDeclaration declaration) {

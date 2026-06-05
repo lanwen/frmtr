@@ -62,8 +62,8 @@ public sealed interface Doc
             if (doc == EMPTY) {
                 continue;
             }
-            if (doc instanceof Concat concat) {
-                flattenConcat(concat.docs(), out);
+            if (doc instanceof Concat(List<Doc> concat)) {
+                flattenConcat(concat, out);
             } else {
                 out.add(doc);
             }

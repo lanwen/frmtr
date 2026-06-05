@@ -22,11 +22,15 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class JavaFormatter {
     private static final int PARSE_ERROR_CONTEXT_LINES = 2;
+    private static final Pattern MESSAGE_POSITION = Pattern.compile("line (\\d+), column (\\d+)");
 
     private final FormatterOptions options;
     private final JavaParser parser;
@@ -129,11 +133,30 @@ public final class JavaFormatter {
     }
 
     private static String formatProblem(List<String> lines, Problem problem) {
+        return problemPosition(problem)
+                .map(position -> formatProblemAtPosition(lines, position, problem.getVerboseMessage()))
+                .orElse(problem.getVerboseMessage());
+    }
+
+    private static Optional<Position> problemPosition(Problem problem) {
         return problem.getLocation()
                 .flatMap(location -> location.toRange().map(range -> range.begin))
                 .filter(Position::valid)
-                .map(position -> formatProblemAtPosition(lines, position, problem.getVerboseMessage()))
-                .orElse(problem.getVerboseMessage());
+                .or(() -> messagePosition(problem.getVerboseMessage()));
+    }
+
+    private static Optional<Position> messagePosition(String message) {
+        if (message == null) {
+            return Optional.empty();
+        }
+        Matcher matcher = MESSAGE_POSITION.matcher(message);
+        if (!matcher.find()) {
+            return Optional.empty();
+        }
+        Position position = new Position(
+                Integer.parseInt(matcher.group(1)),
+                Integer.parseInt(matcher.group(2)));
+        return position.valid() ? Optional.of(position) : Optional.empty();
     }
 
     private static String formatProblemAtPosition(List<String> lines, Position position, String message) {

@@ -190,7 +190,7 @@ final class MainTest {
         Result result = run(dir, null, "--write");
 
         assertThat(result.exitCode()).isZero();
-        assertThat(result.out()).isEqualTo("Formatted 1 file: 1 written.\n");
+        assertThat(result.out()).isEqualTo("Processed 1 file: 1 formatted.\n");
         assertThat(result.err()).isEmpty();
         assertThat(Files.readString(dir.resolve("src/Main.java"))).isEqualTo("""
                 class Main {
@@ -209,7 +209,7 @@ final class MainTest {
         Result result = run(dir, null, "--write", "src/**/*.java, examples/*.java");
 
         assertThat(result.exitCode()).isZero();
-        assertThat(result.out()).isEqualTo("Formatted 2 files: 2 written.\n");
+        assertThat(result.out()).isEqualTo("Processed 2 files: 2 formatted.\n");
         assertThat(result.err()).isEmpty();
         assertThat(Files.readString(dir.resolve("src/Main.java"))).isEqualTo("""
                 class Main {
@@ -238,7 +238,7 @@ final class MainTest {
                     int value;
                 }
                 """);
-        assertThat(result.err()).isEqualTo("Formatted 1 file: 1 printed.\n");
+        assertThat(result.err()).isEqualTo("Processed 1 file: 1 printed.\n");
     }
 
     @Test
@@ -262,7 +262,7 @@ final class MainTest {
                     int value;
                 }
                 """);
-        assertThat(result.err()).isEqualTo("Formatted 2 files: 2 printed.\n");
+        assertThat(result.err()).isEqualTo("Processed 2 files: 2 printed.\n");
     }
 
     @Test
@@ -341,6 +341,29 @@ final class MainTest {
     }
 
     @Test
+    void writeReportsLexicalErrorsWithContextAndProcessedSummary(@TempDir Path dir) {
+        write(
+                dir.resolve("src/TemplateExpression.java"),
+                """
+                class TemplateExpression {
+
+                  String info = STR."My name is \\{name}";
+                }
+                """);
+
+        Result result = run(dir, null, "--write", "src");
+
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.out()).isEqualTo("Processed 1 file: 0 formatted, 1 failed.\n");
+        assertThat(result.err())
+                .contains("src/TemplateExpression.java: Unable to parse Java source:")
+                .contains("1  class TemplateExpression {")
+                .contains("3    String info = STR.\"My name is \\{name}\";")
+                .contains("^")
+                .contains("Lexical error at line 3, column 34");
+    }
+
+    @Test
     void stacktraceOptionReportsFailureStacktrace(@TempDir Path dir) throws IOException {
         write(dir.resolve("src/Broken.java"), "class {");
 
@@ -413,6 +436,25 @@ final class MainTest {
                 Checked 1 file: 1 would change.
                 """);
         assertThat(result.err()).isEmpty();
+    }
+
+    @Test
+    void writeSummaryCountsIgnoredJavaFiles(@TempDir Path dir) throws IOException {
+        write(dir.resolve(".gitignore"), "ignored/\n");
+        write(dir.resolve("kept/Kept.java"), "class Kept{int value;}");
+        write(dir.resolve("ignored/Ignored.java"), "class Ignored{int value;}");
+
+        Result result = run(dir, null, "--write", ".");
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.out()).isEqualTo("Processed 2 files: 1 formatted, 1 ignored.\n");
+        assertThat(result.err()).isEmpty();
+        assertThat(Files.readString(dir.resolve("kept/Kept.java"))).isEqualTo("""
+                class Kept {
+
+                    int value;
+                }
+                """);
     }
 
     private static Result run(Path workingDirectory, String stdin, String... args) {

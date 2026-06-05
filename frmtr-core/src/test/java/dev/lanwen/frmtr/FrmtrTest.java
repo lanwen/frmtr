@@ -1294,6 +1294,20 @@ final class FrmtrTest {
     }
 
     @Test
+    void lexicalParseErrorsIncludeSourceContextFromMessagePosition() throws Exception {
+        String source = readResource("upstream/prettier-java/unit-test/template-expression/prettier.output.java");
+
+        Throwable thrown = catchThrowable(() -> Frmtr.format(source));
+
+        assertThat(thrown)
+                .isInstanceOf(FormatterException.class)
+                .hasMessageContaining("1  class TemplateExpression {")
+                .hasMessageContaining("3    String info = STR.\"My name is \\{name}\";")
+                .hasMessageContaining("^")
+                .hasMessageContaining("Lexical error at line 3, column 34");
+    }
+
+    @Test
     void parseErrorsSeparateMultipleProblems() {
         String source = """
                 class Demo {

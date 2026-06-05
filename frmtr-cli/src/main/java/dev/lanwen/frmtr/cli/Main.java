@@ -127,15 +127,23 @@ public final class Main implements Callable<Integer> {
         }
         List<Path> files = discovery.files();
         if (files.isEmpty()) {
+            if (write && discovery.ignoredCount() > 0) {
+                printWriteSummary(new FormatRunResult(List.of()), discovery.ignoredCount());
+                return 0;
+            }
+            if (!effectiveCheck && discovery.ignoredCount() > 0) {
+                printPrintSummary(0, 0, 0, discovery.ignoredCount());
+                return 0;
+            }
             return noFilesMatched();
         }
         if (effectiveCheck) {
             return checkFiles(files, options);
         }
         if (write) {
-            return writeFiles(files, options);
+            return writeFiles(files, options, discovery.ignoredCount());
         }
-        return printFiles(files, options);
+        return printFiles(files, options, discovery.ignoredCount());
     }
 
     private FormatterOptions formatterOptions() {
@@ -198,17 +206,17 @@ public final class Main implements Callable<Integer> {
         return run.hasChanges() ? 1 : 0;
     }
 
-    private int writeFiles(List<Path> files, FormatterOptions options) {
+    private int writeFiles(List<Path> files, FormatterOptions options, long ignored) {
         FormatRunResult run = FormatterRunner.write(workingDirectory, files, options);
         run.failedResults().stream()
                 .forEach(result -> result.failureException()
                         .ifPresent(exception -> printFailure(result.displayPath().toString(), exception)));
-        printWriteSummary(run);
+        printWriteSummary(run, ignored);
         out.flush();
         return run.hasFailures() ? 2 : 0;
     }
 
-    private int printFiles(List<Path> files, FormatterOptions options) {
+    private int printFiles(List<Path> files, FormatterOptions options, long ignored) {
         long failed = 0;
         long printed = 0;
         for (int i = 0; i < files.size(); i++) {
@@ -222,7 +230,7 @@ public final class Main implements Callable<Integer> {
                 printFailure(displayPath(file).toString(), exception);
             }
         }
-        printPrintSummary(files.size(), printed, failed);
+        printPrintSummary(files.size(), printed, failed, ignored);
         return failed > 0 ? 2 : 0;
     }
 
@@ -266,19 +274,21 @@ public final class Main implements Callable<Integer> {
         out.println(summaryLine("Checked", run.results().size(), parts));
     }
 
-    private void printWriteSummary(FormatRunResult run) {
+    private void printWriteSummary(FormatRunResult run, long ignored) {
         List<String> parts = new ArrayList<>();
-        addCount(parts, statusCount(run, FormatFileStatus.WRITTEN), "written");
-        addCount(parts, statusCount(run, FormatFileStatus.UNCHANGED), "unchanged");
+        addRequiredCount(parts, statusCount(run, FormatFileStatus.WRITTEN), "formatted");
         addCount(parts, run.failureCount(), "failed");
-        out.println(summaryLine("Formatted", run.results().size(), parts));
+        addCount(parts, ignored, "ignored");
+        addCount(parts, statusCount(run, FormatFileStatus.UNCHANGED), "unchanged");
+        out.println(summaryLine("Processed", run.results().size() + ignored, parts));
     }
 
-    private void printPrintSummary(long total, long printed, long failed) {
+    private void printPrintSummary(long total, long printed, long failed, long ignored) {
         List<String> parts = new ArrayList<>();
-        addCount(parts, printed, "printed");
+        addRequiredCount(parts, printed, "printed");
         addCount(parts, failed, "failed");
-        err.println(summaryLine("Formatted", total, parts));
+        addCount(parts, ignored, "ignored");
+        err.println(summaryLine("Processed", total + ignored, parts));
         err.flush();
     }
 
@@ -290,6 +300,10 @@ public final class Main implements Callable<Integer> {
         if (count > 0) {
             parts.add(count + " " + label);
         }
+    }
+
+    private void addRequiredCount(List<String> parts, long count, String label) {
+        parts.add(count + " " + label);
     }
 
     private String summaryLine(String action, long count, List<String> parts) {

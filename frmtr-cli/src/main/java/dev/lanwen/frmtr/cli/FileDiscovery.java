@@ -23,6 +23,7 @@ final class FileDiscovery {
 
     Result discover(List<String> selectorArgs) throws IOException {
         Set<Path> files = new LinkedHashSet<>();
+        Set<Path> ignoredFiles = new LinkedHashSet<>();
         List<String> missingFileSelectors = new ArrayList<>();
         GitIgnoreMatcher ignores = new GitIgnoreMatcher(root);
         for (String selector : selectors(selectorArgs)) {
@@ -30,12 +31,17 @@ final class FileDiscovery {
                 missingFileSelectors.add(selector);
                 continue;
             }
-            files.addAll(discoverSelector(selector, ignores));
+            Selection selection = discoverSelector(selector, ignores);
+            files.addAll(selection.files());
+            ignoredFiles.addAll(selection.ignoredFiles());
         }
-        return new Result(files.stream().sorted(Comparator.naturalOrder()).toList(), missingFileSelectors);
+        return new Result(
+                files.stream().sorted(Comparator.naturalOrder()).toList(),
+                ignoredFiles.stream().sorted(Comparator.naturalOrder()).toList(),
+                missingFileSelectors);
     }
 
-    private List<Path> discoverSelector(String selector, GitIgnoreMatcher ignores) throws IOException {
+    private Selection discoverSelector(String selector, GitIgnoreMatcher ignores) throws IOException {
         if (hasGlobSyntax(selector)) {
             return discoverGlob(selector, ignores);
         }
@@ -44,36 +50,53 @@ final class FileDiscovery {
         if (Files.isDirectory(path)) {
             return discoverDirectory(path, ignores);
         }
-        if (Files.isRegularFile(path) && isJavaFile(path) && !ignores.isIgnored(path, false)) {
-            return List.of(path);
+        if (Files.isRegularFile(path) && isJavaFile(path)) {
+            Path normalized = path.toAbsolutePath().normalize();
+            if (ignores.isIgnored(path, false)) {
+                return new Selection(List.of(), List.of(normalized));
+            }
+            return new Selection(List.of(normalized), List.of());
         }
-        return List.of();
+        return new Selection(List.of(), List.of());
     }
 
-    private List<Path> discoverDirectory(Path directory, GitIgnoreMatcher ignores) throws IOException {
+    private Selection discoverDirectory(Path directory, GitIgnoreMatcher ignores) throws IOException {
         try (var stream = Files.walk(directory)) {
-            return stream.filter(Files::isRegularFile)
+            List<Path> candidates = stream.filter(Files::isRegularFile)
                     .filter(FileDiscovery::isJavaFile)
-                    .filter(path -> !ignores.isIgnored(path, false))
                     .map(path -> path.toAbsolutePath().normalize())
                     .toList();
+            return selectCandidates(candidates, ignores);
         }
     }
 
-    private List<Path> discoverGlob(String selector, GitIgnoreMatcher ignores) throws IOException {
+    private Selection discoverGlob(String selector, GitIgnoreMatcher ignores) throws IOException {
         Path base = globBase(selector);
         if (!Files.exists(base)) {
-            return List.of();
+            return new Selection(List.of(), List.of());
         }
         List<PathMatcher> matchers = globMatchers(selector);
         try (var stream = Files.walk(base)) {
-            return stream.filter(Files::isRegularFile)
+            List<Path> candidates = stream.filter(Files::isRegularFile)
                     .filter(FileDiscovery::isJavaFile)
                     .filter(path -> matches(matchers, path))
-                    .filter(path -> !ignores.isIgnored(path, false))
                     .map(path -> path.toAbsolutePath().normalize())
                     .toList();
+            return selectCandidates(candidates, ignores);
         }
+    }
+
+    private static Selection selectCandidates(List<Path> candidates, GitIgnoreMatcher ignores) {
+        List<Path> files = new ArrayList<>();
+        List<Path> ignoredFiles = new ArrayList<>();
+        for (Path candidate : candidates) {
+            if (ignores.isIgnored(candidate, false)) {
+                ignoredFiles.add(candidate);
+            } else {
+                files.add(candidate);
+            }
+        }
+        return new Selection(files, ignoredFiles);
     }
 
     private boolean matches(List<PathMatcher> matchers, Path path) {
@@ -150,14 +173,26 @@ final class FileDiscovery {
                 && Files.notExists(root.resolve(selector).normalize());
     }
 
-    record Result(List<Path> files, List<String> missingFileSelectors) {
+    record Result(List<Path> files, List<Path> ignoredFiles, List<String> missingFileSelectors) {
         Result {
             files = List.copyOf(files);
+            ignoredFiles = List.copyOf(ignoredFiles);
             missingFileSelectors = List.copyOf(missingFileSelectors);
         }
 
         boolean hasMissingFileSelectors() {
             return !missingFileSelectors.isEmpty();
+        }
+
+        long ignoredCount() {
+            return ignoredFiles.size();
+        }
+    }
+
+    private record Selection(List<Path> files, List<Path> ignoredFiles) {
+        private Selection {
+            files = List.copyOf(files);
+            ignoredFiles = List.copyOf(ignoredFiles);
         }
     }
 

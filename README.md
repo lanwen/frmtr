@@ -80,7 +80,7 @@ Selectors can be repeated, comma-separated, files, directories, or glob patterns
 
 With no selectors, the CLI uses `./**/*.java` and checks formatting by default. Pass `--stdin` to read Java source from stdin and write formatted source to stdout, or combine `--stdin` with `--check` or `--diff` to compare piped source against formatter output.
 
-`--check` prints `✓` for files that are already formatted, `✗` for files that need formatting, and `!` for files that failed to parse or could not be read, followed by a concise summary. `--write` also ends with a summary. Add `--diff` to render unified diffs for files marked `✗`. Failure output is concise by default; add `--stacktrace` when debugging formatter or I/O failures.
+`--check` prints `✓` for files that are already formatted, `✗` for files that need formatting, and `!` for files that failed to parse or could not be read, followed by a concise summary. `--write` ends with a processed summary that counts files formatted, failed, and ignored by `.gitignore`. Add `--diff` to render unified diffs for files marked `✗`. Failure output is concise by default and includes source context for parse locations reported by JavaParser; add `--stacktrace` when debugging formatter or I/O failures.
 
 Use `--java-level` to choose the parser language level. The default is `LATEST_AVAILABLE`, which uses the newest stable level exposed by the bundled JavaParser dependency. Use `UNSET` for JavaParser raw mode, or a release value such as `17`, `JAVA_21`, or `JAVA_25`.
 

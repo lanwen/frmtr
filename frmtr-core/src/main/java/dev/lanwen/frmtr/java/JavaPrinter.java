@@ -102,8 +102,8 @@ final class JavaPrinter {
     private final EnumDeclarationPrinter enums;
     private final RecordDeclarationPrinter records;
     private final AnnotationDeclarationPrinter annotationDeclarations;
+    private final ClassOrInterfaceDeclarationPrinter classOrInterfaces;
     private final CommentedMethodSignaturePrinter commentedMethodSignatures;
-    private final CommentedInterfacePrinter commentedInterfaces = new CommentedInterfacePrinter();
     private final CompilationUnitPrinter compilationUnits;
     private final FieldDeclarationPrinter fields;
 
@@ -182,6 +182,22 @@ final class JavaPrinter {
                 this::unattachedTrailingBlockComment,
                 this::startsAfterNodeOnSameLine,
                 this::commentText);
+        this.classOrInterfaces = new ClassOrInterfaceDeclarationPrinter(
+                comments,
+                rawSource,
+                options,
+                new CommentedInterfacePrinter(),
+                callableSignatures,
+                this::annotations,
+                this::modifiers,
+                types -> extendsTypes(types),
+                types -> implementsTypes(types),
+                types -> permitsTypes(types),
+                (keyword, types, breakBeforeClause) -> typeClause(keyword, types, breakBeforeClause),
+                this::flatTypeParameters,
+                (keyword, types) -> flatTypeClause(keyword, types),
+                this::currentIndentedWidth,
+                declaration -> memberBlocks.memberBlock(declaration.getMembers(), declaration, this::body));
         this.constructors = new ConstructorDeclarationPrinter(
                 comments,
                 callableSignatures,
@@ -262,7 +278,7 @@ final class JavaPrinter {
 
     private Doc bodyContent(BodyDeclaration<?> declaration) {
         return switch (declaration) {
-            case ClassOrInterfaceDeclaration classDeclaration -> classOrInterface(classDeclaration);
+            case ClassOrInterfaceDeclaration classDeclaration -> classOrInterfaces.classOrInterface(classDeclaration);
             case RecordDeclaration recordDeclaration -> record(recordDeclaration);
             case EnumDeclaration enumDeclaration -> enumDeclaration(enumDeclaration);
             case AnnotationDeclaration annotationDeclaration -> annotationDeclaration(annotationDeclaration);
@@ -274,107 +290,6 @@ final class JavaPrinter {
             case InitializerDeclaration initializerDeclaration -> initializer(initializerDeclaration);
             default -> rawDeclaration(declaration);
         };
-    }
-
-    private Doc classOrInterface(ClassOrInterfaceDeclaration declaration) {
-        String raw = rawSource.raw(declaration);
-        if (declaration.isInterface() && commentedInterfaces.hasCommentedHeader(raw)) {
-            return Doc.concat(comments.leading(declaration), Doc.text(commentedInterfaces.formatCommentedInterface(raw)));
-        }
-        if (shouldBreakClassOrInterfaceHeader(declaration)) {
-            return brokenClassOrInterface(declaration);
-        }
-        List<Doc> header = new ArrayList<>();
-        header.add(comments.leading(declaration));
-        header.add(annotations(declaration));
-        header.add(Doc.text(modifiers(declaration)));
-        header.add(Doc.text(declaration.isInterface() ? "interface " : "class "));
-        header.add(Doc.text(declaration.getNameAsString()));
-        if (!declaration.getTypeParameters().isEmpty()) {
-            header.add(callableSignatures.typeParameters(declaration.getTypeParameters()));
-        }
-        extendsTypes(declaration.getExtendedTypes()).ifPresent(header::add);
-        implementsTypes(declaration.getImplementedTypes()).ifPresent(header::add);
-        permitsTypes(declaration.getPermittedTypes()).ifPresent(header::add);
-        header.add(Doc.text(" "));
-        header.add(memberBlocks.memberBlock(declaration.getMembers(), declaration, this::body));
-        return Doc.concat(header);
-    }
-
-    private boolean shouldBreakClassOrInterfaceHeader(ClassOrInterfaceDeclaration declaration) {
-        if (declaration.getExtendedTypes().isEmpty()
-                && declaration.getImplementedTypes().isEmpty()
-                && declaration.getPermittedTypes().isEmpty()) {
-            return false;
-        }
-        String flatHeader = modifiers(declaration)
-                + (declaration.isInterface() ? "interface " : "class ")
-                + declaration.getNameAsString()
-                + flatTypeParameters(declaration.getTypeParameters())
-                + flatTypeClause("extends", declaration.getExtendedTypes())
-                + flatTypeClause("implements", declaration.getImplementedTypes())
-                + flatTypeClause("permits", declaration.getPermittedTypes());
-        return flatHeader.length() + 1 + flatMemberBlockWidth(declaration) > options.lineWidth();
-    }
-
-    private Doc brokenClassOrInterface(ClassOrInterfaceDeclaration declaration) {
-        List<Doc> header = new ArrayList<>();
-        header.add(comments.leading(declaration));
-        header.add(annotations(declaration));
-        header.add(Doc.text(modifiers(declaration)));
-        header.add(Doc.text(declaration.isInterface() ? "interface " : "class "));
-        header.add(Doc.text(declaration.getNameAsString()));
-        boolean breakTypeParameters = classOrInterfaceTypeParametersBreak(declaration);
-        if (breakTypeParameters) {
-            header.add(callableSignatures.brokenTypeParameters(
-                    declaration.getTypeParameters(),
-                    classOrInterfaceHeaderClauses(declaration) > 1));
-        } else if (!declaration.getTypeParameters().isEmpty()) {
-            header.add(callableSignatures.typeParameters(declaration.getTypeParameters()));
-        }
-        boolean breakClauses = classOrInterfaceHeaderClauses(declaration) > 1 || !breakTypeParameters;
-        typeClause("extends", declaration.getExtendedTypes(), breakClauses).ifPresent(header::add);
-        typeClause("implements", declaration.getImplementedTypes(), breakClauses).ifPresent(header::add);
-        typeClause("permits", declaration.getPermittedTypes(), breakClauses).ifPresent(header::add);
-        header.add(emptyMemberBlock(declaration) || !breakClauses ? Doc.text(" ") : Doc.HARD_LINE);
-        header.add(memberBlocks.memberBlock(declaration.getMembers(), declaration, this::body));
-        return Doc.concat(header);
-    }
-
-    private boolean classOrInterfaceTypeParametersBreak(ClassOrInterfaceDeclaration declaration) {
-        if (declaration.getTypeParameters().isEmpty()) {
-            return false;
-        }
-        if (classOrInterfaceHeaderClauses(declaration) > 1) {
-            String headerHead = modifiers(declaration)
-                    + (declaration.isInterface() ? "interface " : "class ")
-                    + declaration.getNameAsString()
-                    + flatTypeParameters(declaration.getTypeParameters());
-            return currentIndentedWidth(headerHead) > options.lineWidth();
-        }
-        if (declaration.getTypeParameters().size() > 2) {
-            return true;
-        }
-        return classOrInterfaceHeaderClauses(declaration) == 1
-                && declaration.getExtendedTypes().stream().anyMatch(this::hasTypeArguments);
-    }
-
-    private int classOrInterfaceHeaderClauses(ClassOrInterfaceDeclaration declaration) {
-        int clauses = 0;
-        if (!declaration.getExtendedTypes().isEmpty()) {
-            clauses++;
-        }
-        if (!declaration.getImplementedTypes().isEmpty()) {
-            clauses++;
-        }
-        if (!declaration.getPermittedTypes().isEmpty()) {
-            clauses++;
-        }
-        return clauses;
-    }
-
-    private boolean hasTypeArguments(ClassOrInterfaceType type) {
-        return type.getTypeArguments().map(arguments -> !arguments.isEmpty()).orElse(false);
     }
 
     private int typeArgumentCount(ClassOrInterfaceType type) {
@@ -4215,14 +4130,6 @@ final class JavaPrinter {
             return "";
         }
         return "<" + compactJoinTypeLike(typeParameters) + ">";
-    }
-
-    private boolean emptyMemberBlock(ClassOrInterfaceDeclaration declaration) {
-        return declaration.getMembers().isEmpty() && declaration.getOrphanComments().isEmpty();
-    }
-
-    private int flatMemberBlockWidth(ClassOrInterfaceDeclaration declaration) {
-        return emptyMemberBlock(declaration) ? "{}".length() : "{".length();
     }
 
     private Doc annotations(NodeWithAnnotations<?> node) {

@@ -5,29 +5,9 @@ import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
-import com.github.javaparser.ast.comments.BlockComment;
-import com.github.javaparser.ast.stmt.AssertStmt;
 import com.github.javaparser.ast.stmt.BlockStmt;
-import com.github.javaparser.ast.stmt.BreakStmt;
-import com.github.javaparser.ast.stmt.ContinueStmt;
 import com.github.javaparser.ast.stmt.CatchClause;
-import com.github.javaparser.ast.stmt.DoStmt;
-import com.github.javaparser.ast.stmt.EmptyStmt;
-import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
-import com.github.javaparser.ast.stmt.ForEachStmt;
-import com.github.javaparser.ast.stmt.ForStmt;
-import com.github.javaparser.ast.stmt.IfStmt;
-import com.github.javaparser.ast.stmt.LabeledStmt;
-import com.github.javaparser.ast.stmt.LocalClassDeclarationStmt;
-import com.github.javaparser.ast.stmt.LocalRecordDeclarationStmt;
-import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
-import com.github.javaparser.ast.stmt.SwitchStmt;
-import com.github.javaparser.ast.stmt.SynchronizedStmt;
-import com.github.javaparser.ast.stmt.ThrowStmt;
-import com.github.javaparser.ast.stmt.TryStmt;
-import com.github.javaparser.ast.stmt.WhileStmt;
-import com.github.javaparser.ast.stmt.YieldStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.Optional;
@@ -78,6 +58,7 @@ final class JavaPrinter {
     private final VariableDeclarationPrinter variableDeclarations;
     private final ExpressionDispatcher expressionDispatcher;
     private final BodyDeclarationDispatcher bodyDeclarations;
+    private final StatementDispatcher statementDispatcher;
 
     JavaPrinter(FormatterOptions options) {
         this.options = options;
@@ -462,6 +443,12 @@ final class JavaPrinter {
                 constructors::compactConstructor,
                 constructors::constructor,
                 initializers::initializer);
+        this.statementDispatcher = new StatementDispatcher(
+                comments,
+                formatterPragmas,
+                rawSource,
+                statements::statement,
+                switches::switchStatement);
     }
 
     Doc print(CompilationUnit unit) {
@@ -496,44 +483,8 @@ final class JavaPrinter {
         return blocks.block(block);
     }
 
-    /**
-     * Applies statement-level formatter pragmas and comment attachment before structured statement rendering.
-     *
-     * <p>The raw-vs-formatted gate stays here because formatter off/on pragmas update persistent state across later
-     * statements. Switch statements are routed through {@link SwitchPrinter} from here so that outer statement pragmas,
-     * raw output, and leading/trailing comment attachment still run before switch-specific formatting.
-     * Representative pragma coverage includes
-     * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/formatter-on-off/inside_block/input.java}
-     * with
-     * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/formatter-on-off/inside_block/frmtr.output.java}
-     * and
-     * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/require-pragma/format-pragma/input.java}
-     * with
-     * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/require-pragma/format-pragma/frmtr.output.java}.
-     */
     private Doc statement(Statement statement) {
-        FormatterPragmas.PrintAction action = formatterPragmas.statementAction(statement);
-        if (action == FormatterPragmas.PrintAction.RAW_WITH_TRAILING_HARD_LINE) {
-            return Doc.concat(rawStatement(statement), Doc.HARD_LINE);
-        }
-        if (action == FormatterPragmas.PrintAction.RAW) {
-            return rawStatement(statement);
-        }
-        boolean inlineBreakBlockComment = statement instanceof BreakStmt
-                && statement.getComment().filter(BlockComment.class::isInstance).isPresent();
-        boolean inlineSwitchBlockComment = statement instanceof SwitchStmt
-                && statement.getComment().filter(BlockComment.class::isInstance).isPresent();
-        Doc trailing = statement instanceof TryStmt ? Doc.EMPTY : comments.trailingLineComment(statement);
-        Doc leading = statement instanceof TryStmt || inlineBreakBlockComment || inlineSwitchBlockComment
-                ? Doc.EMPTY
-                : trailing == Doc.EMPTY ? comments.leading(statement) : Doc.EMPTY;
-        Doc body = statement instanceof SwitchStmt switchStmt ? switches.switchStatement(switchStmt) : statements.statement(statement);
-        return Doc.concat(leading, body, trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing));
-    }
-
-    private Doc rawStatement(Statement statement) {
-        Doc leading = statement instanceof TryStmt ? Doc.EMPTY : comments.leading(statement);
-        return Doc.concat(leading, Doc.text(rawSource.rawWithoutOwnComment(statement)));
+        return statementDispatcher.statement(statement);
     }
 
     private Doc brokenMethodCall(MethodCallExpr expression) {

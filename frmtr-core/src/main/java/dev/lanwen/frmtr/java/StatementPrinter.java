@@ -51,11 +51,11 @@ import java.util.function.ToIntFunction;
  *
  * <p>This helper owns non-switch statement dispatch and the source-sensitive statement details around if/else chains,
  * loops, try/catch/finally, labels, empty bodies, and simple semicolon statements. The boundary exists so
- * {@link JavaPrinter} can keep formatter pragma raw-passes, leading/trailing statement comment attachment, and
- * switch-specific formatting in one outer state machine while this class handles the ordinary statement content. Switch
- * statements are deliberately excluded because switch labels, guards, rule bodies, statement groups, and switch
- * expressions share a switch-specific grammar that is easier to extract as one later slice; nested switch statements
- * still reach {@link JavaPrinter} through the statement callback.
+ * {@link StatementDispatcher} can keep formatter pragma raw-passes, leading/trailing statement comment attachment, and
+ * switch routing in one outer state machine while this class handles ordinary statement content. Switch statements are
+ * deliberately excluded because switch labels, guards, rule bodies, statement groups, and switch expressions share a
+ * switch-specific grammar owned by {@link SwitchPrinter}; nested switch statements still reach the dispatcher through
+ * the statement callback.
  *
  * <p>Expression, type, local-variable, declaration-body, and block formatting stay with their existing owners and are
  * called through callbacks. Representative coverage pairs for this boundary include
@@ -158,11 +158,11 @@ final class StatementPrinter {
     }
 
     /**
-     * Renders the structured body of a non-switch statement after JavaPrinter has already chosen formatted output.
+     * Renders the structured body of a non-switch statement after StatementDispatcher has chosen formatted output.
      *
-     * <p>Raw pragma handling stays in {@link JavaPrinter#statement(Statement)} because formatter off/on state changes
-     * which later statements format. This method only decides the formatted content once the outer gate has decided the
-     * statement should not be printed from raw source.
+     * <p>Raw pragma handling stays in {@link StatementDispatcher} because formatter off/on state changes which later
+     * statements format. This method only decides the formatted content once the outer gate has decided the statement
+     * should not be printed from raw source.
      */
     Doc statement(Statement statement) {
         return switch (statement) {
@@ -615,8 +615,8 @@ final class StatementPrinter {
      *
      * <p>The forks here are driven by source layout rather than Java syntax alone: empty bodies can keep comments inside
      * the header line, comments between {@code then} and {@code else} stay between those tokens, and nested {@code else
-     * if} routes back through the outer statement callback so it gets the same raw/pragma/switch gate as any other
-     * nested statement.
+     * if} routes back through the outer statement callback so it gets the same raw/pragma/comment gate and switch
+     * routing as any other nested statement.
      */
     private Doc ifStatement(IfStmt statement) {
         if (statement.getThenStmt().isEmptyStmt()) {
@@ -835,7 +835,7 @@ final class StatementPrinter {
      * <p>Empty if-blocks keep the two-line block shape used by existing fixtures, block bodies stay on the same line as
      * their header, and nested control statements break and indent so constructs such as single-line loops do not
      * collapse into ambiguous header/body text. Switch bodies go back through the outer statement callback, where
-     * {@link JavaPrinter} keeps the switch-specific path.
+     * {@link StatementDispatcher} keeps the switch-specific route.
      */
     private Doc nestedStatement(Statement statement) {
         if (statement.isBlockStmt()

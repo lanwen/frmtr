@@ -29,9 +29,10 @@ import java.util.function.ToIntFunction;
  * <p>JavaParser exposes {@link SwitchStmt} through the statement tree and {@link SwitchExpr} through the expression
  * tree, but their blocks share the same labels, guards, rule entries, statement groups, and source-only fallback cases.
  * Keeping those branches together avoids splitting {@code case} layout decisions across statement and expression
- * helpers. {@link JavaPrinter} still owns the outer statement pragma/raw gate, expression dispatch, raw source helpers,
- * ordinary statement formatting, expression formatting, type formatting, and block formatting; this helper only chooses
- * the switch-specific structure after those outer owners have selected formatted output.
+ * helpers. {@link StatementDispatcher} owns the outer statement pragma/raw/comment gate before statement switches reach
+ * this helper, while {@link JavaPrinter} still wires expression dispatch, raw source helpers, ordinary statement
+ * formatting, expression formatting, type formatting, and block formatting. This helper only chooses the switch-specific
+ * structure after those outer owners have selected formatted output.
  *
  * <p>Representative fixture pairs for this boundary include
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/switch/input.java} with
@@ -90,7 +91,7 @@ final class SwitchPrinter {
     }
 
     /**
-     * Prints a statement switch after {@link JavaPrinter} has applied statement pragmas and leading comment policy.
+     * Prints a statement switch after {@link StatementDispatcher} has applied pragmas and leading comment policy.
      *
      * <p>Empty switch statements keep the legacy expanded block shape because statement switches used that shape before
      * this helper existed. Non-empty switches enter the shared switch block path, with selector line comments inserted

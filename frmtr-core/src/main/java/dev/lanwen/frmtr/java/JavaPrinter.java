@@ -80,6 +80,7 @@ final class JavaPrinter {
     private final BlockPrinter blocks;
     private final StatementPrinter statements;
     private final SwitchPrinter switches;
+    private final ControlConditionPrinter controlConditions;
     private final BinaryExpressionPrinter binaries;
     private final AnnotationExpressionPrinter annotationExpressions;
     private final ConditionalExpressionPrinter conditionals;
@@ -139,6 +140,13 @@ final class JavaPrinter {
                 binaries::nestedLines,
                 this::compact,
                 this::currentIndentedWidth);
+        this.controlConditions = new ControlConditionPrinter(
+                comments,
+                options,
+                this::compact,
+                this::compactWithoutOwnComment,
+                binaries::lines,
+                this::currentIndentedWidth);
         this.switches = new SwitchPrinter(
                 comments,
                 rawSource,
@@ -147,7 +155,7 @@ final class JavaPrinter {
                 this::expression,
                 this::block,
                 blocks::statementSeparator,
-                this::controlCondition,
+                controlConditions::controlCondition,
                 binaries::lines,
                 this::compact,
                 this::compactTypeLike,
@@ -426,8 +434,8 @@ final class JavaPrinter {
                 methodCalls::methodCallChainRootIsFieldAccess,
                 binaries::expressionHasParenthesizedNestedBinary,
                 binaries::lines,
-                this::controlCondition,
-                this::compactWithOwnBlockComment,
+                controlConditions::controlCondition,
+                controlConditions::compactWithOwnBlockComment,
                 this::ownSameLineBlockCommentBeforeNode,
                 this::currentIndentedWidth);
         this.annotationDeclarations = new AnnotationDeclarationPrinter(
@@ -690,38 +698,6 @@ final class JavaPrinter {
             return left.begin.line < right.begin.line;
         }
         return left.begin.column < right.begin.column;
-    }
-
-    private Doc controlCondition(Expression expression) {
-        String flat = compactWithOwnBlockComment(expression);
-        if (currentIndentedWidth("(" + flat + ") {}") <= options.lineWidth()) {
-            return Doc.text("(" + flat + ")");
-        }
-        return Doc.concat(
-                Doc.text("("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, binaries.lines(expression))),
-                Doc.HARD_LINE,
-                Doc.text(")"));
-    }
-
-    private String compactWithOwnBlockComment(Expression expression) {
-        Optional<Comment> ownComment = expression.getComment().filter(BlockComment.class::isInstance);
-        if (ownComment.isEmpty()) {
-            return compact(expression);
-        }
-        Comment comment = ownComment.orElseThrow();
-        String commentText = commentText(comments.comment(comment));
-        String expressionText = compactWithoutOwnComment(expression);
-        return conditionCommentStartsBeforeExpression(expression, comment)
-                ? commentText + " " + expressionText
-                : expressionText + " " + commentText;
-    }
-
-    private boolean conditionCommentStartsBeforeExpression(Expression condition, Comment comment) {
-        return comment.getRange()
-                .flatMap(commentRange -> condition.getRange()
-                        .map(conditionRange -> startsBefore(commentRange, conditionRange)))
-                .orElse(false);
     }
 
     private String commentText(Doc comment) {

@@ -65,11 +65,8 @@ import com.github.javaparser.ast.stmt.TryStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
 import com.github.javaparser.ast.stmt.YieldStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
-import com.github.javaparser.ast.type.IntersectionType;
-import com.github.javaparser.ast.type.Type;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -93,6 +90,7 @@ final class JavaPrinter {
     private final ArrayExpressionPrinter arrays;
     private final ObjectCreationPrinter objectCreations;
     private final TextBlockPrinter textBlocks;
+    private final CastExpressionPrinter casts;
     private final MethodCallPrinter methodCalls;
     private final CallableSignaturePrinter callableSignatures;
     private final ConstructorDeclarationPrinter constructors;
@@ -202,6 +200,11 @@ final class JavaPrinter {
                 this::compactTypeLikeWithoutOwnComment,
                 this::commentText);
         this.textBlocks = new TextBlockPrinter(rawSource, options);
+        this.casts = new CastExpressionPrinter(
+                options,
+                this::expression,
+                this::compactTypeLike,
+                this::currentIndentedWidth);
         this.methodCalls = new MethodCallPrinter(
                 comments,
                 options,
@@ -253,7 +256,7 @@ final class JavaPrinter {
                 methodCalls::mixedFieldMethodCallRoot,
                 methodCalls::methodCallChainRoot,
                 methodCalls::methodCallChainRootIsObjectCreation,
-                this::castType,
+                casts::castType,
                 conditional -> conditionals.conditionalExpression(conditional, true),
                 conditionals::shouldBreakBeforeConditionalInitializer,
                 arrays::arrayCreationTypeBreaks,
@@ -672,7 +675,7 @@ final class JavaPrinter {
             return binaries.binaryExpression(binaryExpr);
         }
         if (expression instanceof CastExpr castExpr) {
-            return castExpression(castExpr);
+            return casts.castExpression(castExpr);
         }
         if (expression instanceof ConditionalExpr conditionalExpr) {
             return conditionals.conditionalExpression(conditionalExpr);
@@ -709,7 +712,7 @@ final class JavaPrinter {
 
     private Doc enclosedExpression(EnclosedExpr expression) {
         if (expression.getInner() instanceof CastExpr) {
-            if (nestedCastDepth(expression.getInner()) <= 2) {
+            if (casts.nestedCastDepth(expression.getInner()) <= 2) {
                 return Doc.concat(Doc.text("("), expression(expression.getInner()), Doc.text(")"));
             }
             return Doc.concat(
@@ -740,46 +743,6 @@ final class JavaPrinter {
             return Doc.concat(scope, nameComment, Doc.HARD_LINE, Doc.text("." + expression.getNameAsString()));
         }
         return Doc.concat(scope, Doc.text("." + expression.getNameAsString()));
-    }
-
-    private int nestedCastDepth(Expression expression) {
-        if (!(expression instanceof CastExpr castExpr)) {
-            return 0;
-        }
-        return 1 + castExpr.getExpression()
-                .toMethodCallExpr()
-                .flatMap(MethodCallExpr::getScope)
-                .filter(EnclosedExpr.class::isInstance)
-                .map(EnclosedExpr.class::cast)
-                .map(EnclosedExpr::getInner)
-                .map(this::nestedCastDepth)
-                .orElse(0);
-    }
-
-    private Doc castExpression(CastExpr expression) {
-        return Doc.concat(
-                castType(expression.getType()),
-                Doc.text(" "),
-                expression(expression.getExpression()));
-    }
-
-    private Doc castType(Type type) {
-        if (type instanceof IntersectionType intersectionType
-                && currentIndentedWidth("(" + compactTypeLike(type) + ")") > options.lineWidth()) {
-            List<Doc> elements = new ArrayList<>();
-            for (int i = 0; i < intersectionType.getElements().size(); i++) {
-                Type element = intersectionType.getElements().get(i);
-                elements.add(Doc.text((i == 0 ? "" : "& ") + compactTypeLike(element)));
-            }
-            return Doc.concat(
-                    Doc.text("("),
-                    Doc.indent(Doc.concat(
-                            Doc.HARD_LINE,
-                            Doc.join(Doc.HARD_LINE, elements))),
-                    Doc.HARD_LINE,
-                    Doc.text(")"));
-        }
-        return Doc.text("(" + compactTypeLike(type) + ")");
     }
 
     private Doc instanceOfExpression(InstanceOfExpr expression) {

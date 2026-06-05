@@ -99,6 +99,7 @@ final class JavaPrinter {
     private final CallableSignaturePrinter callableSignatures;
     private final ConstructorDeclarationPrinter constructors;
     private final MethodDeclarationPrinter methods;
+    private final InitializerDeclarationPrinter initializers;
     private final EnumDeclarationPrinter enums;
     private final RecordDeclarationPrinter records;
     private final AnnotationDeclarationPrinter annotationDeclarations;
@@ -186,6 +187,7 @@ final class JavaPrinter {
                 this::compact,
                 this::throwsClause,
                 this::block);
+        this.initializers = new InitializerDeclarationPrinter(comments, this::block);
         this.enums = new EnumDeclarationPrinter(
                 comments,
                 rawSource,
@@ -605,10 +607,7 @@ final class JavaPrinter {
     }
 
     private Doc initializer(InitializerDeclaration declaration) {
-        return Doc.concat(
-                comments.leading(declaration),
-                declaration.isStatic() ? Doc.text("static ") : Doc.EMPTY,
-                block(declaration.getBody()));
+        return initializers.initializer(declaration);
     }
 
     private Doc block(BlockStmt block) {

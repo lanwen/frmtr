@@ -219,7 +219,10 @@ public class Lambda {
 
         a.b(c, (c0, c1) -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
 
-        a((b, c, d) -> e.f());
+        a(
+            // comment
+            (b, c, d) -> e.f()
+        );
 
         a(
             (
@@ -255,32 +258,13 @@ public class Lambda {
             ) -> e.f()
         );
 
-        a((b, c, d) -> e.f());
+        a(/* comment */ (b, c, d) -> e.f());
 
-        a(
-            (
-                /* comment */
-                b,
-                c,
-                d
-            ) -> e.f()
-        );
+        a((/* comment */ b, c, d) -> e.f());
 
-        a(
-            (
-                b,
-                /* comment */ c,
-                d
-            ) -> e.f()
-        );
+        a((b, /* comment */ c, d) -> e.f());
 
-        a(
-            (
-                b,
-                c,
-                d /* comment */
-            ) -> e.f()
-        );
+        a((b, c, d /* comment */) -> e.f());
 
         a(
             (
@@ -301,11 +285,12 @@ public class Lambda {
         );
 
         aaaaaaaaaaaaaaaaaaaaaaaa(
+            /* comment */
             (bbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccccccc, dddddddddddddddddddddddd) -> eeeeeeeeeeeeeeeeeeeeeeee.ffffffffffffffffffffffff()
         );
 
         aaaaaaaaaaaaaaaaaaaaaaaa(
-            (bbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccccccc, dddddddddddddddddddddddd) -> eeeeeeeeeeeeeeeeeeeeeeee.ffffffffffffffffffffffff()
+            /* comment */ (bbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccccccc, dddddddddddddddddddddddd) -> eeeeeeeeeeeeeeeeeeeeeeee.ffffffffffffffffffffffff()
         );
 
         a.b(
@@ -355,8 +340,7 @@ public class Lambda {
 
     void lambdaWithLeadingComments() {
         System.out.println(
-            List
-                .of(1, 2, 3)
+            List.of(1, 2, 3)
                 .stream()
                 .map(
                     // a very long comment which explains the beatifullness of multiplication by 2
@@ -369,8 +353,7 @@ public class Lambda {
 
     void lambdaWithTrailingComments() {
         System.out.println(
-            List
-                .of(1, 2, 3)
+            List.of(1, 2, 3)
                 .stream()
                 .map(
                     v -> v * 2

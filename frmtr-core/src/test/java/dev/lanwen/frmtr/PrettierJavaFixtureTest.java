@@ -121,6 +121,8 @@ final class PrettierJavaFixtureTest {
             "indent",
             "instantiation",
             "interface",
+            "lambda/arrow-parens-always",
+            "lambda/arrow-parens-avoid",
             "member_chain",
             "method_reference",
             "marker_annotations",

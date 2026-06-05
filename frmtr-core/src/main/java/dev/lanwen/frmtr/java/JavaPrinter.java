@@ -4209,9 +4209,7 @@ final class JavaPrinter {
     }
 
     private Doc parenthesizedLambdaBreak(LambdaExpr expression) {
-        String parameters = expression.isEnclosingParameters()
-                ? "(" + compactJoin(expression.getParameters()) + ")"
-                : compactJoin(expression.getParameters());
+        String parameters = lambdaParameters(expression);
         return Doc.concat(
                 Doc.text("(" + parameters + " ->"),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, lambdaExpressionBody(expression))),
@@ -4230,6 +4228,12 @@ final class JavaPrinter {
             return Doc.concat(lambdaParametersForHeader(expression, parameters), Doc.text(" -> "), block(expression.getBody().asBlockStmt()));
         }
         boolean parametersHaveComments = lambdaParametersHaveComments(expression);
+        if (parametersHaveComments) {
+            Optional<String> inlineCommentedLambda = inlineCommentedLambda(expression);
+            if (inlineCommentedLambda.filter(lambda -> currentIndentedWidth(lambda) <= options.lineWidth()).isPresent()) {
+                return Doc.text(inlineCommentedLambda.orElseThrow());
+            }
+        }
         String flat = parameters + " -> " + expression.getExpressionBody()
                 .map(this::compact)
                 .orElseGet(() -> compact(expression.getBody()));
@@ -4260,6 +4264,33 @@ final class JavaPrinter {
         return body instanceof MethodCallExpr methodCall
                 && methodCall.getArguments().isEmpty()
                 && currentIndentedWidth(") -> " + compact(methodCall)) <= options.lineWidth();
+    }
+
+    private Optional<String> inlineCommentedLambda(LambdaExpr expression) {
+        if (expression.getComment().isPresent() || expression.getExpressionBody().isEmpty()) {
+            return Optional.empty();
+        }
+        return lambdaParameterText(expression)
+                .filter(parameterText -> parameterText.contains("/*"))
+                .filter(parameterText -> !parameterText.contains("//"))
+                .flatMap(this::compactInlineCommentedLambdaParameters)
+                .map(parameters -> parameters + " -> " + compact(expression.getExpressionBody().orElseThrow()));
+    }
+
+    private Optional<String> compactInlineCommentedLambdaParameters(String parameterText) {
+        List<String> lines = parameterText.lines()
+                .map(String::strip)
+                .filter(line -> !line.isEmpty())
+                .toList();
+        for (int i = 1; i < lines.size(); i++) {
+            if (lines.get(i).startsWith("/*")) {
+                return Optional.empty();
+            }
+        }
+        return Optional.of(normalizeWhitespace(String.join(" ", lines))
+                .replace("( /*", "(/*")
+                .replaceAll(",\\s*", ", ")
+                .replaceAll("\\s+\\)", ")"));
     }
 
     private Doc brokenLambdaExpressionBody(LambdaExpr expression) {
@@ -4435,10 +4466,14 @@ final class JavaPrinter {
         }
         List<Comment> commentsAroundLambda = new ArrayList<>();
         expression.getOrphanComments().stream()
-                .filter(LineComment.class::isInstance)
+                .filter(this::isLineOrBlockComment)
                 .forEach(commentsAroundLambda::add);
         lambdaExpr.getComment()
-                .filter(LineComment.class::isInstance)
+                .filter(this::isLineOrBlockComment)
+                .ifPresent(commentsAroundLambda::add);
+        expression.getName().getComment()
+                .filter(this::isLineOrBlockComment)
+                .filter(comment -> startsBefore(comment, lambdaExpr))
                 .ifPresent(commentsAroundLambda::add);
         if (commentsAroundLambda.isEmpty()) {
             return Optional.empty();
@@ -4446,13 +4481,24 @@ final class JavaPrinter {
         commentsAroundLambda.sort(Comparator.comparing(comment -> comment.getRange()
                 .map(range -> range.begin)
                 .orElse(Position.HOME)));
+        Optional<Doc> inlineBlockComment = inlineBlockCommentedExpressionLambdaArgument(prefix, lambdaExpr, commentsAroundLambda);
+        if (inlineBlockComment.isPresent()) {
+            return inlineBlockComment;
+        }
+        Optional<Doc> brokenLeadingBlockComment = brokenLeadingBlockCommentedExpressionLambdaArgument(
+                prefix,
+                lambdaExpr,
+                commentsAroundLambda);
+        if (brokenLeadingBlockComment.isPresent()) {
+            return brokenLeadingBlockComment;
+        }
         List<Doc> leading = commentsAroundLambda.stream()
-                .filter(comment -> startsBefore(comment, lambdaExpr))
+                .filter(comment -> isLeadingExpressionLambdaComment(lambdaExpr, comment))
                 .map(comments::comment)
                 .filter(comment -> comment != Doc.EMPTY)
                 .toList();
         List<Doc> trailing = commentsAroundLambda.stream()
-                .filter(comment -> !startsBefore(comment, lambdaExpr))
+                .filter(comment -> !isLeadingExpressionLambdaComment(lambdaExpr, comment))
                 .map(comments::comment)
                 .filter(comment -> comment != Doc.EMPTY)
                 .toList();
@@ -4465,6 +4511,58 @@ final class JavaPrinter {
                 Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, argumentLines))),
                 Doc.HARD_LINE,
                 Doc.text(")")));
+    }
+
+    private boolean isLineOrBlockComment(Comment comment) {
+        return comment instanceof LineComment || comment instanceof BlockComment;
+    }
+
+    private Optional<Doc> inlineBlockCommentedExpressionLambdaArgument(
+            String prefix,
+            LambdaExpr lambdaExpr,
+            List<Comment> commentsAroundLambda) {
+        if (commentsAroundLambda.size() != 1) {
+            return Optional.empty();
+        }
+        Comment comment = commentsAroundLambda.getFirst();
+        if (!(comment instanceof BlockComment) || !isLeadingExpressionLambdaComment(lambdaExpr, comment)
+                || !startsOnSameLine(comment, lambdaExpr)) {
+            return Optional.empty();
+        }
+        String call = prefix + "(" + comment.toString().stripTrailing() + " " + compactWithoutOwnComment(lambdaExpr) + ")";
+        if (currentIndentedWidth(call) > options.lineWidth()) {
+            return Optional.empty();
+        }
+        comments.comment(comment);
+        return Optional.of(Doc.text(call));
+    }
+
+    private Optional<Doc> brokenLeadingBlockCommentedExpressionLambdaArgument(
+            String prefix,
+            LambdaExpr lambdaExpr,
+            List<Comment> commentsAroundLambda) {
+        if (commentsAroundLambda.size() != 1) {
+            return Optional.empty();
+        }
+        Comment comment = commentsAroundLambda.getFirst();
+        if (!(comment instanceof BlockComment) || !isLeadingExpressionLambdaComment(lambdaExpr, comment)
+                || !startsOnSameLine(comment, lambdaExpr)) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+                Doc.text(prefix + "("),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        comments.comment(comment),
+                        Doc.text(" "),
+                        lambdaExpression(lambdaExpr))),
+                Doc.HARD_LINE,
+                Doc.text(")")));
+    }
+
+    private boolean isLeadingExpressionLambdaComment(LambdaExpr lambdaExpr, Comment comment) {
+        return lambdaExpr.getComment().filter(ownComment -> ownComment == comment).isPresent()
+                || startsBefore(comment, lambdaExpr);
     }
 
     private Optional<Doc> huggableMethodCallExpressionLambdaArguments(String prefix, NodeList<Expression> arguments) {
@@ -4731,6 +4829,8 @@ final class JavaPrinter {
                 root = calls.removeFirst();
                 inlinePromotedRoot = true;
             }
+        } else if (methodCallChainShouldPromoteFirstCallForArgumentComments(root, calls)) {
+            root = calls.removeFirst();
         } else if (methodCallChainShouldPromoteFirstCall(force, root, calls)) {
             root = calls.removeFirst();
         }
@@ -4909,6 +5009,15 @@ final class JavaPrinter {
         }
         return force || calls.getFirst().getArguments().stream()
                 .anyMatch(argument -> argument instanceof LambdaExpr lambdaExpr && lambdaExpr.getBody().isBlockStmt());
+    }
+
+    private boolean methodCallChainShouldPromoteFirstCallForArgumentComments(
+            Expression root,
+            List<MethodCallExpr> calls) {
+        return methodCallChainPromotesFirstCall(root)
+                && calls.size() > 1
+                && calls.getFirst().getAllContainedComments().isEmpty()
+                && calls.stream().skip(1).anyMatch(call -> !call.getAllContainedComments().isEmpty());
     }
 
     private Doc inlineMethodCall(MethodCallExpr expression) {

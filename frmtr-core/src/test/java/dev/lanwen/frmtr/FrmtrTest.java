@@ -357,6 +357,39 @@ final class FrmtrTest {
     }
 
     @Test
+    void promotesStaticChainFirstCallBeforeCommentedLambdaArgument() {
+        String source = """
+                class Demo {
+                    void method() {
+                        System.out.println(List.of(1, 2, 3).stream().map(
+                            // first
+                            // second
+                            v -> v * 2
+                        ).collect(Collectors.summingInt(v -> v)));
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("List.of(1, 2, 3)\n"
+                        + "        .stream()\n"
+                        + "        .map(\n"
+                        + "          // first\n"
+                        + "          // second\n"
+                        + "          v -> v * 2\n"
+                        + "        )");
+    }
+
+    @Test
     void breaksParenthesizedExpressionLambdaBody() {
         String source = """
                 class Demo {
@@ -377,6 +410,33 @@ final class FrmtrTest {
 
         assertThat(formatted)
                 .contains("(aaaaaaaaaa ->\n"
+                        + "      bbbbbbbbbb.cccccccccc().dddddddddd().eeeeeeeeee().ffffffffff());");
+    }
+
+    @Test
+    void parenthesizedExpressionLambdaBodyRespectsAlwaysArrowParens() {
+        String source = """
+                class Demo {
+                    void method() {
+                        (aaaaaaaaaa -> bbbbbbbbbb.cccccccccc().dddddddddd().eeeeeeeeee().ffffffffff());
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                false,
+                false,
+                FormatterOptions.LambdaArrowParens.ALWAYS,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("((aaaaaaaaaa) ->\n"
                         + "      bbbbbbbbbb.cccccccccc().dddddddddd().eeeeeeeeee().ffffffffff());");
     }
 
@@ -408,6 +468,112 @@ final class FrmtrTest {
                         + "      // first\n"
                         + "      // second\n"
                         + "      v -> v * 2\n"
+                        + "    );");
+    }
+
+    @Test
+    void preservesLineCommentBeforeExpressionLambdaArgument() {
+        String source = """
+                class Demo {
+                    void method() {
+                        a( // comment
+                            (b, c, d) -> e.f()
+                        );
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("a(\n"
+                        + "      // comment\n"
+                        + "      (b, c, d) -> e.f()\n"
+                        + "    );");
+    }
+
+    @Test
+    void preservesInlineBlockCommentBeforeExpressionLambdaArgument() {
+        String source = """
+                class Demo {
+                    void method() {
+                        a(/* comment */ (b, c, d) -> e.f());
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted).contains("a(/* comment */ (b, c, d) -> e.f());");
+    }
+
+    @Test
+    void keepsInlineBlockCommentsInFittingLambdaParameters() {
+        String source = """
+                class Demo {
+                    void method() {
+                        a(( /* first */ b, c, d) -> e.f());
+                        a((b, /* second */ c, d) -> e.f());
+                        a((b, c, d /* third */) -> e.f());
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("a((/* first */ b, c, d) -> e.f());")
+                .contains("a((b, /* second */ c, d) -> e.f());")
+                .contains("a((b, c, d /* third */) -> e.f());");
+    }
+
+    @Test
+    void keepsLeadingBlockCommentWithBrokenExpressionLambdaParameters() {
+        String source = """
+                class Demo {
+                    void method() {
+                        aaaaaaaaaaaaaaaaaaaaaaaa(/* comment */ (bbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccccccc, dddddddddddddddddddddddd) -> eeeeeeeeeeeeeeeeeeeeeeee.ffffffffffffffffffffffff());
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("aaaaaaaaaaaaaaaaaaaaaaaa(\n"
+                        + "      /* comment */ (\n"
+                        + "        bbbbbbbbbbbbbbbbbbbbbbbb,\n"
+                        + "        cccccccccccccccccccccccc,\n"
+                        + "        dddddddddddddddddddddddd\n"
+                        + "      ) -> eeeeeeeeeeeeeeeeeeeeeeee.ffffffffffffffffffffffff()\n"
                         + "    );");
     }
 

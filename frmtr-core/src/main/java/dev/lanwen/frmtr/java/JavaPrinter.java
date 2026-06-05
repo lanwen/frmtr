@@ -37,12 +37,10 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
-import com.github.javaparser.ast.expr.RecordPatternExpr;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
-import com.github.javaparser.ast.expr.TypePatternExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.comments.BlockComment;
@@ -67,7 +65,6 @@ import com.github.javaparser.ast.stmt.LocalClassDeclarationStmt;
 import com.github.javaparser.ast.stmt.LocalRecordDeclarationStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
-import com.github.javaparser.ast.stmt.SwitchEntry;
 import com.github.javaparser.ast.stmt.SwitchStmt;
 import com.github.javaparser.ast.stmt.SynchronizedStmt;
 import com.github.javaparser.ast.stmt.ThrowStmt;
@@ -96,6 +93,7 @@ final class JavaPrinter {
     private final MemberBlockPrinter memberBlocks;
     private final BlockPrinter blocks;
     private final StatementPrinter statements;
+    private final SwitchPrinter switches;
     private final CallableSignaturePrinter callableSignatures;
     private final ConstructorDeclarationPrinter constructors;
     private final MethodDeclarationPrinter methods;
@@ -123,6 +121,21 @@ final class JavaPrinter {
                 moduleBlocks::moduleBlock);
         this.memberBlocks = new MemberBlockPrinter(rawSource, comments, this::hasDeclarationAnnotations);
         this.blocks = new BlockPrinter(comments, this::statement, formatterPragmas::hasPragma);
+        this.switches = new SwitchPrinter(
+                comments,
+                rawSource,
+                options,
+                this::statement,
+                this::expression,
+                this::block,
+                blocks::statementSeparator,
+                this::controlCondition,
+                this::binaryExpressionLines,
+                this::compact,
+                this::compactTypeLike,
+                this::modifiers,
+                this::currentIndentedWidth,
+                this::ownSameLineBlockCommentBeforeNode);
         this.commentedMethodSignatures = new CommentedMethodSignaturePrinter(options);
         PackageDeclarationPrinter packageDeclarations = new PackageDeclarationPrinter(comments, rawSource, options);
         ImportDeclarationPrinter importDeclarations = new ImportDeclarationPrinter(comments);
@@ -420,8 +433,8 @@ final class JavaPrinter {
      * Applies statement-level formatter pragmas and comment attachment before structured statement rendering.
      *
      * <p>The raw-vs-formatted gate stays here because formatter off/on pragmas update persistent state across later
-     * statements. Switch statements also stay here so switch statement bodies and nested switch statements keep using
-     * the same switch-specific code as switch expressions until that grammar is extracted as its own slice.
+     * statements. Switch statements are routed through {@link SwitchPrinter} from here so that outer statement pragmas,
+     * raw output, and leading/trailing comment attachment still run before switch-specific formatting.
      * Representative pragma coverage includes
      * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/formatter-on-off/inside_block/input.java}
      * with
@@ -447,7 +460,7 @@ final class JavaPrinter {
         Doc leading = statement instanceof TryStmt || inlineBreakBlockComment || inlineSwitchBlockComment
                 ? Doc.EMPTY
                 : trailing == Doc.EMPTY ? comments.leading(statement) : Doc.EMPTY;
-        Doc body = statement instanceof SwitchStmt switchStmt ? switchStatement(switchStmt) : statements.statement(statement);
+        Doc body = statement instanceof SwitchStmt switchStmt ? switches.switchStatement(switchStmt) : statements.statement(statement);
         return Doc.concat(leading, body, trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing));
     }
 
@@ -781,7 +794,7 @@ final class JavaPrinter {
             return objectCreation(objectCreationExpr);
         }
         if (expression instanceof SwitchExpr switchExpr) {
-            return switchExpression(switchExpr);
+            return switches.switchExpression(switchExpr);
         }
         if (expression instanceof TextBlockLiteralExpr textBlockLiteralExpr) {
             return textBlockLiteral(textBlockLiteralExpr);
@@ -2797,270 +2810,6 @@ final class JavaPrinter {
             docs.add(members.get(index));
         }
         return Doc.concat(docs);
-    }
-
-    private Doc switchStatement(SwitchStmt statement) {
-        Doc leadingBlockComment = ownSameLineBlockCommentBeforeNode(statement);
-        Doc prefix = leadingBlockComment == Doc.EMPTY ? Doc.EMPTY : Doc.concat(leadingBlockComment, Doc.text(" "));
-        if (statement.getEntries().isEmpty()) {
-            return Doc.concat(
-                    prefix,
-                    Doc.text("switch "),
-                    controlCondition(statement.getSelector()),
-                    Doc.text(" {"),
-                    Doc.HARD_LINE,
-                    Doc.text("}"));
-        }
-        Doc selectorLineComment = comments.ownComment(statement.getSelector(), LineComment.class::isInstance);
-        return Doc.concat(
-                prefix,
-                Doc.text("switch "),
-                controlCondition(statement.getSelector()),
-                Doc.text(" "),
-                switchBlock(statement.getEntries(), selectorLineComment));
-    }
-
-    private Doc switchExpression(SwitchExpr expression) {
-        return Doc.concat(
-                Doc.text("switch (" + compact(expression.getSelector()) + ") "),
-                switchBlock(expression.getEntries()));
-    }
-
-    private Doc switchBlock(NodeList<SwitchEntry> entries) {
-        return switchBlock(entries, Doc.EMPTY);
-    }
-
-    private Doc switchBlock(NodeList<SwitchEntry> entries, Doc leadingInside) {
-        if (entries.isEmpty()) {
-            return Doc.text("{}");
-        }
-        List<Doc> entryDocs = new ArrayList<>();
-        if (leadingInside != Doc.EMPTY) {
-            entryDocs.add(leadingInside);
-        }
-        entryDocs.addAll(entries.stream().map(this::switchEntry).toList());
-        return Doc.concat(
-                Doc.text("{"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, entryDocs))),
-                Doc.HARD_LINE,
-                Doc.text("}"));
-    }
-
-    private Doc switchEntry(SwitchEntry entry) {
-        Doc leadingComment = comments.ownComment(entry, commentNode -> commentNode instanceof LineComment
-                && commentNode.getRange()
-                        .flatMap(commentRange -> entry.getRange()
-                                .map(entryRange -> commentRange.begin.line < entryRange.begin.line))
-                        .orElse(false));
-        if (leadingComment != Doc.EMPTY) {
-            leadingComment = Doc.concat(leadingComment, Doc.HARD_LINE);
-        }
-        Doc trailingComment = comments.ownComment(entry, commentNode -> commentNode instanceof LineComment
-                && commentNode.getRange()
-                        .flatMap(commentRange -> entry.getRange()
-                                .map(entryRange -> commentRange.begin.line == entryRange.begin.line))
-                        .orElse(false));
-        if (trailingComment == Doc.EMPTY) {
-            Optional<Doc> raw = rawSingleLineSwitchEntry(entry);
-            if (raw.isPresent()) {
-                return Doc.concat(leadingComment, raw.orElseThrow());
-            }
-        }
-        Doc label = switchEntryLabel(entry);
-        Doc guard = switchEntryGuard(entry);
-        Doc entryDoc;
-        if (entry.getType() == SwitchEntry.Type.STATEMENT_GROUP) {
-            entryDoc = switchStatementGroupEntry(label, guard, entry.getStatements());
-        } else if (entry.getStatements().isEmpty()) {
-            entryDoc = Doc.concat(label, guard, Doc.text(" ->"));
-        } else {
-            Statement statement = entry.getStatements().get(0);
-            if (hasLeadingOwnComment(statement)) {
-                entryDoc = Doc.concat(
-                        label,
-                        guard,
-                        Doc.text(" ->"),
-                        Doc.indent(Doc.concat(Doc.HARD_LINE, statement(statement))));
-            } else {
-                entryDoc = Doc.concat(label, guard, Doc.text(" -> "), switchEntryBody(statement));
-            }
-        }
-        entryDoc = trailingComment == Doc.EMPTY ? entryDoc : Doc.concat(entryDoc, Doc.text(" "), trailingComment);
-        return Doc.concat(leadingComment, entryDoc);
-    }
-
-    private Doc switchEntryLabel(SwitchEntry entry) {
-        if (entry.isDefault()) {
-            return Doc.text(defaultSwitchEntryLabel(entry));
-        }
-        String flatLabels = entry.getLabels().stream().map(this::switchLabelText).reduce((left, right) -> left + ", " + right).orElse("");
-        String flat = "case " + flatLabels;
-        if (entry.getLabels().size() == 1 && !switchLabelBreaks(entry.getLabels().get(0))
-                || currentIndentedWidth(flat + " -> {}") <= options.lineWidth()) {
-            return Doc.text(flat);
-        }
-        if (entry.getLabels().size() == 1) {
-            return Doc.concat(Doc.text("case "), switchLabel(entry.getLabels().get(0)));
-        }
-        return Doc.concat(
-                Doc.text("case"),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(
-                                Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                                entry.getLabels().stream().map(label -> Doc.text(switchLabelText(label))).toList()))));
-    }
-
-    private boolean switchLabelBreaks(Expression label) {
-        return label instanceof RecordPatternExpr && currentIndentedWidth("case " + switchLabelText(label) + " -> {}") > options.lineWidth();
-    }
-
-    private Doc switchLabel(Expression label) {
-        if (label instanceof RecordPatternExpr recordPattern && switchLabelBreaks(label)) {
-            return recordPattern(recordPattern);
-        }
-        return Doc.text(switchLabelText(label));
-    }
-
-    private String switchLabelText(Expression label) {
-        if (label instanceof TypePatternExpr) {
-            return rawSource.normalizeWhitespace(label.toString());
-        }
-        if (label instanceof RecordPatternExpr) {
-            return rawSource.normalizeWhitespace(label.toString());
-        }
-        return compact(label);
-    }
-
-    private String defaultSwitchEntryLabel(SwitchEntry entry) {
-        String raw = rawSource.raw(entry);
-        int colon = raw.indexOf(':');
-        if (colon < 0) {
-            return "default";
-        }
-        String label = CommentedTokenText.tokenLine(CommentedTokenText.tokens(raw.substring(0, colon)));
-        return label.isEmpty() ? "default" : label;
-    }
-
-    private Doc recordPattern(RecordPatternExpr pattern) {
-        return Doc.concat(
-                Doc.text(modifiers(pattern) + compactTypeLike(pattern.getType()) + "("),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), pattern.getPatternList().stream()
-                                .map(this::recordPatternComponent)
-                                .toList()))),
-                Doc.HARD_LINE,
-                Doc.text(")"));
-    }
-
-    private Doc recordPatternComponent(Expression pattern) {
-        if (pattern instanceof RecordPatternExpr recordPattern && switchLabelBreaks(pattern)) {
-            return recordPattern(recordPattern);
-        }
-        return Doc.text(switchLabelText(pattern));
-    }
-
-    private Doc switchEntryGuard(SwitchEntry entry) {
-        if (entry.getGuard().isEmpty()) {
-            return Doc.EMPTY;
-        }
-        Expression guard = entry.getGuard().orElseThrow();
-        String flat = " when " + compact(guard);
-        if (!switchGuardBreaks(entry, guard, flat)) {
-            return Doc.text(flat);
-        }
-        Expression guardedExpression = guard instanceof EnclosedExpr enclosedExpr ? enclosedExpr.getInner() : guard;
-        return Doc.concat(
-                Doc.text(" when ("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines(guardedExpression))),
-                Doc.HARD_LINE,
-                Doc.text(")"));
-    }
-
-    private boolean switchGuardBreaks(SwitchEntry entry, Expression guard, String flat) {
-        String label = "case " + entry.getLabels().stream().map(this::switchLabelText).reduce((left, right) -> left + ", " + right).orElse("");
-        return guard instanceof EnclosedExpr
-                || switchEntryWidth(label + flat + " -> {}") >= options.lineWidth()
-                        && !rawSingleLineSwitchEntry(entry).isPresent();
-    }
-
-    private int switchEntryWidth(String text) {
-        return (options.indentUnit().length() * 3) + text.length();
-    }
-
-    private Doc switchStatementGroupEntry(Doc label, Doc guard, NodeList<Statement> statements) {
-        if (statements.size() == 1 && statements.get(0).isBlockStmt()) {
-            return Doc.concat(label, guard, Doc.text(": "), switchStatementGroupBlock(statements.get(0).asBlockStmt()));
-        }
-        return Doc.concat(label, guard, Doc.text(":"), switchEntryStatements(statements));
-    }
-
-    private Doc switchStatementGroupBlock(BlockStmt block) {
-        if (block.getStatements().isEmpty() && block.getOrphanComments().isEmpty()) {
-            return Doc.concat(Doc.text("{"), Doc.HARD_LINE, Doc.text("}"));
-        }
-        return block(block);
-    }
-
-    private boolean hasLeadingOwnComment(Statement statement) {
-        return statement.getComment()
-                .filter(comment -> comment.getRange()
-                        .flatMap(commentRange -> statement.getRange()
-                                .map(statementRange -> commentRange.begin.line < statementRange.begin.line))
-                        .orElse(false))
-                .isPresent();
-    }
-
-    private Optional<Doc> rawSingleLineSwitchEntry(SwitchEntry entry) {
-        if (entry.getType() == SwitchEntry.Type.STATEMENT_GROUP) {
-            return Optional.empty();
-        }
-        String raw = entry.getTokenRange().map(Object::toString).orElseGet(() -> rawSource.rawWithoutOwnComment(entry)).stripTrailing();
-        if (!raw.contains("->") || raw.contains("\n")) {
-            return Optional.empty();
-        }
-        boolean preservesSourceOnlySyntax = raw.contains("/*") || raw.contains("null, default");
-        if (!preservesSourceOnlySyntax && currentIndentedWidth(raw) <= options.lineWidth()) {
-            return Optional.empty();
-        }
-        if (!preservesSourceOnlySyntax) {
-            return Optional.empty();
-        }
-        return Optional.of(Doc.text(raw));
-    }
-
-    private Doc switchEntryBody(Statement statement) {
-        if (statement.isBlockStmt()) {
-            return switchRuleBlock(statement.asBlockStmt());
-        }
-        if (statement instanceof ExpressionStmt expressionStmt) {
-            return Doc.concat(expression(expressionStmt.getExpression()), Doc.text(";"));
-        }
-        return Doc.concat(statement(statement));
-    }
-
-    private Doc switchRuleBlock(BlockStmt block) {
-        if (block.getStatements().isEmpty() && block.getOrphanComments().isEmpty()) {
-            return Doc.concat(Doc.text("{"), Doc.HARD_LINE, Doc.text("}"));
-        }
-        return block(block);
-    }
-
-    private Doc switchEntryStatements(NodeList<Statement> statements) {
-        if (statements.isEmpty()) {
-            return Doc.EMPTY;
-        }
-        List<Doc> docs = new ArrayList<>();
-        Statement previous = null;
-        for (Statement current : statements) {
-            if (previous != null) {
-                docs.add(blocks.statementSeparator(previous, current));
-            }
-            docs.add(statement(current));
-            previous = current;
-        }
-        return Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.concat(docs)));
     }
 
     private Doc variableDeclaration(VariableDeclarationExpr declaration) {

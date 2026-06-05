@@ -177,8 +177,8 @@ public class BinaryOperations {
     exponent = ((b[3] << 1) & 0xff) | (b[2] >> (7 - 127));
     mantissa = (b[2] & (0x7f << 16)) | (b[1] << 8) | b[0];
 
-    ignored = ((2 / 3) * 10) / 2 + 2;
-    ignored = (2 * 3 * 10) / 2 + 2;
+    ((2 / 3) * 10) / 2 + 2;
+    (2 * 3 * 10) / 2 + 2;
     var rotateX =
       (RANGE / rect.height) * refY -
       (RANGE / 2) * getXMultiplication(rect.width);
@@ -186,29 +186,29 @@ public class BinaryOperations {
       (RANGE / rect.width) * refX -
       (RANGE / 2) * getYMultiplication(rect.width);
 
-    ignored = (a % 10) - 5;
-    ignored = a - (10 % 5);
-    ignored = (a * b) % 10;
-    ignored = (a % b) * 10;
-    ignored = a % 10 > 5;
-    ignored = a % 10 == 0;
+    (a % 10) - 5;
+    a - (10 % 5);
+    (a * b) % 10;
+    (a % b) * 10;
+    a % 10 > 5;
+    a % 10 == 0;
 
-    ignored = ((1 << 2) >>> 3) >> 4;
-    ignored = ((1 >>> 2) >> 3) << 4;
+    ((1 << 2) >>> 3) >> 4;
+    ((1 >>> 2) >> 3) << 4;
 
-    ignored = 1 << (2 + 3);
-    ignored = 1 >> (2 - 3);
-    ignored = 1 >>> (2 * 3);
-    ignored = (1 / 2) << 3;
-    ignored = (1 + 2) >> 3;
-    ignored = (1 - 2) >>> 3;
+    1 << (2 + 3);
+    1 >> (2 - 3);
+    1 >>> (2 * 3);
+    (1 / 2) << 3;
+    (1 + 2) >> 3;
+    (1 - 2) >>> 3;
 
-    ignored = (x == y) == z;
-    ignored = (x != y) == z;
-    ignored = (x == y) != z;
-    ignored = (x != y) != z;
+    (x == y) == z;
+    (x != y) == z;
+    (x == y) != z;
+    (x != y) != z;
 
-    ignored = 1 & (2 == 3);
+    1 & (2 == 3);
 
     if (
       (aaaaaaaaaa + bbbbbbbbbb == cccccccccc + dddddddddd &&
@@ -245,8 +245,8 @@ public class BinaryOperations {
       Foo.get(longlinelonglinelonglinelonglinelongline) instanceof
         NumberNumberNumberNumber n && n.foo();
 
-    ignored = e instanceof @Ann final E baz;
-    ignored = f instanceof final @Ann E qux;
+    e instanceof @Ann final E baz;
+    f instanceof final @Ann E qux;
   }
 
   void unaryExpression() {

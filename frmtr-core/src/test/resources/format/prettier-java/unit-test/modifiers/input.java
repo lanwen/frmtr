@@ -1,6 +1,6 @@
   @AnnotationOne
 
-@AnnotationTwo public @AnnotationThree interface InterfaceWithModifiers {
+@AnnotationTwo static public @AnnotationThree interface InterfaceWithModifiers {
   static final @AnnotationOne public String INTERFACE_CONSTANT = "abc";
 
     @AnnotationOne
@@ -21,14 +21,14 @@
   volatile private @Annotation static String field;
 
   @AnnotationOne
-  @AnnotationTwo abstract protected @AnnotationThree String method();
+  @AnnotationTwo abstract synchronized protected @AnnotationThree String method();
 
   public @AnnotationOne @AnnotationTwo void twoTrailingAnnotations() {}
 
   @AnnotationOne void onlyAnnotations() {}
 }
 
-final @AnnotationOne public @AnnotationTwo class ClassWithModifiers {
+final @AnnotationOne static public @AnnotationTwo class ClassWithModifiers {
   transient @AnnotationOne final private @AnnotationTwo static String CONSTANT = "abc";
 
   final @AnnotationOne static @AnnotationTwo protected @AnnotationThree String CONSTANT_2 = "123";

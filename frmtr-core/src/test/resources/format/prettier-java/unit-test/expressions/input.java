@@ -210,7 +210,7 @@ public class Expressions {
 
   void parenthesesWithLeadingAndTrailingBreak() {
     (aaaaaaaaaa + bbbbbbbbbb + cccccccccc + dddddddddd + eeeeeeeeee).ffffffffff();
-    value = (aaaaaaaaaa + bbbbbbbbbb + cccccccccc + dddddddddd + eeeeeeeeee)::ffffffffff;
+    (aaaaaaaaaa + bbbbbbbbbb + cccccccccc + dddddddddd + eeeeeeeeee)::ffffffffff;
 
     aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
     aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
@@ -229,14 +229,14 @@ public class Expressions {
 
   void parenthesesWithTrailingBreak() {
     (aaaaaaaaaa && bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
-    value = (aaaaaaaaaa && bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
-    value = (aaaaaaaaaa && bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
+    (aaaaaaaaaa && bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
+    (aaaaaaaaaa && bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
   }
 
   void parenthesesWithoutBreak() {
     (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
-    value = (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
-    value = (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
+    (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
+    (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
 
     aaaaaaaaaa = (bbbbbbbbbb -> cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
     aaaaaaaaaa = (bbbbbbbbbb -> cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;

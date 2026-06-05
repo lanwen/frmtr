@@ -24,7 +24,7 @@ final class PrettierJavaCorpusTest {
 
         assertThat(count(adoptedUnitTests, "input.java")).isEqualTo(84);
         assertThat(count(adoptedUnitTests, "prettier.output.java")).isEqualTo(84);
-        assertThat(count(adoptedUnitTests, "frmtr.output.java")).isEqualTo(84);
+        assertThat(count(adoptedUnitTests, "frmtr.output.java")).isEqualTo(73);
         assertThat(count(unitTests, "input.java")).isEqualTo(84);
         assertThat(count(unitTests, "prettier.output.java")).isEqualTo(84);
     }

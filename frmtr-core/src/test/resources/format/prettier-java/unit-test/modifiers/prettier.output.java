@@ -1,7 +1,7 @@
 @AnnotationOne
 @AnnotationTwo
 @AnnotationThree
-public interface InterfaceWithModifiers {
+public static interface InterfaceWithModifiers {
   @AnnotationOne
   public static final String INTERFACE_CONSTANT = "abc";
 
@@ -31,7 +31,7 @@ public abstract class AbstractClassWithModifiers {
 
   @AnnotationOne
   @AnnotationTwo
-  protected abstract @AnnotationThree String method();
+  protected abstract synchronized @AnnotationThree String method();
 
   public @AnnotationOne @AnnotationTwo void twoTrailingAnnotations() {}
 
@@ -41,7 +41,7 @@ public abstract class AbstractClassWithModifiers {
 
 @AnnotationOne
 @AnnotationTwo
-public final class ClassWithModifiers {
+public static final class ClassWithModifiers {
 
   @AnnotationOne
   @AnnotationTwo

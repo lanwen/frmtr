@@ -22,7 +22,7 @@ public interface Interfaces extends Interface1, Interface2, Interface3, Interfac
 
 }
 
-interface Interface {
+private interface Interface {
   String STRING_1 = "STRING_1";
   String STRING_2 = "STRING_2";
   class T {}

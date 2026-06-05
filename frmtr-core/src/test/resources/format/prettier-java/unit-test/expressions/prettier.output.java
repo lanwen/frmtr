@@ -258,7 +258,7 @@ public class Expressions {
       dddddddddd +
       eeeeeeeeee
     ).ffffffffff();
-    value = (
+    (
       aaaaaaaaaa +
       bbbbbbbbbb +
       cccccccccc +
@@ -307,11 +307,11 @@ public class Expressions {
       ? dddddddddd
       : eeeeeeeeee
     ).ffffffffff();
-    value = (aaaaaaaaaa && bbbbbbbbbb && cccccccccc
+    (aaaaaaaaaa && bbbbbbbbbb && cccccccccc
       ? dddddddddd
       : eeeeeeeeee
     )::ffffffffff;
-    value = (aaaaaaaaaa && bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[
+    (aaaaaaaaaa && bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[
       ffffffffff
     ];
   }
@@ -319,9 +319,9 @@ public class Expressions {
   void parenthesesWithoutBreak() {
     (aaaaaaaaaa ->
       bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
-    value = (aaaaaaaaaa ->
+    (aaaaaaaaaa ->
       bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
-    value = (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[
+    (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[
       ffffffffff
     ];
 

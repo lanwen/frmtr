@@ -73,8 +73,7 @@ class T {
 
   void multipleSwitchPatterns() {
     switch (box) {
-      case Box(RedBall _) -> processBox(box);
-      case Box(BlueBall _) -> processBox(box);
+      case Box(RedBall _), Box(BlueBall _) -> processBox(box);
       case Box(GreenBall _) -> stopProcessing();
       case Box(var _) -> pickAnotherBox();
     }
@@ -82,8 +81,7 @@ class T {
 
   void multipleSwitchPatternsWithGuard() {
     switch (box) {
-      case Box(RedBall _) when x == 42 -> processBox(b);
-      case Box(BlueBall _) when x == 42 -> processBox(b);
+      case Box(RedBall _), Box(BlueBall _) when x == 42 -> processBox(b);
     }
   }
 
@@ -98,8 +96,7 @@ class T {
 
   void switchLabelWithMatchAllPattern() {
     switch (box) {
-      case Box(RedBall _) -> processBox(box);
-      case Box(BlueBall _) -> processBox(box);
+      case Box(RedBall _), Box(BlueBall _) -> processBox(box);
       case Box(GreenBall _) -> stopProcessing();
       case Box(_) -> pickAnotherBox();
     }
@@ -107,15 +104,31 @@ class T {
 
   int wrappingMultipleSwitchPatterns() {
     return switch ("") {
-      case LongTypeName longVariableName -> 0;
-      case LongTypeName longVariableName -> 0;
-      case LongTypeName longVariableName -> 0;
-      case MyRecord(A a) -> 0;
-      case MyRecord(B b) -> 0;
-      case MyRecord(A a) when true -> 0;
-      case MyRecord(B b) when true -> 0;
-      case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) -> 0;
-      case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when this.longVariableName > longVariableName && this.longVariableName > longVariableName -> longMethodName(longVariableName, longVariableName, longVariableName, longVariableName);
+      case LongTypeName longVariableName, LongTypeName longVariableName -> 0;
+      case
+        LongTypeName longVariableName,
+        LongTypeName longVariableName,
+        LongTypeName longVariableName -> 0;
+      case MyRecord(A a), MyRecord(B b) -> 0;
+      case MyRecord(A a), MyRecord(B b) when true -> 0;
+      case
+        MyRecord(LongTypeName longVariableName, LongTypeName longVariableName),
+        MyRecord(
+          LongTypeName longVariableName,
+          LongTypeName longVariableName
+        ) -> 0;
+      case
+        MyRecord(LongTypeName longVariableName, LongTypeName longVariableName),
+        MyRecord(LongTypeName longVariableName, LongTypeName longVariableName)
+      when (
+        this.longVariableName > longVariableName &&
+        this.longVariableName > longVariableName
+      ) -> longMethodName(
+        longVariableName,
+        longVariableName,
+        longVariableName,
+        longVariableName
+      );
     };
   }
 }

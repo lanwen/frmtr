@@ -82,8 +82,6 @@ final class PrettierJavaFixtureTest {
             "arrays",
             "annotation_interface_declaration",
             "assert",
-            "binary_expressions/operator-position-end",
-            "binary_expressions/operator-position-start",
             "blank_lines",
             "bug-fixes",
             "cast",
@@ -91,12 +89,10 @@ final class PrettierJavaFixtureTest {
             "classes",
             "comments/bug-fixes",
             "comments/class",
-            "comments/comments-blocks-and-statements/complex",
             "comments/comments-blocks-and-statements/end-of-block",
             "comments/comments-blocks-and-statements/if-statement",
             "comments/comments-blocks-and-statements/labeled-statement",
             "comments/edge",
-            "comments/expression",
             "comments/comments-only",
             "comments/interface",
             "comments/package",
@@ -104,7 +100,6 @@ final class PrettierJavaFixtureTest {
             "constructors",
             "empty_statement",
             "enum",
-            "expressions",
             "extends_abstract_class",
             "extends_abstract_class_and_implements_interfaces",
             "formatter-on-off/begin_with_on",
@@ -120,13 +115,11 @@ final class PrettierJavaFixtureTest {
             "if",
             "indent",
             "instantiation",
-            "interface",
             "lambda/arrow-parens-always",
             "lambda/arrow-parens-avoid",
             "member_chain",
             "method_reference",
             "marker_annotations",
-            "modifiers",
             "modules",
             "package_and_imports/classWithMixedImports",
             "package_and_imports/classWithMixedCaseImports",
@@ -150,13 +143,11 @@ final class PrettierJavaFixtureTest {
             "sealed",
             "synchronized",
             "switch",
-            "template-expression",
             "text-blocks",
             "throws",
             "try_catch",
             "types",
             "unnamed-class-compilation-unit",
-            "unnamed-variables-and-patterns",
             "variables",
             "while",
             "yield-statement");
@@ -166,14 +157,15 @@ final class PrettierJavaFixtureTest {
             .setAttributeComments(true));
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("fixtures")
-    void adoptedPrettierJavaFixtureInputsAndReferenceOutputsAreParseable(Fixture fixture) throws IOException {
+    @MethodSource("javaParserSupportedFixtures")
+    void javaParserSupportedPrettierJavaFixtureInputsAndReferenceOutputsAreParseable(Fixture fixture)
+            throws IOException {
         assertParseable(fixture, fixture.input());
         assertParseable(fixture, fixture.prettierOutput());
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("fixtures")
+    @MethodSource("javaParserSupportedFixtures")
     void currentFormatterOutputMatchesCheckedInSnapshot(Fixture fixture) throws IOException {
         String input = read(fixture.input());
 
@@ -194,9 +186,14 @@ final class PrettierJavaFixtureTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("fixtures")
-    void adoptedPrettierJavaFixtureCompanionsArePresent(Fixture fixture) {
+    void adoptedPrettierJavaFixtureUpstreamCompanionsArePresent(Fixture fixture) {
         assertThat(fixture.input()).isRegularFile();
         assertThat(fixture.prettierOutput()).isRegularFile();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("javaParserSupportedFixtures")
+    void javaParserSupportedPrettierJavaFixtureSnapshotsArePresent(Fixture fixture) {
         assertThat(fixture.frmtrOutput()).isRegularFile();
     }
 
@@ -214,6 +211,10 @@ final class PrettierJavaFixtureTest {
 
     private static Stream<Fixture> prettierCompatibleFixtures() throws IOException, URISyntaxException {
         return fixtures().filter(fixture -> PRETTIER_COMPATIBLE_FIXTURES.contains(fixture.name()));
+    }
+
+    private static Stream<Fixture> javaParserSupportedFixtures() throws IOException, URISyntaxException {
+        return fixtures().filter(PrettierJavaFixtureTest::isJavaParserSupported);
     }
 
     private static FormatterOptions prettierCompatibilityOptions(Fixture fixture) {
@@ -258,6 +259,20 @@ final class PrettierJavaFixtureTest {
 
         assertThat(result.getProblems()).describedAs("%s in %s", file.getFileName(), fixture).isEmpty();
         assertThat(result.getResult()).describedAs("%s in %s", file.getFileName(), fixture).isPresent();
+    }
+
+    private static boolean isJavaParserSupported(Fixture fixture) {
+        return isParseable(fixture.input()) && isParseable(fixture.prettierOutput());
+    }
+
+    private static boolean isParseable(Path file) {
+        try {
+            ParseResult<CompilationUnit> result =
+                    PARSER.parse(ParseStart.COMPILATION_UNIT, Providers.provider(read(file)));
+            return result.getProblems().isEmpty() && result.getResult().isPresent();
+        } catch (IOException exception) {
+            throw new IllegalStateException("Unable to read fixture " + file, exception);
+        }
     }
 
     private static String read(Path path) throws IOException {

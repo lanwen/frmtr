@@ -15,14 +15,15 @@ Source paths inspected:
 The copied fixture files are licensed by upstream under Apache License 2.0. The upstream
 `LICENSE` and `NOTICE` files are preserved in this directory.
 
-Each adopted fixture directory contains:
+Each fixture directory contains:
 
 - `input.java`: the input formatted by frmtr.
 - `prettier.output.java`: the upstream Prettier Java reference output.
-- `frmtr.output.java`: the current frmtr output snapshot for the adopted input.
 
-Some upstream samples are not JavaParser compilation units as copied. The adopted copies keep
-the original expression or language-feature intent while adjusting the surrounding Java source
-shape so `input.java` and `prettier.output.java` parse as compilation units. The verbatim
-upstream copy remains under `../../upstream/prettier-java` with matching fixture file
-names.
+When JavaParser supports parsing the upstream syntax, the fixture directory also contains
+`frmtr.output.java`: the current frmtr output snapshot for the input.
+
+The `input.java` and `prettier.output.java` files are kept byte-for-byte aligned with the
+preserved upstream copy under `../../upstream/prettier-java`. Some upstream samples use
+syntax that the bundled JavaParser dependency does not parse yet; formatter assertions skip
+those fixtures until JavaParser supports them.

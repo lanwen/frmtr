@@ -28,7 +28,7 @@ public interface Interfaces
   public static final Method METHOD = SomeStatic.findMethod();
 }
 
-interface Interface {
+private interface Interface {
   String STRING_1 = "STRING_1";
   String STRING_2 = "STRING_2";
 

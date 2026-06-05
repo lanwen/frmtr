@@ -463,10 +463,6 @@ final class JavaPrinter {
         return expressionDispatcher.expressionWithoutOwnComment(expression);
     }
 
-    private boolean isCommentOnlyLine(String line) {
-        return line.startsWith("//") || line.startsWith("/*") && line.endsWith("*/");
-    }
-
     private int currentIndentedWidth(String text) {
         return options.indentUnit().length() + text.length();
     }

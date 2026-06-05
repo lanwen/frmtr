@@ -3364,7 +3364,8 @@ final class JavaPrinter {
     }
 
     private Optional<Doc> assignmentWithConditionalValue(AssignExpr assignExpr, ConditionalExpr conditionalExpr) {
-        if (shouldBreakBeforeConditionalInitializer(conditionalExpr)) {
+        if (shouldBreakBeforeConditionalInitializer(conditionalExpr)
+                || shouldBreakBeforeConditionalAssignment(conditionalExpr)) {
             return Optional.of(Doc.concat(
                     expression(assignExpr.getTarget()),
                     Doc.text(" " + assignExpr.getOperator().asString()),
@@ -3382,6 +3383,11 @@ final class JavaPrinter {
                     conditionalExpression(conditionalExpr, true)));
         }
         return Optional.empty();
+    }
+
+    private boolean shouldBreakBeforeConditionalAssignment(ConditionalExpr conditionalExpr) {
+        return conditionalExpr.getCondition() instanceof BinaryExpr binaryExpr
+                && binaryExpr.findAll(MethodCallExpr.class).stream().findAny().isPresent();
     }
 
     private Doc textBlockLiteral(TextBlockLiteralExpr expression) {

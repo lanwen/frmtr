@@ -1135,6 +1135,32 @@ final class FrmtrTest {
     }
 
     @Test
+    void breaksAssignmentBeforeMethodCallComparisonConditionalValue() {
+        String source = """
+                class Demo {
+                    void method() {
+                        aaaaaaaaaa = bbbbbbbbbb(cccccccccc, dddddddddd, eeeeeeeeee) != ffffffffff ? gggggggggg : hhhhhhhhhh;
+                    }
+                }
+                """;
+        FormatterOptions options = new FormatterOptions(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted)
+                .contains("aaaaaaaaaa =\n"
+                        + "      bbbbbbbbbb(cccccccccc, dddddddddd, eeeeeeeeee) != ffffffffff\n"
+                        + "        ? gggggggggg\n"
+                        + "        : hhhhhhhhhh;");
+    }
+
+    @Test
     void preservesCommentsInBrokenBinaryContinuationLines() {
         String source = """
                 class Demo {

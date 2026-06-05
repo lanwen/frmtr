@@ -8,3 +8,8 @@
 ## Tests
 
 - Use AssertJ for assertions.
+
+## Formatter helper comments
+
+- When extracting formatter helper modules, add Javadocs in the same style as `RawSource`, `CommentedTokenText`, and `FormatterPragmas`: explain what concern the helper owns, why the boundary exists, and what decisions it intentionally leaves to the caller.
+- Add method-level Javadocs when a helper method preserves source-formatting nuance that is not obvious from the method name.

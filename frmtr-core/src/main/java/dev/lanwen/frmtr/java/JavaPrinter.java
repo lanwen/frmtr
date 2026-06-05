@@ -101,11 +101,13 @@ final class JavaPrinter {
     private final JavaFormatter.CommentTracker comments = new JavaFormatter.CommentTracker();
     private final FormatterOptions options;
     private final RawSource rawSource;
-    private boolean formattingDisabled;
+    private final FormatterPragmas formatterPragmas = new FormatterPragmas();
+    private final MemberBlockPrinter memberBlocks;
 
     JavaPrinter(FormatterOptions options) {
         this.options = options;
         this.rawSource = new RawSource(options);
+        this.memberBlocks = new MemberBlockPrinter(rawSource, comments, this::hasDeclarationAnnotations);
     }
 
     Doc print(CompilationUnit unit) {
@@ -577,26 +579,18 @@ final class JavaPrinter {
     }
 
     private Doc body(BodyDeclaration<?> declaration) {
-        FormatterPragma formatterPragma = formatterPragma(declaration);
-        if (formatterPragma == FormatterPragma.ON) {
-            formattingDisabled = false;
+        FormatterPragmas.PrintAction action = formatterPragmas.bodyAction(declaration);
+        if (action == FormatterPragmas.PrintAction.FORMAT_WITH_LEADING) {
             return Doc.concat(comments.leading(declaration), bodyContent(declaration));
-        } else if (formatterPragma == FormatterPragma.END) {
-            formattingDisabled = false;
-            return Doc.concat(comments.leading(declaration), bodyContent(declaration));
-        } else if (formatterPragma == FormatterPragma.OFF) {
-            formattingDisabled = true;
-            return Doc.concat(comments.leading(declaration), Doc.text(rawSource.rawWithoutOwnComment(declaration)));
-        } else if (formatterPragma == FormatterPragma.START) {
-            formattingDisabled = true;
-            return Doc.concat(comments.leading(declaration), Doc.text(rawSource.rawWithoutOwnComment(declaration)));
-        } else if (formatterPragma == FormatterPragma.IGNORE) {
-            return Doc.concat(comments.leading(declaration), Doc.text(rawSource.rawWithoutOwnComment(declaration)));
         }
-        if (formattingDisabled) {
-            return Doc.concat(comments.leading(declaration), Doc.text(rawSource.rawWithoutOwnComment(declaration)));
+        if (action == FormatterPragmas.PrintAction.RAW) {
+            return rawBody(declaration);
         }
         return bodyContent(declaration);
+    }
+
+    private Doc rawBody(BodyDeclaration<?> declaration) {
+        return Doc.concat(comments.leading(declaration), Doc.text(rawSource.rawWithoutOwnComment(declaration)));
     }
 
     private Doc bodyContent(BodyDeclaration<?> declaration) {
@@ -636,7 +630,7 @@ final class JavaPrinter {
         implementsTypes(declaration.getImplementedTypes()).ifPresent(header::add);
         permitsTypes(declaration.getPermittedTypes()).ifPresent(header::add);
         header.add(Doc.text(" "));
-        header.add(memberBlock(declaration.getMembers(), declaration));
+        header.add(memberBlocks.memberBlock(declaration.getMembers(), declaration, this::body));
         return Doc.concat(header);
     }
 
@@ -765,7 +759,7 @@ final class JavaPrinter {
         typeClause("implements", declaration.getImplementedTypes(), breakClauses).ifPresent(header::add);
         typeClause("permits", declaration.getPermittedTypes(), breakClauses).ifPresent(header::add);
         header.add(emptyMemberBlock(declaration) || !breakClauses ? Doc.text(" ") : Doc.HARD_LINE);
-        header.add(memberBlock(declaration.getMembers(), declaration));
+        header.add(memberBlocks.memberBlock(declaration.getMembers(), declaration, this::body));
         return Doc.concat(header);
     }
 
@@ -823,7 +817,7 @@ final class JavaPrinter {
         header.add(recordParameters(declaration, breakParameters));
         recordImplementsTypes(declaration, breakParameters).ifPresent(header::add);
         header.add(recordBodyBreak(declaration) ? Doc.HARD_LINE : Doc.text(" "));
-        header.add(memberBlock(declaration.getMembers(), declaration));
+        header.add(memberBlocks.memberBlock(declaration.getMembers(), declaration, this::body));
         return Doc.concat(header);
     }
 
@@ -1979,157 +1973,6 @@ final class JavaPrinter {
                 block(declaration.getBody()));
     }
 
-    private Doc openingBraceTrailingLineComment(Node node) {
-        String raw = rawSource.raw(node);
-        int openingBrace = raw.indexOf('{');
-        if (openingBrace < 0) {
-            return Doc.EMPTY;
-        }
-        int commentStart = raw.indexOf("//", openingBrace);
-        if (commentStart < 0 || raw.substring(openingBrace, commentStart).contains("\n")) {
-            return Doc.EMPTY;
-        }
-        int commentEnd = raw.indexOf('\n', commentStart);
-        String comment = commentEnd < 0 ? raw.substring(commentStart) : raw.substring(commentStart, commentEnd);
-        return Doc.text(comment.stripTrailing());
-    }
-
-    private Doc memberBlock(NodeList<BodyDeclaration<?>> members, Node owner) {
-        List<Doc> memberDocs = new ArrayList<>(members.stream().map(this::body).toList());
-        Doc openingBraceTrailingComment = openingBraceTrailingLineComment(owner);
-        if (memberDocs.isEmpty()) {
-            List<Doc> orphanComments = comments.orphanCommentStatements(owner);
-            if (openingBraceTrailingComment == Doc.EMPTY && orphanComments.isEmpty()) {
-                return Doc.text("{}");
-            }
-            List<Doc> comments = new ArrayList<>();
-            if (openingBraceTrailingComment != Doc.EMPTY) {
-                comments.add(openingBraceTrailingComment);
-            }
-            comments.addAll(orphanComments);
-            return Doc.concat(
-                    Doc.text("{"),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, comments))),
-                    Doc.HARD_LINE,
-                    Doc.text("}"));
-        }
-        Doc contents = memberContents(owner, members, memberDocs);
-        if (openingBraceTrailingComment != Doc.EMPTY) {
-            contents = Doc.concat(openingBraceTrailingComment, Doc.HARD_LINE, contents);
-        }
-        return Doc.concat(
-                Doc.text("{"),
-                Doc.indent(Doc.concat(memberBlockOpeningBreak(owner), contents)),
-                Doc.HARD_LINE,
-                Doc.text("}"));
-    }
-
-    private Doc memberBlockOpeningBreak(Node owner) {
-        if (owner instanceof RecordDeclaration
-                || owner instanceof ClassOrInterfaceDeclaration declaration && declaration.isInterface()) {
-            return Doc.HARD_LINE;
-        }
-        return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
-    }
-
-    private Doc memberContents(Node owner, NodeList<BodyDeclaration<?>> members, List<Doc> memberDocs) {
-        List<Doc> contents = new ArrayList<>();
-        List<Comment> orphanComments = owner.getOrphanComments().stream()
-                .sorted(Comparator.comparingInt(this::commentBeginLine))
-                .toList();
-        int orphanIndex = 0;
-        int previousEndLine = Integer.MIN_VALUE;
-        BodyDeclaration<?> previousMember = null;
-        boolean previousWasMember = false;
-        for (int i = 0; i < memberDocs.size(); i++) {
-            BodyDeclaration<?> currentMember = members.get(i);
-            int currentBeginLine = beginLine(currentMember);
-            while (orphanIndex < orphanComments.size()
-                    && commentBeginLine(orphanComments.get(orphanIndex)) < currentBeginLine) {
-                Comment comment = orphanComments.get(orphanIndex++);
-                addMemberContentSeparator(
-                        contents, owner, previousEndLine, commentBeginLine(comment), previousWasMember, null, null);
-                Doc commentDoc = comments.comment(comment);
-                if (commentDoc != Doc.EMPTY) {
-                    contents.add(commentDoc);
-                    previousEndLine = commentEndLine(comment);
-                    previousWasMember = false;
-                }
-            }
-            addMemberContentSeparator(
-                    contents, owner, previousEndLine, currentBeginLine, previousWasMember, previousMember, currentMember);
-            contents.add(memberDocs.get(i));
-            previousEndLine = endLine(currentMember);
-            previousMember = currentMember;
-            previousWasMember = true;
-        }
-        while (orphanIndex < orphanComments.size()) {
-            Comment comment = orphanComments.get(orphanIndex++);
-            addMemberContentSeparator(
-                    contents, owner, previousEndLine, commentBeginLine(comment), previousWasMember, null, null);
-            Doc commentDoc = comments.comment(comment);
-            if (commentDoc != Doc.EMPTY) {
-                contents.add(commentDoc);
-                previousEndLine = commentEndLine(comment);
-                previousWasMember = false;
-            }
-        }
-        return Doc.concat(contents);
-    }
-
-    private void addMemberContentSeparator(
-            List<Doc> contents,
-            Node owner,
-            int previousEndLine,
-            int currentBeginLine,
-            boolean previousWasMember,
-            BodyDeclaration<?> previousMember,
-            BodyDeclaration<?> currentMember) {
-        if (contents.isEmpty()) {
-            return;
-        }
-        if (previousWasMember && previousMember != null && currentMember != null) {
-            contents.add(memberSeparator(owner, previousMember, currentMember));
-            return;
-        }
-        contents.add(sourceLineSeparator(previousEndLine, currentBeginLine));
-    }
-
-    private Doc sourceLineSeparator(int previousEndLine, int currentBeginLine) {
-        return currentBeginLine > previousEndLine + 1 ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;
-    }
-
-    private int beginLine(Node node) {
-        return node.getRange().map(range -> range.begin.line).orElse(Integer.MAX_VALUE);
-    }
-
-    private int endLine(Node node) {
-        return node.getRange().map(range -> range.end.line).orElse(Integer.MAX_VALUE);
-    }
-
-    private Doc memberSeparator(Node owner, BodyDeclaration<?> previous, BodyDeclaration<?> current) {
-        if (owner instanceof ClassOrInterfaceDeclaration declaration
-                && declaration.isInterface()
-                && previous instanceof MethodDeclaration previousMethod
-                && current instanceof MethodDeclaration currentMethod
-                && previousMethod.getBody().isEmpty()
-                && currentMethod.getBody().isEmpty()
-                && !hasDeclarationAnnotations(previous)
-                && !hasDeclarationAnnotations(current)) {
-            return Doc.HARD_LINE;
-        }
-        if (!(previous instanceof FieldDeclaration) || !(current instanceof FieldDeclaration)) {
-            return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
-        }
-        boolean hasBlankLineBetween = previous.getRange()
-                .flatMap(previousRange -> current.getRange()
-                        .map(currentRange -> currentRange.begin.line > previousRange.end.line + 1))
-                .orElse(true);
-        return hasBlankLineBetween || hasDeclarationAnnotations(previous) || hasDeclarationAnnotations(current)
-                ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE)
-                : Doc.HARD_LINE;
-    }
-
     private Doc parameters(NodeList<Parameter> parameters) {
         return Doc.group(Doc.concat(
                 Doc.text("("),
@@ -2356,8 +2199,7 @@ final class JavaPrinter {
         if (previousStatement == null) {
             return Doc.HARD_LINE;
         }
-        if (formatterPragma(previousStatement) != FormatterPragma.NONE
-                || formatterPragma(currentStatement) != FormatterPragma.NONE) {
+        if (formatterPragmas.hasPragma(previousStatement) || formatterPragmas.hasPragma(currentStatement)) {
             return Doc.HARD_LINE;
         }
         boolean hasBlankLineBetween = previousStatement.getRange()
@@ -2376,22 +2218,12 @@ final class JavaPrinter {
     }
 
     private Doc statement(Statement statement) {
-        FormatterPragma formatterPragma = formatterPragma(statement);
-        if (formatterPragma == FormatterPragma.ON) {
-            formattingDisabled = false;
-        } else if (formatterPragma == FormatterPragma.END) {
-            formattingDisabled = false;
-        } else if (formatterPragma == FormatterPragma.OFF) {
-            formattingDisabled = true;
-        } else if (formatterPragma == FormatterPragma.START) {
-            formattingDisabled = true;
-        } else if (formatterPragma == FormatterPragma.IGNORE) {
-            Doc leading = statement instanceof TryStmt ? Doc.EMPTY : comments.leading(statement);
-            return Doc.concat(leading, Doc.text(rawSource.rawWithoutOwnComment(statement)), Doc.HARD_LINE);
+        FormatterPragmas.PrintAction action = formatterPragmas.statementAction(statement);
+        if (action == FormatterPragmas.PrintAction.RAW_WITH_TRAILING_HARD_LINE) {
+            return Doc.concat(rawStatement(statement), Doc.HARD_LINE);
         }
-        if (formattingDisabled) {
-            Doc leading = statement instanceof TryStmt ? Doc.EMPTY : comments.leading(statement);
-            return Doc.concat(leading, Doc.text(rawSource.rawWithoutOwnComment(statement)));
+        if (action == FormatterPragmas.PrintAction.RAW) {
+            return rawStatement(statement);
         }
         boolean inlineBreakBlockComment = statement instanceof BreakStmt
                 && statement.getComment().filter(BlockComment.class::isInstance).isPresent();
@@ -2430,6 +2262,11 @@ final class JavaPrinter {
             default -> Doc.text(compact(statement));
         };
         return Doc.concat(leading, body, trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing));
+    }
+
+    private Doc rawStatement(Statement statement) {
+        Doc leading = statement instanceof TryStmt ? Doc.EMPTY : comments.leading(statement);
+        return Doc.concat(leading, Doc.text(rawSource.rawWithoutOwnComment(statement)));
     }
 
     private Doc breakStatement(BreakStmt statement) {
@@ -2798,30 +2635,6 @@ final class JavaPrinter {
                                 .toList()))),
                 Doc.SOFT_LINE,
                 Doc.text(")")));
-    }
-
-    private FormatterPragma formatterPragma(Node node) {
-        return node.getComment()
-                .map(comment -> {
-                    String content = comment.getContent();
-                    if (content.contains("@formatter:off")) {
-                        return FormatterPragma.OFF;
-                    }
-                    if (content.contains("@formatter:on")) {
-                        return FormatterPragma.ON;
-                    }
-                    if (content.contains("prettier-ignore-start")) {
-                        return FormatterPragma.START;
-                    }
-                    if (content.contains("prettier-ignore-end")) {
-                        return FormatterPragma.END;
-                    }
-                    if (content.contains("prettier-ignore")) {
-                        return FormatterPragma.IGNORE;
-                    }
-                    return FormatterPragma.NONE;
-                })
-                .orElse(FormatterPragma.NONE);
     }
 
     private Doc expressionStatement(ExpressionStmt statement) {
@@ -6367,15 +6180,6 @@ final class JavaPrinter {
         Node clone = node.clone();
         clone.removeComment();
         return compact(clone);
-    }
-
-    private enum FormatterPragma {
-        OFF,
-        ON,
-        START,
-        END,
-        IGNORE,
-        NONE
     }
 
     private enum MethodCallMode {

@@ -3,11 +3,21 @@ package dev.lanwen.frmtr.java;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Tokenizes Java source fragments that contain comments interleaved with punctuation-sensitive syntax.
+ *
+ * <p>This helper exists for formatter paths that still need to reshape partially commented declarations, such as module
+ * and interface headers, without losing comment placement. It intentionally does not parse Java, choose line breaks for
+ * general AST nodes, or decide whether commented source should be formatted structurally or preserved as raw text.
+ */
 final class CommentedTokenText {
     private static final String COMMENTED_TOKEN_PUNCTUATION = "{};,().";
 
     private CommentedTokenText() {}
 
+    /**
+     * Splits one source line into lightweight tokens while keeping block and line comments as indivisible tokens.
+     */
     static List<String> tokens(String line) {
         List<String> tokens = new ArrayList<>();
         int cursor = 0;
@@ -50,10 +60,16 @@ final class CommentedTokenText {
         return tokens;
     }
 
+    /**
+     * Reports whether a token came from a Java line or block comment.
+     */
     static boolean isComment(String token) {
         return token.startsWith("/*") || token.startsWith("//");
     }
 
+    /**
+     * Appends already-rendered token groups with one separating space when needed.
+     */
     static void appendSpaceSeparated(StringBuilder out, List<String> values) {
         for (String value : values) {
             if (!out.isEmpty() && out.charAt(out.length() - 1) != ' ') {
@@ -63,6 +79,10 @@ final class CommentedTokenText {
         }
     }
 
+    /**
+     * Rebuilds a qualified name from tokens, preserving comments around dots in the source-compatible order needed by
+     * module and interface formatting.
+     */
     static String qualifiedName(List<String> tokens, boolean moveCommentsAfterDotBeforeDot) {
         StringBuilder out = new StringBuilder();
         int cursor = 0;
@@ -103,6 +123,10 @@ final class CommentedTokenText {
         return out.toString().strip();
     }
 
+    /**
+     * Partitions token streams at top-level commas for commented constructs that need to format each segment
+     * independently.
+     */
     static List<List<String>> commaSeparated(List<String> tokens) {
         List<List<String>> parts = new ArrayList<>();
         List<String> current = new ArrayList<>();
@@ -118,6 +142,9 @@ final class CommentedTokenText {
         return parts;
     }
 
+    /**
+     * Rebuilds a single line from tokens with Java punctuation spacing suitable for commented source fragments.
+     */
     static String tokenLine(List<String> tokens) {
         StringBuilder out = new StringBuilder();
         for (String token : tokens) {

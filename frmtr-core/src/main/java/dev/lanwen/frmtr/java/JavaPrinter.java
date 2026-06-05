@@ -91,6 +91,7 @@ final class JavaPrinter {
     private final ObjectCreationPrinter objectCreations;
     private final TextBlockPrinter textBlocks;
     private final CastExpressionPrinter casts;
+    private final InstanceOfExpressionPrinter instanceOfExpressions;
     private final MethodCallPrinter methodCalls;
     private final CallableSignaturePrinter callableSignatures;
     private final ConstructorDeclarationPrinter constructors;
@@ -203,6 +204,12 @@ final class JavaPrinter {
         this.casts = new CastExpressionPrinter(
                 options,
                 this::expression,
+                this::compactTypeLike,
+                this::currentIndentedWidth);
+        this.instanceOfExpressions = new InstanceOfExpressionPrinter(
+                options,
+                this::expression,
+                this::compact,
                 this::compactTypeLike,
                 this::currentIndentedWidth);
         this.methodCalls = new MethodCallPrinter(
@@ -687,7 +694,7 @@ final class JavaPrinter {
             return fieldAccess(fieldAccessExpr);
         }
         if (expression instanceof InstanceOfExpr instanceOfExpr) {
-            return instanceOfExpression(instanceOfExpr);
+            return instanceOfExpressions.instanceOfExpression(instanceOfExpr);
         }
         if (expression instanceof LambdaExpr lambdaExpr) {
             return lambdas.lambdaExpression(lambdaExpr);
@@ -743,19 +750,6 @@ final class JavaPrinter {
             return Doc.concat(scope, nameComment, Doc.HARD_LINE, Doc.text("." + expression.getNameAsString()));
         }
         return Doc.concat(scope, Doc.text("." + expression.getNameAsString()));
-    }
-
-    private Doc instanceOfExpression(InstanceOfExpr expression) {
-        String flat = compact(expression);
-        if (currentIndentedWidth(flat) <= options.lineWidth()) {
-            return Doc.text(flat);
-        }
-        Doc left = expression(expression.getExpression());
-        String right = expression.getPattern().map(this::compact).orElseGet(() -> compactTypeLike(expression.getType()));
-        if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.START) {
-            return Doc.concat(left, Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text("instanceof " + right))));
-        }
-        return Doc.concat(left, Doc.text(" instanceof"), Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(right))));
     }
 
     private Optional<Doc> suffixedEnclosedExpression(Expression expression, boolean leadingBreak) {

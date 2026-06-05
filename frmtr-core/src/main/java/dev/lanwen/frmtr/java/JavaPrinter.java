@@ -4229,11 +4229,18 @@ final class JavaPrinter {
         if (expression.getBody().isBlockStmt()) {
             return Doc.concat(lambdaParametersForHeader(expression, parameters), Doc.text(" -> "), block(expression.getBody().asBlockStmt()));
         }
+        boolean parametersHaveComments = lambdaParametersHaveComments(expression);
         String flat = parameters + " -> " + expression.getExpressionBody()
                 .map(this::compact)
                 .orElseGet(() -> compact(expression.getBody()));
-        if (currentIndentedWidth(flat) <= options.lineWidth()) {
+        if (!parametersHaveComments && currentIndentedWidth(flat) <= options.lineWidth()) {
             return Doc.text(flat);
+        }
+        if (parametersHaveComments && expression.getExpressionBody().isPresent()) {
+            Expression body = expression.getExpressionBody().orElseThrow();
+            if (currentIndentedWidth(") -> " + compact(body)) <= options.lineWidth()) {
+                return Doc.concat(lambdaParametersForHeader(expression, parameters), Doc.text(" -> "), expression(body));
+            }
         }
         if (lambdaParametersShouldBreak(expression, parameters)
                 && expression.getExpressionBody().filter(this::shouldHugBrokenLambdaBody).isPresent()) {
@@ -4269,6 +4276,9 @@ final class JavaPrinter {
     }
 
     private Doc lambdaParametersForHeader(LambdaExpr expression, String flatParameters) {
+        if (lambdaParametersHaveComments(expression)) {
+            return commentedLambdaParametersForHeader(expression);
+        }
         if (!lambdaParametersShouldBreak(expression, flatParameters)) {
             return Doc.text(flatParameters);
         }
@@ -4281,6 +4291,85 @@ final class JavaPrinter {
                                 .toList()))),
                 Doc.HARD_LINE,
                 Doc.text(")"));
+    }
+
+    private Doc commentedLambdaParametersForHeader(LambdaExpr expression) {
+        return Doc.concat(
+                Doc.text("("),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(Doc.HARD_LINE, commentedLambdaParameterLines(expression).stream()
+                                .map(Doc::text)
+                                .toList()))),
+                Doc.HARD_LINE,
+                Doc.text(")"));
+    }
+
+    private List<String> commentedLambdaParameterLines(LambdaExpr expression) {
+        String parameterText = lambdaParameterText(expression).orElseGet(() -> compactJoin(expression.getParameters()));
+        if (parameterText.startsWith("(") && parameterText.endsWith(")")) {
+            parameterText = parameterText.substring(1, parameterText.length() - 1);
+        }
+        List<String> lines = new ArrayList<>();
+        for (String rawLine : parameterText.lines().map(String::strip).toList()) {
+            if (rawLine.isEmpty()) {
+                continue;
+            }
+            addCommentedLambdaParameterLine(lines, rawLine);
+        }
+        return lines;
+    }
+
+    private void addCommentedLambdaParameterLine(List<String> lines, String rawLine) {
+        int lineComment = rawLine.indexOf("//");
+        if (lineComment >= 0) {
+            String beforeComment = rawLine.substring(0, lineComment).stripTrailing();
+            String comment = rawLine.substring(lineComment).stripTrailing();
+            if (beforeComment.isBlank()) {
+                lines.add(comment);
+                return;
+            }
+            addCommaSeparatedLambdaParameters(lines, beforeComment, comment);
+            return;
+        }
+        if (rawLine.startsWith("/*")) {
+            lines.add(rawLine);
+            return;
+        }
+        addCommaSeparatedLambdaParameters(lines, rawLine, "");
+    }
+
+    private void addCommaSeparatedLambdaParameters(List<String> lines, String text, String trailingComment) {
+        boolean lineEndsWithComma = text.stripTrailing().endsWith(",");
+        String[] parameters = text.split(",");
+        for (int i = 0; i < parameters.length; i++) {
+            String parameter = parameters[i].strip();
+            if (parameter.isEmpty()) {
+                continue;
+            }
+            boolean last = i == parameters.length - 1;
+            if (!last) {
+                lines.add(parameter + ",");
+            } else if (!trailingComment.isBlank()) {
+                lines.add(parameter + (lineEndsWithComma ? ", " : " ") + trailingComment);
+            } else {
+                lines.add(parameter + (lineEndsWithComma ? "," : ""));
+            }
+        }
+    }
+
+    private boolean lambdaParametersHaveComments(LambdaExpr expression) {
+        return lambdaParameterText(expression)
+                .map(parameterText -> parameterText.contains("//") || parameterText.contains("/*"))
+                .orElseGet(() -> expression.getParameters().stream()
+                        .anyMatch(parameter -> !parameter.getAllContainedComments().isEmpty()));
+    }
+
+    private Optional<String> lambdaParameterText(LambdaExpr expression) {
+        return expression.getTokenRange()
+                .map(Object::toString)
+                .filter(raw -> raw.contains("->"))
+                .map(raw -> raw.substring(0, raw.indexOf("->")).strip());
     }
 
     private boolean lambdaParametersShouldBreak(LambdaExpr expression, String flatParameters) {

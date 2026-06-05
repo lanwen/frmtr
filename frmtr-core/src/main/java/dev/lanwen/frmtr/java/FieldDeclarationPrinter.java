@@ -42,7 +42,8 @@ import java.util.function.Predicate;
  * after {@code =}, source-leading initializer line comments, and the field-width forks that decide when array creation,
  * object creation, method-call chains, conditional expressions, and lambda parameters should break. It intentionally
  * delegates general expression, type, method-call, binary-expression, object-creation, lambda, and raw-source-sensitive
- * formatting back to {@link JavaPrinter} callbacks so those shared printers keep one behavior source.
+ * formatting back to {@link JavaPrinter}, {@link ObjectCreationPrinter}, and other shared-printer callbacks so those
+ * shared printers keep one behavior source.
  *
  * <p>Representative fixture pairs live at
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/variables/input.java} and

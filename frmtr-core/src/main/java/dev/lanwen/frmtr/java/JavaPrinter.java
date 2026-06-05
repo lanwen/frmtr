@@ -96,6 +96,7 @@ final class JavaPrinter {
     private final ConditionalExpressionPrinter conditionals;
     private final LambdaExpressionPrinter lambdas;
     private final ArrayExpressionPrinter arrays;
+    private final ObjectCreationPrinter objectCreations;
     private final MethodCallPrinter methodCalls;
     private final CallableSignaturePrinter callableSignatures;
     private final ConstructorDeclarationPrinter constructors;
@@ -185,13 +186,24 @@ final class JavaPrinter {
                 this::currentIndentedWidth,
                 this::startsBefore,
                 this::startsAfterNodeOnSameLine);
+        this.objectCreations = new ObjectCreationPrinter(
+                comments,
+                types,
+                this::expression,
+                lambdas::huggableBlockLambdaArguments,
+                this::body,
+                this::compact,
+                this::compactJoin,
+                this::compactTypeLike,
+                this::compactTypeLikeWithoutOwnComment,
+                this::commentText);
         this.methodCalls = new MethodCallPrinter(
                 comments,
                 options,
                 types,
                 this::expression,
                 this::brokenEnclosedForSuffix,
-                this::brokenObjectCreation,
+                objectCreations::brokenObjectCreation,
                 lambdas::huggableBlockLambdaArguments,
                 lambdas::commentedExpressionLambdaArgument,
                 lambdas::huggableMethodCallExpressionLambdaArguments,
@@ -242,7 +254,7 @@ final class JavaPrinter {
                 arrays::arrayCreationTypeBreaks,
                 arrays::arrayCreationPrefix,
                 arrays::arrayInitializer,
-                this::objectCreationPrefix,
+                objectCreations::objectCreationPrefix,
                 types::typeNameWithoutArguments,
                 types::brokenClassOrInterfaceType,
                 methodCalls::shouldPrintScopeAsDoc,
@@ -610,7 +622,7 @@ final class JavaPrinter {
                     return Doc.concat(
                             expression(assignExpr.getTarget()),
                             Doc.text(" " + assignExpr.getOperator().asString() + " "),
-                            brokenObjectCreation(objectCreationExpr));
+                            objectCreations.brokenObjectCreation(objectCreationExpr));
                 }
                 if (assignExpr.getValue() instanceof MethodCallExpr methodCall) {
                     Optional<Doc> methodCallAssignment =
@@ -678,7 +690,7 @@ final class JavaPrinter {
             return methodReference(methodReferenceExpr);
         }
         if (expression instanceof ObjectCreationExpr objectCreationExpr) {
-            return objectCreation(objectCreationExpr);
+            return objectCreations.objectCreation(objectCreationExpr);
         }
         if (expression instanceof SwitchExpr switchExpr) {
             return switches.switchExpression(switchExpr);
@@ -1133,92 +1145,6 @@ final class JavaPrinter {
             return left.begin.line < right.begin.line;
         }
         return left.begin.column < right.begin.column;
-    }
-
-    private Doc objectCreation(ObjectCreationExpr expression) {
-        return objectCreation(expression, false);
-    }
-
-    private Doc brokenObjectCreation(ObjectCreationExpr expression) {
-        return objectCreation(expression, true);
-    }
-
-    private Doc objectCreation(ObjectCreationExpr expression, boolean forceBreak) {
-        String prefix = objectCreationPrefix(expression);
-        if (expression.getAnonymousClassBody().isPresent()) {
-            return anonymousObjectCreation(expression, prefix);
-        }
-        if (expression.getArguments().isEmpty()) {
-            return objectCreationWithBrokenType(expression).orElseGet(() -> Doc.text(prefix + "()"));
-        }
-        Optional<Doc> huggableLambda = lambdas.huggableBlockLambdaArguments(prefix, expression.getArguments());
-        if (huggableLambda.isPresent()) {
-            return huggableLambda.orElseThrow();
-        }
-        Doc call = Doc.concat(
-                Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(
-                        methodCalls.methodCallLine(forceBreak),
-                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), expression.getArguments().stream()
-                                .map(this::expression)
-                                .toList()))),
-                methodCalls.methodCallLine(forceBreak),
-                Doc.text(")"));
-        return forceBreak ? call : Doc.group(call);
-    }
-
-    private String objectCreationPrefix(ObjectCreationExpr expression) {
-        Doc creationComment = comments.ownComment(expression, BlockComment.class::isInstance);
-        Doc typeComment = comments.ownComment(expression.getType(), BlockComment.class::isInstance);
-        String type = typeComment == Doc.EMPTY
-                ? compactTypeLike(expression.getType())
-                : commentText(typeComment) + " " + compactTypeLikeWithoutOwnComment(expression.getType());
-        return expression.getScope().map(scope -> compact(scope) + ".").orElse("")
-                + (creationComment == Doc.EMPTY ? "new " : commentText(creationComment) + " new ")
-                + expression.getTypeArguments().map(typeArguments -> "<" + types.compactJoinTypeLike(typeArguments) + ">").orElse("")
-                + type;
-    }
-
-    private Optional<Doc> objectCreationWithBrokenType(ObjectCreationExpr expression) {
-        if (expression.getScope().isPresent()
-                || expression.getTypeArguments().isPresent()
-                || expression.getComment().filter(BlockComment.class::isInstance).isPresent()
-                || expression.getType().getComment().filter(BlockComment.class::isInstance).isPresent()
-                || !types.typeCanBreak(expression.getType())) {
-            return Optional.empty();
-        }
-        return Optional.of(Doc.group(Doc.concat(Doc.text("new "), types.typeBody(expression.getType()), Doc.text("()"))));
-    }
-
-    private Doc anonymousObjectCreation(ObjectCreationExpr expression, String prefix) {
-        String arguments = expression.getArguments().isEmpty()
-                ? ""
-                : compactJoin(expression.getArguments());
-        Doc header = Doc.text(prefix + "(" + arguments + ") ");
-        List<BodyDeclaration<?>> declarations = expression.getAnonymousClassBody().orElseThrow();
-        List<Doc> members = declarations.stream().map(this::body).toList();
-        if (members.isEmpty()) {
-            return Doc.concat(header, Doc.text("{}"));
-        }
-        return Doc.concat(
-                header,
-                Doc.text("{"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, anonymousClassMembers(declarations, members))),
-                Doc.HARD_LINE,
-                Doc.text("}"));
-    }
-
-    private Doc anonymousClassMembers(List<BodyDeclaration<?>> declarations, List<Doc> members) {
-        List<Doc> docs = new ArrayList<>();
-        for (int index = 0; index < members.size(); index++) {
-            if (index > 0) {
-                boolean adjacentFields = declarations.get(index - 1) instanceof FieldDeclaration
-                        && declarations.get(index) instanceof FieldDeclaration;
-                docs.add(adjacentFields ? Doc.HARD_LINE : Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE));
-            }
-            docs.add(members.get(index));
-        }
-        return Doc.concat(docs);
     }
 
     private Doc variableDeclaration(VariableDeclarationExpr declaration) {

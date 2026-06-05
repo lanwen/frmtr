@@ -32,9 +32,10 @@ import java.util.function.ToIntFunction;
  * call or constructor call. The boundary exists because lambdas are selected by normal expression dispatch, but their
  * argument forms also affect method-call and object-creation layout.
  *
- * <p>{@link JavaPrinter} still owns broad expression dispatch, object creation, enclosed-expression suffix decisions,
- * raw source helpers, range predicates, and binary-expression policy. {@link MethodCallPrinter} still owns call and
- * chain layout. This helper receives those decisions as callbacks and only chooses the lambda-specific structure.
+ * <p>{@link JavaPrinter} still owns broad expression dispatch, enclosed-expression suffix decisions, raw source
+ * helpers, range predicates, and binary-expression policy. {@link ObjectCreationPrinter} owns constructor layout, and
+ * {@link MethodCallPrinter} still owns call and chain layout. This helper receives those decisions as callbacks and
+ * only chooses the lambda-specific structure.
  * Representative fixture pairs for this boundary include
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/lambda/arrow-parens-always/input.java} with
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/lambda/arrow-parens-always/frmtr.output.java},

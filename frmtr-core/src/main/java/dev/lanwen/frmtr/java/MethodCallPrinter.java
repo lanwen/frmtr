@@ -33,8 +33,9 @@ import java.util.function.ToIntFunction;
  * <p>This helper owns the call-specific decision tree: auto versus forced chain breaks, compact root plus broken final
  * segment handling, mixed field/method chains, name comments on chain segments, empty argument comments, text-block
  * arguments, and single binary arguments. The boundary exists so {@link JavaPrinter} can keep broad expression
- * dispatch, enclosed suffix breaking, object creation, and binary-expression policy in their current owners while
- * lambda argument rendering stays in {@link LambdaExpressionPrinter} and method-call layout reads as one state machine.
+ * dispatch, enclosed suffix breaking, and binary-expression policy in their current owners while object creation stays
+ * in {@link ObjectCreationPrinter}, lambda argument rendering stays in {@link LambdaExpressionPrinter}, and method-call
+ * layout reads as one state machine.
  *
  * <p>Representative fixture pairs live at
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/member_chain/input.java} with

@@ -42,9 +42,8 @@ class ConditionalExpression {
               b
             : // c
               c;
-        value = a
-            ? // b
-              b
+        value = a // b
+            ? b
             : // c
               c;
         value = a

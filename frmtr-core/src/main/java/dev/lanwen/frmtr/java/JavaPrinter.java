@@ -3705,8 +3705,17 @@ final class JavaPrinter {
                 .filter(LineComment.class::isInstance);
         Optional<Comment> elseComment = expression.getElseExpr().getComment()
                 .filter(LineComment.class::isInstance);
+        Optional<Comment> leadingThenComment =
+                thenComment.filter(comment -> startsBefore(comment, expression.getThenExpr()));
+        Optional<Comment> conditionTrailingComment =
+                conditionComment
+                        .filter(comment -> conditionalQuestionCommentTrailsCondition(expression, comment))
+                        .or(() -> leadingThenComment
+                                .filter(comment -> conditionalQuestionCommentTrailsCondition(expression, comment)));
         Optional<Comment> questionComment = conditionComment
-                .or(() -> thenComment.filter(comment -> startsBefore(comment, expression.getThenExpr())));
+                .filter(comment -> !conditionalQuestionCommentTrailsCondition(expression, comment))
+                .or(() -> leadingThenComment
+                        .filter(comment -> !conditionalQuestionCommentTrailsCondition(expression, comment)));
         Optional<Comment> thenTrailingComment = thenComment
                 .filter(comment -> !startsBefore(comment, expression.getThenExpr()))
                 .filter(comment -> !commentAppearsAfterColon(expression, comment));
@@ -3719,12 +3728,24 @@ final class JavaPrinter {
                 .filter(comment -> !startsBefore(comment, expression.getElseExpr()))
                 .filter(comment -> !conditionalElseCommentIsStatementTrailing(expression, comment));
         return Optional.of(Doc.concat(
-                expressionWithoutOwnComment(expression.getCondition()),
+                conditionalConditionWithTrailingComment(expression.getCondition(), conditionTrailingComment),
                 Doc.indent(Doc.concat(
                         Doc.HARD_LINE,
                         conditionalCommentedBranch("?", expression.getThenExpr(), questionComment, thenTrailingComment),
                         Doc.HARD_LINE,
                         conditionalCommentedBranch(":", expression.getElseExpr(), colonComment, elseTrailingComment)))));
+    }
+
+    private Doc conditionalConditionWithTrailingComment(Expression condition, Optional<Comment> trailingComment) {
+        Doc trailing = trailingComment
+                .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
+                .orElse(Doc.EMPTY);
+        return Doc.concat(expressionWithoutOwnComment(condition), trailing);
+    }
+
+    private boolean conditionalQuestionCommentTrailsCondition(ConditionalExpr expression, Comment comment) {
+        return commentAppearsAfterOperator(expression, comment, "?")
+                && startsAfterNodeOnSameLine(expression.getCondition(), comment);
     }
 
     private Doc conditionalCommentedBranch(
@@ -3766,6 +3787,10 @@ final class JavaPrinter {
     }
 
     private boolean commentAppearsAfterColon(ConditionalExpr expression, Comment comment) {
+        return commentAppearsAfterOperator(expression, comment, ":");
+    }
+
+    private boolean commentAppearsAfterOperator(ConditionalExpr expression, Comment comment, String operator) {
         return expression.getTokenRange()
                 .flatMap(tokenRange -> expression.getRange().flatMap(expressionRange -> comment.getRange()
                         .map(commentRange -> {
@@ -3781,7 +3806,7 @@ final class JavaPrinter {
                                 return false;
                             }
                             String prefix = lines.get(lineIndex).substring(0, Math.min(column, lines.get(lineIndex).length()));
-                            return prefix.contains(":");
+                            return prefix.contains(operator);
                         })))
                 .orElse(false);
     }

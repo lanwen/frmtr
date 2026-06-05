@@ -331,6 +331,11 @@ final class FrmtrTest {
                             b : // c
                             c;
                         value = a
+                            // b
+                            ? b
+                            // c
+                            : c;
+                        value = a
                             ? b // b
                             : c; // c
                     }
@@ -350,6 +355,10 @@ final class FrmtrTest {
                 .contains("value = a\n"
                         + "      ? // b\n"
                         + "        b\n"
+                        + "      : // c\n"
+                        + "        c;")
+                .contains("value = a // b\n"
+                        + "      ? b\n"
                         + "      : // c\n"
                         + "        c;")
                 .contains("value = a\n"

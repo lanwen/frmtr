@@ -10,7 +10,6 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.AnnotationMemberDeclaration;
 import com.github.javaparser.ast.body.BodyDeclaration;
-import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.CompactConstructorDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
@@ -20,7 +19,6 @@ import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.InitializerDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
-import com.github.javaparser.ast.body.ReceiverParameter;
 import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.AnnotationExpr;
@@ -104,12 +102,25 @@ final class JavaPrinter {
     private final FormatterPragmas formatterPragmas = new FormatterPragmas();
     private final MemberBlockPrinter memberBlocks;
     private final BlockPrinter blocks;
+    private final CallableSignaturePrinter callableSignatures;
 
     JavaPrinter(FormatterOptions options) {
         this.options = options;
         this.rawSource = new RawSource(options);
         this.memberBlocks = new MemberBlockPrinter(rawSource, comments, this::hasDeclarationAnnotations);
         this.blocks = new BlockPrinter(comments, this::statement, formatterPragmas::hasPragma);
+        this.callableSignatures = new CallableSignaturePrinter(
+                comments,
+                rawSource,
+                options,
+                this::compact,
+                this::compactTypeLike,
+                this::typeBody,
+                this::modifier,
+                this::typeCanBreak,
+                this::unattachedTrailingBlockComment,
+                this::startsAfterNodeOnSameLine,
+                this::commentText);
     }
 
     Doc print(CompilationUnit unit) {
@@ -626,7 +637,7 @@ final class JavaPrinter {
         header.add(Doc.text(declaration.isInterface() ? "interface " : "class "));
         header.add(Doc.text(declaration.getNameAsString()));
         if (!declaration.getTypeParameters().isEmpty()) {
-            header.add(typeParameters(declaration.getTypeParameters()));
+            header.add(callableSignatures.typeParameters(declaration.getTypeParameters()));
         }
         extendsTypes(declaration.getExtendedTypes()).ifPresent(header::add);
         implementsTypes(declaration.getImplementedTypes()).ifPresent(header::add);
@@ -752,9 +763,11 @@ final class JavaPrinter {
         header.add(Doc.text(declaration.getNameAsString()));
         boolean breakTypeParameters = classOrInterfaceTypeParametersBreak(declaration);
         if (breakTypeParameters) {
-            header.add(brokenTypeParameters(declaration.getTypeParameters(), classOrInterfaceHeaderClauses(declaration) > 1));
+            header.add(callableSignatures.brokenTypeParameters(
+                    declaration.getTypeParameters(),
+                    classOrInterfaceHeaderClauses(declaration) > 1));
         } else if (!declaration.getTypeParameters().isEmpty()) {
-            header.add(typeParameters(declaration.getTypeParameters()));
+            header.add(callableSignatures.typeParameters(declaration.getTypeParameters()));
         }
         boolean breakClauses = classOrInterfaceHeaderClauses(declaration) > 1 || !breakTypeParameters;
         typeClause("extends", declaration.getExtendedTypes(), breakClauses).ifPresent(header::add);
@@ -812,7 +825,7 @@ final class JavaPrinter {
         String prefix = modifiers(declaration) + "record " + declaration.getNameAsString();
         header.add(Doc.text(prefix));
         if (!declaration.getTypeParameters().isEmpty()) {
-            header.add(typeParameters(declaration.getTypeParameters()));
+            header.add(callableSignatures.typeParameters(declaration.getTypeParameters()));
             prefix += flatTypeParameters(declaration.getTypeParameters());
         }
         boolean breakParameters = recordParametersBreak(prefix, declaration);
@@ -1712,7 +1725,7 @@ final class JavaPrinter {
         if (!declaration.getTypeParameters().isEmpty()) {
             String typeParameters = flatTypeParameters(declaration.getTypeParameters()) + " ";
             prefix += typeParameters;
-            docs.add(typeParameters(declaration.getTypeParameters()));
+            docs.add(callableSignatures.typeParameters(declaration.getTypeParameters()));
             docs.add(Doc.text(" "));
         }
         String signature = inlineAnnotations(declaration)
@@ -1721,7 +1734,9 @@ final class JavaPrinter {
                 + declaration.getNameAsString();
         prefix += signature;
         docs.add(Doc.text(signature));
-        docs.add(parameters(declaration, parametersBreak(prefix, declaration, methodParameterSuffix(declaration))));
+        docs.add(callableSignatures.parameters(
+                declaration,
+                callableSignatures.parametersBreak(prefix, declaration, methodParameterSuffix(declaration))));
         if (!declaration.getThrownExceptions().isEmpty()) {
             docs.add(throwsClause(
                     prefix,
@@ -1907,7 +1922,9 @@ final class JavaPrinter {
         }
         prefix += declaration.getNameAsString();
         docs.add(Doc.text(declaration.getNameAsString()));
-        docs.add(parameters(declaration, parametersBreak(prefix, declaration, " {}")));
+        docs.add(callableSignatures.parameters(
+                declaration,
+                callableSignatures.parametersBreak(prefix, declaration, " {}")));
         if (!declaration.getThrownExceptions().isEmpty()) {
             docs.add(throwsClause(prefix, declaration.getParameters(), declaration.getThrownExceptions(), " {"));
         }
@@ -1973,168 +1990,6 @@ final class JavaPrinter {
                 comments.leading(declaration),
                 declaration.isStatic() ? Doc.text("static ") : Doc.EMPTY,
                 block(declaration.getBody()));
-    }
-
-    private Doc parameters(NodeList<Parameter> parameters) {
-        return Doc.group(Doc.concat(
-                Doc.text("("),
-                Doc.indent(Doc.concat(
-                        Doc.SOFT_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), parameters.stream().map(this::parameter).toList()))),
-                Doc.SOFT_LINE,
-                Doc.text(")")));
-    }
-
-    private Doc parameters(CallableDeclaration<?> declaration) {
-        return parameters(declaration, false);
-    }
-
-    private Doc parameters(CallableDeclaration<?> declaration, boolean forceBreak) {
-        List<Doc> parameters = new ArrayList<>();
-        declaration.getReceiverParameter().map(this::receiverParameter).ifPresent(parameters::add);
-        declaration.getParameters().stream().map(this::parameter).forEach(parameters::add);
-        Doc doc = Doc.concat(
-                Doc.text("("),
-                Doc.indent(Doc.concat(
-                        forceBreak ? Doc.HARD_LINE : Doc.SOFT_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), parameters))),
-                forceBreak ? Doc.HARD_LINE : Doc.SOFT_LINE,
-                Doc.text(")"));
-        return forceBreak ? doc : Doc.group(doc);
-    }
-
-    private Doc receiverParameter(ReceiverParameter parameter) {
-        return Doc.text(compactReceiverParameter(parameter));
-    }
-
-    private String compactReceiverParameter(ReceiverParameter parameter) {
-        List<String> parts = new ArrayList<>();
-        parameter.getAnnotations().stream().map(this::compact).forEach(parts::add);
-        parts.add(compactTypeLike(parameter.getType()));
-        parts.add(receiverName(parameter));
-        return String.join(" ", parts);
-    }
-
-    private String receiverName(ReceiverParameter parameter) {
-        return parameter.getTokenRange()
-                .map(Object::toString)
-                .map(rawSource::normalizeWhitespace)
-                .map(text -> text.substring(text.lastIndexOf(' ') + 1))
-                .orElseGet(() -> compact(parameter.getName()));
-    }
-
-    private boolean parametersBreak(String prefix, CallableDeclaration<?> declaration, String suffix) {
-        String parameters = callableParameterText(declaration);
-        return currentIndentedWidth(prefix + "(" + parameters + ")" + suffix) > options.lineWidth();
-    }
-
-    private String callableParameterText(CallableDeclaration<?> declaration) {
-        List<String> parameters = new ArrayList<>();
-        declaration.getReceiverParameter().map(this::compactReceiverParameter).ifPresent(parameters::add);
-        declaration.getParameters().stream().map(this::compact).forEach(parameters::add);
-        return String.join(", ", parameters);
-    }
-
-    private Doc typeParameters(NodeList<TypeParameter> typeParameters) {
-        return Doc.group(Doc.concat(
-                Doc.text("<"),
-                Doc.indent(Doc.concat(
-                        Doc.SOFT_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), typeParameters.stream()
-                                .map(this::typeParameter)
-                                .toList()))),
-                Doc.SOFT_LINE,
-                Doc.text(">")));
-    }
-
-    private Doc brokenTypeParameters(NodeList<TypeParameter> typeParameters, boolean indentClosingBracket) {
-        Doc parameters = Doc.concat(
-                Doc.text("<"),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), typeParameters.stream()
-                                .map(this::typeParameter)
-                                .toList()))),
-                Doc.HARD_LINE,
-                Doc.text(">"));
-        return indentClosingBracket ? Doc.indent(parameters) : parameters;
-    }
-
-    private Doc typeParameter(TypeParameter typeParameter) {
-        String flat = compactTypeLike(typeParameter);
-        if (!typeParameter.getAnnotations().isEmpty() || typeParameter.getTypeBound().isEmpty() || flat.contains("@")) {
-            return Doc.text(compactTypeLike(typeParameter));
-        }
-        Doc firstBound = typeBody(typeParameter.getTypeBound().get(0));
-        List<Doc> trailingBounds = typeParameter.getTypeBound().stream()
-                .skip(1)
-                .map(bound -> Doc.concat(Doc.text("& "), typeBody(bound)))
-                .toList();
-        if (trailingBounds.isEmpty()) {
-            return Doc.group(Doc.concat(Doc.text(typeParameter.getNameAsString() + " extends "), firstBound));
-        }
-        return Doc.group(Doc.concat(
-                Doc.text(typeParameter.getNameAsString() + " extends "),
-                firstBound,
-                Doc.indent(Doc.concat(Doc.LINE, Doc.join(Doc.LINE, trailingBounds)))));
-    }
-
-    private Doc parameter(Parameter parameter) {
-        if (!parameter.isVarArgs() && typeCanBreak(parameter.getType())) {
-            List<String> prefixes = new ArrayList<>();
-            parameter.getAnnotations().stream().map(this::compact).forEach(prefixes::add);
-            parameter.getModifiers().stream().map(this::modifier).forEach(prefixes::add);
-            String prefix = prefixes.isEmpty() ? "" : String.join(" ", prefixes) + " ";
-            return Doc.group(Doc.concat(
-                    Doc.text(prefix),
-                    typeBody(parameter.getType()),
-                    Doc.text(" " + parameter.getNameAsString())));
-        }
-        List<String> parts = new ArrayList<>();
-        parameter.getAnnotations().stream().map(this::compact).forEach(parts::add);
-        parameter.getModifiers().stream().map(this::modifier).forEach(parts::add);
-        String type = compact(parameter.getType());
-        if (parameter.isVarArgs()) {
-            String varargsAnnotations = compactJoin(parameter.getVarArgsAnnotations());
-            type += varargsAnnotations.isEmpty() ? "..." : " " + varargsAnnotations + "...";
-        }
-        parts.add(type);
-        parts.add(parameter.getNameAsString());
-        String text = String.join(" ", parts);
-        Doc leadingBlockComment = comments.ownComment(parameter, BlockComment.class::isInstance);
-        if (leadingBlockComment != Doc.EMPTY) {
-            text = commentText(leadingBlockComment) + " " + text;
-        }
-        Doc trailingBlockComment = unattachedTrailingBlockComment(parameter);
-        if (trailingBlockComment == Doc.EMPTY) {
-            trailingBlockComment = parameterTrailingBlockComment(parameter);
-        }
-        if (trailingBlockComment != Doc.EMPTY) {
-            text += " " + commentText(trailingBlockComment);
-        }
-        return Doc.text(text);
-    }
-
-    private Doc parameterTrailingBlockComment(Parameter parameter) {
-        if (!lastCallableParameter(parameter)) {
-            return Doc.EMPTY;
-        }
-        return parameter.getParentNode().stream()
-                .flatMap(parent -> parent.getAllContainedComments().stream())
-                .filter(BlockComment.class::isInstance)
-                .filter(comment -> startsAfterNodeOnSameLine(parameter, comment))
-                .findFirst()
-                .map(comments::comment)
-                .orElse(Doc.EMPTY);
-    }
-
-    private boolean lastCallableParameter(Parameter parameter) {
-        return parameter.getParentNode()
-                .filter(CallableDeclaration.class::isInstance)
-                .map(CallableDeclaration.class::cast)
-                .map(declaration -> !declaration.getParameters().isEmpty()
-                        && declaration.getParameters().get(declaration.getParameters().size() - 1) == parameter)
-                .orElse(false);
     }
 
     private Doc block(BlockStmt block) {

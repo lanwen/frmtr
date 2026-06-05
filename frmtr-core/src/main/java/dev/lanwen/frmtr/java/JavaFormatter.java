@@ -18,10 +18,12 @@ import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import dev.lanwen.frmtr.doc.DocRenderer;
+import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Predicate;
 
 public final class JavaFormatter {
     private static final int PARSE_ERROR_CONTEXT_LINES = 2;
@@ -39,11 +41,27 @@ public final class JavaFormatter {
     }
 
     public String format(String source) {
+        if (options.requirePragma() && !hasFormatPragma(source)) {
+            return source;
+        }
         CompilationUnit unit = parse(source);
         SyntaxNodeView.from(unit);
-        JavaPrinter printer = new JavaPrinter();
+        JavaPrinter printer = new JavaPrinter(options);
         Doc doc = printer.print(unit);
         return new DocRenderer(options).render(doc);
+    }
+
+    private boolean hasFormatPragma(String source) {
+        String stripped = source.stripLeading();
+        if (!stripped.startsWith("/**")) {
+            return false;
+        }
+        int end = stripped.indexOf("*/");
+        if (end < 0) {
+            return false;
+        }
+        String leadingDocComment = stripped.substring(0, end + 2);
+        return leadingDocComment.contains("@format") || leadingDocComment.contains("@prettier");
     }
 
     private CompilationUnit parse(String source) {
@@ -150,7 +168,7 @@ public final class JavaFormatter {
     }
 
     static final class CommentTracker {
-        private final Set<Comment> printed = new HashSet<>();
+        private final Set<Comment> printed = Collections.newSetFromMap(new IdentityHashMap<>());
 
         Doc leading(Node node) {
             return node.getComment()
@@ -160,24 +178,110 @@ public final class JavaFormatter {
                     .orElse(Doc.EMPTY);
         }
 
+        Doc trailingLineComment(Node node) {
+            return node.getComment()
+                    .filter(LineComment.class::isInstance)
+                    .filter(comment -> sameEndLine(node, comment))
+                    .filter(printed::add)
+                    .map(JavaFormatter::commentDoc)
+                    .orElse(Doc.EMPTY);
+        }
+
         Doc orphanComments(Node node) {
+            return orphanComments(node, ignored -> true);
+        }
+
+        Doc orphanComments(Node node, Predicate<Comment> predicate) {
             return Doc.concat(node.getOrphanComments().stream()
+                    .filter(predicate)
                     .filter(printed::add)
                     .map(comment -> Doc.concat(commentDoc(comment), Doc.HARD_LINE))
                     .toList());
+        }
+
+        List<Doc> orphanCommentStatements(Node node) {
+            return orphanCommentStatements(node, ignored -> true);
+        }
+
+        List<Doc> orphanCommentStatements(Node node, Predicate<Comment> predicate) {
+            return node.getOrphanComments().stream()
+                    .filter(predicate)
+                    .filter(printed::add)
+                    .map(JavaFormatter::commentDoc)
+                    .toList();
+        }
+
+        Doc ownComment(Node node, Predicate<Comment> predicate) {
+            return node.getComment()
+                    .filter(predicate)
+                    .filter(printed::add)
+                    .map(JavaFormatter::commentDoc)
+                    .orElse(Doc.EMPTY);
+        }
+
+        Doc comment(Comment comment) {
+            return printed.add(comment) ? JavaFormatter.commentDoc(comment) : Doc.EMPTY;
+        }
+
+        private boolean sameEndLine(Node node, Comment comment) {
+            return node.getRange()
+                    .flatMap(nodeRange -> comment.getRange()
+                            .map(commentRange -> nodeRange.end.line == commentRange.begin.line))
+                    .orElse(false);
         }
     }
 
     static Doc commentDoc(Comment comment) {
         if (comment instanceof LineComment lineComment) {
-            return Doc.text("//" + lineComment.getContent().stripTrailing());
+            String text = lineComment.toString().stripTrailing();
+            if (text.contains("\n")) {
+                return lineDoc(text);
+            }
+            text = splitAdjacentLineComments("//" + lineComment.getContent().stripTrailing());
+            return text.contains("\n") ? lineDoc(text) : Doc.text(text);
         }
         if (comment instanceof JavadocComment javadocComment) {
-            return Doc.text("/**" + javadocComment.getContent().stripTrailing() + "*/");
+            String raw = comment.getTokenRange().map(Object::toString).orElseGet(javadocComment::toString).strip();
+            if (raw.lines().count() == 1) {
+                return Doc.text(raw);
+            }
+            return lineDoc(javadocComment.toString().stripTrailing());
         }
         if (comment instanceof BlockComment blockComment) {
-            return Doc.text("/*" + blockComment.getContent().stripTrailing() + "*/");
+            String text = blockComment.toString();
+            String normalized = normalizeBlockComment(text);
+            return normalized.equals(text.stripTrailing()) ? Doc.text(normalized) : lineDoc(normalized);
         }
-        return Doc.text(comment.toString().stripTrailing());
+        return lineDoc(comment.toString().stripTrailing());
+    }
+
+    private static Doc lineDoc(String value) {
+        List<Doc> lines = value.lines().map(Doc::text).toList();
+        return Doc.join(Doc.HARD_LINE, lines);
+    }
+
+    private static String splitAdjacentLineComments(String value) {
+        String split = value.replaceAll("(?<!:)//", System.lineSeparator() + "//");
+        return split.startsWith(System.lineSeparator()) ? split.substring(System.lineSeparator().length()) : split;
+    }
+
+    private static String normalizeBlockComment(String value) {
+        String text = value.stripTrailing();
+        List<String> lines = text.lines().toList();
+        if (lines.size() < 3 || lines.stream().skip(1).limit(lines.size() - 2)
+                .map(String::stripLeading)
+                .anyMatch(line -> !line.startsWith("*"))) {
+            return text;
+        }
+        List<String> normalized = new java.util.ArrayList<>();
+        normalized.add(lines.getFirst());
+        lines.stream()
+                .skip(1)
+                .limit(lines.size() - 2)
+                .map(String::stripLeading)
+                .map(line -> " " + line)
+                .forEach(normalized::add);
+        normalized.add(" */");
+        return String.join(System.lineSeparator(), normalized);
     }
 }

@@ -8,6 +8,10 @@ public record FormatterOptions(
         int indentWidth,
         LineEnding lineEnding,
         boolean trailingNewline,
+        boolean preserveRawTrailingWhitespace,
+        boolean requirePragma,
+        LambdaArrowParens lambdaArrowParens,
+        BinaryOperatorPosition binaryOperatorPosition,
         JavaLanguageLevel javaLanguageLevel) {
     public static final int DEFAULT_LINE_WIDTH = 140;
     public static final int DEFAULT_INDENT_WIDTH = 4;
@@ -21,6 +25,82 @@ public record FormatterOptions(
         this(lineWidth, indentStyle, indentWidth, lineEnding, trailingNewline, JavaLanguageLevel.LATEST_AVAILABLE);
     }
 
+    public FormatterOptions(
+            int lineWidth,
+            IndentStyle indentStyle,
+            int indentWidth,
+            LineEnding lineEnding,
+            boolean trailingNewline,
+            JavaLanguageLevel javaLanguageLevel) {
+        this(lineWidth, indentStyle, indentWidth, lineEnding, trailingNewline, false, javaLanguageLevel);
+    }
+
+    public FormatterOptions(
+            int lineWidth,
+            IndentStyle indentStyle,
+            int indentWidth,
+            LineEnding lineEnding,
+            boolean trailingNewline,
+            boolean preserveRawTrailingWhitespace,
+            JavaLanguageLevel javaLanguageLevel) {
+        this(
+                lineWidth,
+                indentStyle,
+                indentWidth,
+                lineEnding,
+                trailingNewline,
+                preserveRawTrailingWhitespace,
+                false,
+                LambdaArrowParens.PRESERVE,
+                BinaryOperatorPosition.END,
+                javaLanguageLevel);
+    }
+
+    public FormatterOptions(
+            int lineWidth,
+            IndentStyle indentStyle,
+            int indentWidth,
+            LineEnding lineEnding,
+            boolean trailingNewline,
+            boolean preserveRawTrailingWhitespace,
+            boolean requirePragma,
+            JavaLanguageLevel javaLanguageLevel) {
+        this(
+                lineWidth,
+                indentStyle,
+                indentWidth,
+                lineEnding,
+                trailingNewline,
+                preserveRawTrailingWhitespace,
+                requirePragma,
+                LambdaArrowParens.PRESERVE,
+                BinaryOperatorPosition.END,
+                javaLanguageLevel);
+    }
+
+    public FormatterOptions(
+            int lineWidth,
+            IndentStyle indentStyle,
+            int indentWidth,
+            LineEnding lineEnding,
+            boolean trailingNewline,
+            boolean preserveRawTrailingWhitespace,
+            boolean requirePragma,
+            LambdaArrowParens lambdaArrowParens,
+            JavaLanguageLevel javaLanguageLevel) {
+        this(
+                lineWidth,
+                indentStyle,
+                indentWidth,
+                lineEnding,
+                trailingNewline,
+                preserveRawTrailingWhitespace,
+                requirePragma,
+                lambdaArrowParens,
+                BinaryOperatorPosition.END,
+                javaLanguageLevel);
+    }
+
     public FormatterOptions {
         if (lineWidth < 20) {
             throw new IllegalArgumentException("lineWidth must be at least 20");
@@ -30,6 +110,8 @@ public record FormatterOptions(
         }
         Objects.requireNonNull(indentStyle, "indentStyle");
         Objects.requireNonNull(lineEnding, "lineEnding");
+        Objects.requireNonNull(lambdaArrowParens, "lambdaArrowParens");
+        Objects.requireNonNull(binaryOperatorPosition, "binaryOperatorPosition");
         Objects.requireNonNull(javaLanguageLevel, "javaLanguageLevel");
     }
 
@@ -40,6 +122,10 @@ public record FormatterOptions(
                 DEFAULT_INDENT_WIDTH,
                 LineEnding.LF,
                 true,
+                false,
+                false,
+                LambdaArrowParens.PRESERVE,
+                BinaryOperatorPosition.END,
                 JavaLanguageLevel.LATEST_AVAILABLE);
     }
 
@@ -77,6 +163,32 @@ public record FormatterOptions(
         public String value() {
             return value;
         }
+    }
+
+    public enum LambdaArrowParens {
+        /**
+         * Keeps single-parameter lambda parentheses according to the parsed source.
+         */
+        PRESERVE,
+        /**
+         * Removes parentheses from single untyped lambda parameters when Java syntax allows it.
+         */
+        AVOID,
+        /**
+         * Adds parentheses around single lambda parameters to match styles that always require them.
+         */
+        ALWAYS
+    }
+
+    public enum BinaryOperatorPosition {
+        /**
+         * Keeps binary operators at the end of broken continuation lines.
+         */
+        END,
+        /**
+         * Moves binary operators to the start of broken continuation lines.
+         */
+        START
     }
 
     public enum JavaLanguageLevel {

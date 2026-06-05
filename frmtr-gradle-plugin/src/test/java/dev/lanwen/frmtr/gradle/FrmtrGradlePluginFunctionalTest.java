@@ -63,6 +63,7 @@ final class FrmtrGradlePluginFunctionalTest {
                 package demo;
 
                 class Main {
+
                     int value;
                 }
                 """);
@@ -117,6 +118,7 @@ final class FrmtrGradlePluginFunctionalTest {
                 package demo;
 
                 class Included {
+
                     int value;
                 }
                 """);
@@ -151,6 +153,7 @@ final class FrmtrGradlePluginFunctionalTest {
                 package demo;
 
                 class IncludedBySourceSet {
+
                     int value;
                 }
                 """);

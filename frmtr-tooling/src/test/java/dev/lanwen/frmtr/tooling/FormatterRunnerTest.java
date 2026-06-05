@@ -19,6 +19,7 @@ final class FormatterRunnerTest {
                 dir.resolve("src/Unchanged.java"),
                 """
                 class Unchanged {
+
                     int value;
                 }
                 """);
@@ -64,6 +65,7 @@ final class FormatterRunnerTest {
         assertThat(run.firstFailure()).isPresent();
         assertThat(Files.readString(changed, StandardCharsets.UTF_8)).isEqualTo("""
                 class Changed {
+
                     int value;
                 }
                 """);

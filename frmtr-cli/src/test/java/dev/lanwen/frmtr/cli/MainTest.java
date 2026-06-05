@@ -27,6 +27,7 @@ final class MainTest {
         assertThat(exitCode).isZero();
         assertThat(out.toString()).isEqualTo("""
                 class Demo {
+
                     int value;
                 }
                 """);
@@ -57,6 +58,7 @@ final class MainTest {
                 Path.of("."),
                 """
                 class Demo {
+
                     int value;
                 }
                 """,
@@ -89,6 +91,7 @@ final class MainTest {
                 .contains("-class Demo{int value;}\n")
                 .contains("""
                         +class Demo {
+                        +
                         +    int value;
                         +}
                         """);
@@ -101,6 +104,7 @@ final class MainTest {
                 dir.resolve("Formatted.java"),
                 """
                 class Formatted {
+
                     int value;
                 }
                 """);
@@ -190,6 +194,7 @@ final class MainTest {
         assertThat(result.err()).isEmpty();
         assertThat(Files.readString(dir.resolve("src/Main.java"))).isEqualTo("""
                 class Main {
+
                     int value;
                 }
                 """);
@@ -208,11 +213,13 @@ final class MainTest {
         assertThat(result.err()).isEmpty();
         assertThat(Files.readString(dir.resolve("src/Main.java"))).isEqualTo("""
                 class Main {
+
                     int value;
                 }
                 """);
         assertThat(Files.readString(dir.resolve("examples/Example.java"))).isEqualTo("""
                 class Example {
+
                     int value;
                 }
                 """);
@@ -227,6 +234,7 @@ final class MainTest {
         assertThat(result.exitCode()).isZero();
         assertThat(result.out()).isEqualTo("""
                 class Main {
+
                     int value;
                 }
                 """);
@@ -244,11 +252,13 @@ final class MainTest {
         assertThat(result.out()).isEqualTo("""
                 ==> a/A.java <==
                 class A {
+
                     int value;
                 }
 
                 ==> b/B.java <==
                 class B {
+
                     int value;
                 }
                 """);
@@ -261,6 +271,7 @@ final class MainTest {
                 dir.resolve("src/Formatted.java"),
                 """
                 class Formatted {
+
                     int value;
                 }
                 """);
@@ -283,6 +294,7 @@ final class MainTest {
                 dir.resolve("src/Formatted.java"),
                 """
                 class Formatted {
+
                     int value;
                 }
                 """);
@@ -301,6 +313,7 @@ final class MainTest {
                 .contains("-class Main{int value;}\n")
                 .contains("""
                         +class Main {
+                        +
                         +    int value;
                         +}
                         """)

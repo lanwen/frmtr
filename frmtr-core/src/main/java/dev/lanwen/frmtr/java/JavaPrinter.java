@@ -94,6 +94,7 @@ final class JavaPrinter {
     private final FieldAccessPrinter fieldAccesses;
     private final MethodReferencePrinter methodReferences;
     private final MethodCallPrinter methodCalls;
+    private final AssignmentExpressionPrinter assignments;
     private final CallableSignaturePrinter callableSignatures;
     private final ConstructorDeclarationPrinter constructors;
     private final MethodDeclarationPrinter methods;
@@ -236,6 +237,17 @@ final class JavaPrinter {
                 this::compactJoin,
                 this::currentIndentedWidth,
                 this::blockStatementWidth);
+        this.assignments = new AssignmentExpressionPrinter(
+                options,
+                this::expression,
+                this::compact,
+                this::blockStatementWidth,
+                (expression, leadingBreak) -> suffixedEnclosedExpression(expression, leadingBreak),
+                binaries::shouldKeepCastDivisionContinuationFlat,
+                (expression, forceBreak) -> binaries.lines(expression, forceBreak),
+                objectCreations::brokenObjectCreation,
+                methodCalls::assignmentWithBrokenMethodCallArguments,
+                conditionals::assignmentWithConditionalValue);
         this.commentedMethodSignatures = new CommentedMethodSignaturePrinter(options);
         PackageDeclarationPrinter packageDeclarations = new PackageDeclarationPrinter(comments, rawSource, options);
         ImportDeclarationPrinter importDeclarations = new ImportDeclarationPrinter(comments);
@@ -620,59 +632,7 @@ final class JavaPrinter {
 
     private Doc expression(Expression expression) {
         if (expression instanceof AssignExpr assignExpr) {
-            String flat = compact(assignExpr);
-            if (blockStatementWidth(flat + ";") > options.lineWidth()) {
-                Optional<Doc> suffixedEnclosedValue = suffixedEnclosedExpression(assignExpr.getValue(), true);
-                if (suffixedEnclosedValue.isPresent()) {
-                    return Doc.concat(
-                            expression(assignExpr.getTarget()),
-                            Doc.text(" " + assignExpr.getOperator().asString() + " "),
-                            suffixedEnclosedValue.orElseThrow());
-                }
-                if (assignExpr.getValue() instanceof BinaryExpr binaryExpr) {
-                    if (binaries.shouldKeepCastDivisionContinuationFlat(binaryExpr)) {
-                        return Doc.concat(
-                                expression(assignExpr.getTarget()),
-                                Doc.text(" " + assignExpr.getOperator().asString()),
-                                Doc.indent(Doc.concat(Doc.HARD_LINE, expression(binaryExpr))));
-                    }
-                    return Doc.concat(
-                            expression(assignExpr.getTarget()),
-                            Doc.text(" " + assignExpr.getOperator().asString()),
-                            Doc.indent(Doc.concat(Doc.HARD_LINE, binaries.lines(assignExpr.getValue(), true))));
-                }
-                if (assignExpr.getValue() instanceof ObjectCreationExpr objectCreationExpr
-                        && objectCreationExpr.getAnonymousClassBody().isEmpty()) {
-                    return Doc.concat(
-                            expression(assignExpr.getTarget()),
-                            Doc.text(" " + assignExpr.getOperator().asString() + " "),
-                            objectCreations.brokenObjectCreation(objectCreationExpr));
-                }
-                if (assignExpr.getValue() instanceof MethodCallExpr methodCall) {
-                    Optional<Doc> methodCallAssignment =
-                            methodCalls.assignmentWithBrokenMethodCallArguments(assignExpr, methodCall);
-                    if (methodCallAssignment.isPresent()) {
-                        return methodCallAssignment.orElseThrow();
-                    }
-                }
-                if (assignExpr.getValue() instanceof ConditionalExpr conditionalExpr) {
-                    Optional<Doc> conditionalAssignment =
-                            conditionals.assignmentWithConditionalValue(assignExpr, conditionalExpr);
-                    if (conditionalAssignment.isPresent()) {
-                        return conditionalAssignment.orElseThrow();
-                    }
-                }
-                if (assignExpr.getValue() instanceof AssignExpr nestedAssignment) {
-                    return Doc.concat(
-                            expression(assignExpr.getTarget()),
-                            Doc.text(" " + assignExpr.getOperator().asString()),
-                            Doc.indent(Doc.concat(Doc.HARD_LINE, expression(nestedAssignment))));
-                }
-            }
-            return Doc.concat(
-                    expression(assignExpr.getTarget()),
-                    Doc.text(" " + assignExpr.getOperator().asString() + " "),
-                    expression(assignExpr.getValue()));
+            return assignments.assignment(assignExpr);
         }
         if (expression instanceof ArrayAccessExpr arrayAccessExpr) {
             return arrays.arrayAccess(arrayAccessExpr);

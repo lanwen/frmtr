@@ -1,7 +1,6 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.AnnotationDeclaration;
@@ -37,8 +36,6 @@ import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
-import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
-import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.stmt.AssertStmt;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.BreakStmt;
@@ -64,7 +61,6 @@ import com.github.javaparser.ast.stmt.YieldStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -83,6 +79,7 @@ final class JavaPrinter {
     private final ControlConditionPrinter controlConditions;
     private final BinaryExpressionPrinter binaries;
     private final AnnotationExpressionPrinter annotationExpressions;
+    private final DeclarationPrefixPrinter declarationPrefixes;
     private final ConditionalExpressionPrinter conditionals;
     private final LambdaExpressionPrinter lambdas;
     private final ArrayExpressionPrinter arrays;
@@ -113,16 +110,6 @@ final class JavaPrinter {
         this.options = options;
         this.rawSource = new RawSource(options);
         this.types = new TypePrinter(options, this::compactTypeLike);
-        this.moduleBlocks = new ModuleBlockPrinter(comments, options, this::compact, this::compactJoin, this::modifiers);
-        this.moduleDeclarations = new ModuleDeclarationPrinter(
-                comments,
-                rawSource,
-                new CommentedModulePrinter(),
-                this::annotations,
-                this::commentText,
-                this::compact,
-                moduleBlocks::moduleBlock);
-        this.memberBlocks = new MemberBlockPrinter(rawSource, comments, this::hasDeclarationAnnotations);
         this.blocks = new BlockPrinter(comments, this::statement, formatterPragmas::hasPragma);
         this.binaries = new BinaryExpressionPrinter(
                 comments,
@@ -140,6 +127,24 @@ final class JavaPrinter {
                 binaries::nestedLines,
                 this::compact,
                 this::currentIndentedWidth);
+        this.declarationPrefixes = new DeclarationPrefixPrinter(
+                annotationExpressions::annotation,
+                annotationExpressions::annotationFlatText);
+        this.moduleBlocks = new ModuleBlockPrinter(
+                comments,
+                options,
+                this::compact,
+                this::compactJoin,
+                declarationPrefixes::modifiers);
+        this.moduleDeclarations = new ModuleDeclarationPrinter(
+                comments,
+                rawSource,
+                new CommentedModulePrinter(),
+                declarationPrefixes::annotations,
+                this::commentText,
+                this::compact,
+                moduleBlocks::moduleBlock);
+        this.memberBlocks = new MemberBlockPrinter(rawSource, comments, declarationPrefixes::hasDeclarationAnnotations);
         this.controlConditions = new ControlConditionPrinter(
                 comments,
                 options,
@@ -159,7 +164,7 @@ final class JavaPrinter {
                 binaries::lines,
                 this::compact,
                 this::compactTypeLike,
-                this::modifiers,
+                declarationPrefixes::modifiers,
                 this::currentIndentedWidth,
                 this::ownSameLineBlockCommentBeforeNode);
         this.conditionals = new ConditionalExpressionPrinter(
@@ -287,9 +292,9 @@ final class JavaPrinter {
                 comments,
                 rawSource,
                 options,
-                this::declarationAnnotations,
-                this::modifiers,
-                this::inlineAnnotations,
+                declarationPrefixes::declarationAnnotations,
+                declarationPrefixes::modifiers,
+                declarationPrefixes::inlineAnnotations,
                 this::compactTypeLike,
                 this::compact,
                 this::compactWithoutOwnComment,
@@ -325,8 +330,8 @@ final class JavaPrinter {
                 lambdas::lambdaExpression);
         this.variableDeclarations = new VariableDeclarationPrinter(
                 options,
-                this::annotations,
-                this::modifiers,
+                declarationPrefixes::annotations,
+                declarationPrefixes::modifiers,
                 this::compactTypeLike,
                 types::typeBody,
                 types::typeCanBreak,
@@ -339,7 +344,7 @@ final class JavaPrinter {
                 this::compact,
                 this::compactTypeLike,
                 types::typeBody,
-                this::modifier,
+                declarationPrefixes::modifier,
                 types::typeCanBreak,
                 this::unattachedTrailingBlockComment,
                 this::startsAfterNodeOnSameLine,
@@ -350,8 +355,8 @@ final class JavaPrinter {
                 options,
                 new CommentedInterfacePrinter(),
                 callableSignatures,
-                this::annotations,
-                this::modifiers,
+                declarationPrefixes::annotations,
+                declarationPrefixes::modifiers,
                 types::extendsTypes,
                 types::implementsTypes,
                 types::permitsTypes,
@@ -363,8 +368,8 @@ final class JavaPrinter {
         this.constructors = new ConstructorDeclarationPrinter(
                 comments,
                 callableSignatures,
-                this::annotations,
-                this::modifiers,
+                declarationPrefixes::annotations,
+                declarationPrefixes::modifiers,
                 this::compactJoin,
                 this::throwsClause,
                 this::block);
@@ -373,10 +378,10 @@ final class JavaPrinter {
                 rawSource,
                 commentedMethodSignatures,
                 callableSignatures,
-                this::declarationAnnotations,
-                this::modifiers,
+                declarationPrefixes::declarationAnnotations,
+                declarationPrefixes::modifiers,
                 types::flatTypeParameters,
-                this::inlineAnnotations,
+                declarationPrefixes::inlineAnnotations,
                 this::compact,
                 this::throwsClause,
                 this::block);
@@ -385,8 +390,8 @@ final class JavaPrinter {
                 comments,
                 rawSource,
                 options,
-                this::annotations,
-                this::modifiers,
+                declarationPrefixes::annotations,
+                declarationPrefixes::modifiers,
                 enumTypes -> types.typeClause("implements", enumTypes),
                 types::implementsTypes,
                 enumTypes -> types.flatTypeClause("implements", enumTypes),
@@ -398,8 +403,8 @@ final class JavaPrinter {
         this.records = new RecordDeclarationPrinter(
                 comments,
                 options,
-                this::annotations,
-                this::modifiers,
+                declarationPrefixes::annotations,
+                declarationPrefixes::modifiers,
                 callableSignatures::typeParameters,
                 types::flatTypeParameters,
                 this::compact,
@@ -440,8 +445,8 @@ final class JavaPrinter {
                 this::currentIndentedWidth);
         this.annotationDeclarations = new AnnotationDeclarationPrinter(
                 comments,
-                this::annotations,
-                this::modifiers,
+                declarationPrefixes::annotations,
+                declarationPrefixes::modifiers,
                 this::compactTypeLike,
                 this::expression,
                 this::body);
@@ -734,110 +739,6 @@ final class JavaPrinter {
 
     private Doc rawDeclaration(BodyDeclaration<?> declaration) {
         return Doc.concat(comments.leading(declaration), Doc.text(compact(declaration)));
-    }
-
-    private Doc annotations(NodeWithAnnotations<?> node) {
-        return annotations(node.getAnnotations());
-    }
-
-    private Doc declarationAnnotations(NodeWithAnnotations<?> node) {
-        if (!(node instanceof NodeWithModifiers<?> nodeWithModifiers)) {
-            return annotations(node);
-        }
-        return annotations(node.getAnnotations().stream()
-                .filter(annotation -> !afterAllModifiers(annotation, nodeWithModifiers))
-                .toList());
-    }
-
-    private boolean hasDeclarationAnnotations(NodeWithAnnotations<?> node) {
-        if (!(node instanceof NodeWithModifiers<?> nodeWithModifiers)) {
-            return !node.getAnnotations().isEmpty();
-        }
-        return node.getAnnotations().stream()
-                .anyMatch(annotation -> !afterAllModifiers(annotation, nodeWithModifiers));
-    }
-
-    private Doc annotations(List<AnnotationExpr> annotations) {
-        if (annotations.isEmpty()) {
-            return Doc.EMPTY;
-        }
-        return Doc.concat(annotations.stream()
-                .map(annotation -> Doc.concat(annotationExpressions.annotation(annotation), Doc.HARD_LINE))
-                .toList());
-    }
-
-    private String inlineAnnotations(NodeWithAnnotations<?> node) {
-        if (!(node instanceof NodeWithModifiers<?> nodeWithModifiers)) {
-            return "";
-        }
-        String annotations = node.getAnnotations().stream()
-                .filter(annotation -> afterAllModifiers(annotation, nodeWithModifiers))
-                .map(annotation -> annotationExpressions.annotationFlatText(annotation) + " ")
-                .reduce("", String::concat);
-        return annotations;
-    }
-
-    private boolean afterAllModifiers(AnnotationExpr annotation, NodeWithModifiers<?> node) {
-        if (node.getModifiers().isEmpty()) {
-            return false;
-        }
-        return annotation.getRange()
-                .flatMap(annotationRange -> node.getModifiers().stream()
-                        .map(Modifier::getRange)
-                        .flatMap(Optional::stream)
-                        .max(this::compareRangeEnds)
-                        .map(modifierRange -> startsAfter(annotationRange, modifierRange)))
-                .orElse(false);
-    }
-
-    private int compareRangeEnds(com.github.javaparser.Range left, com.github.javaparser.Range right) {
-        int line = Integer.compare(left.end.line, right.end.line);
-        if (line != 0) {
-            return line;
-        }
-        return Integer.compare(left.end.column, right.end.column);
-    }
-
-    private boolean startsAfter(com.github.javaparser.Range annotationRange, com.github.javaparser.Range modifierRange) {
-        if (annotationRange.begin.line != modifierRange.end.line) {
-            return annotationRange.begin.line > modifierRange.end.line;
-        }
-        return annotationRange.begin.column > modifierRange.end.column;
-    }
-
-    private String modifiers(NodeWithModifiers<?> node) {
-        if (node.getModifiers().isEmpty()) {
-            return "";
-        }
-        return String.join(" ", node.getModifiers().stream()
-                        .sorted(Comparator.comparingInt(this::modifierRank))
-                        .map(this::modifier)
-                        .toList())
-                + " ";
-    }
-
-    private String modifier(Modifier modifier) {
-        return modifier.getKeyword().asString();
-    }
-
-    private int modifierRank(Modifier modifier) {
-        return switch (modifier.getKeyword()) {
-            case PUBLIC -> 0;
-            case PROTECTED -> 1;
-            case PRIVATE -> 2;
-            case ABSTRACT -> 3;
-            case STATIC -> 4;
-            case FINAL -> 5;
-            case SEALED -> 6;
-            case NON_SEALED -> 7;
-            case SYNCHRONIZED -> 8;
-            case NATIVE -> 9;
-            case STRICTFP -> 10;
-            case TRANSIENT -> 11;
-            case VOLATILE -> 12;
-            case TRANSITIVE -> 13;
-            default -> 100;
-        };
     }
 
     private String compactJoin(List<? extends Node> nodes) {

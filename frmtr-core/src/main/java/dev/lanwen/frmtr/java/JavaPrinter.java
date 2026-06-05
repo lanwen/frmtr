@@ -96,18 +96,16 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-import java.util.regex.Pattern;
 
 final class JavaPrinter {
-    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
-    private static final String COMMENTED_TOKEN_PUNCTUATION = "{};,().";
-
     private final JavaFormatter.CommentTracker comments = new JavaFormatter.CommentTracker();
     private final FormatterOptions options;
+    private final RawSource rawSource;
     private boolean formattingDisabled;
 
     JavaPrinter(FormatterOptions options) {
         this.options = options;
+        this.rawSource = new RawSource(options);
     }
 
     Doc print(CompilationUnit unit) {
@@ -183,7 +181,7 @@ final class JavaPrinter {
         if (!leading.startsWith("/*") && !leading.startsWith("//")) {
             return Doc.EMPTY;
         }
-        return Doc.text(options.preserveRawTrailingWhitespace() ? leading : stripTrailingHorizontalWhitespace(leading));
+        return Doc.text(options.preserveRawTrailingWhitespace() ? leading : rawSource.stripTrailingHorizontalWhitespace(leading));
     }
 
     private List<Doc> topLevelDeclarations(CompilationUnit unit) {
@@ -254,7 +252,7 @@ final class JavaPrinter {
     }
 
     private Doc moduleDeclaration(ModuleDeclaration declaration) {
-        String raw = raw(declaration);
+        String raw = rawSource.raw(declaration);
         if (raw.contains("/*") || raw.contains("//")) {
             Doc leadingBlock = comments.ownComment(declaration, BlockComment.class::isInstance);
             String leadingText = commentText(leadingBlock);
@@ -293,10 +291,10 @@ final class JavaPrinter {
     }
 
     private String formatCommentedModuleHeader(String line) {
-        List<String> tokens = moduleTokens(line);
+        List<String> tokens = CommentedTokenText.tokens(line);
         int cursor = 0;
         List<String> leadingComments = new ArrayList<>();
-        while (cursor < tokens.size() && isCommentToken(tokens.get(cursor))) {
+        while (cursor < tokens.size() && CommentedTokenText.isComment(tokens.get(cursor))) {
             leadingComments.add(tokens.get(cursor++));
         }
         boolean open = cursor < tokens.size() && tokens.get(cursor).equals("open");
@@ -305,7 +303,7 @@ final class JavaPrinter {
         }
         List<String> beforeNameComments = new ArrayList<>();
         while (cursor < tokens.size() && !tokens.get(cursor).equals("module")) {
-            if (isCommentToken(tokens.get(cursor))) {
+            if (CommentedTokenText.isComment(tokens.get(cursor))) {
                 beforeNameComments.add(tokens.get(cursor));
             }
             cursor++;
@@ -313,7 +311,7 @@ final class JavaPrinter {
         if (cursor < tokens.size() && tokens.get(cursor).equals("module")) {
             cursor++;
         }
-        while (cursor < tokens.size() && isCommentToken(tokens.get(cursor))) {
+        while (cursor < tokens.size() && CommentedTokenText.isComment(tokens.get(cursor))) {
             beforeNameComments.add(tokens.get(cursor++));
         }
         int nameEnd = tokens.indexOf("{");
@@ -321,7 +319,7 @@ final class JavaPrinter {
             nameEnd = tokens.size();
         }
         StringBuilder out = new StringBuilder();
-        appendSpaceSeparated(out, leadingComments);
+        CommentedTokenText.appendSpaceSeparated(out, leadingComments);
         if (!out.isEmpty()) {
             out.append(' ');
         }
@@ -331,10 +329,10 @@ final class JavaPrinter {
         out.append("module");
         if (!beforeNameComments.isEmpty()) {
             out.append(' ');
-            appendSpaceSeparated(out, beforeNameComments);
+            CommentedTokenText.appendSpaceSeparated(out, beforeNameComments);
         }
         out.append(' ');
-        out.append(formatCommentedQualifiedName(tokens.subList(cursor, nameEnd), true));
+        out.append(CommentedTokenText.qualifiedName(tokens.subList(cursor, nameEnd), true));
         out.append(" {");
         return out.toString();
     }
@@ -343,20 +341,20 @@ final class JavaPrinter {
         if (line.startsWith("//")) {
             return line;
         }
-        List<String> tokens = moduleTokens(line);
+        List<String> tokens = CommentedTokenText.tokens(line);
         int semicolon = tokens.indexOf(";");
         if (semicolon < 0) {
             semicolon = tokens.size();
         }
         List<String> afterSemicolonComments = new ArrayList<>();
         for (int i = semicolon + 1; i < tokens.size(); i++) {
-            if (isCommentToken(tokens.get(i))) {
+            if (CommentedTokenText.isComment(tokens.get(i))) {
                 afterSemicolonComments.add(tokens.get(i));
             }
         }
         int cursor = 0;
         List<String> leadingComments = new ArrayList<>();
-        while (cursor < semicolon && isCommentToken(tokens.get(cursor))) {
+        while (cursor < semicolon && CommentedTokenText.isComment(tokens.get(cursor))) {
             leadingComments.add(tokens.get(cursor++));
         }
         if (cursor >= semicolon) {
@@ -373,7 +371,7 @@ final class JavaPrinter {
             return line;
         }
         StringBuilder out = new StringBuilder();
-        appendSpaceSeparated(out, leadingComments);
+        CommentedTokenText.appendSpaceSeparated(out, leadingComments);
         if (!out.isEmpty()) {
             out.append(' ');
         }
@@ -384,73 +382,73 @@ final class JavaPrinter {
         out.append(';');
         if (!afterSemicolonComments.isEmpty()) {
             out.append(' ');
-            appendSpaceSeparated(out, afterSemicolonComments);
+            CommentedTokenText.appendSpaceSeparated(out, afterSemicolonComments);
         }
         return out.toString();
     }
 
     private String formatCommentedRequires(List<String> tokens, int cursor, int semicolon) {
         List<String> beforeTransitiveOrName = new ArrayList<>();
-        while (cursor < semicolon && isCommentToken(tokens.get(cursor))) {
+        while (cursor < semicolon && CommentedTokenText.isComment(tokens.get(cursor))) {
             beforeTransitiveOrName.add(tokens.get(cursor++));
         }
         StringBuilder out = new StringBuilder();
         if (cursor < semicolon && tokens.get(cursor).equals("transitive")) {
-            appendSpaceSeparated(out, beforeTransitiveOrName);
+            CommentedTokenText.appendSpaceSeparated(out, beforeTransitiveOrName);
             if (!out.isEmpty()) {
                 out.append(' ');
             }
             out.append("transitive");
             cursor++;
             List<String> beforeName = new ArrayList<>();
-            while (cursor < semicolon && isCommentToken(tokens.get(cursor))) {
+            while (cursor < semicolon && CommentedTokenText.isComment(tokens.get(cursor))) {
                 beforeName.add(tokens.get(cursor++));
             }
             if (!beforeName.isEmpty()) {
                 out.append(' ');
-                appendSpaceSeparated(out, beforeName);
+                CommentedTokenText.appendSpaceSeparated(out, beforeName);
             }
             out.append(' ');
         } else {
-            appendSpaceSeparated(out, beforeTransitiveOrName);
+            CommentedTokenText.appendSpaceSeparated(out, beforeTransitiveOrName);
             if (!out.isEmpty()) {
                 out.append(' ');
             }
         }
-        out.append(formatCommentedQualifiedName(tokens.subList(cursor, semicolon), false));
+        out.append(CommentedTokenText.qualifiedName(tokens.subList(cursor, semicolon), false));
         return out.toString();
     }
 
     private String formatCommentedModuleAccess(String keyword, List<String> tokens, int cursor, int semicolon) {
         List<String> beforeName = new ArrayList<>();
-        while (cursor < semicolon && isCommentToken(tokens.get(cursor))) {
+        while (cursor < semicolon && CommentedTokenText.isComment(tokens.get(cursor))) {
             beforeName.add(tokens.get(cursor++));
         }
         int targetKeyword = tokens.subList(cursor, semicolon).indexOf("to");
         if (targetKeyword < 0) {
             StringBuilder out = new StringBuilder();
-            appendSpaceSeparated(out, beforeName);
+            CommentedTokenText.appendSpaceSeparated(out, beforeName);
             if (!out.isEmpty()) {
                 out.append(' ');
             }
-            out.append(formatCommentedQualifiedName(tokens.subList(cursor, semicolon), false));
+            out.append(CommentedTokenText.qualifiedName(tokens.subList(cursor, semicolon), false));
             return out.toString();
         }
         int toIndex = cursor + targetKeyword;
         int nameEnd = toIndex;
-        while (nameEnd > cursor && isCommentToken(tokens.get(nameEnd - 1))) {
+        while (nameEnd > cursor && CommentedTokenText.isComment(tokens.get(nameEnd - 1))) {
             nameEnd--;
         }
         List<String> beforeTo = tokens.subList(nameEnd, toIndex);
         StringBuilder out = new StringBuilder();
-        appendSpaceSeparated(out, beforeName);
+        CommentedTokenText.appendSpaceSeparated(out, beforeName);
         if (!out.isEmpty()) {
             out.append(' ');
         }
-        out.append(formatCommentedQualifiedName(tokens.subList(cursor, nameEnd), false));
+        out.append(CommentedTokenText.qualifiedName(tokens.subList(cursor, nameEnd), false));
         if (!beforeTo.isEmpty()) {
             out.append(' ');
-            appendSpaceSeparated(out, beforeTo);
+            CommentedTokenText.appendSpaceSeparated(out, beforeTo);
         }
         out.append('\n');
         out.append("    to ");
@@ -460,23 +458,23 @@ final class JavaPrinter {
 
     private String formatCommentedUses(List<String> tokens, int cursor, int semicolon) {
         List<String> beforeName = new ArrayList<>();
-        while (cursor < semicolon && isCommentToken(tokens.get(cursor))) {
+        while (cursor < semicolon && CommentedTokenText.isComment(tokens.get(cursor))) {
             beforeName.add(tokens.get(cursor++));
         }
         List<String> nameTokens = new ArrayList<>(tokens.subList(cursor, semicolon));
         List<String> beforeSemicolon = new ArrayList<>();
-        while (!nameTokens.isEmpty() && isCommentToken(nameTokens.getLast())) {
+        while (!nameTokens.isEmpty() && CommentedTokenText.isComment(nameTokens.getLast())) {
             beforeSemicolon.add(0, nameTokens.removeLast());
         }
         StringBuilder out = new StringBuilder();
-        appendSpaceSeparated(out, beforeName);
+        CommentedTokenText.appendSpaceSeparated(out, beforeName);
         if (!out.isEmpty()) {
             out.append(' ');
         }
-        out.append(formatCommentedQualifiedName(nameTokens, false));
+        out.append(CommentedTokenText.qualifiedName(nameTokens, false));
         if (!beforeSemicolon.isEmpty()) {
             out.append(' ');
-            appendSpaceSeparated(out, beforeSemicolon);
+            CommentedTokenText.appendSpaceSeparated(out, beforeSemicolon);
         }
         return out.toString();
     }
@@ -486,111 +484,16 @@ final class JavaPrinter {
         List<String> current = new ArrayList<>();
         for (String token : tokens) {
             if (token.equals(",")) {
-                parts.add(formatCommentedQualifiedName(current, false));
+                parts.add(CommentedTokenText.qualifiedName(current, false));
                 current = new ArrayList<>();
             } else {
                 current.add(token);
             }
         }
         if (!current.isEmpty()) {
-            parts.add(formatCommentedQualifiedName(current, false));
+            parts.add(CommentedTokenText.qualifiedName(current, false));
         }
         return String.join(", ", parts);
-    }
-
-    private String formatCommentedQualifiedName(List<String> tokens, boolean moveCommentsAfterDotBeforeDot) {
-        StringBuilder out = new StringBuilder();
-        int cursor = 0;
-        while (cursor < tokens.size()) {
-            String token = tokens.get(cursor);
-            if (token.equals(".")) {
-                out.append('.');
-                cursor++;
-                continue;
-            }
-            if (isCommentToken(token)) {
-                if (!out.isEmpty() && out.charAt(out.length() - 1) != ' ' && out.charAt(out.length() - 1) != '.') {
-                    out.append(' ');
-                }
-                out.append(token);
-                if (moveCommentsAfterDotBeforeDot && cursor + 1 < tokens.size() && tokens.get(cursor + 1).equals(".")) {
-                    cursor += 2;
-                    while (cursor < tokens.size() && isCommentToken(tokens.get(cursor))) {
-                        out.append(' ').append(tokens.get(cursor++));
-                    }
-                    out.append('.');
-                    continue;
-                }
-                if (cursor + 1 < tokens.size() && tokens.get(cursor + 1).equals(".")) {
-                    cursor++;
-                    continue;
-                }
-                out.append(' ');
-                cursor++;
-                continue;
-            }
-            if (!out.isEmpty() && out.charAt(out.length() - 1) != '.' && out.charAt(out.length() - 1) != ' ') {
-                out.append(' ');
-            }
-            out.append(token);
-            cursor++;
-        }
-        return out.toString().strip();
-    }
-
-    private void appendSpaceSeparated(StringBuilder out, List<String> values) {
-        for (String value : values) {
-            if (!out.isEmpty() && out.charAt(out.length() - 1) != ' ') {
-                out.append(' ');
-            }
-            out.append(value);
-        }
-    }
-
-    private boolean isCommentToken(String token) {
-        return token.startsWith("/*") || token.startsWith("//");
-    }
-
-    private List<String> moduleTokens(String line) {
-        List<String> tokens = new ArrayList<>();
-        int cursor = 0;
-        while (cursor < line.length()) {
-            char current = line.charAt(cursor);
-            if (Character.isWhitespace(current)) {
-                cursor++;
-                continue;
-            }
-            if (cursor + 1 < line.length() && line.startsWith("/*", cursor)) {
-                int end = line.indexOf("*/", cursor + 2);
-                if (end < 0) {
-                    tokens.add(line.substring(cursor));
-                    break;
-                }
-                tokens.add(line.substring(cursor, end + 2));
-                cursor = end + 2;
-                continue;
-            }
-            if (cursor + 1 < line.length() && line.startsWith("//", cursor)) {
-                tokens.add(line.substring(cursor).stripTrailing());
-                break;
-            }
-            if (COMMENTED_TOKEN_PUNCTUATION.indexOf(current) >= 0) {
-                tokens.add(String.valueOf(current));
-                cursor++;
-                continue;
-            }
-            int end = cursor + 1;
-            while (end < line.length()
-                    && !Character.isWhitespace(line.charAt(end))
-                    && COMMENTED_TOKEN_PUNCTUATION.indexOf(line.charAt(end)) < 0
-                    && !line.startsWith("/*", end)
-                    && !line.startsWith("//", end)) {
-                end++;
-            }
-            tokens.add(line.substring(cursor, end));
-            cursor = end;
-        }
-        return tokens;
     }
 
     private Doc moduleBlock(ModuleDeclaration declaration) {
@@ -683,15 +586,15 @@ final class JavaPrinter {
             return Doc.concat(comments.leading(declaration), bodyContent(declaration));
         } else if (formatterPragma == FormatterPragma.OFF) {
             formattingDisabled = true;
-            return Doc.concat(comments.leading(declaration), Doc.text(rawWithoutOwnComment(declaration)));
+            return Doc.concat(comments.leading(declaration), Doc.text(rawSource.rawWithoutOwnComment(declaration)));
         } else if (formatterPragma == FormatterPragma.START) {
             formattingDisabled = true;
-            return Doc.concat(comments.leading(declaration), Doc.text(rawWithoutOwnComment(declaration)));
+            return Doc.concat(comments.leading(declaration), Doc.text(rawSource.rawWithoutOwnComment(declaration)));
         } else if (formatterPragma == FormatterPragma.IGNORE) {
-            return Doc.concat(comments.leading(declaration), Doc.text(rawWithoutOwnComment(declaration)));
+            return Doc.concat(comments.leading(declaration), Doc.text(rawSource.rawWithoutOwnComment(declaration)));
         }
         if (formattingDisabled) {
-            return Doc.concat(comments.leading(declaration), Doc.text(rawWithoutOwnComment(declaration)));
+            return Doc.concat(comments.leading(declaration), Doc.text(rawSource.rawWithoutOwnComment(declaration)));
         }
         return bodyContent(declaration);
     }
@@ -713,7 +616,7 @@ final class JavaPrinter {
     }
 
     private Doc classOrInterface(ClassOrInterfaceDeclaration declaration) {
-        String raw = raw(declaration);
+        String raw = rawSource.raw(declaration);
         if (declaration.isInterface() && commentedInterfaceHeader(raw).contains("/*")) {
             return Doc.concat(comments.leading(declaration), Doc.text(formatCommentedInterface(raw)));
         }
@@ -776,98 +679,56 @@ final class JavaPrinter {
     }
 
     private String formatCommentedInterfaceHeader(String line) {
-        List<String> tokens = new ArrayList<>(moduleTokens(line));
+        List<String> tokens = new ArrayList<>(CommentedTokenText.tokens(line));
         int openBrace = tokens.indexOf("{");
         if (openBrace < 0) {
             return line;
         }
         List<String> beforeBrace = new ArrayList<>();
-        for (int i = openBrace - 1; i >= 0 && isCommentToken(tokens.get(i)); i--) {
+        for (int i = openBrace - 1; i >= 0 && CommentedTokenText.isComment(tokens.get(i)); i--) {
             beforeBrace.add(0, tokens.get(i));
         }
         tokens = new ArrayList<>(tokens.subList(0, openBrace - beforeBrace.size()));
         int extendsIndex = tokens.indexOf("extends");
         if (extendsIndex < 0) {
-            return formatCommentedTokenLine(tokens) + " {";
+            return CommentedTokenText.tokenLine(tokens) + " {";
         }
         List<String> beforeExtends = new ArrayList<>(tokens.subList(0, extendsIndex));
         List<String> clauseLeading = new ArrayList<>();
-        while (!beforeExtends.isEmpty() && isCommentToken(beforeExtends.getLast())) {
+        while (!beforeExtends.isEmpty() && CommentedTokenText.isComment(beforeExtends.getLast())) {
             clauseLeading.add(0, beforeExtends.removeLast());
         }
         List<String> clause = new ArrayList<>(clauseLeading);
         clause.addAll(tokens.subList(extendsIndex, tokens.size()));
         return String.join(
                 "\n",
-                formatCommentedTokenLine(beforeExtends),
-                "  " + formatCommentedTokenLine(clause),
-                formatCommentedTokenLine(beforeBrace) + " {");
+                CommentedTokenText.tokenLine(beforeExtends),
+                "  " + CommentedTokenText.tokenLine(clause),
+                CommentedTokenText.tokenLine(beforeBrace) + " {");
     }
 
     private String formatCommentedAbstractMethod(String line) {
-        List<String> tokens = moduleTokens(line);
+        List<String> tokens = CommentedTokenText.tokens(line);
         int open = tokens.indexOf("(");
         int close = tokens.lastIndexOf(")");
         int semicolon = tokens.indexOf(";");
         if (open < 0 || close < open || semicolon < close) {
-            return "  " + formatCommentedTokenLine(tokens);
+            return "  " + CommentedTokenText.tokenLine(tokens);
         }
         List<String> docs = new ArrayList<>();
-        docs.add("  " + formatCommentedTokenLine(tokens.subList(0, open)) + "(");
+        docs.add("  " + CommentedTokenText.tokenLine(tokens.subList(0, open)) + "(");
         List<String> parameterTokens = tokens.subList(open + 1, close);
         if (!parameterTokens.isEmpty()) {
-            for (List<String> parameter : commaSeparated(parameterTokens)) {
-                docs.add("    " + formatCommentedTokenLine(parameter) + ",");
+            for (List<String> parameter : CommentedTokenText.commaSeparated(parameterTokens)) {
+                docs.add("    " + CommentedTokenText.tokenLine(parameter) + ",");
             }
             String lastParameter = docs.removeLast();
             docs.add(lastParameter.substring(0, lastParameter.length() - 1));
         }
-        String suffix = formatCommentedTokenLine(tokens.subList(close + 1, semicolon));
-        String trailing = formatCommentedTokenLine(tokens.subList(semicolon + 1, tokens.size()));
+        String suffix = CommentedTokenText.tokenLine(tokens.subList(close + 1, semicolon));
+        String trailing = CommentedTokenText.tokenLine(tokens.subList(semicolon + 1, tokens.size()));
         docs.add("  )" + (suffix.isEmpty() ? "" : " " + suffix) + ";" + (trailing.isEmpty() ? "" : " " + trailing));
         return String.join("\n", docs);
-    }
-
-    private List<List<String>> commaSeparated(List<String> tokens) {
-        List<List<String>> parts = new ArrayList<>();
-        List<String> current = new ArrayList<>();
-        for (String token : tokens) {
-            if (token.equals(",")) {
-                parts.add(current);
-                current = new ArrayList<>();
-            } else {
-                current.add(token);
-            }
-        }
-        parts.add(current);
-        return parts;
-    }
-
-    private String formatCommentedTokenLine(List<String> tokens) {
-        StringBuilder out = new StringBuilder();
-        for (String token : tokens) {
-            if (token.equals(",")) {
-                stripTrailingSpace(out);
-                out.append(", ");
-                continue;
-            }
-            if (token.equals(".")) {
-                stripTrailingSpace(out);
-                out.append('.');
-                continue;
-            }
-            if (!out.isEmpty() && out.charAt(out.length() - 1) != ' ' && out.charAt(out.length() - 1) != '.') {
-                out.append(' ');
-            }
-            out.append(token);
-        }
-        return out.toString().strip();
-    }
-
-    private void stripTrailingSpace(StringBuilder out) {
-        while (!out.isEmpty() && out.charAt(out.length() - 1) == ' ') {
-            out.deleteCharAt(out.length() - 1);
-        }
     }
 
     private boolean shouldBreakClassOrInterfaceHeader(ClassOrInterfaceDeclaration declaration) {
@@ -1231,7 +1092,7 @@ final class JavaPrinter {
     }
 
     private boolean enumSemicolonFollowsBodyComments(EnumDeclaration declaration) {
-        String raw = declaration.getTokenRange().map(Object::toString).orElseGet(() -> rawWithoutOwnComment(declaration));
+        String raw = declaration.getTokenRange().map(Object::toString).orElseGet(() -> rawSource.rawWithoutOwnComment(declaration));
         int firstMember = declaration.getMembers().stream()
                 .findFirst()
                 .flatMap(member -> member.getTokenRange().map(Object::toString))
@@ -1246,7 +1107,7 @@ final class JavaPrinter {
     }
 
     private boolean enumHasExplicitSemicolon(EnumDeclaration declaration) {
-        String raw = rawWithoutOwnComment(declaration);
+        String raw = rawSource.rawWithoutOwnComment(declaration);
         int open = raw.indexOf('{');
         int firstMember = declaration.getMembers().stream()
                 .findFirst()
@@ -1557,7 +1418,7 @@ final class JavaPrinter {
     }
 
     private Optional<Doc> preEqualsBlockComment(VariableDeclarator variable, Expression initializer) {
-        String raw = raw(variable);
+        String raw = rawSource.raw(variable);
         int equals = raw.indexOf('=');
         int blockComment = raw.indexOf("/*");
         if (blockComment < 0 || equals < 0 || blockComment > equals) {
@@ -1568,7 +1429,7 @@ final class JavaPrinter {
     }
 
     private Optional<String> postEqualsBlockComment(VariableDeclarator variable, Expression initializer) {
-        String raw = raw(variable);
+        String raw = rawSource.raw(variable);
         int equals = raw.indexOf('=');
         int blockComment = raw.indexOf("/*");
         if (blockComment < 0 || equals < 0 || blockComment < equals) {
@@ -1841,7 +1702,7 @@ final class JavaPrinter {
     }
 
     private Doc method(MethodDeclaration declaration) {
-        String raw = raw(declaration);
+        String raw = rawSource.raw(declaration);
         if (declaration.getBody().isPresent()
                 && hasCommentedMethodSignature(raw)
                 && canFormatCommentedMethodSignatureFromRaw(declaration)) {
@@ -1909,14 +1770,16 @@ final class JavaPrinter {
         if (open < 0 || close < open) {
             return method;
         }
-        String prefix = formatCommentedTokenLine(moduleTokens(signature.substring(0, open)));
+        String prefix = CommentedTokenText.tokenLine(CommentedTokenText.tokens(signature.substring(0, open)));
         String parameters = signature.substring(open + 1, close);
         List<String> parameterLines = nonBlankLines(parameters);
         String inlineOpeningLineComment = inlineOpeningLineComment(parameters);
         if (parameterLines.isEmpty()) {
             return formatMethodWithBody(prefix + "()", List.of(), inlineOpeningLineComment, body);
         }
-        if (parameterLines.size() == 1 && isCommentToken(parameterLines.getFirst()) && parameterLines.getFirst().startsWith("/*")
+        if (parameterLines.size() == 1
+                && CommentedTokenText.isComment(parameterLines.getFirst())
+                && parameterLines.getFirst().startsWith("/*")
                 && !parameters.contains("\n")) {
             return formatMethodWithBody(prefix + " " + parameterLines.getFirst() + "()", List.of(), "", body);
         }
@@ -1937,7 +1800,7 @@ final class JavaPrinter {
             }
             return formatMethodWithBody(prefix + "()", parameterLines, inlineOpeningLineComment, body);
         }
-        String parameter = formatCommentedTokenLine(moduleTokens(String.join(" ", parameterParts)));
+        String parameter = CommentedTokenText.tokenLine(CommentedTokenText.tokens(String.join(" ", parameterParts)));
         if (leadingComments.isEmpty() && !containsLineComment(parameter)) {
             List<String> suffixComments = new ArrayList<>(trailingComments);
             return formatMethodWithBody(prefix + "(" + parameter + ")", suffixComments, "", body);
@@ -2117,7 +1980,7 @@ final class JavaPrinter {
     }
 
     private Doc openingBraceTrailingLineComment(Node node) {
-        String raw = raw(node);
+        String raw = rawSource.raw(node);
         int openingBrace = raw.indexOf('{');
         if (openingBrace < 0) {
             return Doc.EMPTY;
@@ -2310,7 +2173,7 @@ final class JavaPrinter {
     private String receiverName(ReceiverParameter parameter) {
         return parameter.getTokenRange()
                 .map(Object::toString)
-                .map(this::normalizeWhitespace)
+                .map(rawSource::normalizeWhitespace)
                 .map(text -> text.substring(text.lastIndexOf(' ') + 1))
                 .orElseGet(() -> compact(parameter.getName()));
     }
@@ -2524,11 +2387,11 @@ final class JavaPrinter {
             formattingDisabled = true;
         } else if (formatterPragma == FormatterPragma.IGNORE) {
             Doc leading = statement instanceof TryStmt ? Doc.EMPTY : comments.leading(statement);
-            return Doc.concat(leading, Doc.text(rawWithoutOwnComment(statement)), Doc.HARD_LINE);
+            return Doc.concat(leading, Doc.text(rawSource.rawWithoutOwnComment(statement)), Doc.HARD_LINE);
         }
         if (formattingDisabled) {
             Doc leading = statement instanceof TryStmt ? Doc.EMPTY : comments.leading(statement);
-            return Doc.concat(leading, Doc.text(rawWithoutOwnComment(statement)));
+            return Doc.concat(leading, Doc.text(rawSource.rawWithoutOwnComment(statement)));
         }
         boolean inlineBreakBlockComment = statement instanceof BreakStmt
                 && statement.getComment().filter(BlockComment.class::isInstance).isPresent();
@@ -2586,7 +2449,7 @@ final class JavaPrinter {
     }
 
     private String trailingStatementBlockComment(Statement statement) {
-        String raw = raw(statement);
+        String raw = rawSource.raw(statement);
         int commentStart = raw.indexOf("/*");
         int semicolon = raw.lastIndexOf(';');
         if (commentStart < 0 || semicolon < commentStart) {
@@ -2647,7 +2510,7 @@ final class JavaPrinter {
     }
 
     private List<String> labeledStatementLeadingComments(LabeledStmt statement) {
-        String raw = raw(statement);
+        String raw = rawSource.raw(statement);
         int colon = raw.indexOf(':');
         if (colon < 0) {
             return List.of();
@@ -3076,7 +2939,7 @@ final class JavaPrinter {
     }
 
     private boolean tryResourcesHaveTrailingSemicolon(TryStmt statement) {
-        String raw = rawWithoutOwnComment(statement);
+        String raw = rawSource.rawWithoutOwnComment(statement);
         int resourceStart = raw.indexOf('(');
         int blockStart = raw.indexOf('{', resourceStart);
         if (resourceStart < 0 || blockStart < 0) {
@@ -3242,7 +3105,7 @@ final class JavaPrinter {
         Doc leading = comments.ownComment(parameter, BlockComment.class::isInstance);
         List<Doc> lines = new ArrayList<>();
         for (int i = 0; i < parts.size(); i++) {
-            String type = formatCommentedTokenLine(moduleTokens(parts.get(i).strip()));
+            String type = CommentedTokenText.tokenLine(CommentedTokenText.tokens(parts.get(i).strip()));
             if (i == 0 && leading != Doc.EMPTY) {
                 type = commentText(leading) + " " + type;
             }
@@ -3476,7 +3339,7 @@ final class JavaPrinter {
     }
 
     private Optional<String> formattedTypeScriptTextBlock(TextBlockLiteralExpr expression) {
-        String raw = raw(expression);
+        String raw = rawSource.raw(expression);
         if (!raw.contains("const s =")) {
             return Optional.empty();
         }
@@ -3490,7 +3353,7 @@ final class JavaPrinter {
     }
 
     private String renderUnformattedTextBlock(TextBlockLiteralExpr expression) {
-        String raw = raw(expression);
+        String raw = rawSource.raw(expression);
         if (hasSameLineTextBlockClosingDelimiter(raw)) {
             return renderTextBlockWithSameLineClosingDelimiter(
                     stripSameLineTextBlockIndent(raw), textBlockContentIndent(expression));
@@ -4426,7 +4289,7 @@ final class JavaPrinter {
                 return Optional.empty();
             }
         }
-        return Optional.of(normalizeWhitespace(String.join(" ", lines))
+        return Optional.of(rawSource.normalizeWhitespace(String.join(" ", lines))
                 .replace("( /*", "(/*")
                 .replaceAll(",\\s*", ", ")
                 .replaceAll("\\s+\\)", ")"));
@@ -5486,21 +5349,21 @@ final class JavaPrinter {
 
     private String switchLabelText(Expression label) {
         if (label instanceof TypePatternExpr) {
-            return normalizeWhitespace(label.toString());
+            return rawSource.normalizeWhitespace(label.toString());
         }
         if (label instanceof RecordPatternExpr) {
-            return normalizeWhitespace(label.toString());
+            return rawSource.normalizeWhitespace(label.toString());
         }
         return compact(label);
     }
 
     private String defaultSwitchEntryLabel(SwitchEntry entry) {
-        String raw = raw(entry);
+        String raw = rawSource.raw(entry);
         int colon = raw.indexOf(':');
         if (colon < 0) {
             return "default";
         }
-        String label = formatCommentedTokenLine(moduleTokens(raw.substring(0, colon)));
+        String label = CommentedTokenText.tokenLine(CommentedTokenText.tokens(raw.substring(0, colon)));
         return label.isEmpty() ? "default" : label;
     }
 
@@ -5578,7 +5441,7 @@ final class JavaPrinter {
         if (entry.getType() == SwitchEntry.Type.STATEMENT_GROUP) {
             return Optional.empty();
         }
-        String raw = entry.getTokenRange().map(Object::toString).orElseGet(() -> rawWithoutOwnComment(entry)).stripTrailing();
+        String raw = entry.getTokenRange().map(Object::toString).orElseGet(() -> rawSource.rawWithoutOwnComment(entry)).stripTrailing();
         if (!raw.contains("->") || raw.contains("\n")) {
             return Optional.empty();
         }
@@ -5948,7 +5811,7 @@ final class JavaPrinter {
     }
 
     private String forEachVariable(ForEachStmt statement) {
-        String raw = raw(statement);
+        String raw = rawSource.raw(statement);
         int open = raw.indexOf('(');
         int colon = raw.indexOf(':', open);
         if (open < 0 || colon < open) {
@@ -5956,7 +5819,7 @@ final class JavaPrinter {
         }
         String variable = raw.substring(open + 1, colon);
         return variable.contains("/*")
-                ? formatCommentedTokenLine(moduleTokens(variable))
+                ? CommentedTokenText.tokenLine(CommentedTokenText.tokens(variable))
                 : compact(statement.getVariable());
     }
 
@@ -6130,7 +5993,7 @@ final class JavaPrinter {
         if (unattached != Doc.EMPTY) {
             return " " + commentText(unattached);
         }
-        String raw = raw(node);
+        String raw = rawSource.raw(node);
         int semicolon = raw.lastIndexOf(';');
         if (semicolon < 0 || semicolon + 1 >= raw.length()) {
             return "";
@@ -6467,7 +6330,7 @@ final class JavaPrinter {
 
     private String compact(Node node) {
         if (node instanceof StringLiteralExpr) {
-            return raw(node);
+            return rawSource.raw(node);
         }
         if (node instanceof FieldAccessExpr fieldAccessExpr) {
             return compact(fieldAccessExpr.getScope()) + "." + fieldAccessExpr.getNameAsString();
@@ -6477,8 +6340,8 @@ final class JavaPrinter {
         }
         return node.getTokenRange()
                 .map(Object::toString)
-                .map(this::normalizeWhitespace)
-                .orElseGet(() -> normalizeWhitespace(node.toString()));
+                .map(rawSource::normalizeWhitespace)
+                .orElseGet(() -> rawSource.normalizeWhitespace(node.toString()));
     }
 
     private String compactMethodCall(MethodCallExpr expression) {
@@ -6506,25 +6369,6 @@ final class JavaPrinter {
         return compact(clone);
     }
 
-    private String rawWithoutOwnComment(Node node) {
-        Node clone = node.clone();
-        clone.removeComment();
-        String raw = clone.getTokenRange().map(Object::toString).orElseGet(clone::toString).strip();
-        return options.preserveRawTrailingWhitespace() ? raw : stripTrailingHorizontalWhitespace(raw);
-    }
-
-    private String raw(Node node) {
-        String raw = node.getTokenRange().map(Object::toString).orElseGet(node::toString).strip();
-        return options.preserveRawTrailingWhitespace() ? raw : stripTrailingHorizontalWhitespace(raw);
-    }
-
-    private String stripTrailingHorizontalWhitespace(String text) {
-        return text.lines()
-                .map(line -> line.stripTrailing())
-                .reduce((left, right) -> left + System.lineSeparator() + right)
-                .orElse("");
-    }
-
     private enum FormatterPragma {
         OFF,
         ON,
@@ -6539,13 +6383,4 @@ final class JavaPrinter {
         BREAK
     }
 
-    private String normalizeWhitespace(String text) {
-        String stripped = text.strip();
-        if (stripped.isEmpty()) {
-            return "";
-        }
-        String normalized = WHITESPACE.matcher(stripped).replaceAll(" ")
-                .replaceAll("(?<![=!<>])\\s*=\\s*(?![=])", " = ");
-        return WHITESPACE.matcher(normalized).replaceAll(" ");
-    }
 }

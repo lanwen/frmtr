@@ -23,7 +23,7 @@ Shared subproject conventions configure Java 25, UTF-8 compilation, `-Xlint:all`
 
 - `frmtr-core/src/main/java/dev/lanwen/frmtr`: public API and configuration.
 - `frmtr-core/src/main/java/dev/lanwen/frmtr/doc`: formatter document IR and renderer.
-- `frmtr-core/src/main/java/dev/lanwen/frmtr/java`: JavaParser-backed parser, syntax view, comment handling, and Java-specific printer.
+- `frmtr-core/src/main/java/dev/lanwen/frmtr/java`: JavaParser-backed parser, syntax view, comment handling, raw source text helpers, and Java-specific printer.
 - `frmtr-tooling/src/main/java/dev/lanwen/frmtr/tooling`: reusable file-oriented check/write runner, run summaries, per-file results, and unified diff rendering shared by adapters.
 - `frmtr-cli/src/main/java/dev/lanwen/frmtr/cli`: Picocli command-line adapter, selector discovery, ignore handling, and output modes.
 - `frmtr-gradle-plugin/src/main/java/dev/lanwen/frmtr/gradle`: Gradle extension, Java source-set integration, and formatter tasks.
@@ -72,7 +72,7 @@ The runner owns deterministic path ordering and de-duplication for file lists su
 
 The public `Frmtr` API wraps recoverable internal formatter failures, including parser dependency linkage failures and assertions, as `FormatterException.internal(...)` so adapters can report concise failures without treating them as VM-level crashes.
 
-`JavaPrinter` contains the current Java formatting rules for packages, imports, common type declarations, fields, methods, constructors, blocks, and basic statements. It keeps the v1 style deliberately opinionated and sparse on options.
+`JavaPrinter` contains the current Java formatting rules for packages, imports, common type declarations, fields, methods, constructors, blocks, and basic statements. It keeps the v1 style deliberately opinionated and sparse on options. `RawSource` centralizes JavaParser token-range text access and whitespace normalization used by printer rules when formatting requires raw source text or compact source-derived text. `CommentedTokenText` centralizes the small comment-aware tokenization and token-line text helpers used by raw-source fallback formatting.
 
 `CommentTracker` preserves comments currently exposed by JavaParser as leading or orphan comments. Comment handling is expected to become more precise as the formatter grows.
 

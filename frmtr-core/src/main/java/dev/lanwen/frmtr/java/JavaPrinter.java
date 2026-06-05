@@ -106,6 +106,7 @@ final class JavaPrinter {
     private final CommentedMethodSignaturePrinter commentedMethodSignatures;
     private final CommentedModulePrinter commentedModules = new CommentedModulePrinter();
     private final CommentedInterfacePrinter commentedInterfaces = new CommentedInterfacePrinter();
+    private final PackageDeclarationPrinter packageDeclarations;
     private final ImportDeclarationPrinter importDeclarations;
     private final FieldDeclarationPrinter fields;
 
@@ -116,6 +117,7 @@ final class JavaPrinter {
         this.memberBlocks = new MemberBlockPrinter(rawSource, comments, this::hasDeclarationAnnotations);
         this.blocks = new BlockPrinter(comments, this::statement, formatterPragmas::hasPragma);
         this.commentedMethodSignatures = new CommentedMethodSignaturePrinter(options);
+        this.packageDeclarations = new PackageDeclarationPrinter(comments, rawSource, options);
         this.importDeclarations = new ImportDeclarationPrinter(comments);
         this.fields = new FieldDeclarationPrinter(
                 comments,
@@ -231,7 +233,7 @@ final class JavaPrinter {
     Doc print(CompilationUnit unit) {
         List<Doc> parts = new ArrayList<>();
         boolean hasStructuralParts = false;
-        Doc sourceLeadingComments = sourceLeadingCommentsBeforePackage(unit);
+        Doc sourceLeadingComments = packageDeclarations.sourceLeadingCommentsBeforePackage(unit);
         if (sourceLeadingComments != Doc.EMPTY) {
             parts.add(sourceLeadingComments);
             parts.add(Doc.HARD_LINE);
@@ -247,8 +249,7 @@ final class JavaPrinter {
             parts.add(orphanComments);
         }
         unit.getPackageDeclaration().ifPresent(packageDeclaration -> {
-            parts.add(comments.leading(packageDeclaration));
-            parts.add(Doc.text("package " + packageDeclaration.getNameAsString() + ";"));
+            parts.add(packageDeclarations.packageDeclaration(packageDeclaration));
         });
         hasStructuralParts = unit.getPackageDeclaration().isPresent();
         Optional<Doc> imports = imports(unit);
@@ -285,23 +286,6 @@ final class JavaPrinter {
             parts.add(trailingOrphanComments);
         }
         return Doc.concat(parts);
-    }
-
-    private Doc sourceLeadingCommentsBeforePackage(CompilationUnit unit) {
-        if (unit.getPackageDeclaration().isEmpty()) {
-            return Doc.EMPTY;
-        }
-        String packagePrefix = "package " + unit.getPackageDeclaration().orElseThrow().getNameAsString();
-        String rawUnit = unit.getTokenRange().map(Object::toString).orElse("");
-        int packageStart = rawUnit.indexOf(packagePrefix);
-        if (packageStart <= 0) {
-            return Doc.EMPTY;
-        }
-        String leading = rawUnit.substring(0, packageStart).stripTrailing();
-        if (!leading.startsWith("/*") && !leading.startsWith("//")) {
-            return Doc.EMPTY;
-        }
-        return Doc.text(options.preserveRawTrailingWhitespace() ? leading : rawSource.stripTrailingHorizontalWhitespace(leading));
     }
 
     private List<Doc> topLevelDeclarations(CompilationUnit unit) {

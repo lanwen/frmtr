@@ -48,7 +48,6 @@ import com.github.javaparser.ast.stmt.CatchClause;
 import com.github.javaparser.ast.stmt.DoStmt;
 import com.github.javaparser.ast.stmt.EmptyStmt;
 import com.github.javaparser.ast.stmt.ExplicitConstructorInvocationStmt;
-import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.stmt.ForEachStmt;
 import com.github.javaparser.ast.stmt.ForStmt;
 import com.github.javaparser.ast.stmt.IfStmt;
@@ -90,6 +89,7 @@ final class JavaPrinter {
     private final ObjectCreationPrinter objectCreations;
     private final TextBlockPrinter textBlocks;
     private final CastExpressionPrinter casts;
+    private final EnclosedExpressionPrinter enclosedExpressions;
     private final InstanceOfExpressionPrinter instanceOfExpressions;
     private final FieldAccessPrinter fieldAccesses;
     private final MethodReferencePrinter methodReferences;
@@ -181,11 +181,26 @@ final class JavaPrinter {
                 this::blockStatementWidth,
                 this::startsBefore,
                 this::startsOnSameLine);
+        this.casts = new CastExpressionPrinter(
+                options,
+                this::expression,
+                this::compactTypeLike,
+                this::currentIndentedWidth);
+        this.enclosedExpressions = new EnclosedExpressionPrinter(
+                options,
+                this::expression,
+                (expression, forceBreak) -> binaries.lines(expression, forceBreak),
+                this::compact,
+                this::currentIndentedWidth,
+                this::continuationStatementWidth,
+                casts::nestedCastDepth,
+                lambdas::parenthesizedLambdaBreak,
+                (expression, forceBreak) -> conditionals.conditionalExpression(expression, forceBreak));
         this.arrays = new ArrayExpressionPrinter(
                 comments,
                 options,
                 this::expression,
-                this::brokenEnclosedForSuffix,
+                enclosedExpressions::brokenEnclosedForSuffix,
                 this::compactTypeLike,
                 this::compact,
                 this::currentIndentedWidth,
@@ -203,11 +218,6 @@ final class JavaPrinter {
                 this::compactTypeLikeWithoutOwnComment,
                 this::commentText);
         this.textBlocks = new TextBlockPrinter(rawSource, options);
-        this.casts = new CastExpressionPrinter(
-                options,
-                this::expression,
-                this::compactTypeLike,
-                this::currentIndentedWidth);
         this.instanceOfExpressions = new InstanceOfExpressionPrinter(
                 options,
                 this::expression,
@@ -219,14 +229,14 @@ final class JavaPrinter {
                 options,
                 this::compact,
                 types::compactJoinTypeLike,
-                this::brokenEnclosedForSuffix,
+                enclosedExpressions::brokenEnclosedForSuffix,
                 this::blockStatementWidth);
         this.methodCalls = new MethodCallPrinter(
                 comments,
                 options,
                 types,
                 this::expression,
-                this::brokenEnclosedForSuffix,
+                enclosedExpressions::brokenEnclosedForSuffix,
                 objectCreations::brokenObjectCreation,
                 lambdas::huggableBlockLambdaArguments,
                 lambdas::commentedExpressionLambdaArgument,
@@ -594,27 +604,15 @@ final class JavaPrinter {
         if (expression instanceof UnaryExpr unaryExpr
                 && unaryExpr.getOperator() == UnaryExpr.Operator.LOGICAL_COMPLEMENT
                 && unaryExpr.getExpression() instanceof EnclosedExpr enclosedExpr) {
-            return Doc.concat(Doc.text("!"), parenthesizedBreak(enclosedExpr.getInner()));
+            return Doc.concat(Doc.text("!"), enclosedExpressions.parenthesizedBreak(enclosedExpr.getInner()));
         }
         if (expression instanceof EnclosedExpr enclosedExpr) {
-            return parenthesizedBreak(enclosedExpr.getInner());
+            return enclosedExpressions.parenthesizedBreak(enclosedExpr.getInner());
         }
         if (expression instanceof BinaryExpr binaryExpr) {
-            return parenthesizedBreak(binaryExpr);
+            return enclosedExpressions.parenthesizedBreak(binaryExpr);
         }
         return expression(expression);
-    }
-
-    private Doc parenthesizedBreak(Expression expression) {
-        return parenthesizedBreak(expression, false);
-    }
-
-    private Doc parenthesizedBreak(Expression expression, boolean forceBinaryBreak) {
-        return Doc.concat(
-                Doc.text("("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, binaries.lines(expression, forceBinaryBreak))),
-                Doc.HARD_LINE,
-                Doc.text(")"));
     }
 
     private Doc brokenMethodCall(MethodCallExpr expression) {
@@ -656,7 +654,7 @@ final class JavaPrinter {
             return conditionals.conditionalExpression(conditionalExpr);
         }
         if (expression instanceof EnclosedExpr enclosedExpr) {
-            return enclosedExpression(enclosedExpr);
+            return enclosedExpressions.enclosedExpression(enclosedExpr);
         }
         if (expression instanceof FieldAccessExpr fieldAccessExpr) {
             return fieldAccesses.fieldAccess(fieldAccessExpr);
@@ -685,31 +683,6 @@ final class JavaPrinter {
         return Doc.text(compact(expression));
     }
 
-    private Doc enclosedExpression(EnclosedExpr expression) {
-        if (expression.getInner() instanceof CastExpr) {
-            if (casts.nestedCastDepth(expression.getInner()) <= 2) {
-                return Doc.concat(Doc.text("("), expression(expression.getInner()), Doc.text(")"));
-            }
-            return Doc.concat(
-                    Doc.text("("),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, expression(expression.getInner()))),
-                    Doc.HARD_LINE,
-                    Doc.text(")"));
-        }
-        if (expression.getInner() instanceof ConditionalExpr conditionalExpr
-                && continuationStatementWidth(compact(expression)) >= options.lineWidth()) {
-            return Doc.concat(Doc.text("("), conditionals.conditionalExpression(conditionalExpr, true), Doc.text(")"));
-        }
-        if (expression.getInner() instanceof LambdaExpr lambdaExpr
-                && expression.getParentNode().filter(ExpressionStmt.class::isInstance).isPresent()) {
-            return lambdas.parenthesizedLambdaBreak(lambdaExpr);
-        }
-        if (currentIndentedWidth(compact(expression)) <= options.lineWidth()) {
-            return Doc.text(compact(expression));
-        }
-        return Doc.concat(Doc.text("("), expression(expression.getInner()), Doc.text(")"));
-    }
-
     private Optional<Doc> suffixedEnclosedExpression(Expression expression, boolean leadingBreak) {
         if (expression instanceof MethodCallExpr methodCallExpr) {
             return methodCalls.suffixedEnclosedMethodCall(methodCallExpr, leadingBreak);
@@ -718,38 +691,6 @@ final class JavaPrinter {
             return methodReferences.suffixedEnclosedMethodReference(methodReferenceExpr, leadingBreak);
         }
         return Optional.empty();
-    }
-
-    private Doc brokenEnclosedForSuffix(EnclosedExpr expression, boolean leadingBreak) {
-        Expression inner = expression.getInner();
-        if (inner instanceof LambdaExpr lambdaExpr) {
-            return lambdas.parenthesizedLambdaBreak(lambdaExpr);
-        }
-        if (inner instanceof ConditionalExpr conditionalExpr
-                && (!leadingBreak || conditionalConditionHasNestedBinary(conditionalExpr))) {
-            return parenthesizedConditionalTrailingBreak(conditionalExpr);
-        }
-        return parenthesizedBreak(inner, leadingBreak || inner instanceof BinaryExpr);
-    }
-
-    private boolean conditionalConditionHasNestedBinary(ConditionalExpr expression) {
-        return expression.getCondition() instanceof BinaryExpr binaryExpr
-                && (binaryExpr.getLeft() instanceof BinaryExpr || binaryExpr.getRight() instanceof BinaryExpr);
-    }
-
-    private Doc parenthesizedConditionalTrailingBreak(ConditionalExpr expression) {
-        return Doc.concat(
-                Doc.text("("),
-                expression(expression.getCondition()),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.text("? "),
-                        expression(expression.getThenExpr()),
-                        Doc.HARD_LINE,
-                        Doc.text(": "),
-                        expression(expression.getElseExpr()))),
-                Doc.HARD_LINE,
-                Doc.text(")"));
     }
 
     private boolean startsOnSameLine(Comment comment, Node node) {

@@ -98,6 +98,7 @@ final class JavaPrinter {
     private final MemberBlockPrinter memberBlocks;
     private final BlockPrinter blocks;
     private final CallableSignaturePrinter callableSignatures;
+    private final RecordDeclarationPrinter records;
     private final CommentedMethodSignaturePrinter commentedMethodSignatures;
     private final CommentedModulePrinter commentedModules = new CommentedModulePrinter();
     private final CommentedInterfacePrinter commentedInterfaces = new CommentedInterfacePrinter();
@@ -121,6 +122,21 @@ final class JavaPrinter {
                 this::unattachedTrailingBlockComment,
                 this::startsAfterNodeOnSameLine,
                 this::commentText);
+        this.records = new RecordDeclarationPrinter(
+                comments,
+                options,
+                this::annotations,
+                this::modifiers,
+                callableSignatures::typeParameters,
+                this::flatTypeParameters,
+                this::compact,
+                this::compactJoin,
+                this::compactJoinTypeLike,
+                this::compactTypeLike,
+                this::annotation,
+                this::annotationFlatText,
+                this::currentIndentedWidth,
+                declaration -> memberBlocks.memberBlock(declaration.getMembers(), declaration, this::body));
     }
 
     Doc print(CompilationUnit unit) {
@@ -418,136 +434,7 @@ final class JavaPrinter {
     }
 
     private Doc record(RecordDeclaration declaration) {
-        List<Doc> header = new ArrayList<>();
-        header.add(comments.leading(declaration));
-        header.add(annotations(declaration));
-        String prefix = modifiers(declaration) + "record " + declaration.getNameAsString();
-        header.add(Doc.text(prefix));
-        if (!declaration.getTypeParameters().isEmpty()) {
-            header.add(callableSignatures.typeParameters(declaration.getTypeParameters()));
-            prefix += flatTypeParameters(declaration.getTypeParameters());
-        }
-        boolean breakParameters = recordParametersBreak(prefix, declaration);
-        header.add(recordParameters(declaration, breakParameters));
-        recordImplementsTypes(declaration, breakParameters).ifPresent(header::add);
-        header.add(recordBodyBreak(declaration) ? Doc.HARD_LINE : Doc.text(" "));
-        header.add(memberBlocks.memberBlock(declaration.getMembers(), declaration, this::body));
-        return Doc.concat(header);
-    }
-
-    private boolean recordParametersBreak(String prefix, RecordDeclaration declaration) {
-        if (declaration.getTypeParameters().size() > 2) {
-            return true;
-        }
-        String parameters = declaration.getParameters().stream()
-                .map(this::recordComponentFlat)
-                .reduce((left, right) -> left + ", " + right)
-                .orElse("");
-        String implementsClause = declaration.getImplementedTypes().isEmpty()
-                ? ""
-                : " implements " + compactJoinTypeLike(declaration.getImplementedTypes());
-        return currentIndentedWidth(prefix + "(" + parameters + ")" + implementsClause + " {}") > options.lineWidth();
-    }
-
-    private Doc recordParameters(RecordDeclaration declaration, boolean forceBreak) {
-        if (declaration.getParameters().isEmpty()) {
-            return Doc.text("()");
-        }
-        List<Doc> parameters = new ArrayList<>();
-        for (int i = 0; i < declaration.getParameters().size(); i++) {
-            if (i > 0) {
-                parameters.add(recordParameterSeparator(
-                        declaration.getParameters().get(i - 1),
-                        declaration.getParameters().get(i),
-                        forceBreak));
-            }
-            parameters.add(recordComponent(declaration.getParameters().get(i)));
-        }
-        Doc line = forceBreak ? Doc.HARD_LINE : Doc.SOFT_LINE;
-        Doc doc = Doc.concat(
-                Doc.text("("),
-                Doc.indent(Doc.concat(line, Doc.concat(parameters))),
-                line,
-                Doc.text(")"));
-        return forceBreak ? doc : Doc.group(doc);
-    }
-
-    private Doc recordParameterSeparator(Parameter previous, Parameter current, boolean forceBreak) {
-        boolean blankLineBetween = previous.getRange()
-                .flatMap(previousRange -> current.getRange()
-                        .map(currentRange -> currentRange.begin.line > previousRange.end.line + 1))
-                .orElse(false);
-        if (blankLineBetween) {
-            return Doc.concat(Doc.text(","), Doc.HARD_LINE, Doc.HARD_LINE);
-        }
-        return Doc.concat(Doc.text(","), forceBreak ? Doc.HARD_LINE : Doc.LINE);
-    }
-
-    private Doc recordComponent(Parameter parameter) {
-        List<Doc> parts = new ArrayList<>();
-        Doc leading = comments.leading(parameter);
-        if (leading != Doc.EMPTY) {
-            parts.add(leading);
-        }
-        boolean breakAnnotations = parameter.getAnnotations().size() > 1
-                || parameter.getAnnotations().stream()
-                        .anyMatch(annotation -> currentIndentedWidth(annotationFlatText(annotation) + " " + recordComponentTail(parameter)) > options.lineWidth());
-        if (breakAnnotations) {
-            parameter.getAnnotations().stream().map(this::annotation).map(doc -> Doc.concat(doc, Doc.HARD_LINE)).forEach(parts::add);
-        } else if (!parameter.getAnnotations().isEmpty()) {
-            parts.add(Doc.text(parameter.getAnnotations().stream()
-                    .map(this::annotationFlatText)
-                    .reduce((left, right) -> left + " " + right)
-                    .orElse("") + " "));
-        }
-        Doc typeComment = comments.ownComment(parameter.getType(), comment -> comment instanceof LineComment);
-        if (typeComment != Doc.EMPTY) {
-            parts.add(typeComment);
-            parts.add(Doc.HARD_LINE);
-        }
-        parts.add(Doc.text(recordComponentTail(parameter)));
-        return Doc.concat(parts);
-    }
-
-    private String recordComponentFlat(Parameter parameter) {
-        List<String> parts = new ArrayList<>();
-        parameter.getAnnotations().stream().map(this::compact).forEach(parts::add);
-        parts.add(recordComponentTail(parameter));
-        return String.join(" ", parts);
-    }
-
-    private String recordComponentTail(Parameter parameter) {
-        String type = compactTypeLike(parameter.getType());
-        if (parameter.isVarArgs()) {
-            String varargsAnnotations = compactJoin(parameter.getVarArgsAnnotations());
-            type += varargsAnnotations.isEmpty() ? "..." : " " + varargsAnnotations + "...";
-        }
-        return type + " " + parameter.getNameAsString();
-    }
-
-    private Optional<Doc> recordImplementsTypes(RecordDeclaration declaration, boolean parametersBreak) {
-        if (declaration.getImplementedTypes().isEmpty()) {
-            return Optional.empty();
-        }
-        String flat = "implements " + compactJoinTypeLike(declaration.getImplementedTypes());
-        if (currentIndentedWidth(") " + flat + " {}") <= options.lineWidth()) {
-            return Optional.of(Doc.text(" " + flat));
-        }
-        return Optional.of(Doc.concat(
-                Doc.text(" implements"),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), declaration.getImplementedTypes().stream()
-                                .map(type -> Doc.text(compactTypeLike(type)))
-                                .toList())))));
-    }
-
-    private boolean recordBodyBreak(RecordDeclaration declaration) {
-        if (declaration.getImplementedTypes().isEmpty()) {
-            return false;
-        }
-        String flat = "implements " + compactJoinTypeLike(declaration.getImplementedTypes());
-        return currentIndentedWidth(") " + flat + " {}") > options.lineWidth();
+        return records.record(declaration);
     }
 
     private Doc enumDeclaration(EnumDeclaration declaration) {

@@ -92,6 +92,7 @@ final class JavaPrinter {
     private final CastExpressionPrinter casts;
     private final InstanceOfExpressionPrinter instanceOfExpressions;
     private final FieldAccessPrinter fieldAccesses;
+    private final MethodReferencePrinter methodReferences;
     private final MethodCallPrinter methodCalls;
     private final CallableSignaturePrinter callableSignatures;
     private final ConstructorDeclarationPrinter constructors;
@@ -213,6 +214,12 @@ final class JavaPrinter {
                 this::compactTypeLike,
                 this::currentIndentedWidth);
         this.fieldAccesses = new FieldAccessPrinter(comments, this::expression);
+        this.methodReferences = new MethodReferencePrinter(
+                options,
+                this::compact,
+                types::compactJoinTypeLike,
+                this::brokenEnclosedForSuffix,
+                this::blockStatementWidth);
         this.methodCalls = new MethodCallPrinter(
                 comments,
                 options,
@@ -704,7 +711,7 @@ final class JavaPrinter {
             return methodCalls.methodCall(methodCallExpr);
         }
         if (expression instanceof MethodReferenceExpr methodReferenceExpr) {
-            return methodReference(methodReferenceExpr);
+            return methodReferences.methodReference(methodReferenceExpr);
         }
         if (expression instanceof ObjectCreationExpr objectCreationExpr) {
             return objectCreations.objectCreation(objectCreationExpr);
@@ -748,19 +755,9 @@ final class JavaPrinter {
             return methodCalls.suffixedEnclosedMethodCall(methodCallExpr, leadingBreak);
         }
         if (expression instanceof MethodReferenceExpr methodReferenceExpr) {
-            return suffixedEnclosedMethodReference(methodReferenceExpr, leadingBreak);
+            return methodReferences.suffixedEnclosedMethodReference(methodReferenceExpr, leadingBreak);
         }
         return Optional.empty();
-    }
-
-    private Optional<Doc> suffixedEnclosedMethodReference(MethodReferenceExpr expression, boolean leadingBreak) {
-        if (!leadingBreak && blockStatementWidth(compact(expression) + ";") <= options.lineWidth()) {
-            return Optional.empty();
-        }
-        if (!(expression.getScope() instanceof EnclosedExpr enclosed)) {
-            return Optional.empty();
-        }
-        return Optional.of(Doc.concat(brokenEnclosedForSuffix(enclosed, leadingBreak), Doc.text(methodReferenceSuffix(expression))));
     }
 
     private Doc brokenEnclosedForSuffix(EnclosedExpr expression, boolean leadingBreak) {
@@ -793,17 +790,6 @@ final class JavaPrinter {
                         expression(expression.getElseExpr()))),
                 Doc.HARD_LINE,
                 Doc.text(")"));
-    }
-
-    private String methodReferenceSuffix(MethodReferenceExpr expression) {
-        return "::"
-                + expression.getTypeArguments().map(typeArguments -> "<" + types.compactJoinTypeLike(typeArguments) + ">").orElse("")
-                + expression.getIdentifier();
-    }
-
-    private Doc methodReference(MethodReferenceExpr expression) {
-        return suffixedEnclosedMethodReference(expression, false)
-                .orElseGet(() -> Doc.text(compact(expression)));
     }
 
     private boolean startsOnSameLine(Comment comment, Node node) {

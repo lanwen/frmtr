@@ -1,8 +1,6 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.AnnotationMemberDeclaration;
 import com.github.javaparser.ast.body.BodyDeclaration;
@@ -13,7 +11,6 @@ import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.InitializerDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.ArrayAccessExpr;
@@ -92,6 +89,7 @@ final class JavaPrinter {
     private final AssignmentExpressionPrinter assignments;
     private final ReturnExpressionPrinter returnExpressions;
     private final CallableSignaturePrinter callableSignatures;
+    private final ThrowsClausePrinter throwsClauses;
     private final ConstructorDeclarationPrinter constructors;
     private final MethodDeclarationPrinter methods;
     private final InitializerDeclarationPrinter initializers;
@@ -349,6 +347,11 @@ final class JavaPrinter {
                 commentPlacement::unattachedTrailingBlockComment,
                 commentPlacement::startsAfterNodeOnSameLine,
                 this::commentText);
+        this.throwsClauses = new ThrowsClausePrinter(
+                options,
+                compactSource::compact,
+                compactSource::compactJoin,
+                this::currentIndentedWidth);
         this.classOrInterfaces = new ClassOrInterfaceDeclarationPrinter(
                 comments,
                 rawSource,
@@ -371,7 +374,7 @@ final class JavaPrinter {
                 declarationPrefixes::annotations,
                 declarationPrefixes::modifiers,
                 compactSource::compactJoin,
-                this::throwsClause,
+                throwsClauses::throwsClause,
                 this::block);
         this.methods = new MethodDeclarationPrinter(
                 comments,
@@ -383,7 +386,7 @@ final class JavaPrinter {
                 types::flatTypeParameters,
                 declarationPrefixes::inlineAnnotations,
                 compactSource::compact,
-                this::throwsClause,
+                throwsClauses::throwsClause,
                 this::block);
         this.initializers = new InitializerDeclarationPrinter(comments, this::block);
         this.enums = new EnumDeclarationPrinter(
@@ -527,28 +530,6 @@ final class JavaPrinter {
 
     private Doc compactConstructor(CompactConstructorDeclaration declaration) {
         return constructors.compactConstructor(declaration);
-    }
-
-    private Doc throwsClause(
-            String prefix,
-            NodeList<Parameter> parameters,
-            NodeList<? extends Node> thrownExceptions,
-            String suffix) {
-        String exceptions = compactSource.compactJoin(thrownExceptions);
-        String flatParameters = "(" + parameters.stream()
-                .map(compactSource::compact)
-                .reduce((left, right) -> left + ", " + right)
-                .orElse("") + ")";
-        String flatSignature = prefix + flatParameters;
-        String throwsText = "throws " + exceptions;
-        boolean parametersBreak = currentIndentedWidth(flatSignature) > options.lineWidth();
-        int sameLineWidth = parametersBreak
-                ? currentIndentedWidth(") " + throwsText + suffix)
-                : currentIndentedWidth(flatSignature + " " + throwsText + suffix);
-        if (sameLineWidth <= options.lineWidth()) {
-            return Doc.text(" " + throwsText);
-        }
-        return Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(throwsText)));
     }
 
     private int currentIndentedWidth(String text) {

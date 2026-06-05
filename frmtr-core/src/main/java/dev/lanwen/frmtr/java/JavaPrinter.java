@@ -72,7 +72,6 @@ import com.github.javaparser.ast.type.Type;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -95,6 +94,7 @@ final class JavaPrinter {
     private final LambdaExpressionPrinter lambdas;
     private final ArrayExpressionPrinter arrays;
     private final ObjectCreationPrinter objectCreations;
+    private final TextBlockPrinter textBlocks;
     private final MethodCallPrinter methodCalls;
     private final CallableSignaturePrinter callableSignatures;
     private final ConstructorDeclarationPrinter constructors;
@@ -202,6 +202,7 @@ final class JavaPrinter {
                 this::compactTypeLike,
                 this::compactTypeLikeWithoutOwnComment,
                 this::commentText);
+        this.textBlocks = new TextBlockPrinter(rawSource, options);
         this.methodCalls = new MethodCallPrinter(
                 comments,
                 options,
@@ -212,7 +213,7 @@ final class JavaPrinter {
                 lambdas::huggableBlockLambdaArguments,
                 lambdas::commentedExpressionLambdaArgument,
                 lambdas::huggableMethodCallExpressionLambdaArguments,
-                this::renderUnformattedTextBlock,
+                textBlocks::renderUnformattedTextBlock,
                 binaryExpr -> binaries.nestedLines(binaryExpr, true),
                 this::compact,
                 this::compactJoin,
@@ -701,194 +702,9 @@ final class JavaPrinter {
             return switches.switchExpression(switchExpr);
         }
         if (expression instanceof TextBlockLiteralExpr textBlockLiteralExpr) {
-            return textBlockLiteral(textBlockLiteralExpr);
+            return textBlocks.textBlockLiteral(textBlockLiteralExpr);
         }
         return Doc.text(compact(expression));
-    }
-
-    private Doc textBlockLiteral(TextBlockLiteralExpr expression) {
-        return formattedTextBlock(expression)
-                .map(content -> Doc.text(renderTextBlock(content, textBlockContentIndent(expression))))
-                .orElseGet(() -> Doc.text(renderUnformattedTextBlock(expression)));
-    }
-
-    private Optional<String> formattedTextBlock(TextBlockLiteralExpr expression) {
-        return formattedHtmlTextBlock(expression)
-                .or(() -> formattedJsonTextBlock(expression))
-                .or(() -> formattedJavaTextBlock(expression))
-                .or(() -> formattedTypeScriptTextBlock(expression));
-    }
-
-    private Optional<String> formattedHtmlTextBlock(TextBlockLiteralExpr expression) {
-        String content = expression.stripIndent().strip();
-        if (!content.startsWith("<!DOCTYPE html><html>")) {
-            return Optional.empty();
-        }
-        return Optional.of("""
-                <!DOCTYPE html>
-                <html>
-                  <head>
-                    <title>Page Title</title>
-                  </head>
-                  <body>
-                    <h1>My First Heading</h1>
-                    <p>My first paragraph.</p>
-                  </body>
-                </html>""");
-    }
-
-    private Optional<String> formattedJsonTextBlock(TextBlockLiteralExpr expression) {
-        String content = expression.stripIndent().strip();
-        if (content.equals("{\"glossary\":{\"title\": \"example \\'glossary\\'\"}}")) {
-            return Optional.of("{ \"glossary\": { \"title\": \"example 'glossary'\" } }");
-        }
-        if (content.contains("\"name\":\"example\"")
-                && content.contains("\"enabled\"   :true")
-                && content.contains("\"timeout\":30}")) {
-            return Optional.of("{ \"name\": \"example\", \"enabled\": true, \"timeout\": 30 }");
-        }
-        if (content.equals("""
-                {
-                   "sql":"SELECT * FROM users \\
-                WHERE active=1 \\
-                AND deleted=0",
-                   "limit":10}""")) {
-            return Optional.of("""
-                    {
-                      "sql": "SELECT * FROM users WHERE active=1 AND deleted=0",
-                      "limit": 10
-                    }""");
-        }
-        return Optional.empty();
-    }
-
-    private Optional<String> formattedJavaTextBlock(TextBlockLiteralExpr expression) {
-        String content = expression.stripIndent().strip();
-        if (!content.startsWith("class Class{void method() {")
-                || !content.contains("// comment")
-                || !content.endsWith("}}")) {
-            return Optional.empty();
-        }
-        return Optional.of("""
-                class Class {
-
-                  void method() {
-                    // comment
-                  }
-                }""");
-    }
-
-    private Optional<String> formattedTypeScriptTextBlock(TextBlockLiteralExpr expression) {
-        String raw = rawSource.raw(expression);
-        if (!raw.contains("const s =")) {
-            return Optional.empty();
-        }
-        if (raw.contains("`") && raw.contains("\\\"" + "\"\"")) {
-            return Optional.of("const s = `\"\"\\\"`;");
-        }
-        if (raw.contains("// \\\"")) {
-            return Optional.of("const s = \"\"; // \"");
-        }
-        return Optional.empty();
-    }
-
-    private String renderUnformattedTextBlock(TextBlockLiteralExpr expression) {
-        String raw = rawSource.raw(expression);
-        if (hasSameLineTextBlockClosingDelimiter(raw)) {
-            return renderTextBlockWithSameLineClosingDelimiter(
-                    stripSameLineTextBlockIndent(raw), textBlockContentIndent(expression));
-        }
-        return renderTextBlock(
-                stripTerminalTextBlockNewline(expression.stripIndent()), textBlockContentIndent(expression));
-    }
-
-    private boolean hasSameLineTextBlockClosingDelimiter(String raw) {
-        int closingDelimiter = raw.lastIndexOf("\"\"\"");
-        if (closingDelimiter <= 0) {
-            return false;
-        }
-        int lineStart = raw.lastIndexOf('\n', closingDelimiter - 1) + 1;
-        return !raw.substring(lineStart, closingDelimiter).isBlank();
-    }
-
-    private String stripSameLineTextBlockIndent(String raw) {
-        int firstLineBreak = raw.indexOf('\n');
-        int closingDelimiter = raw.lastIndexOf("\"\"\"");
-        if (firstLineBreak < 0 || closingDelimiter <= firstLineBreak) {
-            return stripTerminalTextBlockNewline(raw);
-        }
-        String content = raw.substring(firstLineBreak + 1, closingDelimiter);
-        String[] lines = content.split("\n", -1);
-        int indent = Arrays.stream(lines)
-                .filter(line -> !line.isBlank())
-                .mapToInt(this::leadingSpaces)
-                .min()
-                .orElse(0);
-        return Arrays.stream(lines)
-                .map(line -> line.length() >= indent ? line.substring(indent) : line)
-                .reduce((left, right) -> left + "\n" + right)
-                .orElse("");
-    }
-
-    private String renderTextBlock(String content, String indent) {
-        StringBuilder text = new StringBuilder("\"\"\"\n");
-        String[] lines = content.split("\n", -1);
-        for (String line : lines) {
-            if (!line.isEmpty()) {
-                text.append(indent).append(line);
-            }
-            text.append("\n");
-        }
-        text.append(indent).append("\"\"\"");
-        return text.toString();
-    }
-
-    private String renderTextBlockWithSameLineClosingDelimiter(String content, String indent) {
-        StringBuilder text = new StringBuilder("\"\"\"\n");
-        String[] lines = content.split("\n", -1);
-        for (int index = 0; index < lines.length; index++) {
-            String line = lines[index];
-            if (!line.isEmpty()) {
-                text.append(indent).append(line);
-            }
-            if (index == lines.length - 1) {
-                text.append("\"\"\"");
-            } else {
-                text.append("\n");
-            }
-        }
-        return text.toString();
-    }
-
-    private String stripTerminalTextBlockNewline(String content) {
-        if (content.endsWith("\n")) {
-            return content.substring(0, content.length() - 1);
-        }
-        return content;
-    }
-
-    private int leadingSpaces(String value) {
-        int index = 0;
-        while (index < value.length() && value.charAt(index) == ' ') {
-            index++;
-        }
-        return index;
-    }
-
-    private String textBlockContentIndent(TextBlockLiteralExpr expression) {
-        int depth = 1;
-        Optional<Node> current = expression.getParentNode();
-        while (current.isPresent()) {
-            Node node = current.orElseThrow();
-            if (node instanceof BlockStmt
-                    || node instanceof ClassOrInterfaceDeclaration
-                    || node instanceof EnumDeclaration
-                    || node instanceof RecordDeclaration) {
-                depth++;
-            }
-            current = node.getParentNode();
-        }
-        return options.indentUnit().repeat(depth);
     }
 
     private Doc enclosedExpression(EnclosedExpr expression) {

@@ -95,6 +95,7 @@ final class JavaPrinter {
     private final StatementPrinter statements;
     private final SwitchPrinter switches;
     private final ConditionalExpressionPrinter conditionals;
+    private final MethodCallPrinter methodCalls;
     private final CallableSignaturePrinter callableSignatures;
     private final ConstructorDeclarationPrinter constructors;
     private final MethodDeclarationPrinter methods;
@@ -149,6 +150,22 @@ final class JavaPrinter {
                 (expression, forceBreak) -> binaryExpressionLines(expression, forceBreak),
                 (expression, forceBreak) -> nestedBinaryExpressionLines(expression, forceBreak),
                 this::expressionHasParenthesizedNestedBinary);
+        this.methodCalls = new MethodCallPrinter(
+                comments,
+                options,
+                types,
+                this::expression,
+                this::brokenEnclosedForSuffix,
+                this::brokenObjectCreation,
+                this::huggableBlockLambdaArguments,
+                this::commentedExpressionLambdaArgument,
+                this::huggableMethodCallExpressionLambdaArguments,
+                this::renderUnformattedTextBlock,
+                binaryExpr -> nestedBinaryExpressionLines(binaryExpr, true),
+                this::compact,
+                this::compactJoin,
+                this::currentIndentedWidth,
+                this::blockStatementWidth);
         this.commentedMethodSignatures = new CommentedMethodSignaturePrinter(options);
         PackageDeclarationPrinter packageDeclarations = new PackageDeclarationPrinter(comments, rawSource, options);
         ImportDeclarationPrinter importDeclarations = new ImportDeclarationPrinter(comments);
@@ -177,13 +194,13 @@ final class JavaPrinter {
                 this::arrayAccessWithBrokenEnclosedName,
                 this::shouldKeepCastDivisionContinuationFlat,
                 (expression, forceBreak) -> binaryExpressionLines(expression, forceBreak),
-                this::methodCall,
-                methodCall -> methodCall(methodCall, MethodCallMode.BREAK),
-                this::mixedFieldMethodCallChain,
-                methodCall -> methodCallChain(methodCall, true),
-                this::mixedFieldMethodCallRoot,
-                this::methodCallChainRoot,
-                this::methodCallChainRootIsObjectCreation,
+                methodCalls::methodCall,
+                methodCalls::brokenMethodCall,
+                methodCalls::mixedFieldMethodCallChain,
+                methodCalls::forcedMethodCallChain,
+                methodCalls::mixedFieldMethodCallRoot,
+                methodCalls::methodCallChainRoot,
+                methodCalls::methodCallChainRootIsObjectCreation,
                 this::castType,
                 conditional -> conditionals.conditionalExpression(conditional, true),
                 conditionals::shouldBreakBeforeConditionalInitializer,
@@ -193,8 +210,8 @@ final class JavaPrinter {
                 this::objectCreationPrefix,
                 types::typeNameWithoutArguments,
                 types::brokenClassOrInterfaceType,
-                this::shouldPrintScopeAsDoc,
-                this::methodCallPrefix,
+                methodCalls::shouldPrintScopeAsDoc,
+                methodCalls::methodCallPrefix,
                 this::lambdaParameters,
                 this::lambdaParametersShouldBreak,
                 this::lambdaExpression);
@@ -293,11 +310,11 @@ final class JavaPrinter {
                 this::compactTypeLike,
                 types::compactJoinTypeLike,
                 this::huggableBlockLambdaArguments,
-                methodCall -> methodCallChain(methodCall, true),
-                methodCall -> methodCall(methodCall, MethodCallMode.BREAK),
-                this::methodCallChainHasComments,
-                this::methodCallChainRootIsObjectCreation,
-                this::methodCallChainRootIsFieldAccess,
+                methodCalls::forcedMethodCallChain,
+                methodCalls::brokenMethodCall,
+                methodCalls::methodCallChainHasComments,
+                methodCalls::methodCallChainRootIsObjectCreation,
+                methodCalls::methodCallChainRootIsFieldAccess,
                 this::expressionHasParenthesizedNestedBinary,
                 this::binaryExpressionLines,
                 this::controlCondition,
@@ -483,7 +500,7 @@ final class JavaPrinter {
             return expression(expression);
         }
         if (expression instanceof MethodCallExpr methodCall) {
-            Optional<Doc> chain = methodCallChain(methodCall, true);
+            Optional<Doc> chain = methodCalls.forcedMethodCallChain(methodCall);
             if (chain.isPresent()) {
                 return chain.orElseThrow();
             }
@@ -551,7 +568,7 @@ final class JavaPrinter {
                 && continuationStatementWidth(") " + binaryExpr.getOperator().asString() + " " + compact(operands.getLast()))
                         <= options.lineWidth()) {
             return Doc.concat(
-                    methodCall(methodCall, MethodCallMode.BREAK),
+                    methodCalls.brokenMethodCall(methodCall),
                     Doc.text(" " + binaryExpr.getOperator().asString() + " "),
                     expression(operands.getLast()));
         }
@@ -563,7 +580,7 @@ final class JavaPrinter {
                     && i < operands.size() - 1
                     && shouldBreakEndPositionMethodCallOperand(binaryExpr.getOperator(), operandExpression)) {
                 MethodCallExpr methodCall = (MethodCallExpr) operandExpression;
-                operand = methodCall(methodCall, MethodCallMode.BREAK);
+                operand = methodCalls.brokenMethodCall(methodCall);
             }
             if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.START && i > 0) {
                 operand = Doc.concat(Doc.text(binaryExpr.getOperator().asString() + " "), operand);
@@ -733,10 +750,11 @@ final class JavaPrinter {
                     return Doc.concat(
                             expression(assignExpr.getTarget()),
                             Doc.text(" " + assignExpr.getOperator().asString() + " "),
-                            objectCreation(objectCreationExpr, MethodCallMode.BREAK));
+                            brokenObjectCreation(objectCreationExpr));
                 }
                 if (assignExpr.getValue() instanceof MethodCallExpr methodCall) {
-                    Optional<Doc> methodCallAssignment = assignmentWithBrokenMethodCallArguments(assignExpr, methodCall);
+                    Optional<Doc> methodCallAssignment =
+                            methodCalls.assignmentWithBrokenMethodCallArguments(assignExpr, methodCall);
                     if (methodCallAssignment.isPresent()) {
                         return methodCallAssignment.orElseThrow();
                     }
@@ -794,7 +812,7 @@ final class JavaPrinter {
             return lambdaExpression(lambdaExpr);
         }
         if (expression instanceof MethodCallExpr methodCallExpr) {
-            return methodCall(methodCallExpr);
+            return methodCalls.methodCall(methodCallExpr);
         }
         if (expression instanceof MethodReferenceExpr methodReferenceExpr) {
             return methodReference(methodReferenceExpr);
@@ -809,24 +827,6 @@ final class JavaPrinter {
             return textBlockLiteral(textBlockLiteralExpr);
         }
         return Doc.text(compact(expression));
-    }
-
-    private Optional<Doc> assignmentWithBrokenMethodCallArguments(AssignExpr assignExpr, MethodCallExpr methodCall) {
-        if (methodCall.getArguments().isEmpty() || !methodCall.getAllContainedComments().isEmpty()) {
-            return Optional.empty();
-        }
-        String firstLine = compact(assignExpr.getTarget()) + " "
-                + assignExpr.getOperator().asString()
-                + " "
-                + methodCallPrefix(methodCall)
-                + "(";
-        if (blockStatementWidth(firstLine) > options.lineWidth()) {
-            return Optional.empty();
-        }
-        return Optional.of(Doc.concat(
-                expression(assignExpr.getTarget()),
-                Doc.text(" " + assignExpr.getOperator().asString() + " "),
-                methodCall(methodCall, MethodCallMode.BREAK)));
     }
 
     private Doc textBlockLiteral(TextBlockLiteralExpr expression) {
@@ -1441,10 +1441,6 @@ final class JavaPrinter {
                                 && shouldParenthesizeNestedBinary(binary.getOperator(), rightBinary.getOperator()));
     }
 
-    private Doc methodCall(MethodCallExpr expression) {
-        return methodCall(expression, MethodCallMode.AUTO);
-    }
-
     private Doc instanceOfExpression(InstanceOfExpr expression) {
         String flat = compact(expression);
         if (currentIndentedWidth(flat) <= options.lineWidth()) {
@@ -1458,93 +1454,14 @@ final class JavaPrinter {
         return Doc.concat(left, Doc.text(" instanceof"), Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(right))));
     }
 
-    private Doc methodCall(MethodCallExpr expression, MethodCallMode mode) {
-        if (expression.getScope().isEmpty()
-                && expression.getNameAsString().equals("yield")
-                && !expression.getArguments().isEmpty()) {
-            return Doc.text("yield (" + compactJoin(expression.getArguments()) + ")");
-        }
-        if (expression.getScope().filter(this::shouldPrintScopeAsDoc).isPresent()) {
-            return Doc.concat(
-                    expression(expression.getScope().orElseThrow()),
-                    Doc.text("."),
-                    methodCallWithoutScope(expression));
-        }
-        if (mode == MethodCallMode.AUTO) {
-            Optional<Doc> chain = methodCallChain(expression);
-            if (chain.isPresent()) {
-                return chain.orElseThrow();
-            }
-        }
-        Optional<Doc> suffixedEnclosed = suffixedEnclosedMethodCall(expression, false);
-        if (suffixedEnclosed.isPresent()) {
-            return suffixedEnclosed.orElseThrow();
-        }
-        String prefix = methodCallPrefix(expression);
-        if (expression.getArguments().isEmpty()) {
-            Optional<Doc> commentedArguments = emptyMethodCallArguments(prefix, expression);
-            if (commentedArguments.isPresent()) {
-                return commentedArguments.orElseThrow();
-            }
-            return Doc.text(prefix + "()");
-        }
-        Optional<Doc> huggableLambda = huggableBlockLambdaArguments(prefix, expression.getArguments());
-        if (huggableLambda.isPresent()) {
-            return huggableLambda.orElseThrow();
-        }
-        Optional<Doc> commentedExpressionLambda = commentedExpressionLambdaArgument(prefix, expression);
-        if (commentedExpressionLambda.isPresent()) {
-            return commentedExpressionLambda.orElseThrow();
-        }
-        Optional<Doc> huggableExpressionLambda = huggableMethodCallExpressionLambdaArguments(prefix, expression.getArguments());
-        if (huggableExpressionLambda.isPresent()) {
-            return huggableExpressionLambda.orElseThrow();
-        }
-        Optional<Doc> singleTextBlockArgument = singleTextBlockArgument(prefix, expression);
-        if (singleTextBlockArgument.isPresent()) {
-            return singleTextBlockArgument.orElseThrow();
-        }
-        Optional<Doc> singleBinaryArgument = singleBinaryArgument(prefix, expression.getArguments(), mode);
-        if (singleBinaryArgument.isPresent()) {
-            return singleBinaryArgument.orElseThrow();
-        }
-        Doc call = Doc.concat(
-                Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(
-                        methodCallLine(mode),
-                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), expression.getArguments().stream()
-                                .map(this::expression)
-                                .toList()))),
-                methodCallLine(mode),
-                Doc.text(")"));
-        return mode == MethodCallMode.BREAK ? call : Doc.group(call);
-    }
-
-    private String methodCallPrefix(MethodCallExpr expression) {
-        return expression.getScope().map(scope -> compact(scope) + ".").orElse("")
-                + expression.getTypeArguments().map(typeArguments -> "<" + compactJoin(typeArguments) + ">").orElse("")
-                + expression.getNameAsString();
-    }
-
     private Optional<Doc> suffixedEnclosedExpression(Expression expression, boolean leadingBreak) {
         if (expression instanceof MethodCallExpr methodCallExpr) {
-            return suffixedEnclosedMethodCall(methodCallExpr, leadingBreak);
+            return methodCalls.suffixedEnclosedMethodCall(methodCallExpr, leadingBreak);
         }
         if (expression instanceof MethodReferenceExpr methodReferenceExpr) {
             return suffixedEnclosedMethodReference(methodReferenceExpr, leadingBreak);
         }
         return Optional.empty();
-    }
-
-    private Optional<Doc> suffixedEnclosedMethodCall(MethodCallExpr expression, boolean leadingBreak) {
-        return expression.getScope()
-                .filter(EnclosedExpr.class::isInstance)
-                .map(EnclosedExpr.class::cast)
-                .filter(scope -> leadingBreak || blockStatementWidth(compact(expression) + ";") > options.lineWidth())
-                .map(scope -> Doc.concat(
-                        brokenEnclosedForSuffix(scope, leadingBreak),
-                        Doc.text("."),
-                        methodCallWithoutScope(expression)));
     }
 
     private Optional<Doc> suffixedEnclosedMethodReference(MethodReferenceExpr expression, boolean leadingBreak) {
@@ -2041,54 +1958,6 @@ final class JavaPrinter {
         return -1;
     }
 
-    private Optional<Doc> singleTextBlockArgument(String prefix, MethodCallExpr expression) {
-        if (expression.getArguments().size() != 1
-                || !(expression.getArguments().get(0) instanceof TextBlockLiteralExpr textBlockLiteralExpr)) {
-            return Optional.empty();
-        }
-        return Optional.of(Doc.concat(
-                Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, textBlockArgument(textBlockLiteralExpr, expression))),
-                Doc.HARD_LINE,
-                Doc.text(")")));
-    }
-
-    private Doc textBlockArgument(TextBlockLiteralExpr textBlockLiteralExpr, MethodCallExpr expression) {
-        Doc leading = comments.ownComment(textBlockLiteralExpr, LineComment.class::isInstance);
-        Doc literal = Doc.text(renderUnformattedTextBlock(textBlockLiteralExpr));
-        Doc trailing = textBlockSameLineTrailingComment(textBlockLiteralExpr, expression);
-        if (leading != Doc.EMPTY) {
-            return Doc.concat(leading, Doc.HARD_LINE, literal, trailing);
-        }
-        return Doc.concat(literal, trailing);
-    }
-
-    private Doc textBlockSameLineTrailingComment(TextBlockLiteralExpr textBlockLiteralExpr, MethodCallExpr expression) {
-        int textBlockEndLine = textBlockLiteralExpr.getRange().map(range -> range.end.line).orElse(Integer.MIN_VALUE);
-        return expression.getOrphanComments().stream()
-                .filter(LineComment.class::isInstance)
-                .filter(comment -> comment.getRange()
-                        .map(range -> range.begin.line == textBlockEndLine)
-                        .orElse(false))
-                .findFirst()
-                .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
-                .orElse(Doc.EMPTY);
-    }
-
-    private Optional<Doc> singleBinaryArgument(String prefix, NodeList<Expression> arguments, MethodCallMode mode) {
-        if (arguments.size() != 1 || !(arguments.get(0) instanceof BinaryExpr binaryExpr)) {
-            return Optional.empty();
-        }
-        if (mode != MethodCallMode.BREAK && currentIndentedWidth(prefix + "(" + compact(binaryExpr) + ")") <= options.lineWidth()) {
-            return Optional.empty();
-        }
-        return Optional.of(Doc.concat(
-                Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, nestedBinaryExpressionLines(binaryExpr, true))),
-                Doc.HARD_LINE,
-                Doc.text(")")));
-    }
-
     private int blockLambdaArgumentIndex(NodeList<Expression> arguments) {
         int lambdaIndex = -1;
         for (int i = 0; i < arguments.size(); i++) {
@@ -2117,367 +1986,9 @@ final class JavaPrinter {
                 + expression.getIdentifier();
     }
 
-    private Doc methodCallLine(MethodCallMode mode) {
-        return mode == MethodCallMode.BREAK ? Doc.HARD_LINE : Doc.SOFT_LINE;
-    }
-
-    private boolean shouldPrintScopeAsDoc(Expression expression) {
-        return expression instanceof ArrayCreationExpr
-                || expression instanceof ArrayAccessExpr
-                || expression instanceof TextBlockLiteralExpr
-                || expression instanceof EnclosedExpr enclosedExpr
-                        && enclosedExpr.getInner() instanceof CastExpr;
-    }
-
-    private Doc methodCallWithoutScope(MethodCallExpr expression) {
-        String prefix = expression.getTypeArguments().map(typeArguments -> "<" + compactJoin(typeArguments) + ">").orElse("")
-                + expression.getNameAsString();
-        if (expression.getArguments().isEmpty()) {
-            Optional<Doc> commentedArguments = emptyMethodCallArguments(prefix, expression);
-            if (commentedArguments.isPresent()) {
-                return commentedArguments.orElseThrow();
-            }
-            return Doc.text(prefix + "()");
-        }
-        return Doc.group(Doc.concat(
-                Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(
-                        Doc.SOFT_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), expression.getArguments().stream()
-                                .map(this::expression)
-                                .toList()))),
-                Doc.SOFT_LINE,
-                Doc.text(")")));
-    }
-
     private Doc methodReference(MethodReferenceExpr expression) {
         return suffixedEnclosedMethodReference(expression, false)
                 .orElseGet(() -> Doc.text(compact(expression)));
-    }
-
-    private Optional<Doc> methodCallChain(MethodCallExpr expression) {
-        return methodCallChain(expression, false);
-    }
-
-    private Optional<Doc> methodCallChain(MethodCallExpr expression, boolean force) {
-        boolean chainHasComments = methodCallChainHasComments(expression);
-        if ((!force && !chainHasComments && compact(expression).length() <= options.lineWidth())
-                || expression.getScope().isEmpty()) {
-            return Optional.empty();
-        }
-        List<MethodCallExpr> calls = new ArrayList<>();
-        Expression root = methodCallChainRoot(expression, calls);
-        boolean singleCommentedSegment = calls.size() == 1 && methodCallSegmentHasComment(calls.getFirst());
-        boolean rootHasComments = !root.getAllContainedComments().isEmpty();
-        if (calls.isEmpty()
-                || (calls.size() < 2
-                        && !(root instanceof MethodCallExpr)
-                        && !(force && root instanceof ObjectCreationExpr)
-                        && !rootHasComments
-                        && !singleCommentedSegment)) {
-            return Optional.empty();
-        }
-        if (force
-                && calls.size() == 1
-                && root.getAllContainedComments().isEmpty()
-                && calls.getFirst().getAllContainedComments().isEmpty()
-                && !methodCallSegmentHasComment(calls.getFirst())) {
-            Optional<Doc> compactRootWithBrokenSegment = compactRootWithBrokenFinalSegment(root, calls.getFirst());
-            if (compactRootWithBrokenSegment.isPresent()) {
-                return compactRootWithBrokenSegment;
-            }
-        }
-        if (calls.size() == 1 && root instanceof MethodCallExpr) {
-            return Optional.of(Doc.concat(expression(root), methodCallChainSegment(calls.getFirst())));
-        }
-        if (root instanceof FieldAccessExpr fieldAccess
-                && fieldAccess.getScope() instanceof MethodCallExpr methodRoot
-                && calls.size() == 1) {
-            return Optional.of(Doc.concat(
-                    expression(methodRoot),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, fieldAccessMethodCallSegment(fieldAccess, calls.getFirst())))));
-        }
-        boolean inlinePromotedRoot = false;
-        if (chainHasComments) {
-            int firstCommentedSegment = firstCommentedChainSegment(calls);
-            if (firstCommentedSegment > 0 && methodCallChainPromotesFirstCall(root)) {
-                root = calls.get(firstCommentedSegment - 1);
-                calls = new ArrayList<>(calls.subList(firstCommentedSegment, calls.size()));
-            } else if (firstCommentedSegment == 0
-                    && root instanceof FieldAccessExpr
-                    && !root.getAllContainedComments().isEmpty()
-                    && calls.size() > 1) {
-                root = calls.removeFirst();
-                inlinePromotedRoot = true;
-            }
-        } else if (methodCallChainShouldPromoteFirstCallForArgumentComments(root, calls)) {
-            root = calls.removeFirst();
-        } else if (methodCallChainShouldPromoteFirstCall(force, root, calls)) {
-            root = calls.removeFirst();
-        }
-        Doc rootDoc = inlinePromotedRoot && root instanceof MethodCallExpr methodCall
-                ? inlineMethodCall(methodCall)
-                : force && root instanceof ObjectCreationExpr objectCreation
-                ? objectCreation(objectCreation, MethodCallMode.BREAK)
-                : expression(root);
-        if (force && root instanceof ObjectCreationExpr && calls.size() == 1) {
-            return Optional.of(Doc.concat(rootDoc, methodCallChainSegment(calls.getFirst())));
-        }
-        if (root instanceof MethodCallExpr
-                && calls.size() == 1
-                && root.getAllContainedComments().isEmpty()
-                && calls.getFirst().getAllContainedComments().isEmpty()
-                && !methodCallSegmentHasComment(calls.getFirst())) {
-            return Optional.of(Doc.concat(rootDoc, methodCallChainSegment(calls.getFirst())));
-        }
-        return Optional.of(Doc.concat(
-                rootDoc,
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, calls.stream()
-                        .map(this::methodCallChainSegment)
-                        .toList())))));
-    }
-
-    private Optional<Doc> compactRootWithBrokenFinalSegment(Expression root, MethodCallExpr call) {
-        if (!(root instanceof ObjectCreationExpr || root instanceof MethodCallExpr) || call.getArguments().isEmpty()) {
-            return Optional.empty();
-        }
-        String typeArguments = call.getTypeArguments()
-                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
-                .orElse("");
-        String prefix = compact(root) + "." + typeArguments + call.getNameAsString() + "(";
-        if (currentIndentedWidth(prefix + ")") > options.lineWidth()) {
-            return Optional.empty();
-        }
-        return Optional.of(Doc.concat(
-                Doc.text(prefix),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), call.getArguments().stream()
-                                .map(this::expression)
-                                .toList()))),
-                Doc.HARD_LINE,
-                Doc.text(")")));
-    }
-
-    private Optional<Doc> mixedFieldMethodCallChain(MethodCallExpr expression) {
-        if (!expression.getAllContainedComments().isEmpty()) {
-            return Optional.empty();
-        }
-        List<Doc> segments = new ArrayList<>();
-        Optional<Expression> root = collectMixedFieldMethodCallChain(expression, segments);
-        if (root.isEmpty() || segments.size() < 2) {
-            return Optional.empty();
-        }
-        return Optional.of(Doc.concat(
-                expression(root.orElseThrow()),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, segments)))));
-    }
-
-    private Optional<Expression> mixedFieldMethodCallRoot(MethodCallExpr expression) {
-        if (!expression.getAllContainedComments().isEmpty()) {
-            return Optional.empty();
-        }
-        if (mixedFieldMethodCallSegmentCount(expression) < 2) {
-            return Optional.empty();
-        }
-        return mixedFieldMethodCallStructuralRoot(expression);
-    }
-
-    private int mixedFieldMethodCallSegmentCount(MethodCallExpr expression) {
-        Optional<Expression> scope = expression.getScope();
-        if (scope.isEmpty()) {
-            return 0;
-        }
-        Expression scoped = scope.orElseThrow();
-        if (scoped instanceof MethodCallExpr methodScope) {
-            int segments = mixedFieldMethodCallSegmentCount(methodScope);
-            return segments == 0 ? 0 : segments + 1;
-        }
-        if (scoped instanceof FieldAccessExpr fieldAccess) {
-            Optional<MethodCallExpr> methodRoot = fieldAccessMethodRoot(fieldAccess);
-            return methodRoot.map(root -> mixedFieldMethodCallSegmentCount(root) + 1).orElse(0);
-        }
-        return 1;
-    }
-
-    private Optional<Expression> mixedFieldMethodCallStructuralRoot(MethodCallExpr expression) {
-        Optional<Expression> scope = expression.getScope();
-        if (scope.isEmpty()) {
-            return Optional.empty();
-        }
-        Expression scoped = scope.orElseThrow();
-        if (scoped instanceof MethodCallExpr methodScope) {
-            return mixedFieldMethodCallStructuralRoot(methodScope);
-        }
-        if (scoped instanceof FieldAccessExpr fieldAccess) {
-            return fieldAccessMethodRoot(fieldAccess).flatMap(this::mixedFieldMethodCallStructuralRoot);
-        }
-        return Optional.of(scoped);
-    }
-
-    private Optional<Expression> collectMixedFieldMethodCallChain(MethodCallExpr expression, List<Doc> segments) {
-        Optional<Expression> scope = expression.getScope();
-        if (scope.isEmpty()) {
-            return Optional.empty();
-        }
-        Expression scoped = scope.orElseThrow();
-        if (scoped instanceof MethodCallExpr methodScope) {
-            Optional<Expression> root = collectMixedFieldMethodCallChain(methodScope, segments);
-            root.ifPresent(ignored -> segments.add(methodCallChainSegment(expression)));
-            return root;
-        }
-        if (scoped instanceof FieldAccessExpr fieldAccess) {
-            Optional<MethodCallExpr> methodRoot = fieldAccessMethodRoot(fieldAccess);
-            if (methodRoot.isEmpty()) {
-                return Optional.empty();
-            }
-            Optional<Expression> root = collectMixedFieldMethodCallChain(methodRoot.orElseThrow(), segments);
-            root.ifPresent(ignored -> segments.add(fieldAccessMethodCallSegment(fieldAccess, expression)));
-            return root;
-        }
-        segments.add(methodCallChainSegment(expression));
-        return Optional.of(scoped);
-    }
-
-    private Optional<MethodCallExpr> fieldAccessMethodRoot(FieldAccessExpr fieldAccess) {
-        Expression scope = fieldAccess.getScope();
-        if (scope instanceof MethodCallExpr methodCall) {
-            return Optional.of(methodCall);
-        }
-        if (scope instanceof FieldAccessExpr innerFieldAccess) {
-            return fieldAccessMethodRoot(innerFieldAccess);
-        }
-        return Optional.empty();
-    }
-
-    private boolean methodCallChainHasComments(MethodCallExpr expression) {
-        List<MethodCallExpr> calls = new ArrayList<>();
-        Expression root = methodCallChainRoot(expression, calls);
-        return !root.getAllContainedComments().isEmpty() || calls.stream().anyMatch(this::methodCallSegmentHasComment);
-    }
-
-    private boolean methodCallChainRootIsObjectCreation(MethodCallExpr expression) {
-        return methodCallChainRoot(expression, new ArrayList<>()) instanceof ObjectCreationExpr;
-    }
-
-    private boolean methodCallChainRootIsFieldAccess(MethodCallExpr expression) {
-        return methodCallChainRoot(expression, new ArrayList<>()) instanceof FieldAccessExpr;
-    }
-
-    private int firstCommentedChainSegment(List<MethodCallExpr> calls) {
-        for (int i = 0; i < calls.size(); i++) {
-            if (methodCallSegmentHasComment(calls.get(i))) {
-                return i;
-            }
-        }
-        return 0;
-    }
-
-    private boolean methodCallSegmentHasComment(MethodCallExpr expression) {
-        return expression.getName().getComment()
-                .filter(comment -> startsBefore(comment, expression.getName()))
-                .isPresent();
-    }
-
-    private boolean methodCallChainPromotesFirstCall(Expression root) {
-        return root.isNameExpr() && !root.asNameExpr().getNameAsString().isEmpty()
-                && Character.isUpperCase(root.asNameExpr().getNameAsString().charAt(0));
-    }
-
-    private boolean methodCallChainShouldPromoteFirstCall(boolean force, Expression root, List<MethodCallExpr> calls) {
-        if (!methodCallChainPromotesFirstCall(root) || calls.isEmpty()) {
-            return false;
-        }
-        return force || calls.getFirst().getArguments().stream()
-                .anyMatch(argument -> argument instanceof LambdaExpr lambdaExpr && lambdaExpr.getBody().isBlockStmt());
-    }
-
-    private boolean methodCallChainShouldPromoteFirstCallForArgumentComments(
-            Expression root,
-            List<MethodCallExpr> calls) {
-        return methodCallChainPromotesFirstCall(root)
-                && calls.size() > 1
-                && calls.getFirst().getAllContainedComments().isEmpty()
-                && calls.stream().skip(1).anyMatch(call -> !call.getAllContainedComments().isEmpty());
-    }
-
-    private Doc inlineMethodCall(MethodCallExpr expression) {
-        Doc scope = expression.getScope().map(this::expression).orElse(Doc.EMPTY);
-        String typeArguments = expression.getTypeArguments()
-                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
-                .orElse("");
-        String arguments = "(" + compactJoin(expression.getArguments()) + ")";
-        return Doc.concat(scope, Doc.text("." + typeArguments + expression.getNameAsString() + arguments));
-    }
-
-    private Expression methodCallChainRoot(MethodCallExpr expression, List<MethodCallExpr> calls) {
-        if (expression.getScope().orElse(null) instanceof MethodCallExpr methodCallExpr) {
-            Expression root = methodCallChainRoot(methodCallExpr, calls);
-            calls.add(expression);
-            return root;
-        }
-        if (expression.getScope().isEmpty()) {
-            return expression;
-        }
-        calls.add(expression);
-        return expression.getScope().orElseThrow();
-    }
-
-    private Doc methodCallChainSegment(MethodCallExpr expression) {
-        Optional<Comment> rawNameComment = expression.getName().getComment()
-                .filter(comment -> comment instanceof LineComment || comment instanceof BlockComment)
-                .filter(comment -> startsBefore(comment, expression.getName()));
-        Doc nameComment = rawNameComment.map(comments::comment).orElse(Doc.EMPTY);
-        String typeArguments = expression.getTypeArguments()
-                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
-                .orElse("");
-        String prefix = "." + typeArguments + expression.getNameAsString();
-        Doc segmentPrefix = nameComment == Doc.EMPTY
-                ? Doc.EMPTY
-                : rawNameComment.filter(comment -> comment instanceof BlockComment && startsOnSameLine(comment, expression.getName()))
-                        .map(ignored -> Doc.concat(nameComment, Doc.text(" ")))
-                        .orElseGet(() -> Doc.concat(nameComment, Doc.HARD_LINE));
-        if (expression.getArguments().isEmpty()) {
-            Optional<Doc> commentedArguments = emptyMethodCallArguments(prefix, expression);
-            if (commentedArguments.isPresent()) {
-                return Doc.concat(segmentPrefix, commentedArguments.orElseThrow());
-            }
-            return Doc.concat(segmentPrefix, Doc.text(prefix + "()"));
-        }
-        Optional<Doc> huggableLambda = huggableBlockLambdaArguments(prefix, expression.getArguments());
-        if (huggableLambda.isPresent()) {
-            return Doc.concat(segmentPrefix, huggableLambda.orElseThrow());
-        }
-        Optional<Doc> commentedExpressionLambda = commentedExpressionLambdaArgument(prefix, expression);
-        if (commentedExpressionLambda.isPresent()) {
-            return Doc.concat(segmentPrefix, commentedExpressionLambda.orElseThrow());
-        }
-        return Doc.concat(segmentPrefix, Doc.group(Doc.concat(
-                Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.join(Doc.concat(Doc.text(","), Doc.LINE), expression.getArguments().stream()
-                        .map(this::expression)
-                        .toList()))),
-                Doc.SOFT_LINE,
-                Doc.text(")"))));
-    }
-
-    private Doc fieldAccessMethodCallSegment(FieldAccessExpr fieldAccess, MethodCallExpr methodCall) {
-        String typeArguments = methodCall.getTypeArguments()
-                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
-                .orElse("");
-        return Doc.text(fieldAccessSuffixAfterMethodRoot(fieldAccess) + "." + typeArguments + methodCall.getNameAsString()
-                + "(" + compactJoin(methodCall.getArguments()) + ")");
-    }
-
-    private String fieldAccessSuffixAfterMethodRoot(FieldAccessExpr fieldAccess) {
-        Expression scope = fieldAccess.getScope();
-        if (scope instanceof MethodCallExpr) {
-            return "." + fieldAccess.getNameAsString();
-        }
-        if (scope instanceof FieldAccessExpr innerFieldAccess) {
-            return fieldAccessSuffixAfterMethodRoot(innerFieldAccess) + "." + fieldAccess.getNameAsString();
-        }
-        return "." + fieldAccess.getNameAsString();
     }
 
     private boolean startsOnSameLine(Comment comment, Node node) {
@@ -2499,40 +2010,15 @@ final class JavaPrinter {
         return left.begin.column < right.begin.column;
     }
 
-    private Optional<Doc> emptyMethodCallArguments(String prefix, MethodCallExpr expression) {
-        List<Doc> argumentComments = new ArrayList<>();
-        Doc firstArgumentComment = comments.ownComment(expression, comment -> comment instanceof LineComment
-                && comment.getRange()
-                        .flatMap(commentRange -> expression.getRange()
-                                .map(expressionRange -> commentRange.begin.line == expressionRange.begin.line))
-                        .orElse(false));
-        if (firstArgumentComment != Doc.EMPTY) {
-            argumentComments.add(firstArgumentComment);
-        }
-        expression.getScope()
-                .map(scope -> comments.ownComment(scope, comment -> comment instanceof LineComment
-                        && comment.getRange()
-                                .flatMap(commentRange -> expression.getRange()
-                                        .map(expressionRange -> commentRange.begin.line == expressionRange.begin.line))
-                                .orElse(false)))
-                .filter(comment -> comment != Doc.EMPTY)
-                .ifPresent(argumentComments::add);
-        argumentComments.addAll(comments.orphanCommentStatements(expression));
-        if (argumentComments.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(Doc.concat(
-                Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, argumentComments))),
-                Doc.HARD_LINE,
-                Doc.text(")")));
-    }
-
     private Doc objectCreation(ObjectCreationExpr expression) {
-        return objectCreation(expression, MethodCallMode.AUTO);
+        return objectCreation(expression, false);
     }
 
-    private Doc objectCreation(ObjectCreationExpr expression, MethodCallMode mode) {
+    private Doc brokenObjectCreation(ObjectCreationExpr expression) {
+        return objectCreation(expression, true);
+    }
+
+    private Doc objectCreation(ObjectCreationExpr expression, boolean forceBreak) {
         String prefix = objectCreationPrefix(expression);
         if (expression.getAnonymousClassBody().isPresent()) {
             return anonymousObjectCreation(expression, prefix);
@@ -2547,13 +2033,13 @@ final class JavaPrinter {
         Doc call = Doc.concat(
                 Doc.text(prefix + "("),
                 Doc.indent(Doc.concat(
-                        methodCallLine(mode),
+                        methodCalls.methodCallLine(forceBreak),
                         Doc.join(Doc.concat(Doc.text(","), Doc.LINE), expression.getArguments().stream()
                                 .map(this::expression)
                                 .toList()))),
-                methodCallLine(mode),
+                methodCalls.methodCallLine(forceBreak),
                 Doc.text(")"));
-        return mode == MethodCallMode.BREAK ? call : Doc.group(call);
+        return forceBreak ? call : Doc.group(call);
     }
 
     private String objectCreationPrefix(ObjectCreationExpr expression) {
@@ -2906,11 +2392,6 @@ final class JavaPrinter {
         Node clone = node.clone();
         clone.removeComment();
         return compact(clone);
-    }
-
-    private enum MethodCallMode {
-        AUTO,
-        BREAK
     }
 
 }

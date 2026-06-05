@@ -99,6 +99,7 @@ final class JavaPrinter {
     private final CallableSignaturePrinter callableSignatures;
     private final EnumDeclarationPrinter enums;
     private final RecordDeclarationPrinter records;
+    private final AnnotationDeclarationPrinter annotationDeclarations;
     private final CommentedMethodSignaturePrinter commentedMethodSignatures;
     private final CommentedModulePrinter commentedModules = new CommentedModulePrinter();
     private final CommentedInterfacePrinter commentedInterfaces = new CommentedInterfacePrinter();
@@ -151,6 +152,13 @@ final class JavaPrinter {
                 this::annotationFlatText,
                 this::currentIndentedWidth,
                 declaration -> memberBlocks.memberBlock(declaration.getMembers(), declaration, this::body));
+        this.annotationDeclarations = new AnnotationDeclarationPrinter(
+                comments,
+                this::annotations,
+                this::modifiers,
+                this::compactTypeLike,
+                this::expression,
+                this::body);
     }
 
     Doc print(CompilationUnit unit) {
@@ -456,37 +464,11 @@ final class JavaPrinter {
     }
 
     private Doc annotationDeclaration(AnnotationDeclaration declaration) {
-        List<Doc> header = new ArrayList<>();
-        header.add(comments.leading(declaration));
-        header.add(annotations(declaration));
-        header.add(Doc.text(modifiers(declaration)));
-        header.add(Doc.text("@interface " + declaration.getNameAsString() + " "));
-        header.add(annotationMemberBlock(declaration));
-        return Doc.concat(header);
-    }
-
-    private Doc annotationMemberBlock(AnnotationDeclaration declaration) {
-        if (declaration.getMembers().isEmpty()) {
-            return Doc.text("{}");
-        }
-        List<Doc> memberDocs = declaration.getMembers().stream().map(this::body).toList();
-        return Doc.concat(
-                Doc.text("{"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE), memberDocs))),
-                Doc.HARD_LINE,
-                Doc.text("}"));
+        return annotationDeclarations.annotationDeclaration(declaration);
     }
 
     private Doc annotationMember(AnnotationMemberDeclaration declaration) {
-        List<Doc> docs = new ArrayList<>();
-        docs.add(comments.leading(declaration));
-        docs.add(annotations(declaration));
-        docs.add(Doc.text(modifiers(declaration)));
-        docs.add(Doc.text(compactTypeLike(declaration.getType()) + " " + declaration.getNameAsString() + "()"));
-        declaration.getDefaultValue()
-                .ifPresent(defaultValue -> docs.add(Doc.concat(Doc.text(" default "), expression(defaultValue))));
-        docs.add(Doc.text(";"));
-        return Doc.concat(docs);
+        return annotationDeclarations.annotationMember(declaration);
     }
 
     private Doc field(FieldDeclaration declaration) {

@@ -49,7 +49,7 @@ class ConditionalExpression {
               c;
         value = a
             ? b // b
-            : c // c;
+            : c; // c
     }
 
     void ternaryInParentheses() {

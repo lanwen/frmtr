@@ -330,6 +330,9 @@ final class FrmtrTest {
                         value = a ? // b
                             b : // c
                             c;
+                        value = a
+                            ? b // b
+                            : c; // c
                     }
                 }
                 """;
@@ -348,7 +351,10 @@ final class FrmtrTest {
                         + "      ? // b\n"
                         + "        b\n"
                         + "      : // c\n"
-                        + "        c;");
+                        + "        c;")
+                .contains("value = a\n"
+                        + "      ? b // b\n"
+                        + "      : c; // c");
     }
 
     @Test

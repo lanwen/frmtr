@@ -2977,7 +2977,20 @@ final class JavaPrinter {
                             : methodCall(methodCall, MethodCallMode.BREAK),
                     Doc.text(";"));
         }
-        return Doc.concat(expression(expression), Doc.text(";"));
+        Optional<Comment> trailingConditionalComment = conditionalElseStatementTrailingComment(statement);
+        Doc trailing = trailingConditionalComment
+                .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
+                .orElse(Doc.EMPTY);
+        return Doc.concat(expression(expression), Doc.text(";"), trailing);
+    }
+
+    private Optional<Comment> conditionalElseStatementTrailingComment(ExpressionStmt statement) {
+        return statement.getExpression().findAll(ConditionalExpr.class).stream()
+                .flatMap(conditionalExpr -> conditionalExpr.getElseExpr().getComment()
+                        .filter(LineComment.class::isInstance)
+                        .filter(comment -> startsAfterNodeOnSameLine(statement, comment))
+                        .stream())
+                .findFirst();
     }
 
     private Doc tryStatement(TryStmt statement) {
@@ -3703,7 +3716,8 @@ final class JavaPrinter {
                 .or(() -> elseComment.filter(comment -> startsBefore(comment, expression.getElseExpr())));
         Optional<Comment> elseTrailingComment = elseComment
                 .filter(comment -> !colonComment.filter(colon -> colon == comment).isPresent())
-                .filter(comment -> !startsBefore(comment, expression.getElseExpr()));
+                .filter(comment -> !startsBefore(comment, expression.getElseExpr()))
+                .filter(comment -> !conditionalElseCommentIsStatementTrailing(expression, comment));
         return Optional.of(Doc.concat(
                 expressionWithoutOwnComment(expression.getCondition()),
                 Doc.indent(Doc.concat(
@@ -3730,6 +3744,25 @@ final class JavaPrinter {
                 .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
                 .orElse(Doc.EMPTY);
         return Doc.concat(Doc.text(operator + " "), expressionWithoutOwnComment(branch), trailing);
+    }
+
+    private boolean conditionalElseCommentIsStatementTrailing(ConditionalExpr expression, Comment comment) {
+        return expression.getParentNode()
+                .stream()
+                .flatMap(parent -> findAncestorExpressionStatement(parent).stream())
+                .anyMatch(statement -> startsAfterNodeOnSameLine(statement, comment));
+    }
+
+    private Optional<ExpressionStmt> findAncestorExpressionStatement(Node node) {
+        Optional<Node> parent = node.getParentNode();
+        while (parent.isPresent()) {
+            Node current = parent.orElseThrow();
+            if (current instanceof ExpressionStmt expressionStmt) {
+                return Optional.of(expressionStmt);
+            }
+            parent = current.getParentNode();
+        }
+        return Optional.empty();
     }
 
     private boolean commentAppearsAfterColon(ConditionalExpr expression, Comment comment) {

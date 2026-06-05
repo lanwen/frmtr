@@ -9,6 +9,10 @@ import java.util.List;
  * <p>This helper owns module headers and the small set of module directives whose comments are awkward to reconstruct
  * from JavaParser's module directive AST. It deliberately does not decide when raw source should be used, how leading
  * declaration comments are attached, or how normal structured module blocks and directives are printed.
+ *
+ * <p>The fixture pair {@code format/prettier-java/unit-test/comments/package/input.java} and {@code
+ * format/prettier-java/unit-test/comments/package/frmtr.output.java} shows the expected output for this raw commented
+ * module path.
  */
 final class CommentedModulePrinter {
     /**

@@ -12,24 +12,9 @@ import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.InitializerDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.RecordDeclaration;
-import com.github.javaparser.ast.expr.AnnotationExpr;
-import com.github.javaparser.ast.expr.ArrayAccessExpr;
-import com.github.javaparser.ast.expr.ArrayCreationExpr;
-import com.github.javaparser.ast.expr.ArrayInitializerExpr;
-import com.github.javaparser.ast.expr.AssignExpr;
-import com.github.javaparser.ast.expr.BinaryExpr;
-import com.github.javaparser.ast.expr.CastExpr;
-import com.github.javaparser.ast.expr.ConditionalExpr;
-import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
-import com.github.javaparser.ast.expr.FieldAccessExpr;
-import com.github.javaparser.ast.expr.InstanceOfExpr;
-import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
-import com.github.javaparser.ast.expr.ObjectCreationExpr;
-import com.github.javaparser.ast.expr.SwitchExpr;
-import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.stmt.AssertStmt;
 import com.github.javaparser.ast.stmt.BlockStmt;
@@ -101,6 +86,7 @@ final class JavaPrinter {
     private final CompilationUnitPrinter compilationUnits;
     private final FieldDeclarationPrinter fields;
     private final VariableDeclarationPrinter variableDeclarations;
+    private final ExpressionDispatcher expressionDispatcher;
 
     JavaPrinter(FormatterOptions options) {
         this.options = options;
@@ -269,6 +255,23 @@ final class JavaPrinter {
                 objectCreations::brokenObjectCreation,
                 methodCalls::assignmentWithBrokenMethodCallArguments,
                 conditionals::assignmentWithConditionalValue);
+        this.expressionDispatcher = new ExpressionDispatcher(
+                assignments,
+                arrays,
+                annotationExpressions,
+                binaries,
+                casts,
+                conditionals,
+                enclosedExpressions,
+                fieldAccesses,
+                instanceOfExpressions,
+                lambdas,
+                methodCalls,
+                methodReferences,
+                objectCreations,
+                switches,
+                textBlocks,
+                compactSource);
         this.returnExpressions = new ReturnExpressionPrinter(
                 options,
                 this::expression,
@@ -511,9 +514,7 @@ final class JavaPrinter {
     }
 
     private Doc expressionWithoutOwnComment(Expression expression) {
-        Expression clone = expression.clone();
-        clone.removeComment();
-        return expression(clone);
+        return expressionDispatcher.expressionWithoutOwnComment(expression);
     }
 
     private Doc method(MethodDeclaration declaration) {
@@ -597,58 +598,7 @@ final class JavaPrinter {
     }
 
     private Doc expression(Expression expression) {
-        if (expression instanceof AssignExpr assignExpr) {
-            return assignments.assignment(assignExpr);
-        }
-        if (expression instanceof ArrayAccessExpr arrayAccessExpr) {
-            return arrays.arrayAccess(arrayAccessExpr);
-        }
-        if (expression instanceof ArrayCreationExpr arrayCreationExpr) {
-            return arrays.arrayCreation(arrayCreationExpr);
-        }
-        if (expression instanceof ArrayInitializerExpr arrayInitializerExpr) {
-            return arrays.arrayInitializer(arrayInitializerExpr);
-        }
-        if (expression instanceof AnnotationExpr annotationExpr) {
-            return annotationExpressions.annotation(annotationExpr);
-        }
-        if (expression instanceof BinaryExpr binaryExpr) {
-            return binaries.binaryExpression(binaryExpr);
-        }
-        if (expression instanceof CastExpr castExpr) {
-            return casts.castExpression(castExpr);
-        }
-        if (expression instanceof ConditionalExpr conditionalExpr) {
-            return conditionals.conditionalExpression(conditionalExpr);
-        }
-        if (expression instanceof EnclosedExpr enclosedExpr) {
-            return enclosedExpressions.enclosedExpression(enclosedExpr);
-        }
-        if (expression instanceof FieldAccessExpr fieldAccessExpr) {
-            return fieldAccesses.fieldAccess(fieldAccessExpr);
-        }
-        if (expression instanceof InstanceOfExpr instanceOfExpr) {
-            return instanceOfExpressions.instanceOfExpression(instanceOfExpr);
-        }
-        if (expression instanceof LambdaExpr lambdaExpr) {
-            return lambdas.lambdaExpression(lambdaExpr);
-        }
-        if (expression instanceof MethodCallExpr methodCallExpr) {
-            return methodCalls.methodCall(methodCallExpr);
-        }
-        if (expression instanceof MethodReferenceExpr methodReferenceExpr) {
-            return methodReferences.methodReference(methodReferenceExpr);
-        }
-        if (expression instanceof ObjectCreationExpr objectCreationExpr) {
-            return objectCreations.objectCreation(objectCreationExpr);
-        }
-        if (expression instanceof SwitchExpr switchExpr) {
-            return switches.switchExpression(switchExpr);
-        }
-        if (expression instanceof TextBlockLiteralExpr textBlockLiteralExpr) {
-            return textBlocks.textBlockLiteral(textBlockLiteralExpr);
-        }
-        return Doc.text(compactSource.compact(expression));
+        return expressionDispatcher.expression(expression);
     }
 
     private Optional<Doc> suffixedEnclosedExpression(Expression expression, boolean leadingBreak) {

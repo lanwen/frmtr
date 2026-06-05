@@ -1,17 +1,7 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.body.AnnotationDeclaration;
-import com.github.javaparser.ast.body.AnnotationMemberDeclaration;
 import com.github.javaparser.ast.body.BodyDeclaration;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.CompactConstructorDeclaration;
-import com.github.javaparser.ast.body.ConstructorDeclaration;
-import com.github.javaparser.ast.body.EnumDeclaration;
-import com.github.javaparser.ast.body.FieldDeclaration;
-import com.github.javaparser.ast.body.InitializerDeclaration;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
@@ -87,6 +77,7 @@ final class JavaPrinter {
     private final FieldDeclarationPrinter fields;
     private final VariableDeclarationPrinter variableDeclarations;
     private final ExpressionDispatcher expressionDispatcher;
+    private final BodyDeclarationDispatcher bodyDeclarations;
 
     JavaPrinter(FormatterOptions options) {
         this.options = options;
@@ -456,6 +447,21 @@ final class JavaPrinter {
                 compactSource::compactTypeLike,
                 this::expression,
                 this::body);
+        this.bodyDeclarations = new BodyDeclarationDispatcher(
+                formatterPragmas,
+                comments::leading,
+                rawSource::rawWithoutOwnComment,
+                compactSource::compact,
+                classOrInterfaces::classOrInterface,
+                records::record,
+                enums::enumDeclaration,
+                annotationDeclarations::annotationDeclaration,
+                annotationDeclarations::annotationMember,
+                fields::field,
+                methods::method,
+                constructors::compactConstructor,
+                constructors::constructor,
+                initializers::initializer);
     }
 
     Doc print(CompilationUnit unit) {
@@ -463,74 +469,15 @@ final class JavaPrinter {
     }
 
     private Doc body(BodyDeclaration<?> declaration) {
-        FormatterPragmas.PrintAction action = formatterPragmas.bodyAction(declaration);
-        if (action == FormatterPragmas.PrintAction.FORMAT_WITH_LEADING) {
-            return Doc.concat(comments.leading(declaration), bodyContent(declaration));
-        }
-        if (action == FormatterPragmas.PrintAction.RAW) {
-            return rawBody(declaration);
-        }
-        return bodyContent(declaration);
-    }
-
-    private Doc rawBody(BodyDeclaration<?> declaration) {
-        return Doc.concat(comments.leading(declaration), Doc.text(rawSource.rawWithoutOwnComment(declaration)));
-    }
-
-    private Doc bodyContent(BodyDeclaration<?> declaration) {
-        return switch (declaration) {
-            case ClassOrInterfaceDeclaration classDeclaration -> classOrInterfaces.classOrInterface(classDeclaration);
-            case RecordDeclaration recordDeclaration -> record(recordDeclaration);
-            case EnumDeclaration enumDeclaration -> enumDeclaration(enumDeclaration);
-            case AnnotationDeclaration annotationDeclaration -> annotationDeclaration(annotationDeclaration);
-            case AnnotationMemberDeclaration annotationMemberDeclaration -> annotationMember(annotationMemberDeclaration);
-            case FieldDeclaration fieldDeclaration -> field(fieldDeclaration);
-            case MethodDeclaration methodDeclaration -> method(methodDeclaration);
-            case CompactConstructorDeclaration compactConstructorDeclaration -> compactConstructor(compactConstructorDeclaration);
-            case ConstructorDeclaration constructorDeclaration -> constructor(constructorDeclaration);
-            case InitializerDeclaration initializerDeclaration -> initializer(initializerDeclaration);
-            default -> rawDeclaration(declaration);
-        };
-    }
-
-    private Doc record(RecordDeclaration declaration) {
-        return records.record(declaration);
-    }
-
-    private Doc enumDeclaration(EnumDeclaration declaration) {
-        return enums.enumDeclaration(declaration);
-    }
-
-    private Doc annotationDeclaration(AnnotationDeclaration declaration) {
-        return annotationDeclarations.annotationDeclaration(declaration);
-    }
-
-    private Doc annotationMember(AnnotationMemberDeclaration declaration) {
-        return annotationDeclarations.annotationMember(declaration);
-    }
-
-    private Doc field(FieldDeclaration declaration) {
-        return fields.field(declaration);
+        return bodyDeclarations.body(declaration);
     }
 
     private Doc expressionWithoutOwnComment(Expression expression) {
         return expressionDispatcher.expressionWithoutOwnComment(expression);
     }
 
-    private Doc method(MethodDeclaration declaration) {
-        return methods.method(declaration);
-    }
-
     private boolean isCommentOnlyLine(String line) {
         return line.startsWith("//") || line.startsWith("/*") && line.endsWith("*/");
-    }
-
-    private Doc constructor(ConstructorDeclaration declaration) {
-        return constructors.constructor(declaration);
-    }
-
-    private Doc compactConstructor(CompactConstructorDeclaration declaration) {
-        return constructors.compactConstructor(declaration);
     }
 
     private int currentIndentedWidth(String text) {
@@ -543,10 +490,6 @@ final class JavaPrinter {
 
     private int continuationStatementWidth(String text) {
         return (options.indentUnit().length() * 3) + text.length();
-    }
-
-    private Doc initializer(InitializerDeclaration declaration) {
-        return initializers.initializer(declaration);
     }
 
     private Doc block(BlockStmt block) {
@@ -616,10 +559,6 @@ final class JavaPrinter {
             return text.value();
         }
         return "";
-    }
-
-    private Doc rawDeclaration(BodyDeclaration<?> declaration) {
-        return Doc.concat(comments.leading(declaration), Doc.text(compactSource.compact(declaration)));
     }
 
 }

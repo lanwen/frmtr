@@ -34,7 +34,6 @@ import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.comments.BlockComment;
-import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.stmt.AssertStmt;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.BreakStmt;
@@ -66,6 +65,7 @@ final class JavaPrinter {
     private final FormatterOptions options;
     private final RawSource rawSource;
     private final CompactSourceText compactSource;
+    private final CommentPlacement commentPlacement;
     private final TypePrinter types;
     private final FormatterPragmas formatterPragmas = new FormatterPragmas();
     private final ModuleBlockPrinter moduleBlocks;
@@ -108,6 +108,7 @@ final class JavaPrinter {
         this.options = options;
         this.rawSource = new RawSource(options);
         this.compactSource = new CompactSourceText(rawSource);
+        this.commentPlacement = new CommentPlacement(comments);
         this.types = new TypePrinter(options, compactSource::compactTypeLike);
         this.blocks = new BlockPrinter(comments, this::statement, formatterPragmas::hasPragma);
         this.binaries = new BinaryExpressionPrinter(
@@ -165,7 +166,7 @@ final class JavaPrinter {
                 compactSource::compactTypeLike,
                 declarationPrefixes::modifiers,
                 this::currentIndentedWidth,
-                this::ownSameLineBlockCommentBeforeNode);
+                commentPlacement::ownSameLineBlockCommentBeforeNode);
         this.conditionals = new ConditionalExpressionPrinter(
                 comments,
                 options,
@@ -191,8 +192,8 @@ final class JavaPrinter {
                 compactSource::compactJoin,
                 this::currentIndentedWidth,
                 this::blockStatementWidth,
-                this::startsBefore,
-                this::startsOnSameLine);
+                commentPlacement::startsBefore,
+                commentPlacement::startsOnSameLine);
         this.casts = new CastExpressionPrinter(
                 options,
                 this::expression,
@@ -216,8 +217,8 @@ final class JavaPrinter {
                 compactSource::compactTypeLike,
                 compactSource::compact,
                 this::currentIndentedWidth,
-                this::startsBefore,
-                this::startsAfterNodeOnSameLine);
+                commentPlacement::startsBefore,
+                commentPlacement::startsAfterNodeOnSameLine);
         this.objectCreations = new ObjectCreationPrinter(
                 comments,
                 types,
@@ -345,8 +346,8 @@ final class JavaPrinter {
                 types::typeBody,
                 declarationPrefixes::modifier,
                 types::typeCanBreak,
-                this::unattachedTrailingBlockComment,
-                this::startsAfterNodeOnSameLine,
+                commentPlacement::unattachedTrailingBlockComment,
+                commentPlacement::startsAfterNodeOnSameLine,
                 this::commentText);
         this.classOrInterfaces = new ClassOrInterfaceDeclarationPrinter(
                 comments,
@@ -397,7 +398,7 @@ final class JavaPrinter {
                 compactSource::compactJoin,
                 this::expression,
                 this::currentIndentedWidth,
-                this::startsAfterNodeOnSameLine,
+                commentPlacement::startsAfterNodeOnSameLine,
                 this::body);
         this.records = new RecordDeclarationPrinter(
                 comments,
@@ -440,7 +441,7 @@ final class JavaPrinter {
                 binaries::lines,
                 controlConditions::controlCondition,
                 controlConditions::compactWithOwnBlockComment,
-                this::ownSameLineBlockCommentBeforeNode,
+                commentPlacement::ownSameLineBlockCommentBeforeNode,
                 this::currentIndentedWidth);
         this.annotationDeclarations = new AnnotationDeclarationPrinter(
                 comments,
@@ -614,15 +615,6 @@ final class JavaPrinter {
         return methodCalls.brokenMethodCall(expression);
     }
 
-    private Doc ownSameLineBlockCommentBeforeNode(Node node) {
-        return comments.ownComment(node, comment -> comment instanceof BlockComment
-                && comment.getRange()
-                        .flatMap(commentRange -> node.getRange()
-                                .map(nodeRange -> commentRange.begin.line == nodeRange.begin.line
-                                        && startsBefore(commentRange, nodeRange)))
-                        .orElse(false));
-    }
-
     private Doc expression(Expression expression) {
         if (expression instanceof AssignExpr assignExpr) {
             return assignments.assignment(assignExpr);
@@ -688,55 +680,11 @@ final class JavaPrinter {
         return Optional.empty();
     }
 
-    private boolean startsOnSameLine(Comment comment, Node node) {
-        return comment.getRange()
-                .flatMap(commentRange -> node.getRange().map(nodeRange -> commentRange.begin.line == nodeRange.begin.line))
-                .orElse(false);
-    }
-
-    private boolean startsBefore(Comment comment, Node node) {
-        return comment.getRange()
-                .flatMap(commentRange -> node.getRange().map(nodeRange -> startsBefore(commentRange, nodeRange)))
-                .orElse(false);
-    }
-
-    private boolean startsBefore(com.github.javaparser.Range left, com.github.javaparser.Range right) {
-        if (left.begin.line != right.begin.line) {
-            return left.begin.line < right.begin.line;
-        }
-        return left.begin.column < right.begin.column;
-    }
-
     private String commentText(Doc comment) {
         if (comment instanceof Doc.Text text) {
             return text.value();
         }
         return "";
-    }
-
-    private boolean startsAfterNodeOnSameLine(Node node, Comment comment) {
-        return node.getRange()
-                .flatMap(nodeRange -> comment.getRange()
-                        .map(commentRange -> commentRange.begin.line == nodeRange.end.line
-                                && commentRange.begin.column > nodeRange.end.column))
-                .orElse(false);
-    }
-
-    private Doc unattachedTrailingBlockComment(Node node) {
-        Optional<Node> parent = node.getParentNode();
-        while (parent.isPresent()) {
-            Optional<Doc> trailing = parent.orElseThrow().getAllContainedComments().stream()
-                    .filter(BlockComment.class::isInstance)
-                    .filter(comment -> comment.getCommentedNode().isEmpty())
-                    .filter(comment -> startsAfterNodeOnSameLine(node, comment))
-                    .findFirst()
-                    .map(comments::comment);
-            if (trailing.isPresent()) {
-                return trailing.orElseThrow();
-            }
-            parent = parent.orElseThrow().getParentNode();
-        }
-        return Doc.EMPTY;
     }
 
     private Doc rawDeclaration(BodyDeclaration<?> declaration) {

@@ -94,6 +94,7 @@ final class JavaPrinter {
     private final BlockPrinter blocks;
     private final StatementPrinter statements;
     private final SwitchPrinter switches;
+    private final ConditionalExpressionPrinter conditionals;
     private final CallableSignaturePrinter callableSignatures;
     private final ConstructorDeclarationPrinter constructors;
     private final MethodDeclarationPrinter methods;
@@ -136,6 +137,18 @@ final class JavaPrinter {
                 this::modifiers,
                 this::currentIndentedWidth,
                 this::ownSameLineBlockCommentBeforeNode);
+        this.conditionals = new ConditionalExpressionPrinter(
+                comments,
+                options,
+                this::expression,
+                this::expressionWithoutOwnComment,
+                this::compact,
+                this::currentIndentedWidth,
+                this::blockStatementWidth,
+                this::continuationStatementWidth,
+                (expression, forceBreak) -> binaryExpressionLines(expression, forceBreak),
+                (expression, forceBreak) -> nestedBinaryExpressionLines(expression, forceBreak),
+                this::expressionHasParenthesizedNestedBinary);
         this.commentedMethodSignatures = new CommentedMethodSignaturePrinter(options);
         PackageDeclarationPrinter packageDeclarations = new PackageDeclarationPrinter(comments, rawSource, options);
         ImportDeclarationPrinter importDeclarations = new ImportDeclarationPrinter(comments);
@@ -172,8 +185,8 @@ final class JavaPrinter {
                 this::methodCallChainRoot,
                 this::methodCallChainRootIsObjectCreation,
                 this::castType,
-                conditional -> conditionalExpression(conditional, true),
-                this::shouldBreakBeforeConditionalInitializer,
+                conditional -> conditionals.conditionalExpression(conditional, true),
+                conditionals::shouldBreakBeforeConditionalInitializer,
                 this::arrayCreationTypeBreaks,
                 this::arrayCreationPrefix,
                 (initializer, forceBreak) -> arrayInitializer(initializer, forceBreak),
@@ -369,11 +382,6 @@ final class JavaPrinter {
         return expression(clone);
     }
 
-    private boolean shouldBreakBeforeConditionalInitializer(ConditionalExpr initializer) {
-        return initializer.getCondition() instanceof BinaryExpr
-                && (initializer.getThenExpr() instanceof BinaryExpr || initializer.getElseExpr() instanceof BinaryExpr);
-    }
-
     private Doc method(MethodDeclaration declaration) {
         return methods.method(declaration);
     }
@@ -481,7 +489,7 @@ final class JavaPrinter {
             }
         }
         if (expression instanceof ConditionalExpr conditionalExpr) {
-            return conditionalExpression(conditionalExpr, true);
+            return conditionals.conditionalExpression(conditionalExpr, true);
         }
         if (expression instanceof UnaryExpr unaryExpr
                 && unaryExpr.getOperator() == UnaryExpr.Operator.LOGICAL_COMPLEMENT
@@ -734,7 +742,8 @@ final class JavaPrinter {
                     }
                 }
                 if (assignExpr.getValue() instanceof ConditionalExpr conditionalExpr) {
-                    Optional<Doc> conditionalAssignment = assignmentWithConditionalValue(assignExpr, conditionalExpr);
+                    Optional<Doc> conditionalAssignment =
+                            conditionals.assignmentWithConditionalValue(assignExpr, conditionalExpr);
                     if (conditionalAssignment.isPresent()) {
                         return conditionalAssignment.orElseThrow();
                     }
@@ -770,7 +779,7 @@ final class JavaPrinter {
             return castExpression(castExpr);
         }
         if (expression instanceof ConditionalExpr conditionalExpr) {
-            return conditionalExpression(conditionalExpr);
+            return conditionals.conditionalExpression(conditionalExpr);
         }
         if (expression instanceof EnclosedExpr enclosedExpr) {
             return enclosedExpression(enclosedExpr);
@@ -818,33 +827,6 @@ final class JavaPrinter {
                 expression(assignExpr.getTarget()),
                 Doc.text(" " + assignExpr.getOperator().asString() + " "),
                 methodCall(methodCall, MethodCallMode.BREAK)));
-    }
-
-    private Optional<Doc> assignmentWithConditionalValue(AssignExpr assignExpr, ConditionalExpr conditionalExpr) {
-        if (shouldBreakBeforeConditionalInitializer(conditionalExpr)
-                || shouldBreakBeforeConditionalAssignment(conditionalExpr)) {
-            return Optional.of(Doc.concat(
-                    expression(assignExpr.getTarget()),
-                    Doc.text(" " + assignExpr.getOperator().asString()),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, conditionalExpression(conditionalExpr, true)))));
-        }
-        String conditionLine = compact(assignExpr.getTarget()) + " "
-                + assignExpr.getOperator().asString()
-                + " "
-                + compact(conditionalExpr.getCondition())
-                + ";";
-        if (blockStatementWidth(conditionLine) <= options.lineWidth()) {
-            return Optional.of(Doc.concat(
-                    expression(assignExpr.getTarget()),
-                    Doc.text(" " + assignExpr.getOperator().asString() + " "),
-                    conditionalExpression(conditionalExpr, true)));
-        }
-        return Optional.empty();
-    }
-
-    private boolean shouldBreakBeforeConditionalAssignment(ConditionalExpr conditionalExpr) {
-        return conditionalExpr.getCondition() instanceof BinaryExpr binaryExpr
-                && binaryExpr.findAll(MethodCallExpr.class).stream().findAny().isPresent();
     }
 
     private Doc textBlockLiteral(TextBlockLiteralExpr expression) {
@@ -1045,7 +1027,7 @@ final class JavaPrinter {
         }
         if (expression.getInner() instanceof ConditionalExpr conditionalExpr
                 && continuationStatementWidth(compact(expression)) >= options.lineWidth()) {
-            return Doc.concat(Doc.text("("), conditionalExpression(conditionalExpr, true), Doc.text(")"));
+            return Doc.concat(Doc.text("("), conditionals.conditionalExpression(conditionalExpr, true), Doc.text(")"));
         }
         if (expression.getInner() instanceof LambdaExpr lambdaExpr
                 && expression.getParentNode().filter(ExpressionStmt.class::isInstance).isPresent()) {
@@ -1105,190 +1087,6 @@ final class JavaPrinter {
                     Doc.text(")"));
         }
         return Doc.text("(" + compactTypeLike(type) + ")");
-    }
-
-    private Doc conditionalExpression(ConditionalExpr expression) {
-        return conditionalExpression(expression, false);
-    }
-
-    private Doc conditionalExpression(ConditionalExpr expression, boolean forceBreak) {
-        Optional<Doc> commented = commentedConditionalExpression(expression);
-        if (commented.isPresent()) {
-            return commented.orElseThrow();
-        }
-        String flat = compact(expression);
-        if (!forceBreak && currentIndentedWidth(flat) <= options.lineWidth()) {
-            if (expressionHasParenthesizedNestedBinary(expression)) {
-                return Doc.concat(
-                        conditionalCondition(expression),
-                        Doc.text(" ? "),
-                        conditionalBranch(expression.getThenExpr()),
-                        Doc.text(" : "),
-                        conditionalBranch(expression.getElseExpr()));
-            }
-            return Doc.text(flat);
-        }
-        return Doc.concat(
-                conditionalCondition(expression),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.text("? "),
-                        conditionalBranch(expression.getThenExpr()),
-                        Doc.HARD_LINE,
-                        Doc.text(": "),
-                        conditionalBranch(expression.getElseExpr()))));
-    }
-
-    private Optional<Doc> commentedConditionalExpression(ConditionalExpr expression) {
-        if (expression.getAllContainedComments().stream().noneMatch(LineComment.class::isInstance)) {
-            return Optional.empty();
-        }
-        Optional<Comment> conditionComment = expression.getCondition().getComment()
-                .filter(LineComment.class::isInstance);
-        Optional<Comment> thenComment = expression.getThenExpr().getComment()
-                .filter(LineComment.class::isInstance);
-        Optional<Comment> elseComment = expression.getElseExpr().getComment()
-                .filter(LineComment.class::isInstance);
-        Optional<Comment> leadingThenComment =
-                thenComment.filter(comment -> startsBefore(comment, expression.getThenExpr()));
-        Optional<Comment> conditionTrailingComment =
-                conditionComment
-                        .filter(comment -> conditionalQuestionCommentTrailsCondition(expression, comment))
-                        .or(() -> leadingThenComment
-                                .filter(comment -> conditionalQuestionCommentTrailsCondition(expression, comment)));
-        Optional<Comment> questionComment = conditionComment
-                .filter(comment -> !conditionalQuestionCommentTrailsCondition(expression, comment))
-                .or(() -> leadingThenComment
-                        .filter(comment -> !conditionalQuestionCommentTrailsCondition(expression, comment)));
-        Optional<Comment> thenTrailingComment = thenComment
-                .filter(comment -> !startsBefore(comment, expression.getThenExpr()))
-                .filter(comment -> !commentAppearsAfterColon(expression, comment));
-        Optional<Comment> colonComment = thenComment
-                .filter(comment -> !questionComment.filter(question -> question == comment).isPresent())
-                .filter(comment -> commentAppearsAfterColon(expression, comment))
-                .or(() -> elseComment.filter(comment -> startsBefore(comment, expression.getElseExpr())));
-        Optional<Comment> elseTrailingComment = elseComment
-                .filter(comment -> !colonComment.filter(colon -> colon == comment).isPresent())
-                .filter(comment -> !startsBefore(comment, expression.getElseExpr()))
-                .filter(comment -> !conditionalElseCommentIsStatementTrailing(expression, comment));
-        return Optional.of(Doc.concat(
-                conditionalConditionWithTrailingComment(expression.getCondition(), conditionTrailingComment),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        conditionalCommentedBranch("?", expression.getThenExpr(), questionComment, thenTrailingComment),
-                        Doc.HARD_LINE,
-                        conditionalCommentedBranch(":", expression.getElseExpr(), colonComment, elseTrailingComment)))));
-    }
-
-    private Doc conditionalConditionWithTrailingComment(Expression condition, Optional<Comment> trailingComment) {
-        Doc trailing = trailingComment
-                .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
-                .orElse(Doc.EMPTY);
-        return Doc.concat(expressionWithoutOwnComment(condition), trailing);
-    }
-
-    private boolean conditionalQuestionCommentTrailsCondition(ConditionalExpr expression, Comment comment) {
-        return commentAppearsAfterOperator(expression, comment, "?")
-                && startsAfterNodeOnSameLine(expression.getCondition(), comment);
-    }
-
-    private Doc conditionalCommentedBranch(
-            String operator,
-            Expression branch,
-            Optional<Comment> leadingComment,
-            Optional<Comment> trailingComment) {
-        if (leadingComment.isPresent()) {
-            return Doc.concat(
-                    Doc.text(operator + " "),
-                    comments.comment(leadingComment.orElseThrow()),
-                    Doc.HARD_LINE,
-                    Doc.text("  "),
-                    expressionWithoutOwnComment(branch));
-        }
-        Doc trailing = trailingComment
-                .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
-                .orElse(Doc.EMPTY);
-        return Doc.concat(Doc.text(operator + " "), expressionWithoutOwnComment(branch), trailing);
-    }
-
-    private boolean conditionalElseCommentIsStatementTrailing(ConditionalExpr expression, Comment comment) {
-        return expression.getParentNode()
-                .stream()
-                .flatMap(parent -> findAncestorExpressionStatement(parent).stream())
-                .anyMatch(statement -> startsAfterNodeOnSameLine(statement, comment));
-    }
-
-    private Optional<ExpressionStmt> findAncestorExpressionStatement(Node node) {
-        Optional<Node> parent = node.getParentNode();
-        while (parent.isPresent()) {
-            Node current = parent.orElseThrow();
-            if (current instanceof ExpressionStmt expressionStmt) {
-                return Optional.of(expressionStmt);
-            }
-            parent = current.getParentNode();
-        }
-        return Optional.empty();
-    }
-
-    private boolean commentAppearsAfterColon(ConditionalExpr expression, Comment comment) {
-        return commentAppearsAfterOperator(expression, comment, ":");
-    }
-
-    private boolean commentAppearsAfterOperator(ConditionalExpr expression, Comment comment, String operator) {
-        return expression.getTokenRange()
-                .flatMap(tokenRange -> expression.getRange().flatMap(expressionRange -> comment.getRange()
-                        .map(commentRange -> {
-                            List<String> lines = tokenRange.toString().lines().toList();
-                            int lineIndex = commentRange.begin.line - expressionRange.begin.line;
-                            if (lineIndex < 0 || lineIndex >= lines.size()) {
-                                return false;
-                            }
-                            int column = lineIndex == 0
-                                    ? commentRange.begin.column - expressionRange.begin.column
-                                    : commentRange.begin.column - 1;
-                            if (column <= 0) {
-                                return false;
-                            }
-                            String prefix = lines.get(lineIndex).substring(0, Math.min(column, lines.get(lineIndex).length()));
-                            return prefix.contains(operator);
-                        })))
-                .orElse(false);
-    }
-
-    private Doc conditionalCondition(ConditionalExpr expression) {
-        Expression condition = expression.getCondition();
-        if (condition instanceof BinaryExpr
-                && continuationStatementWidth(compact(condition)) > options.lineWidth()) {
-            if (conditionalIsAssignmentValue(expression) || conditionalIsVariableInitializer(expression)) {
-                return binaryExpressionLines(condition, true);
-            }
-            return nestedBinaryExpressionLines(condition, true);
-        }
-        return expression(condition);
-    }
-
-    private boolean conditionalIsAssignmentValue(ConditionalExpr expression) {
-        return expression.getParentNode()
-                .filter(AssignExpr.class::isInstance)
-                .map(AssignExpr.class::cast)
-                .filter(assignExpr -> assignExpr.getValue() == expression)
-                .isPresent();
-    }
-
-    private boolean conditionalIsVariableInitializer(ConditionalExpr expression) {
-        return expression.getParentNode()
-                .filter(VariableDeclarator.class::isInstance)
-                .map(VariableDeclarator.class::cast)
-                .flatMap(VariableDeclarator::getInitializer)
-                .filter(initializer -> initializer == expression)
-                .isPresent();
-    }
-
-    private Doc conditionalBranch(Expression branch) {
-        if (branch instanceof ConditionalExpr conditionalExpr) {
-            return conditionalExpression(conditionalExpr, true);
-        }
-        return expression(branch);
     }
 
     private Doc arrayAccess(ArrayAccessExpr expression) {

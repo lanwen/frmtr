@@ -38,7 +38,6 @@ import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
-import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.stmt.AssertStmt;
@@ -92,6 +91,7 @@ final class JavaPrinter {
     private final TextBlockPrinter textBlocks;
     private final CastExpressionPrinter casts;
     private final InstanceOfExpressionPrinter instanceOfExpressions;
+    private final FieldAccessPrinter fieldAccesses;
     private final MethodCallPrinter methodCalls;
     private final CallableSignaturePrinter callableSignatures;
     private final ConstructorDeclarationPrinter constructors;
@@ -212,6 +212,7 @@ final class JavaPrinter {
                 this::compact,
                 this::compactTypeLike,
                 this::currentIndentedWidth);
+        this.fieldAccesses = new FieldAccessPrinter(comments, this::expression);
         this.methodCalls = new MethodCallPrinter(
                 comments,
                 options,
@@ -691,7 +692,7 @@ final class JavaPrinter {
             return enclosedExpression(enclosedExpr);
         }
         if (expression instanceof FieldAccessExpr fieldAccessExpr) {
-            return fieldAccess(fieldAccessExpr);
+            return fieldAccesses.fieldAccess(fieldAccessExpr);
         }
         if (expression instanceof InstanceOfExpr instanceOfExpr) {
             return instanceOfExpressions.instanceOfExpression(instanceOfExpr);
@@ -740,16 +741,6 @@ final class JavaPrinter {
             return Doc.text(compact(expression));
         }
         return Doc.concat(Doc.text("("), expression(expression.getInner()), Doc.text(")"));
-    }
-
-    private Doc fieldAccess(FieldAccessExpr expression) {
-        Doc scope = expression(expression.getScope());
-        Doc nameComment = comments.ownComment(expression.getName(), comment -> comment instanceof LineComment
-                || comment instanceof BlockComment);
-        if (nameComment != Doc.EMPTY) {
-            return Doc.concat(scope, nameComment, Doc.HARD_LINE, Doc.text("." + expression.getNameAsString()));
-        }
-        return Doc.concat(scope, Doc.text("." + expression.getNameAsString()));
     }
 
     private Optional<Doc> suffixedEnclosedExpression(Expression expression, boolean leadingBreak) {

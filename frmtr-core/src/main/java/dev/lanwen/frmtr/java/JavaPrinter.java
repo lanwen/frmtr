@@ -35,7 +35,6 @@ import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
-import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
@@ -95,6 +94,7 @@ final class JavaPrinter {
     private final MethodReferencePrinter methodReferences;
     private final MethodCallPrinter methodCalls;
     private final AssignmentExpressionPrinter assignments;
+    private final ReturnExpressionPrinter returnExpressions;
     private final CallableSignaturePrinter callableSignatures;
     private final ConstructorDeclarationPrinter constructors;
     private final MethodDeclarationPrinter methods;
@@ -258,6 +258,14 @@ final class JavaPrinter {
                 objectCreations::brokenObjectCreation,
                 methodCalls::assignmentWithBrokenMethodCallArguments,
                 conditionals::assignmentWithConditionalValue);
+        this.returnExpressions = new ReturnExpressionPrinter(
+                options,
+                this::expression,
+                this::compact,
+                this::currentIndentedWidth,
+                methodCalls::forcedMethodCallChain,
+                (expression, forceBreak) -> conditionals.conditionalExpression(expression, forceBreak),
+                enclosedExpressions::parenthesizedBreak);
         this.commentedMethodSignatures = new CommentedMethodSignaturePrinter(options);
         PackageDeclarationPrinter packageDeclarations = new PackageDeclarationPrinter(comments, rawSource, options);
         ImportDeclarationPrinter importDeclarations = new ImportDeclarationPrinter(comments);
@@ -403,7 +411,7 @@ final class JavaPrinter {
                 blocks::blockWithLeading,
                 this::body,
                 this::expression,
-                this::returnExpression,
+                returnExpressions::returnExpression,
                 variableDeclarations::variableDeclaration,
                 this::compact,
                 this::compactWithoutOwnComment,
@@ -585,34 +593,6 @@ final class JavaPrinter {
     private Doc rawStatement(Statement statement) {
         Doc leading = statement instanceof TryStmt ? Doc.EMPTY : comments.leading(statement);
         return Doc.concat(leading, Doc.text(rawSource.rawWithoutOwnComment(statement)));
-    }
-
-    private Doc returnExpression(Expression expression) {
-        String flatReturn = "return " + compact(expression) + ";";
-        if (currentIndentedWidth(flatReturn) <= options.lineWidth()) {
-            return expression(expression);
-        }
-        if (expression instanceof MethodCallExpr methodCall) {
-            Optional<Doc> chain = methodCalls.forcedMethodCallChain(methodCall);
-            if (chain.isPresent()) {
-                return chain.orElseThrow();
-            }
-        }
-        if (expression instanceof ConditionalExpr conditionalExpr) {
-            return conditionals.conditionalExpression(conditionalExpr, true);
-        }
-        if (expression instanceof UnaryExpr unaryExpr
-                && unaryExpr.getOperator() == UnaryExpr.Operator.LOGICAL_COMPLEMENT
-                && unaryExpr.getExpression() instanceof EnclosedExpr enclosedExpr) {
-            return Doc.concat(Doc.text("!"), enclosedExpressions.parenthesizedBreak(enclosedExpr.getInner()));
-        }
-        if (expression instanceof EnclosedExpr enclosedExpr) {
-            return enclosedExpressions.parenthesizedBreak(enclosedExpr.getInner());
-        }
-        if (expression instanceof BinaryExpr binaryExpr) {
-            return enclosedExpressions.parenthesizedBreak(binaryExpr);
-        }
-        return expression(expression);
     }
 
     private Doc brokenMethodCall(MethodCallExpr expression) {

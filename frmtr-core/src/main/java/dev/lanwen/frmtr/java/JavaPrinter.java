@@ -13,7 +13,6 @@ import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.CompactConstructorDeclaration;
 import com.github.javaparser.ast.body.ConstructorDeclaration;
-import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.InitializerDeclaration;
@@ -98,6 +97,7 @@ final class JavaPrinter {
     private final MemberBlockPrinter memberBlocks;
     private final BlockPrinter blocks;
     private final CallableSignaturePrinter callableSignatures;
+    private final EnumDeclarationPrinter enums;
     private final RecordDeclarationPrinter records;
     private final CommentedMethodSignaturePrinter commentedMethodSignatures;
     private final CommentedModulePrinter commentedModules = new CommentedModulePrinter();
@@ -122,6 +122,20 @@ final class JavaPrinter {
                 this::unattachedTrailingBlockComment,
                 this::startsAfterNodeOnSameLine,
                 this::commentText);
+        this.enums = new EnumDeclarationPrinter(
+                comments,
+                rawSource,
+                options,
+                this::annotations,
+                this::modifiers,
+                types -> typeClause("implements", types),
+                this::implementsTypes,
+                types -> flatTypeClause("implements", types),
+                this::compactJoin,
+                this::expression,
+                this::currentIndentedWidth,
+                this::startsAfterNodeOnSameLine,
+                this::body);
         this.records = new RecordDeclarationPrinter(
                 comments,
                 options,
@@ -438,179 +452,7 @@ final class JavaPrinter {
     }
 
     private Doc enumDeclaration(EnumDeclaration declaration) {
-        List<Doc> header = new ArrayList<>();
-        header.add(comments.leading(declaration));
-        header.add(annotations(declaration));
-        header.add(Doc.text(modifiers(declaration)));
-        header.add(Doc.text("enum " + declaration.getNameAsString()));
-        boolean breakHeader = shouldBreakEnumHeader(declaration);
-        if (breakHeader) {
-            typeClause("implements", declaration.getImplementedTypes()).ifPresent(header::add);
-            header.add(enumBodyOpenBreak(declaration));
-        } else {
-            implementsTypes(declaration.getImplementedTypes()).ifPresent(header::add);
-            header.add(Doc.text(" "));
-        }
-        header.add(enumBlock(declaration));
-        return Doc.concat(header);
-    }
-
-    private boolean shouldBreakEnumHeader(EnumDeclaration declaration) {
-        if (declaration.getImplementedTypes().isEmpty()) {
-            return false;
-        }
-        String flatHeader = modifiers(declaration)
-                + "enum "
-                + declaration.getNameAsString()
-                + flatTypeClause("implements", declaration.getImplementedTypes());
-        int blockWidth = declaration.getEntries().isEmpty()
-                        && declaration.getMembers().isEmpty()
-                        && declaration.getOrphanComments().isEmpty()
-                ? "{}".length()
-                : "{".length();
-        return flatHeader.length() + 1 + blockWidth > options.lineWidth();
-    }
-
-    private Doc enumBodyOpenBreak(EnumDeclaration declaration) {
-        if (declaration.getEntries().isEmpty()
-                && declaration.getMembers().isEmpty()
-                && declaration.getOrphanComments().isEmpty()) {
-            return Doc.text(" ");
-        }
-        return Doc.HARD_LINE;
-    }
-
-    private Doc enumBlock(EnumDeclaration declaration) {
-        List<Doc> entries = enumEntries(declaration);
-        List<Doc> members = declaration.getMembers().stream().map(this::body).toList();
-        List<Doc> bodyComments = enumBodyComments(declaration);
-        if (entries.isEmpty() && members.isEmpty() && bodyComments.isEmpty()) {
-            return Doc.text("{}");
-        }
-        List<Doc> contents = new ArrayList<>();
-        if (!entries.isEmpty()) {
-            contents.add(enumEntryList(declaration, entries));
-            contents.add(Doc.text(members.isEmpty() && bodyComments.isEmpty() ? "," : ";"));
-        } else if (!members.isEmpty() && enumHasExplicitSemicolon(declaration)) {
-            contents.add(Doc.text(";"));
-        }
-        if (!bodyComments.isEmpty()) {
-            if (!contents.isEmpty()) {
-                contents.add(Doc.HARD_LINE);
-                contents.add(Doc.HARD_LINE);
-            }
-            contents.add(Doc.join(Doc.HARD_LINE, bodyComments));
-        }
-        if (!members.isEmpty()) {
-            if (!contents.isEmpty()) {
-                contents.add(enumMemberSeparator(declaration));
-            }
-            contents.add(Doc.join(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE), members));
-        }
-        return Doc.concat(
-                Doc.text("{"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.concat(contents))),
-                Doc.HARD_LINE,
-                Doc.text("}"));
-    }
-
-    private List<Doc> enumEntries(EnumDeclaration declaration) {
-        List<Doc> entries = new ArrayList<>();
-        for (int i = 0; i < declaration.getEntries().size(); i++) {
-            EnumConstantDeclaration entry = declaration.getEntries().get(i);
-            EnumConstantDeclaration next = i + 1 < declaration.getEntries().size() ? declaration.getEntries().get(i + 1) : null;
-            entries.add(enumConstant(declaration, entry, next, i == declaration.getEntries().size() - 1));
-        }
-        return entries;
-    }
-
-    private Doc enumEntryList(EnumDeclaration declaration, List<Doc> entries) {
-        List<Doc> docs = new ArrayList<>();
-        for (int i = 0; i < entries.size(); i++) {
-            if (i > 0) {
-                docs.add(enumEntrySeparator(declaration.getEntries().get(i - 1), declaration.getEntries().get(i)));
-            }
-            docs.add(entries.get(i));
-        }
-        return Doc.concat(docs);
-    }
-
-    private Doc enumEntrySeparator(EnumConstantDeclaration previous, EnumConstantDeclaration current) {
-        boolean hasBlankLineBetween = previous.getRange()
-                .flatMap(previousRange -> current.getRange()
-                        .map(currentRange -> enumEntryBeginLine(current, currentRange.begin.line)
-                                > previousRange.end.line + 1))
-                .orElse(false);
-        return hasBlankLineBetween
-                ? Doc.concat(Doc.text(","), Doc.HARD_LINE, Doc.HARD_LINE)
-                : Doc.concat(Doc.text(","), Doc.HARD_LINE);
-    }
-
-    private int enumEntryBeginLine(EnumConstantDeclaration declaration, int fallback) {
-        return declaration.getComment()
-                .flatMap(Node::getRange)
-                .map(range -> range.begin.line)
-                .orElse(fallback);
-    }
-
-    private List<Doc> enumBodyComments(EnumDeclaration declaration) {
-        return comments.orphanCommentStatements(declaration, comment -> comment.getRange()
-                .map(commentRange -> declaration.getEntries().stream()
-                        .flatMap(entry -> entry.getRange().stream())
-                        .noneMatch(entryRange -> commentRange.begin.line == entryRange.end.line))
-                .orElse(true));
-    }
-
-    private Doc enumMemberSeparator(EnumDeclaration declaration) {
-        if (declaration.getOrphanComments().isEmpty() || declaration.getMembers().isEmpty()) {
-            return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
-        }
-        if (enumSemicolonFollowsBodyComments(declaration)) {
-            return Doc.HARD_LINE;
-        }
-        return enumBodyCommentsHaveBlankLineBeforeFirstMember(declaration)
-                ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE)
-                : Doc.HARD_LINE;
-    }
-
-    private boolean enumBodyCommentsHaveBlankLineBeforeFirstMember(EnumDeclaration declaration) {
-        int lastCommentLine = declaration.getOrphanComments().stream()
-                .flatMap(comment -> comment.getRange().stream())
-                .mapToInt(range -> range.end.line)
-                .max()
-                .orElse(Integer.MAX_VALUE);
-        return declaration.getMembers().stream()
-                .findFirst()
-                .flatMap(Node::getRange)
-                .map(range -> range.begin.line > lastCommentLine + 1)
-                .orElse(false);
-    }
-
-    private boolean enumSemicolonFollowsBodyComments(EnumDeclaration declaration) {
-        String raw = declaration.getTokenRange().map(Object::toString).orElseGet(() -> rawSource.rawWithoutOwnComment(declaration));
-        int firstMember = declaration.getMembers().stream()
-                .findFirst()
-                .flatMap(member -> member.getTokenRange().map(Object::toString))
-                .map(raw::indexOf)
-                .filter(index -> index >= 0)
-                .orElse(raw.length());
-        String beforeMember = raw.substring(0, firstMember);
-        int semicolon = beforeMember.lastIndexOf(';');
-        int lineComment = beforeMember.lastIndexOf("//");
-        int blockComment = beforeMember.lastIndexOf("/*");
-        return semicolon > Math.max(lineComment, blockComment);
-    }
-
-    private boolean enumHasExplicitSemicolon(EnumDeclaration declaration) {
-        String raw = rawSource.rawWithoutOwnComment(declaration);
-        int open = raw.indexOf('{');
-        int firstMember = declaration.getMembers().stream()
-                .findFirst()
-                .flatMap(member -> member.getTokenRange().map(Object::toString))
-                .map(raw::indexOf)
-                .filter(index -> index >= 0)
-                .orElse(raw.length());
-        return open >= 0 && raw.substring(open + 1, firstMember).contains(";");
+        return enums.enumDeclaration(declaration);
     }
 
     private Doc annotationDeclaration(AnnotationDeclaration declaration) {
@@ -645,77 +487,6 @@ final class JavaPrinter {
                 .ifPresent(defaultValue -> docs.add(Doc.concat(Doc.text(" default "), expression(defaultValue))));
         docs.add(Doc.text(";"));
         return Doc.concat(docs);
-    }
-
-    private Doc enumConstant(EnumConstantDeclaration declaration) {
-        return enumConstant(null, declaration, false);
-    }
-
-    private Doc enumConstant(EnumDeclaration owner, EnumConstantDeclaration declaration, boolean last) {
-        return enumConstant(owner, declaration, null, last);
-    }
-
-    private Doc enumConstant(
-            EnumDeclaration owner,
-            EnumConstantDeclaration declaration,
-            EnumConstantDeclaration next,
-            boolean last) {
-        Doc trailing = enumConstantTrailingComment(owner, declaration, next, last);
-        return Doc.concat(
-                comments.leading(declaration),
-                Doc.text(declaration.getNameAsString()),
-                enumConstantArguments(declaration),
-                trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing));
-    }
-
-    private Doc enumConstantArguments(EnumConstantDeclaration declaration) {
-        if (declaration.getArguments().isEmpty()) {
-            return Doc.EMPTY;
-        }
-        if (declaration.getArguments().stream().noneMatch(this::enumConstantArgumentNeedsDoc)) {
-            return Doc.text("(" + compactJoin(declaration.getArguments()) + ")");
-        }
-        String flat = declaration.getNameAsString() + "(" + compactJoin(declaration.getArguments()) + ")";
-        if (currentIndentedWidth(flat) <= options.lineWidth()) {
-            return Doc.concat(
-                    Doc.text("("),
-                    Doc.join(Doc.text(", "), declaration.getArguments().stream().map(this::expression).toList()),
-                    Doc.text(")"));
-        }
-        return Doc.concat(
-                Doc.text("("),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), declaration.getArguments().stream()
-                                .map(this::expression)
-                                .toList()))),
-                Doc.HARD_LINE,
-                Doc.text(")"));
-    }
-
-    private boolean enumConstantArgumentNeedsDoc(Expression expression) {
-        return expression instanceof LambdaExpr || expression.findFirst(LambdaExpr.class).isPresent();
-    }
-
-    private Doc enumConstantTrailingComment(
-            EnumDeclaration owner,
-            EnumConstantDeclaration declaration,
-            EnumConstantDeclaration next,
-            boolean last) {
-        if (next != null) {
-            return next.getComment()
-                    .filter(BlockComment.class::isInstance)
-                    .filter(comment -> startsAfterNodeOnSameLine(declaration, comment))
-                    .map(comments::comment)
-                    .orElse(Doc.EMPTY);
-        }
-        if (owner == null || !last) {
-            return Doc.EMPTY;
-        }
-        return Doc.concat(comments.orphanCommentStatements(owner, comment -> comment.getRange()
-                .flatMap(commentRange -> declaration.getRange()
-                        .map(entryRange -> commentRange.begin.line == entryRange.end.line))
-                .orElse(false)));
     }
 
     private Doc field(FieldDeclaration declaration) {

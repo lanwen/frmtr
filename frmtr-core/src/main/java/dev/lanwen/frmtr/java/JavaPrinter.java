@@ -77,7 +77,6 @@ import com.github.javaparser.ast.stmt.YieldStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.IntersectionType;
 import com.github.javaparser.ast.type.Type;
-import com.github.javaparser.ast.type.TypeParameter;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
@@ -90,6 +89,7 @@ final class JavaPrinter {
     private final JavaFormatter.CommentTracker comments = new JavaFormatter.CommentTracker();
     private final FormatterOptions options;
     private final RawSource rawSource;
+    private final TypePrinter types;
     private final FormatterPragmas formatterPragmas = new FormatterPragmas();
     private final ModuleBlockPrinter moduleBlocks;
     private final ModuleDeclarationPrinter moduleDeclarations;
@@ -110,6 +110,7 @@ final class JavaPrinter {
     JavaPrinter(FormatterOptions options) {
         this.options = options;
         this.rawSource = new RawSource(options);
+        this.types = new TypePrinter(options, this::compactTypeLike);
         this.moduleBlocks = new ModuleBlockPrinter(comments, options, this::compact, this::compactJoin, this::modifiers);
         this.moduleDeclarations = new ModuleDeclarationPrinter(
                 comments,
@@ -163,8 +164,8 @@ final class JavaPrinter {
                 this::arrayCreationPrefix,
                 (initializer, forceBreak) -> arrayInitializer(initializer, forceBreak),
                 this::objectCreationPrefix,
-                this::typeNameWithoutArguments,
-                this::brokenClassOrInterfaceType,
+                types::typeNameWithoutArguments,
+                types::brokenClassOrInterfaceType,
                 this::shouldPrintScopeAsDoc,
                 this::methodCallPrefix,
                 this::lambdaParameters,
@@ -176,9 +177,9 @@ final class JavaPrinter {
                 options,
                 this::compact,
                 this::compactTypeLike,
-                this::typeBody,
+                types::typeBody,
                 this::modifier,
-                this::typeCanBreak,
+                types::typeCanBreak,
                 this::unattachedTrailingBlockComment,
                 this::startsAfterNodeOnSameLine,
                 this::commentText);
@@ -190,12 +191,12 @@ final class JavaPrinter {
                 callableSignatures,
                 this::annotations,
                 this::modifiers,
-                types -> extendsTypes(types),
-                types -> implementsTypes(types),
-                types -> permitsTypes(types),
-                (keyword, types, breakBeforeClause) -> typeClause(keyword, types, breakBeforeClause),
-                this::flatTypeParameters,
-                (keyword, types) -> flatTypeClause(keyword, types),
+                types::extendsTypes,
+                types::implementsTypes,
+                types::permitsTypes,
+                (keyword, headerTypes, breakBeforeClause) -> types.typeClause(keyword, headerTypes, breakBeforeClause),
+                types::flatTypeParameters,
+                types::flatTypeClause,
                 this::currentIndentedWidth,
                 declaration -> memberBlocks.memberBlock(declaration.getMembers(), declaration, this::body));
         this.constructors = new ConstructorDeclarationPrinter(
@@ -213,7 +214,7 @@ final class JavaPrinter {
                 callableSignatures,
                 this::declarationAnnotations,
                 this::modifiers,
-                this::flatTypeParameters,
+                types::flatTypeParameters,
                 this::inlineAnnotations,
                 this::compact,
                 this::throwsClause,
@@ -225,9 +226,9 @@ final class JavaPrinter {
                 options,
                 this::annotations,
                 this::modifiers,
-                types -> typeClause("implements", types),
-                this::implementsTypes,
-                types -> flatTypeClause("implements", types),
+                enumTypes -> types.typeClause("implements", enumTypes),
+                types::implementsTypes,
+                enumTypes -> types.flatTypeClause("implements", enumTypes),
                 this::compactJoin,
                 this::expression,
                 this::currentIndentedWidth,
@@ -239,10 +240,10 @@ final class JavaPrinter {
                 this::annotations,
                 this::modifiers,
                 callableSignatures::typeParameters,
-                this::flatTypeParameters,
+                types::flatTypeParameters,
                 this::compact,
                 this::compactJoin,
-                this::compactJoinTypeLike,
+                types::compactJoinTypeLike,
                 this::compactTypeLike,
                 this::annotation,
                 this::annotationFlatText,
@@ -290,10 +291,6 @@ final class JavaPrinter {
             case InitializerDeclaration initializerDeclaration -> initializer(initializerDeclaration);
             default -> rawDeclaration(declaration);
         };
-    }
-
-    private int typeArgumentCount(ClassOrInterfaceType type) {
-        return type.getTypeArguments().map(NodeList::size).orElse(0);
     }
 
     private Doc record(RecordDeclaration declaration) {
@@ -790,7 +787,7 @@ final class JavaPrinter {
 
     private Doc explicitConstructorInvocation(ExplicitConstructorInvocationStmt statement) {
         String prefix = statement.getExpression().map(expression -> compact(expression) + ".").orElse("")
-                + statement.getTypeArguments().map(typeArguments -> "<" + compactJoinTypeLike(typeArguments) + ">").orElse("")
+                + statement.getTypeArguments().map(typeArguments -> "<" + types.compactJoinTypeLike(typeArguments) + ">").orElse("")
                 + (statement.isThis() ? "this" : "super");
         if (statement.getArguments().isEmpty()) {
             return Doc.text(prefix + "()");
@@ -2681,7 +2678,7 @@ final class JavaPrinter {
 
     private String methodReferenceSuffix(MethodReferenceExpr expression) {
         return "::"
-                + expression.getTypeArguments().map(typeArguments -> "<" + compactJoinTypeLike(typeArguments) + ">").orElse("")
+                + expression.getTypeArguments().map(typeArguments -> "<" + types.compactJoinTypeLike(typeArguments) + ">").orElse("")
                 + expression.getIdentifier();
     }
 
@@ -2810,7 +2807,7 @@ final class JavaPrinter {
             return Optional.empty();
         }
         String typeArguments = call.getTypeArguments()
-                .map(arguments -> "<" + compactJoinTypeLike(arguments) + ">")
+                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
                 .orElse("");
         String prefix = compact(root) + "." + typeArguments + call.getNameAsString() + "(";
         if (currentIndentedWidth(prefix + ")") > options.lineWidth()) {
@@ -2972,7 +2969,7 @@ final class JavaPrinter {
     private Doc inlineMethodCall(MethodCallExpr expression) {
         Doc scope = expression.getScope().map(this::expression).orElse(Doc.EMPTY);
         String typeArguments = expression.getTypeArguments()
-                .map(arguments -> "<" + compactJoinTypeLike(arguments) + ">")
+                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
                 .orElse("");
         String arguments = "(" + compactJoin(expression.getArguments()) + ")";
         return Doc.concat(scope, Doc.text("." + typeArguments + expression.getNameAsString() + arguments));
@@ -2997,7 +2994,7 @@ final class JavaPrinter {
                 .filter(comment -> startsBefore(comment, expression.getName()));
         Doc nameComment = rawNameComment.map(comments::comment).orElse(Doc.EMPTY);
         String typeArguments = expression.getTypeArguments()
-                .map(arguments -> "<" + compactJoinTypeLike(arguments) + ">")
+                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
                 .orElse("");
         String prefix = "." + typeArguments + expression.getNameAsString();
         Doc segmentPrefix = nameComment == Doc.EMPTY
@@ -3031,7 +3028,7 @@ final class JavaPrinter {
 
     private Doc fieldAccessMethodCallSegment(FieldAccessExpr fieldAccess, MethodCallExpr methodCall) {
         String typeArguments = methodCall.getTypeArguments()
-                .map(arguments -> "<" + compactJoinTypeLike(arguments) + ">")
+                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
                 .orElse("");
         return Doc.text(fieldAccessSuffixAfterMethodRoot(fieldAccess) + "." + typeArguments + methodCall.getNameAsString()
                 + "(" + compactJoin(methodCall.getArguments()) + ")");
@@ -3125,7 +3122,7 @@ final class JavaPrinter {
                 : commentText(typeComment) + " " + compactTypeLikeWithoutOwnComment(expression.getType());
         return expression.getScope().map(scope -> compact(scope) + ".").orElse("")
                 + (creationComment == Doc.EMPTY ? "new " : commentText(creationComment) + " new ")
-                + expression.getTypeArguments().map(typeArguments -> "<" + compactJoinTypeLike(typeArguments) + ">").orElse("")
+                + expression.getTypeArguments().map(typeArguments -> "<" + types.compactJoinTypeLike(typeArguments) + ">").orElse("")
                 + type;
     }
 
@@ -3134,10 +3131,10 @@ final class JavaPrinter {
                 || expression.getTypeArguments().isPresent()
                 || expression.getComment().filter(BlockComment.class::isInstance).isPresent()
                 || expression.getType().getComment().filter(BlockComment.class::isInstance).isPresent()
-                || !typeCanBreak(expression.getType())) {
+                || !types.typeCanBreak(expression.getType())) {
             return Optional.empty();
         }
-        return Optional.of(Doc.group(Doc.concat(Doc.text("new "), typeBody(expression.getType()), Doc.text("()"))));
+        return Optional.of(Doc.group(Doc.concat(Doc.text("new "), types.typeBody(expression.getType()), Doc.text("()"))));
     }
 
     private Doc anonymousObjectCreation(ObjectCreationExpr expression, String prefix) {
@@ -3448,7 +3445,7 @@ final class JavaPrinter {
                 Doc variables = Doc.join(Doc.concat(Doc.text(","), Doc.LINE), declaration.getVariables().stream()
                         .map(variable -> variable(variable, localVariableDeclarationPrefix(variable, "")))
                         .toList());
-                docs.add(Doc.group(Doc.concat(typeBody(type), Doc.text(" "), variables)));
+                docs.add(Doc.group(Doc.concat(types.typeBody(type), Doc.text(" "), variables)));
                 return Doc.concat(docs);
             }
             docs.add(Doc.text(flatType));
@@ -3474,7 +3471,7 @@ final class JavaPrinter {
             Type type,
             NodeList<VariableDeclarator> variables,
             String declarationPrefix) {
-        return typeCanBreak(type)
+        return types.typeCanBreak(type)
                 && variables.stream()
                         .anyMatch(variable -> currentIndentedWidth(declarationPrefix + variable.getNameAsString())
                                 > options.lineWidth());
@@ -4014,124 +4011,6 @@ final class JavaPrinter {
         return Doc.concat(comments.leading(declaration), Doc.text(compact(declaration)));
     }
 
-    private <T extends Node> Optional<Doc> extendsTypes(NodeList<T> types) {
-        if (types.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(Doc.text(" extends " + compactJoinTypeLike(types)));
-    }
-
-    private Optional<Doc> implementsTypes(NodeList<ClassOrInterfaceType> types) {
-        if (types.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(Doc.text(" implements " + compactJoinTypeLike(types)));
-    }
-
-    private Optional<Doc> permitsTypes(NodeList<ClassOrInterfaceType> types) {
-        if (types.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(Doc.text(" permits " + compactJoinTypeLike(types)));
-    }
-
-    private <T extends Node> Optional<Doc> typeClause(String keyword, NodeList<T> types) {
-        return typeClause(keyword, types, true);
-    }
-
-    private <T extends Node> Optional<Doc> typeClause(String keyword, NodeList<T> types, boolean breakBeforeClause) {
-        if (types.isEmpty()) {
-            return Optional.empty();
-        }
-        String flat = keyword + " " + compactJoinTypeLike(types);
-        if (!breakBeforeClause) {
-            if (types.size() == 1
-                    && types.get(0) instanceof ClassOrInterfaceType type
-                    && typeArgumentCount(type) > 2) {
-                return Optional.of(Doc.concat(Doc.text(" " + keyword + " "), brokenClassOrInterfaceType(type)));
-            }
-            return Optional.of(Doc.text(" " + flat));
-        }
-        if (flat.length() + options.indentUnit().length() <= options.lineWidth()) {
-            return Optional.of(Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(flat))));
-        }
-        if (types.size() == 1
-                && types.get(0) instanceof ClassOrInterfaceType type
-                && typeArgumentCount(type) > 2) {
-            return Optional.of(Doc.indent(Doc.concat(
-                    Doc.HARD_LINE,
-                    Doc.text(keyword + " "),
-                    brokenClassOrInterfaceType(type))));
-        }
-        return Optional.of(Doc.indent(Doc.concat(
-                Doc.HARD_LINE,
-                Doc.text(keyword),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), types.stream()
-                                .map(type -> Doc.text(compactTypeLike(type)))
-                                .toList()))))));
-    }
-
-    private Doc brokenClassOrInterfaceType(ClassOrInterfaceType type) {
-        return Doc.concat(
-                Doc.text(typeNameWithoutArguments(type) + "<"),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), type.getTypeArguments().stream()
-                                .flatMap(NodeList::stream)
-                                .map(this::typeBody)
-                                .toList()))),
-                Doc.HARD_LINE,
-                Doc.text(">"));
-    }
-
-    private boolean typeCanBreak(Type type) {
-        return type instanceof ClassOrInterfaceType classOrInterfaceType
-                && classOrInterfaceType.getTypeArguments().isPresent();
-    }
-
-    private Doc typeBody(Type type) {
-        if (type instanceof ClassOrInterfaceType classOrInterfaceType
-                && classOrInterfaceType.getTypeArguments().isPresent()) {
-            return classOrInterfaceTypeBody(classOrInterfaceType);
-        }
-        return Doc.text(compactTypeLike(type));
-    }
-
-    private Doc classOrInterfaceTypeBody(ClassOrInterfaceType type) {
-        return Doc.concat(
-                Doc.text(typeNameWithoutArguments(type) + "<"),
-                Doc.indent(Doc.concat(
-                        Doc.SOFT_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), type.getTypeArguments().stream()
-                                .flatMap(NodeList::stream)
-                                .map(this::typeBody)
-                                .toList()))),
-                Doc.SOFT_LINE,
-                Doc.text(">"));
-    }
-
-    private String typeNameWithoutArguments(ClassOrInterfaceType type) {
-        String text = compactTypeLike(type);
-        int argumentsStart = text.indexOf('<');
-        return argumentsStart < 0 ? text : text.substring(0, argumentsStart);
-    }
-
-    private <T extends Node> String flatTypeClause(String keyword, NodeList<T> types) {
-        if (types.isEmpty()) {
-            return "";
-        }
-        return " " + keyword + " " + compactJoinTypeLike(types);
-    }
-
-    private String flatTypeParameters(NodeList<TypeParameter> typeParameters) {
-        if (typeParameters.isEmpty()) {
-            return "";
-        }
-        return "<" + compactJoinTypeLike(typeParameters) + ">";
-    }
-
     private Doc annotations(NodeWithAnnotations<?> node) {
         return annotations(node.getAnnotations());
     }
@@ -4263,10 +4142,6 @@ final class JavaPrinter {
                 .orElse("") + "}";
     }
 
-    private String compactJoinTypeLike(List<? extends Node> nodes) {
-        return nodes.stream().map(this::compactTypeLike).reduce((left, right) -> left + ", " + right).orElse("");
-    }
-
     private String compact(Node node) {
         if (node instanceof StringLiteralExpr) {
             return rawSource.raw(node);
@@ -4285,7 +4160,7 @@ final class JavaPrinter {
 
     private String compactMethodCall(MethodCallExpr expression) {
         String prefix = expression.getScope().map(scope -> compact(scope) + ".").orElse("")
-                + expression.getTypeArguments().map(typeArguments -> "<" + compactJoinTypeLike(typeArguments) + ">").orElse("")
+                + expression.getTypeArguments().map(typeArguments -> "<" + types.compactJoinTypeLike(typeArguments) + ">").orElse("")
                 + expression.getNameAsString();
         return prefix + "(" + compactJoin(expression.getArguments()) + ")";
     }

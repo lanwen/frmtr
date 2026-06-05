@@ -26,19 +26,19 @@ public final class DocRenderer {
         switch (doc) {
             case Doc.Text text -> append(text.value());
             case Doc.Concat concat -> concat.docs().forEach(child -> render(child, indent, mode));
-            case Doc.Line ignored -> {
+            case Doc.Line _ -> {
                 if (mode == Mode.FLAT) {
                     append(" ");
                 } else {
                     newline(indent);
                 }
             }
-            case Doc.SoftLine ignored -> {
+            case Doc.SoftLine _ -> {
                 if (mode == Mode.BREAK) {
                     newline(indent);
                 }
             }
-            case Doc.HardLine ignored -> newline(indent);
+            case Doc.HardLine _ -> newline(indent);
             case Doc.Indent indented -> render(indented.doc(), indent + 1, mode);
             case Doc.Group group -> {
                 Mode next = fits(group.doc(), indent, options.lineWidth() - column) ? Mode.FLAT : Mode.BREAK;
@@ -71,9 +71,9 @@ public final class DocRenderer {
                 }
                 yield ok;
             }
-            case Doc.Line ignored -> remaining >= 1;
-            case Doc.SoftLine ignored -> true;
-            case Doc.HardLine ignored -> false;
+            case Doc.Line _ -> remaining >= 1;
+            case Doc.SoftLine _ -> true;
+            case Doc.HardLine _ -> false;
             case Doc.Indent indented -> fits(indented.doc(), indent + 1, remaining, mode);
             case Doc.Group group -> fits(group.doc(), indent, remaining, Mode.FLAT);
             case Doc.IfBreak conditional -> fits(mode == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(), indent, remaining, mode);
@@ -94,9 +94,9 @@ public final class DocRenderer {
                 }
                 yield width;
             }
-            case Doc.Line ignored -> 1;
-            case Doc.SoftLine ignored -> 0;
-            case Doc.HardLine ignored -> -1;
+            case Doc.Line _ -> 1;
+            case Doc.SoftLine _ -> 0;
+            case Doc.HardLine _ -> -1;
             case Doc.Indent indented -> flatWidth(indented.doc(), indent + 1, mode);
             case Doc.Group group -> flatWidth(group.doc(), indent, Mode.FLAT);
             case Doc.IfBreak conditional -> flatWidth(mode == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(), indent, mode);

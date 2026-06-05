@@ -13,11 +13,9 @@ import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
@@ -162,7 +160,6 @@ final class PrettierJavaFixtureTest {
             "variables",
             "while",
             "yield-statement");
-    private static final Map<String, String> PRETTIER_INCOMPATIBLE_FIXTURE_REASONS = Map.of();
     private static final JavaParser PARSER = new JavaParser(new ParserConfiguration()
             .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
             .setStoreTokens(true)
@@ -201,19 +198,6 @@ final class PrettierJavaFixtureTest {
         assertThat(fixture.input()).isRegularFile();
         assertThat(fixture.prettierOutput()).isRegularFile();
         assertThat(fixture.frmtrOutput()).isRegularFile();
-    }
-
-    @Test
-    void documentedIncompatiblePrettierJavaFixturesAreAdoptedAndExcludedFromCompatibilitySet()
-            throws IOException, URISyntaxException {
-        var fixtureNames = fixtures().map(Fixture::name).toList();
-
-        assertThat(PRETTIER_INCOMPATIBLE_FIXTURE_REASONS)
-                .allSatisfy((fixtureName, reason) -> {
-                    assertThat(fixtureNames).contains(fixtureName);
-                    assertThat(PRETTIER_COMPATIBLE_FIXTURES).doesNotContain(fixtureName);
-                    assertThat(reason).isNotBlank();
-                });
     }
 
     private static Stream<Fixture> fixtures() throws IOException, URISyntaxException {

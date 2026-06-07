@@ -305,7 +305,6 @@ final class JavaPrinter {
                 declarationPrefixes::modifier,
                 types::typeCanBreak,
                 commentPlacement::unattachedTrailingBlockComment,
-                CommentIndex::startsAfterNodeOnSameLine,
                 this::commentText);
         this.throwsClauses = new ThrowsClausePrinter(
                 options,

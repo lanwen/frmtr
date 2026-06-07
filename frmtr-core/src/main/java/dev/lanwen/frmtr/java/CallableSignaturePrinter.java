@@ -7,14 +7,12 @@ import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.ReceiverParameter;
 import com.github.javaparser.ast.comments.BlockComment;
-import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -36,7 +34,6 @@ final class CallableSignaturePrinter {
     private final Function<Modifier, String> modifier;
     private final Predicate<Type> typeCanBreak;
     private final Function<Node, Doc> unattachedTrailingBlockComment;
-    private final BiPredicate<Node, Comment> startsAfterNodeOnSameLine;
     private final Function<Doc, String> commentText;
 
     CallableSignaturePrinter(
@@ -49,7 +46,6 @@ final class CallableSignaturePrinter {
             Function<Modifier, String> modifier,
             Predicate<Type> typeCanBreak,
             Function<Node, Doc> unattachedTrailingBlockComment,
-            BiPredicate<Node, Comment> startsAfterNodeOnSameLine,
             Function<Doc, String> commentText) {
         this.comments = comments;
         this.rawSource = rawSource;
@@ -60,7 +56,6 @@ final class CallableSignaturePrinter {
         this.modifier = modifier;
         this.typeCanBreak = typeCanBreak;
         this.unattachedTrailingBlockComment = unattachedTrailingBlockComment;
-        this.startsAfterNodeOnSameLine = startsAfterNodeOnSameLine;
         this.commentText = commentText;
     }
 
@@ -263,7 +258,7 @@ final class CallableSignaturePrinter {
         return parameter.getParentNode().stream()
                 .flatMap(parent -> parent.getAllContainedComments().stream())
                 .filter(BlockComment.class::isInstance)
-                .filter(comment -> startsAfterNodeOnSameLine.test(parameter, comment))
+                .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(parameter, comment))
                 .findFirst()
                 .map(comments::comment)
                 .orElse(Doc.EMPTY);

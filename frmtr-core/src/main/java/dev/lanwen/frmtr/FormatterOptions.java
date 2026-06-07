@@ -13,7 +13,9 @@ public record FormatterOptions(
         LambdaArrowParens lambdaArrowParens,
         BinaryOperatorPosition binaryOperatorPosition,
         JavaLanguageLevel javaLanguageLevel) {
+
     public static final int DEFAULT_LINE_WIDTH = 140;
+
     public static final int DEFAULT_INDENT_WIDTH = 4;
 
     public FormatterOptions(
@@ -200,77 +202,41 @@ public record FormatterOptions(
          * Uses the newest stable Java language level exposed by the bundled JavaParser dependency.
          */
         LATEST_AVAILABLE,
-        /**
-         * Parses source using Java 8 grammar rules for projects that still target Java 8.
-         */
+
         JAVA_8,
-        /**
-         * Parses source using Java 9 grammar rules for projects that rely on Java 9 language support.
-         */
+
         JAVA_9,
-        /**
-         * Parses source using Java 10 grammar rules for projects that rely on Java 10 language support.
-         */
+
         JAVA_10,
-        /**
-         * Parses source using Java 11 grammar rules for projects that rely on Java 11 language support.
-         */
+
         JAVA_11,
-        /**
-         * Parses source using Java 12 grammar rules for projects that rely on Java 12 language support.
-         */
+
         JAVA_12,
-        /**
-         * Parses source using Java 13 grammar rules for projects that rely on Java 13 language support.
-         */
+
         JAVA_13,
-        /**
-         * Parses source using Java 14 grammar rules for projects that rely on Java 14 language support.
-         */
+
         JAVA_14,
-        /**
-         * Parses source using Java 15 grammar rules for projects that rely on Java 15 language support.
-         */
+
         JAVA_15,
-        /**
-         * Parses source using Java 16 grammar rules for projects that rely on Java 16 language support.
-         */
+
         JAVA_16,
-        /**
-         * Parses source using Java 17 grammar rules for projects that rely on Java 17 language support.
-         */
+
         JAVA_17,
-        /**
-         * Parses source using Java 18 grammar rules for projects that rely on Java 18 language support.
-         */
+
         JAVA_18,
-        /**
-         * Parses source using Java 19 grammar rules for projects that rely on Java 19 language support.
-         */
+
         JAVA_19,
-        /**
-         * Parses source using Java 20 grammar rules for projects that rely on Java 20 language support.
-         */
+
         JAVA_20,
-        /**
-         * Parses source using Java 21 grammar rules for projects that rely on Java 21 language support.
-         */
+
         JAVA_21,
-        /**
-         * Parses source using Java 22 grammar rules for projects that rely on Java 22 language support.
-         */
+
         JAVA_22,
-        /**
-         * Parses source using Java 23 grammar rules for projects that rely on Java 23 language support.
-         */
+
         JAVA_23,
-        /**
-         * Parses source using Java 24 grammar rules for projects that rely on Java 24 language support.
-         */
+
         JAVA_24,
-        /**
-         * Parses source using Java 25 grammar rules for projects that rely on Java 25 language support.
-         */
+
         JAVA_25
     }
 }

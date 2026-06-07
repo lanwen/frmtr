@@ -1288,8 +1288,8 @@ final class FrmtrTest {
                 .isInstanceOf(FormatterException.class)
                 .hasMessageContaining("2      void method() {")
                 .hasMessageContaining("3          var something =")
-                .hasMessageContaining("4      }")
                 .hasMessageContaining("----------------------^")
+                .hasMessageContaining("4      }")
                 .hasMessageContaining("(line 3,col 23) Parse error");
     }
 

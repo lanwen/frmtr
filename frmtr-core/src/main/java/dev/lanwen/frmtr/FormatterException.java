@@ -1,11 +1,13 @@
 package dev.lanwen.frmtr;
 
+import java.io.Serial;
 import java.util.Objects;
 
 /**
  * Raised when source cannot be parsed or formatted.
  */
 public final class FormatterException extends RuntimeException {
+    @Serial
     private static final long serialVersionUID = 1L;
 
     private final boolean internal;

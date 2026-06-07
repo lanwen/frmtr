@@ -1,6 +1,5 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.EnclosedExpr;
@@ -53,11 +52,10 @@ final class SwitchPrinter {
     private final BiFunction<Statement, Statement, Doc> statementSeparator;
     private final Function<Expression, Doc> controlConditionRenderer;
     private final Function<Expression, Doc> binaryExpressionLinesRenderer;
-    private final Function<Node, String> compact;
-    private final Function<Node, String> compactTypeLike;
+    private final CompactSourceText compactSource;
+    private final CommentPlacement commentPlacement;
     private final Function<NodeWithModifiers<?>, String> modifiers;
     private final ToIntFunction<String> currentIndentedWidth;
-    private final Function<Node, Doc> sameLineBlockCommentBeforeNode;
 
     /**
      * Names the switch-label layouts after the caller has already selected structured switch-entry printing.
@@ -97,34 +95,28 @@ final class SwitchPrinter {
     }
 
     SwitchPrinter(
-            JavaFormatter.CommentTracker comments,
-            RawSource rawSource,
-            FormatterOptions options,
+            JavaFormatContext context,
             Function<Statement, Doc> statementRenderer,
             Function<Expression, Doc> expressionRenderer,
             Function<BlockStmt, Doc> blockRenderer,
             BiFunction<Statement, Statement, Doc> statementSeparator,
             Function<Expression, Doc> controlConditionRenderer,
             Function<Expression, Doc> binaryExpressionLinesRenderer,
-            Function<Node, String> compact,
-            Function<Node, String> compactTypeLike,
             Function<NodeWithModifiers<?>, String> modifiers,
-            ToIntFunction<String> currentIndentedWidth,
-            Function<Node, Doc> sameLineBlockCommentBeforeNode) {
-        this.comments = comments;
-        this.rawSource = rawSource;
-        this.options = options;
+            ToIntFunction<String> currentIndentedWidth) {
+        this.comments = context.comments;
+        this.rawSource = context.rawSource;
+        this.options = context.options;
         this.statementRenderer = statementRenderer;
         this.expressionRenderer = expressionRenderer;
         this.blockRenderer = blockRenderer;
         this.statementSeparator = statementSeparator;
         this.controlConditionRenderer = controlConditionRenderer;
         this.binaryExpressionLinesRenderer = binaryExpressionLinesRenderer;
-        this.compact = compact;
-        this.compactTypeLike = compactTypeLike;
+        this.compactSource = context.compactSource;
+        this.commentPlacement = context.commentPlacement;
         this.modifiers = modifiers;
         this.currentIndentedWidth = currentIndentedWidth;
-        this.sameLineBlockCommentBeforeNode = sameLineBlockCommentBeforeNode;
     }
 
     /**
@@ -135,7 +127,7 @@ final class SwitchPrinter {
      * as the first item inside the block so they stay on their own line before the first entry.
      */
     Doc switchStatement(SwitchStmt statement) {
-        Doc leadingBlockComment = sameLineBlockCommentBeforeNode.apply(statement);
+        Doc leadingBlockComment = commentPlacement.ownSameLineBlockCommentBeforeNode(statement);
         Doc prefix = leadingBlockComment == Doc.EMPTY ? Doc.EMPTY : Doc.concat(leadingBlockComment, Doc.text(" "));
         if (statement.getEntries().isEmpty()) {
             return Doc.concat(
@@ -160,7 +152,7 @@ final class SwitchPrinter {
      */
     Doc switchExpression(SwitchExpr expression) {
         return Doc.concat(
-                Doc.text("switch (" + compact.apply(expression.getSelector()) + ") "),
+                Doc.text("switch (" + compactSource.compact(expression.getSelector()) + ") "),
                 switchBlock(expression.getEntries()));
     }
 
@@ -319,7 +311,7 @@ final class SwitchPrinter {
         if (label instanceof RecordPatternExpr) {
             return rawSource.normalizeWhitespace(label.toString());
         }
-        return compact.apply(label);
+        return compactSource.compact(label);
     }
 
     private String defaultSwitchEntryLabel(SwitchEntry entry) {
@@ -341,7 +333,7 @@ final class SwitchPrinter {
      */
     private Doc recordPattern(RecordPatternExpr pattern) {
         return Doc.concat(
-                Doc.text(modifiers.apply(pattern) + compactTypeLike.apply(pattern.getType()) + "("),
+                Doc.text(modifiers.apply(pattern) + compactSource.compactTypeLike(pattern.getType()) + "("),
                 Doc.indent(Doc.concat(
                         Doc.HARD_LINE,
                         Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), pattern.getPatternList().stream()
@@ -369,7 +361,7 @@ final class SwitchPrinter {
             return Doc.EMPTY;
         }
         Expression guard = entry.getGuard().orElseThrow();
-        String flat = " when " + compact.apply(guard);
+        String flat = " when " + compactSource.compact(guard);
         if (!switchGuardBreaks(entry, guard, flat)) {
             return Doc.text(flat);
         }

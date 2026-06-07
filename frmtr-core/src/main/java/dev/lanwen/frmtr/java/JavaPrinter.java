@@ -11,13 +11,8 @@ import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 
 final class JavaPrinter {
-    private final JavaFormatter.CommentTracker comments = new JavaFormatter.CommentTracker();
-    private final FormatterOptions options;
-    private final RawSource rawSource;
-    private final CompactSourceText compactSource;
-    private final CommentPlacement commentPlacement;
+    private final JavaFormatContext context;
     private final TypePrinter types;
-    private final FormatterPragmas formatterPragmas = new FormatterPragmas();
     private final ModuleBlockPrinter moduleBlocks;
     private final ModuleDeclarationPrinter moduleDeclarations;
     private final MemberBlockPrinter memberBlocks;
@@ -60,10 +55,12 @@ final class JavaPrinter {
     private final StatementDispatcher statementDispatcher;
 
     JavaPrinter(FormatterOptions options) {
-        this.options = options;
-        this.rawSource = new RawSource(options);
-        this.compactSource = new CompactSourceText(rawSource);
-        this.commentPlacement = new CommentPlacement(comments);
+        this.context = new JavaFormatContext(options);
+        JavaFormatter.CommentTracker comments = context.comments;
+        FormatterPragmas formatterPragmas = context.formatterPragmas;
+        RawSource rawSource = context.rawSource;
+        CompactSourceText compactSource = context.compactSource;
+        CommentPlacement commentPlacement = context.commentPlacement;
         this.types = new TypePrinter(options, compactSource::compactTypeLike);
         this.blocks = new BlockPrinter(comments, this::statement, formatterPragmas::hasPragma);
         this.binaries = new BinaryExpressionPrinter(
@@ -108,26 +105,19 @@ final class JavaPrinter {
                 binaries::lines,
                 this::currentIndentedWidth);
         this.switches = new SwitchPrinter(
-                comments,
-                rawSource,
-                options,
+                context,
                 this::statement,
                 this::expression,
                 this::block,
                 blocks::statementSeparator,
                 controlConditions::controlCondition,
                 binaries::lines,
-                compactSource::compact,
-                compactSource::compactTypeLike,
                 declarationPrefixes::modifiers,
-                this::currentIndentedWidth,
-                commentPlacement::ownSameLineBlockCommentBeforeNode);
+                this::currentIndentedWidth);
         this.conditionals = new ConditionalExpressionPrinter(
-                comments,
-                options,
+                context,
                 this::expression,
                 this::expressionWithoutOwnComment,
-                compactSource::compact,
                 this::currentIndentedWidth,
                 this::blockStatementWidth,
                 this::continuationStatementWidth,
@@ -200,8 +190,7 @@ final class JavaPrinter {
                 enclosedExpressions::brokenEnclosedForSuffix,
                 this::blockStatementWidth);
         this.methodCalls = new MethodCallPrinter(
-                comments,
-                options,
+                context,
                 types,
                 this::expression,
                 enclosedExpressions::brokenEnclosedForSuffix,
@@ -211,8 +200,6 @@ final class JavaPrinter {
                 lambdas::huggableMethodCallExpressionLambdaArguments,
                 textBlocks::renderUnformattedTextBlock,
                 binaryExpr -> binaries.nestedLines(binaryExpr, true),
-                compactSource::compact,
-                compactSource::compactJoin,
                 this::currentIndentedWidth,
                 this::blockStatementWidth);
         this.enclosedSuffixes = new EnclosedSuffixDispatcher(methodCalls, methodReferences);
@@ -464,15 +451,15 @@ final class JavaPrinter {
     }
 
     private int currentIndentedWidth(String text) {
-        return options.indentUnit().length() + text.length();
+        return context.options.indentUnit().length() + text.length();
     }
 
     private int blockStatementWidth(String text) {
-        return (options.indentUnit().length() * 2) + text.length();
+        return (context.options.indentUnit().length() * 2) + text.length();
     }
 
     private int continuationStatementWidth(String text) {
-        return (options.indentUnit().length() * 3) + text.length();
+        return (context.options.indentUnit().length() * 3) + text.length();
     }
 
     private Doc block(BlockStmt block) {

@@ -44,9 +44,9 @@ import java.util.function.ToIntFunction;
 final class ConditionalExpressionPrinter {
     private final JavaFormatter.CommentTracker comments;
     private final FormatterOptions options;
+    private final CompactSourceText compactSource;
     private final Function<Expression, Doc> expressionRenderer;
     private final Function<Expression, Doc> expressionWithoutOwnCommentRenderer;
-    private final Function<Node, String> compact;
     private final ToIntFunction<String> currentIndentedWidth;
     private final ToIntFunction<String> blockStatementWidth;
     private final ToIntFunction<String> continuationStatementWidth;
@@ -118,22 +118,20 @@ final class ConditionalExpressionPrinter {
     }
 
     ConditionalExpressionPrinter(
-            JavaFormatter.CommentTracker comments,
-            FormatterOptions options,
+            JavaFormatContext context,
             Function<Expression, Doc> expressionRenderer,
             Function<Expression, Doc> expressionWithoutOwnCommentRenderer,
-            Function<Node, String> compact,
             ToIntFunction<String> currentIndentedWidth,
             ToIntFunction<String> blockStatementWidth,
             ToIntFunction<String> continuationStatementWidth,
             BiFunction<Expression, Boolean, Doc> binaryExpressionLinesRenderer,
             BiFunction<Expression, Boolean, Doc> nestedBinaryExpressionLinesRenderer,
             Predicate<Expression> expressionHasParenthesizedNestedBinary) {
-        this.comments = comments;
-        this.options = options;
+        this.comments = context.comments;
+        this.options = context.options;
+        this.compactSource = context.compactSource;
         this.expressionRenderer = expressionRenderer;
         this.expressionWithoutOwnCommentRenderer = expressionWithoutOwnCommentRenderer;
-        this.compact = compact;
         this.currentIndentedWidth = currentIndentedWidth;
         this.blockStatementWidth = blockStatementWidth;
         this.continuationStatementWidth = continuationStatementWidth;
@@ -160,10 +158,10 @@ final class ConditionalExpressionPrinter {
                             Doc.HARD_LINE,
                             conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED)))));
         }
-        String conditionLine = compact.apply(assignExpr.getTarget()) + " "
+        String conditionLine = compactSource.compact(assignExpr.getTarget()) + " "
                 + assignExpr.getOperator().asString()
                 + " "
-                + compact.apply(conditionalExpr.getCondition())
+                + compactSource.compact(conditionalExpr.getCondition())
                 + ";";
         if (blockStatementWidth.applyAsInt(conditionLine) <= options.lineWidth()) {
             return Optional.of(Doc.concat(
@@ -208,7 +206,7 @@ final class ConditionalExpressionPrinter {
         if (commented.isPresent()) {
             return commented.orElseThrow();
         }
-        String flat = compact.apply(expression);
+        String flat = compactSource.compact(expression);
         if (!breakMode.isForced() && currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
             if (expressionHasParenthesizedNestedBinary.test(expression)) {
                 return Doc.concat(
@@ -391,7 +389,7 @@ final class ConditionalExpressionPrinter {
             ConditionalExpr expression,
             Expression condition) {
         if (!(condition instanceof BinaryExpr)
-                || continuationStatementWidth.applyAsInt(compact.apply(condition)) <= options.lineWidth()) {
+                || continuationStatementWidth.applyAsInt(compactSource.compact(condition)) <= options.lineWidth()) {
             return ConditionalConditionLayout.EXPRESSION;
         }
         if (conditionalIsAssignmentValue(expression) || conditionalIsVariableInitializer(expression)) {

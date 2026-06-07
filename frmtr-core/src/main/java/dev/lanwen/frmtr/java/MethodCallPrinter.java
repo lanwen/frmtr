@@ -47,6 +47,7 @@ import java.util.function.ToIntFunction;
 final class MethodCallPrinter {
     private final JavaFormatter.CommentTracker comments;
     private final FormatterOptions options;
+    private final CompactSourceText compactSource;
     private final TypePrinter types;
     private final Function<Expression, Doc> expressionRenderer;
     private final BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix;
@@ -56,8 +57,6 @@ final class MethodCallPrinter {
     private final BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument;
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments;
     private final Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer;
-    private final Function<Node, String> compact;
-    private final Function<List<? extends Node>, String> compactJoin;
     private final ToIntFunction<String> currentIndentedWidth;
     private final ToIntFunction<String> blockStatementWidth;
 
@@ -120,8 +119,7 @@ final class MethodCallPrinter {
     }
 
     MethodCallPrinter(
-            JavaFormatter.CommentTracker comments,
-            FormatterOptions options,
+            JavaFormatContext context,
             TypePrinter types,
             Function<Expression, Doc> expressionRenderer,
             BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix,
@@ -131,12 +129,11 @@ final class MethodCallPrinter {
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments,
             Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer,
             Function<BinaryExpr, Doc> brokenBinaryExpressionLinesRenderer,
-            Function<Node, String> compact,
-            Function<List<? extends Node>, String> compactJoin,
             ToIntFunction<String> currentIndentedWidth,
             ToIntFunction<String> blockStatementWidth) {
-        this.comments = comments;
-        this.options = options;
+        this.comments = context.comments;
+        this.options = context.options;
+        this.compactSource = context.compactSource;
         this.types = types;
         this.expressionRenderer = expressionRenderer;
         this.brokenEnclosedForSuffix = brokenEnclosedForSuffix;
@@ -146,8 +143,6 @@ final class MethodCallPrinter {
         this.commentedExpressionLambdaArgument = commentedExpressionLambdaArgument;
         this.huggableExpressionLambdaArguments = huggableExpressionLambdaArguments;
         this.unformattedTextBlockRenderer = unformattedTextBlockRenderer;
-        this.compact = compact;
-        this.compactJoin = compactJoin;
         this.currentIndentedWidth = currentIndentedWidth;
         this.blockStatementWidth = blockStatementWidth;
     }
@@ -170,7 +165,7 @@ final class MethodCallPrinter {
         if (expression.getScope().isEmpty()
                 && expression.getNameAsString().equals("yield")
                 && !expression.getArguments().isEmpty()) {
-            return Doc.text("yield (" + compactJoin.apply(expression.getArguments()) + ")");
+            return Doc.text("yield (" + compactSource.compactJoin(expression.getArguments()) + ")");
         }
         if (expression.getScope().filter(this::shouldPrintScopeAsDoc).isPresent()) {
             return Doc.concat(
@@ -229,13 +224,17 @@ final class MethodCallPrinter {
     }
 
     String methodCallPrefix(MethodCallExpr expression) {
-        return expression.getScope().map(scope -> compact.apply(scope) + ".").orElse("")
-                + expression.getTypeArguments().map(typeArguments -> "<" + compactJoin.apply(typeArguments) + ">").orElse("")
+        return expression.getScope().map(scope -> compactSource.compact(scope) + ".").orElse("")
+                + expression.getTypeArguments()
+                        .map(typeArguments -> "<" + compactSource.compactJoin(typeArguments) + ">")
+                        .orElse("")
                 + expression.getNameAsString();
     }
 
     Doc methodCallWithoutScope(MethodCallExpr expression) {
-        String prefix = expression.getTypeArguments().map(typeArguments -> "<" + compactJoin.apply(typeArguments) + ">").orElse("")
+        String prefix = expression.getTypeArguments()
+                        .map(typeArguments -> "<" + compactSource.compactJoin(typeArguments) + ">")
+                        .orElse("")
                 + expression.getNameAsString();
         if (expression.getArguments().isEmpty()) {
             Optional<Doc> commentedArguments = emptyMethodCallArguments(prefix, expression);
@@ -259,7 +258,8 @@ final class MethodCallPrinter {
         return expression.getScope()
                 .filter(EnclosedExpr.class::isInstance)
                 .map(EnclosedExpr.class::cast)
-                .filter(scope -> leadingBreak || blockStatementWidth.applyAsInt(compact.apply(expression) + ";") > options.lineWidth())
+                .filter(scope -> leadingBreak
+                        || blockStatementWidth.applyAsInt(compactSource.compact(expression) + ";") > options.lineWidth())
                 .map(scope -> Doc.concat(
                         brokenEnclosedForSuffix.apply(scope, leadingBreak),
                         Doc.text("."),
@@ -286,7 +286,9 @@ final class MethodCallPrinter {
 
     private Optional<Doc> methodCallChain(MethodCallExpr expression, MethodCallBreakMode breakMode) {
         boolean chainHasComments = methodCallChainHasComments(expression);
-        if ((!breakMode.isForced() && !chainHasComments && compact.apply(expression).length() <= options.lineWidth())
+        if ((!breakMode.isForced()
+                        && !chainHasComments
+                        && compactSource.compact(expression).length() <= options.lineWidth())
                 || expression.getScope().isEmpty()) {
             return Optional.empty();
         }
@@ -395,7 +397,7 @@ final class MethodCallPrinter {
         String typeArguments = call.getTypeArguments()
                 .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
                 .orElse("");
-        String prefix = compact.apply(root) + "." + typeArguments + call.getNameAsString() + "(";
+        String prefix = compactSource.compact(root) + "." + typeArguments + call.getNameAsString() + "(";
         if (currentIndentedWidth.applyAsInt(prefix + ")") > options.lineWidth()) {
             return Optional.empty();
         }
@@ -573,7 +575,7 @@ final class MethodCallPrinter {
         String typeArguments = expression.getTypeArguments()
                 .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
                 .orElse("");
-        String arguments = "(" + compactJoin.apply(expression.getArguments()) + ")";
+        String arguments = "(" + compactSource.compactJoin(expression.getArguments()) + ")";
         return Doc.concat(scope, Doc.text("." + typeArguments + expression.getNameAsString() + arguments));
     }
 
@@ -633,7 +635,7 @@ final class MethodCallPrinter {
                 .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
                 .orElse("");
         return Doc.text(fieldAccessSuffixAfterMethodRoot(fieldAccess) + "." + typeArguments + methodCall.getNameAsString()
-                + "(" + compactJoin.apply(methodCall.getArguments()) + ")");
+                + "(" + compactSource.compactJoin(methodCall.getArguments()) + ")");
     }
 
     private String fieldAccessSuffixAfterMethodRoot(FieldAccessExpr fieldAccess) {
@@ -737,7 +739,8 @@ final class MethodCallPrinter {
             return Optional.empty();
         }
         if (!breakMode.isForced()
-                && currentIndentedWidth.applyAsInt(prefix + "(" + compact.apply(binaryExpr) + ")") <= options.lineWidth()) {
+                && currentIndentedWidth.applyAsInt(prefix + "(" + compactSource.compact(binaryExpr) + ")")
+                        <= options.lineWidth()) {
             return Optional.empty();
         }
         return Optional.of(Doc.concat(
@@ -751,7 +754,7 @@ final class MethodCallPrinter {
         if (methodCall.getArguments().isEmpty() || !methodCall.getAllContainedComments().isEmpty()) {
             return Optional.empty();
         }
-        String firstLine = compact.apply(assignExpr.getTarget()) + " "
+        String firstLine = compactSource.compact(assignExpr.getTarget()) + " "
                 + assignExpr.getOperator().asString()
                 + " "
                 + methodCallPrefix(methodCall)

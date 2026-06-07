@@ -6,10 +6,9 @@ import com.github.javaparser.ast.Node;
  * Tracks formatter pragmas that are attached to syntax nodes and translates them into raw-vs-formatted print
  * actions.
  *
- * <p>This class owns the persistent enabled/disabled state created by range pragmas such as
- * {@code @formatter:off} and {@code prettier-ignore-start}. It deliberately does not decide how raw source is
- * recovered, how leading/trailing comments are printed, or which JavaPrinter dispatch path renders a node when
- * formatting remains enabled.
+ * <p>This class owns the persistent enabled/disabled state created by range pragmas and single-node ignore pragmas. It
+ * deliberately does not decide how raw source is recovered, how leading/trailing comments are printed, or which
+ * JavaPrinter dispatch path renders a node when formatting remains enabled.
  */
 final class FormatterPragmas {
     private boolean formattingDisabled;
@@ -38,7 +37,7 @@ final class FormatterPragmas {
     /**
      * Returns the print action for a statement after applying any pragma carried by that statement.
      *
-     * <p>{@code prettier-ignore} has a statement-specific newline side effect in the existing printer, so the
+     * <p>Single-node ignore pragmas have a statement-specific newline side effect in the existing printer, so the
      * returned action preserves that distinction without making this class responsible for constructing docs.
      */
     PrintAction statementAction(Node node) {
@@ -110,10 +109,10 @@ final class FormatterPragmas {
         /** Re-enables formatter output from this node onward and formats the node that carries the pragma. */
         ON,
 
-        /** Starts a prettier ignore range and raw-passes the node that carries the pragma. */
+        /** Starts an ignore range and raw-passes the node that carries the pragma. */
         START,
 
-        /** Ends a prettier ignore range and formats the node that carries the pragma. */
+        /** Ends an ignore range and formats the node that carries the pragma. */
         END,
 
         /** Raw-passes only the node that carries the pragma without changing later formatter state. */

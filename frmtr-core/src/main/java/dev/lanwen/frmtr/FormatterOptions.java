@@ -35,9 +35,9 @@ import java.util.Objects;
  *     source-sensitive fallback paths. Normal structured formatting still trims trailing horizontal whitespace when
  *     rendering line breaks.
  * @param requirePragma whether the formatter should require a leading Javadoc pragma before formatting a file. When
- *     {@code true}, only sources whose leading Javadoc comment contains {@code @format} or {@code @prettier} are
- *     formatted; sources without that pragma are returned unchanged. When {@code false}, every parseable source is
- *     eligible for formatting.
+ *     {@code true}, the public opt-in marker is {@code @format} in the leading Javadoc comment; sources without a
+ *     recognized opt-in marker are returned unchanged. When {@code false}, every parseable source is eligible for
+ *     formatting.
  * @param lambdaArrowParens policy for single-parameter lambda parentheses. See {@link LambdaArrowParens} for examples
  *     of how {@code value -> value}, {@code (value) -> value}, and typed parameters are handled.
  * @param binaryOperatorPosition where binary operators appear when a binary expression breaks across continuation
@@ -60,8 +60,8 @@ public record FormatterOptions(
     /**
      * Default target line width used by {@link #defaults()}.
      *
-     * <p>This width is intentionally wider than the Prettier-compatible fixture mode used in tests. Adapters may expose
-     * this as a user setting when projects prefer narrower or wider Java output.
+     * <p>This width is intentionally wider than the compatibility fixture mode used in tests. Adapters may expose this
+     * as a user setting when projects prefer narrower or wider Java output.
      */
     public static final int DEFAULT_LINE_WIDTH = 140;
 

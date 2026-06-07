@@ -1,14 +1,12 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.modules.ModuleDeclaration;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
@@ -17,11 +15,12 @@ import java.util.function.Function;
  * Sequences the layout of a Java compilation unit after the parser has exposed package, import, module, and type nodes.
  *
  * <p>This helper owns only whole-file ordering: source-leading package comments, orphan comments before the first type,
- * the package line, sorted import blocks, optional module declarations, top-level declarations, compact unnamed-class
+ * the package line, ordered import blocks, optional module declarations, top-level declarations, compact unnamed-class
  * member expansion, and trailing orphan comments. It intentionally delegates package declaration text to
- * {@link PackageDeclarationPrinter}, individual imports to {@link ImportDeclarationPrinter}, module declaration
- * formatting to {@link JavaPrinter}, and body declaration formatting back to {@link JavaPrinter}. It does not print
- * statements, expressions, raw body preservation, or any single-node package/import behavior itself.
+ * {@link PackageDeclarationPrinter}, import grouping and sorting to {@link ImportOrdering}, individual imports to {@link
+ * ImportDeclarationPrinter}, module declaration formatting to {@link JavaPrinter}, and body declaration formatting back
+ * to {@link JavaPrinter}. It does not print statements, expressions, raw body preservation, or any single-node
+ * package/import behavior itself.
  *
  * <p>Representative fixture pairs live at
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/package_and_imports/classWithMixedImports/input.java}
@@ -163,30 +162,31 @@ final class CompilationUnitPrinter {
     }
 
     /**
-     * Builds the import section as static imports first, then ordinary imports, each block sorted by imported name.
+     * Builds the import section from ordered static and ordinary import groups.
      *
      * <p>The section-level blank line between static and ordinary imports belongs here because it depends on both import
-     * groups being present. Rendering each individual import line remains with {@link ImportDeclarationPrinter}.
+     * groups being present. Import grouping and ordering belongs to {@link ImportOrdering}, and rendering each individual
+     * import line remains with {@link ImportDeclarationPrinter}.
      */
     private Optional<Doc> imports(CompilationUnit unit) {
-        List<ImportDeclaration> normal = unit.getImports().stream()
-                .filter(importDeclaration -> !importDeclaration.isStatic())
-                .sorted(Comparator.comparing(ImportDeclaration::getNameAsString))
-                .toList();
-        List<ImportDeclaration> statics = unit.getImports().stream()
-                .filter(ImportDeclaration::isStatic)
-                .sorted(Comparator.comparing(ImportDeclaration::getNameAsString))
-                .toList();
-        List<Doc> blocks = new ArrayList<>();
-        if (!statics.isEmpty()) {
-            blocks.add(Doc.join(Doc.HARD_LINE, statics.stream().map(importDeclarations::importDeclaration).toList()));
+        ImportOrdering orderedImports = ImportOrdering.order(unit.getImports());
+        if (orderedImports.isEmpty()) {
+            return Optional.empty();
         }
-        if (!normal.isEmpty() && !statics.isEmpty()) {
+        List<Doc> blocks = new ArrayList<>();
+        if (!orderedImports.staticImports().isEmpty()) {
+            blocks.add(Doc.join(
+                    Doc.HARD_LINE,
+                    orderedImports.staticImports().stream().map(importDeclarations::importDeclaration).toList()));
+        }
+        if (!orderedImports.normalImports().isEmpty() && !orderedImports.staticImports().isEmpty()) {
             blocks.add(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE));
         }
-        if (!normal.isEmpty()) {
-            blocks.add(Doc.join(Doc.HARD_LINE, normal.stream().map(importDeclarations::importDeclaration).toList()));
+        if (!orderedImports.normalImports().isEmpty()) {
+            blocks.add(Doc.join(
+                    Doc.HARD_LINE,
+                    orderedImports.normalImports().stream().map(importDeclarations::importDeclaration).toList()));
         }
-        return blocks.isEmpty() ? Optional.empty() : Optional.of(Doc.concat(blocks));
+        return Optional.of(Doc.concat(blocks));
     }
 }

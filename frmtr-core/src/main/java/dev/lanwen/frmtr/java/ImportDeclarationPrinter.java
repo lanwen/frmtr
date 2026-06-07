@@ -8,8 +8,9 @@ import dev.lanwen.frmtr.doc.Doc;
  *
  * <p>This helper owns import-level leading comments, the keyword fork between {@code import} and {@code import static},
  * and the trailing asterisk marker for wildcard imports. It intentionally delegates import ordering, static-versus-
- * normal block separation, package declarations, and module declarations back to {@link JavaPrinter} because those are
- * top-level compilation-unit layout decisions rather than single-import formatting decisions.
+ * normal grouping, package declarations, and module declarations back to {@link ImportOrdering} and {@link
+ * CompilationUnitPrinter} because those are transform and top-level layout decisions rather than single-import
+ * formatting decisions.
  *
  * <p>Representative fixture pairs live under
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/package_and_imports}, especially

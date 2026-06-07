@@ -37,35 +37,24 @@ final class CommentPlacement {
                 && comment.getRange()
                         .flatMap(commentRange -> node.getRange()
                                 .map(nodeRange -> commentRange.begin.line == nodeRange.begin.line
-                                        && startsBefore(commentRange, nodeRange)))
+                                        && CommentIndex.startsBefore(commentRange, nodeRange)))
                         .orElse(false));
     }
 
     boolean startsOnSameLine(Comment comment, Node node) {
-        return comment.getRange()
-                .flatMap(commentRange -> node.getRange().map(nodeRange -> commentRange.begin.line == nodeRange.begin.line))
-                .orElse(false);
+        return CommentIndex.startsOnSameLine(comment, node);
     }
 
     boolean startsBefore(Comment comment, Node node) {
-        return comment.getRange()
-                .flatMap(commentRange -> node.getRange().map(nodeRange -> startsBefore(commentRange, nodeRange)))
-                .orElse(false);
+        return CommentIndex.startsBefore(comment, node);
     }
 
     boolean startsBefore(Range left, Range right) {
-        if (left.begin.line != right.begin.line) {
-            return left.begin.line < right.begin.line;
-        }
-        return left.begin.column < right.begin.column;
+        return CommentIndex.startsBefore(left, right);
     }
 
     boolean startsAfterNodeOnSameLine(Node node, Comment comment) {
-        return node.getRange()
-                .flatMap(nodeRange -> comment.getRange()
-                        .map(commentRange -> commentRange.begin.line == nodeRange.end.line
-                                && commentRange.begin.column > nodeRange.end.column))
-                .orElse(false);
+        return CommentIndex.startsAfterNodeOnSameLine(node, comment);
     }
 
     /**
@@ -81,7 +70,7 @@ final class CommentPlacement {
             Optional<Doc> trailing = parent.orElseThrow().getAllContainedComments().stream()
                     .filter(BlockComment.class::isInstance)
                     .filter(comment -> comment.getCommentedNode().isEmpty())
-                    .filter(comment -> startsAfterNodeOnSameLine(node, comment))
+                    .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(node, comment))
                     .findFirst()
                     .map(comments::comment);
             if (trailing.isPresent()) {

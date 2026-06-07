@@ -1,6 +1,5 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.Position;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
@@ -12,7 +11,6 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
@@ -192,7 +190,7 @@ final class BinaryExpressionPrinter {
     }
 
     boolean hasLineComments(BinaryExpr expression) {
-        return expression.getAllContainedComments().stream().anyMatch(LineComment.class::isInstance);
+        return CommentIndex.hasContainedLineComments(expression);
     }
 
     /**
@@ -210,10 +208,10 @@ final class BinaryExpressionPrinter {
             Expression operand = operands.get(i);
             Doc line = Doc.text(binaryLineOperandText(expression.getOperator(), operand, i, operands.size()));
             List<Comment> between = i < operands.size() - 1
-                    ? binaryCommentsBetween(expression, operand, operands.get(i + 1))
+                    ? CommentIndex.lineCommentsBetween(expression, operand, operands.get(i + 1))
                     : List.of();
             if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END) {
-                List<Comment> sameLineComments = sameLineComments(operand, between);
+                List<Comment> sameLineComments = CommentIndex.commentsStartingOnEndLine(operand, between);
                 for (Comment comment : sameLineComments) {
                     line = Doc.concat(line, Doc.text(" "), comments.comment(comment));
                 }
@@ -235,42 +233,6 @@ final class BinaryExpressionPrinter {
             return index == 0 ? text : operator.asString() + " " + text;
         }
         return index < operandCount - 1 ? text + " " + operator.asString() : text;
-    }
-
-    /**
-     * Finds line comments that sit between two neighboring flattened operands in source order.
-     *
-     * <p>The binary tree tells us operand order, but comments live on source ranges. The range fork keeps comments after
-     * the previous operand and before the next operand attached to this binary continuation instead of letting normal
-     * expression printing duplicate or drop them.
-     */
-    private List<Comment> binaryCommentsBetween(BinaryExpr expression, Expression previous, Expression next) {
-        int previousLine = previous.getRange().map(range -> range.end.line).orElse(Integer.MIN_VALUE);
-        int nextLine = next.getRange().map(range -> range.begin.line).orElse(Integer.MAX_VALUE);
-        return expression.getAllContainedComments().stream()
-                .filter(LineComment.class::isInstance)
-                .filter(comment -> comment.getRange()
-                        .map(range -> range.begin.line >= previousLine && range.begin.line < nextLine)
-                        .orElse(false))
-                .sorted(Comparator.comparing(comment -> comment.getRange()
-                        .map(range -> range.begin)
-                        .orElse(Position.HOME)))
-                .toList();
-    }
-
-    /**
-     * Splits trailing comments from between-operand comments for end-position operators.
-     *
-     * <p>When operators stay at line ends, a source comment on the same line as an operand should remain after that
-     * operand, while later comments become their own continuation lines.
-     */
-    private List<Comment> sameLineComments(Expression expression, List<Comment> comments) {
-        int expressionEndLine = expression.getRange().map(range -> range.end.line).orElse(Integer.MIN_VALUE);
-        return comments.stream()
-                .filter(comment -> comment.getRange()
-                        .map(range -> range.begin.line == expressionEndLine)
-                        .orElse(false))
-                .toList();
     }
 
     private List<Doc> commentDocs(List<Comment> sourceComments) {

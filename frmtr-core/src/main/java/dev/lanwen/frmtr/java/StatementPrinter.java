@@ -1,6 +1,5 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.Range;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.BodyDeclaration;
@@ -378,7 +377,7 @@ final class StatementPrinter {
         return statement.getExpression().findAll(ConditionalExpr.class).stream()
                 .flatMap(conditionalExpr -> conditionalExpr.getElseExpr().getComment()
                         .filter(LineComment.class::isInstance)
-                        .filter(comment -> startsAfterNodeOnSameLine(statement, comment))
+                        .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(statement, comment))
                         .stream())
                 .findFirst();
     }
@@ -499,7 +498,8 @@ final class StatementPrinter {
     private Doc ownBlockCommentBeforeNode(Node node) {
         return comments.ownComment(node, comment -> comment instanceof BlockComment
                 && comment.getRange()
-                        .flatMap(commentRange -> node.getRange().map(nodeRange -> startsBefore(commentRange, nodeRange)))
+                        .flatMap(commentRange -> node.getRange()
+                                .map(nodeRange -> CommentIndex.startsBefore(commentRange, nodeRange)))
                         .orElse(false));
     }
 
@@ -765,10 +765,7 @@ final class StatementPrinter {
     }
 
     private boolean conditionCommentStartsBeforeExpression(Expression condition, Comment comment) {
-        return comment.getRange()
-                .flatMap(commentRange -> condition.getRange()
-                        .map(conditionRange -> startsBefore(commentRange, conditionRange)))
-                .orElse(false);
+        return CommentIndex.startsBefore(comment, condition);
     }
 
     private Doc trailingBlockCommentBeforeCloseParen(Expression condition) {
@@ -779,18 +776,10 @@ final class StatementPrinter {
                 .filter(comment -> comment.getCommentedNode()
                         .map(BlockStmt.class::isInstance)
                         .orElse(false))
-                .filter(comment -> startsImmediatelyAfterNodeOnSameLine(condition, comment))
+                .filter(comment -> CommentIndex.startsImmediatelyAfterNodeOnSameLine(condition, comment))
                 .findFirst()
                 .map(comments::comment)
                 .orElse(Doc.EMPTY);
-    }
-
-    private boolean startsImmediatelyAfterNodeOnSameLine(Node node, Comment comment) {
-        return node.getRange()
-                .flatMap(nodeRange -> comment.getRange()
-                        .map(commentRange -> commentRange.begin.line == nodeRange.end.line
-                                && commentRange.begin.column == nodeRange.end.column + 1))
-                .orElse(false);
     }
 
     private Doc ifThenStatement(IfStmt statement) {
@@ -1084,7 +1073,7 @@ final class StatementPrinter {
             Optional<Doc> trailing = parent.orElseThrow().getAllContainedComments().stream()
                     .filter(LineComment.class::isInstance)
                     .filter(comment -> comment.getCommentedNode().isEmpty())
-                    .filter(comment -> startsAfterNodeOnSameLine(node, comment))
+                    .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(node, comment))
                     .findFirst()
                     .map(comments::comment);
             if (trailing.isPresent()) {
@@ -1101,7 +1090,7 @@ final class StatementPrinter {
             Optional<Doc> trailing = parent.orElseThrow().getAllContainedComments().stream()
                     .filter(BlockComment.class::isInstance)
                     .filter(comment -> comment.getCommentedNode().isEmpty())
-                    .filter(comment -> startsAfterNodeOnSameLine(node, comment))
+                    .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(node, comment))
                     .findFirst()
                     .map(comments::comment);
             if (trailing.isPresent()) {
@@ -1110,14 +1099,6 @@ final class StatementPrinter {
             parent = parent.orElseThrow().getParentNode();
         }
         return Doc.EMPTY;
-    }
-
-    private boolean startsAfterNodeOnSameLine(Node node, Comment comment) {
-        return node.getRange()
-                .flatMap(nodeRange -> comment.getRange()
-                        .map(commentRange -> commentRange.begin.line == nodeRange.end.line
-                                && commentRange.begin.column > nodeRange.end.column))
-                .orElse(false);
     }
 
     private String forHeaderExpression(Expression expression) {
@@ -1137,13 +1118,6 @@ final class StatementPrinter {
                     + variable.getInitializer().map(initializer -> " = " + compact.apply(initializer)).orElse("");
         }
         return compact.apply(expression);
-    }
-
-    private boolean startsBefore(Range left, Range right) {
-        if (left.begin.line != right.begin.line) {
-            return left.begin.line < right.begin.line;
-        }
-        return left.begin.column < right.begin.column;
     }
 
     @FunctionalInterface

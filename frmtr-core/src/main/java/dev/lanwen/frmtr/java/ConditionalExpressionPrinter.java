@@ -1,6 +1,5 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.Range;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.Comment;
@@ -224,7 +223,7 @@ final class ConditionalExpressionPrinter {
         Optional<Comment> elseComment = expression.getElseExpr().getComment()
                 .filter(LineComment.class::isInstance);
         Optional<Comment> leadingThenComment =
-                thenComment.filter(comment -> startsBefore(comment, expression.getThenExpr()));
+                thenComment.filter(comment -> CommentIndex.startsBefore(comment, expression.getThenExpr()));
         Optional<Comment> conditionTrailingComment =
                 conditionComment
                         .filter(comment -> conditionalQuestionCommentTrailsCondition(expression, comment))
@@ -235,15 +234,15 @@ final class ConditionalExpressionPrinter {
                 .or(() -> leadingThenComment
                         .filter(comment -> !conditionalQuestionCommentTrailsCondition(expression, comment)));
         Optional<Comment> thenTrailingComment = thenComment
-                .filter(comment -> !startsBefore(comment, expression.getThenExpr()))
+                .filter(comment -> !CommentIndex.startsBefore(comment, expression.getThenExpr()))
                 .filter(comment -> !commentAppearsAfterColon(expression, comment));
         Optional<Comment> colonComment = thenComment
                 .filter(comment -> questionComment.filter(question -> question == comment).isEmpty())
                 .filter(comment -> commentAppearsAfterColon(expression, comment))
-                .or(() -> elseComment.filter(comment -> startsBefore(comment, expression.getElseExpr())));
+                .or(() -> elseComment.filter(comment -> CommentIndex.startsBefore(comment, expression.getElseExpr())));
         Optional<Comment> elseTrailingComment = elseComment
                 .filter(comment -> colonComment.filter(colon -> colon == comment).isEmpty())
-                .filter(comment -> !startsBefore(comment, expression.getElseExpr()))
+                .filter(comment -> !CommentIndex.startsBefore(comment, expression.getElseExpr()))
                 .filter(comment -> !conditionalElseCommentIsStatementTrailing(expression, comment));
         return Optional.of(Doc.concat(
                 conditionalConditionWithTrailingComment(expression.getCondition(), conditionTrailingComment),
@@ -271,7 +270,7 @@ final class ConditionalExpressionPrinter {
 
     private boolean conditionalQuestionCommentTrailsCondition(ConditionalExpr expression, Comment comment) {
         return commentAppearsAfterOperator(expression, comment, "?")
-                && startsAfterNodeOnSameLine(expression.getCondition(), comment);
+                && CommentIndex.startsAfterNodeOnSameLine(expression.getCondition(), comment);
     }
 
     /**
@@ -301,7 +300,7 @@ final class ConditionalExpressionPrinter {
         return expression.getParentNode()
                 .stream()
                 .flatMap(parent -> findAncestorExpressionStatement(parent).stream())
-                .anyMatch(statement -> startsAfterNodeOnSameLine(statement, comment));
+                .anyMatch(statement -> CommentIndex.startsAfterNodeOnSameLine(statement, comment));
     }
 
     private Optional<ExpressionStmt> findAncestorExpressionStatement(Node node) {
@@ -398,24 +397,4 @@ final class ConditionalExpressionPrinter {
         return expressionRenderer.apply(branch);
     }
 
-    private boolean startsBefore(Comment comment, Node node) {
-        return comment.getRange()
-                .flatMap(commentRange -> node.getRange().map(nodeRange -> startsBefore(commentRange, nodeRange)))
-                .orElse(false);
-    }
-
-    private boolean startsBefore(Range left, Range right) {
-        if (left.begin.line != right.begin.line) {
-            return left.begin.line < right.begin.line;
-        }
-        return left.begin.column < right.begin.column;
-    }
-
-    private boolean startsAfterNodeOnSameLine(Node node, Comment comment) {
-        return node.getRange()
-                .flatMap(nodeRange -> comment.getRange()
-                        .map(commentRange -> commentRange.begin.line == nodeRange.end.line
-                                && commentRange.begin.column > nodeRange.end.column))
-                .orElse(false);
-    }
 }

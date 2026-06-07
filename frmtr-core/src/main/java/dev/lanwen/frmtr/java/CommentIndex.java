@@ -65,18 +65,27 @@ final class CommentIndex {
                 .toList();
     }
 
+    /**
+     * Reports whether {@code comment} begins on the same source line where {@code node} begins.
+     */
     static boolean startsOnSameLine(Comment comment, Node node) {
         return comment.getRange()
                 .flatMap(commentRange -> node.getRange().map(nodeRange -> commentRange.begin.line == nodeRange.begin.line))
                 .orElse(false);
     }
 
+    /**
+     * Reports whether {@code comment} begins before {@code node} in source order.
+     */
     static boolean startsBefore(Comment comment, Node node) {
         return comment.getRange()
                 .flatMap(commentRange -> node.getRange().map(nodeRange -> startsBefore(commentRange, nodeRange)))
                 .orElse(false);
     }
 
+    /**
+     * Compares two JavaParser ranges by their starting source position.
+     */
     static boolean startsBefore(Range left, Range right) {
         if (left.begin.line != right.begin.line) {
             return left.begin.line < right.begin.line;
@@ -84,11 +93,25 @@ final class CommentIndex {
         return left.begin.column < right.begin.column;
     }
 
+    /**
+     * Reports whether {@code comment} begins later on the same source line where {@code node} ends.
+     */
     static boolean startsAfterNodeOnSameLine(Node node, Comment comment) {
         return node.getRange()
                 .flatMap(nodeRange -> comment.getRange()
                         .map(commentRange -> commentRange.begin.line == nodeRange.end.line
                                 && commentRange.begin.column > nodeRange.end.column))
+                .orElse(false);
+    }
+
+    /**
+     * Reports whether {@code comment} begins immediately after {@code node} with no horizontal source gap.
+     */
+    static boolean startsImmediatelyAfterNodeOnSameLine(Node node, Comment comment) {
+        return node.getRange()
+                .flatMap(nodeRange -> comment.getRange()
+                        .map(commentRange -> commentRange.begin.line == nodeRange.end.line
+                                && commentRange.begin.column == nodeRange.end.column + 1))
                 .orElse(false);
     }
 }

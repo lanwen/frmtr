@@ -1,19 +1,17 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.Range;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.comments.BlockComment;
-import com.github.javaparser.ast.comments.Comment;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.Optional;
 
 /**
- * Answers source-range comment-placement questions for formatter helpers that already know what they are printing.
+ * Recovers source-position-sensitive comment docs for formatter helpers that already know what they are printing.
  *
- * <p>This helper owns the shared predicates that compare JavaParser node and comment ranges, plus the narrow recovery
- * path for block comments that JavaParser leaves unattached but source places on the same line as a node. The boundary
- * keeps layout printers focused on syntax-specific {@code Doc} assembly while still giving them one consistent source
- * position vocabulary for comment placement.
+ * <p>This helper owns the narrow rendered-comment paths that depend on source positions: attached block comments that
+ * source placed before a node on the same line, and unattached trailing block comments that JavaParser leaves inside a
+ * parent. It uses {@link CommentIndex} for pure range comparisons so caller printers share one source-position
+ * vocabulary.
  *
  * <p>Callers still decide which comments belong to a leading, trailing, orphan, or syntax-specific path, how returned
  * comment docs are spaced, and whether a source-position fork should affect the surrounding layout.
@@ -39,22 +37,6 @@ final class CommentPlacement {
                                 .map(nodeRange -> commentRange.begin.line == nodeRange.begin.line
                                         && CommentIndex.startsBefore(commentRange, nodeRange)))
                         .orElse(false));
-    }
-
-    boolean startsOnSameLine(Comment comment, Node node) {
-        return CommentIndex.startsOnSameLine(comment, node);
-    }
-
-    boolean startsBefore(Comment comment, Node node) {
-        return CommentIndex.startsBefore(comment, node);
-    }
-
-    boolean startsBefore(Range left, Range right) {
-        return CommentIndex.startsBefore(left, right);
-    }
-
-    boolean startsAfterNodeOnSameLine(Node node, Comment comment) {
-        return CommentIndex.startsAfterNodeOnSameLine(node, comment);
     }
 
     /**

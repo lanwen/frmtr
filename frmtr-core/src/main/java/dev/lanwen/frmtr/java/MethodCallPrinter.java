@@ -1,6 +1,5 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.Range;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.comments.BlockComment;
@@ -534,7 +533,7 @@ final class MethodCallPrinter {
 
     private boolean methodCallSegmentHasComment(MethodCallExpr expression) {
         return expression.getName().getComment()
-                .filter(comment -> startsBefore(comment, expression.getName()))
+                .filter(comment -> CommentIndex.startsBefore(comment, expression.getName()))
                 .isPresent();
     }
 
@@ -595,7 +594,7 @@ final class MethodCallPrinter {
     private Doc methodCallChainSegment(MethodCallExpr expression) {
         Optional<Comment> rawNameComment = expression.getName().getComment()
                 .filter(comment -> comment instanceof LineComment || comment instanceof BlockComment)
-                .filter(comment -> startsBefore(comment, expression.getName()));
+                .filter(comment -> CommentIndex.startsBefore(comment, expression.getName()));
         Doc nameComment = rawNameComment.map(comments::comment).orElse(Doc.EMPTY);
         String typeArguments = expression.getTypeArguments()
                 .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
@@ -603,7 +602,8 @@ final class MethodCallPrinter {
         String prefix = "." + typeArguments + expression.getNameAsString();
         Doc segmentPrefix = nameComment == Doc.EMPTY
                 ? Doc.EMPTY
-                : rawNameComment.filter(comment -> comment instanceof BlockComment && startsOnSameLine(comment, expression.getName()))
+                : rawNameComment.filter(comment -> comment instanceof BlockComment
+                                && CommentIndex.startsOnSameLine(comment, expression.getName()))
                         .map(ignored -> Doc.concat(nameComment, Doc.text(" ")))
                         .orElseGet(() -> Doc.concat(nameComment, Doc.HARD_LINE));
         if (expression.getArguments().isEmpty()) {
@@ -780,22 +780,4 @@ final class MethodCallPrinter {
         return breakMode.argumentLine();
     }
 
-    private boolean startsOnSameLine(Comment comment, Node node) {
-        return comment.getRange()
-                .flatMap(commentRange -> node.getRange().map(nodeRange -> commentRange.begin.line == nodeRange.begin.line))
-                .orElse(false);
-    }
-
-    private boolean startsBefore(Comment comment, Node node) {
-        return comment.getRange()
-                .flatMap(commentRange -> node.getRange().map(nodeRange -> startsBefore(commentRange, nodeRange)))
-                .orElse(false);
-    }
-
-    private boolean startsBefore(Range left, Range right) {
-        if (left.begin.line != right.begin.line) {
-            return left.begin.line < right.begin.line;
-        }
-        return left.begin.column < right.begin.column;
-    }
 }

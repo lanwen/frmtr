@@ -85,17 +85,7 @@ final class ControlConditionPrinter {
     }
 
     private boolean conditionCommentStartsBeforeExpression(Expression condition, Comment comment) {
-        return comment.getRange()
-                .flatMap(commentRange -> condition.getRange()
-                        .map(conditionRange -> startsBefore(commentRange, conditionRange)))
-                .orElse(false);
-    }
-
-    private boolean startsBefore(com.github.javaparser.Range left, com.github.javaparser.Range right) {
-        if (left.begin.line != right.begin.line) {
-            return left.begin.line < right.begin.line;
-        }
-        return left.begin.column < right.begin.column;
+        return CommentIndex.startsBefore(comment, condition);
     }
 
     private String commentText(Doc comment) {

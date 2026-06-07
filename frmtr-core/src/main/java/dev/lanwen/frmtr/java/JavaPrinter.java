@@ -137,8 +137,8 @@ final class JavaPrinter {
                 compactSource::compactJoin,
                 this::currentIndentedWidth,
                 this::blockStatementWidth,
-                commentPlacement::startsBefore,
-                commentPlacement::startsOnSameLine);
+                CommentIndex::startsBefore,
+                CommentIndex::startsOnSameLine);
         this.casts = new CastExpressionPrinter(
                 options,
                 this::expression,
@@ -162,8 +162,8 @@ final class JavaPrinter {
                 compactSource::compactTypeLike,
                 compactSource::compact,
                 this::currentIndentedWidth,
-                commentPlacement::startsBefore,
-                commentPlacement::startsAfterNodeOnSameLine);
+                CommentIndex::startsBefore,
+                CommentIndex::startsAfterNodeOnSameLine);
         this.objectCreations = new ObjectCreationPrinter(
                 comments,
                 types,
@@ -307,7 +307,7 @@ final class JavaPrinter {
                 declarationPrefixes::modifier,
                 types::typeCanBreak,
                 commentPlacement::unattachedTrailingBlockComment,
-                commentPlacement::startsAfterNodeOnSameLine,
+                CommentIndex::startsAfterNodeOnSameLine,
                 this::commentText);
         this.throwsClauses = new ThrowsClausePrinter(
                 options,
@@ -363,7 +363,7 @@ final class JavaPrinter {
                 compactSource::compactJoin,
                 this::expression,
                 this::currentIndentedWidth,
-                commentPlacement::startsAfterNodeOnSameLine,
+                CommentIndex::startsAfterNodeOnSameLine,
                 this::body);
         this.records = new RecordDeclarationPrinter(
                 comments,

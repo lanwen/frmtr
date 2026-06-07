@@ -650,11 +650,11 @@ final class FieldDeclarationPrinter {
         List<Comment> leadingComments = new ArrayList<>();
         variable.getOrphanComments().stream()
                 .filter(LineComment.class::isInstance)
-                .filter(comment -> startsBefore(comment, initializer))
+                .filter(comment -> CommentIndex.startsBefore(comment, initializer))
                 .forEach(leadingComments::add);
         initializer.getComment()
                 .filter(LineComment.class::isInstance)
-                .filter(comment -> startsBefore(comment, initializer))
+                .filter(comment -> CommentIndex.startsBefore(comment, initializer))
                 .ifPresent(leadingComments::add);
         List<Doc> docs = leadingComments.stream()
                 .sorted(Comparator.comparing(comment -> comment.getRange()
@@ -732,19 +732,6 @@ final class FieldDeclarationPrinter {
 
     private int continuationStatementWidth(String text) {
         return (options.indentUnit().length() * 3) + text.length();
-    }
-
-    private boolean startsBefore(Comment comment, Node node) {
-        return comment.getRange()
-                .flatMap(commentRange -> node.getRange().map(nodeRange -> startsBefore(commentRange, nodeRange)))
-                .orElse(false);
-    }
-
-    private boolean startsBefore(com.github.javaparser.Range left, com.github.javaparser.Range right) {
-        if (left.begin.line != right.begin.line) {
-            return left.begin.line < right.begin.line;
-        }
-        return left.begin.column < right.begin.column;
     }
 
     private String commentText(Doc comment) {

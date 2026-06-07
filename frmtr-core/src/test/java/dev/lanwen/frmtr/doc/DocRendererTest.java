@@ -10,7 +10,8 @@ final class DocRendererTest {
     void keepsGroupFlatWhenItFits() {
         Doc doc = Doc.group(Doc.concat(Doc.text("call("), Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.text("value"))), Doc.SOFT_LINE, Doc.text(")")));
 
-        String rendered = new DocRenderer(new FormatterOptions(40, FormatterOptions.IndentStyle.SPACE, 2, FormatterOptions.LineEnding.LF, false))
+        String rendered = new DocRenderer(FormatterOptions.forLayout(
+                        40, FormatterOptions.IndentStyle.SPACE, 2, FormatterOptions.LineEnding.LF, false))
                 .render(doc);
 
         assertThat(rendered).isEqualTo("call(value)");
@@ -24,7 +25,8 @@ final class DocRendererTest {
                 Doc.SOFT_LINE,
                 Doc.text(")")));
 
-        String rendered = new DocRenderer(new FormatterOptions(20, FormatterOptions.IndentStyle.SPACE, 2, FormatterOptions.LineEnding.LF, false))
+        String rendered = new DocRenderer(FormatterOptions.forLayout(
+                        20, FormatterOptions.IndentStyle.SPACE, 2, FormatterOptions.LineEnding.LF, false))
                 .render(doc);
 
         assertThat(rendered).isEqualTo("""

@@ -73,7 +73,7 @@ public abstract class AbstractFrmtrJavaTask extends DefaultTask {
     }
 
     protected FormatterOptions formatterOptions() {
-        return new FormatterOptions(
+        return FormatterOptions.withJavaLanguageLevel(
                 lineWidth.get(),
                 FormatterOptions.IndentStyle.SPACE,
                 FormatterOptions.DEFAULT_INDENT_WIDTH,

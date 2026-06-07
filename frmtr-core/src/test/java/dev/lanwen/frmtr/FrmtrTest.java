@@ -130,7 +130,7 @@ final class FrmtrTest {
                 }
                 """;
 
-        FormatterOptions avoid = new FormatterOptions(
+        FormatterOptions avoid = FormatterOptions.withLambdaArrowParens(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -140,7 +140,7 @@ final class FrmtrTest {
                 false,
                 FormatterOptions.LambdaArrowParens.AVOID,
                 FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
-        FormatterOptions always = new FormatterOptions(
+        FormatterOptions always = FormatterOptions.withLambdaArrowParens(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -165,7 +165,7 @@ final class FrmtrTest {
                     }, other),
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -191,7 +191,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 60,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -216,7 +216,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -247,7 +247,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -272,7 +272,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -304,7 +304,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -341,7 +341,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -378,7 +378,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -413,7 +413,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -442,7 +442,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -466,7 +466,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withLambdaArrowParens(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -497,7 +497,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -526,7 +526,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -552,7 +552,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -576,7 +576,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -601,7 +601,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -634,7 +634,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -661,7 +661,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -690,7 +690,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -763,7 +763,7 @@ final class FrmtrTest {
                 }
                 """;
 
-        assertThat(Frmtr.format(source, new FormatterOptions(
+        assertThat(Frmtr.format(source, FormatterOptions.withJavaLanguageLevel(
                         80,
                         FormatterOptions.IndentStyle.SPACE,
                         2,
@@ -878,7 +878,7 @@ final class FrmtrTest {
                 }
                 """;
 
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -910,7 +910,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -939,7 +939,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -963,7 +963,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -1012,7 +1012,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -1045,7 +1045,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -1074,7 +1074,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -1104,7 +1104,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -1133,7 +1133,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -1158,7 +1158,7 @@ final class FrmtrTest {
                     }
                 }
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 80,
                 FormatterOptions.IndentStyle.SPACE,
                 2,
@@ -1235,7 +1235,7 @@ final class FrmtrTest {
                  */
                  public class Demo{int value;}\
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withPragmaRequirement(
                 FormatterOptions.DEFAULT_LINE_WIDTH,
                 FormatterOptions.IndentStyle.SPACE,
                 FormatterOptions.DEFAULT_INDENT_WIDTH,
@@ -1258,7 +1258,7 @@ final class FrmtrTest {
                  */
                  public class Demo{int value;}\
                 """;
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withPragmaRequirement(
                 FormatterOptions.DEFAULT_LINE_WIDTH,
                 FormatterOptions.IndentStyle.SPACE,
                 FormatterOptions.DEFAULT_INDENT_WIDTH,
@@ -1343,7 +1343,7 @@ final class FrmtrTest {
 
     @Test
     void unsetJavaLanguageLevelUsesRawParserMode() {
-        FormatterOptions options = new FormatterOptions(
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
                 FormatterOptions.DEFAULT_LINE_WIDTH,
                 FormatterOptions.IndentStyle.SPACE,
                 FormatterOptions.DEFAULT_INDENT_WIDTH,

@@ -14,6 +14,9 @@ import java.util.Objects;
  * single-parameter lambda parentheses, binary operators at the end of broken continuation lines, and the latest Java
  * language level exposed by the bundled JavaParser dependency's bleeding-edge parser mode.
  *
+ * <p>Use the canonical record constructor when every option is intentionally selected. Use the static factory methods
+ * for common partial configurations where the remaining formatter policy should stay at defaults.
+ *
  * @param lineWidth target maximum rendered line width. The renderer and Java-specific width gates use this value to
  *     decide whether grouped docs can stay flat or should break across lines. The value is a formatting target rather
  *     than an absolute hard cap because comments, raw-preserved regions, text blocks, and source-only syntax may still
@@ -71,119 +74,6 @@ public record FormatterOptions(
     public static final int DEFAULT_INDENT_WIDTH = 4;
 
     /**
-     * Compatibility constructor for callers that only configure renderer-level options.
-     *
-     * <p>Raw trailing whitespace is not preserved, require-pragma is disabled, lambda parentheses preserve source
-     * spelling, broken binary operators stay at the end of continuation lines, and the Java language level defaults to
-     * {@link JavaLanguageLevel#LATEST_AVAILABLE}.
-     */
-    public FormatterOptions(
-            int lineWidth,
-            IndentStyle indentStyle,
-            int indentWidth,
-            LineEnding lineEnding,
-            boolean trailingNewline) {
-        this(lineWidth, indentStyle, indentWidth, lineEnding, trailingNewline, JavaLanguageLevel.LATEST_AVAILABLE);
-    }
-
-    /**
-     * Compatibility constructor for callers that configure parser language level but not raw/pragma/style options.
-     *
-     * <p>Raw trailing whitespace is not preserved, require-pragma is disabled, lambda parentheses preserve source
-     * spelling, and broken binary operators stay at the end of continuation lines.
-     */
-    public FormatterOptions(
-            int lineWidth,
-            IndentStyle indentStyle,
-            int indentWidth,
-            LineEnding lineEnding,
-            boolean trailingNewline,
-            JavaLanguageLevel javaLanguageLevel) {
-        this(lineWidth, indentStyle, indentWidth, lineEnding, trailingNewline, false, javaLanguageLevel);
-    }
-
-    /**
-     * Compatibility constructor for callers that need raw trailing-whitespace preservation in formatter-ignore paths.
-     *
-     * <p>Require-pragma is disabled, lambda parentheses preserve source spelling, and broken binary operators stay at
-     * the end of continuation lines.
-     */
-    public FormatterOptions(
-            int lineWidth,
-            IndentStyle indentStyle,
-            int indentWidth,
-            LineEnding lineEnding,
-            boolean trailingNewline,
-            boolean preserveRawTrailingWhitespace,
-            JavaLanguageLevel javaLanguageLevel) {
-        this(
-                lineWidth,
-                indentStyle,
-                indentWidth,
-                lineEnding,
-                trailingNewline,
-                preserveRawTrailingWhitespace,
-                false,
-                LambdaArrowParens.PRESERVE,
-                BinaryOperatorPosition.END,
-                javaLanguageLevel);
-    }
-
-    /**
-     * Compatibility constructor for callers that configure raw preservation and require-pragma behavior.
-     *
-     * <p>Lambda parentheses preserve source spelling and broken binary operators stay at the end of continuation lines.
-     */
-    public FormatterOptions(
-            int lineWidth,
-            IndentStyle indentStyle,
-            int indentWidth,
-            LineEnding lineEnding,
-            boolean trailingNewline,
-            boolean preserveRawTrailingWhitespace,
-            boolean requirePragma,
-            JavaLanguageLevel javaLanguageLevel) {
-        this(
-                lineWidth,
-                indentStyle,
-                indentWidth,
-                lineEnding,
-                trailingNewline,
-                preserveRawTrailingWhitespace,
-                requirePragma,
-                LambdaArrowParens.PRESERVE,
-                BinaryOperatorPosition.END,
-                javaLanguageLevel);
-    }
-
-    /**
-     * Compatibility constructor for callers that configure lambda parentheses but use the default binary-operator
-     * continuation style.
-     */
-    public FormatterOptions(
-            int lineWidth,
-            IndentStyle indentStyle,
-            int indentWidth,
-            LineEnding lineEnding,
-            boolean trailingNewline,
-            boolean preserveRawTrailingWhitespace,
-            boolean requirePragma,
-            LambdaArrowParens lambdaArrowParens,
-            JavaLanguageLevel javaLanguageLevel) {
-        this(
-                lineWidth,
-                indentStyle,
-                indentWidth,
-                lineEnding,
-                trailingNewline,
-                preserveRawTrailingWhitespace,
-                requirePragma,
-                lambdaArrowParens,
-                BinaryOperatorPosition.END,
-                javaLanguageLevel);
-    }
-
-    /**
      * Validates option values before a formatter run uses them.
      *
      * <p>The width and indentation lower bounds catch configuration mistakes early. Enum options are required because
@@ -219,6 +109,118 @@ public record FormatterOptions(
                 LambdaArrowParens.PRESERVE,
                 BinaryOperatorPosition.END,
                 JavaLanguageLevel.LATEST_AVAILABLE);
+    }
+
+    /**
+     * Creates options for callers that only configure document-rendering shape.
+     *
+     * <p>Raw trailing whitespace is not preserved, require-pragma is disabled, lambda parentheses preserve source
+     * spelling, broken binary operators stay at the end of continuation lines, and the Java language level defaults to
+     * {@link JavaLanguageLevel#LATEST_AVAILABLE}.
+     */
+    public static FormatterOptions forLayout(
+            int lineWidth,
+            IndentStyle indentStyle,
+            int indentWidth,
+            LineEnding lineEnding,
+            boolean trailingNewline) {
+        return withJavaLanguageLevel(
+                lineWidth, indentStyle, indentWidth, lineEnding, trailingNewline, JavaLanguageLevel.LATEST_AVAILABLE);
+    }
+
+    /**
+     * Creates options for callers that configure document-rendering shape and parser language level.
+     *
+     * <p>Raw trailing whitespace is not preserved, require-pragma is disabled, lambda parentheses preserve source
+     * spelling, and broken binary operators stay at the end of continuation lines.
+     */
+    public static FormatterOptions withJavaLanguageLevel(
+            int lineWidth,
+            IndentStyle indentStyle,
+            int indentWidth,
+            LineEnding lineEnding,
+            boolean trailingNewline,
+            JavaLanguageLevel javaLanguageLevel) {
+        return withRawTrailingWhitespace(
+                lineWidth, indentStyle, indentWidth, lineEnding, trailingNewline, false, javaLanguageLevel);
+    }
+
+    /**
+     * Creates options for callers that need raw trailing-whitespace preservation in formatter-ignore paths.
+     *
+     * <p>Require-pragma is disabled, lambda parentheses preserve source spelling, and broken binary operators stay at
+     * the end of continuation lines.
+     */
+    public static FormatterOptions withRawTrailingWhitespace(
+            int lineWidth,
+            IndentStyle indentStyle,
+            int indentWidth,
+            LineEnding lineEnding,
+            boolean trailingNewline,
+            boolean preserveRawTrailingWhitespace,
+            JavaLanguageLevel javaLanguageLevel) {
+        return withPragmaRequirement(
+                lineWidth,
+                indentStyle,
+                indentWidth,
+                lineEnding,
+                trailingNewline,
+                preserveRawTrailingWhitespace,
+                false,
+                javaLanguageLevel);
+    }
+
+    /**
+     * Creates options for callers that configure raw preservation and require-pragma behavior.
+     *
+     * <p>Lambda parentheses preserve source spelling and broken binary operators stay at the end of continuation lines.
+     */
+    public static FormatterOptions withPragmaRequirement(
+            int lineWidth,
+            IndentStyle indentStyle,
+            int indentWidth,
+            LineEnding lineEnding,
+            boolean trailingNewline,
+            boolean preserveRawTrailingWhitespace,
+            boolean requirePragma,
+            JavaLanguageLevel javaLanguageLevel) {
+        return withLambdaArrowParens(
+                lineWidth,
+                indentStyle,
+                indentWidth,
+                lineEnding,
+                trailingNewline,
+                preserveRawTrailingWhitespace,
+                requirePragma,
+                LambdaArrowParens.PRESERVE,
+                javaLanguageLevel);
+    }
+
+    /**
+     * Creates options for callers that configure lambda parentheses but use the default binary-operator continuation
+     * style.
+     */
+    public static FormatterOptions withLambdaArrowParens(
+            int lineWidth,
+            IndentStyle indentStyle,
+            int indentWidth,
+            LineEnding lineEnding,
+            boolean trailingNewline,
+            boolean preserveRawTrailingWhitespace,
+            boolean requirePragma,
+            LambdaArrowParens lambdaArrowParens,
+            JavaLanguageLevel javaLanguageLevel) {
+        return new FormatterOptions(
+                lineWidth,
+                indentStyle,
+                indentWidth,
+                lineEnding,
+                trailingNewline,
+                preserveRawTrailingWhitespace,
+                requirePragma,
+                lambdaArrowParens,
+                BinaryOperatorPosition.END,
+                javaLanguageLevel);
     }
 
     /**
@@ -374,58 +376,40 @@ public record FormatterOptions(
          */
         LATEST_AVAILABLE,
 
-        /** Parses source using Java 8 syntax rules. */
         JAVA_8,
 
-        /** Parses source using Java 9 syntax rules. */
         JAVA_9,
 
-        /** Parses source using Java 10 syntax rules. */
         JAVA_10,
 
-        /** Parses source using Java 11 syntax rules. */
         JAVA_11,
 
-        /** Parses source using Java 12 syntax rules. */
         JAVA_12,
 
-        /** Parses source using Java 13 syntax rules. */
         JAVA_13,
 
-        /** Parses source using Java 14 syntax rules. */
         JAVA_14,
 
-        /** Parses source using Java 15 syntax rules. */
         JAVA_15,
 
-        /** Parses source using Java 16 syntax rules. */
         JAVA_16,
 
-        /** Parses source using Java 17 syntax rules. */
         JAVA_17,
 
-        /** Parses source using Java 18 syntax rules. */
         JAVA_18,
 
-        /** Parses source using Java 19 syntax rules. */
         JAVA_19,
 
-        /** Parses source using Java 20 syntax rules. */
         JAVA_20,
 
-        /** Parses source using Java 21 syntax rules. */
         JAVA_21,
 
-        /** Parses source using Java 22 syntax rules. */
         JAVA_22,
 
-        /** Parses source using Java 23 syntax rules. */
         JAVA_23,
 
-        /** Parses source using Java 24 syntax rules. */
         JAVA_24,
 
-        /** Parses source using Java 25 syntax rules. */
         JAVA_25
     }
 }

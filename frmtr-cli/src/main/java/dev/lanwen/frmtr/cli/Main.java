@@ -147,7 +147,7 @@ public final class Main implements Callable<Integer> {
     }
 
     private FormatterOptions formatterOptions() {
-        return new FormatterOptions(
+        return FormatterOptions.withJavaLanguageLevel(
                 lineWidth,
                 FormatterOptions.IndentStyle.SPACE,
                 FormatterOptions.DEFAULT_INDENT_WIDTH,

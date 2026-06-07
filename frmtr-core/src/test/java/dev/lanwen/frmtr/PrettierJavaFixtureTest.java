@@ -23,7 +23,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 final class PrettierJavaFixtureTest {
     private static final String FIXTURE_ROOT = "format/prettier-java/unit-test";
-    private static final FormatterOptions PRETTIER_COMPATIBILITY_OPTIONS = new FormatterOptions(
+    private static final FormatterOptions PRETTIER_COMPATIBILITY_OPTIONS = FormatterOptions.withRawTrailingWhitespace(
             80,
             FormatterOptions.IndentStyle.SPACE,
             2,
@@ -31,7 +31,7 @@ final class PrettierJavaFixtureTest {
             true,
             true,
             FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
-    private static final FormatterOptions PRETTIER_REQUIRE_PRAGMA_OPTIONS = new FormatterOptions(
+    private static final FormatterOptions PRETTIER_REQUIRE_PRAGMA_OPTIONS = FormatterOptions.withPragmaRequirement(
             80,
             FormatterOptions.IndentStyle.SPACE,
             2,
@@ -40,7 +40,7 @@ final class PrettierJavaFixtureTest {
             true,
             true,
             FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
-    private static final FormatterOptions PRETTIER_WIDE_COMPATIBILITY_OPTIONS = new FormatterOptions(
+    private static final FormatterOptions PRETTIER_WIDE_COMPATIBILITY_OPTIONS = FormatterOptions.withRawTrailingWhitespace(
             320,
             FormatterOptions.IndentStyle.SPACE,
             2,
@@ -48,7 +48,7 @@ final class PrettierJavaFixtureTest {
             true,
             true,
             FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
-    private static final FormatterOptions PRETTIER_ARROW_PARENS_AVOID_OPTIONS = new FormatterOptions(
+    private static final FormatterOptions PRETTIER_ARROW_PARENS_AVOID_OPTIONS = FormatterOptions.withLambdaArrowParens(
             80,
             FormatterOptions.IndentStyle.SPACE,
             2,
@@ -58,7 +58,7 @@ final class PrettierJavaFixtureTest {
             false,
             FormatterOptions.LambdaArrowParens.AVOID,
             FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
-    private static final FormatterOptions PRETTIER_ARROW_PARENS_ALWAYS_OPTIONS = new FormatterOptions(
+    private static final FormatterOptions PRETTIER_ARROW_PARENS_ALWAYS_OPTIONS = FormatterOptions.withLambdaArrowParens(
             80,
             FormatterOptions.IndentStyle.SPACE,
             2,

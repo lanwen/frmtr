@@ -505,10 +505,7 @@ final class StatementPrinter {
 
     private Doc ownLineCommentBeforeNode(Node node) {
         return comments.ownComment(node, comment -> comment instanceof LineComment
-                && comment.getRange()
-                        .flatMap(commentRange -> node.getRange()
-                                .map(nodeRange -> commentRange.begin.line < nodeRange.begin.line))
-                        .orElse(false));
+                && CommentIndex.startsBeforeBeginLine(comment, node));
     }
 
     private Doc rawTrailingLineComment(Node node) {

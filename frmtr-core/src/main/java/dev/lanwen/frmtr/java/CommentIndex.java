@@ -123,8 +123,29 @@ final class CommentIndex {
      * Reports whether {@code comment} begins on the same source line where {@code node} begins.
      */
     static boolean startsOnSameLine(Comment comment, Node node) {
+        return startsOnBeginLine(comment, node);
+    }
+
+    /**
+     * Reports whether {@code comment} begins on the source line where {@code node} begins.
+     *
+     * <p>This is intentionally a line-only predicate: callers use it when same-line attachment is significant but the
+     * comment's column must not affect ownership or layout decisions.
+     */
+    static boolean startsOnBeginLine(Comment comment, Node node) {
         return comment.getRange()
                 .flatMap(commentRange -> node.getRange().map(nodeRange -> commentRange.begin.line == nodeRange.begin.line))
+                .orElse(false);
+    }
+
+    /**
+     * Reports whether {@code comment} begins on a source line before the line where {@code node} begins.
+     *
+     * <p>This intentionally ignores columns, preserving callers that classify own-line comments only by line position.
+     */
+    static boolean startsBeforeBeginLine(Comment comment, Node node) {
+        return comment.getRange()
+                .flatMap(commentRange -> node.getRange().map(nodeRange -> commentRange.begin.line < nodeRange.begin.line))
                 .orElse(false);
     }
 

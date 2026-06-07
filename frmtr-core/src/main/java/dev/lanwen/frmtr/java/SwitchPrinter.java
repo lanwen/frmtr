@@ -191,18 +191,12 @@ final class SwitchPrinter {
      */
     private Doc switchEntry(SwitchEntry entry) {
         Doc leadingComment = comments.ownComment(entry, commentNode -> commentNode instanceof LineComment
-                && commentNode.getRange()
-                        .flatMap(commentRange -> entry.getRange()
-                                .map(entryRange -> commentRange.begin.line < entryRange.begin.line))
-                        .orElse(false));
+                && CommentIndex.startsBeforeBeginLine(commentNode, entry));
         if (leadingComment != Doc.EMPTY) {
             leadingComment = Doc.concat(leadingComment, Doc.HARD_LINE);
         }
         Doc trailingComment = comments.ownComment(entry, commentNode -> commentNode instanceof LineComment
-                && commentNode.getRange()
-                        .flatMap(commentRange -> entry.getRange()
-                                .map(entryRange -> commentRange.begin.line == entryRange.begin.line))
-                        .orElse(false));
+                && CommentIndex.startsOnBeginLine(commentNode, entry));
         if (trailingComment == Doc.EMPTY) {
             Optional<Doc> raw = rawSingleLineSwitchEntry(entry);
             if (raw.isPresent()) {
@@ -409,10 +403,7 @@ final class SwitchPrinter {
 
     private boolean hasLeadingOwnComment(Statement statement) {
         return statement.getComment()
-                .filter(comment -> comment.getRange()
-                        .flatMap(commentRange -> statement.getRange()
-                                .map(statementRange -> commentRange.begin.line < statementRange.begin.line))
-                        .orElse(false))
+                .filter(comment -> CommentIndex.startsBeforeBeginLine(comment, statement))
                 .isPresent();
     }
 

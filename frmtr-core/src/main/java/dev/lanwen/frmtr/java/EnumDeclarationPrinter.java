@@ -6,7 +6,6 @@ import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.comments.BlockComment;
-import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
@@ -17,7 +16,6 @@ import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.ToIntFunction;
 
@@ -48,7 +46,6 @@ final class EnumDeclarationPrinter {
     private final Function<List<? extends Node>, String> compactJoin;
     private final Function<Expression, Doc> expression;
     private final ToIntFunction<String> currentIndentedWidth;
-    private final BiPredicate<Node, Comment> startsAfterNodeOnSameLine;
     private final Function<BodyDeclaration<?>, Doc> memberRenderer;
 
     EnumDeclarationPrinter(
@@ -63,7 +60,6 @@ final class EnumDeclarationPrinter {
             Function<List<? extends Node>, String> compactJoin,
             Function<Expression, Doc> expression,
             ToIntFunction<String> currentIndentedWidth,
-            BiPredicate<Node, Comment> startsAfterNodeOnSameLine,
             Function<BodyDeclaration<?>, Doc> memberRenderer) {
         this.comments = comments;
         this.rawSource = rawSource;
@@ -76,7 +72,6 @@ final class EnumDeclarationPrinter {
         this.compactJoin = compactJoin;
         this.expression = expression;
         this.currentIndentedWidth = currentIndentedWidth;
-        this.startsAfterNodeOnSameLine = startsAfterNodeOnSameLine;
         this.memberRenderer = memberRenderer;
     }
 
@@ -228,11 +223,8 @@ final class EnumDeclarationPrinter {
      * Returns orphan comments that belong to the body section rather than to the trailing side of an enum constant.
      */
     private List<Doc> enumBodyComments(EnumDeclaration declaration) {
-        return comments.orphanCommentStatements(declaration, comment -> comment.getRange()
-                .map(commentRange -> declaration.getEntries().stream()
-                        .flatMap(entry -> entry.getRange().stream())
-                        .noneMatch(entryRange -> commentRange.begin.line == entryRange.end.line))
-                .orElse(true));
+        return comments.orphanCommentStatements(declaration, comment -> declaration.getEntries().stream()
+                .noneMatch(entry -> CommentIndex.startsOnEndLine(entry, comment)));
     }
 
     /**
@@ -368,16 +360,14 @@ final class EnumDeclarationPrinter {
         if (next != null) {
             return next.getComment()
                     .filter(BlockComment.class::isInstance)
-                    .filter(comment -> startsAfterNodeOnSameLine.test(declaration, comment))
+                    .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(declaration, comment))
                     .map(comments::comment)
                     .orElse(Doc.EMPTY);
         }
         if (owner == null || !last) {
             return Doc.EMPTY;
         }
-        return Doc.concat(comments.orphanCommentStatements(owner, comment -> comment.getRange()
-                .flatMap(commentRange -> declaration.getRange()
-                        .map(entryRange -> commentRange.begin.line == entryRange.end.line))
-                .orElse(false)));
+        return Doc.concat(
+                comments.orphanCommentStatements(owner, comment -> CommentIndex.startsOnEndLine(declaration, comment)));
     }
 }

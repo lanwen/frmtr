@@ -165,12 +165,7 @@ final class BlockPrinter {
      * comments stay with the child statement printer so block-level sequencing does not pull them out of context.
      */
     private boolean commentInsideChildStatement(BlockStmt block, Comment comment) {
-        return comment.getRange()
-                .map(commentRange -> block.getStatements().stream()
-                        .flatMap(statement -> statement.getRange().stream())
-                        .anyMatch(statementRange -> commentRange.begin.line >= statementRange.begin.line
-                                && commentRange.begin.line <= statementRange.end.line))
-                .orElse(false);
+        return block.getStatements().stream().anyMatch(statement -> CommentIndex.startsInsideLineRange(comment, statement));
     }
 
     /**

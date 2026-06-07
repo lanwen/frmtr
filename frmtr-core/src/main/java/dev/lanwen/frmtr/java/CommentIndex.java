@@ -120,6 +120,33 @@ final class CommentIndex {
     }
 
     /**
+     * Reports whether {@code comment} begins inside the source line range covered by {@code node}.
+     *
+     * <p>This intentionally ignores columns because callers use it for coarse containment when JavaParser left a
+     * comment attached to an ancestor even though its starting line still belongs to a child node.
+     */
+    static boolean startsInsideLineRange(Comment comment, Node node) {
+        return comment.getRange()
+                .flatMap(commentRange -> node.getRange()
+                        .map(nodeRange -> commentRange.begin.line >= nodeRange.begin.line
+                                && commentRange.begin.line <= nodeRange.end.line))
+                .orElse(false);
+    }
+
+    /**
+     * Reports whether two nodes begin on the same source line.
+     *
+     * <p>The comparison is line-only so callers can preserve inline source shapes without making column distance part
+     * of the ownership decision.
+     */
+    static boolean sameBeginLine(Node left, Node right) {
+        return left.getRange()
+                .flatMap(leftRange -> right.getRange()
+                        .map(rightRange -> leftRange.begin.line == rightRange.begin.line))
+                .orElse(false);
+    }
+
+    /**
      * Reports whether {@code comment} begins on the same source line where {@code node} begins.
      */
     static boolean startsOnSameLine(Comment comment, Node node) {

@@ -1,11 +1,9 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.Range;
 import com.github.javaparser.ast.ArrayCreationLevel;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.comments.BlockComment;
-import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.expr.ArrayAccessExpr;
 import com.github.javaparser.ast.expr.ArrayCreationExpr;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
@@ -18,7 +16,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
-import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.ToIntFunction;
 
@@ -32,7 +29,7 @@ import java.util.function.ToIntFunction;
  * still needs one place to preserve compact/raw/comment behavior for array syntax.
  *
  * <p>{@link JavaPrinter} still owns broad expression dispatch, parenthesized suffix breaking, raw-source compact text,
- * width calculations, and source-range predicates. Field declaration layout still decides when an initializer line has
+ * width calculations. Field declaration layout still decides when an initializer line has
  * overflowed; this helper only provides the array-specific shapes after that caller decision.
  */
 final class ArrayExpressionPrinter {
@@ -43,8 +40,6 @@ final class ArrayExpressionPrinter {
     private final Function<Node, String> compactTypeLike;
     private final Function<Node, String> compact;
     private final ToIntFunction<String> currentIndentedWidth;
-    private final BiPredicate<Range, Range> startsBefore;
-    private final BiPredicate<Node, Comment> startsAfterNodeOnSameLine;
 
     ArrayExpressionPrinter(
             JavaFormatter.CommentTracker comments,
@@ -53,9 +48,7 @@ final class ArrayExpressionPrinter {
             BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix,
             Function<Node, String> compactTypeLike,
             Function<Node, String> compact,
-            ToIntFunction<String> currentIndentedWidth,
-            BiPredicate<Range, Range> startsBefore,
-            BiPredicate<Node, Comment> startsAfterNodeOnSameLine) {
+            ToIntFunction<String> currentIndentedWidth) {
         this.comments = comments;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
@@ -63,8 +56,6 @@ final class ArrayExpressionPrinter {
         this.compactTypeLike = compactTypeLike;
         this.compact = compact;
         this.currentIndentedWidth = currentIndentedWidth;
-        this.startsBefore = startsBefore;
-        this.startsAfterNodeOnSameLine = startsAfterNodeOnSameLine;
     }
 
     Doc arrayAccess(ArrayAccessExpr expression) {
@@ -219,9 +210,7 @@ final class ArrayExpressionPrinter {
     private Doc arrayInitializerValue(Expression value, Expression next) {
         List<Doc> parts = new ArrayList<>();
         Doc leadingComment = comments.ownComment(value, comment -> comment instanceof BlockComment
-                && comment.getRange()
-                        .flatMap(commentRange -> value.getRange().map(valueRange -> startsBefore.test(commentRange, valueRange)))
-                        .orElse(false));
+                && CommentIndex.startsBefore(comment, value));
         if (leadingComment != Doc.EMPTY) {
             parts.add(leadingComment);
             parts.add(Doc.text(" "));
@@ -230,11 +219,8 @@ final class ArrayExpressionPrinter {
         if (next != null) {
             Doc trailingComment = next.getComment()
                     .filter(BlockComment.class::isInstance)
-                    .filter(comment -> startsAfterNodeOnSameLine.test(value, comment))
-                    .filter(comment -> comment.getRange()
-                            .flatMap(commentRange -> next.getRange()
-                                    .map(nextRange -> commentRange.begin.line < nextRange.begin.line))
-                            .orElse(false))
+                    .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(value, comment))
+                    .filter(comment -> CommentIndex.startsBeforeBeginLine(comment, next))
                     .map(comments::comment)
                     .orElse(Doc.EMPTY);
             if (trailingComment != Doc.EMPTY) {

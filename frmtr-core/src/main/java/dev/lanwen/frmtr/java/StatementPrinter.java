@@ -527,10 +527,8 @@ final class StatementPrinter {
         return node.getParentNode()
                 .filter(BlockStmt.class::isInstance)
                 .map(BlockStmt.class::cast)
-                .map(parent -> Doc.concat(comments.orphanCommentStatements(parent, comment -> comment.getRange()
-                        .flatMap(commentRange -> node.getRange()
-                                .map(nodeRange -> commentRange.begin.line == nodeRange.end.line))
-                        .orElse(false))))
+                .map(parent -> Doc.concat(
+                        comments.orphanCommentStatements(parent, comment -> CommentIndex.startsOnEndLine(node, comment))))
                 .orElse(Doc.EMPTY);
     }
 
@@ -955,17 +953,10 @@ final class StatementPrinter {
             return Optional.empty();
         }
         Doc commentedStatement = Doc.concat(comment, Doc.text(" "), statementRenderer.apply(body));
-        if (sameBeginLine(loop, body)) {
+        if (CommentIndex.sameBeginLine(loop, body)) {
             return Optional.of(Doc.concat(Doc.text(" "), commentedStatement));
         }
         return Optional.of(Doc.indent(Doc.concat(Doc.HARD_LINE, commentedStatement)));
-    }
-
-    private boolean sameBeginLine(Node left, Node right) {
-        return left.getRange()
-                .flatMap(leftRange -> right.getRange()
-                        .map(rightRange -> leftRange.begin.line == rightRange.begin.line))
-                .orElse(false);
     }
 
     private Doc doStatement(DoStmt statement) {

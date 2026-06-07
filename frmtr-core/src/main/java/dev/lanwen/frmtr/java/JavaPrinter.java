@@ -161,9 +161,7 @@ final class JavaPrinter {
                 enclosedExpressions::brokenEnclosedForSuffix,
                 compactSource::compactTypeLike,
                 compactSource::compact,
-                this::currentIndentedWidth,
-                CommentIndex::startsBefore,
-                CommentIndex::startsAfterNodeOnSameLine);
+                this::currentIndentedWidth);
         this.objectCreations = new ObjectCreationPrinter(
                 comments,
                 types,
@@ -363,7 +361,6 @@ final class JavaPrinter {
                 compactSource::compactJoin,
                 this::expression,
                 this::currentIndentedWidth,
-                CommentIndex::startsAfterNodeOnSameLine,
                 this::body);
         this.records = new RecordDeclarationPrinter(
                 comments,

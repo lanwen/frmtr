@@ -54,7 +54,7 @@ frmtr {
 }
 ```
 
-Java source files under the Gradle build directory are excluded by default. The Gradle parser language level defaults to `AUTO`, which uses the Java toolchain first, then `sourceCompatibility`, and otherwise falls back to `LATEST_AVAILABLE`. Set `LATEST_AVAILABLE` to ignore the Gradle project target, or `UNDEFINED` for JavaParser raw mode. Check output prints changed and failed files; unified diffs for changed files are enabled by default.
+Java source files under the Gradle build directory are excluded by default. The Gradle parser language level defaults to `AUTO`, which uses the Java toolchain first, then `sourceCompatibility`, and otherwise falls back to `LATEST_AVAILABLE`. Set `LATEST_AVAILABLE` to ignore the Gradle project target and use JavaParser's bleeding-edge parser mode, or `UNDEFINED` for JavaParser raw mode. Check output prints changed and failed files; unified diffs for changed files are enabled by default.
 
 ## CLI
 
@@ -82,7 +82,7 @@ With no selectors, the CLI uses `./**/*.java` and checks formatting by default. 
 
 `--check` prints `✓` for files that are already formatted, `✗` for files that need formatting, and `!` for files that failed to parse or could not be read, followed by a concise summary. `--write` ends with a processed summary that counts files formatted, failed, and ignored by `.gitignore`. Add `--diff` to render unified diffs for files marked `✗`. Failure output is concise by default and includes source context for parse locations reported by JavaParser; add `--stacktrace` when debugging formatter or I/O failures.
 
-Use `--java-level` to choose the parser language level. The default is `LATEST_AVAILABLE`, which uses the newest stable level exposed by the bundled JavaParser dependency. Use `UNSET` for JavaParser raw mode, or a release value such as `17`, `JAVA_21`, or `JAVA_25`.
+Use `--java-level` to choose the parser language level. The default is `LATEST_AVAILABLE`, which uses JavaParser's bleeding-edge parser mode. Use `UNSET` for JavaParser raw mode, or a release value such as `17`, `JAVA_21`, or `JAVA_25` when you need a strict release gate.
 
 The formatter-wide default line width is 140 columns. Use `--line-width` in the CLI or `frmtr { java { lineWidth.set(...) } }` in Gradle to override it.
 

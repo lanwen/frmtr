@@ -12,7 +12,7 @@ import java.util.Objects;
  * <p>The default configuration is returned by {@link #defaults()}: 140 columns, four-space indentation, LF line
  * endings, a trailing newline, no raw-trailing-whitespace preservation, no require-pragma gate, source-preserving
  * single-parameter lambda parentheses, binary operators at the end of broken continuation lines, and the latest Java
- * language level exposed by the bundled JavaParser dependency.
+ * language level exposed by the bundled JavaParser dependency's bleeding-edge parser mode.
  *
  * @param lineWidth target maximum rendered line width. The renderer and Java-specific width gates use this value to
  *     decide whether grouped docs can stay flat or should break across lines. The value is a formatting target rather
@@ -354,8 +354,8 @@ public record FormatterOptions(
      * Selects the Java language level passed to JavaParser before formatting.
      *
      * <p>The formatter can only format source that the configured parser level accepts. Choosing a lower release can be
-     * useful when a project wants parser failures for newer syntax; choosing {@link #LATEST_AVAILABLE} tracks the
-     * bundled JavaParser dependency's newest stable support. The value does not otherwise change formatter style.
+     * useful when a project wants parser failures for newer syntax; choosing {@link #LATEST_AVAILABLE} uses the bundled
+     * JavaParser dependency's bleeding-edge parser mode. The value does not otherwise change formatter style.
      */
     public enum JavaLanguageLevel {
         /**
@@ -366,9 +366,11 @@ public record FormatterOptions(
          */
         UNSET,
         /**
-         * Uses the newest stable Java language level exposed by the bundled JavaParser dependency.
+         * Uses the newest Java language level exposed by the bundled JavaParser dependency's bleeding-edge parser mode.
          *
-         * <p>This is the default because it keeps the formatter accepting modern Java as JavaParser adds support.
+         * <p>This is the default because it keeps the formatter accepting modern Java as JavaParser adds support. It can
+         * accept syntax before JavaParser exposes a release-specific stable enum for that syntax, so callers that need a
+         * strict release gate should choose a concrete {@code JAVA_*} value instead.
          */
         LATEST_AVAILABLE,
 

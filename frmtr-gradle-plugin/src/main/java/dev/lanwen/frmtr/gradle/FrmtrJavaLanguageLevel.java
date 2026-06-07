@@ -7,8 +7,7 @@ public enum FrmtrJavaLanguageLevel {
      */
     AUTO,
     /**
-     * Uses the newest stable Java language level exposed by the bundled JavaParser dependency, regardless of the
-     * Gradle project target.
+     * Uses the bundled JavaParser dependency's bleeding-edge parser mode, regardless of the Gradle project target.
      */
     LATEST_AVAILABLE,
     /**

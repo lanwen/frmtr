@@ -77,30 +77,6 @@ final class ConditionalExpressionPrinter {
     }
 
     /**
-     * Names the ternary operator positions used when classifying source-attached line comments.
-     *
-     * <p>JavaParser attaches those comments to nearby expressions rather than operator tokens, so this enum gives the
-     * comment classifier a typed vocabulary without moving comment ownership out of this helper.
-     */
-    private enum TernaryOperator {
-        /** The {@code ?} operator that starts the then branch of a conditional expression. */
-        QUESTION("?"),
-
-        /** The {@code :} operator that starts the else branch of a conditional expression. */
-        COLON(":");
-
-        private final String token;
-
-        TernaryOperator(String token) {
-            this.token = token;
-        }
-
-        String token() {
-            return token;
-        }
-    }
-
-    /**
      * Names how a conditional expression's condition should render when the condition itself is a long binary tree.
      *
      * <p>The enum owns only the condition sub-layout. It leaves branch rendering, assignment detection, and the binary
@@ -274,13 +250,13 @@ final class ConditionalExpressionPrinter {
                 Doc.indent(Doc.concat(
                         Doc.HARD_LINE,
                         conditionalCommentedBranch(
-                                TernaryOperator.QUESTION,
+                                "?",
                                 expression.getThenExpr(),
                                 questionComment,
                                 thenTrailingComment),
                         Doc.HARD_LINE,
                         conditionalCommentedBranch(
-                                TernaryOperator.COLON,
+                                ":",
                                 expression.getElseExpr(),
                                 colonComment,
                                 elseTrailingComment)))));
@@ -294,7 +270,7 @@ final class ConditionalExpressionPrinter {
     }
 
     private boolean conditionalQuestionCommentTrailsCondition(ConditionalExpr expression, Comment comment) {
-        return commentAppearsAfterOperator(expression, comment, TernaryOperator.QUESTION)
+        return commentAppearsAfterOperator(expression, comment, "?")
                 && startsAfterNodeOnSameLine(expression.getCondition(), comment);
     }
 
@@ -303,13 +279,13 @@ final class ConditionalExpressionPrinter {
      * before or after the branch expression.
      */
     private Doc conditionalCommentedBranch(
-            TernaryOperator operator,
+            String operatorToken,
             Expression branch,
             Optional<Comment> leadingComment,
             Optional<Comment> trailingComment) {
         if (leadingComment.isPresent()) {
             return Doc.concat(
-                    Doc.text(operator.token() + " "),
+                    Doc.text(operatorToken + " "),
                     comments.comment(leadingComment.orElseThrow()),
                     Doc.HARD_LINE,
                     Doc.text("  "),
@@ -318,7 +294,7 @@ final class ConditionalExpressionPrinter {
         Doc trailing = trailingComment
                 .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
                 .orElse(Doc.EMPTY);
-        return Doc.concat(Doc.text(operator.token() + " "), expressionWithoutOwnCommentRenderer.apply(branch), trailing);
+        return Doc.concat(Doc.text(operatorToken + " "), expressionWithoutOwnCommentRenderer.apply(branch), trailing);
     }
 
     private boolean conditionalElseCommentIsStatementTrailing(ConditionalExpr expression, Comment comment) {
@@ -341,13 +317,13 @@ final class ConditionalExpressionPrinter {
     }
 
     private boolean commentAppearsAfterColon(ConditionalExpr expression, Comment comment) {
-        return commentAppearsAfterOperator(expression, comment, TernaryOperator.COLON);
+        return commentAppearsAfterOperator(expression, comment, ":");
     }
 
     private boolean commentAppearsAfterOperator(
             ConditionalExpr expression,
             Comment comment,
-            TernaryOperator operator) {
+            String operatorToken) {
         return expression.getTokenRange()
                 .flatMap(tokenRange -> expression.getRange().flatMap(expressionRange -> comment.getRange()
                         .map(commentRange -> {
@@ -363,7 +339,7 @@ final class ConditionalExpressionPrinter {
                                 return false;
                             }
                             String prefix = lines.get(lineIndex).substring(0, Math.min(column, lines.get(lineIndex).length()));
-                            return prefix.contains(operator.token());
+                            return prefix.contains(operatorToken);
                         })))
                 .orElse(false);
     }

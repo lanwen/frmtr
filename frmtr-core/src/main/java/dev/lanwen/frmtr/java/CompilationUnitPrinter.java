@@ -15,8 +15,8 @@ import java.util.function.Function;
  * Sequences the layout of a Java compilation unit after the parser has exposed package, import, module, and type nodes.
  *
  * <p>This helper owns only whole-file ordering: source-leading package comments, orphan comments before the first type,
- * the package line, ordered import blocks, optional module declarations, top-level declarations, compact unnamed-class
- * member expansion, and trailing orphan comments. It intentionally delegates package declaration text to
+ * the package line, an ordered import section, optional module declarations, top-level declarations, compact
+ * unnamed-class member expansion, and trailing orphan comments. It intentionally delegates package declaration text to
  * {@link PackageDeclarationPrinter}, import grouping and sorting to {@link ImportOrdering}, individual imports to {@link
  * ImportDeclarationPrinter}, module declaration formatting to {@link JavaPrinter}, and body declaration formatting back
  * to {@link JavaPrinter}. It does not print statements, expressions, raw body preservation, or any single-node

@@ -1,6 +1,5 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.Position;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.comments.BlockComment;
@@ -16,7 +15,6 @@ import com.github.javaparser.ast.stmt.Statement;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
@@ -390,9 +388,7 @@ final class LambdaExpressionPrinter {
         if (commentsAroundLambda.isEmpty()) {
             return Optional.empty();
         }
-        commentsAroundLambda.sort(Comparator.comparing(comment -> comment.getRange()
-                .map(range -> range.begin)
-                .orElse(Position.HOME)));
+        commentsAroundLambda.sort(CommentIndex.sourceOrderComparator());
         Optional<Doc> inlineBlockComment = inlineBlockCommentedExpressionLambdaArgument(prefix, lambdaExpr, commentsAroundLambda);
         if (inlineBlockComment.isPresent()) {
             return inlineBlockComment;

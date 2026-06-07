@@ -20,6 +20,8 @@ import java.util.List;
  * surrounding layout, and when a comment is rendered or marked as consumed by {@link JavaFormatter.CommentTracker}.
  */
 final class CommentIndex {
+    private static final Comparator<Comment> SOURCE_ORDER = Comparator.comparing(CommentIndex::beginPosition);
+
     private CommentIndex() {}
 
     /**
@@ -44,10 +46,18 @@ final class CommentIndex {
                 .filter(comment -> comment.getRange()
                         .map(range -> range.begin.line >= previousLine && range.begin.line < nextLine)
                         .orElse(false))
-                .sorted(Comparator.comparing(comment -> comment.getRange()
-                        .map(range -> range.begin)
-                        .orElse(Position.HOME)))
+                .sorted(sourceOrderComparator())
                 .toList();
+    }
+
+    /**
+     * Orders comments by the source position where JavaParser says each comment begins.
+     *
+     * <p>Comments without ranges fall back to {@link Position#HOME}, matching the formatter's existing local ordering
+     * logic for incomplete or synthetic parser nodes.
+     */
+    static Comparator<Comment> sourceOrderComparator() {
+        return SOURCE_ORDER;
     }
 
     /**
@@ -57,12 +67,17 @@ final class CommentIndex {
      * on that operand's printed line while leaving later gap comments to become standalone continuation lines.
      */
     static List<Comment> commentsStartingOnEndLine(Node node, List<Comment> comments) {
-        int nodeEndLine = node.getRange().map(range -> range.end.line).orElse(Integer.MIN_VALUE);
-        return comments.stream()
-                .filter(comment -> comment.getRange()
-                        .map(range -> range.begin.line == nodeEndLine)
-                        .orElse(false))
-                .toList();
+        return comments.stream().filter(comment -> startsOnEndLine(node, comment)).toList();
+    }
+
+    /**
+     * Reports whether {@code comment} begins on the same source line where {@code node} ends.
+     */
+    static boolean startsOnEndLine(Node node, Comment comment) {
+        return node.getRange()
+                .flatMap(nodeRange -> comment.getRange()
+                        .map(commentRange -> commentRange.begin.line == nodeRange.end.line))
+                .orElse(false);
     }
 
     /**
@@ -113,5 +128,9 @@ final class CommentIndex {
                         .map(commentRange -> commentRange.begin.line == nodeRange.end.line
                                 && commentRange.begin.column == nodeRange.end.column + 1))
                 .orElse(false);
+    }
+
+    private static Position beginPosition(Comment comment) {
+        return comment.getRange().map(range -> range.begin).orElse(Position.HOME);
     }
 }

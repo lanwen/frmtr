@@ -714,12 +714,9 @@ final class MethodCallPrinter {
     }
 
     private Doc textBlockSameLineTrailingComment(TextBlockLiteralExpr textBlockLiteralExpr, MethodCallExpr expression) {
-        int textBlockEndLine = textBlockLiteralExpr.getRange().map(range -> range.end.line).orElse(Integer.MIN_VALUE);
         return expression.getOrphanComments().stream()
                 .filter(LineComment.class::isInstance)
-                .filter(comment -> comment.getRange()
-                        .map(range -> range.begin.line == textBlockEndLine)
-                        .orElse(false))
+                .filter(comment -> CommentIndex.startsOnEndLine(textBlockLiteralExpr, comment))
                 .findFirst()
                 .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
                 .orElse(Doc.EMPTY);

@@ -1,6 +1,5 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.Position;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
@@ -26,7 +25,6 @@ import com.github.javaparser.ast.type.Type;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
@@ -657,9 +655,7 @@ final class FieldDeclarationPrinter {
                 .filter(comment -> CommentIndex.startsBefore(comment, initializer))
                 .ifPresent(leadingComments::add);
         List<Doc> docs = leadingComments.stream()
-                .sorted(Comparator.comparing(comment -> comment.getRange()
-                        .map(range -> range.begin)
-                        .orElse(Position.HOME)))
+                .sorted(CommentIndex.sourceOrderComparator())
                 .map(comments::comment)
                 .filter(doc -> doc != Doc.EMPTY)
                 .toList();

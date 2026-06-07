@@ -204,7 +204,7 @@ public final class JavaFormatter {
         Doc trailingLineComment(Node node) {
             return node.getComment()
                     .filter(LineComment.class::isInstance)
-                    .filter(comment -> sameEndLine(node, comment))
+                    .filter(comment -> CommentIndex.startsOnEndLine(node, comment))
                     .filter(printed::add)
                     .map(JavaFormatter::commentDoc)
                     .orElse(Doc.EMPTY);
@@ -244,13 +244,6 @@ public final class JavaFormatter {
 
         Doc comment(Comment comment) {
             return printed.add(comment) ? JavaFormatter.commentDoc(comment) : Doc.EMPTY;
-        }
-
-        private boolean sameEndLine(Node node, Comment comment) {
-            return node.getRange()
-                    .flatMap(nodeRange -> comment.getRange()
-                            .map(commentRange -> nodeRange.end.line == commentRange.begin.line))
-                    .orElse(false);
         }
     }
 

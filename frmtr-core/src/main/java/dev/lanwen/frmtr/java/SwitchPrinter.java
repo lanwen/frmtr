@@ -59,6 +59,43 @@ final class SwitchPrinter {
     private final ToIntFunction<String> currentIndentedWidth;
     private final Function<Node, Doc> sameLineBlockCommentBeforeNode;
 
+    /**
+     * Names the switch-label layouts after the caller has already selected structured switch-entry printing.
+     *
+     * <p>The enum owns only the local label shape. It does not decide whether an entry is raw-preserved, whether guards
+     * wrap, or how the entry body renders; those choices stay with the surrounding switch-entry pipeline.
+     */
+    private enum SwitchLabelLayout {
+        /** Keep the complete {@code case ...} label on one line because it fits or a single label does not need wrapping. */
+        FLAT,
+
+        /** Wrap one record-pattern label after {@code case} because the pattern itself exceeds the available width. */
+        SINGLE_WRAPPED_LABEL,
+
+        /** Put each label on its own line because a comma-separated label list exceeds the available width. */
+        WRAPPED_LABEL_LIST
+    }
+
+    /**
+     * Names the body shape of a switch entry after labels, guards, and comments have been classified.
+     *
+     * <p>The enum keeps the statement-group versus rule-entry state machine local to switch formatting. Nested
+     * statements, expressions, blocks, and raw source recovery remain delegated to their existing collaborators.
+     */
+    private enum SwitchEntryLayout {
+        /** Render an old-style {@code case:} statement group with zero or more nested statements. */
+        STATEMENT_GROUP,
+
+        /** Render a rule entry with no body statements, preserving only the {@code ->} marker. */
+        EMPTY_RULE,
+
+        /** Render a rule entry body on the next line because its body statement owns a leading comment. */
+        COMMENTED_RULE_BODY,
+
+        /** Render a rule entry body after {@code ->} on the same line through the normal body renderer. */
+        INLINE_RULE_BODY
+    }
+
     SwitchPrinter(
             JavaFormatter.CommentTracker comments,
             RawSource rawSource,
@@ -182,25 +219,38 @@ final class SwitchPrinter {
         }
         Doc label = switchEntryLabel(entry);
         Doc guard = switchEntryGuard(entry);
-        Doc entryDoc;
-        if (entry.getType() == SwitchEntry.Type.STATEMENT_GROUP) {
-            entryDoc = switchStatementGroupEntry(label, guard, entry.getStatements());
-        } else if (entry.getStatements().isEmpty()) {
-            entryDoc = Doc.concat(label, guard, Doc.text(" ->"));
-        } else {
-            Statement statement = entry.getStatements().get(0);
-            if (hasLeadingOwnComment(statement)) {
-                entryDoc = Doc.concat(
+        Doc entryDoc = switch (switchEntryLayout(entry)) {
+            case STATEMENT_GROUP -> switchStatementGroupEntry(label, guard, entry.getStatements());
+            case EMPTY_RULE -> Doc.concat(label, guard, Doc.text(" ->"));
+            case COMMENTED_RULE_BODY -> {
+                Statement statement = entry.getStatements().get(0);
+                yield Doc.concat(
                         label,
                         guard,
                         Doc.text(" ->"),
                         Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.apply(statement))));
-            } else {
-                entryDoc = Doc.concat(label, guard, Doc.text(" -> "), switchEntryBody(statement));
             }
-        }
+            case INLINE_RULE_BODY -> Doc.concat(
+                    label,
+                    guard,
+                    Doc.text(" -> "),
+                    switchEntryBody(entry.getStatements().get(0)));
+        };
         entryDoc = trailingComment == Doc.EMPTY ? entryDoc : Doc.concat(entryDoc, Doc.text(" "), trailingComment);
         return Doc.concat(leadingComment, entryDoc);
+    }
+
+    private SwitchEntryLayout switchEntryLayout(SwitchEntry entry) {
+        if (entry.getType() == SwitchEntry.Type.STATEMENT_GROUP) {
+            return SwitchEntryLayout.STATEMENT_GROUP;
+        }
+        if (entry.getStatements().isEmpty()) {
+            return SwitchEntryLayout.EMPTY_RULE;
+        }
+        if (hasLeadingOwnComment(entry.getStatements().get(0))) {
+            return SwitchEntryLayout.COMMENTED_RULE_BODY;
+        }
+        return SwitchEntryLayout.INLINE_RULE_BODY;
     }
 
     /**
@@ -218,20 +268,30 @@ final class SwitchPrinter {
                 .reduce((left, right) -> left + ", " + right)
                 .orElse("");
         String flat = "case " + flatLabels;
-        if (entry.getLabels().size() == 1 && !switchLabelBreaks(entry.getLabels().get(0))
-                || currentIndentedWidth.applyAsInt(flat + " -> {}") <= options.lineWidth()) {
-            return Doc.text(flat);
+        return switch (switchLabelLayout(entry, flat)) {
+            case FLAT -> Doc.text(flat);
+            case SINGLE_WRAPPED_LABEL -> Doc.concat(Doc.text("case "), switchLabel(entry.getLabels().get(0)));
+            case WRAPPED_LABEL_LIST -> Doc.concat(
+                    Doc.text("case"),
+                    Doc.indent(Doc.concat(
+                            Doc.HARD_LINE,
+                            Doc.join(
+                                    Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                                    entry.getLabels().stream().map(label -> Doc.text(switchLabelText(label))).toList()))));
+        };
+    }
+
+    private SwitchLabelLayout switchLabelLayout(SwitchEntry entry, String flat) {
+        if (entry.getLabels().size() == 1 && !switchLabelBreaks(entry.getLabels().get(0))) {
+            return SwitchLabelLayout.FLAT;
+        }
+        if (currentIndentedWidth.applyAsInt(flat + " -> {}") <= options.lineWidth()) {
+            return SwitchLabelLayout.FLAT;
         }
         if (entry.getLabels().size() == 1) {
-            return Doc.concat(Doc.text("case "), switchLabel(entry.getLabels().get(0)));
+            return SwitchLabelLayout.SINGLE_WRAPPED_LABEL;
         }
-        return Doc.concat(
-                Doc.text("case"),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(
-                                Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                                entry.getLabels().stream().map(label -> Doc.text(switchLabelText(label))).toList()))));
+        return SwitchLabelLayout.WRAPPED_LABEL_LIST;
     }
 
     /**

@@ -54,6 +54,69 @@ final class ConditionalExpressionPrinter {
     private final BiFunction<Expression, Boolean, Doc> nestedBinaryExpressionLinesRenderer;
     private final Predicate<Expression> expressionHasParenthesizedNestedBinary;
 
+    /**
+     * Names whether conditional-expression layout is caller-forced or selected by local width and comment checks.
+     *
+     * <p>The enum owns only the ternary break mode. Assignment, return, field, and enclosed-expression callers still
+     * decide when their surrounding context requires the forced mode.
+     */
+    private enum ConditionalBreakMode {
+        /** Keep the conditional flat when source-equivalent text fits and no comments or nesting require rebuilding. */
+        AUTO,
+
+        /** Print the broken ternary shape because a caller has already selected a multiline conditional context. */
+        FORCED;
+
+        static ConditionalBreakMode fromForced(boolean forced) {
+            return forced ? FORCED : AUTO;
+        }
+
+        boolean isForced() {
+            return this == FORCED;
+        }
+    }
+
+    /**
+     * Names the ternary operator positions used when classifying source-attached line comments.
+     *
+     * <p>JavaParser attaches those comments to nearby expressions rather than operator tokens, so this enum gives the
+     * comment classifier a typed vocabulary without moving comment ownership out of this helper.
+     */
+    private enum TernaryOperator {
+        /** The {@code ?} operator that starts the then branch of a conditional expression. */
+        QUESTION("?"),
+
+        /** The {@code :} operator that starts the else branch of a conditional expression. */
+        COLON(":");
+
+        private final String token;
+
+        TernaryOperator(String token) {
+            this.token = token;
+        }
+
+        String token() {
+            return token;
+        }
+    }
+
+    /**
+     * Names how a conditional expression's condition should render when the condition itself is a long binary tree.
+     *
+     * <p>The enum owns only the condition sub-layout. It leaves branch rendering, assignment detection, and the binary
+     * expression continuation policy with their existing owners.
+     */
+    private enum ConditionalConditionLayout {
+        /** Render the condition through ordinary expression dispatch. */
+        EXPRESSION,
+
+        /** Render a wide binary condition with the assignment/initializer continuation shape. */
+        ASSIGNMENT_CONTINUATION_BINARY,
+
+        /** Render a wide binary condition with nested-expression continuation indentation. */
+        NESTED_BINARY
+    }
+
     ConditionalExpressionPrinter(
             JavaFormatter.CommentTracker comments,
             FormatterOptions options,
@@ -93,7 +156,9 @@ final class ConditionalExpressionPrinter {
             return Optional.of(Doc.concat(
                     expressionRenderer.apply(assignExpr.getTarget()),
                     Doc.text(" " + assignExpr.getOperator().asString()),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, conditionalExpression(conditionalExpr, true)))));
+                    Doc.indent(Doc.concat(
+                            Doc.HARD_LINE,
+                            conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED)))));
         }
         String conditionLine = compact.apply(assignExpr.getTarget()) + " "
                 + assignExpr.getOperator().asString()
@@ -104,7 +169,7 @@ final class ConditionalExpressionPrinter {
             return Optional.of(Doc.concat(
                     expressionRenderer.apply(assignExpr.getTarget()),
                     Doc.text(" " + assignExpr.getOperator().asString() + " "),
-                    conditionalExpression(conditionalExpr, true)));
+                    conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED)));
         }
         return Optional.empty();
     }
@@ -127,7 +192,7 @@ final class ConditionalExpressionPrinter {
     }
 
     Doc conditionalExpression(ConditionalExpr expression) {
-        return conditionalExpression(expression, false);
+        return conditionalExpression(expression, ConditionalBreakMode.AUTO);
     }
 
     /**
@@ -135,12 +200,16 @@ final class ConditionalExpressionPrinter {
      * the broken ternary shape.
      */
     Doc conditionalExpression(ConditionalExpr expression, boolean forceBreak) {
+        return conditionalExpression(expression, ConditionalBreakMode.fromForced(forceBreak));
+    }
+
+    private Doc conditionalExpression(ConditionalExpr expression, ConditionalBreakMode breakMode) {
         Optional<Doc> commented = commentedConditionalExpression(expression);
         if (commented.isPresent()) {
             return commented.orElseThrow();
         }
         String flat = compact.apply(expression);
-        if (!forceBreak && currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
+        if (!breakMode.isForced() && currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
             if (expressionHasParenthesizedNestedBinary.test(expression)) {
                 return Doc.concat(
                         conditionalCondition(expression),
@@ -206,9 +275,17 @@ final class ConditionalExpressionPrinter {
                 conditionalConditionWithTrailingComment(expression.getCondition(), conditionTrailingComment),
                 Doc.indent(Doc.concat(
                         Doc.HARD_LINE,
-                        conditionalCommentedBranch("?", expression.getThenExpr(), questionComment, thenTrailingComment),
+                        conditionalCommentedBranch(
+                                TernaryOperator.QUESTION,
+                                expression.getThenExpr(),
+                                questionComment,
+                                thenTrailingComment),
                         Doc.HARD_LINE,
-                        conditionalCommentedBranch(":", expression.getElseExpr(), colonComment, elseTrailingComment)))));
+                        conditionalCommentedBranch(
+                                TernaryOperator.COLON,
+                                expression.getElseExpr(),
+                                colonComment,
+                                elseTrailingComment)))));
     }
 
     private Doc conditionalConditionWithTrailingComment(Expression condition, Optional<Comment> trailingComment) {
@@ -219,7 +296,7 @@ final class ConditionalExpressionPrinter {
     }
 
     private boolean conditionalQuestionCommentTrailsCondition(ConditionalExpr expression, Comment comment) {
-        return commentAppearsAfterOperator(expression, comment, "?")
+        return commentAppearsAfterOperator(expression, comment, TernaryOperator.QUESTION)
                 && startsAfterNodeOnSameLine(expression.getCondition(), comment);
     }
 
@@ -228,13 +305,13 @@ final class ConditionalExpressionPrinter {
      * before or after the branch expression.
      */
     private Doc conditionalCommentedBranch(
-            String operator,
+            TernaryOperator operator,
             Expression branch,
             Optional<Comment> leadingComment,
             Optional<Comment> trailingComment) {
         if (leadingComment.isPresent()) {
             return Doc.concat(
-                    Doc.text(operator + " "),
+                    Doc.text(operator.token() + " "),
                     comments.comment(leadingComment.orElseThrow()),
                     Doc.HARD_LINE,
                     Doc.text("  "),
@@ -243,7 +320,7 @@ final class ConditionalExpressionPrinter {
         Doc trailing = trailingComment
                 .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
                 .orElse(Doc.EMPTY);
-        return Doc.concat(Doc.text(operator + " "), expressionWithoutOwnCommentRenderer.apply(branch), trailing);
+        return Doc.concat(Doc.text(operator.token() + " "), expressionWithoutOwnCommentRenderer.apply(branch), trailing);
     }
 
     private boolean conditionalElseCommentIsStatementTrailing(ConditionalExpr expression, Comment comment) {
@@ -266,10 +343,13 @@ final class ConditionalExpressionPrinter {
     }
 
     private boolean commentAppearsAfterColon(ConditionalExpr expression, Comment comment) {
-        return commentAppearsAfterOperator(expression, comment, ":");
+        return commentAppearsAfterOperator(expression, comment, TernaryOperator.COLON);
     }
 
-    private boolean commentAppearsAfterOperator(ConditionalExpr expression, Comment comment, String operator) {
+    private boolean commentAppearsAfterOperator(
+            ConditionalExpr expression,
+            Comment comment,
+            TernaryOperator operator) {
         return expression.getTokenRange()
                 .flatMap(tokenRange -> expression.getRange().flatMap(expressionRange -> comment.getRange()
                         .map(commentRange -> {
@@ -285,7 +365,7 @@ final class ConditionalExpressionPrinter {
                                 return false;
                             }
                             String prefix = lines.get(lineIndex).substring(0, Math.min(column, lines.get(lineIndex).length()));
-                            return prefix.contains(operator);
+                            return prefix.contains(operator.token());
                         })))
                 .orElse(false);
     }
@@ -300,14 +380,24 @@ final class ConditionalExpressionPrinter {
      */
     private Doc conditionalCondition(ConditionalExpr expression) {
         Expression condition = expression.getCondition();
-        if (condition instanceof BinaryExpr
-                && continuationStatementWidth.applyAsInt(compact.apply(condition)) > options.lineWidth()) {
-            if (conditionalIsAssignmentValue(expression) || conditionalIsVariableInitializer(expression)) {
-                return binaryExpressionLinesRenderer.apply(condition, true);
-            }
-            return nestedBinaryExpressionLinesRenderer.apply(condition, true);
+        return switch (conditionalConditionLayout(expression, condition)) {
+            case EXPRESSION -> expressionRenderer.apply(condition);
+            case ASSIGNMENT_CONTINUATION_BINARY -> binaryExpressionLinesRenderer.apply(condition, true);
+            case NESTED_BINARY -> nestedBinaryExpressionLinesRenderer.apply(condition, true);
+        };
+    }
+
+    private ConditionalConditionLayout conditionalConditionLayout(
+            ConditionalExpr expression,
+            Expression condition) {
+        if (!(condition instanceof BinaryExpr)
+                || continuationStatementWidth.applyAsInt(compact.apply(condition)) <= options.lineWidth()) {
+            return ConditionalConditionLayout.EXPRESSION;
         }
-        return expressionRenderer.apply(condition);
+        if (conditionalIsAssignmentValue(expression) || conditionalIsVariableInitializer(expression)) {
+            return ConditionalConditionLayout.ASSIGNMENT_CONTINUATION_BINARY;
+        }
+        return ConditionalConditionLayout.NESTED_BINARY;
     }
 
     private boolean conditionalIsAssignmentValue(ConditionalExpr expression) {
@@ -329,7 +419,7 @@ final class ConditionalExpressionPrinter {
 
     private Doc conditionalBranch(Expression branch) {
         if (branch instanceof ConditionalExpr conditionalExpr) {
-            return conditionalExpression(conditionalExpr, true);
+            return conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED);
         }
         return expressionRenderer.apply(branch);
     }

@@ -61,6 +61,64 @@ final class MethodCallPrinter {
     private final ToIntFunction<String> currentIndentedWidth;
     private final ToIntFunction<String> blockStatementWidth;
 
+    /**
+     * Names whether method-call argument and chain layout is caller-forced or width/comment-driven.
+     *
+     * <p>The enum owns only the local break-mode distinction. It does not decide which expressions are method calls,
+     * when a surrounding statement overflowed, or how arguments render after a break has been selected.
+     */
+    private enum MethodCallBreakMode {
+        /** Let width and comment checks decide whether the call stays flat, groups softly, or becomes a chain. */
+        AUTO,
+
+        /** Preserve a caller-selected broken call shape because the surrounding expression already overflowed. */
+        FORCED;
+
+        static MethodCallBreakMode fromForced(boolean forced) {
+            return forced ? FORCED : AUTO;
+        }
+
+        boolean isForced() {
+            return this == FORCED;
+        }
+
+        Doc argumentLine() {
+            return isForced() ? Doc.HARD_LINE : Doc.SOFT_LINE;
+        }
+    }
+
+    /**
+     * Names how a selected method-chain root should be printed after root promotion has adjusted the chain.
+     *
+     * <p>The enum is deliberately narrower than the chain collector: it only records the rendering policy for the root
+     * expression. Segment collection, comment detection, and argument layout stay with the existing chain methods.
+     */
+    private enum ChainRootRendering {
+        /** Render the selected root through ordinary expression dispatch. */
+        EXPRESSION_RENDERER,
+
+        /** Render a promoted method-call root inline so its scope, name, and compact arguments stay on the root line. */
+        INLINE_PROMOTED_METHOD_CALL,
+
+        /** Render an object-creation root through the forced broken-constructor path selected by the caller. */
+        BROKEN_OBJECT_CREATION
+    }
+
+    /**
+     * Carries the selected method-chain root, remaining call segments, and root rendering policy together.
+     *
+     * <p>This keeps root promotion from leaking boolean flags into the final chain assembly. The model does not own
+     * segment rendering or decide whether a chain should be printed at all.
+     */
+    private record MethodCallChainState(
+            Expression root,
+            List<MethodCallExpr> calls,
+            ChainRootRendering rootRendering) {
+        MethodCallChainState {
+            calls = List.copyOf(calls);
+        }
+    }
+
     MethodCallPrinter(
             JavaFormatter.CommentTracker comments,
             FormatterOptions options,
@@ -95,11 +153,11 @@ final class MethodCallPrinter {
     }
 
     Doc methodCall(MethodCallExpr expression) {
-        return methodCall(expression, false);
+        return methodCall(expression, MethodCallBreakMode.AUTO);
     }
 
     Doc brokenMethodCall(MethodCallExpr expression) {
-        return methodCall(expression, true);
+        return methodCall(expression, MethodCallBreakMode.FORCED);
     }
 
     /**
@@ -108,7 +166,7 @@ final class MethodCallPrinter {
      * <p>The unforced path tries a chain shape only when the call itself asks for it; the forced path is used by
      * surrounding expression printers that already decided the call arguments must break.
      */
-    private Doc methodCall(MethodCallExpr expression, boolean forceBreak) {
+    private Doc methodCall(MethodCallExpr expression, MethodCallBreakMode breakMode) {
         if (expression.getScope().isEmpty()
                 && expression.getNameAsString().equals("yield")
                 && !expression.getArguments().isEmpty()) {
@@ -120,7 +178,7 @@ final class MethodCallPrinter {
                     Doc.text("."),
                     methodCallWithoutScope(expression));
         }
-        if (!forceBreak) {
+        if (!breakMode.isForced()) {
             Optional<Doc> chain = methodCallChain(expression);
             if (chain.isPresent()) {
                 return chain.orElseThrow();
@@ -154,20 +212,20 @@ final class MethodCallPrinter {
         if (singleTextBlockArgument.isPresent()) {
             return singleTextBlockArgument.orElseThrow();
         }
-        Optional<Doc> singleBinaryArgument = singleBinaryArgument(prefix, expression.getArguments(), forceBreak);
+        Optional<Doc> singleBinaryArgument = singleBinaryArgument(prefix, expression.getArguments(), breakMode);
         if (singleBinaryArgument.isPresent()) {
             return singleBinaryArgument.orElseThrow();
         }
         Doc call = Doc.concat(
                 Doc.text(prefix + "("),
                 Doc.indent(Doc.concat(
-                        methodCallLine(forceBreak),
+                        methodCallLine(breakMode),
                         Doc.join(Doc.concat(Doc.text(","), Doc.LINE), expression.getArguments().stream()
                                 .map(expressionRenderer)
                                 .toList()))),
-                methodCallLine(forceBreak),
+                methodCallLine(breakMode),
                 Doc.text(")"));
-        return forceBreak ? call : Doc.group(call);
+        return breakMode.isForced() ? call : Doc.group(call);
     }
 
     String methodCallPrefix(MethodCallExpr expression) {
@@ -209,11 +267,11 @@ final class MethodCallPrinter {
     }
 
     Optional<Doc> methodCallChain(MethodCallExpr expression) {
-        return methodCallChain(expression, false);
+        return methodCallChain(expression, MethodCallBreakMode.AUTO);
     }
 
     Optional<Doc> forcedMethodCallChain(MethodCallExpr expression) {
-        return methodCallChain(expression, true);
+        return methodCallChain(expression, MethodCallBreakMode.FORCED);
     }
 
     /**
@@ -223,8 +281,12 @@ final class MethodCallPrinter {
      * contexts that already know the surrounding line overflowed and need a broken call shape.
      */
     Optional<Doc> methodCallChain(MethodCallExpr expression, boolean force) {
+        return methodCallChain(expression, MethodCallBreakMode.fromForced(force));
+    }
+
+    private Optional<Doc> methodCallChain(MethodCallExpr expression, MethodCallBreakMode breakMode) {
         boolean chainHasComments = methodCallChainHasComments(expression);
-        if ((!force && !chainHasComments && compact.apply(expression).length() <= options.lineWidth())
+        if ((!breakMode.isForced() && !chainHasComments && compact.apply(expression).length() <= options.lineWidth())
                 || expression.getScope().isEmpty()) {
             return Optional.empty();
         }
@@ -235,12 +297,12 @@ final class MethodCallPrinter {
         if (calls.isEmpty()
                 || (calls.size() < 2
                         && !(root instanceof MethodCallExpr)
-                        && !(force && root instanceof ObjectCreationExpr)
+                        && !(breakMode.isForced() && root instanceof ObjectCreationExpr)
                         && !rootHasComments
                         && !singleCommentedSegment)) {
             return Optional.empty();
         }
-        if (force
+        if (breakMode.isForced()
                 && calls.size() == 1
                 && root.getAllContainedComments().isEmpty()
                 && calls.getFirst().getAllContainedComments().isEmpty()
@@ -260,30 +322,11 @@ final class MethodCallPrinter {
                     expressionRenderer.apply(methodRoot),
                     Doc.indent(Doc.concat(Doc.HARD_LINE, fieldAccessMethodCallSegment(fieldAccess, calls.getFirst())))));
         }
-        boolean inlinePromotedRoot = false;
-        if (chainHasComments) {
-            int firstCommentedSegment = firstCommentedChainSegment(calls);
-            if (firstCommentedSegment > 0 && methodCallChainPromotesFirstCall(root)) {
-                root = calls.get(firstCommentedSegment - 1);
-                calls = new ArrayList<>(calls.subList(firstCommentedSegment, calls.size()));
-            } else if (firstCommentedSegment == 0
-                    && root instanceof FieldAccessExpr
-                    && !root.getAllContainedComments().isEmpty()
-                    && calls.size() > 1) {
-                root = calls.removeFirst();
-                inlinePromotedRoot = true;
-            }
-        } else if (methodCallChainShouldPromoteFirstCallForArgumentComments(root, calls)) {
-            root = calls.removeFirst();
-        } else if (methodCallChainShouldPromoteFirstCall(force, root, calls)) {
-            root = calls.removeFirst();
-        }
-        Doc rootDoc = inlinePromotedRoot && root instanceof MethodCallExpr methodCall
-                ? inlineMethodCall(methodCall)
-                : force && root instanceof ObjectCreationExpr objectCreation
-                ? brokenObjectCreationRenderer.apply(objectCreation)
-                : expressionRenderer.apply(root);
-        if (force && root instanceof ObjectCreationExpr && calls.size() == 1) {
+        MethodCallChainState chainState = methodCallChainState(root, calls, chainHasComments, breakMode);
+        root = chainState.root();
+        calls = chainState.calls();
+        Doc rootDoc = methodCallChainRootDoc(chainState);
+        if (chainState.rootRendering() == ChainRootRendering.BROKEN_OBJECT_CREATION && calls.size() == 1) {
             return Optional.of(Doc.concat(rootDoc, methodCallChainSegment(calls.getFirst())));
         }
         if (root instanceof MethodCallExpr
@@ -298,6 +341,51 @@ final class MethodCallPrinter {
                 Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, calls.stream()
                         .map(this::methodCallChainSegment)
                         .toList())))));
+    }
+
+    private MethodCallChainState methodCallChainState(
+            Expression root,
+            List<MethodCallExpr> calls,
+            boolean chainHasComments,
+            MethodCallBreakMode breakMode) {
+        ChainRootRendering rootRendering = ChainRootRendering.EXPRESSION_RENDERER;
+        List<MethodCallExpr> remainingCalls = calls;
+        if (chainHasComments) {
+            int firstCommentedSegment = firstCommentedChainSegment(calls);
+            if (firstCommentedSegment > 0 && methodCallChainPromotesFirstCall(root)) {
+                root = calls.get(firstCommentedSegment - 1);
+                remainingCalls = new ArrayList<>(calls.subList(firstCommentedSegment, calls.size()));
+            } else if (firstCommentedSegment == 0
+                    && root instanceof FieldAccessExpr
+                    && !root.getAllContainedComments().isEmpty()
+                    && calls.size() > 1) {
+                root = calls.getFirst();
+                remainingCalls = new ArrayList<>(calls.subList(1, calls.size()));
+                rootRendering = ChainRootRendering.INLINE_PROMOTED_METHOD_CALL;
+            }
+        } else if (methodCallChainShouldPromoteFirstCallForArgumentComments(root, calls)) {
+            root = calls.getFirst();
+            remainingCalls = new ArrayList<>(calls.subList(1, calls.size()));
+        } else if (methodCallChainShouldPromoteFirstCall(breakMode, root, calls)) {
+            root = calls.getFirst();
+            remainingCalls = new ArrayList<>(calls.subList(1, calls.size()));
+        }
+        if (rootRendering == ChainRootRendering.EXPRESSION_RENDERER
+                && breakMode.isForced()
+                && root instanceof ObjectCreationExpr) {
+            rootRendering = ChainRootRendering.BROKEN_OBJECT_CREATION;
+        }
+        return new MethodCallChainState(root, remainingCalls, rootRendering);
+    }
+
+    private Doc methodCallChainRootDoc(MethodCallChainState chainState) {
+        return switch (chainState.rootRendering()) {
+            case INLINE_PROMOTED_METHOD_CALL -> chainState.root() instanceof MethodCallExpr methodCall
+                    ? inlineMethodCall(methodCall)
+                    : expressionRenderer.apply(chainState.root());
+            case BROKEN_OBJECT_CREATION -> brokenObjectCreationRenderer.apply((ObjectCreationExpr) chainState.root());
+            case EXPRESSION_RENDERER -> expressionRenderer.apply(chainState.root());
+        };
     }
 
     private Optional<Doc> compactRootWithBrokenFinalSegment(Expression root, MethodCallExpr call) {
@@ -459,11 +547,14 @@ final class MethodCallPrinter {
                 && Character.isUpperCase(root.asNameExpr().getNameAsString().charAt(0));
     }
 
-    private boolean methodCallChainShouldPromoteFirstCall(boolean force, Expression root, List<MethodCallExpr> calls) {
+    private boolean methodCallChainShouldPromoteFirstCall(
+            MethodCallBreakMode breakMode,
+            Expression root,
+            List<MethodCallExpr> calls) {
         if (!methodCallChainPromotesFirstCall(root) || calls.isEmpty()) {
             return false;
         }
-        return force || calls.getFirst().getArguments().stream()
+        return breakMode.isForced() || calls.getFirst().getArguments().stream()
                 .anyMatch(argument -> argument instanceof LambdaExpr lambdaExpr
                         && lambdaExpr.getBody().isBlockStmt());
     }
@@ -638,11 +729,14 @@ final class MethodCallPrinter {
      * <p>Binary expressions have their own continuation policy, so the call printer only decides that the binary
      * argument gets the entire broken argument list to itself.
      */
-    private Optional<Doc> singleBinaryArgument(String prefix, NodeList<Expression> arguments, boolean forceBreak) {
+    private Optional<Doc> singleBinaryArgument(
+            String prefix,
+            NodeList<Expression> arguments,
+            MethodCallBreakMode breakMode) {
         if (arguments.size() != 1 || !(arguments.get(0) instanceof BinaryExpr binaryExpr)) {
             return Optional.empty();
         }
-        if (!forceBreak
+        if (!breakMode.isForced()
                 && currentIndentedWidth.applyAsInt(prefix + "(" + compact.apply(binaryExpr) + ")") <= options.lineWidth()) {
             return Optional.empty();
         }
@@ -679,8 +773,8 @@ final class MethodCallPrinter {
                         && enclosedExpr.getInner() instanceof CastExpr;
     }
 
-    Doc methodCallLine(boolean forceBreak) {
-        return forceBreak ? Doc.HARD_LINE : Doc.SOFT_LINE;
+    private Doc methodCallLine(MethodCallBreakMode breakMode) {
+        return breakMode.argumentLine();
     }
 
     private boolean startsOnSameLine(Comment comment, Node node) {

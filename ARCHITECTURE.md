@@ -80,7 +80,7 @@ The public `Frmtr` API wraps recoverable internal formatter failures, including 
 
 `CommentTracker` preserves comments currently exposed by JavaParser as leading or orphan comments. Comment handling is expected to become more precise as the formatter grows.
 
-`CommentIndex` centralizes read-only source-position classification for comments, including line/column comparisons, source-order sorting, contained line-comment selection, and between-node comment gaps. It does not render comments or mutate printed-comment state; `CommentTracker` remains responsible for rendered comment docs and consumption, while caller printers and `CommentPlacement` decide spacing and layout context.
+`CommentIndex` centralizes read-only source-position classification for comments, including explicit-fallback begin/end line lookups, line/column comparisons, source-order sorting, contained line-comment selection, and between-node comment gaps. It does not render comments or mutate printed-comment state; `CommentTracker` remains responsible for rendered comment docs and consumption, while caller printers and `CommentPlacement` decide spacing and layout context.
 
 ## CLI
 

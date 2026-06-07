@@ -121,7 +121,7 @@ final class MemberBlockPrinter {
     private Doc memberContents(Node owner, NodeList<BodyDeclaration<?>> members, List<Doc> memberDocs) {
         List<Doc> contents = new ArrayList<>();
         List<Comment> orphanComments = owner.getOrphanComments().stream()
-                .sorted(Comparator.comparingInt(this::commentBeginLine))
+                .sorted(Comparator.comparingInt(comment -> CommentIndex.beginLine(comment, Integer.MAX_VALUE)))
                 .toList();
         int orphanIndex = 0;
         int previousEndLine = Integer.MIN_VALUE;
@@ -129,25 +129,31 @@ final class MemberBlockPrinter {
         boolean previousWasMember = false;
         for (int i = 0; i < memberDocs.size(); i++) {
             BodyDeclaration<?> currentMember = members.get(i);
-            int currentBeginLine = beginLine(currentMember);
+            int currentBeginLine = CommentIndex.beginLine(currentMember, Integer.MAX_VALUE);
             // Orphan comments that start before this declaration belong in the source gap before the member.
             while (orphanIndex < orphanComments.size()
-                    && commentBeginLine(orphanComments.get(orphanIndex)) < currentBeginLine) {
+                    && CommentIndex.beginLine(orphanComments.get(orphanIndex), Integer.MAX_VALUE) < currentBeginLine) {
                 Comment comment = orphanComments.get(orphanIndex++);
                 addMemberContentSeparator(
-                        contents, owner, previousEndLine, commentBeginLine(comment), previousWasMember, null, null);
+                        contents,
+                        owner,
+                        previousEndLine,
+                        CommentIndex.beginLine(comment, Integer.MAX_VALUE),
+                        previousWasMember,
+                        null,
+                        null);
                 Doc commentDoc = comments.comment(comment);
                 // Already-printed comments return EMPTY, so separator state only moves when text is emitted.
                 if (commentDoc != Doc.EMPTY) {
                     contents.add(commentDoc);
-                    previousEndLine = commentEndLine(comment);
+                    previousEndLine = CommentIndex.endLine(comment, Integer.MAX_VALUE);
                     previousWasMember = false;
                 }
             }
             addMemberContentSeparator(
                     contents, owner, previousEndLine, currentBeginLine, previousWasMember, previousMember, currentMember);
             contents.add(memberDocs.get(i));
-            previousEndLine = endLine(currentMember);
+            previousEndLine = CommentIndex.endLine(currentMember, Integer.MAX_VALUE);
             previousMember = currentMember;
             previousWasMember = true;
         }
@@ -155,12 +161,18 @@ final class MemberBlockPrinter {
         while (orphanIndex < orphanComments.size()) {
             Comment comment = orphanComments.get(orphanIndex++);
             addMemberContentSeparator(
-                    contents, owner, previousEndLine, commentBeginLine(comment), previousWasMember, null, null);
+                    contents,
+                    owner,
+                    previousEndLine,
+                    CommentIndex.beginLine(comment, Integer.MAX_VALUE),
+                    previousWasMember,
+                    null,
+                    null);
             Doc commentDoc = comments.comment(comment);
             // Already-printed comments return EMPTY, so separator state only moves when text is emitted.
             if (commentDoc != Doc.EMPTY) {
                 contents.add(commentDoc);
-                previousEndLine = commentEndLine(comment);
+                previousEndLine = CommentIndex.endLine(comment, Integer.MAX_VALUE);
                 previousWasMember = false;
             }
         }
@@ -198,34 +210,6 @@ final class MemberBlockPrinter {
      */
     private Doc sourceLineSeparator(int previousEndLine, int currentBeginLine) {
         return currentBeginLine > previousEndLine + 1 ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;
-    }
-
-    /**
-     * Returns the source start line for a node, placing range-less nodes after source-backed content.
-     */
-    private int beginLine(Node node) {
-        return node.getRange().map(range -> range.begin.line).orElse(Integer.MAX_VALUE);
-    }
-
-    /**
-     * Returns the source end line for a node, placing range-less nodes after source-backed content.
-     */
-    private int endLine(Node node) {
-        return node.getRange().map(range -> range.end.line).orElse(Integer.MAX_VALUE);
-    }
-
-    /**
-     * Returns the source start line for an orphan comment, placing range-less comments after source-backed content.
-     */
-    private int commentBeginLine(Comment comment) {
-        return comment.getRange().map(range -> range.begin.line).orElse(Integer.MAX_VALUE);
-    }
-
-    /**
-     * Returns the source end line for an orphan comment, placing range-less comments after source-backed content.
-     */
-    private int commentEndLine(Comment comment) {
-        return comment.getRange().map(range -> range.end.line).orElse(Integer.MAX_VALUE);
     }
 
     /**

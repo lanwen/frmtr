@@ -3,7 +3,6 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.modules.ModuleDeclaration;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
@@ -71,7 +70,8 @@ final class CompilationUnitPrinter {
             parts.add(Doc.HARD_LINE);
         }
         int firstTypeLine = firstTypeLine(unit);
-        Doc orphanComments = comments.orphanComments(unit, comment -> commentBeginLine(comment) < firstTypeLine);
+        Doc orphanComments = comments.orphanComments(
+                unit, comment -> CommentIndex.beginLine(comment, Integer.MAX_VALUE) < firstTypeLine);
         if (orphanComments != Doc.EMPTY) {
             if (!parts.isEmpty()) {
                 parts.add(Doc.HARD_LINE);
@@ -109,7 +109,8 @@ final class CompilationUnitPrinter {
             }
             parts.add(Doc.join(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE), topLevelDeclarations));
         }
-        Doc trailingOrphanComments = comments.orphanComments(unit, comment -> commentBeginLine(comment) > lastTypeLine(unit));
+        Doc trailingOrphanComments = comments.orphanComments(
+                unit, comment -> CommentIndex.beginLine(comment, Integer.MAX_VALUE) > lastTypeLine(unit));
         if (trailingOrphanComments != Doc.EMPTY) {
             if (!parts.isEmpty()) {
                 parts.add(Doc.HARD_LINE);
@@ -143,22 +144,17 @@ final class CompilationUnitPrinter {
 
     private int firstTypeLine(CompilationUnit unit) {
         return unit.getTypes().stream()
-                .flatMap(type -> type.getRange().stream())
-                .mapToInt(range -> range.begin.line)
+                .mapToInt(type -> CommentIndex.beginLine(type, Integer.MAX_VALUE))
                 .min()
                 .orElse(Integer.MAX_VALUE);
     }
 
     private int lastTypeLine(CompilationUnit unit) {
-        return unit.getTypes().stream()
-                .flatMap(type -> type.getRange().stream())
-                .mapToInt(range -> range.end.line)
+        int lastSourceBackedLine = unit.getTypes().stream()
+                .mapToInt(type -> CommentIndex.endLine(type, Integer.MIN_VALUE))
                 .max()
-                .orElse(Integer.MAX_VALUE);
-    }
-
-    private int commentBeginLine(Comment comment) {
-        return comment.getRange().map(range -> range.begin.line).orElse(Integer.MAX_VALUE);
+                .orElse(Integer.MIN_VALUE);
+        return lastSourceBackedLine == Integer.MIN_VALUE ? Integer.MAX_VALUE : lastSourceBackedLine;
     }
 
     /**

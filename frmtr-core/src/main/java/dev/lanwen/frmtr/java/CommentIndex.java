@@ -51,6 +51,45 @@ final class CommentIndex {
     }
 
     /**
+     * Returns the source start line for a node, using the caller's explicit fallback when JavaParser has no range.
+     *
+     * <p>Callers choose the fallback because missing ranges can mean "sort after source-backed content" for begin-line
+     * ordering, but "do not extend a source-backed maximum" for end-line aggregation.
+     */
+    static int beginLine(Node node, int fallback) {
+        return node.getRange().map(range -> range.begin.line).orElse(fallback);
+    }
+
+    /**
+     * Returns the source end line for a node, using the caller's explicit fallback when JavaParser has no range.
+     *
+     * <p>The fallback is intentionally visible at call sites so sequencing rules keep their missing-range policy local
+     * to the caller.
+     */
+    static int endLine(Node node, int fallback) {
+        return node.getRange().map(range -> range.end.line).orElse(fallback);
+    }
+
+    /**
+     * Returns the source start line for a comment, using the caller's explicit fallback when JavaParser has no range.
+     *
+     * <p>Comment sequencing uses this to keep synthetic or incomplete comments in the caller-selected source-order slot.
+     */
+    static int beginLine(Comment comment, int fallback) {
+        return comment.getRange().map(range -> range.begin.line).orElse(fallback);
+    }
+
+    /**
+     * Returns the source end line for a comment, using the caller's explicit fallback when JavaParser has no range.
+     *
+     * <p>The fallback remains caller-owned because end-line gaps can either preserve previous source state or move
+     * range-less comments after source-backed content depending on the surrounding sequence.
+     */
+    static int endLine(Comment comment, int fallback) {
+        return comment.getRange().map(range -> range.end.line).orElse(fallback);
+    }
+
+    /**
      * Orders comments by the source position where JavaParser says each comment begins.
      *
      * <p>Comments without ranges fall back to {@link Position#HOME}, matching the formatter's existing local ordering

@@ -26,10 +26,14 @@ import java.util.function.Predicate;
 final class CommentTracker {
     private final Set<Comment> printed = Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<Comment> rawRendered = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final JavaCommentPlacementPolicy commentPlacement;
+
+    CommentTracker(JavaCommentPlacementPolicy commentPlacement) {
+        this.commentPlacement = commentPlacement;
+    }
 
     Doc leading(Node node) {
-        return node.getComment()
-                .map(JavaCommentTrivia::from)
+        return commentPlacement.leadingComment(node)
                 .filter(this::claim)
                 .map(JavaFormatter::commentDoc)
                 .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
@@ -37,10 +41,7 @@ final class CommentTracker {
     }
 
     Doc trailingLineComment(Node node) {
-        return node.getComment()
-                .map(JavaCommentTrivia::from)
-                .filter(JavaCommentTrivia::isLine)
-                .filter(comment -> comment.startsOnEndLine(node))
+        return commentPlacement.trailingLineComment(node)
                 .filter(this::claim)
                 .map(JavaFormatter::commentDoc)
                 .orElse(Doc.EMPTY);
@@ -51,8 +52,7 @@ final class CommentTracker {
     }
 
     Doc orphanComments(Node node, Predicate<Comment> predicate) {
-        return Doc.concat(node.getOrphanComments().stream()
-                .map(JavaCommentTrivia::from)
+        return Doc.concat(commentPlacement.orphanComments(node).stream()
                 .filter(trivia -> predicate.test(trivia.comment()))
                 .filter(this::claim)
                 .map(comment -> Doc.concat(JavaFormatter.commentDoc(comment), Doc.HARD_LINE))
@@ -64,8 +64,7 @@ final class CommentTracker {
     }
 
     List<Doc> orphanCommentStatements(Node node, Predicate<Comment> predicate) {
-        return node.getOrphanComments().stream()
-                .map(JavaCommentTrivia::from)
+        return commentPlacement.orphanComments(node).stream()
                 .filter(trivia -> predicate.test(trivia.comment()))
                 .filter(this::claim)
                 .map(JavaFormatter::commentDoc)
@@ -73,17 +72,30 @@ final class CommentTracker {
     }
 
     List<Doc> orphanTriviaCommentStatements(Node node, Predicate<JavaCommentTrivia> predicate) {
-        return node.getOrphanComments().stream()
-                .map(JavaCommentTrivia::from)
+        return commentPlacement.orphanComments(node).stream()
                 .filter(predicate)
                 .filter(this::claim)
                 .map(JavaFormatter::commentDoc)
                 .toList();
     }
 
+    Doc orphanCommentsBeforeLine(Node node, int line) {
+        return orphanComments(commentPlacement.orphanCommentsBeforeLine(node, line));
+    }
+
+    Doc orphanCommentsAfterLine(Node node, int line) {
+        return orphanComments(commentPlacement.orphanCommentsAfterLine(node, line));
+    }
+
+    private Doc orphanComments(List<JavaCommentTrivia> comments) {
+        return Doc.concat(comments.stream()
+                .filter(this::claim)
+                .map(comment -> Doc.concat(JavaFormatter.commentDoc(comment), Doc.HARD_LINE))
+                .toList());
+    }
+
     Doc ownComment(Node node, Predicate<Comment> predicate) {
-        return node.getComment()
-                .map(JavaCommentTrivia::from)
+        return commentPlacement.ownComment(node)
                 .filter(trivia -> predicate.test(trivia.comment()))
                 .filter(this::claim)
                 .map(JavaFormatter::commentDoc)
@@ -91,8 +103,7 @@ final class CommentTracker {
     }
 
     Doc ownTriviaComment(Node node, Predicate<JavaCommentTrivia> predicate) {
-        return node.getComment()
-                .map(JavaCommentTrivia::from)
+        return commentPlacement.ownComment(node)
                 .filter(predicate)
                 .filter(this::claim)
                 .map(JavaFormatter::commentDoc)
@@ -100,8 +111,15 @@ final class CommentTracker {
     }
 
     Doc comment(Comment comment) {
-        JavaCommentTrivia trivia = JavaCommentTrivia.from(comment);
+        return comment(JavaCommentTrivia.from(comment));
+    }
+
+    Doc comment(JavaCommentTrivia trivia) {
         return claim(trivia) ? JavaFormatter.commentDoc(trivia) : Doc.EMPTY;
+    }
+
+    private boolean claim(JavaCommentTrivia trivia) {
+        return FormatterGuardrails.claimComment(trivia, printed);
     }
 
     boolean isPrinted(JavaCommentTrivia trivia) {
@@ -140,7 +158,4 @@ final class CommentTracker {
         FormatterGuardrails.assertAllCommentsAccounted(unit, printed, rawRendered);
     }
 
-    private boolean claim(JavaCommentTrivia trivia) {
-        return FormatterGuardrails.claimComment(trivia, printed);
-    }
 }

@@ -25,7 +25,7 @@ final class FormatterGuardrailsTest {
     @Test
     void duplicateCommentClaimsKeepExistingSkipBehaviorByDefault() {
         withGuardrails(null, () -> {
-            CommentTracker comments = new CommentTracker();
+            CommentTracker comments = commentTracker();
             LineComment comment = new LineComment("value");
 
             assertThat(comments.comment(comment)).isNotEqualTo(Doc.EMPTY);
@@ -38,7 +38,7 @@ final class FormatterGuardrailsTest {
     @Test
     void duplicateCommentClaimsFailFastWhenDebugGuardrailsAreEnabled() {
         withGuardrails("true", () -> {
-            CommentTracker comments = new CommentTracker();
+            CommentTracker comments = commentTracker();
             LineComment comment = new LineComment("value");
 
             comments.comment(comment);
@@ -61,7 +61,7 @@ final class FormatterGuardrailsTest {
     @Test
     void duplicateCommentClaimMessageCapsCommentText() {
         withGuardrails("true", () -> {
-            CommentTracker comments = new CommentTracker();
+            CommentTracker comments = commentTracker();
             LineComment comment = new LineComment("a".repeat(120) + "tail-marker");
 
             comments.comment(comment);
@@ -83,7 +83,7 @@ final class FormatterGuardrailsTest {
                         int value; // value
                     }
                     """);
-            CommentTracker comments = new CommentTracker();
+            CommentTracker comments = commentTracker();
 
             assertThatCode(() -> comments.assertAllCommentsAccounted(unit)).doesNotThrowAnyException();
         });
@@ -97,7 +97,7 @@ final class FormatterGuardrailsTest {
                         int value; // value
                     }
                     """);
-            CommentTracker comments = new CommentTracker();
+            CommentTracker comments = commentTracker();
 
             assertThatThrownBy(() -> comments.assertAllCommentsAccounted(unit))
                     .isInstanceOf(AssertionError.class)
@@ -116,7 +116,7 @@ final class FormatterGuardrailsTest {
                         int value; // value
                     }
                     """);
-            CommentTracker comments = new CommentTracker();
+            CommentTracker comments = commentTracker();
             RawPreservedSource rawPreservedSource = new RawPreservedSource(
                     new RawSource(FormatterOptions.defaults()),
                     comments);
@@ -357,5 +357,9 @@ final class FormatterGuardrailsTest {
         return parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
                 .getResult()
                 .orElseThrow();
+    }
+
+    private static CommentTracker commentTracker() {
+        return new CommentTracker(new JavaCommentPlacementPolicy());
     }
 }

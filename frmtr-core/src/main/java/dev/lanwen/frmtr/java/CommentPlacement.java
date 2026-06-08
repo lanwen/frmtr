@@ -2,24 +2,25 @@ package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
 import dev.lanwen.frmtr.doc.Doc;
-import java.util.Optional;
 
 /**
  * Recovers source-position-sensitive comment docs for formatter helpers that already know what they are printing.
  *
  * <p>This helper owns the narrow rendered-comment paths that depend on source positions: attached block comments that
  * source placed before a node on the same line, and unattached trailing block comments that JavaParser leaves inside a
- * parent. It uses {@link CommentIndex} for pure range comparisons so caller printers share one source-position
- * vocabulary.
+ * parent. It uses {@link JavaCommentPlacementPolicy} for comment placement queries so caller printers share one
+ * source-position vocabulary.
  *
  * <p>Callers still decide which comments belong to a leading, trailing, orphan, or syntax-specific path, how returned
  * comment docs are spaced, and whether a source-position fork should affect the surrounding layout.
  */
 final class CommentPlacement {
     private final CommentTracker comments;
+    private final JavaCommentPlacementPolicy commentPlacement;
 
-    CommentPlacement(CommentTracker comments) {
+    CommentPlacement(CommentTracker comments, JavaCommentPlacementPolicy commentPlacement) {
         this.comments = comments;
+        this.commentPlacement = commentPlacement;
     }
 
     /**
@@ -30,12 +31,9 @@ final class CommentPlacement {
      * range comparison keeps that decision tied to the original source position.
      */
     Doc ownSameLineBlockCommentBeforeNode(Node node) {
-        return comments.ownTriviaComment(node, comment -> comment.isBlock()
-                && comment.comment().getRange()
-                        .flatMap(commentRange -> node.getRange()
-                                .map(nodeRange -> commentRange.begin.line == nodeRange.begin.line
-                                        && CommentIndex.startsBefore(commentRange, nodeRange)))
-                        .orElse(false));
+        return commentPlacement.ownSameLineBlockCommentBeforeNode(node)
+                .map(comments::comment)
+                .orElse(Doc.EMPTY);
     }
 
     /**
@@ -46,21 +44,6 @@ final class CommentPlacement {
      * for JavaParser's comment attachment gaps.
      */
     Doc unattachedTrailingBlockComment(Node node) {
-        Optional<Node> parent = node.getParentNode();
-        while (parent.isPresent()) {
-            Optional<Doc> trailing = parent.orElseThrow().getAllContainedComments().stream()
-                    .map(JavaCommentTrivia::from)
-                    .filter(JavaCommentTrivia::isBlock)
-                    .filter(comment -> comment.comment().getCommentedNode().isEmpty())
-                    .filter(comment -> comment.startsAfterNodeOnSameLine(node))
-                    .map(JavaCommentTrivia::comment)
-                    .findFirst()
-                    .map(comments::comment);
-            if (trailing.isPresent()) {
-                return trailing.orElseThrow();
-            }
-            parent = parent.orElseThrow().getParentNode();
-        }
-        return Doc.EMPTY;
+        return commentPlacement.unattachedTrailingBlockComment(node).map(comments::comment).orElse(Doc.EMPTY);
     }
 }

@@ -1,6 +1,5 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.stmt.BreakStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.stmt.SwitchStmt;
@@ -26,6 +25,7 @@ import dev.lanwen.frmtr.doc.Doc;
  */
 final class StatementDispatcher {
     private final CommentTracker comments;
+    private final JavaCommentPlacementPolicy commentPlacement;
     private final FormatterPragmas formatterPragmas;
     private final RawPreservedSource rawPreservedSource;
     private final JavaFormatRule<Statement> statementRenderer;
@@ -33,11 +33,13 @@ final class StatementDispatcher {
 
     StatementDispatcher(
             CommentTracker comments,
+            JavaCommentPlacementPolicy commentPlacement,
             FormatterPragmas formatterPragmas,
             RawPreservedSource rawPreservedSource,
             JavaFormatRule<Statement> statementRenderer,
             JavaFormatRule<SwitchStmt> switchRenderer) {
         this.comments = comments;
+        this.commentPlacement = commentPlacement;
         this.formatterPragmas = formatterPragmas;
         this.rawPreservedSource = rawPreservedSource;
         this.statementRenderer = statementRenderer;
@@ -91,7 +93,7 @@ final class StatementDispatcher {
      */
     private boolean hasInlineBreakBlockComment(Statement statement) {
         return statement instanceof BreakStmt
-                && statement.getComment().filter(BlockComment.class::isInstance).isPresent();
+                && commentPlacement.ownComment(statement, JavaCommentTrivia::isBlock).isPresent();
     }
 
     /**
@@ -99,6 +101,6 @@ final class StatementDispatcher {
      */
     private boolean hasInlineSwitchBlockComment(Statement statement) {
         return statement instanceof SwitchStmt
-                && statement.getComment().filter(BlockComment.class::isInstance).isPresent();
+                && commentPlacement.ownComment(statement, JavaCommentTrivia::isBlock).isPresent();
     }
 }

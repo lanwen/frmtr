@@ -57,15 +57,17 @@ final class JavaPrinter {
     JavaPrinter(FormatterOptions options) {
         this.context = new JavaFormatContext(options);
         CommentTracker comments = context.comments;
+        JavaCommentPlacementPolicy commentPlacementPolicy = context.commentPlacementPolicy;
         FormatterPragmas formatterPragmas = context.formatterPragmas;
         RawSource rawSource = context.rawSource;
         RawPreservedSource rawPreservedSource = context.rawPreservedSource;
         CompactSourceText compactSource = context.compactSource;
         CommentPlacement commentPlacement = context.commentPlacement;
         this.types = new TypePrinter(options, compactSource::compactTypeLike);
-        this.blocks = new BlockPrinter(comments, this::statement, formatterPragmas::hasPragma);
+        this.blocks = new BlockPrinter(comments, commentPlacementPolicy, this::statement, formatterPragmas::hasPragma);
         this.binaries = new BinaryExpressionPrinter(
                 comments,
+                commentPlacementPolicy,
                 options,
                 this::expression,
                 this::brokenMethodCall,
@@ -98,7 +100,11 @@ final class JavaPrinter {
                 this::commentText,
                 compactSource::compact,
                 moduleBlocks::moduleBlock);
-        this.memberBlocks = new MemberBlockPrinter(rawSource, comments, declarationPrefixes::hasDeclarationAnnotations);
+        this.memberBlocks = new MemberBlockPrinter(
+                rawSource,
+                comments,
+                commentPlacementPolicy,
+                declarationPrefixes::hasDeclarationAnnotations);
         this.controlConditions = new ControlConditionPrinter(
                 comments,
                 options,
@@ -434,6 +440,7 @@ final class JavaPrinter {
                 initializers::initializer);
         this.statementDispatcher = new StatementDispatcher(
                 comments,
+                commentPlacementPolicy,
                 formatterPragmas,
                 rawPreservedSource,
                 statements::statement,
@@ -441,6 +448,7 @@ final class JavaPrinter {
     }
 
     Doc print(CompilationUnit unit) {
+        context.startCommentRun(unit);
         Doc doc = compilationUnits.print(unit);
         context.comments.assertAllCommentsAccounted(unit);
         return doc;

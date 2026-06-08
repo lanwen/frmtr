@@ -1,8 +1,6 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.comments.Comment;
-import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.CastExpr;
 import com.github.javaparser.ast.expr.Expression;
@@ -33,6 +31,7 @@ import java.util.function.ToIntFunction;
  */
 final class BinaryExpressionPrinter {
     private final CommentTracker comments;
+    private final JavaCommentPlacementPolicy commentPlacement;
     private final FormatterOptions options;
     private final JavaFormatRule<Expression> expressionRenderer;
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
@@ -43,6 +42,7 @@ final class BinaryExpressionPrinter {
 
     BinaryExpressionPrinter(
             CommentTracker comments,
+            JavaCommentPlacementPolicy commentPlacement,
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
@@ -51,6 +51,7 @@ final class BinaryExpressionPrinter {
             ToIntFunction<String> continuationStatementWidth,
             ToIntFunction<String> blockStatementWidth) {
         this.comments = comments;
+        this.commentPlacement = commentPlacement;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
@@ -190,7 +191,7 @@ final class BinaryExpressionPrinter {
     }
 
     boolean hasLineComments(BinaryExpr expression) {
-        return CommentIndex.hasContainedLineComments(expression);
+        return commentPlacement.hasContainedLineComments(expression);
     }
 
     /**
@@ -207,12 +208,12 @@ final class BinaryExpressionPrinter {
         for (int i = 0; i < operands.size(); i++) {
             Expression operand = operands.get(i);
             Doc line = Doc.text(binaryLineOperandText(expression.getOperator(), operand, i, operands.size()));
-            List<Comment> between = i < operands.size() - 1
-                    ? CommentIndex.lineCommentsBetween(expression, operand, operands.get(i + 1))
+            List<JavaCommentTrivia> between = i < operands.size() - 1
+                    ? commentPlacement.lineCommentsBetween(expression, operand, operands.get(i + 1))
                     : List.of();
             if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END) {
-                List<Comment> sameLineComments = CommentIndex.commentsStartingOnEndLine(operand, between);
-                for (Comment comment : sameLineComments) {
+                List<JavaCommentTrivia> sameLineComments = commentPlacement.commentsStartingOnEndLine(operand, between);
+                for (JavaCommentTrivia comment : sameLineComments) {
                     line = Doc.concat(line, Doc.text(" "), comments.comment(comment));
                 }
                 between = between.stream()
@@ -235,7 +236,7 @@ final class BinaryExpressionPrinter {
         return index < operandCount - 1 ? text + " " + operator.asString() : text;
     }
 
-    private List<Doc> commentDocs(List<Comment> sourceComments) {
+    private List<Doc> commentDocs(List<JavaCommentTrivia> sourceComments) {
         return sourceComments.stream()
                 .map(comments::comment)
                 .filter(doc -> doc != Doc.EMPTY)
@@ -275,19 +276,18 @@ final class BinaryExpressionPrinter {
      * operand as it was in source.
      */
     Doc binaryExpression(BinaryExpr expression) {
-        Optional<LineComment> leftLineComment = expression.getLeft()
-                .getComment()
-                .filter(LineComment.class::isInstance)
-                .map(LineComment.class::cast);
+        Optional<JavaCommentTrivia> leftLineComment =
+                commentPlacement.ownComment(expression.getLeft(), JavaCommentTrivia::isLine);
         if (leftLineComment.isEmpty()) {
             return Doc.concat(
                     binaryLeftOperand(expression),
                     Doc.text(" " + expression.getOperator().asString() + " "),
                     binaryRightOperand(expression));
         }
+        String operator = " " + expression.getOperator().asString() + " ";
         return Doc.concat(
-                Doc.text(compactWithoutOwnComment.apply(expression.getLeft()) + " " + expression.getOperator().asString() + " "),
-                JavaFormatter.commentDoc(leftLineComment.orElseThrow()),
+                Doc.text(compactWithoutOwnComment.apply(expression.getLeft()) + operator),
+                comments.comment(leftLineComment.orElseThrow()),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, binaryRightOperand(expression))));
     }
 

@@ -21,8 +21,9 @@ Single-file formatting flows through these ownership boundaries:
    JavaParser child-node identities across the tree, preserve JavaParser-visible comment identities, and reorder
    existing import declarations without replacing nodes or moving attached comments.
 4. `JavaPrinter` creates the per-run `JavaFormatContext` while wiring all printers and dispatchers.
-   `JavaPrinter.print(CompilationUnit)` delegates whole-file layout to `CompilationUnitPrinter`, then asks
-   `CommentTracker` to run the debug-only missed comment guardrail.
+   `JavaPrinter.print(CompilationUnit)` builds the `JavaCommentMap` through `JavaCommentPlacementPolicy`, delegates
+   whole-file layout to `CompilationUnitPrinter`, then asks `CommentTracker` to run the debug-only missed comment
+   guardrail.
 5. `CompilationUnitPrinter` sequences file-leading comments, package declarations, imports, optional module
    declarations, top-level declarations, compact unnamed-class members, and trailing orphan comments.
 
@@ -149,9 +150,11 @@ These helpers define the fallback and comment-accounting boundaries used by the 
 
 | Helper | Boundary owned |
 | --- | --- |
-| `CommentTracker` | Stateful comment consumption for leading, trailing, orphan, and raw-preserved comments in one formatting run. |
+| `JavaCommentMap` | Per-run snapshot of JavaParser own, orphan, and contained comment associations. It preserves lookup identity and does not classify placement. |
+| `JavaCommentPlacementPolicy` | Read-only placement queries over `JavaCommentMap`, including leading, trailing-line, orphan, contained, between-neighbor, and same-line comment decisions. It does not render or claim comments. |
+| `CommentTracker` | Stateful comment consumption for policy-selected leading, trailing, orphan, and raw-preserved comments in one formatting run. |
 | `CommentIndex` | Read-only source-position predicates and ordering for comments and nodes. It does not render or mark comments consumed. |
-| `CommentPlacement` | Source-position-sensitive attached and unattached block-comment docs for callers that need more than ordinary leading/trailing slots. |
+| `CommentPlacement` | Source-position-sensitive attached and unattached block-comment docs for callers that need more than ordinary leading/trailing slots, backed by `JavaCommentPlacementPolicy`. |
 | `JavaCommentTrivia` and `JavaCommentKind` | Comment classification and reusable range checks for comment accounting and layout rules. |
 | `FormatterPragmas` | Formatter off/on and ignore state used by declaration and statement dispatchers. |
 | `FormatterGuardrails` | Debug-only transform and comment-accounting checks enabled by `dev.lanwen.frmtr.debug.guardrails`. |

@@ -20,14 +20,17 @@ import java.util.function.Predicate;
  */
 final class BlockPrinter {
     private final CommentTracker comments;
+    private final JavaCommentPlacementPolicy commentPlacement;
     private final JavaFormatRule<Statement> statementRenderer;
     private final Predicate<Statement> hasPragma;
 
     BlockPrinter(
             CommentTracker comments,
+            JavaCommentPlacementPolicy commentPlacement,
             JavaFormatRule<Statement> statementRenderer,
             Predicate<Statement> hasPragma) {
         this.comments = comments;
+        this.commentPlacement = commentPlacement;
         this.statementRenderer = statementRenderer;
         this.hasPragma = hasPragma;
     }
@@ -39,7 +42,7 @@ final class BlockPrinter {
      * inside child statement ranges are left to the child statement printer so they are not emitted twice.
      */
     Doc block(BlockStmt block) {
-        if (block.getStatements().isEmpty() && block.getOrphanComments().isEmpty()) {
+        if (block.getStatements().isEmpty() && !commentPlacement.hasOrphanComments(block)) {
             return Doc.text("{}");
         }
         List<Doc> statements = new ArrayList<>();
@@ -61,7 +64,9 @@ final class BlockPrinter {
      * though JavaParser exposes them on the preceding clause. The caller keeps any special empty-block shape decisions.
      */
     Doc blockWithLeading(BlockStmt block, Doc leadingInside) {
-        if (block.getStatements().isEmpty() && block.getOrphanComments().isEmpty() && leadingInside == Doc.EMPTY) {
+        if (block.getStatements().isEmpty()
+                && !commentPlacement.hasOrphanComments(block)
+                && leadingInside == Doc.EMPTY) {
             return Doc.text("{}");
         }
         List<Doc> statements = new ArrayList<>();
@@ -151,17 +156,10 @@ final class BlockPrinter {
      * Returns orphan comments that belong to the block itself rather than to nested statement bodies.
      */
     private List<Doc> blockOrphanCommentStatements(BlockStmt block) {
-        return comments.orphanTriviaCommentStatements(block, comment -> !commentInsideChildStatement(block, comment));
-    }
-
-    /**
-     * Detects orphan comments whose source line falls inside a child statement range.
-     *
-     * <p>JavaParser sometimes leaves comments as block orphans even though the line is part of a child statement. Those
-     * comments stay with the child statement printer so block-level sequencing does not pull them out of context.
-     */
-    private boolean commentInsideChildStatement(BlockStmt block, JavaCommentTrivia comment) {
-        return block.getStatements().stream().anyMatch(comment::startsInsideLineRange);
+        return commentPlacement.orphanCommentsOutsideChildRanges(block, block.getStatements()).stream()
+                .map(comments::comment)
+                .filter(doc -> doc != Doc.EMPTY)
+                .toList();
     }
 
     /**
@@ -171,8 +169,7 @@ final class BlockPrinter {
      * available, the caller's statement begin line remains the fallback.
      */
     private int effectiveBeginLine(Statement statement, int fallback) {
-        return statement.getComment()
-                .map(JavaCommentTrivia::from)
+        return commentPlacement.ownComment(statement)
                 .map(comment -> comment.beginLine(fallback))
                 .orElse(fallback);
     }

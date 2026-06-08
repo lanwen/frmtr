@@ -70,8 +70,7 @@ final class CompilationUnitPrinter {
             parts.add(Doc.HARD_LINE);
         }
         int firstTypeLine = firstTypeLine(unit);
-        Doc orphanComments = comments.orphanComments(
-                unit, comment -> CommentIndex.beginLine(comment, Integer.MAX_VALUE) < firstTypeLine);
+        Doc orphanComments = comments.orphanCommentsBeforeLine(unit, firstTypeLine);
         if (orphanComments != Doc.EMPTY) {
             if (!parts.isEmpty()) {
                 parts.add(Doc.HARD_LINE);
@@ -109,8 +108,7 @@ final class CompilationUnitPrinter {
             }
             parts.add(Doc.join(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE), topLevelDeclarations));
         }
-        Doc trailingOrphanComments = comments.orphanComments(
-                unit, comment -> CommentIndex.beginLine(comment, Integer.MAX_VALUE) > lastTypeLine(unit));
+        Doc trailingOrphanComments = comments.orphanCommentsAfterLine(unit, lastTypeLine(unit));
         if (trailingOrphanComments != Doc.EMPTY) {
             if (!parts.isEmpty()) {
                 parts.add(Doc.HARD_LINE);

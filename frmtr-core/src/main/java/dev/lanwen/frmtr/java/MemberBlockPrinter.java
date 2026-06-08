@@ -7,10 +7,8 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.RecordDeclaration;
-import com.github.javaparser.ast.comments.Comment;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -27,14 +25,17 @@ import java.util.function.Predicate;
 final class MemberBlockPrinter {
     private final RawSource rawSource;
     private final CommentTracker comments;
+    private final JavaCommentPlacementPolicy commentPlacement;
     private final Predicate<BodyDeclaration<?>> hasDeclarationAnnotations;
 
     MemberBlockPrinter(
             RawSource rawSource,
             CommentTracker comments,
+            JavaCommentPlacementPolicy commentPlacement,
             Predicate<BodyDeclaration<?>> hasDeclarationAnnotations) {
         this.rawSource = rawSource;
         this.comments = comments;
+        this.commentPlacement = commentPlacement;
         this.hasDeclarationAnnotations = hasDeclarationAnnotations;
     }
 
@@ -120,9 +121,7 @@ final class MemberBlockPrinter {
      */
     private Doc memberContents(Node owner, NodeList<BodyDeclaration<?>> members, List<Doc> memberDocs) {
         List<Doc> contents = new ArrayList<>();
-        List<Comment> orphanComments = owner.getOrphanComments().stream()
-                .sorted(Comparator.comparingInt(comment -> CommentIndex.beginLine(comment, Integer.MAX_VALUE)))
-                .toList();
+        List<JavaCommentTrivia> orphanComments = commentPlacement.orphanCommentsInSourceOrder(owner);
         int orphanIndex = 0;
         int previousEndLine = Integer.MIN_VALUE;
         BodyDeclaration<?> previousMember = null;
@@ -132,13 +131,13 @@ final class MemberBlockPrinter {
             int currentBeginLine = CommentIndex.beginLine(currentMember, Integer.MAX_VALUE);
             // Orphan comments that start before this declaration belong in the source gap before the member.
             while (orphanIndex < orphanComments.size()
-                    && CommentIndex.beginLine(orphanComments.get(orphanIndex), Integer.MAX_VALUE) < currentBeginLine) {
-                Comment comment = orphanComments.get(orphanIndex++);
+                    && orphanComments.get(orphanIndex).beginLine(Integer.MAX_VALUE) < currentBeginLine) {
+                JavaCommentTrivia comment = orphanComments.get(orphanIndex++);
                 addMemberContentSeparator(
                         contents,
                         owner,
                         previousEndLine,
-                        CommentIndex.beginLine(comment, Integer.MAX_VALUE),
+                        comment.beginLine(Integer.MAX_VALUE),
                         previousWasMember,
                         null,
                         null);
@@ -146,7 +145,7 @@ final class MemberBlockPrinter {
                 // Already-printed comments return EMPTY, so separator state only moves when text is emitted.
                 if (commentDoc != Doc.EMPTY) {
                     contents.add(commentDoc);
-                    previousEndLine = CommentIndex.endLine(comment, Integer.MAX_VALUE);
+                    previousEndLine = comment.endLine(Integer.MAX_VALUE);
                     previousWasMember = false;
                 }
             }
@@ -159,12 +158,12 @@ final class MemberBlockPrinter {
         }
         // Anything left after the declaration walk is trailing source trivia in the member block.
         while (orphanIndex < orphanComments.size()) {
-            Comment comment = orphanComments.get(orphanIndex++);
+            JavaCommentTrivia comment = orphanComments.get(orphanIndex++);
             addMemberContentSeparator(
                     contents,
                     owner,
                     previousEndLine,
-                    CommentIndex.beginLine(comment, Integer.MAX_VALUE),
+                    comment.beginLine(Integer.MAX_VALUE),
                     previousWasMember,
                     null,
                     null);
@@ -172,7 +171,7 @@ final class MemberBlockPrinter {
             // Already-printed comments return EMPTY, so separator state only moves when text is emitted.
             if (commentDoc != Doc.EMPTY) {
                 contents.add(commentDoc);
-                previousEndLine = CommentIndex.endLine(comment, Integer.MAX_VALUE);
+                previousEndLine = comment.endLine(Integer.MAX_VALUE);
                 previousWasMember = false;
             }
         }

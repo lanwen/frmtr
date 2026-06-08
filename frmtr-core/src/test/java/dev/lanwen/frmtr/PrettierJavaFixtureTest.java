@@ -1,6 +1,7 @@
 package dev.lanwen.frmtr;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParseResult;
@@ -192,6 +193,18 @@ final class PrettierJavaFixtureTest {
                 .containsExactlyInAnyOrderElementsOf(JAVA_PARSER_UNSUPPORTED_FIXTURES.keySet());
     }
 
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("javaParserUnsupportedFixtures")
+    void javaParserUnsupportedPrettierJavaFixtureInputsFailWithFormatterParseError(Fixture fixture)
+            throws IOException {
+        Throwable thrown = catchThrowable(() -> Frmtr.format(read(fixture.input())));
+
+        assertThat(thrown)
+                .describedAs("%s should stay skipped until JavaParser can parse its input: %s", fixture, unsupportedReason(fixture))
+                .isInstanceOf(FormatterException.class)
+                .hasMessageContaining("Unable to parse Java source:");
+    }
+
     private static Stream<Fixture> fixtures() throws IOException, URISyntaxException {
         Path root = fixtureRoot();
         try (var stream = Files.walk(root)) {
@@ -210,6 +223,14 @@ final class PrettierJavaFixtureTest {
 
     private static Stream<Fixture> javaParserSupportedFixtures() throws IOException, URISyntaxException {
         return fixtures().filter(fixture -> !JAVA_PARSER_UNSUPPORTED_FIXTURES.containsKey(fixture.name()));
+    }
+
+    private static Stream<Fixture> javaParserUnsupportedFixtures() throws IOException, URISyntaxException {
+        return fixtures().filter(fixture -> JAVA_PARSER_UNSUPPORTED_FIXTURES.containsKey(fixture.name()));
+    }
+
+    private static String unsupportedReason(Fixture fixture) {
+        return JAVA_PARSER_UNSUPPORTED_FIXTURES.get(fixture.name());
     }
 
     private static FormatterOptions prettierCompatibilityOptions(Fixture fixture) {

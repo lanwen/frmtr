@@ -14,7 +14,7 @@ import java.util.Set;
  * appropriate when guardrails are disabled, and how rendered output should be assembled.
  */
 final class FormatterGuardrails {
-    static final String ENABLED_PROPERTY = "dev.lanwen.frmtr.debugGuardrails";
+    static final String ENABLED_PROPERTY = "dev.lanwen.frmtr.debug.guardrails";
     private static final int COMMENT_SNIPPET_LENGTH = 80;
 
     private FormatterGuardrails() {}

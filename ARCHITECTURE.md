@@ -85,7 +85,7 @@ The public `Frmtr` API wraps recoverable internal formatter failures, including 
 
 `CommentIndex` centralizes read-only source-position classification for comments, including explicit-fallback begin/end line lookups, line/column comparisons, line-range containment, same-begin-line checks, source-order sorting, contained line-comment selection, and between-node comment gaps. It does not render comments or mutate printed-comment state; `CommentTracker` remains responsible for rendered comment docs and consumption, while caller printers and `CommentPlacement` decide spacing and layout context.
 
-`FormatterGuardrails` hosts opt-in internal pipeline diagnostics. Setting `dev.lanwen.frmtr.debugGuardrails=true` enables development-only checks such as duplicate comment-claim failures while the default path keeps existing best-effort skip behavior and formatter output unchanged.
+`FormatterGuardrails` hosts opt-in internal pipeline diagnostics. Setting `dev.lanwen.frmtr.debug.guardrails=true` enables development-only checks such as duplicate comment-claim failures while the default path keeps existing best-effort skip behavior and formatter output unchanged.
 
 ## CLI
 

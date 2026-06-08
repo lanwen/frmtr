@@ -18,7 +18,7 @@ final class PrettierJavaFixtureOptionsTest {
     void inheritsOptionsFromParentDirectories() throws IOException {
         Path root = temporaryDirectory.resolve("unit-test");
         Path fixture = root.resolve("require-pragma").resolve("format-pragma");
-        writeOptions(root.resolve("require-pragma"), "requirePragma=true\n");
+        writeOptions(root.resolve("require-pragma"), "require-pragma=true\n");
 
         FormatterOptions options = PrettierJavaFixtureOptions.resolve(root, fixture);
 
@@ -31,8 +31,8 @@ final class PrettierJavaFixtureOptionsTest {
         Path root = temporaryDirectory.resolve("unit-test");
         Path parent = root.resolve("lambda");
         Path fixture = parent.resolve("arrow-parens-avoid");
-        writeOptions(parent, "lambdaArrowParens=ALWAYS\nbinaryOperatorPosition=END\nlineWidth=100\n");
-        writeOptions(fixture, "lambdaArrowParens=AVOID\nbinaryOperatorPosition=START\n");
+        writeOptions(parent, "lambda-arrow-parens=ALWAYS\nbinary-operator-position=END\nline-width=100\n");
+        writeOptions(fixture, "lambda-arrow-parens=AVOID\nbinary-operator-position=START\n");
 
         FormatterOptions options = PrettierJavaFixtureOptions.resolve(root, fixture);
 
@@ -45,22 +45,22 @@ final class PrettierJavaFixtureOptionsTest {
     void rejectsUnknownMetadataKeys() throws IOException {
         Path root = temporaryDirectory.resolve("unit-test");
         Path fixture = root.resolve("fixture");
-        writeOptions(fixture, "tabWidth=2\n");
+        writeOptions(fixture, "tab-width=2\n");
 
         assertThatThrownBy(() -> PrettierJavaFixtureOptions.resolve(root, fixture))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Unsupported fixture formatter option `tabWidth`");
+                .hasMessageContaining("Unsupported fixture formatter option `tab-width`");
     }
 
     @Test
     void rejectsInvalidMetadataValues() throws IOException {
         Path root = temporaryDirectory.resolve("unit-test");
         Path fixture = root.resolve("fixture");
-        writeOptions(fixture, "requirePragma=sometimes\n");
+        writeOptions(fixture, "require-pragma=sometimes\n");
 
         assertThatThrownBy(() -> PrettierJavaFixtureOptions.resolve(root, fixture))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Invalid value `sometimes` for fixture formatter option `requirePragma`");
+                .hasMessageContaining("Invalid value `sometimes` for fixture formatter option `require-pragma`");
     }
 
     @Test

@@ -28,8 +28,8 @@ selects formatter options when a fixture is compared against Prettier reference 
 Metadata is inherited from parent fixture directories to child fixture directories, so a
 fixture family can share one option override. Metadata under fixtures whose upstream syntax
 JavaParser does not parse yet is validated by tests but may remain future-facing until the
-fixture joins the active compatibility assertion. Supported keys are `lineWidth`,
-`requirePragma`, `lambdaArrowParens`, and `binaryOperatorPosition`.
+fixture joins the active compatibility assertion. Supported keys are `line-width`,
+`require-pragma`, `lambda-arrow-parens`, and `binary-operator-position`.
 
 The `input.java` and `prettier.output.java` files are kept byte-for-byte aligned with the
 original upstream files. Some upstream samples use syntax that the bundled JavaParser

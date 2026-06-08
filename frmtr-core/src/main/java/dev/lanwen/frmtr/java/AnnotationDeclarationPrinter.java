@@ -26,7 +26,7 @@ import java.util.function.Function;
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/annotation_interface_declaration/frmtr.output.java}.
  */
 final class AnnotationDeclarationPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final Function<NodeWithAnnotations<?>, Doc> annotations;
     private final Function<NodeWithModifiers<?>, String> modifiers;
     private final Function<Type, String> compactTypeLike;
@@ -34,7 +34,7 @@ final class AnnotationDeclarationPrinter {
     private final Function<BodyDeclaration<?>, Doc> memberRenderer;
 
     AnnotationDeclarationPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             Function<NodeWithAnnotations<?>, Doc> annotations,
             Function<NodeWithModifiers<?>, String> modifiers,
             Function<Type, String> compactTypeLike,

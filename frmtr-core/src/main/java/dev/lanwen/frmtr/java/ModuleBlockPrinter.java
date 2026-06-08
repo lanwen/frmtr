@@ -33,14 +33,14 @@ import java.util.function.Function;
  * format/prettier-java/unit-test/modules/frmtr.output.java} shows the expected structured module behavior.
  */
 final class ModuleBlockPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final FormatterOptions options;
     private final Function<Node, String> compact;
     private final Function<List<? extends Node>, String> compactJoin;
     private final Function<ModuleRequiresDirective, String> requiresModifiers;
 
     ModuleBlockPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             FormatterOptions options,
             Function<Node, String> compact,
             Function<List<? extends Node>, String> compactJoin,

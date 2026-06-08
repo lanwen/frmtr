@@ -71,7 +71,7 @@ import java.util.function.ToIntFunction;
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/comments/comments-blocks-and-statements/if-statement/frmtr.output.java}.
  */
 final class StatementPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final RawSource rawSource;
     private final FormatterOptions options;
     private final JavaFormatRule<Statement> statementRenderer;
@@ -100,7 +100,7 @@ final class StatementPrinter {
     private final ToIntFunction<String> currentIndentedWidth;
 
     StatementPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             RawSource rawSource,
             FormatterOptions options,
             JavaFormatRule<Statement> statementRenderer,

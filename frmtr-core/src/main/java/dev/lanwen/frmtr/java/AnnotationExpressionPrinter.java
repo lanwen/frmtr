@@ -31,7 +31,7 @@ import java.util.function.ToIntFunction;
  * annotation value is a binary expression that must break.
  */
 final class AnnotationExpressionPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final FormatterOptions options;
     private final JavaFormatRule<Expression> expressionRenderer;
     private final BiFunction<Expression, Boolean, Doc> nestedBinaryLines;
@@ -39,7 +39,7 @@ final class AnnotationExpressionPrinter {
     private final ToIntFunction<String> currentIndentedWidth;
 
     AnnotationExpressionPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
             BiFunction<Expression, Boolean, Doc> nestedBinaryLines,

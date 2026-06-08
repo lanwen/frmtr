@@ -49,7 +49,7 @@ import java.util.function.Predicate;
  * near {@code variableWithComment1} through {@code variableWithComment4} cover the before/after {@code =} branches.
  */
 final class FieldDeclarationPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final RawSource rawSource;
     private final FormatterOptions options;
     private final Function<NodeWithAnnotations<?>, Doc> declarationAnnotations;
@@ -90,7 +90,7 @@ final class FieldDeclarationPrinter {
     private final Function<LambdaExpr, Doc> lambdaExpression;
 
     FieldDeclarationPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             RawSource rawSource,
             FormatterOptions options,
             Function<NodeWithAnnotations<?>, Doc> declarationAnnotations,

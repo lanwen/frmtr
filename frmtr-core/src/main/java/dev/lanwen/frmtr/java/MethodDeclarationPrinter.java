@@ -32,7 +32,7 @@ import java.util.function.Function;
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/throws/frmtr.output.java}.
  */
 final class MethodDeclarationPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final RawSource rawSource;
     private final CommentedMethodSignaturePrinter commentedMethodSignatures;
     private final CallableSignaturePrinter callableSignatures;
@@ -45,7 +45,7 @@ final class MethodDeclarationPrinter {
     private final Function<BlockStmt, Doc> block;
 
     MethodDeclarationPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             RawSource rawSource,
             CommentedMethodSignaturePrinter commentedMethodSignatures,
             CallableSignaturePrinter callableSignatures,

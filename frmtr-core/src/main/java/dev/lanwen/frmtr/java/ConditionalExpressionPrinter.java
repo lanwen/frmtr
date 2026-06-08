@@ -41,7 +41,7 @@ import java.util.function.ToIntFunction;
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/expressions/prettier.output.java}.
  */
 final class ConditionalExpressionPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final FormatterOptions options;
     private final CompactSourceText compactSource;
     private final Function<Expression, Doc> expressionRenderer;

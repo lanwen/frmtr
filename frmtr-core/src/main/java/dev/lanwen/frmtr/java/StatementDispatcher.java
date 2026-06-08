@@ -25,14 +25,14 @@ import dev.lanwen.frmtr.doc.Doc;
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/require-pragma/format-pragma/frmtr.output.java}.
  */
 final class StatementDispatcher {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final FormatterPragmas formatterPragmas;
     private final RawSource rawSource;
     private final JavaFormatRule<Statement> statementRenderer;
     private final JavaFormatRule<SwitchStmt> switchRenderer;
 
     StatementDispatcher(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             FormatterPragmas formatterPragmas,
             RawSource rawSource,
             JavaFormatRule<Statement> statementRenderer,

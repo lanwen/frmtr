@@ -35,7 +35,7 @@ import java.util.function.ToIntFunction;
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/lambda/arrow-parens-avoid/input.java}.
  */
 final class EnumDeclarationPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final RawSource rawSource;
     private final FormatterOptions options;
     private final Function<NodeWithAnnotations<?>, Doc> annotations;
@@ -49,7 +49,7 @@ final class EnumDeclarationPrinter {
     private final Function<BodyDeclaration<?>, Doc> memberRenderer;
 
     EnumDeclarationPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             RawSource rawSource,
             FormatterOptions options,
             Function<NodeWithAnnotations<?>, Doc> annotations,

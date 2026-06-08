@@ -25,7 +25,7 @@ import java.util.function.Predicate;
  * and trailing-comment rendering decisions from the caller.
  */
 final class CallableSignaturePrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final RawSource rawSource;
     private final FormatterOptions options;
     private final Function<Node, String> compact;
@@ -37,7 +37,7 @@ final class CallableSignaturePrinter {
     private final Function<Doc, String> commentText;
 
     CallableSignaturePrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             RawSource rawSource,
             FormatterOptions options,
             Function<Node, String> compact,

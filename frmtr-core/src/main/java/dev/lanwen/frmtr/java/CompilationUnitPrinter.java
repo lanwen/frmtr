@@ -33,14 +33,14 @@ import java.util.Optional;
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/unnamed-class-compilation-unit/frmtr.output.java}.
  */
 final class CompilationUnitPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final PackageDeclarationPrinter packageDeclarations;
     private final ImportDeclarationPrinter importDeclarations;
     private final JavaFormatRule<ModuleDeclaration> moduleDeclarations;
     private final JavaFormatRule<BodyDeclaration<?>> bodyDeclarations;
 
     CompilationUnitPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             PackageDeclarationPrinter packageDeclarations,
             ImportDeclarationPrinter importDeclarations,
             JavaFormatRule<ModuleDeclaration> moduleDeclarations,

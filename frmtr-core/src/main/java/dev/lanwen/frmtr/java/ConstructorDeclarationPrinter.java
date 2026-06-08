@@ -31,7 +31,7 @@ import java.util.function.Function;
  * and {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/records/frmtr.output.java}.
  */
 final class ConstructorDeclarationPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final CallableSignaturePrinter callableSignatures;
     private final Function<NodeWithAnnotations<?>, Doc> annotations;
     private final Function<NodeWithModifiers<?>, String> modifiers;
@@ -40,7 +40,7 @@ final class ConstructorDeclarationPrinter {
     private final Function<BlockStmt, Doc> block;
 
     ConstructorDeclarationPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             CallableSignaturePrinter callableSignatures,
             Function<NodeWithAnnotations<?>, Doc> annotations,
             Function<NodeWithModifiers<?>, String> modifiers,

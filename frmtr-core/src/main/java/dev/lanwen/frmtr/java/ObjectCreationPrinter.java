@@ -28,7 +28,7 @@ import java.util.function.Function;
  * shapes; this helper only asks whether constructor arguments can use that lambda-specific form.
  */
 final class ObjectCreationPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final TypePrinter types;
     private final JavaFormatRule<Expression> expressionRenderer;
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments;
@@ -40,7 +40,7 @@ final class ObjectCreationPrinter {
     private final Function<Doc, String> commentText;
 
     ObjectCreationPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             TypePrinter types,
             JavaFormatRule<Expression> expressionRenderer,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,

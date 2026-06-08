@@ -9,7 +9,6 @@ import com.github.javaparser.Providers;
 import com.github.javaparser.Problem;
 import com.github.javaparser.Position;
 import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.JavadocComment;
@@ -18,13 +17,9 @@ import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import dev.lanwen.frmtr.doc.DocRenderer;
-import java.util.Collections;
 import java.util.Comparator;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
-import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -190,95 +185,6 @@ public final class JavaFormatter {
                 formatted.append(System.lineSeparator());
             }
             formatted.append(String.format("%" + width + "d  %s", line, lines.get(line - 1)));
-        }
-    }
-
-    static final class CommentTracker {
-        private final Set<Comment> printed = Collections.newSetFromMap(new IdentityHashMap<>());
-
-        Doc leading(Node node) {
-            return node.getComment()
-                    .map(JavaCommentTrivia::from)
-                    .filter(this::claim)
-                    .map(JavaFormatter::commentDoc)
-                    .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
-                    .orElse(Doc.EMPTY);
-        }
-
-        Doc trailingLineComment(Node node) {
-            return node.getComment()
-                    .map(JavaCommentTrivia::from)
-                    .filter(JavaCommentTrivia::isLine)
-                    .filter(comment -> comment.startsOnEndLine(node))
-                    .filter(this::claim)
-                    .map(JavaFormatter::commentDoc)
-                    .orElse(Doc.EMPTY);
-        }
-
-        Doc orphanComments(Node node) {
-            return orphanComments(node, ignored -> true);
-        }
-
-        Doc orphanComments(Node node, Predicate<Comment> predicate) {
-            return Doc.concat(node.getOrphanComments().stream()
-                    .map(JavaCommentTrivia::from)
-                    .filter(trivia -> predicate.test(trivia.comment()))
-                    .filter(this::claim)
-                    .map(comment -> Doc.concat(commentDoc(comment), Doc.HARD_LINE))
-                    .toList());
-        }
-
-        List<Doc> orphanCommentStatements(Node node) {
-            return orphanCommentStatements(node, ignored -> true);
-        }
-
-        List<Doc> orphanCommentStatements(Node node, Predicate<Comment> predicate) {
-            return node.getOrphanComments().stream()
-                    .map(JavaCommentTrivia::from)
-                    .filter(trivia -> predicate.test(trivia.comment()))
-                    .filter(this::claim)
-                    .map(JavaFormatter::commentDoc)
-                    .toList();
-        }
-
-        List<Doc> orphanTriviaCommentStatements(Node node, Predicate<JavaCommentTrivia> predicate) {
-            return node.getOrphanComments().stream()
-                    .map(JavaCommentTrivia::from)
-                    .filter(predicate)
-                    .filter(this::claim)
-                    .map(JavaFormatter::commentDoc)
-                    .toList();
-        }
-
-        Doc ownComment(Node node, Predicate<Comment> predicate) {
-            return node.getComment()
-                    .map(JavaCommentTrivia::from)
-                    .filter(trivia -> predicate.test(trivia.comment()))
-                    .filter(this::claim)
-                    .map(JavaFormatter::commentDoc)
-                    .orElse(Doc.EMPTY);
-        }
-
-        Doc ownTriviaComment(Node node, Predicate<JavaCommentTrivia> predicate) {
-            return node.getComment()
-                    .map(JavaCommentTrivia::from)
-                    .filter(predicate)
-                    .filter(this::claim)
-                    .map(JavaFormatter::commentDoc)
-                    .orElse(Doc.EMPTY);
-        }
-
-        Doc comment(Comment comment) {
-            JavaCommentTrivia trivia = JavaCommentTrivia.from(comment);
-            return claim(trivia) ? JavaFormatter.commentDoc(trivia) : Doc.EMPTY;
-        }
-
-        boolean isPrinted(JavaCommentTrivia trivia) {
-            return trivia.isClaimedBy(printed);
-        }
-
-        private boolean claim(JavaCommentTrivia trivia) {
-            return FormatterGuardrails.claimComment(trivia, printed);
         }
     }
 

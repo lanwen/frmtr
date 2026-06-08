@@ -19,12 +19,12 @@ import java.util.function.Predicate;
  * does not decide how any individual {@link Statement} renders or how formatter pragmas change statement print actions.
  */
 final class BlockPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final JavaFormatRule<Statement> statementRenderer;
     private final Predicate<Statement> hasPragma;
 
     BlockPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             JavaFormatRule<Statement> statementRenderer,
             Predicate<Statement> hasPragma) {
         this.comments = comments;

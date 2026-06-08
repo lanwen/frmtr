@@ -33,7 +33,7 @@ import java.util.function.ToIntFunction;
  * overflowed; this helper only provides the array-specific shapes after that caller decision.
  */
 final class ArrayExpressionPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final FormatterOptions options;
     private final JavaFormatRule<Expression> expressionRenderer;
     private final BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix;
@@ -42,7 +42,7 @@ final class ArrayExpressionPrinter {
     private final ToIntFunction<String> currentIndentedWidth;
 
     ArrayExpressionPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
             BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix,

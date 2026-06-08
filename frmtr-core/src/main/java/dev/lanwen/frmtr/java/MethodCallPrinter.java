@@ -44,7 +44,7 @@ import java.util.function.ToIntFunction;
  * cases are covered by the two {@code lambda/arrow-parens-*} fixture directories.
  */
 final class MethodCallPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final FormatterOptions options;
     private final CompactSourceText compactSource;
     private final TypePrinter types;

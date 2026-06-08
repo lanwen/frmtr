@@ -27,7 +27,7 @@ import java.util.function.Function;
  * frmtr-core/src/test/resources/format/prettier-java/unit-test/comments/package/frmtr.output.java}.
  */
 final class ModuleDeclarationPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final RawSource rawSource;
     private final CommentedModulePrinter commentedModules;
     private final Function<NodeWithAnnotations<?>, Doc> annotations;
@@ -36,7 +36,7 @@ final class ModuleDeclarationPrinter {
     private final Function<ModuleDeclaration, Doc> moduleBlock;
 
     ModuleDeclarationPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             RawSource rawSource,
             CommentedModulePrinter commentedModules,
             Function<NodeWithAnnotations<?>, Doc> annotations,

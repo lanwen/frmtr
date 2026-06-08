@@ -18,10 +18,10 @@ import java.util.function.Function;
  * and {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/comments/comments-blocks-and-statements/end-of-block/frmtr.output.java}.
  */
 final class InitializerDeclarationPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final Function<BlockStmt, Doc> block;
 
-    InitializerDeclarationPrinter(JavaFormatter.CommentTracker comments, Function<BlockStmt, Doc> block) {
+    InitializerDeclarationPrinter(CommentTracker comments, Function<BlockStmt, Doc> block) {
         this.comments = comments;
         this.block = block;
     }

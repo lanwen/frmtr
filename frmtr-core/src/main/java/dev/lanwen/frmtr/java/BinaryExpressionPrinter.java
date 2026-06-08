@@ -32,7 +32,7 @@ import java.util.function.ToIntFunction;
  * identified a binary operand that should break before an end-position operator.
  */
 final class BinaryExpressionPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final FormatterOptions options;
     private final JavaFormatRule<Expression> expressionRenderer;
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
@@ -42,7 +42,7 @@ final class BinaryExpressionPrinter {
     private final ToIntFunction<String> blockStatementWidth;
 
     BinaryExpressionPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,

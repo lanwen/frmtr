@@ -19,10 +19,10 @@ import dev.lanwen.frmtr.doc.Doc;
  * {@link FieldAccessExpr} is assembled.
  */
 final class FieldAccessPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final JavaFormatRule<Expression> expression;
 
-    FieldAccessPrinter(JavaFormatter.CommentTracker comments, JavaFormatRule<Expression> expression) {
+    FieldAccessPrinter(CommentTracker comments, JavaFormatRule<Expression> expression) {
         this.comments = comments;
         this.expression = expression;
     }

@@ -34,7 +34,7 @@ import java.util.function.ToIntFunction;
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/annotation_interface_declaration/input.java}.
  */
 final class RecordDeclarationPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final FormatterOptions options;
     private final Function<NodeWithAnnotations<?>, Doc> annotations;
     private final Function<NodeWithModifiers<?>, String> modifiers;
@@ -50,7 +50,7 @@ final class RecordDeclarationPrinter {
     private final Function<RecordDeclaration, Doc> memberBlock;
 
     RecordDeclarationPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             FormatterOptions options,
             Function<NodeWithAnnotations<?>, Doc> annotations,
             Function<NodeWithModifiers<?>, String> modifiers,

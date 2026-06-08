@@ -56,7 +56,7 @@ final class JavaPrinter {
 
     JavaPrinter(FormatterOptions options) {
         this.context = new JavaFormatContext(options);
-        JavaFormatter.CommentTracker comments = context.comments;
+        CommentTracker comments = context.comments;
         FormatterPragmas formatterPragmas = context.formatterPragmas;
         RawSource rawSource = context.rawSource;
         CompactSourceText compactSource = context.compactSource;

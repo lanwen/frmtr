@@ -11,7 +11,7 @@ import java.util.Set;
  * Wraps a JavaParser comment with formatter-owned trivia classification and source-position queries.
  *
  * <p>This helper owns reusable comment facts: parser kind, line-position lookups through {@link CommentIndex}, and the
- * identity-based claim checks used by {@link JavaFormatter.CommentTracker}. The boundary exists so printers can combine
+ * identity-based claim checks used by {@link CommentTracker}. The boundary exists so printers can combine
  * comment facts without repeating raw JavaParser subclass, range, and printed-state decisions.
  *
  * <p>Callers still decide syntax-specific placement, surrounding whitespace, and whether a comment is leading, trailing,
@@ -149,7 +149,7 @@ record JavaCommentTrivia(Comment comment) {
     /**
      * Claims this exact JavaParser comment instance in the supplied identity set.
      *
-     * <p>{@link JavaFormatter.CommentTracker} uses this to preserve its "print once" behavior while allowing callers to
+     * <p>{@link CommentTracker} uses this to preserve its "print once" behavior while allowing callers to
      * work with classified trivia instead of raw comments.
      */
     boolean claim(Set<Comment> claimedComments) {

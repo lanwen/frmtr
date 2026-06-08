@@ -16,7 +16,7 @@ import dev.lanwen.frmtr.FormatterOptions;
  */
 final class JavaFormatContext {
     final FormatterOptions options;
-    final JavaFormatter.CommentTracker comments;
+    final CommentTracker comments;
     final FormatterPragmas formatterPragmas;
     final RawSource rawSource;
     final CompactSourceText compactSource;
@@ -24,7 +24,7 @@ final class JavaFormatContext {
 
     JavaFormatContext(FormatterOptions options) {
         this.options = options;
-        this.comments = new JavaFormatter.CommentTracker();
+        this.comments = new CommentTracker();
         this.formatterPragmas = new FormatterPragmas();
         this.rawSource = new RawSource(options);
         this.compactSource = new CompactSourceText(rawSource);

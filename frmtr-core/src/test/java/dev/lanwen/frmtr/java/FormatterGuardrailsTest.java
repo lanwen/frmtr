@@ -15,7 +15,7 @@ final class FormatterGuardrailsTest {
     @Test
     void duplicateCommentClaimsKeepExistingSkipBehaviorByDefault() {
         withGuardrails(null, () -> {
-            JavaFormatter.CommentTracker comments = new JavaFormatter.CommentTracker();
+            CommentTracker comments = new CommentTracker();
             LineComment comment = new LineComment("value");
 
             assertThat(comments.comment(comment)).isNotEqualTo(Doc.EMPTY);
@@ -28,7 +28,7 @@ final class FormatterGuardrailsTest {
     @Test
     void duplicateCommentClaimsFailFastWhenDebugGuardrailsAreEnabled() {
         withGuardrails("true", () -> {
-            JavaFormatter.CommentTracker comments = new JavaFormatter.CommentTracker();
+            CommentTracker comments = new CommentTracker();
             LineComment comment = new LineComment("value");
 
             comments.comment(comment);
@@ -51,7 +51,7 @@ final class FormatterGuardrailsTest {
     @Test
     void duplicateCommentClaimMessageCapsCommentText() {
         withGuardrails("true", () -> {
-            JavaFormatter.CommentTracker comments = new JavaFormatter.CommentTracker();
+            CommentTracker comments = new CommentTracker();
             LineComment comment = new LineComment("a".repeat(120) + "tail-marker");
 
             comments.comment(comment);

@@ -18,9 +18,9 @@ import dev.lanwen.frmtr.doc.Doc;
  * non-static-only fixtures cover the import-section cases that remain in {@link CompilationUnitPrinter}.
  */
 final class ImportDeclarationPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
 
-    ImportDeclarationPrinter(JavaFormatter.CommentTracker comments) {
+    ImportDeclarationPrinter(CommentTracker comments) {
         this.comments = comments;
     }
 

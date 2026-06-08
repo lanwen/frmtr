@@ -37,7 +37,7 @@ import java.util.function.ToIntFunction;
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/generic_class/frmtr.output.java}.
  */
 final class ClassOrInterfaceDeclarationPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final RawSource rawSource;
     private final FormatterOptions options;
     private final CommentedInterfacePrinter commentedInterfaces;
@@ -54,7 +54,7 @@ final class ClassOrInterfaceDeclarationPrinter {
     private final Function<ClassOrInterfaceDeclaration, Doc> memberBlock;
 
     ClassOrInterfaceDeclarationPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             RawSource rawSource,
             FormatterOptions options,
             CommentedInterfacePrinter commentedInterfaces,

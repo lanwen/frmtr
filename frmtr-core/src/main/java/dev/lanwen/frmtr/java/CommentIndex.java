@@ -16,7 +16,7 @@ import java.util.List;
  * callers are trying to preserve.
  *
  * <p>Callers still decide whether a comment is leading, trailing, orphan, or syntax-specific, how it is spaced in the
- * surrounding layout, and when a comment is rendered or marked as consumed by {@link JavaFormatter.CommentTracker}.
+ * surrounding layout, and when a comment is rendered or marked as consumed by {@link CommentTracker}.
  */
 final class CommentIndex {
     private static final Comparator<Comment> SOURCE_ORDER = Comparator.comparing(CommentIndex::beginPosition);

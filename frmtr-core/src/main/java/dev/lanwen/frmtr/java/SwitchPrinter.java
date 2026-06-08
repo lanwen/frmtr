@@ -42,7 +42,7 @@ import java.util.function.ToIntFunction;
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/unnamed-variables-and-patterns/input.java}.
  */
 final class SwitchPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final RawSource rawSource;
     private final FormatterOptions options;
     private final JavaFormatRule<Statement> statementRenderer;

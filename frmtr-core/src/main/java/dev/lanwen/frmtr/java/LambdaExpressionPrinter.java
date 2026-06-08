@@ -45,7 +45,7 @@ import java.util.function.ToIntFunction;
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/variables/frmtr.output.java}.
  */
 final class LambdaExpressionPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final RawSource rawSource;
     private final FormatterOptions options;
     private final JavaFormatRule<Expression> expressionRenderer;
@@ -61,7 +61,7 @@ final class LambdaExpressionPrinter {
     private final BiPredicate<Comment, Node> startsOnSameLine;
 
     LambdaExpressionPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             RawSource rawSource,
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,

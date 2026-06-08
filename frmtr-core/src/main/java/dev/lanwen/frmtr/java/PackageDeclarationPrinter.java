@@ -19,12 +19,12 @@ import dev.lanwen.frmtr.doc.Doc;
  * comments are covered near {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/comments/class}.
  */
 final class PackageDeclarationPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final RawSource rawSource;
     private final FormatterOptions options;
 
     PackageDeclarationPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             RawSource rawSource,
             FormatterOptions options) {
         this.comments = comments;

@@ -16,9 +16,9 @@ import java.util.Optional;
  * comment docs are spaced, and whether a source-position fork should affect the surrounding layout.
  */
 final class CommentPlacement {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
 
-    CommentPlacement(JavaFormatter.CommentTracker comments) {
+    CommentPlacement(CommentTracker comments) {
         this.comments = comments;
     }
 

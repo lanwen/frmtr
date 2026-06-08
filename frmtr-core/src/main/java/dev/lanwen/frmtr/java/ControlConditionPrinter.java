@@ -22,7 +22,7 @@ import java.util.function.ToIntFunction;
  * condition expression text or docs that fit between the already-decided parentheses.
  */
 final class ControlConditionPrinter {
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final FormatterOptions options;
     private final Function<Expression, String> compact;
     private final Function<Expression, String> compactWithoutOwnComment;
@@ -30,7 +30,7 @@ final class ControlConditionPrinter {
     private final ToIntFunction<String> currentIndentedWidth;
 
     ControlConditionPrinter(
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             FormatterOptions options,
             Function<Expression, String> compact,
             Function<Expression, String> compactWithoutOwnComment,

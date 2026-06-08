@@ -26,12 +26,12 @@ import java.util.function.Predicate;
  */
 final class MemberBlockPrinter {
     private final RawSource rawSource;
-    private final JavaFormatter.CommentTracker comments;
+    private final CommentTracker comments;
     private final Predicate<BodyDeclaration<?>> hasDeclarationAnnotations;
 
     MemberBlockPrinter(
             RawSource rawSource,
-            JavaFormatter.CommentTracker comments,
+            CommentTracker comments,
             Predicate<BodyDeclaration<?>> hasDeclarationAnnotations) {
         this.rawSource = rawSource;
         this.comments = comments;

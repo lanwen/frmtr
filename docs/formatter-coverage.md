@@ -1,0 +1,183 @@
+# Formatter Coverage Map
+
+This map records which JavaParser AST kinds are currently owned by structured formatter printers and which paths still
+use raw or compact source-derived text. It is an audit aid for formatter maintainability work, not a test matrix or a
+promise that every JavaParser subtype has a dedicated structured rule.
+
+When formatter ownership moves, update this file in the same change as the code. Output-changing work still belongs in
+golden fixtures and idempotence/reparse coverage; this map only explains the decision tree that selects existing
+owners.
+
+## Whole-File And Transform Flow
+
+Single-file formatting flows through these ownership boundaries:
+
+1. `Frmtr.format(...)` applies `FormatterOptions`.
+2. `JavaFormatter` handles pragma-required opt-in, JavaParser configuration, token/comment storage, parse errors, and
+   the transform stage.
+3. `JavaTransformPipeline` applies source-equivalent AST transforms. The current transform is `ImportSortTransform`,
+   which orders existing imports before printing.
+4. `JavaPrinter` creates the per-run `JavaFormatContext` while wiring all printers and dispatchers.
+   `JavaPrinter.print(CompilationUnit)` delegates whole-file layout to `CompilationUnitPrinter`, then asks
+   `CommentTracker` to run the debug-only missed comment guardrail.
+5. `CompilationUnitPrinter` sequences file-leading comments, package declarations, imports, optional module
+   declarations, top-level declarations, compact unnamed-class members, and trailing orphan comments.
+
+Top-level AST ownership:
+
+| JavaParser AST kind | Primary owner | Notes |
+| --- | --- | --- |
+| `CompilationUnit` | `CompilationUnitPrinter` | Owns package/import/module/type ordering and orphan comment placement around the first and last type. |
+| `PackageDeclaration` | `PackageDeclarationPrinter` | Owns package line text and source-leading package comments. |
+| `ImportDeclaration` | `ImportDeclarationPrinter` | Owns one import line. Import ordering is owned by `ImportSortTransform`; import block separation is owned by `CompilationUnitPrinter`. |
+| `ModuleDeclaration` | `ModuleDeclarationPrinter` and `ModuleBlockPrinter` | `ModuleDeclarationPrinter` owns header and raw commented-module fallback selection; `ModuleBlockPrinter` owns structured directives. |
+| Top-level `BodyDeclaration<?>` | `BodyDeclarationDispatcher` | Applies body-level pragma/raw routing before narrowing to declaration printers. |
+| Compact unnamed-class members | `CompilationUnitPrinter` then `BodyDeclarationDispatcher` | JavaParser's compact wrapper class is not printed as a class; its members are treated as top-level declarations. |
+
+## Body Declarations
+
+`BodyDeclarationDispatcher` owns the body-declaration pragma gate and the broad subtype dispatch. Declaration printers
+own declaration-specific layout, and `MemberBlockPrinter` owns member sequencing inside type bodies.
+
+| JavaParser AST kind | Structured owner | Fallback or boundary notes |
+| --- | --- | --- |
+| `ClassOrInterfaceDeclaration` | `ClassOrInterfaceDeclarationPrinter` | Interfaces whose headers contain inline block comments route through `CommentedInterfacePrinter` and `RawPreservedSource`. |
+| `RecordDeclaration` | `RecordDeclarationPrinter` | Owns record headers, component lists, implements clauses, and body start layout. Members return to `MemberBlockPrinter` and `BodyDeclarationDispatcher`. |
+| `EnumDeclaration` | `EnumDeclarationPrinter` | Owns enum headers, constants, enum semicolons, body orphan comments, and enum constant argument layout. Ordinary members return to body dispatch. |
+| `AnnotationDeclaration` | `AnnotationDeclarationPrinter` | Owns annotation type headers and member blocks. |
+| `AnnotationMemberDeclaration` | `AnnotationDeclarationPrinter` | Owns annotation member declarations and default values, delegating default expressions back through expression rendering. |
+| `FieldDeclaration` | `FieldDeclarationPrinter` | Owns field declarations, variables, initializer break decisions, and shared variable initializer policy. |
+| `MethodDeclaration` | `MethodDeclarationPrinter` | Commented signatures with small bodies can route through `CommentedMethodSignaturePrinter` and `RawPreservedSource`; ordinary bodies delegate to `BlockPrinter`. |
+| `CompactConstructorDeclaration` | `ConstructorDeclarationPrinter` | Owns compact constructor headers and delegates bodies to `BlockPrinter`. |
+| `ConstructorDeclaration` | `ConstructorDeclarationPrinter` | Owns constructor headers, parameter lists, throws clauses, and body delegation. |
+| `InitializerDeclaration` | `InitializerDeclarationPrinter` | Owns static and instance initializer prefixes and delegates bodies to `BlockPrinter`. |
+| Other `BodyDeclaration<?>` subtypes | `BodyDeclarationDispatcher.rawDeclaration(...)` | Leading comments are printed through `CommentTracker`; the declaration body is emitted as `RawPreservedSource.rawWithoutOwnComment(..., CompactSourceText.compact(...))`. |
+
+Body-level raw routing:
+
+- `FormatterPragmas.bodyAction(...)` can force a declaration through raw preserved source when formatting is disabled or
+  ignored.
+- `FORMAT_WITH_LEADING` keeps legacy leading-comment placement before structured rendering.
+- `RawPreservedSource` must wrap any raw/source-derived body fallback so debug comment accounting sees comments
+  intentionally preserved by raw text.
+
+## Statements
+
+`StatementDispatcher` owns statement-level formatter pragma state, raw statement recovery, leading comments, trailing
+line comments, `TryStmt` comment exceptions, and the switch-vs-non-switch branch. Non-switch structured bodies then
+route to `StatementPrinter`; switch grammar routes to `SwitchPrinter`.
+
+| JavaParser AST kind | Primary owner | Notes |
+| --- | --- | --- |
+| `SwitchStmt` | `StatementDispatcher` then `SwitchPrinter.switchStatement(...)` | Statement-level raw/comment gates run first; labels, guards, entries, and switch bodies are switch-owned. |
+| `BlockStmt` | `StatementPrinter` then `BlockPrinter` | `BlockPrinter` owns statement sequencing, orphan comments, printable empty statements, and block separators. |
+| `ReturnStmt` | `StatementPrinter` and `ReturnExpressionPrinter` | `StatementPrinter` owns statement assembly; `ReturnExpressionPrinter` owns return-value wrapping. |
+| `ThrowStmt` | `StatementPrinter` | Throws expressions delegate through expression rendering. |
+| `YieldStmt` | `StatementPrinter` | Used by switch entries and ordinary statement dispatch. |
+| `ExplicitConstructorInvocationStmt` | `StatementPrinter` | Owns `this(...)` and `super(...)` calls, type arguments, and huggable lambda arguments. |
+| `ExpressionStmt` | `StatementPrinter` | Local `VariableDeclarationExpr` routes to `VariableDeclarationPrinter`; wide method-call statements can route through `MethodCallPrinter`; other expressions delegate through `ExpressionDispatcher`. |
+| `EmptyStmt` | `StatementPrinter` | Emits `;`. |
+| `AssertStmt` | `StatementPrinter` | Uses compact source text for check/message shape. |
+| `BreakStmt` | `StatementPrinter` | Owns label and inline block-comment handling. |
+| `ContinueStmt` | `StatementPrinter` | Owns label and label-comment handling. |
+| `LabeledStmt` | `StatementPrinter` | Owns label/comment extraction, then delegates nested block or statement formatting back to the normal owners. |
+| `LocalClassDeclarationStmt` | `StatementPrinter` then `BodyDeclarationDispatcher` | The contained class declaration is formatted as a body declaration. |
+| `LocalRecordDeclarationStmt` | `StatementPrinter` then `BodyDeclarationDispatcher` | The contained record declaration is formatted as a body declaration. |
+| `IfStmt` | `StatementPrinter` | Owns if/else chain structure, empty branches, and between-branch comments; nested statements return through statement dispatch. |
+| `WhileStmt` | `StatementPrinter` | Conditions route through `ControlConditionPrinter`; bodies route through statement/block owners. |
+| `DoStmt` | `StatementPrinter` | Conditions route through `ControlConditionPrinter`; bodies route through statement/block owners. |
+| `TryStmt` | `StatementPrinter` | Owns resource layout, catch/finally sequencing, and adjacent block-comment handoff. Blocks route to `BlockPrinter`. |
+| `SynchronizedStmt` | `StatementPrinter` | Conditions route through `ControlConditionPrinter`; body routes to `BlockPrinter`. |
+| `ForStmt` | `StatementPrinter` | Owns init/compare/update compact text and body routing. |
+| `ForEachStmt` | `StatementPrinter` | Owns variable/iterable compact text and body routing. |
+| Other `Statement` subtypes | `StatementPrinter` compact fallback | Emits `Doc.text(CompactSourceText.compact(statement))` after `StatementDispatcher` has handled the outer leading/trailing comment gate. |
+
+Switch-specific ownership:
+
+- `SwitchPrinter` owns both `SwitchStmt` and `SwitchExpr` so labels, guards, statement groups, rule entries, and switch
+  block layout stay in one grammar slice.
+- `SwitchEntry` layout is local to `SwitchPrinter`: statement groups, empty rules, commented rule bodies, and inline rule
+  bodies.
+- `TypePatternExpr` and `RecordPatternExpr` labels are switch-label concerns. Flat labels use normalized source text;
+  wide record patterns can wrap structurally.
+- Single-line rule entries with source-only syntax, currently block comments inside the rule text or `null, default`,
+  are preserved with `RawPreservedSource`.
+
+## Expressions
+
+`ExpressionDispatcher` owns only broad expression subtype narrowing. Callers still choose the expression context,
+comment placement, and whether compact text is acceptable. Specialized expression printers own the layout decision tree
+for their selected AST kind.
+
+| JavaParser AST kind | Structured owner | Notes |
+| --- | --- | --- |
+| `AssignExpr` | `AssignmentExpressionPrinter` | Owns assignment wrapping, nested assignment continuations, and assignment-specific hooks for binary, method-call, conditional, object-creation, and enclosed suffix cases. |
+| `ArrayAccessExpr` | `ArrayExpressionPrinter` | Owns array access and suffix behavior for broken enclosed scopes. |
+| `ArrayCreationExpr` | `ArrayExpressionPrinter` | Owns array creation prefixes, type breaks, and initializer delegation. |
+| `ArrayInitializerExpr` | `ArrayExpressionPrinter` | Owns initializer braces, compact initializer acceptance, and initializer comments. |
+| `AnnotationExpr` and subclasses | `AnnotationExpressionPrinter` | Covers marker, normal, and single-member annotations plus annotation member values. |
+| `BinaryExpr` | `BinaryExpressionPrinter` | Owns binary flattening, operator position, line comments between operands, precedence parentheses, and cast-division continuation policy. |
+| `CastExpr` | `CastExpressionPrinter` | Owns cast type layout and nested cast depth checks. |
+| `ConditionalExpr` | `ConditionalExpressionPrinter` | Owns ternary layout for assignments, initializers, comments around `?` and `:`, nested branches, and binary condition wrapping. |
+| `EnclosedExpr` | `EnclosedExpressionPrinter` | Owns parenthesized expression layout and suffix preservation for array, method-call, and method-reference suffixes. |
+| `FieldAccessExpr` | `FieldAccessPrinter` | Owns dotted field access and comment-sensitive name splitting. Compact field-access text is also reconstructed by `CompactSourceText`. |
+| `InstanceOfExpr` | `InstanceOfExpressionPrinter` | Owns `instanceof` continuations and binary-operator-position-aware placement. |
+| `LambdaExpr` | `LambdaExpressionPrinter` | Owns parameter parentheses policy, commented parameter reconstruction, expression/block bodies, and huggable lambda argument shapes. |
+| `MethodCallExpr` | `MethodCallPrinter` | Owns calls, call chains, chain comments, method-call suffixes, text-block arguments, lambda arguments, and broken chain roots. |
+| `MethodReferenceExpr` | `MethodReferencePrinter` | Owns method references, type-argument suffix text, and parenthesized-scope suffixes. |
+| `ObjectCreationExpr` | `ObjectCreationPrinter` | Owns constructor calls, argument breaks, lambda arguments, generic type-body breaks, and anonymous class member sequencing. |
+| `SwitchExpr` | `SwitchPrinter.switchExpression(...)` | Shares switch label, guard, entry, and block ownership with `SwitchStmt`. |
+| `TextBlockLiteralExpr` | `TextBlockPrinter` | Owns narrow fixture-backed content probes and raw source-derived fallback rendering for unrecognized text blocks. |
+| Other `Expression` subtypes | `ExpressionDispatcher` compact fallback | Emits `Doc.text(CompactSourceText.compact(expression))`. This covers simple names, literals, `this`, `super`, class literals, unary/postfix forms, pattern nodes outside switch-label paths, and any JavaParser expression kind without a dedicated branch. |
+
+Expression-adjacent owners that are selected by statement or declaration context rather than direct expression dispatch:
+
+- `VariableDeclarationPrinter` owns local `VariableDeclarationExpr` after `StatementPrinter` identifies a local variable
+  declaration statement.
+- `ReturnExpressionPrinter` owns return-value wrapping after `StatementPrinter` identifies a `ReturnStmt`.
+- `ControlConditionPrinter` owns parenthesized conditions for `if`, loops, synchronized statements, and switch
+  selectors after the statement or switch grammar selects that context.
+- `EnclosedSuffixDispatcher` is the bridge for broken enclosed expressions that need method-call or method-reference
+  suffixes preserved.
+
+## Comment, Raw, And Compact Boundaries
+
+These helpers define the fallback and comment-accounting boundaries used by the maps above.
+
+| Helper | Boundary owned |
+| --- | --- |
+| `CommentTracker` | Stateful comment consumption for leading, trailing, orphan, and raw-preserved comments in one formatting run. |
+| `CommentIndex` | Read-only source-position predicates and ordering for comments and nodes. It does not render or mark comments consumed. |
+| `CommentPlacement` | Source-position-sensitive attached and unattached block-comment docs for callers that need more than ordinary leading/trailing slots. |
+| `JavaCommentTrivia` and `JavaCommentKind` | Comment classification and reusable range checks for comment accounting and layout rules. |
+| `FormatterPragmas` | Formatter off/on and ignore state used by declaration and statement dispatchers. |
+| `RawSource` | Token-range recovery, raw-without-own-comment text, line-by-line trailing whitespace stripping, and single-line whitespace normalization. |
+| `RawPreservedSource` | The canonical raw-output boundary. It wraps raw or source-derived text in `Doc.Text` and records contained comments as deliberately raw-preserved. |
+| `CompactSourceText` | Source-equivalent compact text for width gates and compact fallbacks, including raw string-literal spelling, reconstructed comment-free method calls, field accesses, type-like generic spacing cleanup, and clone-before-comment-removal variants. |
+| `CommentedTokenText` | Comment-aware tokenization and token-line helpers used by raw fallback printers. |
+| `CommentedModulePrinter` | Raw-source reconstruction for commented `module-info.java` headers and directives selected by `ModuleDeclarationPrinter`. |
+| `CommentedInterfacePrinter` | Raw-source reconstruction for interface headers and abstract method signatures with comments inside declaration syntax. |
+| `CommentedMethodSignaturePrinter` | Raw-source reconstruction for method signatures with comments when the body is small enough that the fallback does not become a second statement formatter. |
+
+## Known Intentional Fallbacks
+
+These fallbacks are intentional current behavior. Before replacing one with structured formatting, add a dedicated owner
+branch, fixture coverage for source/comment edge cases, and update this map.
+
+| Fallback | Current trigger | What new structured coverage would need |
+| --- | --- | --- |
+| Body pragma raw pass | `FormatterPragmas.bodyAction(...)` returns `RAW`. | Usually no replacement; pragma semantics require source preservation. Any changed pragma behavior needs pragma fixtures and comment-accounting review. |
+| Statement pragma raw pass | `FormatterPragmas.statementAction(...)` returns `RAW` or `RAW_WITH_TRAILING_HARD_LINE`. | Usually no replacement; pragma semantics require source preservation. Any changed pragma behavior needs pragma fixtures and statement separator review. |
+| Unknown body declarations | `BodyDeclarationDispatcher` default branch. | Add a typed dispatcher branch and declaration printer, including leading comments, member sequencing if relevant, raw/comment accounting, and golden fixtures. |
+| Unknown statements | `StatementPrinter` default branch. | Add a typed statement branch, nested statement/expression delegation, comment placement rules, and golden fixtures. |
+| Unknown expressions | `ExpressionDispatcher` default branch. | Add a typed expression branch, recursive expression delegation, comment placement rules, width policy, and golden fixtures. |
+| Unknown module directives | `ModuleBlockPrinter` default branch. | Add a directive branch, target list/comment rules as needed, and module fixtures. |
+| Commented module declarations | `ModuleDeclarationPrinter` sees `/*` or `//` in the raw module declaration. | Structured module comment slots for headers and directives, plus fixtures that prove comments are printed once. |
+| Commented interface headers and abstract signatures | `ClassOrInterfaceDeclarationPrinter` detects a commented interface header. | Structured comment slots for interface headers, extends clauses, and abstract method signatures. |
+| Commented method signatures | `MethodDeclarationPrinter` receives a non-empty result from `CommentedMethodSignaturePrinter`. | Structured signature comment slots that work for larger method bodies without source-string body formatting. |
+| Source-only switch rule entries | `SwitchPrinter.rawSingleLineSwitchEntry(...)` sees single-line rule text with block comments or `null, default`. | Structured representation of those label/body comment positions or source-only labels, plus switch fixtures. |
+| Unrecognized text-block content | `TextBlockPrinter` content probes decline. | A real content formatter or additional probe, plus text-block fixtures for raw spelling, indentation, closing delimiter placement, and escapes. |
+
+Compact text is also a normal support mechanism for flat width checks, type-like snippets, labels, resources, and other
+source-equivalent fragments. A compact call is not automatically a missing printer; it is a missing coverage item only
+when a caller uses compact text as the final emitted document for an AST kind that should have structured layout.

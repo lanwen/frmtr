@@ -10,16 +10,17 @@ import java.util.function.Function;
 import java.util.function.ToIntFunction;
 
 /**
- * Renders expressions once a statement or switch grammar has placed them in a parenthesized control condition.
+ * Renders expressions once statement or statement-switch rendering has placed them in a parenthesized control condition.
  *
  * <p>This helper owns the condition-specific boundary between compact source text and broken expression docs,
  * including the block-comment placement rules that preserve source shape inside condition parentheses. The boundary
- * exists because while, do-while, synchronized, and switch selectors all need one condition layout policy after their
- * caller has already chosen the surrounding keyword, body, and statement separator behavior.
+ * exists because while, do-while, synchronized, and statement-switch selectors all need one condition layout policy after
+ * their caller has already chosen the surrounding keyword, body, and statement separator behavior.
  *
  * <p>{@link JavaPrinter} still owns broad expression dispatch, raw-source normalization, and width calculation policy.
- * {@link StatementPrinter} and {@link SwitchPrinter} still own their statement grammar; this helper only returns the
- * condition expression text or docs that fit between the already-decided parentheses.
+ * {@link StatementPrinter} owns ordinary statement grammar, and {@link SwitchPrinter} owns statement-switch selector
+ * placement; this helper only returns the condition expression text or docs that fit between the already-decided
+ * parentheses.
  */
 final class ControlConditionPrinter {
     private final CommentTracker comments;

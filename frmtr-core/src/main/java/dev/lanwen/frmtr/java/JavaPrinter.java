@@ -391,6 +391,7 @@ final class JavaPrinter {
                 rawSource,
                 options,
                 this::statement,
+                switches::switchStatement,
                 this::block,
                 blocks::blockWithLeading,
                 this::body,
@@ -438,15 +439,12 @@ final class JavaPrinter {
                 formatterPragmas,
                 rawPreservedSource,
                 bodyDeclarationDispatcher::bodyContent);
-        StatementDispatcher statementDispatcher = new StatementDispatcher(
-                statements::statement,
-                switches::switchStatement);
         this.statementRules = new StatementRuleEnvelope(
                 comments,
                 commentPlacementPolicy,
                 formatterPragmas,
                 rawPreservedSource,
-                statementDispatcher::statementContent);
+                statements::statement);
     }
 
     Doc print(CompilationUnit unit) {

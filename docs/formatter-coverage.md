@@ -70,13 +70,13 @@ Body-level raw routing:
 ## Statements
 
 `StatementRuleEnvelope` owns statement-level formatter pragma state, raw statement recovery, leading comments, trailing
-line comments, and `TryStmt` comment exceptions. Formatted statement content then routes through
-`StatementDispatcher`, which owns only the switch-vs-non-switch branch: non-switch structured bodies go to
-`StatementPrinter`, and switch grammar goes to `SwitchPrinter`.
+line comments, and `TryStmt` comment exceptions. Formatted statement content then routes to `StatementPrinter`, which
+owns the statement-kind branch. Switch statements are selected there with the other statements, then delegate reusable
+switch-entry layout to `SwitchPrinter`.
 
 | JavaParser AST kind | Primary owner | Notes |
 | --- | --- | --- |
-| `SwitchStmt` | `StatementRuleEnvelope` then `StatementDispatcher` then `SwitchPrinter.switchStatement(...)` | Statement-level raw/comment gates run first; content dispatch then routes labels, guards, entries, and switch bodies to switch-owned formatting. |
+| `SwitchStmt` | `StatementRuleEnvelope` then `StatementPrinter` then `SwitchPrinter.switchStatement(...)` | Statement-level raw/comment gates run first; `StatementPrinter` selects the switch-statement branch with the other statements, then delegates labels, guards, entries, and switch body layout to switch-owned formatting. |
 | `BlockStmt` | `StatementPrinter` then `BlockPrinter` | `BlockPrinter` owns statement sequencing, orphan comments, printable empty statements, and block separators. |
 | `ReturnStmt` | `StatementPrinter` and `ReturnExpressionPrinter` | `StatementPrinter` owns statement assembly; `ReturnExpressionPrinter` owns return-value wrapping. |
 | `ThrowStmt` | `StatementPrinter` | Throws expressions delegate through expression rendering. |
@@ -101,8 +101,8 @@ line comments, and `TryStmt` comment exceptions. Formatted statement content the
 
 Switch-specific ownership:
 
-- `SwitchPrinter` owns both `SwitchStmt` and `SwitchExpr` so labels, guards, statement groups, rule entries, and switch
-  block layout stay in one grammar slice.
+- `StatementPrinter` owns `SwitchStmt` selection with the other statements, while `SwitchPrinter` owns reusable labels,
+  guards, statement groups, rule entries, and switch block layout for statement and expression switches.
 - `SwitchEntry` layout is local to `SwitchPrinter`: statement groups, empty rules, commented rule bodies, and inline rule
   bodies.
 - `TypePatternExpr` and `RecordPatternExpr` labels are switch-label concerns. Flat labels use normalized source text;
@@ -134,7 +134,7 @@ expression kinds. Specialized expression printers own the layout decision tree f
 | `MethodCallExpr` | `MethodCallPrinter` | Owns calls, call chains, chain comments, method-call suffixes, text-block arguments, lambda arguments, and broken chain roots. |
 | `MethodReferenceExpr` | `MethodReferencePrinter` | Owns method references, type-argument suffix text, and parenthesized-scope suffixes. |
 | `ObjectCreationExpr` | `ObjectCreationPrinter` | Owns constructor calls, argument breaks, lambda arguments, generic type-body breaks, and anonymous class member sequencing. |
-| `SwitchExpr` | `SwitchPrinter.switchExpression(...)` | Shares switch label, guard, entry, and block ownership with `SwitchStmt`. |
+| `SwitchExpr` | `SwitchPrinter.switchExpression(...)` | Uses the same reusable switch label, guard, entry, and block layout as `SwitchStmt` without owning statement dispatch. |
 | `TextBlockLiteralExpr` | `TextBlockPrinter` | Owns narrow fixture-backed content probes and raw source-derived fallback rendering for unrecognized text blocks. |
 | Other `Expression` subtypes | `ExpressionRuleEnvelope` then `ExpressionDispatcher` compact fallback | Emits `Doc.text(CompactSourceText.compact(expression))`. This covers simple names, literals, `this`, `super`, class literals, unary/postfix forms, pattern nodes outside switch-label paths, and any JavaParser expression kind without a dedicated branch. |
 
@@ -143,8 +143,9 @@ Expression-adjacent owners that are selected by statement or declaration context
 - `VariableDeclarationPrinter` owns local `VariableDeclarationExpr` after `StatementPrinter` identifies a local variable
   declaration statement.
 - `ReturnExpressionPrinter` owns return-value wrapping after `StatementPrinter` identifies a `ReturnStmt`.
-- `ControlConditionPrinter` owns parenthesized conditions for `if`, loops, synchronized statements, and switch
-  selectors after the statement or switch grammar selects that context.
+- `ControlConditionPrinter` owns parenthesized conditions for `if`, loops, synchronized statements, and statement-switch
+  selectors after the statement or statement-switch renderer selects that context; switch expressions use compact selector
+  text directly.
 - `EnclosedSuffixDispatcher` is the bridge for broken enclosed expressions that need method-call or method-reference
   suffixes preserved.
 

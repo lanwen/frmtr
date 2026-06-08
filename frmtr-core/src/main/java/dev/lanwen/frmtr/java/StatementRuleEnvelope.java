@@ -11,13 +11,12 @@ import dev.lanwen.frmtr.doc.Doc;
  *
  * <p>This helper owns the outer statement rule envelope: formatter off/on and ignore pragmas, raw source recovery,
  * leading and trailing statement comments, and {@link TryStmt} comment special cases. The boundary keeps those
- * source-sensitive gates out of {@link StatementPrinter}, which renders structured non-switch statement bodies, out of
- * {@link SwitchPrinter}, which owns switch grammar, and out of {@link StatementDispatcher}, which only chooses between
- * those content rules.
+ * source-sensitive gates out of {@link StatementPrinter}, which renders structured statement bodies, and out of
+ * {@link SwitchPrinter}, which owns reusable switch-entry grammar for switch statements and switch expressions.
  *
  * <p>Callers still choose when a statement context is needed and provide the already-wired content dispatcher.
- * Expression formatting, block formatting, declaration-body formatting, switch rendering, and non-switch statement
- * rendering stay with their existing owners. Representative pragma coverage includes
+ * Expression formatting, block formatting, declaration-body formatting, switch-entry rendering, and statement rendering
+ * stay with their existing owners. Representative pragma coverage includes
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/formatter-on-off/inside_block/input.java} with
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/formatter-on-off/inside_block/frmtr.output.java}
  * and {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/require-pragma/format-pragma/input.java}
@@ -48,8 +47,8 @@ final class StatementRuleEnvelope {
      * Applies statement-level formatter pragmas and comment attachment before structured statement content rendering.
      *
      * <p>Formatter off/on pragmas update persistent state across later statements, so this gate must run before the
-     * content dispatcher. Formatted statements route to {@link StatementDispatcher} only after statement-level raw
-     * output, leading comments, and trailing line comments have been selected.
+     * content renderer. Formatted statements route to {@link StatementPrinter} only after statement-level raw output,
+     * leading comments, and trailing line comments have been selected.
      */
     Doc statement(Statement statement) {
         FormatterPragmas.PrintAction action = formatterPragmas.statementAction(statement);

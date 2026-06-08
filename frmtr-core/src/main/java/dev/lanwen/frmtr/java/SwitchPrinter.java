@@ -22,15 +22,12 @@ import java.util.function.Function;
 import java.util.function.ToIntFunction;
 
 /**
- * Renders switch statements, switch expressions, labels, guards, and entry bodies as one switch grammar slice.
+ * Renders switch expressions and reusable switch-entry grammar.
  *
- * <p>JavaParser exposes {@link SwitchStmt} through the statement tree and {@link SwitchExpr} through the expression
- * tree, but their blocks share the same labels, guards, rule entries, statement groups, and source-only fallback cases.
- * Keeping those branches together avoids splitting {@code case} layout decisions across statement and expression
- * helpers. {@link StatementRuleEnvelope} owns the outer statement pragma/raw/comment gate before statement switches
- * reach this helper, while {@link JavaPrinter} still wires expression dispatch, raw source helpers, ordinary statement
- * formatting, expression formatting, type formatting, and block formatting. This helper only chooses the switch-specific
- * structure after those outer owners have selected formatted output.
+ * <p>Statement switches are selected by {@link StatementPrinter}, and expression switches are selected by
+ * {@link ExpressionDispatcher}. Both routes delegate here for selector comments, labels, guards, rule entries, statement
+ * groups, and source-only fallback cases so {@code case} layout decisions remain in one place without moving
+ * {@link SwitchStmt} out of ordinary statement dispatch.
  *
  * <p>Representative fixture pairs for this boundary include
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/switch/input.java} with

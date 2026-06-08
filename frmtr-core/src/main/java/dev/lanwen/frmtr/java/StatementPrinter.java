@@ -30,6 +30,7 @@ import com.github.javaparser.ast.stmt.LocalClassDeclarationStmt;
 import com.github.javaparser.ast.stmt.LocalRecordDeclarationStmt;
 import com.github.javaparser.ast.stmt.ReturnStmt;
 import com.github.javaparser.ast.stmt.Statement;
+import com.github.javaparser.ast.stmt.SwitchStmt;
 import com.github.javaparser.ast.stmt.SynchronizedStmt;
 import com.github.javaparser.ast.stmt.ThrowStmt;
 import com.github.javaparser.ast.stmt.TryStmt;
@@ -46,15 +47,13 @@ import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
 
 /**
- * Renders structured Java statements except switch statements.
+ * Renders structured Java statements.
  *
- * <p>This helper owns non-switch statement dispatch and the source-sensitive statement details around if/else chains,
- * loops, try/catch/finally, labels, empty bodies, and simple semicolon statements. The boundary exists so
+ * <p>This helper owns statement dispatch and the source-sensitive statement details around if/else chains, loops, switch
+ * statements, try/catch/finally, labels, empty bodies, and simple semicolon statements. The boundary exists so
  * {@link StatementRuleEnvelope} can keep formatter pragma raw-passes and leading/trailing statement comment attachment
- * in the outer rule envelope, while {@link StatementDispatcher} keeps switch routing out of ordinary statement
- * content. Switch statements are deliberately excluded because switch labels, guards, rule bodies, statement groups,
- * and switch expressions share a switch-specific grammar owned by {@link SwitchPrinter}; nested switch statements still
- * reach the dispatcher through the statement callback.
+ * in the outer rule envelope. Switch statements are part of the normal statement-kind decision here, while their labels,
+ * guards, rule bodies, and statement groups stay delegated to {@link SwitchPrinter}'s switch-entry renderer.
  *
  * <p>Expression, type, local-variable, declaration-body, and block formatting stay with their existing owners and are
  * called through callbacks. Representative coverage pairs for this boundary include
@@ -75,6 +74,7 @@ final class StatementPrinter {
     private final RawSource rawSource;
     private final FormatterOptions options;
     private final JavaFormatRule<Statement> statementRenderer;
+    private final JavaFormatRule<SwitchStmt> switchStatementRenderer;
     private final JavaFormatRule<BlockStmt> blockRenderer;
     private final BiFunction<BlockStmt, Doc, Doc> blockWithLeadingRenderer;
     private final JavaFormatRule<BodyDeclaration<?>> bodyRenderer;
@@ -104,6 +104,7 @@ final class StatementPrinter {
             RawSource rawSource,
             FormatterOptions options,
             JavaFormatRule<Statement> statementRenderer,
+            JavaFormatRule<SwitchStmt> switchStatementRenderer,
             JavaFormatRule<BlockStmt> blockRenderer,
             BiFunction<BlockStmt, Doc, Doc> blockWithLeadingRenderer,
             JavaFormatRule<BodyDeclaration<?>> bodyRenderer,
@@ -131,6 +132,7 @@ final class StatementPrinter {
         this.rawSource = rawSource;
         this.options = options;
         this.statementRenderer = statementRenderer;
+        this.switchStatementRenderer = switchStatementRenderer;
         this.blockRenderer = blockRenderer;
         this.blockWithLeadingRenderer = blockWithLeadingRenderer;
         this.bodyRenderer = bodyRenderer;
@@ -157,7 +159,7 @@ final class StatementPrinter {
     }
 
     /**
-     * Renders the structured body of a non-switch statement after StatementRuleEnvelope has chosen formatted output.
+     * Renders the structured body of a statement after StatementRuleEnvelope has chosen formatted output.
      *
      * <p>Raw pragma handling stays in {@link StatementRuleEnvelope} because formatter off/on state changes which later
      * statements format. This method only decides the formatted content once the outer gate has decided the statement
@@ -189,6 +191,7 @@ final class StatementPrinter {
                     blockRenderer.format(synchronizedStmt.getBody()));
             case ForStmt forStmt -> forStatement(forStmt);
             case ForEachStmt forEachStmt -> forEachStatement(forEachStmt);
+            case SwitchStmt switchStmt -> switchStatementRenderer.format(switchStmt);
             default -> Doc.text(compact.apply(statement));
         };
     }
@@ -819,7 +822,7 @@ final class StatementPrinter {
      * <p>Empty if-blocks keep the two-line block shape used by existing fixtures, block bodies stay on the same line as
      * their header, and nested control statements break and indent so constructs such as single-line loops do not
      * collapse into ambiguous header/body text. Switch bodies go back through the outer statement callback, where the
-     * rule envelope preserves statement gates and {@link StatementDispatcher} keeps the switch-specific route.
+     * rule envelope preserves statement gates before this printer selects the switch-statement branch again.
      */
     private Doc nestedStatement(Statement statement) {
         if (statement.isBlockStmt()

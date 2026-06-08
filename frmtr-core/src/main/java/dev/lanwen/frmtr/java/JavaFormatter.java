@@ -34,7 +34,7 @@ public final class JavaFormatter {
 
     public JavaFormatter(FormatterOptions options) {
         this.options = options;
-        ParserConfiguration configuration = new ParserConfiguration()
+        var configuration = new ParserConfiguration()
                 .setLanguageLevel(javaParserLanguageLevel(options.javaLanguageLevel()))
                 .setStoreTokens(true)
                 .setAttributeComments(true);
@@ -186,10 +186,6 @@ public final class JavaFormatter {
             }
             formatted.append(String.format("%" + width + "d  %s", line, lines.get(line - 1)));
         }
-    }
-
-    static Doc commentDoc(Comment comment) {
-        return commentDoc(JavaCommentTrivia.from(comment));
     }
 
     static Doc commentDoc(JavaCommentTrivia trivia) {

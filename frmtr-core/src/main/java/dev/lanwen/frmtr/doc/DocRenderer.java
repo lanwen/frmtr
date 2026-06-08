@@ -115,8 +115,8 @@ public final class DocRenderer {
 
     private void newline(int indent) {
         trimTrailingHorizontalWhitespace();
-        out.append(options.lineEnding().value());
-        out.append(options.indentUnit().repeat(indent));
+        out.append(options.lineEnding().value())
+            .repeat(options.indentUnit(), indent);
         column = options.indentUnit().length() * indent;
     }
 

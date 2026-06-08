@@ -278,7 +278,7 @@ public final class JavaFormatter {
         }
 
         private boolean claim(JavaCommentTrivia trivia) {
-            return trivia.claim(printed);
+            return FormatterGuardrails.claimComment(trivia, printed);
         }
     }
 

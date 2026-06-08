@@ -37,9 +37,10 @@ Single-source formatting starts at `Frmtr.format(...)`.
 2. If `FormatterOptions.requirePragma` is enabled, `JavaFormatter` first checks the leading Javadoc comment for a recognized opt-in marker. The public marker is `@format`; source without an opt-in marker is returned unchanged.
 3. `JavaFormatter` parses source with JavaParser using stored tokens and attributed comments.
 4. Syntactically invalid Java is rejected with `FormatterException`; v1 formats parseable compilation units only.
-5. The parsed tree is adapted into `SyntaxNodeView` to keep formatter-owned syntax metadata separate from JavaParser APIs.
-6. `JavaPrinter` walks JavaParser declarations and statements and emits `Doc` values.
-7. `DocRenderer` renders the document IR using line width, indentation, line ending, and trailing-newline options.
+5. The declared transform pipeline applies source-equivalent AST normalization before printing.
+6. The transformed tree is adapted into `SyntaxNodeView` to keep formatter-owned syntax metadata separate from JavaParser APIs.
+7. `JavaPrinter` walks JavaParser declarations and statements and emits `Doc` values.
+8. `DocRenderer` renders the document IR using line width, indentation, line ending, and trailing-newline options.
 
 JavaParser printers are not the formatter engine. They may be useful as references, but final formatting is owned by the `Doc` pipeline.
 
@@ -83,6 +84,8 @@ The public `Frmtr` API wraps recoverable internal formatter failures, including 
 `JavaCommentKind` and `JavaCommentTrivia` classify JavaParser comments as line, block, Javadoc, or unknown trivia, expose reusable source-position queries through `CommentIndex`, and let `CommentTracker` preserve identity-based printed-comment claims without making printers repeat raw subclass and range checks.
 
 `CommentIndex` centralizes read-only source-position classification for comments, including explicit-fallback begin/end line lookups, line/column comparisons, line-range containment, same-begin-line checks, source-order sorting, contained line-comment selection, and between-node comment gaps. It does not render comments or mutate printed-comment state; `CommentTracker` remains responsible for rendered comment docs and consumption, while caller printers and `CommentPlacement` decide spacing and layout context.
+
+`FormatterGuardrails` hosts opt-in internal pipeline diagnostics. Setting `dev.lanwen.frmtr.debugGuardrails=true` enables development-only checks such as duplicate comment-claim failures while the default path keeps existing best-effort skip behavior and formatter output unchanged.
 
 ## CLI
 

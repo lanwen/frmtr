@@ -67,13 +67,14 @@ Body-level raw routing:
 
 ## Statements
 
-`StatementDispatcher` owns statement-level formatter pragma state, raw statement recovery, leading comments, trailing
-line comments, `TryStmt` comment exceptions, and the switch-vs-non-switch branch. Non-switch structured bodies then
-route to `StatementPrinter`; switch grammar routes to `SwitchPrinter`.
+`StatementRuleEnvelope` owns statement-level formatter pragma state, raw statement recovery, leading comments, trailing
+line comments, and `TryStmt` comment exceptions. Formatted statement content then routes through
+`StatementDispatcher`, which owns only the switch-vs-non-switch branch: non-switch structured bodies go to
+`StatementPrinter`, and switch grammar goes to `SwitchPrinter`.
 
 | JavaParser AST kind | Primary owner | Notes |
 | --- | --- | --- |
-| `SwitchStmt` | `StatementDispatcher` then `SwitchPrinter.switchStatement(...)` | Statement-level raw/comment gates run first; labels, guards, entries, and switch bodies are switch-owned. |
+| `SwitchStmt` | `StatementRuleEnvelope` then `StatementDispatcher` then `SwitchPrinter.switchStatement(...)` | Statement-level raw/comment gates run first; content dispatch then routes labels, guards, entries, and switch bodies to switch-owned formatting. |
 | `BlockStmt` | `StatementPrinter` then `BlockPrinter` | `BlockPrinter` owns statement sequencing, orphan comments, printable empty statements, and block separators. |
 | `ReturnStmt` | `StatementPrinter` and `ReturnExpressionPrinter` | `StatementPrinter` owns statement assembly; `ReturnExpressionPrinter` owns return-value wrapping. |
 | `ThrowStmt` | `StatementPrinter` | Throws expressions delegate through expression rendering. |
@@ -94,7 +95,7 @@ route to `StatementPrinter`; switch grammar routes to `SwitchPrinter`.
 | `SynchronizedStmt` | `StatementPrinter` | Conditions route through `ControlConditionPrinter`; body routes to `BlockPrinter`. |
 | `ForStmt` | `StatementPrinter` | Owns init/compare/update compact text and body routing. |
 | `ForEachStmt` | `StatementPrinter` | Owns variable/iterable compact text and body routing. |
-| Other `Statement` subtypes | `StatementPrinter` compact fallback | Emits `Doc.text(CompactSourceText.compact(statement))` after `StatementDispatcher` has handled the outer leading/trailing comment gate. |
+| Other `Statement` subtypes | `StatementPrinter` compact fallback | Emits `Doc.text(CompactSourceText.compact(statement))` after `StatementRuleEnvelope` has handled the outer leading/trailing comment gate. |
 
 Switch-specific ownership:
 
@@ -156,7 +157,7 @@ These helpers define the fallback and comment-accounting boundaries used by the 
 | `CommentIndex` | Read-only source-position predicates and ordering for comments and nodes. It does not render or mark comments consumed. |
 | `CommentPlacement` | Source-position-sensitive attached and unattached block-comment docs for callers that need more than ordinary leading/trailing slots, backed by `JavaCommentPlacementPolicy`. |
 | `JavaCommentTrivia` and `JavaCommentKind` | Comment classification and reusable range checks for comment accounting and layout rules. |
-| `FormatterPragmas` | Formatter off/on and ignore state used by declaration and statement dispatchers. |
+| `FormatterPragmas` | Formatter off/on and ignore state used by declaration dispatch and the statement rule envelope. |
 | `FormatterGuardrails` | Debug-only transform and comment-accounting checks enabled by `dev.lanwen.frmtr.debug.guardrails`. |
 | `RawSource` | Token-range recovery, raw-without-own-comment text, line-by-line trailing whitespace stripping, and single-line whitespace normalization. |
 | `RawPreservedSource` | The canonical raw-output boundary. It wraps raw or source-derived text in `Doc.Text` and records contained comments as deliberately raw-preserved. |

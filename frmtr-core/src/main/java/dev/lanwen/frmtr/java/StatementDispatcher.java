@@ -1,106 +1,41 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.ast.stmt.BreakStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.stmt.SwitchStmt;
-import com.github.javaparser.ast.stmt.TryStmt;
 import dev.lanwen.frmtr.doc.Doc;
 
 /**
- * Applies statement-level pragma, raw-source, and comment gates before routing formatted statement bodies.
+ * Routes formatted statement content to the helper that owns the selected statement grammar.
  *
- * <p>This helper owns the outer statement state machine: formatter off/on and ignore pragmas, raw source recovery,
- * leading and trailing statement comments, TryStmt comment special cases, and the switch-vs-non-switch branch. The
- * boundary keeps those source-sensitive gates out of {@link StatementPrinter}, which only renders structured
- * non-switch statement bodies, and out of {@link SwitchPrinter}, which owns switch labels, guards, entries, and bodies.
+ * <p>This helper owns only the switch-vs-non-switch decision after {@link StatementRuleEnvelope} has decided that a
+ * statement should be formatted structurally. The boundary keeps {@link StatementPrinter} free of switch routing while
+ * also keeping formatter pragma state, raw-source recovery, and statement comment attachment out of the content
+ * dispatcher.
  *
- * <p>Callers still choose when a statement context is needed and provide the actual structured renderers. Expression
- * formatting, block formatting, declaration-body formatting, switch rendering, and non-switch statement rendering stay
- * with their existing owners. Representative pragma coverage includes
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/formatter-on-off/inside_block/input.java} with
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/formatter-on-off/inside_block/frmtr.output.java}
- * and {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/require-pragma/format-pragma/input.java}
- * with
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/require-pragma/format-pragma/frmtr.output.java}.
+ * <p>Callers still choose when statement content rendering is allowed and provide the switch and ordinary statement
+ * rules. Switch labels, guards, entries, and switch bodies stay with {@link SwitchPrinter}; all other statement bodies
+ * stay with {@link StatementPrinter}.
  */
 final class StatementDispatcher {
-    private final CommentTracker comments;
-    private final JavaCommentPlacementPolicy commentPlacement;
-    private final FormatterPragmas formatterPragmas;
-    private final RawPreservedSource rawPreservedSource;
-    private final JavaFormatRule<Statement> statementRenderer;
-    private final JavaFormatRule<SwitchStmt> switchRenderer;
+    private final JavaFormatRule<Statement> statements;
+    private final JavaFormatRule<SwitchStmt> switches;
 
     StatementDispatcher(
-            CommentTracker comments,
-            JavaCommentPlacementPolicy commentPlacement,
-            FormatterPragmas formatterPragmas,
-            RawPreservedSource rawPreservedSource,
-            JavaFormatRule<Statement> statementRenderer,
-            JavaFormatRule<SwitchStmt> switchRenderer) {
-        this.comments = comments;
-        this.commentPlacement = commentPlacement;
-        this.formatterPragmas = formatterPragmas;
-        this.rawPreservedSource = rawPreservedSource;
-        this.statementRenderer = statementRenderer;
-        this.switchRenderer = switchRenderer;
+            JavaFormatRule<Statement> statements,
+            JavaFormatRule<SwitchStmt> switches) {
+        this.statements = statements;
+        this.switches = switches;
     }
 
     /**
-     * Applies statement-level formatter pragmas and comment attachment before structured statement rendering.
+     * Chooses the structured content rule for a statement whose envelope has already allowed formatting.
      *
-     * <p>Formatter off/on pragmas update persistent state across later statements, so this gate must run before the
-     * non-switch and switch renderers. Switch statements route to {@link SwitchPrinter} through the callback only after
-     * statement-level raw output, leading comments, and trailing line comments have been selected.
+     * <p>{@link SwitchStmt} routes to the switch grammar because statement and expression switches share labels,
+     * guards, entries, and source-only fallback cases. Every other statement routes to the non-switch statement printer.
      */
-    Doc statement(Statement statement) {
-        FormatterPragmas.PrintAction action = formatterPragmas.statementAction(statement);
-        if (action == FormatterPragmas.PrintAction.RAW_WITH_TRAILING_HARD_LINE) {
-            return Doc.concat(rawStatement(statement), Doc.HARD_LINE);
-        }
-        if (action == FormatterPragmas.PrintAction.RAW) {
-            return rawStatement(statement);
-        }
-        Doc trailing = statement instanceof TryStmt ? Doc.EMPTY : comments.trailingLineComment(statement);
-        Doc leading = leadingComment(statement, trailing);
-        Doc body = statement instanceof SwitchStmt switchStmt
-                ? switchRenderer.format(switchStmt)
-                : statementRenderer.format(statement);
-        return Doc.concat(leading, body, trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing));
-    }
-
-    /**
-     * Recovers raw statement source while preserving leading comments for statements whose raw span excludes them.
-     *
-     * <p>Try statements keep their leading/trailing comment handling inside the structured try renderer because
-     * JavaParser exposes comments around try/catch/finally in source-sensitive positions that are not equivalent to the
-     * ordinary leading statement slot.
-     */
-    private Doc rawStatement(Statement statement) {
-        Doc leading = statement instanceof TryStmt ? Doc.EMPTY : comments.leading(statement);
-        return Doc.concat(leading, rawPreservedSource.rawWithoutOwnComment(statement));
-    }
-
-    private Doc leadingComment(Statement statement, Doc trailing) {
-        if (statement instanceof TryStmt || hasInlineBreakBlockComment(statement) || hasInlineSwitchBlockComment(statement)) {
-            return Doc.EMPTY;
-        }
-        return trailing == Doc.EMPTY ? comments.leading(statement) : Doc.EMPTY;
-    }
-
-    /**
-     * Break statements can use an own block comment as inline statement text, so the normal leading slot stays empty.
-     */
-    private boolean hasInlineBreakBlockComment(Statement statement) {
-        return statement instanceof BreakStmt
-                && commentPlacement.ownComment(statement, JavaCommentTrivia::isBlock).isPresent();
-    }
-
-    /**
-     * Switch statements can carry a same-line block comment before {@code switch}, which SwitchPrinter places inline.
-     */
-    private boolean hasInlineSwitchBlockComment(Statement statement) {
-        return statement instanceof SwitchStmt
-                && commentPlacement.ownComment(statement, JavaCommentTrivia::isBlock).isPresent();
+    Doc statementContent(Statement statement) {
+        return statement instanceof SwitchStmt switchStmt
+                ? switches.format(switchStmt)
+                : statements.format(statement);
     }
 }

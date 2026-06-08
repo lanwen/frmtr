@@ -52,7 +52,7 @@ final class JavaPrinter {
     private final VariableDeclarationPrinter variableDeclarations;
     private final ExpressionDispatcher expressionDispatcher;
     private final BodyDeclarationDispatcher bodyDeclarations;
-    private final StatementDispatcher statementDispatcher;
+    private final StatementRuleEnvelope statementRules;
 
     JavaPrinter(FormatterOptions options) {
         this.context = new JavaFormatContext(options);
@@ -438,13 +438,15 @@ final class JavaPrinter {
                 constructors::compactConstructor,
                 constructors::constructor,
                 initializers::initializer);
-        this.statementDispatcher = new StatementDispatcher(
+        StatementDispatcher statementDispatcher = new StatementDispatcher(
+                statements::statement,
+                switches::switchStatement);
+        this.statementRules = new StatementRuleEnvelope(
                 comments,
                 commentPlacementPolicy,
                 formatterPragmas,
                 rawPreservedSource,
-                statements::statement,
-                switches::switchStatement);
+                statementDispatcher::statementContent);
     }
 
     Doc print(CompilationUnit unit) {
@@ -479,7 +481,7 @@ final class JavaPrinter {
     }
 
     private Doc statement(Statement statement) {
-        return statementDispatcher.statement(statement);
+        return statementRules.statement(statement);
     }
 
     private Doc brokenMethodCall(MethodCallExpr expression) {

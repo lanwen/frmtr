@@ -56,6 +56,9 @@ JavaParser printers are not the formatter engine. They may be useful as referenc
 - `IfBreak` selects different output for flat versus broken groups.
 
 `DocRenderer` is language-agnostic. Java-specific choices belong in `JavaPrinter`, not in the renderer.
+`DocDebugRenderer` provides a package-private, test-oriented structural dump of the document tree so formatter
+maintainers can inspect break opportunities, indentation scopes, groups, and flat-vs-broken alternatives. It is not a
+formatting policy surface and does not expose a CLI or public API hook.
 
 ## File-Oriented Runs
 

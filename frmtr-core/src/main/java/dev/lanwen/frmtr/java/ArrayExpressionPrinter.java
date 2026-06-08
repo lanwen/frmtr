@@ -35,7 +35,7 @@ import java.util.function.ToIntFunction;
 final class ArrayExpressionPrinter {
     private final JavaFormatter.CommentTracker comments;
     private final FormatterOptions options;
-    private final Function<Expression, Doc> expressionRenderer;
+    private final JavaFormatRule<Expression> expressionRenderer;
     private final BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix;
     private final Function<Node, String> compactTypeLike;
     private final Function<Node, String> compact;
@@ -44,7 +44,7 @@ final class ArrayExpressionPrinter {
     ArrayExpressionPrinter(
             JavaFormatter.CommentTracker comments,
             FormatterOptions options,
-            Function<Expression, Doc> expressionRenderer,
+            JavaFormatRule<Expression> expressionRenderer,
             BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix,
             Function<Node, String> compactTypeLike,
             Function<Node, String> compact,
@@ -60,9 +60,9 @@ final class ArrayExpressionPrinter {
 
     Doc arrayAccess(ArrayAccessExpr expression) {
         return Doc.group(Doc.concat(
-                expressionRenderer.apply(expression.getName()),
+                expressionRenderer.format(expression.getName()),
                 Doc.text("["),
-                Doc.indent(Doc.concat(Doc.SOFT_LINE, expressionRenderer.apply(expression.getIndex()))),
+                Doc.indent(Doc.concat(Doc.SOFT_LINE, expressionRenderer.format(expression.getIndex()))),
                 Doc.SOFT_LINE,
                 Doc.text("]")));
     }
@@ -79,7 +79,7 @@ final class ArrayExpressionPrinter {
         return Doc.concat(
                 brokenEnclosedForSuffix.apply(enclosed, true),
                 Doc.text("["),
-                expressionRenderer.apply(expression.getIndex()),
+                expressionRenderer.format(expression.getIndex()),
                 Doc.text("]"));
     }
 
@@ -215,7 +215,7 @@ final class ArrayExpressionPrinter {
             parts.add(leadingComment);
             parts.add(Doc.text(" "));
         }
-        parts.add(expressionRenderer.apply(value));
+        parts.add(expressionRenderer.format(value));
         if (next != null) {
             Doc trailingComment = next.getComment()
                     .filter(BlockComment.class::isInstance)

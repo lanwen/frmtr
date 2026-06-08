@@ -23,14 +23,14 @@ import java.util.function.ToIntFunction;
  */
 final class InstanceOfExpressionPrinter {
     private final FormatterOptions options;
-    private final Function<Expression, Doc> expression;
+    private final JavaFormatRule<Expression> expression;
     private final Function<Node, String> compact;
     private final Function<Node, String> compactTypeLike;
     private final ToIntFunction<String> currentIndentedWidth;
 
     InstanceOfExpressionPrinter(
             FormatterOptions options,
-            Function<Expression, Doc> expression,
+            JavaFormatRule<Expression> expression,
             Function<Node, String> compact,
             Function<Node, String> compactTypeLike,
             ToIntFunction<String> currentIndentedWidth) {
@@ -54,7 +54,7 @@ final class InstanceOfExpressionPrinter {
         if (currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
             return Doc.text(flat);
         }
-        Doc left = this.expression.apply(expression.getExpression());
+        Doc left = this.expression.format(expression.getExpression());
         String right = expression.getPattern()
                 .map(compact)
                 .orElseGet(() -> compactTypeLike.apply(expression.getType()));

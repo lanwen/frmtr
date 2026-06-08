@@ -5,7 +5,6 @@ import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import dev.lanwen.frmtr.doc.Doc;
-import java.util.function.Function;
 
 /**
  * Renders field access expressions after broad expression dispatch has selected a dotted field segment.
@@ -21,9 +20,9 @@ import java.util.function.Function;
  */
 final class FieldAccessPrinter {
     private final JavaFormatter.CommentTracker comments;
-    private final Function<Expression, Doc> expression;
+    private final JavaFormatRule<Expression> expression;
 
-    FieldAccessPrinter(JavaFormatter.CommentTracker comments, Function<Expression, Doc> expression) {
+    FieldAccessPrinter(JavaFormatter.CommentTracker comments, JavaFormatRule<Expression> expression) {
         this.comments = comments;
         this.expression = expression;
     }
@@ -36,7 +35,7 @@ final class FieldAccessPrinter {
      * not inferred here from line width.
      */
     Doc fieldAccess(FieldAccessExpr expression) {
-        Doc scope = this.expression.apply(expression.getScope());
+        Doc scope = this.expression.format(expression.getScope());
         Doc nameComment = comments.ownComment(expression.getName(), comment -> comment instanceof LineComment
                 || comment instanceof BlockComment);
         if (nameComment != Doc.EMPTY) {

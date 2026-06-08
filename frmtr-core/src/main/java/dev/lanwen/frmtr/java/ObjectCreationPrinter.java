@@ -30,9 +30,9 @@ import java.util.function.Function;
 final class ObjectCreationPrinter {
     private final JavaFormatter.CommentTracker comments;
     private final TypePrinter types;
-    private final Function<Expression, Doc> expressionRenderer;
+    private final JavaFormatRule<Expression> expressionRenderer;
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments;
-    private final Function<BodyDeclaration<?>, Doc> bodyRenderer;
+    private final JavaFormatRule<BodyDeclaration<?>> bodyRenderer;
     private final Function<Node, String> compact;
     private final Function<List<? extends Node>, String> compactJoin;
     private final Function<Node, String> compactTypeLike;
@@ -42,9 +42,9 @@ final class ObjectCreationPrinter {
     ObjectCreationPrinter(
             JavaFormatter.CommentTracker comments,
             TypePrinter types,
-            Function<Expression, Doc> expressionRenderer,
+            JavaFormatRule<Expression> expressionRenderer,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,
-            Function<BodyDeclaration<?>, Doc> bodyRenderer,
+            JavaFormatRule<BodyDeclaration<?>> bodyRenderer,
             Function<Node, String> compact,
             Function<List<? extends Node>, String> compactJoin,
             Function<Node, String> compactTypeLike,
@@ -95,7 +95,7 @@ final class ObjectCreationPrinter {
                 Doc.indent(Doc.concat(
                         objectCreationLine(forceBreak),
                         Doc.join(Doc.concat(Doc.text(","), Doc.LINE), expression.getArguments().stream()
-                                .map(expressionRenderer)
+                                .map(expressionRenderer::format)
                                 .toList()))),
                 objectCreationLine(forceBreak),
                 Doc.text(")"));
@@ -155,7 +155,7 @@ final class ObjectCreationPrinter {
                 : compactJoin.apply(expression.getArguments());
         Doc header = Doc.text(prefix + "(" + arguments + ") ");
         List<BodyDeclaration<?>> declarations = expression.getAnonymousClassBody().orElseThrow();
-        List<Doc> members = declarations.stream().map(bodyRenderer).toList();
+        List<Doc> members = declarations.stream().map(bodyRenderer::format).toList();
         if (members.isEmpty()) {
             return Doc.concat(header, Doc.text("{}"));
         }

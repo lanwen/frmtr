@@ -74,13 +74,13 @@ final class StatementPrinter {
     private final JavaFormatter.CommentTracker comments;
     private final RawSource rawSource;
     private final FormatterOptions options;
-    private final Function<Statement, Doc> statementRenderer;
-    private final Function<BlockStmt, Doc> blockRenderer;
+    private final JavaFormatRule<Statement> statementRenderer;
+    private final JavaFormatRule<BlockStmt> blockRenderer;
     private final BiFunction<BlockStmt, Doc, Doc> blockWithLeadingRenderer;
-    private final Function<BodyDeclaration<?>, Doc> bodyRenderer;
-    private final Function<Expression, Doc> expressionRenderer;
+    private final JavaFormatRule<BodyDeclaration<?>> bodyRenderer;
+    private final JavaFormatRule<Expression> expressionRenderer;
     private final Function<Expression, Doc> returnExpressionRenderer;
-    private final Function<VariableDeclarationExpr, Doc> variableDeclarationRenderer;
+    private final JavaFormatRule<VariableDeclarationExpr> variableDeclarationRenderer;
     private final Function<Node, String> compact;
     private final Function<Node, String> compactWithoutOwnComment;
     private final Function<List<? extends Node>, String> compactJoin;
@@ -103,13 +103,13 @@ final class StatementPrinter {
             JavaFormatter.CommentTracker comments,
             RawSource rawSource,
             FormatterOptions options,
-            Function<Statement, Doc> statementRenderer,
-            Function<BlockStmt, Doc> blockRenderer,
+            JavaFormatRule<Statement> statementRenderer,
+            JavaFormatRule<BlockStmt> blockRenderer,
             BiFunction<BlockStmt, Doc, Doc> blockWithLeadingRenderer,
-            Function<BodyDeclaration<?>, Doc> bodyRenderer,
-            Function<Expression, Doc> expressionRenderer,
+            JavaFormatRule<BodyDeclaration<?>> bodyRenderer,
+            JavaFormatRule<Expression> expressionRenderer,
             Function<Expression, Doc> returnExpressionRenderer,
-            Function<VariableDeclarationExpr, Doc> variableDeclarationRenderer,
+            JavaFormatRule<VariableDeclarationExpr> variableDeclarationRenderer,
             Function<Node, String> compact,
             Function<Node, String> compactWithoutOwnComment,
             Function<List<? extends Node>, String> compactJoin,
@@ -165,9 +165,9 @@ final class StatementPrinter {
      */
     Doc statement(Statement statement) {
         return switch (statement) {
-            case BlockStmt blockStmt -> blockRenderer.apply(blockStmt);
+            case BlockStmt blockStmt -> blockRenderer.format(blockStmt);
             case ReturnStmt returnStmt -> returnStatement(returnStmt);
-            case ThrowStmt throwStmt -> Doc.concat(Doc.text("throw "), expressionRenderer.apply(throwStmt.getExpression()), Doc.text(";"));
+            case ThrowStmt throwStmt -> Doc.concat(Doc.text("throw "), expressionRenderer.format(throwStmt.getExpression()), Doc.text(";"));
             case YieldStmt yieldStmt -> yieldStatement(yieldStmt);
             case ExplicitConstructorInvocationStmt constructorInvocation -> Doc.concat(explicitConstructorInvocation(constructorInvocation), Doc.text(";"));
             case ExpressionStmt expressionStmt -> expressionStatement(expressionStmt);
@@ -176,8 +176,8 @@ final class StatementPrinter {
             case BreakStmt breakStmt -> breakStatement(breakStmt);
             case ContinueStmt continueStmt -> continueStatement(continueStmt);
             case LabeledStmt labeledStmt -> labeledStatement(labeledStmt);
-            case LocalClassDeclarationStmt localClassDeclaration -> bodyRenderer.apply(localClassDeclaration.getClassDeclaration());
-            case LocalRecordDeclarationStmt localRecordDeclaration -> bodyRenderer.apply(localRecordDeclaration.getRecordDeclaration());
+            case LocalClassDeclarationStmt localClassDeclaration -> bodyRenderer.format(localClassDeclaration.getClassDeclaration());
+            case LocalRecordDeclarationStmt localRecordDeclaration -> bodyRenderer.format(localRecordDeclaration.getRecordDeclaration());
             case IfStmt ifStmt -> ifStatement(ifStmt);
             case WhileStmt whileStmt -> whileStatement(whileStmt);
             case DoStmt doStmt -> doStatement(doStmt);
@@ -186,7 +186,7 @@ final class StatementPrinter {
                     Doc.text("synchronized "),
                     controlConditionRenderer.apply(synchronizedStmt.getExpression()),
                     Doc.text(" "),
-                    blockRenderer.apply(synchronizedStmt.getBody()));
+                    blockRenderer.format(synchronizedStmt.getBody()));
             case ForStmt forStmt -> forStatement(forStmt);
             case ForEachStmt forEachStmt -> forEachStatement(forEachStmt);
             default -> Doc.text(compact.apply(statement));
@@ -265,9 +265,9 @@ final class StatementPrinter {
             return Doc.text("for (" + compact.apply(forEachStmt.getVariable()) + " : " + compact.apply(forEachStmt.getIterable()) + ") {}");
         }
         if (statement instanceof BlockStmt blockStmt) {
-            return blockRenderer.apply(blockStmt);
+            return blockRenderer.format(blockStmt);
         }
-        return statementRenderer.apply(statement);
+        return statementRenderer.format(statement);
     }
 
     private List<String> labeledStatementLeadingComments(LabeledStmt statement) {
@@ -321,7 +321,7 @@ final class StatementPrinter {
         if (compact.apply(statement.getExpression()).equals("()")) {
             return Doc.text("yield();");
         }
-        return Doc.concat(Doc.text("yield "), expressionRenderer.apply(statement.getExpression()), Doc.text(";"));
+        return Doc.concat(Doc.text("yield "), expressionRenderer.format(statement.getExpression()), Doc.text(";"));
     }
 
     private Doc explicitConstructorInvocation(ExplicitConstructorInvocationStmt statement) {
@@ -340,7 +340,7 @@ final class StatementPrinter {
                 Doc.indent(Doc.concat(
                         Doc.SOFT_LINE,
                         Doc.join(Doc.concat(Doc.text(","), Doc.LINE), statement.getArguments().stream()
-                                .map(expressionRenderer)
+                                .map(expressionRenderer::format)
                                 .toList()))),
                 Doc.SOFT_LINE,
                 Doc.text(")")));
@@ -349,7 +349,7 @@ final class StatementPrinter {
     private Doc expressionStatement(ExpressionStmt statement) {
         Expression expression = statement.getExpression();
         if (expression instanceof VariableDeclarationExpr variableDeclaration) {
-            return Doc.concat(variableDeclarationRenderer.apply(variableDeclaration), Doc.text(";"));
+            return Doc.concat(variableDeclarationRenderer.format(variableDeclaration), Doc.text(";"));
         }
         if (expression instanceof MethodCallExpr methodCall
                 && blockStatementWidth(compact.apply(expression) + ";") > options.lineWidth()) {
@@ -366,7 +366,7 @@ final class StatementPrinter {
         Doc trailing = trailingConditionalComment
                 .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
                 .orElse(Doc.EMPTY);
-        return Doc.concat(expressionRenderer.apply(expression), Doc.text(";"), trailing);
+        return Doc.concat(expressionRenderer.format(expression), Doc.text(";"), trailing);
     }
 
     private int blockStatementWidth(String text) {
@@ -637,7 +637,7 @@ final class StatementPrinter {
                     betweenThenAndElseBlockComment,
                     elseLeadingLineComment,
                     elseLeadingBlockComment));
-            docs.add(elseStatement.isIfStmt() ? statementRenderer.apply(elseStatement) : nestedStatement(elseStatement));
+            docs.add(elseStatement.isIfStmt() ? statementRenderer.format(elseStatement) : nestedStatement(elseStatement));
             if (elseTrailingLineComment != Doc.EMPTY) {
                 docs.add(Doc.text(" "));
                 docs.add(elseTrailingLineComment);
@@ -718,7 +718,7 @@ final class StatementPrinter {
         String flat = compact.apply(condition);
         if (currentIndentedWidth.applyAsInt("if (" + flat + ") {}") <= options.lineWidth()) {
             if (expressionHasParenthesizedNestedBinary.test(condition)) {
-                return Doc.concat(Doc.text("if ("), expressionRenderer.apply(condition), Doc.text(") "));
+                return Doc.concat(Doc.text("if ("), expressionRenderer.format(condition), Doc.text(") "));
             }
             return Doc.text("if (" + flat + ") ");
         }
@@ -829,16 +829,16 @@ final class StatementPrinter {
             return emptyControlBlock(statement.asBlockStmt());
         }
         if (statement.isBlockStmt()) {
-            return statementRenderer.apply(statement);
+            return statementRenderer.format(statement);
         }
         if (statement.isIfStmt()
                 || statement.isForStmt()
                 || statement.isForEachStmt()
                 || statement.isWhileStmt()
                 || statement.isDoStmt()) {
-            return Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.apply(statement)));
+            return Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement)));
         }
-        return statementRenderer.apply(statement);
+        return statementRenderer.format(statement);
     }
 
     private Doc emptyControlBlock(BlockStmt block) {
@@ -862,7 +862,7 @@ final class StatementPrinter {
             return Doc.concat(
                     Doc.text(header + " "),
                     lineComment.orElseThrow(),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.apply(statement.getBody()))));
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement.getBody()))));
         }
         return Doc.concat(Doc.text(header + " "), nestedStatement(statement.getBody()));
     }
@@ -917,7 +917,7 @@ final class StatementPrinter {
             return loopWithEmptyBody(forHeader(statement), statement);
         }
         if (statement.getBody() instanceof DoStmt) {
-            return Doc.concat(Doc.text(forHeader(statement) + " "), statementRenderer.apply(statement.getBody()));
+            return Doc.concat(Doc.text(forHeader(statement) + " "), statementRenderer.format(statement.getBody()));
         }
         return Doc.concat(Doc.text(forHeader(statement) + " "), nestedStatement(statement.getBody()));
     }
@@ -952,7 +952,7 @@ final class StatementPrinter {
         if (comment == Doc.EMPTY) {
             return Optional.empty();
         }
-        Doc commentedStatement = Doc.concat(comment, Doc.text(" "), statementRenderer.apply(body));
+        Doc commentedStatement = Doc.concat(comment, Doc.text(" "), statementRenderer.format(body));
         if (CommentIndex.sameBeginLine(loop, body)) {
             return Optional.of(Doc.concat(Doc.text(" "), commentedStatement));
         }
@@ -981,7 +981,7 @@ final class StatementPrinter {
         if (leadingBlockComment == Doc.EMPTY) {
             return nestedStatement(body);
         }
-        return Doc.concat(leadingBlockComment, Doc.text(" "), blockRenderer.apply(body.asBlockStmt()));
+        return Doc.concat(leadingBlockComment, Doc.text(" "), blockRenderer.format(body.asBlockStmt()));
     }
 
     private Doc doWhileTail(DoStmt statement) {

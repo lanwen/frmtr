@@ -44,7 +44,7 @@ final class RecordDeclarationPrinter {
     private final Function<List<? extends Node>, String> compactJoin;
     private final Function<List<? extends Node>, String> compactJoinTypeLike;
     private final Function<Node, String> compactTypeLike;
-    private final Function<AnnotationExpr, Doc> annotation;
+    private final JavaFormatRule<AnnotationExpr> annotation;
     private final Function<AnnotationExpr, String> annotationFlatText;
     private final ToIntFunction<String> currentIndentedWidth;
     private final Function<RecordDeclaration, Doc> memberBlock;
@@ -60,7 +60,7 @@ final class RecordDeclarationPrinter {
             Function<List<? extends Node>, String> compactJoin,
             Function<List<? extends Node>, String> compactJoinTypeLike,
             Function<Node, String> compactTypeLike,
-            Function<AnnotationExpr, Doc> annotation,
+            JavaFormatRule<AnnotationExpr> annotation,
             Function<AnnotationExpr, String> annotationFlatText,
             ToIntFunction<String> currentIndentedWidth,
             Function<RecordDeclaration, Doc> memberBlock) {
@@ -177,7 +177,7 @@ final class RecordDeclarationPrinter {
                                 > options.lineWidth());
         if (breakAnnotations) {
             parameter.getAnnotations().stream()
-                    .map(annotation)
+                    .map(annotation::format)
                     .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
                     .forEach(parts::add);
         } else if (!parameter.getAnnotations().isEmpty()) {

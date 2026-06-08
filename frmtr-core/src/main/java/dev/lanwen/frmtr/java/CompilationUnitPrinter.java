@@ -9,7 +9,6 @@ import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Function;
 
 /**
  * Sequences the layout of a Java compilation unit after the parser has exposed package, import, module, and type nodes.
@@ -37,15 +36,15 @@ final class CompilationUnitPrinter {
     private final JavaFormatter.CommentTracker comments;
     private final PackageDeclarationPrinter packageDeclarations;
     private final ImportDeclarationPrinter importDeclarations;
-    private final Function<ModuleDeclaration, Doc> moduleDeclarations;
-    private final Function<BodyDeclaration<?>, Doc> bodyDeclarations;
+    private final JavaFormatRule<ModuleDeclaration> moduleDeclarations;
+    private final JavaFormatRule<BodyDeclaration<?>> bodyDeclarations;
 
     CompilationUnitPrinter(
             JavaFormatter.CommentTracker comments,
             PackageDeclarationPrinter packageDeclarations,
             ImportDeclarationPrinter importDeclarations,
-            Function<ModuleDeclaration, Doc> moduleDeclarations,
-            Function<BodyDeclaration<?>, Doc> bodyDeclarations) {
+            JavaFormatRule<ModuleDeclaration> moduleDeclarations,
+            JavaFormatRule<BodyDeclaration<?>> bodyDeclarations) {
         this.comments = comments;
         this.packageDeclarations = packageDeclarations;
         this.importDeclarations = importDeclarations;
@@ -99,7 +98,7 @@ final class CompilationUnitPrinter {
                 parts.add(Doc.HARD_LINE);
                 parts.add(Doc.HARD_LINE);
             }
-            parts.add(moduleDeclarations.apply(moduleDeclaration));
+            parts.add(moduleDeclarations.format(moduleDeclaration));
         });
         hasStructuralParts = hasStructuralParts || module.isPresent();
         List<Doc> topLevelDeclarations = topLevelDeclarations(unit);
@@ -124,9 +123,9 @@ final class CompilationUnitPrinter {
     private List<Doc> topLevelDeclarations(CompilationUnit unit) {
         Optional<ClassOrInterfaceDeclaration> compactClass = compactClass(unit);
         if (compactClass.isPresent()) {
-            return compactClass.orElseThrow().getMembers().stream().map(bodyDeclarations).toList();
+            return compactClass.orElseThrow().getMembers().stream().map(bodyDeclarations::format).toList();
         }
-        return unit.getTypes().stream().map(bodyDeclarations).toList();
+        return unit.getTypes().stream().map(bodyDeclarations::format).toList();
     }
 
     /**

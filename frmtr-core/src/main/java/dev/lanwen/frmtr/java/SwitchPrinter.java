@@ -45,9 +45,9 @@ final class SwitchPrinter {
     private final JavaFormatter.CommentTracker comments;
     private final RawSource rawSource;
     private final FormatterOptions options;
-    private final Function<Statement, Doc> statementRenderer;
-    private final Function<Expression, Doc> expressionRenderer;
-    private final Function<BlockStmt, Doc> blockRenderer;
+    private final JavaFormatRule<Statement> statementRenderer;
+    private final JavaFormatRule<Expression> expressionRenderer;
+    private final JavaFormatRule<BlockStmt> blockRenderer;
     private final BiFunction<Statement, Statement, Doc> statementSeparator;
     private final Function<Expression, Doc> controlConditionRenderer;
     private final Function<Expression, Doc> binaryExpressionLinesRenderer;
@@ -95,9 +95,9 @@ final class SwitchPrinter {
 
     SwitchPrinter(
             JavaFormatContext context,
-            Function<Statement, Doc> statementRenderer,
-            Function<Expression, Doc> expressionRenderer,
-            Function<BlockStmt, Doc> blockRenderer,
+            JavaFormatRule<Statement> statementRenderer,
+            JavaFormatRule<Expression> expressionRenderer,
+            JavaFormatRule<BlockStmt> blockRenderer,
             BiFunction<Statement, Statement, Doc> statementSeparator,
             Function<Expression, Doc> controlConditionRenderer,
             Function<Expression, Doc> binaryExpressionLinesRenderer,
@@ -213,7 +213,7 @@ final class SwitchPrinter {
                         label,
                         guard,
                         Doc.text(" ->"),
-                        Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.apply(statement))));
+                        Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement))));
             }
             case INLINE_RULE_BODY -> Doc.concat(
                     label,
@@ -397,7 +397,7 @@ final class SwitchPrinter {
         if (block.getStatements().isEmpty() && block.getOrphanComments().isEmpty()) {
             return Doc.concat(Doc.text("{"), Doc.HARD_LINE, Doc.text("}"));
         }
-        return blockRenderer.apply(block);
+        return blockRenderer.format(block);
     }
 
     private boolean hasLeadingOwnComment(Statement statement) {
@@ -437,9 +437,9 @@ final class SwitchPrinter {
             return switchRuleBlock(statement.asBlockStmt());
         }
         if (statement instanceof ExpressionStmt expressionStmt) {
-            return Doc.concat(expressionRenderer.apply(expressionStmt.getExpression()), Doc.text(";"));
+            return Doc.concat(expressionRenderer.format(expressionStmt.getExpression()), Doc.text(";"));
         }
-        return Doc.concat(statementRenderer.apply(statement));
+        return Doc.concat(statementRenderer.format(statement));
     }
 
     /**
@@ -452,7 +452,7 @@ final class SwitchPrinter {
         if (block.getStatements().isEmpty() && block.getOrphanComments().isEmpty()) {
             return Doc.concat(Doc.text("{"), Doc.HARD_LINE, Doc.text("}"));
         }
-        return blockRenderer.apply(block);
+        return blockRenderer.format(block);
     }
 
     private Doc switchEntryStatements(NodeList<Statement> statements) {
@@ -465,7 +465,7 @@ final class SwitchPrinter {
             if (previous != null) {
                 docs.add(statementSeparator.apply(previous, current));
             }
-            docs.add(statementRenderer.apply(current));
+            docs.add(statementRenderer.format(current));
             previous = current;
         }
         return Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.concat(docs)));

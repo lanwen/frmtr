@@ -23,11 +23,11 @@ import java.util.function.Function;
  * assembly, member sequencing, expression dispatch, and source-comment attachment to the caller.
  */
 final class DeclarationPrefixPrinter {
-    private final Function<AnnotationExpr, Doc> annotationRenderer;
+    private final JavaFormatRule<AnnotationExpr> annotationRenderer;
     private final Function<AnnotationExpr, String> annotationFlatText;
 
     DeclarationPrefixPrinter(
-            Function<AnnotationExpr, Doc> annotationRenderer,
+            JavaFormatRule<AnnotationExpr> annotationRenderer,
             Function<AnnotationExpr, String> annotationFlatText) {
         this.annotationRenderer = annotationRenderer;
         this.annotationFlatText = annotationFlatText;
@@ -59,7 +59,7 @@ final class DeclarationPrefixPrinter {
             return Doc.EMPTY;
         }
         return Doc.concat(annotations.stream()
-                .map(annotation -> Doc.concat(annotationRenderer.apply(annotation), Doc.HARD_LINE))
+                .map(annotation -> Doc.concat(annotationRenderer.format(annotation), Doc.HARD_LINE))
                 .toList());
     }
 

@@ -28,13 +28,13 @@ import java.util.function.ToIntFunction;
  */
 final class CastExpressionPrinter {
     private final FormatterOptions options;
-    private final Function<Expression, Doc> expression;
+    private final JavaFormatRule<Expression> expression;
     private final Function<Node, String> compactTypeLike;
     private final ToIntFunction<String> currentIndentedWidth;
 
     CastExpressionPrinter(
             FormatterOptions options,
-            Function<Expression, Doc> expression,
+            JavaFormatRule<Expression> expression,
             Function<Node, String> compactTypeLike,
             ToIntFunction<String> currentIndentedWidth) {
         this.options = options;
@@ -53,7 +53,7 @@ final class CastExpressionPrinter {
         return Doc.concat(
                 castType(expression.getType()),
                 Doc.text(" "),
-                this.expression.apply(expression.getExpression()));
+                this.expression.format(expression.getExpression()));
     }
 
     /**

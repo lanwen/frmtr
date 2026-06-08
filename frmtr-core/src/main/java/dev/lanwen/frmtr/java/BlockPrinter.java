@@ -8,7 +8,6 @@ import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -21,12 +20,12 @@ import java.util.function.Predicate;
  */
 final class BlockPrinter {
     private final JavaFormatter.CommentTracker comments;
-    private final Function<Statement, Doc> statementRenderer;
+    private final JavaFormatRule<Statement> statementRenderer;
     private final Predicate<Statement> hasPragma;
 
     BlockPrinter(
             JavaFormatter.CommentTracker comments,
-            Function<Statement, Doc> statementRenderer,
+            JavaFormatRule<Statement> statementRenderer,
             Predicate<Statement> hasPragma) {
         this.comments = comments;
         this.statementRenderer = statementRenderer;
@@ -124,7 +123,7 @@ final class BlockPrinter {
             if (!statements.isEmpty()) {
                 statements.add(statementSeparator(previousStatement, currentStatement));
             }
-            statements.add(statementRenderer.apply(currentStatement));
+            statements.add(statementRenderer.format(currentStatement));
             previousStatement = currentStatement;
         }
     }

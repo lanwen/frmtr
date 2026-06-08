@@ -33,7 +33,7 @@ import java.util.function.ToIntFunction;
 final class AnnotationExpressionPrinter {
     private final JavaFormatter.CommentTracker comments;
     private final FormatterOptions options;
-    private final Function<Expression, Doc> expressionRenderer;
+    private final JavaFormatRule<Expression> expressionRenderer;
     private final BiFunction<Expression, Boolean, Doc> nestedBinaryLines;
     private final Function<Node, String> compact;
     private final ToIntFunction<String> currentIndentedWidth;
@@ -41,7 +41,7 @@ final class AnnotationExpressionPrinter {
     AnnotationExpressionPrinter(
             JavaFormatter.CommentTracker comments,
             FormatterOptions options,
-            Function<Expression, Doc> expressionRenderer,
+            JavaFormatRule<Expression> expressionRenderer,
             BiFunction<Expression, Boolean, Doc> nestedBinaryLines,
             Function<Node, String> compact,
             ToIntFunction<String> currentIndentedWidth) {
@@ -165,7 +165,7 @@ final class AnnotationExpressionPrinter {
         if (value instanceof BinaryExpr) {
             return nestedBinaryLines.apply(value, true);
         }
-        return expressionRenderer.apply(value);
+        return expressionRenderer.format(value);
     }
 
     /**
@@ -181,7 +181,7 @@ final class AnnotationExpressionPrinter {
         return Doc.concat(
                 Doc.text("{"),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                        expression.getValues().stream().map(expressionRenderer).toList()), Doc.text(","))),
+                        expression.getValues().stream().map(expressionRenderer::format).toList()), Doc.text(","))),
                 Doc.HARD_LINE,
                 Doc.text("}"));
     }

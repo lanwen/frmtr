@@ -44,6 +44,7 @@ import java.util.function.ToIntFunction;
 final class SwitchPrinter {
     private final CommentTracker comments;
     private final RawSource rawSource;
+    private final RawPreservedSource rawPreservedSource;
     private final FormatterOptions options;
     private final JavaFormatRule<Statement> statementRenderer;
     private final JavaFormatRule<Expression> expressionRenderer;
@@ -105,6 +106,7 @@ final class SwitchPrinter {
             ToIntFunction<String> currentIndentedWidth) {
         this.comments = context.comments;
         this.rawSource = context.rawSource;
+        this.rawPreservedSource = context.rawPreservedSource;
         this.options = context.options;
         this.statementRenderer = statementRenderer;
         this.expressionRenderer = expressionRenderer;
@@ -429,7 +431,7 @@ final class SwitchPrinter {
         if (!preservesSourceOnlySyntax) {
             return Optional.empty();
         }
-        return Optional.of(Doc.text(raw));
+        return Optional.of(rawPreservedSource.raw(entry, raw));
     }
 
     private Doc switchEntryBody(Statement statement) {

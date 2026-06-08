@@ -1,5 +1,6 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.comments.Comment;
 import dev.lanwen.frmtr.doc.Doc;
@@ -13,8 +14,9 @@ import java.util.function.Predicate;
  * Tracks which JavaParser comments have already been consumed during one Java formatting run.
  *
  * <p>This helper owns stateful comment accounting: identity-based comment claims, leading and trailing attached comment
- * consumption, and orphan-comment consumption. The boundary exists so comment consumption is centralized outside the
- * parser/configuration entrypoint while printers still share one "print once" state for a source file.
+ * consumption, orphan-comment consumption, and the raw-preserved comment marks supplied by {@link RawPreservedSource}.
+ * The boundary exists so comment consumption is centralized outside the parser/configuration entrypoint while printers
+ * still share one "print once" state for a source file.
  *
  * <p>Callers still decide syntax-specific placement, spacing, ordering around neighboring nodes, and whether a raw
  * {@link Comment} predicate or classified {@link JavaCommentTrivia} predicate best describes the local layout rule.
@@ -23,6 +25,7 @@ import java.util.function.Predicate;
  */
 final class CommentTracker {
     private final Set<Comment> printed = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Set<Comment> rawRendered = Collections.newSetFromMap(new IdentityHashMap<>());
 
     Doc leading(Node node) {
         return node.getComment()
@@ -103,6 +106,38 @@ final class CommentTracker {
 
     boolean isPrinted(JavaCommentTrivia trivia) {
         return trivia.isClaimedBy(printed);
+    }
+
+    /**
+     * Records comments that {@link RawPreservedSource} intentionally preserved inside raw source text.
+     *
+     * <p>The canonical raw-preservation helper calls this while building the output {@link Doc}, keeping raw comment
+     * accounting behind one output boundary instead of making each raw fallback remember a separate side effect.
+     */
+    void accountRaw(Node node) {
+        FormatterGuardrails.accountRawComments(node, rawRendered);
+    }
+
+    /**
+     * Records raw-rendered comments after the node's own attached comment has been printed separately.
+     *
+     * <p>{@link RawPreservedSource} uses this for fallbacks that already emitted the node's own comment through normal
+     * attached-comment accounting. Nested and orphan comments inside the raw span remain represented only by the
+     * recovered source text, so they are raw-accounted here without also counting the already printed own comment.
+     */
+    void accountRawWithoutOwnComment(Node node) {
+        FormatterGuardrails.accountRawCommentsWithoutOwnComment(node, rawRendered);
+    }
+
+    /**
+     * Fails in debug mode when JavaParser exposed a comment that was neither printed nor deliberately raw-preserved.
+     *
+     * <p>This is a development-only finalization check for one compilation-unit print. Normal formatter runs leave the
+     * legacy best-effort behavior unchanged because {@link FormatterGuardrails#enabled()} controls whether any assertion
+     * is evaluated.
+     */
+    void assertAllCommentsAccounted(CompilationUnit unit) {
+        FormatterGuardrails.assertAllCommentsAccounted(unit, printed, rawRendered);
     }
 
     private boolean claim(JavaCommentTrivia trivia) {

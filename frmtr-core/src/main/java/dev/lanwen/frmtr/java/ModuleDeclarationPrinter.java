@@ -29,6 +29,7 @@ import java.util.function.Function;
 final class ModuleDeclarationPrinter {
     private final CommentTracker comments;
     private final RawSource rawSource;
+    private final RawPreservedSource rawPreservedSource;
     private final CommentedModulePrinter commentedModules;
     private final Function<NodeWithAnnotations<?>, Doc> annotations;
     private final Function<Doc, String> commentText;
@@ -38,6 +39,7 @@ final class ModuleDeclarationPrinter {
     ModuleDeclarationPrinter(
             CommentTracker comments,
             RawSource rawSource,
+            RawPreservedSource rawPreservedSource,
             CommentedModulePrinter commentedModules,
             Function<NodeWithAnnotations<?>, Doc> annotations,
             Function<Doc, String> commentText,
@@ -45,6 +47,7 @@ final class ModuleDeclarationPrinter {
             Function<ModuleDeclaration, Doc> moduleBlock) {
         this.comments = comments;
         this.rawSource = rawSource;
+        this.rawPreservedSource = rawPreservedSource;
         this.commentedModules = commentedModules;
         this.annotations = annotations;
         this.commentText = commentText;
@@ -66,7 +69,9 @@ final class ModuleDeclarationPrinter {
             Doc leadingBlock = comments.ownComment(declaration, BlockComment.class::isInstance);
             String leadingText = commentText.apply(leadingBlock);
             String commentedRaw = leadingText.isEmpty() ? raw : leadingText + raw;
-            return Doc.text(commentedModules.formatCommentedModule(commentedRaw));
+            return rawPreservedSource.rawWithoutOwnComment(
+                    declaration,
+                    commentedModules.formatCommentedModule(commentedRaw));
         }
         return Doc.concat(
                 comments.leading(declaration),

@@ -27,9 +27,9 @@ import java.util.function.Function;
  * decisions with the printers and source helpers that already own those concerns.
  */
 final class BodyDeclarationDispatcher {
+    private final RawPreservedSource rawPreservedSource;
     private final FormatterPragmas formatterPragmas;
     private final Function<BodyDeclaration<?>, Doc> leadingComments;
-    private final Function<BodyDeclaration<?>, String> rawWithoutOwnComment;
     private final Function<BodyDeclaration<?>, String> compactSource;
     private final JavaFormatRule<ClassOrInterfaceDeclaration> classOrInterfaces;
     private final JavaFormatRule<RecordDeclaration> records;
@@ -43,9 +43,9 @@ final class BodyDeclarationDispatcher {
     private final JavaFormatRule<InitializerDeclaration> initializers;
 
     BodyDeclarationDispatcher(
+            RawPreservedSource rawPreservedSource,
             FormatterPragmas formatterPragmas,
             Function<BodyDeclaration<?>, Doc> leadingComments,
-            Function<BodyDeclaration<?>, String> rawWithoutOwnComment,
             Function<BodyDeclaration<?>, String> compactSource,
             JavaFormatRule<ClassOrInterfaceDeclaration> classOrInterfaces,
             JavaFormatRule<RecordDeclaration> records,
@@ -57,9 +57,9 @@ final class BodyDeclarationDispatcher {
             JavaFormatRule<CompactConstructorDeclaration> compactConstructors,
             JavaFormatRule<ConstructorDeclaration> constructors,
             JavaFormatRule<InitializerDeclaration> initializers) {
+        this.rawPreservedSource = rawPreservedSource;
         this.formatterPragmas = formatterPragmas;
         this.leadingComments = leadingComments;
-        this.rawWithoutOwnComment = rawWithoutOwnComment;
         this.compactSource = compactSource;
         this.classOrInterfaces = classOrInterfaces;
         this.records = records;
@@ -99,7 +99,7 @@ final class BodyDeclarationDispatcher {
      * leading comment that has already been claimed by the comment tracker.
      */
     private Doc rawBody(BodyDeclaration<?> declaration) {
-        return Doc.concat(leadingComments.apply(declaration), Doc.text(rawWithoutOwnComment.apply(declaration)));
+        return Doc.concat(leadingComments.apply(declaration), rawPreservedSource.rawWithoutOwnComment(declaration));
     }
 
     /**
@@ -128,6 +128,8 @@ final class BodyDeclarationDispatcher {
      * formatted body members rather than raw pragma ranges.
      */
     private Doc rawDeclaration(BodyDeclaration<?> declaration) {
-        return Doc.concat(leadingComments.apply(declaration), Doc.text(compactSource.apply(declaration)));
+        return Doc.concat(
+                leadingComments.apply(declaration),
+                rawPreservedSource.rawWithoutOwnComment(declaration, compactSource.apply(declaration)));
     }
 }

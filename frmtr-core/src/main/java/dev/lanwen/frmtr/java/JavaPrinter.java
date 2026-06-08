@@ -59,6 +59,7 @@ final class JavaPrinter {
         CommentTracker comments = context.comments;
         FormatterPragmas formatterPragmas = context.formatterPragmas;
         RawSource rawSource = context.rawSource;
+        RawPreservedSource rawPreservedSource = context.rawPreservedSource;
         CompactSourceText compactSource = context.compactSource;
         CommentPlacement commentPlacement = context.commentPlacement;
         this.types = new TypePrinter(options, compactSource::compactTypeLike);
@@ -91,6 +92,7 @@ final class JavaPrinter {
         this.moduleDeclarations = new ModuleDeclarationPrinter(
                 comments,
                 rawSource,
+                rawPreservedSource,
                 new CommentedModulePrinter(),
                 declarationPrefixes::annotations,
                 this::commentText,
@@ -316,6 +318,7 @@ final class JavaPrinter {
         this.classOrInterfaces = new ClassOrInterfaceDeclarationPrinter(
                 comments,
                 rawSource,
+                rawPreservedSource,
                 options,
                 new CommentedInterfacePrinter(),
                 callableSignatures,
@@ -340,6 +343,7 @@ final class JavaPrinter {
         this.methods = new MethodDeclarationPrinter(
                 comments,
                 rawSource,
+                rawPreservedSource,
                 commentedMethodSignatures,
                 callableSignatures,
                 declarationPrefixes::declarationAnnotations,
@@ -414,9 +418,9 @@ final class JavaPrinter {
                 this::expression,
                 this::body);
         this.bodyDeclarations = new BodyDeclarationDispatcher(
+                rawPreservedSource,
                 formatterPragmas,
                 comments::leading,
-                rawSource::rawWithoutOwnComment,
                 compactSource::compact,
                 classOrInterfaces::classOrInterface,
                 records::record,
@@ -431,13 +435,15 @@ final class JavaPrinter {
         this.statementDispatcher = new StatementDispatcher(
                 comments,
                 formatterPragmas,
-                rawSource,
+                rawPreservedSource,
                 statements::statement,
                 switches::switchStatement);
     }
 
     Doc print(CompilationUnit unit) {
-        return compilationUnits.print(unit);
+        Doc doc = compilationUnits.print(unit);
+        context.comments.assertAllCommentsAccounted(unit);
+        return doc;
     }
 
     private Doc body(BodyDeclaration<?> declaration) {

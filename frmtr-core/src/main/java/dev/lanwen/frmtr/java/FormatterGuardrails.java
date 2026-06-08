@@ -1,6 +1,9 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.comments.Comment;
+import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -33,6 +36,45 @@ final class FormatterGuardrails {
                     + describe(trivia.comment()));
         }
         return claimed;
+    }
+
+    /**
+     * Records comments that reached the output through an explicit raw-source preservation path.
+     */
+    static void accountRawComments(Node node, Set<Comment> rawRenderedComments) {
+        rawRenderedComments.addAll(node.getAllContainedComments());
+    }
+
+    /**
+     * Records raw-preserved comments while excluding the node's own attached comment.
+     */
+    static void accountRawCommentsWithoutOwnComment(Node node, Set<Comment> rawRenderedComments) {
+        Optional<Comment> ownComment = node.getComment();
+        node.getAllContainedComments().stream()
+                .filter(comment -> ownComment.stream().noneMatch(own -> own == comment))
+                .forEach(rawRenderedComments::add);
+    }
+
+    /**
+     * Asserts that every JavaParser-exposed comment reached either structured rendering or raw preservation.
+     */
+    static void assertAllCommentsAccounted(
+            Node root,
+            Set<Comment> claimedComments,
+            Set<Comment> rawRenderedComments) {
+        if (!enabled()) {
+            return;
+        }
+        List<Comment> missedComments = root.getAllContainedComments().stream()
+                .filter(comment -> !claimedComments.contains(comment))
+                .filter(comment -> !rawRenderedComments.contains(comment))
+                .sorted(CommentIndex.sourceOrderComparator())
+                .toList();
+        if (!missedComments.isEmpty()) {
+            throw new AssertionError("Formatter comment guardrail failed: unclaimed comment "
+                    + describe(missedComments.getFirst())
+                    + " was exposed by JavaParser but was not printed or raw-accounted before formatting completed");
+        }
     }
 
     static boolean enabled() {

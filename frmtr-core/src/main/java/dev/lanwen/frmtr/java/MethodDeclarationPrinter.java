@@ -34,6 +34,7 @@ import java.util.function.Function;
 final class MethodDeclarationPrinter {
     private final CommentTracker comments;
     private final RawSource rawSource;
+    private final RawPreservedSource rawPreservedSource;
     private final CommentedMethodSignaturePrinter commentedMethodSignatures;
     private final CallableSignaturePrinter callableSignatures;
     private final Function<NodeWithAnnotations<?>, Doc> declarationAnnotations;
@@ -47,6 +48,7 @@ final class MethodDeclarationPrinter {
     MethodDeclarationPrinter(
             CommentTracker comments,
             RawSource rawSource,
+            RawPreservedSource rawPreservedSource,
             CommentedMethodSignaturePrinter commentedMethodSignatures,
             CallableSignaturePrinter callableSignatures,
             Function<NodeWithAnnotations<?>, Doc> declarationAnnotations,
@@ -58,6 +60,7 @@ final class MethodDeclarationPrinter {
             Function<BlockStmt, Doc> block) {
         this.comments = comments;
         this.rawSource = rawSource;
+        this.rawPreservedSource = rawPreservedSource;
         this.commentedMethodSignatures = commentedMethodSignatures;
         this.callableSignatures = callableSignatures;
         this.declarationAnnotations = declarationAnnotations;
@@ -77,7 +80,9 @@ final class MethodDeclarationPrinter {
         String raw = rawSource.raw(declaration);
         Optional<String> commentedMethod = commentedMethodSignatures.tryFormat(declaration, raw);
         if (commentedMethod.isPresent()) {
-            return Doc.concat(comments.leading(declaration), Doc.text(commentedMethod.orElseThrow()));
+            return Doc.concat(
+                    comments.leading(declaration),
+                    rawPreservedSource.rawWithoutOwnComment(declaration, commentedMethod.orElseThrow()));
         }
         List<Doc> docs = new ArrayList<>();
         docs.add(comments.leading(declaration));

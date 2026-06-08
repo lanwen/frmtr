@@ -6,9 +6,9 @@ import dev.lanwen.frmtr.FormatterOptions;
  * Carries formatter-wide state and source helpers that every Java printer should share for one formatting run.
  *
  * <p>The context owns dependencies whose identity matters across helper boundaries: options, printed-comment tracking,
- * formatter pragma state, raw source recovery, compact source text, and source-position comment placement. The boundary
- * exists so {@link JavaPrinter} can remain the composition root without threading the same shared collaborators through
- * every helper constructor separately.
+ * formatter pragma state, raw source recovery, raw-preserved source output, compact source text, and source-position
+ * comment placement. The boundary exists so {@link JavaPrinter} can remain the composition root without threading the
+ * same shared collaborators through every helper constructor separately.
  *
  * <p>Helpers should still keep syntax-specific callbacks and layout decisions in their own constructors. This context
  * is not a service locator for printers, dispatchers, or renderer policy; it only provides the common stateful
@@ -19,6 +19,7 @@ final class JavaFormatContext {
     final CommentTracker comments;
     final FormatterPragmas formatterPragmas;
     final RawSource rawSource;
+    final RawPreservedSource rawPreservedSource;
     final CompactSourceText compactSource;
     final CommentPlacement commentPlacement;
 
@@ -27,6 +28,7 @@ final class JavaFormatContext {
         this.comments = new CommentTracker();
         this.formatterPragmas = new FormatterPragmas();
         this.rawSource = new RawSource(options);
+        this.rawPreservedSource = new RawPreservedSource(rawSource, comments);
         this.compactSource = new CompactSourceText(rawSource);
         this.commentPlacement = new CommentPlacement(comments);
     }

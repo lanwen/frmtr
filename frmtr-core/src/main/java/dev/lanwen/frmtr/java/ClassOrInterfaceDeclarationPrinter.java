@@ -39,6 +39,7 @@ import java.util.function.ToIntFunction;
 final class ClassOrInterfaceDeclarationPrinter {
     private final CommentTracker comments;
     private final RawSource rawSource;
+    private final RawPreservedSource rawPreservedSource;
     private final FormatterOptions options;
     private final CommentedInterfacePrinter commentedInterfaces;
     private final CallableSignaturePrinter callableSignatures;
@@ -56,6 +57,7 @@ final class ClassOrInterfaceDeclarationPrinter {
     ClassOrInterfaceDeclarationPrinter(
             CommentTracker comments,
             RawSource rawSource,
+            RawPreservedSource rawPreservedSource,
             FormatterOptions options,
             CommentedInterfacePrinter commentedInterfaces,
             CallableSignaturePrinter callableSignatures,
@@ -71,6 +73,7 @@ final class ClassOrInterfaceDeclarationPrinter {
             Function<ClassOrInterfaceDeclaration, Doc> memberBlock) {
         this.comments = comments;
         this.rawSource = rawSource;
+        this.rawPreservedSource = rawPreservedSource;
         this.options = options;
         this.commentedInterfaces = commentedInterfaces;
         this.callableSignatures = callableSignatures;
@@ -97,7 +100,11 @@ final class ClassOrInterfaceDeclarationPrinter {
     Doc classOrInterface(ClassOrInterfaceDeclaration declaration) {
         String raw = rawSource.raw(declaration);
         if (declaration.isInterface() && commentedInterfaces.hasCommentedHeader(raw)) {
-            return Doc.concat(comments.leading(declaration), Doc.text(commentedInterfaces.formatCommentedInterface(raw)));
+            return Doc.concat(
+                    comments.leading(declaration),
+                    rawPreservedSource.rawWithoutOwnComment(
+                            declaration,
+                            commentedInterfaces.formatCommentedInterface(raw)));
         }
         if (shouldBreakClassOrInterfaceHeader(declaration)) {
             return brokenClassOrInterface(declaration);

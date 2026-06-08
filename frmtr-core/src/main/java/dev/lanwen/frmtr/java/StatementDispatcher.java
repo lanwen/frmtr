@@ -27,19 +27,19 @@ import dev.lanwen.frmtr.doc.Doc;
 final class StatementDispatcher {
     private final CommentTracker comments;
     private final FormatterPragmas formatterPragmas;
-    private final RawSource rawSource;
+    private final RawPreservedSource rawPreservedSource;
     private final JavaFormatRule<Statement> statementRenderer;
     private final JavaFormatRule<SwitchStmt> switchRenderer;
 
     StatementDispatcher(
             CommentTracker comments,
             FormatterPragmas formatterPragmas,
-            RawSource rawSource,
+            RawPreservedSource rawPreservedSource,
             JavaFormatRule<Statement> statementRenderer,
             JavaFormatRule<SwitchStmt> switchRenderer) {
         this.comments = comments;
         this.formatterPragmas = formatterPragmas;
-        this.rawSource = rawSource;
+        this.rawPreservedSource = rawPreservedSource;
         this.statementRenderer = statementRenderer;
         this.switchRenderer = switchRenderer;
     }
@@ -76,7 +76,7 @@ final class StatementDispatcher {
      */
     private Doc rawStatement(Statement statement) {
         Doc leading = statement instanceof TryStmt ? Doc.EMPTY : comments.leading(statement);
-        return Doc.concat(leading, Doc.text(rawSource.rawWithoutOwnComment(statement)));
+        return Doc.concat(leading, rawPreservedSource.rawWithoutOwnComment(statement));
     }
 
     private Doc leadingComment(Statement statement, Doc trailing) {

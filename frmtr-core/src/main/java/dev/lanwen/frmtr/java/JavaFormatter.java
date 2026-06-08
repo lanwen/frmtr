@@ -172,8 +172,8 @@ public final class JavaFormatter {
         StringBuilder formatted = new StringBuilder();
         appendSourceLines(formatted, lines, startLine, position.line, width);
         formatted.append(System.lineSeparator())
-                .append(" ".repeat(width + 2))
-                .append("-".repeat(Math.max(0, position.column - 1)))
+                .repeat(" ", width + 2)
+                .repeat("-", Math.max(0, position.column - 1))
                 .append("^")
                 .append(System.lineSeparator());
         formatted.append(message);

@@ -121,8 +121,8 @@ final class JavaPrinter {
                 this::currentIndentedWidth,
                 this::blockStatementWidth,
                 this::continuationStatementWidth,
-                (expression, forceBreak) -> binaries.lines(expression, forceBreak),
-                (expression, forceBreak) -> binaries.nestedLines(expression, forceBreak),
+                binaries::lines,
+                binaries::nestedLines,
                 binaries::expressionHasParenthesizedNestedBinary);
         this.lambdas = new LambdaExpressionPrinter(
                 comments,
@@ -131,7 +131,7 @@ final class JavaPrinter {
                 this::expression,
                 this::statement,
                 this::block,
-                (expression, forceBreak) -> binaries.lines(expression, forceBreak),
+                binaries::lines,
                 compactSource::compact,
                 compactSource::compactWithoutOwnComment,
                 compactSource::compactJoin,
@@ -147,13 +147,13 @@ final class JavaPrinter {
         this.enclosedExpressions = new EnclosedExpressionPrinter(
                 options,
                 this::expression,
-                (expression, forceBreak) -> binaries.lines(expression, forceBreak),
+                binaries::lines,
                 compactSource::compact,
                 this::currentIndentedWidth,
                 this::continuationStatementWidth,
                 casts::nestedCastDepth,
                 lambdas::parenthesizedLambdaBreak,
-                (expression, forceBreak) -> conditionals.conditionalExpression(expression, forceBreak));
+                conditionals::conditionalExpression);
         this.arrays = new ArrayExpressionPrinter(
                 comments,
                 options,
@@ -208,7 +208,7 @@ final class JavaPrinter {
                 this::blockStatementWidth,
                 enclosedSuffixes::suffixedEnclosedExpression,
                 binaries::shouldKeepCastDivisionContinuationFlat,
-                (expression, forceBreak) -> binaries.lines(expression, forceBreak),
+                binaries::lines,
                 objectCreations::brokenObjectCreation,
                 methodCalls::assignmentWithBrokenMethodCallArguments,
                 conditionals::assignmentWithConditionalValue);
@@ -237,7 +237,7 @@ final class JavaPrinter {
                 compactSource::compact,
                 this::currentIndentedWidth,
                 methodCalls::forcedMethodCallChain,
-                (expression, forceBreak) -> conditionals.conditionalExpression(expression, forceBreak),
+                conditionals::conditionalExpression,
                 enclosedExpressions::parenthesizedBreak);
         this.commentedMethodSignatures = new CommentedMethodSignaturePrinter(options);
         PackageDeclarationPrinter packageDeclarations = new PackageDeclarationPrinter(comments, rawSource, options);
@@ -266,7 +266,7 @@ final class JavaPrinter {
                 enclosedSuffixes::suffixedEnclosedExpression,
                 arrays::arrayAccessWithBrokenEnclosedName,
                 binaries::shouldKeepCastDivisionContinuationFlat,
-                (expression, forceBreak) -> binaries.lines(expression, forceBreak),
+                binaries::lines,
                 methodCalls::methodCall,
                 methodCalls::brokenMethodCall,
                 methodCalls::mixedFieldMethodCallChain,
@@ -324,7 +324,7 @@ final class JavaPrinter {
                 types::extendsTypes,
                 types::implementsTypes,
                 types::permitsTypes,
-                (keyword, headerTypes, breakBeforeClause) -> types.typeClause(keyword, headerTypes, breakBeforeClause),
+                types::typeClause,
                 types::flatTypeParameters,
                 types::flatTypeClause,
                 this::currentIndentedWidth,
@@ -477,8 +477,8 @@ final class JavaPrinter {
     }
 
     private String commentText(Doc comment) {
-        if (comment instanceof Doc.Text text) {
-            return text.value();
+        if (comment instanceof Doc.Text(String value)) {
+            return value;
         }
         return "";
     }

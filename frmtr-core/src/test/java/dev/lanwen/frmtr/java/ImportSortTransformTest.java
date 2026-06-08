@@ -16,6 +16,16 @@ import org.junit.jupiter.api.parallel.Resources;
 @ResourceLock(Resources.SYSTEM_PROPERTIES)
 final class ImportSortTransformTest {
     @Test
+    void reportsTransformResultMetadata() {
+        CompilationUnit unit = parse("class Demo {}");
+
+        JavaTransformResult result = new ImportSortTransform().transform(unit);
+
+        assertThat(result.unit()).isSameAs(unit);
+        assertThat(result.transformName()).isEqualTo("ImportSortTransform");
+    }
+
+    @Test
     void reordersCompilationUnitImportsWithoutReplacingNodes() {
         CompilationUnit unit = parse("""
                 package dev.example;

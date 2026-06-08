@@ -11,10 +11,11 @@ import com.github.javaparser.ast.CompilationUnit;
  */
 interface JavaFormatTransform {
     /**
-     * Applies this transform to the parsed compilation unit and returns the same unit for pipeline chaining.
+     * Applies this transform to the parsed compilation unit and returns the transformed unit with transform metadata.
      *
      * <p>Transforms may reorder existing JavaParser nodes when that preserves formatter behavior, but callers remain
-     * responsible for deciding which transforms belong in the pipeline and when printing starts.
+     * responsible for deciding which transforms belong in the pipeline, how transform results are sequenced, and when
+     * printing starts.
      */
-    CompilationUnit transform(CompilationUnit unit);
+    JavaTransformResult transform(CompilationUnit unit);
 }

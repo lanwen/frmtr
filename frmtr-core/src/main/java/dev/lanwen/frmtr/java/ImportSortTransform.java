@@ -25,8 +25,8 @@ final class ImportSortTransform implements JavaFormatTransform {
      * which keeps duplicate import names in source order while still making static/name ordering deterministic.
      */
     @Override
-    public CompilationUnit transform(CompilationUnit unit) {
+    public JavaTransformResult transform(CompilationUnit unit) {
         unit.getImports().sort(FORMATTER_IMPORT_ORDER);
-        return unit;
+        return JavaTransformResult.completed(this, unit);
     }
 }

@@ -23,15 +23,16 @@ final class JavaTransformPipeline {
      *
      * <p>The pipeline passes the transformed unit from one step to the next so future transforms can build on earlier
      * source-equivalent normalization while preserving a single JavaParser tree for comment and node identity tracking.
+     * Per-transform result metadata stays at this boundary because the formatter only needs the final unit today.
      */
     CompilationUnit transform(CompilationUnit unit) {
         CompilationUnit transformed = unit;
         for (JavaFormatTransform transform : transforms) {
             FormatterGuardrails.TransformSnapshot guardrails =
                     FormatterGuardrails.beforeTransform(transform, transformed);
-            CompilationUnit next = transform.transform(transformed);
-            FormatterGuardrails.assertTransformInvariants(guardrails, next);
-            transformed = next;
+            JavaTransformResult result = transform.transform(transformed);
+            FormatterGuardrails.assertTransformInvariants(guardrails, result);
+            transformed = result.unit();
         }
         return transformed;
     }

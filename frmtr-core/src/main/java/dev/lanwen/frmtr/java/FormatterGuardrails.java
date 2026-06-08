@@ -97,8 +97,8 @@ final class FormatterGuardrails {
     /**
      * Asserts that a transform kept the formatter's current JavaParser identity contract.
      */
-    static void assertTransformInvariants(TransformSnapshot before, CompilationUnit transformed) {
-        before.assertPreserved(transformed);
+    static void assertTransformInvariants(TransformSnapshot before, JavaTransformResult result) {
+        before.assertPreserved(result);
     }
 
     static boolean enabled() {
@@ -180,10 +180,17 @@ final class FormatterGuardrails {
                     importComments);
         }
 
-        private void assertPreserved(CompilationUnit transformed) {
+        private void assertPreserved(JavaTransformResult result) {
             if (!enabled) {
                 return;
             }
+            if (!transformName.equals(result.transformName())) {
+                fail("returned result metadata for "
+                        + result.transformName()
+                        + " after the pipeline invoked "
+                        + transformName);
+            }
+            CompilationUnit transformed = result.unit();
             if (transformed != unit) {
                 fail("returned a different CompilationUnit instance; transforms must keep the original JavaParser tree "
                         + "unless the transform pipeline is redesigned");

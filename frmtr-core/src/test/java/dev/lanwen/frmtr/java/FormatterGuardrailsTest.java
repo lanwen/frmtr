@@ -285,50 +285,50 @@ final class FormatterGuardrailsTest {
 
     private static final class ReplacingCompilationUnitTransform implements JavaFormatTransform {
         @Override
-        public CompilationUnit transform(CompilationUnit unit) {
-            return new CompilationUnit();
+        public JavaTransformResult transform(CompilationUnit unit) {
+            return JavaTransformResult.completed(this, new CompilationUnit());
         }
     }
 
     private static final class ReplacingTypeCommentTransform implements JavaFormatTransform {
         @Override
-        public CompilationUnit transform(CompilationUnit unit) {
+        public JavaTransformResult transform(CompilationUnit unit) {
             unit.getType(0).setComment(new LineComment("replacement"));
-            return unit;
+            return JavaTransformResult.completed(this, unit);
         }
     }
 
     private static final class ReplacingImportDeclarationTransform implements JavaFormatTransform {
         @Override
-        public CompilationUnit transform(CompilationUnit unit) {
+        public JavaTransformResult transform(CompilationUnit unit) {
             ImportDeclaration imported = unit.getImport(0);
             Optional<Comment> comment = imported.getComment();
             ImportDeclaration replacement =
                     new ImportDeclaration(imported.getName(), imported.isStatic(), imported.isAsterisk());
             comment.ifPresent(replacement::setComment);
             unit.getImports().set(0, replacement);
-            return unit;
+            return JavaTransformResult.completed(this, unit);
         }
     }
 
     private static final class SwappingImportCommentsTransform implements JavaFormatTransform {
         @Override
-        public CompilationUnit transform(CompilationUnit unit) {
+        public JavaTransformResult transform(CompilationUnit unit) {
             ImportDeclaration first = unit.getImport(0);
             ImportDeclaration second = unit.getImport(1);
             Comment firstComment = first.getComment().orElseThrow();
             Comment secondComment = second.getComment().orElseThrow();
             first.setComment(secondComment);
             second.setComment(firstComment);
-            return unit;
+            return JavaTransformResult.completed(this, unit);
         }
     }
 
     private static final class ReplacingTypeDeclarationTransform implements JavaFormatTransform {
         @Override
-        public CompilationUnit transform(CompilationUnit unit) {
+        public JavaTransformResult transform(CompilationUnit unit) {
             unit.getTypes().set(0, unit.getType(0).clone());
-            return unit;
+            return JavaTransformResult.completed(this, unit);
         }
     }
 

@@ -48,9 +48,9 @@ final class LambdaExpressionPrinter {
     private final JavaFormatter.CommentTracker comments;
     private final RawSource rawSource;
     private final FormatterOptions options;
-    private final Function<Expression, Doc> expressionRenderer;
-    private final Function<Statement, Doc> statementRenderer;
-    private final Function<BlockStmt, Doc> blockRenderer;
+    private final JavaFormatRule<Expression> expressionRenderer;
+    private final JavaFormatRule<Statement> statementRenderer;
+    private final JavaFormatRule<BlockStmt> blockRenderer;
     private final BiFunction<Expression, Boolean, Doc> binaryExpressionLinesRenderer;
     private final Function<Node, String> compact;
     private final Function<Node, String> compactWithoutOwnComment;
@@ -64,9 +64,9 @@ final class LambdaExpressionPrinter {
             JavaFormatter.CommentTracker comments,
             RawSource rawSource,
             FormatterOptions options,
-            Function<Expression, Doc> expressionRenderer,
-            Function<Statement, Doc> statementRenderer,
-            Function<BlockStmt, Doc> blockRenderer,
+            JavaFormatRule<Expression> expressionRenderer,
+            JavaFormatRule<Statement> statementRenderer,
+            JavaFormatRule<BlockStmt> blockRenderer,
             BiFunction<Expression, Boolean, Doc> binaryExpressionLinesRenderer,
             Function<Node, String> compact,
             Function<Node, String> compactWithoutOwnComment,
@@ -101,14 +101,14 @@ final class LambdaExpressionPrinter {
 
     private Doc lambdaExpressionBody(LambdaExpr expression) {
         return expression.getExpressionBody()
-                .map(expressionRenderer)
-                .orElseGet(() -> statementRenderer.apply(expression.getBody()));
+                .map(expressionRenderer::format)
+                .orElseGet(() -> statementRenderer.format(expression.getBody()));
     }
 
     Doc lambdaExpression(LambdaExpr expression) {
         String parameters = lambdaParameters(expression);
         if (expression.getBody().isBlockStmt()) {
-            return Doc.concat(lambdaParametersForHeader(expression, parameters), Doc.text(" -> "), blockRenderer.apply(expression.getBody().asBlockStmt()));
+            return Doc.concat(lambdaParametersForHeader(expression, parameters), Doc.text(" -> "), blockRenderer.format(expression.getBody().asBlockStmt()));
         }
         boolean parametersHaveComments = lambdaParametersHaveComments(expression);
         if (parametersHaveComments) {
@@ -126,7 +126,7 @@ final class LambdaExpressionPrinter {
         if (parametersHaveComments && expression.getExpressionBody().isPresent()) {
             Expression body = expression.getExpressionBody().orElseThrow();
             if (currentIndentedWidth.applyAsInt(") -> " + compact.apply(body)) <= options.lineWidth()) {
-                return Doc.concat(lambdaParametersForHeader(expression, parameters), Doc.text(" -> "), expressionRenderer.apply(body));
+                return Doc.concat(lambdaParametersForHeader(expression, parameters), Doc.text(" -> "), expressionRenderer.format(body));
             }
         }
         if (lambdaParametersShouldBreak(expression, parameters)
@@ -134,7 +134,7 @@ final class LambdaExpressionPrinter {
             return Doc.concat(
                     lambdaParametersForHeader(expression, parameters),
                     Doc.text(" -> "),
-                    expressionRenderer.apply(expression.getExpressionBody().orElseThrow()));
+                    expressionRenderer.format(expression.getExpressionBody().orElseThrow()));
         }
         Doc body = brokenLambdaExpressionBody(expression);
         return Doc.concat(
@@ -186,8 +186,8 @@ final class LambdaExpressionPrinter {
         return expression.getExpressionBody()
                 .map(body -> body instanceof BinaryExpr binaryExpr && isLogicalBinaryOperator(binaryExpr)
                         ? binaryExpressionLinesRenderer.apply(body, true)
-                        : expressionRenderer.apply(body))
-                .orElseGet(() -> statementRenderer.apply(expression.getBody()));
+                        : expressionRenderer.format(body))
+                .orElseGet(() -> statementRenderer.format(expression.getBody()));
     }
 
     private boolean isLogicalBinaryOperator(BinaryExpr expression) {
@@ -531,13 +531,13 @@ final class LambdaExpressionPrinter {
                     Doc.indent(Doc.concat(
                             Doc.HARD_LINE,
                             Doc.text(huggableExpressionLambdaFirstLine(lambdaExpr, parameters)),
-                            Doc.indent(Doc.concat(Doc.HARD_LINE, expressionRenderer.apply(bodyExpression))))),
+                            Doc.indent(Doc.concat(Doc.HARD_LINE, expressionRenderer.format(bodyExpression))))),
                     Doc.HARD_LINE,
                     Doc.text(")")));
         }
         return Optional.of(Doc.concat(
                 Doc.text(firstLine),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, expressionRenderer.apply(bodyExpression))),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, expressionRenderer.format(bodyExpression))),
                 Doc.HARD_LINE,
                 Doc.text(")")));
     }

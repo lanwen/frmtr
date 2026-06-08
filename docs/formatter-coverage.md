@@ -16,7 +16,10 @@ Single-file formatting flows through these ownership boundaries:
 2. `JavaFormatter` handles pragma-required opt-in, JavaParser configuration, token/comment storage, parse errors, and
    the transform stage.
 3. `JavaTransformPipeline` applies source-equivalent AST transforms. The current transform is `ImportSortTransform`,
-   which orders existing imports before printing.
+   which orders existing imports before printing. When `dev.lanwen.frmtr.debug.guardrails=true`, the pipeline asks
+   `FormatterGuardrails` to assert that transforms keep the same `CompilationUnit` root and preserve existing
+   JavaParser child-node identities across the tree, preserve JavaParser-visible comment identities, and reorder
+   existing import declarations without replacing nodes or moving attached comments.
 4. `JavaPrinter` creates the per-run `JavaFormatContext` while wiring all printers and dispatchers.
    `JavaPrinter.print(CompilationUnit)` delegates whole-file layout to `CompilationUnitPrinter`, then asks
    `CommentTracker` to run the debug-only missed comment guardrail.
@@ -151,6 +154,7 @@ These helpers define the fallback and comment-accounting boundaries used by the 
 | `CommentPlacement` | Source-position-sensitive attached and unattached block-comment docs for callers that need more than ordinary leading/trailing slots. |
 | `JavaCommentTrivia` and `JavaCommentKind` | Comment classification and reusable range checks for comment accounting and layout rules. |
 | `FormatterPragmas` | Formatter off/on and ignore state used by declaration and statement dispatchers. |
+| `FormatterGuardrails` | Debug-only transform and comment-accounting checks enabled by `dev.lanwen.frmtr.debug.guardrails`. |
 | `RawSource` | Token-range recovery, raw-without-own-comment text, line-by-line trailing whitespace stripping, and single-line whitespace normalization. |
 | `RawPreservedSource` | The canonical raw-output boundary. It wraps raw or source-derived text in `Doc.Text` and records contained comments as deliberately raw-preserved. |
 | `CompactSourceText` | Source-equivalent compact text for width gates and compact fallbacks, including raw string-literal spelling, reconstructed comment-free method calls, field accesses, type-like generic spacing cleanup, and clone-before-comment-removal variants. |

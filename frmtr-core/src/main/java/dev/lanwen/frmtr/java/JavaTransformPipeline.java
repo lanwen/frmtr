@@ -27,7 +27,11 @@ final class JavaTransformPipeline {
     CompilationUnit transform(CompilationUnit unit) {
         CompilationUnit transformed = unit;
         for (JavaFormatTransform transform : transforms) {
-            transformed = transform.transform(transformed);
+            FormatterGuardrails.TransformSnapshot guardrails =
+                    FormatterGuardrails.beforeTransform(transform, transformed);
+            CompilationUnit next = transform.transform(transformed);
+            FormatterGuardrails.assertTransformInvariants(guardrails, next);
+            transformed = next;
         }
         return transformed;
     }

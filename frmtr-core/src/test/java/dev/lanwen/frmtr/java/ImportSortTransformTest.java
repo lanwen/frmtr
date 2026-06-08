@@ -8,8 +8,12 @@ import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.Providers;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
+import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.ResourceLock;
+import org.junit.jupiter.api.parallel.Resources;
 
+@ResourceLock(Resources.SYSTEM_PROPERTIES)
 final class ImportSortTransformTest {
     @Test
     void reordersCompilationUnitImportsWithoutReplacingNodes() {
@@ -28,7 +32,8 @@ final class ImportSortTransformTest {
         ImportDeclaration staticA = unit.getImport(1);
         ImportDeclaration normalA = unit.getImport(2);
 
-        CompilationUnit transformed = new ImportSortTransform().transform(unit);
+        CompilationUnit transformed = withGuardrails("true", () -> new JavaTransformPipeline(List.of(new ImportSortTransform()))
+                .transform(unit));
 
         assertThat(transformed).isSameAs(unit);
         assertThat(unit.getImport(0)).isSameAs(staticA);
@@ -50,5 +55,27 @@ final class ImportSortTransformTest {
         return parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
                 .getResult()
                 .orElseThrow();
+    }
+
+    private static <T> T withGuardrails(String value, GuardrailAction<T> action) {
+        String previous = System.getProperty(FormatterGuardrails.ENABLED_PROPERTY);
+        try {
+            if (value == null) {
+                System.clearProperty(FormatterGuardrails.ENABLED_PROPERTY);
+            } else {
+                System.setProperty(FormatterGuardrails.ENABLED_PROPERTY, value);
+            }
+            return action.run();
+        } finally {
+            if (previous == null) {
+                System.clearProperty(FormatterGuardrails.ENABLED_PROPERTY);
+            } else {
+                System.setProperty(FormatterGuardrails.ENABLED_PROPERTY, previous);
+            }
+        }
+    }
+
+    private interface GuardrailAction<T> {
+        T run();
     }
 }

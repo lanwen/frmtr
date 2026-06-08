@@ -1,10 +1,16 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.comments.Comment;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Hosts opt-in formatter pipeline checks for mistakes that should be noisy during formatter development.
@@ -77,14 +83,212 @@ final class FormatterGuardrails {
         }
     }
 
+    /**
+     * Captures JavaParser identity state before one transform runs.
+     *
+     * <p>The snapshot is intentionally empty unless debug guardrails are enabled. Transform implementations keep their
+     * normal source-equivalent mutation behavior, while the pipeline gets one canonical place to validate assumptions it
+     * relies on before printing starts.
+     */
+    static TransformSnapshot beforeTransform(JavaFormatTransform transform, CompilationUnit unit) {
+        return enabled() ? TransformSnapshot.capture(transformName(transform), unit) : TransformSnapshot.disabled();
+    }
+
+    /**
+     * Asserts that a transform kept the formatter's current JavaParser identity contract.
+     */
+    static void assertTransformInvariants(TransformSnapshot before, CompilationUnit transformed) {
+        before.assertPreserved(transformed);
+    }
+
     static boolean enabled() {
         return Boolean.getBoolean(ENABLED_PROPERTY);
     }
 
+    /**
+     * Stores debug-only identity snapshots for one transform invocation.
+     *
+     * <p>The formatter currently treats transforms as in-place source-equivalent normalization over one JavaParser tree.
+     * This snapshot makes that boundary explicit: transforms may reorder existing nodes, but replacing the compilation
+     * unit, cloning declarations, or swapping JavaParser-visible comments should fail fast during formatter development.
+     */
+    static final class TransformSnapshot {
+        private final boolean enabled;
+        private final String transformName;
+        private final CompilationUnit unit;
+        private final List<Node> nodes;
+        private final Set<Node> nodeIdentities;
+        private final List<Comment> comments;
+        private final Set<Comment> commentIdentities;
+        private final List<ImportDeclaration> imports;
+        private final Set<ImportDeclaration> importIdentities;
+        private final Map<ImportDeclaration, Optional<Comment>> importComments;
+
+        private TransformSnapshot(
+                boolean enabled,
+                String transformName,
+                CompilationUnit unit,
+                List<Node> nodes,
+                Set<Node> nodeIdentities,
+                List<Comment> comments,
+                Set<Comment> commentIdentities,
+                List<ImportDeclaration> imports,
+                Set<ImportDeclaration> importIdentities,
+                Map<ImportDeclaration, Optional<Comment>> importComments) {
+            this.enabled = enabled;
+            this.transformName = transformName;
+            this.unit = unit;
+            this.nodes = nodes;
+            this.nodeIdentities = nodeIdentities;
+            this.comments = comments;
+            this.commentIdentities = commentIdentities;
+            this.imports = imports;
+            this.importIdentities = importIdentities;
+            this.importComments = importComments;
+        }
+
+        private static TransformSnapshot disabled() {
+            return new TransformSnapshot(
+                    false,
+                    "",
+                    null,
+                    List.of(),
+                    Set.of(),
+                    List.of(),
+                    Set.of(),
+                    List.of(),
+                    Set.of(),
+                    Map.of());
+        }
+
+        private static TransformSnapshot capture(String transformName, CompilationUnit unit) {
+            List<Node> nodes = unit.stream().toList();
+            List<Comment> comments = unit.getAllContainedComments();
+            List<ImportDeclaration> imports = List.copyOf(unit.getImports());
+            Map<ImportDeclaration, Optional<Comment>> importComments = new IdentityHashMap<>();
+            imports.forEach(importDeclaration -> importComments.put(importDeclaration, importDeclaration.getComment()));
+            return new TransformSnapshot(
+                    true,
+                    transformName,
+                    unit,
+                    nodes,
+                    identitySet(nodes),
+                    comments,
+                    identitySet(comments),
+                    imports,
+                    identitySet(imports),
+                    importComments);
+        }
+
+        private void assertPreserved(CompilationUnit transformed) {
+            if (!enabled) {
+                return;
+            }
+            if (transformed != unit) {
+                fail("returned a different CompilationUnit instance; transforms must keep the original JavaParser tree "
+                        + "unless the transform pipeline is redesigned");
+            }
+            assertIdentitySetPreserved(
+                    comments,
+                    commentIdentities,
+                    transformed.getAllContainedComments(),
+                    "JavaParser-visible comment was lost or replaced by identity",
+                    "introduced a new JavaParser-visible comment identity",
+                    FormatterGuardrails::describe);
+            assertImportDeclarationsPreserved(transformed);
+            assertIdentitySetPreserved(
+                    nodes,
+                    nodeIdentities,
+                    transformed.stream().toList(),
+                    "JavaParser tree node was lost or replaced by identity",
+                    "introduced a new JavaParser tree node identity",
+                    FormatterGuardrails::describe);
+        }
+
+        private void assertImportDeclarationsPreserved(CompilationUnit transformed) {
+            List<ImportDeclaration> transformedImports = List.copyOf(transformed.getImports());
+            assertIdentitySetPreserved(
+                    imports,
+                    importIdentities,
+                    transformedImports,
+                    "import declaration node was lost or replaced instead of being reordered in place",
+                    "introduced a new import declaration node instead of reordering existing imports in place",
+                    FormatterGuardrails::describeImport);
+            for (ImportDeclaration importDeclaration : imports) {
+                Optional<Comment> beforeComment = importComments.get(importDeclaration);
+                Optional<Comment> afterComment = importDeclaration.getComment();
+                if (commentsDiffer(beforeComment, afterComment)) {
+                    fail("comment attachment changed for "
+                            + describeImport(importDeclaration)
+                            + "; comments attached to import declarations must remain on their original import nodes");
+                }
+            }
+        }
+
+        private <T> void assertIdentitySetPreserved(
+                List<T> before,
+                Set<T> beforeIdentities,
+                List<T> after,
+                String missingMessage,
+                String addedMessage,
+                Function<T, String> describe) {
+            Set<T> afterIdentities = identitySet(after);
+            before.stream()
+                    .filter(item -> !afterIdentities.contains(item))
+                    .findFirst()
+                    .ifPresent(item -> fail(missingMessage + ": " + describe.apply(item)));
+            after.stream()
+                    .filter(item -> !beforeIdentities.contains(item))
+                    .findFirst()
+                    .ifPresent(item -> fail(addedMessage + ": " + describe.apply(item)));
+        }
+
+        private void fail(String invariant) {
+            throw new AssertionError("Formatter transform guardrail failed for "
+                    + transformName
+                    + ": "
+                    + invariant);
+        }
+    }
+
+    private static String transformName(JavaFormatTransform transform) {
+        String simpleName = transform.getClass().getSimpleName();
+        return simpleName.isBlank() ? transform.getClass().getName() : simpleName;
+    }
+
+    private static boolean commentsDiffer(Optional<Comment> before, Optional<Comment> after) {
+        if (before.isEmpty() || after.isEmpty()) {
+            return before.isPresent() != after.isPresent();
+        }
+        return before.orElseThrow() != after.orElseThrow();
+    }
+
+    private static <T> Set<T> identitySet(List<T> values) {
+        Set<T> identities = Collections.newSetFromMap(new IdentityHashMap<>());
+        identities.addAll(values);
+        return identities;
+    }
+
+    private static String describeImport(ImportDeclaration declaration) {
+        String kind = declaration.isStatic() ? "static import " : "import ";
+        return "ImportDeclaration "
+                + kind
+                + declaration.getNameAsString()
+                + " at "
+                + range(declaration);
+    }
+
+    private static String describe(Node node) {
+        return node.getClass().getSimpleName() + " at " + range(node);
+    }
+
     private static String describe(Comment comment) {
-        String range = comment.getRange().map(Object::toString).orElse("unknown range");
         String text = snippet(comment.toString());
-        return comment.getClass().getSimpleName() + " at " + range + " [" + text + "]";
+        return comment.getClass().getSimpleName() + " at " + range(comment) + " [" + text + "]";
+    }
+
+    private static String range(Node node) {
+        return node.getRange().map(Object::toString).orElse("unknown range");
     }
 
     private static String snippet(String text) {

@@ -54,13 +54,16 @@ JavaParser printers are not the formatter engine. They may be useful as referenc
 - `Indent` increases indentation after line breaks.
 - `Group` attempts flat rendering first and breaks when content does not fit.
 - `IfBreak` selects different output for flat versus broken groups.
+- `Label` attaches debug-only provenance to a subtree.
 
-`DocRenderer` is language-agnostic. Java-specific choices belong in `JavaPrinter`, not in the renderer.
+`DocRenderer` is language-agnostic. Java-specific choices belong in `JavaPrinter`, not in the renderer. Label nodes are
+transparent to rendering, fitting, and width calculations.
 `DocDebugRenderer` provides a stable structural dump of the document tree so formatter maintainers can inspect break
-opportunities, indentation scopes, groups, and flat-vs-broken alternatives. `Frmtr.debugDoc(...)` exposes that view for
-one Java source string after parsing, transforms, and Java printing, without invoking width-based rendering. It always
-builds the document tree for the supplied source; pragma gating remains formatted-output behavior. It is a core debug API
-only, not a formatting policy surface or CLI hook.
+opportunities, indentation scopes, groups, flat-vs-broken alternatives, and high-level formatter rule labels. Label
+names are diagnostic formatter-internal names and may evolve when rule boundaries move. `Frmtr.debugDoc(...)` exposes
+that view for one Java source string after parsing, transforms, and Java printing, without invoking width-based
+rendering. It always builds the document tree for the supplied source; pragma gating remains formatted-output behavior.
+It is a core debug API only, not a formatting policy surface or CLI hook.
 
 ## File-Oriented Runs
 

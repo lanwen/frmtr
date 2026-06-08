@@ -54,15 +54,19 @@ final class StatementRuleEnvelope {
     Doc statement(Statement statement) {
         FormatterPragmas.PrintAction action = formatterPragmas.statementAction(statement);
         if (action == FormatterPragmas.PrintAction.RAW_WITH_TRAILING_HARD_LINE) {
-            return Doc.concat(rawStatement(statement), Doc.HARD_LINE);
+            return label(statement, Doc.concat(rawStatement(statement), Doc.HARD_LINE));
         }
         if (action == FormatterPragmas.PrintAction.RAW) {
-            return rawStatement(statement);
+            return label(statement, rawStatement(statement));
         }
         Doc trailing = statement instanceof TryStmt ? Doc.EMPTY : comments.trailingLineComment(statement);
         Doc leading = leadingComment(statement, trailing);
         Doc body = statementContent.format(statement);
-        return Doc.concat(leading, body, trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing));
+        return label(statement, Doc.concat(leading, body, trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing)));
+    }
+
+    private Doc label(Statement statement, Doc doc) {
+        return Doc.label("java.statement:" + statement.getClass().getSimpleName(), doc);
     }
 
     /**

@@ -45,6 +45,7 @@ public final class DocRenderer {
                 render(group.doc(), indent, next);
             }
             case Doc.IfBreak conditional -> render(mode == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(), indent, mode);
+            case Doc.Label label -> render(label.doc(), indent, mode);
         }
     }
 
@@ -77,6 +78,7 @@ public final class DocRenderer {
             case Doc.Indent indented -> fits(indented.doc(), indent + 1, remaining, mode);
             case Doc.Group group -> fits(group.doc(), indent, remaining, Mode.FLAT);
             case Doc.IfBreak conditional -> fits(mode == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(), indent, remaining, mode);
+            case Doc.Label label -> fits(label.doc(), indent, remaining, mode);
         };
     }
 
@@ -100,6 +102,7 @@ public final class DocRenderer {
             case Doc.Indent indented -> flatWidth(indented.doc(), indent + 1, mode);
             case Doc.Group group -> flatWidth(group.doc(), indent, Mode.FLAT);
             case Doc.IfBreak conditional -> flatWidth(mode == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(), indent, mode);
+            case Doc.Label label -> flatWidth(label.doc(), indent, mode);
         };
     }
 

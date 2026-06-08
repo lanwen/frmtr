@@ -35,4 +35,19 @@ final class DocRendererTest {
                   secondArgument
                 )""");
     }
+
+    @Test
+    void ignoresLabelsWhenRenderingAndFittingGroups() {
+        Doc doc = Doc.group(Doc.concat(
+                Doc.text("call("),
+                Doc.label("argument-list", Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.text("firstArgumentX")))),
+                Doc.SOFT_LINE,
+                Doc.text(")")));
+
+        String rendered = new DocRenderer(FormatterOptions.forLayout(
+                        20, FormatterOptions.IndentStyle.SPACE, 2, FormatterOptions.LineEnding.LF, false))
+                .render(doc);
+
+        assertThat(rendered).isEqualTo("call(firstArgumentX)");
+    }
 }

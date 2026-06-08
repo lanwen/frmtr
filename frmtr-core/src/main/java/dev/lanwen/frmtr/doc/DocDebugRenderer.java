@@ -52,6 +52,10 @@ public final class DocDebugRenderer {
                 appendLine(out, depth + 1, "flat:");
                 render(conditional.flatDoc(), out, depth + 2);
             }
+            case Doc.Label label -> {
+                appendLine(out, depth, "Label(\"" + escaped(label.label()) + "\")");
+                render(label.doc(), out, depth + 1);
+            }
         }
     }
 

@@ -53,6 +53,21 @@ final class DocDebugRendererTest {
     }
 
     @Test
+    void rendersLabelsAsDebugOnlyProvenance() {
+        Doc doc = Doc.label("expression:MethodCallExpr", Doc.group(Doc.concat(Doc.text("call("), Doc.SOFT_LINE, Doc.text(")"))));
+
+        String rendered = DocDebugRenderer.render(doc);
+
+        assertThat(rendered).isEqualTo("""
+                Label("expression:MethodCallExpr")
+                  Group
+                    Concat
+                      Text("call(")
+                      SoftLine
+                      Text(")")""");
+    }
+
+    @Test
     void escapesTextValues() {
         Doc doc = Doc.text("quote \" tab\tnewline\nslash\\");
 

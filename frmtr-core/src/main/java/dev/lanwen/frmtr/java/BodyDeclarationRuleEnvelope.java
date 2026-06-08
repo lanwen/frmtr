@@ -41,12 +41,13 @@ final class BodyDeclarationRuleEnvelope {
      */
     Doc body(BodyDeclaration<?> declaration) {
         FormatterPragmas.PrintAction action = formatterPragmas.bodyAction(declaration);
-        return switch (action) {
+        Doc doc = switch (action) {
             case RAW -> rawBody(declaration);
             case FORMAT -> formattedBody(declaration);
             case RAW_WITH_TRAILING_HARD_LINE -> throw new IllegalStateException("body declarations cannot use "
                     + FormatterPragmas.PrintAction.RAW_WITH_TRAILING_HARD_LINE);
         };
+        return Doc.label("java.bodyDeclaration:" + declaration.getClass().getSimpleName(), doc);
     }
 
     /**

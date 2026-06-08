@@ -115,7 +115,7 @@ final class CompilationUnitPrinter {
             }
             parts.add(trailingOrphanComments);
         }
-        return Doc.concat(parts);
+        return Doc.label("java.compilationUnit", Doc.concat(parts));
     }
 
     private List<Doc> topLevelDeclarations(CompilationUnit unit) {

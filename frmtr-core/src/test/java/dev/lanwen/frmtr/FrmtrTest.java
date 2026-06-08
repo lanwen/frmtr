@@ -109,6 +109,18 @@ final class FrmtrTest {
     }
 
     @Test
+    void debugDocIncludesFormatterRuleLabels() {
+        String rendered = Frmtr.debugDoc("class Demo{void method(){call(value);}}");
+
+        assertThat(rendered)
+                .contains("Label(\"java.compilationUnit\")")
+                .contains("Label(\"java.bodyDeclaration:ClassOrInterfaceDeclaration\")")
+                .contains("Label(\"java.bodyDeclaration:MethodDeclaration\")")
+                .contains("Label(\"java.statement:ExpressionStmt\")")
+                .contains("Label(\"java.expression:MethodCallExpr\")");
+    }
+
+    @Test
     void debugDocUsesFormatterOptionsThatAffectPrinterShape() {
         String source = """
                 class Demo {

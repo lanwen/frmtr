@@ -5,7 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 
 public sealed interface Doc
-        permits Doc.Concat, Doc.Group, Doc.HardLine, Doc.IfBreak, Doc.Indent, Doc.Line, Doc.SoftLine, Doc.Text {
+        permits Doc.Concat, Doc.Group, Doc.HardLine, Doc.IfBreak, Doc.Indent, Doc.Label, Doc.Line, Doc.SoftLine, Doc.Text {
     Doc EMPTY = new Text("");
     Doc LINE = new Line();
     Doc SOFT_LINE = new SoftLine();
@@ -57,6 +57,10 @@ public sealed interface Doc
         return new IfBreak(breakDoc, flatDoc);
     }
 
+    static Doc label(String label, Doc doc) {
+        return new Label(label, doc);
+    }
+
     private static void flattenConcat(List<Doc> docs, List<Doc> out) {
         for (Doc doc : docs) {
             if (doc == EMPTY) {
@@ -85,4 +89,6 @@ public sealed interface Doc
     record Group(Doc doc) implements Doc {}
 
     record IfBreak(Doc breakDoc, Doc flatDoc) implements Doc {}
+
+    record Label(String label, Doc doc) implements Doc {}
 }

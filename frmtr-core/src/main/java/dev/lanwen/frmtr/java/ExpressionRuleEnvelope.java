@@ -26,7 +26,7 @@ final class ExpressionRuleEnvelope {
      * Routes a normal expression rendering request to expression-content dispatch.
      */
     Doc expression(Expression expression) {
-        return expressionContent.format(expression);
+        return Doc.label("java.expression:" + expression.getClass().getSimpleName(), expressionContent.format(expression));
     }
 
     /**

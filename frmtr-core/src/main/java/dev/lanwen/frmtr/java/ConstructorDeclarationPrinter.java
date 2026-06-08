@@ -16,11 +16,11 @@ import java.util.function.Function;
 /**
  * Prints constructor declarations after body dispatch has selected a constructor branch.
  *
- * <p>This helper owns normal and compact constructor header assembly: leading comments, declaration annotations,
- * modifiers, constructor type parameters, constructor names, parameter-list placement, throws-clause placement, and the
- * body handoff. It intentionally delegates parameter-list rules to {@link CallableSignaturePrinter}, throws wrapping to
- * the caller, and block rendering back to {@link JavaPrinter} so method declarations and statement bodies keep their
- * shared behavior source.
+ * <p>This helper owns normal and compact constructor header assembly: declaration annotations, modifiers, constructor
+ * type parameters, constructor names, parameter-list placement, throws-clause placement, and the body handoff. It
+ * intentionally delegates parameter-list rules to {@link CallableSignaturePrinter}, throws wrapping to the caller, and
+ * block rendering back to {@link JavaPrinter} so method declarations and statement bodies keep their shared behavior
+ * source.
  *
  * <p>Representative fixture pairs live at
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/constructors/input.java} and
@@ -31,7 +31,6 @@ import java.util.function.Function;
  * and {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/records/frmtr.output.java}.
  */
 final class ConstructorDeclarationPrinter {
-    private final CommentTracker comments;
     private final CallableSignaturePrinter callableSignatures;
     private final Function<NodeWithAnnotations<?>, Doc> annotations;
     private final Function<NodeWithModifiers<?>, String> modifiers;
@@ -40,14 +39,12 @@ final class ConstructorDeclarationPrinter {
     private final Function<BlockStmt, Doc> block;
 
     ConstructorDeclarationPrinter(
-            CommentTracker comments,
             CallableSignaturePrinter callableSignatures,
             Function<NodeWithAnnotations<?>, Doc> annotations,
             Function<NodeWithModifiers<?>, String> modifiers,
             Function<List<? extends Node>, String> compactJoin,
             ThrowsClauseRenderer throwsClause,
             Function<BlockStmt, Doc> block) {
-        this.comments = comments;
         this.callableSignatures = callableSignatures;
         this.annotations = annotations;
         this.modifiers = modifiers;
@@ -61,7 +58,6 @@ final class ConstructorDeclarationPrinter {
      */
     Doc constructor(ConstructorDeclaration declaration) {
         List<Doc> docs = new ArrayList<>();
-        docs.add(comments.leading(declaration));
         docs.add(annotations.apply(declaration));
         String prefix = modifiers.apply(declaration);
         docs.add(Doc.text(prefix));
@@ -89,7 +85,6 @@ final class ConstructorDeclarationPrinter {
      */
     Doc compactConstructor(CompactConstructorDeclaration declaration) {
         List<Doc> docs = new ArrayList<>();
-        docs.add(comments.leading(declaration));
         docs.add(annotations.apply(declaration));
         String prefix = modifiers.apply(declaration);
         docs.add(Doc.text(prefix));

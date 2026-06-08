@@ -35,18 +35,20 @@ Top-level AST ownership:
 | `PackageDeclaration` | `PackageDeclarationPrinter` | Owns package line text and source-leading package comments. |
 | `ImportDeclaration` | `ImportDeclarationPrinter` | Owns one import line. Import ordering is owned by `ImportSortTransform`; import block separation is owned by `CompilationUnitPrinter`. |
 | `ModuleDeclaration` | `ModuleDeclarationPrinter` and `ModuleBlockPrinter` | `ModuleDeclarationPrinter` owns header and raw commented-module fallback selection; `ModuleBlockPrinter` owns structured directives. |
-| Top-level `BodyDeclaration<?>` | `BodyDeclarationDispatcher` | Applies body-level pragma/raw routing before narrowing to declaration printers. |
-| Compact unnamed-class members | `CompilationUnitPrinter` then `BodyDeclarationDispatcher` | JavaParser's compact wrapper class is not printed as a class; its members are treated as top-level declarations. |
+| Top-level `BodyDeclaration<?>` | `BodyDeclarationRuleEnvelope` then `BodyDeclarationDispatcher` | The envelope applies body-level pragma/raw/leading-comment gates; the dispatcher narrows formatted content to declaration printers. |
+| Compact unnamed-class members | `CompilationUnitPrinter` then `BodyDeclarationRuleEnvelope` then `BodyDeclarationDispatcher` | JavaParser's compact wrapper class is not printed as a class; its members are treated as top-level declarations. |
 
 ## Body Declarations
 
-`BodyDeclarationDispatcher` owns the body-declaration pragma gate and the broad subtype dispatch. Declaration printers
-own declaration-specific layout, and `MemberBlockPrinter` owns member sequencing inside type bodies.
+`BodyDeclarationRuleEnvelope` owns the body-declaration pragma gate, raw declaration recovery, and the outer leading
+comment slot. Formatted declaration content then routes through `BodyDeclarationDispatcher`, which owns only broad
+subtype dispatch and compact fallback for unknown declaration kinds. Declaration printers own declaration-specific
+layout, and `MemberBlockPrinter` owns member sequencing inside type bodies.
 
 | JavaParser AST kind | Structured owner | Fallback or boundary notes |
 | --- | --- | --- |
 | `ClassOrInterfaceDeclaration` | `ClassOrInterfaceDeclarationPrinter` | Interfaces whose headers contain inline block comments route through `CommentedInterfacePrinter` and `RawPreservedSource`. |
-| `RecordDeclaration` | `RecordDeclarationPrinter` | Owns record headers, component lists, implements clauses, and body start layout. Members return to `MemberBlockPrinter` and `BodyDeclarationDispatcher`. |
+| `RecordDeclaration` | `RecordDeclarationPrinter` | Owns record headers, component lists, implements clauses, and body start layout. Members return to `MemberBlockPrinter` and the body-declaration envelope/dispatcher path. |
 | `EnumDeclaration` | `EnumDeclarationPrinter` | Owns enum headers, constants, enum semicolons, body orphan comments, and enum constant argument layout. Ordinary members return to body dispatch. |
 | `AnnotationDeclaration` | `AnnotationDeclarationPrinter` | Owns annotation type headers and member blocks. |
 | `AnnotationMemberDeclaration` | `AnnotationDeclarationPrinter` | Owns annotation member declarations and default values, delegating default expressions back through expression rendering. |
@@ -55,13 +57,13 @@ own declaration-specific layout, and `MemberBlockPrinter` owns member sequencing
 | `CompactConstructorDeclaration` | `ConstructorDeclarationPrinter` | Owns compact constructor headers and delegates bodies to `BlockPrinter`. |
 | `ConstructorDeclaration` | `ConstructorDeclarationPrinter` | Owns constructor headers, parameter lists, throws clauses, and body delegation. |
 | `InitializerDeclaration` | `InitializerDeclarationPrinter` | Owns static and instance initializer prefixes and delegates bodies to `BlockPrinter`. |
-| Other `BodyDeclaration<?>` subtypes | `BodyDeclarationDispatcher.rawDeclaration(...)` | Leading comments are printed through `CommentTracker`; the declaration body is emitted as `RawPreservedSource.rawWithoutOwnComment(..., CompactSourceText.compact(...))`. |
+| Other `BodyDeclaration<?>` subtypes | `BodyDeclarationRuleEnvelope` then `BodyDeclarationDispatcher.rawDeclaration(...)` | Leading comments are printed by the envelope; the declaration body is emitted as `RawPreservedSource.rawWithoutOwnComment(..., CompactSourceText.compact(...))`. |
 
 Body-level raw routing:
 
 - `FormatterPragmas.bodyAction(...)` can force a declaration through raw preserved source when formatting is disabled or
   ignored.
-- `FORMAT_WITH_LEADING` keeps legacy leading-comment placement before structured rendering.
+- `FORMAT` passes through the envelope's leading-comment gate before structured rendering.
 - `RawPreservedSource` must wrap any raw/source-derived body fallback so debug comment accounting sees comments
   intentionally preserved by raw text.
 
@@ -86,8 +88,8 @@ line comments, and `TryStmt` comment exceptions. Formatted statement content the
 | `BreakStmt` | `StatementPrinter` | Owns label and inline block-comment handling. |
 | `ContinueStmt` | `StatementPrinter` | Owns label and label-comment handling. |
 | `LabeledStmt` | `StatementPrinter` | Owns label/comment extraction, then delegates nested block or statement formatting back to the normal owners. |
-| `LocalClassDeclarationStmt` | `StatementPrinter` then `BodyDeclarationDispatcher` | The contained class declaration is formatted as a body declaration. |
-| `LocalRecordDeclarationStmt` | `StatementPrinter` then `BodyDeclarationDispatcher` | The contained record declaration is formatted as a body declaration. |
+| `LocalClassDeclarationStmt` | `StatementPrinter` then `BodyDeclarationRuleEnvelope` then `BodyDeclarationDispatcher` | The contained class declaration is formatted as a body declaration. |
+| `LocalRecordDeclarationStmt` | `StatementPrinter` then `BodyDeclarationRuleEnvelope` then `BodyDeclarationDispatcher` | The contained record declaration is formatted as a body declaration. |
 | `IfStmt` | `StatementPrinter` | Owns if/else chain structure, empty branches, and between-branch comments; nested statements return through statement dispatch. |
 | `WhileStmt` | `StatementPrinter` | Conditions route through `ControlConditionPrinter`; bodies route through statement/block owners. |
 | `DoStmt` | `StatementPrinter` | Conditions route through `ControlConditionPrinter`; bodies route through statement/block owners. |
@@ -176,7 +178,7 @@ branch, fixture coverage for source/comment edge cases, and update this map.
 | --- | --- | --- |
 | Body pragma raw pass | `FormatterPragmas.bodyAction(...)` returns `RAW`. | Usually no replacement; pragma semantics require source preservation. Any changed pragma behavior needs pragma fixtures and comment-accounting review. |
 | Statement pragma raw pass | `FormatterPragmas.statementAction(...)` returns `RAW` or `RAW_WITH_TRAILING_HARD_LINE`. | Usually no replacement; pragma semantics require source preservation. Any changed pragma behavior needs pragma fixtures and statement separator review. |
-| Unknown body declarations | `BodyDeclarationDispatcher` default branch. | Add a typed dispatcher branch and declaration printer, including leading comments, member sequencing if relevant, raw/comment accounting, and golden fixtures. |
+| Unknown body declarations | `BodyDeclarationDispatcher` default branch after `BodyDeclarationRuleEnvelope`. | Add a typed dispatcher branch and declaration printer, including member sequencing if relevant, raw/comment accounting, and golden fixtures. |
 | Unknown statements | `StatementPrinter` default branch. | Add a typed statement branch, nested statement/expression delegation, comment placement rules, and golden fixtures. |
 | Unknown expressions | `ExpressionDispatcher` default branch. | Add a typed expression branch, recursive expression delegation, comment placement rules, width policy, and golden fixtures. |
 | Unknown module directives | `ModuleBlockPrinter` default branch. | Add a directive branch, target list/comment rules as needed, and module fixtures. |

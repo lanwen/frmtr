@@ -37,7 +37,6 @@ import java.util.function.ToIntFunction;
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/generic_class/frmtr.output.java}.
  */
 final class ClassOrInterfaceDeclarationPrinter {
-    private final CommentTracker comments;
     private final RawSource rawSource;
     private final RawPreservedSource rawPreservedSource;
     private final FormatterOptions options;
@@ -55,7 +54,6 @@ final class ClassOrInterfaceDeclarationPrinter {
     private final Function<ClassOrInterfaceDeclaration, Doc> memberBlock;
 
     ClassOrInterfaceDeclarationPrinter(
-            CommentTracker comments,
             RawSource rawSource,
             RawPreservedSource rawPreservedSource,
             FormatterOptions options,
@@ -71,7 +69,6 @@ final class ClassOrInterfaceDeclarationPrinter {
             BiFunction<String, NodeList<ClassOrInterfaceType>, String> flatTypeClause,
             ToIntFunction<String> currentIndentedWidth,
             Function<ClassOrInterfaceDeclaration, Doc> memberBlock) {
-        this.comments = comments;
         this.rawSource = rawSource;
         this.rawPreservedSource = rawPreservedSource;
         this.options = options;
@@ -100,17 +97,14 @@ final class ClassOrInterfaceDeclarationPrinter {
     Doc classOrInterface(ClassOrInterfaceDeclaration declaration) {
         String raw = rawSource.raw(declaration);
         if (declaration.isInterface() && commentedInterfaces.hasCommentedHeader(raw)) {
-            return Doc.concat(
-                    comments.leading(declaration),
-                    rawPreservedSource.rawWithoutOwnComment(
-                            declaration,
-                            commentedInterfaces.formatCommentedInterface(raw)));
+            return rawPreservedSource.rawWithoutOwnComment(
+                    declaration,
+                    commentedInterfaces.formatCommentedInterface(raw));
         }
         if (shouldBreakClassOrInterfaceHeader(declaration)) {
             return brokenClassOrInterface(declaration);
         }
         List<Doc> header = new ArrayList<>();
-        header.add(comments.leading(declaration));
         header.add(annotations.apply(declaration));
         header.add(Doc.text(modifiers.apply(declaration)));
         header.add(Doc.text(declaration.isInterface() ? "interface " : "class "));
@@ -159,7 +153,6 @@ final class ClassOrInterfaceDeclarationPrinter {
      */
     private Doc brokenClassOrInterface(ClassOrInterfaceDeclaration declaration) {
         List<Doc> header = new ArrayList<>();
-        header.add(comments.leading(declaration));
         header.add(annotations.apply(declaration));
         header.add(Doc.text(modifiers.apply(declaration)));
         header.add(Doc.text(declaration.isInterface() ? "interface " : "class "));

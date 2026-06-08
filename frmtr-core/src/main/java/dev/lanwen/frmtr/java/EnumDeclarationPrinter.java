@@ -80,7 +80,6 @@ final class EnumDeclarationPrinter {
      */
     Doc enumDeclaration(EnumDeclaration declaration) {
         List<Doc> header = new ArrayList<>();
-        header.add(comments.leading(declaration));
         header.add(annotations.apply(declaration));
         header.add(Doc.text(modifiers.apply(declaration)));
         header.add(Doc.text("enum " + declaration.getNameAsString()));

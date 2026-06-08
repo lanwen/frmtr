@@ -23,7 +23,7 @@ final class FormatterPragmas {
         return switch (pragma(node)) {
             case ON, END -> {
                 formattingDisabled = false;
-                yield PrintAction.FORMAT_WITH_LEADING;
+                yield PrintAction.FORMAT;
             }
             case OFF, START -> {
                 formattingDisabled = true;
@@ -91,9 +91,6 @@ final class FormatterPragmas {
     enum PrintAction {
         /** Format the current node normally because formatting is enabled after applying its pragma state. */
         FORMAT,
-
-        /** Format a declaration after preserving the legacy explicit leading-comment prefix for enable pragmas. */
-        FORMAT_WITH_LEADING,
 
         /** Emit the current node from raw source because a pragma or active disabled range suppresses formatting. */
         RAW,

@@ -51,7 +51,7 @@ final class JavaPrinter {
     private final FieldDeclarationPrinter fields;
     private final VariableDeclarationPrinter variableDeclarations;
     private final ExpressionDispatcher expressionDispatcher;
-    private final BodyDeclarationDispatcher bodyDeclarations;
+    private final BodyDeclarationRuleEnvelope bodyDeclarations;
     private final StatementRuleEnvelope statementRules;
 
     JavaPrinter(FormatterOptions options) {
@@ -322,7 +322,6 @@ final class JavaPrinter {
                 compactSource::compactJoin,
                 this::currentIndentedWidth);
         this.classOrInterfaces = new ClassOrInterfaceDeclarationPrinter(
-                comments,
                 rawSource,
                 rawPreservedSource,
                 options,
@@ -339,7 +338,6 @@ final class JavaPrinter {
                 this::currentIndentedWidth,
                 declaration -> memberBlocks.memberBlock(declaration.getMembers(), declaration, this::body));
         this.constructors = new ConstructorDeclarationPrinter(
-                comments,
                 callableSignatures,
                 declarationPrefixes::annotations,
                 declarationPrefixes::modifiers,
@@ -347,7 +345,6 @@ final class JavaPrinter {
                 throwsClauses::throwsClause,
                 this::block);
         this.methods = new MethodDeclarationPrinter(
-                comments,
                 rawSource,
                 rawPreservedSource,
                 commentedMethodSignatures,
@@ -359,7 +356,7 @@ final class JavaPrinter {
                 compactSource::compact,
                 throwsClauses::throwsClause,
                 this::block);
-        this.initializers = new InitializerDeclarationPrinter(comments, this::block);
+        this.initializers = new InitializerDeclarationPrinter(this::block);
         this.enums = new EnumDeclarationPrinter(
                 comments,
                 rawSource,
@@ -417,16 +414,13 @@ final class JavaPrinter {
                 commentPlacement::ownSameLineBlockCommentBeforeNode,
                 this::currentIndentedWidth);
         this.annotationDeclarations = new AnnotationDeclarationPrinter(
-                comments,
                 declarationPrefixes::annotations,
                 declarationPrefixes::modifiers,
                 compactSource::compactTypeLike,
                 this::expression,
                 this::body);
-        this.bodyDeclarations = new BodyDeclarationDispatcher(
+        BodyDeclarationDispatcher bodyDeclarationDispatcher = new BodyDeclarationDispatcher(
                 rawPreservedSource,
-                formatterPragmas,
-                comments::leading,
                 compactSource::compact,
                 classOrInterfaces::classOrInterface,
                 records::record,
@@ -438,6 +432,11 @@ final class JavaPrinter {
                 constructors::compactConstructor,
                 constructors::constructor,
                 initializers::initializer);
+        this.bodyDeclarations = new BodyDeclarationRuleEnvelope(
+                comments,
+                formatterPragmas,
+                rawPreservedSource,
+                bodyDeclarationDispatcher::bodyContent);
         StatementDispatcher statementDispatcher = new StatementDispatcher(
                 statements::statement,
                 switches::switchStatement);

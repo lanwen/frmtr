@@ -17,10 +17,10 @@ import java.util.function.Function;
 /**
  * Prints method declarations after body dispatch has selected the method branch.
  *
- * <p>This helper owns the structured method-header decision tree: the raw commented-signature escape hatch, leading
- * comments, declaration annotations, modifiers, method type parameters, return type and name assembly, parameter-list
- * placement, throws-clause placement, and the body-versus-semicolon suffix. It intentionally delegates the raw fallback
- * to {@link CommentedMethodSignaturePrinter}, parameter and type-parameter layout to {@link CallableSignaturePrinter},
+ * <p>This helper owns the structured method-header decision tree: the raw commented-signature escape hatch, declaration
+ * annotations, modifiers, method type parameters, return type and name assembly, parameter-list placement,
+ * throws-clause placement, and the body-versus-semicolon suffix. It intentionally delegates the raw fallback to
+ * {@link CommentedMethodSignaturePrinter}, parameter and type-parameter layout to {@link CallableSignaturePrinter},
  * throws wrapping to the caller, and block rendering back to {@link JavaPrinter} so methods share those rules with
  * constructors, classes, records, and statements.
  *
@@ -32,7 +32,6 @@ import java.util.function.Function;
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/throws/frmtr.output.java}.
  */
 final class MethodDeclarationPrinter {
-    private final CommentTracker comments;
     private final RawSource rawSource;
     private final RawPreservedSource rawPreservedSource;
     private final CommentedMethodSignaturePrinter commentedMethodSignatures;
@@ -46,7 +45,6 @@ final class MethodDeclarationPrinter {
     private final Function<BlockStmt, Doc> block;
 
     MethodDeclarationPrinter(
-            CommentTracker comments,
             RawSource rawSource,
             RawPreservedSource rawPreservedSource,
             CommentedMethodSignaturePrinter commentedMethodSignatures,
@@ -58,7 +56,6 @@ final class MethodDeclarationPrinter {
             Function<Node, String> compact,
             ThrowsClauseRenderer throwsClause,
             Function<BlockStmt, Doc> block) {
-        this.comments = comments;
         this.rawSource = rawSource;
         this.rawPreservedSource = rawPreservedSource;
         this.commentedMethodSignatures = commentedMethodSignatures;
@@ -80,12 +77,9 @@ final class MethodDeclarationPrinter {
         String raw = rawSource.raw(declaration);
         Optional<String> commentedMethod = commentedMethodSignatures.tryFormat(declaration, raw);
         if (commentedMethod.isPresent()) {
-            return Doc.concat(
-                    comments.leading(declaration),
-                    rawPreservedSource.rawWithoutOwnComment(declaration, commentedMethod.orElseThrow()));
+            return rawPreservedSource.rawWithoutOwnComment(declaration, commentedMethod.orElseThrow());
         }
         List<Doc> docs = new ArrayList<>();
-        docs.add(comments.leading(declaration));
         docs.add(declarationAnnotations.apply(declaration));
         String prefix = modifiers.apply(declaration);
         docs.add(Doc.text(prefix));

@@ -176,7 +176,6 @@ final class FieldDeclarationPrinter {
      */
     Doc field(FieldDeclaration declaration) {
         List<Doc> docs = new ArrayList<>();
-        docs.add(comments.leading(declaration));
         docs.add(declarationAnnotations.apply(declaration));
         docs.add(Doc.text(modifiers.apply(declaration)));
         String declarationPrefix = modifiers.apply(declaration);

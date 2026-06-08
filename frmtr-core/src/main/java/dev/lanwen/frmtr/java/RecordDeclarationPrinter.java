@@ -85,7 +85,6 @@ final class RecordDeclarationPrinter {
      */
     Doc record(RecordDeclaration declaration) {
         List<Doc> header = new ArrayList<>();
-        header.add(comments.leading(declaration));
         header.add(annotations.apply(declaration));
         String prefix = modifiers.apply(declaration) + "record " + declaration.getNameAsString();
         header.add(Doc.text(prefix));

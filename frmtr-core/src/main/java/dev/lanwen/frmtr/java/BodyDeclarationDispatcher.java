@@ -15,21 +15,19 @@ import dev.lanwen.frmtr.doc.Doc;
 import java.util.function.Function;
 
 /**
- * Routes body declarations through formatter pragma state and then narrows them to declaration-specific printers.
+ * Routes already-formattable body declaration content to declaration-specific printers.
  *
- * <p>This helper owns the body-declaration raw-vs-formatted decision and the broad {@link BodyDeclaration} subtype
- * dispatch. The boundary keeps {@link JavaPrinter} from carrying the declaration-kind decision tree while class,
- * record, enum, annotation, field, method, constructor, and initializer layout remains with specialized declaration
- * printers.
+ * <p>This helper owns only the broad {@link BodyDeclaration} subtype dispatch after {@link BodyDeclarationRuleEnvelope}
+ * has decided that a declaration should be formatted structurally. The boundary keeps {@link JavaPrinter} from carrying
+ * the declaration-kind decision tree while also keeping formatter pragma state, body-level raw-source recovery, and
+ * leading-comment attachment out of the content dispatcher.
  *
- * <p>Callers still provide leading-comment docs, raw source recovery, compact fallback text, and each specialized
- * renderer. That leaves header layout, member sequencing, width policy, raw-source policy, and compact source text
- * decisions with the printers and source helpers that already own those concerns.
+ * <p>Callers still choose when declaration content rendering is allowed and provide each specialized renderer plus the
+ * compact fallback source policy. Class, record, enum, annotation, field, method, constructor, and initializer layout
+ * remains with specialized declaration printers.
  */
 final class BodyDeclarationDispatcher {
     private final RawPreservedSource rawPreservedSource;
-    private final FormatterPragmas formatterPragmas;
-    private final Function<BodyDeclaration<?>, Doc> leadingComments;
     private final Function<BodyDeclaration<?>, String> compactSource;
     private final JavaFormatRule<ClassOrInterfaceDeclaration> classOrInterfaces;
     private final JavaFormatRule<RecordDeclaration> records;
@@ -44,8 +42,6 @@ final class BodyDeclarationDispatcher {
 
     BodyDeclarationDispatcher(
             RawPreservedSource rawPreservedSource,
-            FormatterPragmas formatterPragmas,
-            Function<BodyDeclaration<?>, Doc> leadingComments,
             Function<BodyDeclaration<?>, String> compactSource,
             JavaFormatRule<ClassOrInterfaceDeclaration> classOrInterfaces,
             JavaFormatRule<RecordDeclaration> records,
@@ -58,8 +54,6 @@ final class BodyDeclarationDispatcher {
             JavaFormatRule<ConstructorDeclaration> constructors,
             JavaFormatRule<InitializerDeclaration> initializers) {
         this.rawPreservedSource = rawPreservedSource;
-        this.formatterPragmas = formatterPragmas;
-        this.leadingComments = leadingComments;
         this.compactSource = compactSource;
         this.classOrInterfaces = classOrInterfaces;
         this.records = records;
@@ -74,38 +68,9 @@ final class BodyDeclarationDispatcher {
     }
 
     /**
-     * Applies body-declaration pragmas before choosing the declaration renderer.
-     *
-     * <p>When a declaration re-enables formatting, {@link FormatterPragmas.PrintAction#FORMAT_WITH_LEADING} keeps the
-     * legacy leading-comment prefix before structured rendering. When formatting is disabled or ignored,
-     * {@link FormatterPragmas.PrintAction#RAW} emits recovered source text instead of letting subtype-specific printers
-     * make formatting choices.
+     * Chooses the structured content rule for a declaration whose envelope has already allowed formatting.
      */
-    Doc body(BodyDeclaration<?> declaration) {
-        FormatterPragmas.PrintAction action = formatterPragmas.bodyAction(declaration);
-        if (action == FormatterPragmas.PrintAction.FORMAT_WITH_LEADING) {
-            return Doc.concat(leadingComments.apply(declaration), bodyContent(declaration));
-        }
-        if (action == FormatterPragmas.PrintAction.RAW) {
-            return rawBody(declaration);
-        }
-        return bodyContent(declaration);
-    }
-
-    /**
-     * Emits a raw-passed declaration after printing its leading comments separately.
-     *
-     * <p>The source text has the declaration's own attached comment removed so raw pragma output does not duplicate the
-     * leading comment that has already been claimed by the comment tracker.
-     */
-    private Doc rawBody(BodyDeclaration<?> declaration) {
-        return Doc.concat(leadingComments.apply(declaration), rawPreservedSource.rawWithoutOwnComment(declaration));
-    }
-
-    /**
-     * Narrows a declaration to the printer that owns that declaration shape.
-     */
-    private Doc bodyContent(BodyDeclaration<?> declaration) {
+    Doc bodyContent(BodyDeclaration<?> declaration) {
         return switch (declaration) {
             case ClassOrInterfaceDeclaration classDeclaration -> classOrInterfaces.format(classDeclaration);
             case RecordDeclaration recordDeclaration -> records.format(recordDeclaration);
@@ -124,12 +89,11 @@ final class BodyDeclarationDispatcher {
     /**
      * Falls back to compact source text for declaration kinds without a structured formatter.
      *
-     * <p>Leading comments are still attached through the normal comment tracker so unknown declarations behave like
-     * formatted body members rather than raw pragma ranges.
+     * <p>This is not the body-level raw pragma gate; the envelope has already allowed formatted content and claimed the
+     * declaration's leading comment slot. The fallback still goes through {@link RawPreservedSource} so comments inside
+     * the compact source-derived text are accounted as intentionally preserved.
      */
     private Doc rawDeclaration(BodyDeclaration<?> declaration) {
-        return Doc.concat(
-                leadingComments.apply(declaration),
-                rawPreservedSource.rawWithoutOwnComment(declaration, compactSource.apply(declaration)));
+        return rawPreservedSource.rawWithoutOwnComment(declaration, compactSource.apply(declaration));
     }
 }

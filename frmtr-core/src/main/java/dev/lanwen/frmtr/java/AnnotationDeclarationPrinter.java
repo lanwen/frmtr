@@ -18,15 +18,14 @@ import java.util.function.Function;
  * <p>This helper owns the annotation-specific declaration tree: the {@code @interface} header, the empty member-block
  * shape, the blank-line separation between annotation members, and the optional default value on annotation member
  * declarations. It intentionally delegates member declarations back through the caller because annotation bodies can
- * contain ordinary declarations, and those declarations must keep using the same pragma, comment, and declaration
- * formatting decisions as the rest of {@link JavaPrinter}.
+ * contain ordinary declarations, and those declarations must keep using the same pragma, body-leading comment, and
+ * declaration formatting decisions as the rest of {@link JavaPrinter}.
  *
  * <p>Representative fixture pairs live at
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/annotation_interface_declaration/input.java} and
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/annotation_interface_declaration/frmtr.output.java}.
  */
 final class AnnotationDeclarationPrinter {
-    private final CommentTracker comments;
     private final Function<NodeWithAnnotations<?>, Doc> annotations;
     private final Function<NodeWithModifiers<?>, String> modifiers;
     private final Function<Type, String> compactTypeLike;
@@ -34,13 +33,11 @@ final class AnnotationDeclarationPrinter {
     private final Function<BodyDeclaration<?>, Doc> memberRenderer;
 
     AnnotationDeclarationPrinter(
-            CommentTracker comments,
             Function<NodeWithAnnotations<?>, Doc> annotations,
             Function<NodeWithModifiers<?>, String> modifiers,
             Function<Type, String> compactTypeLike,
             Function<Expression, Doc> expression,
             Function<BodyDeclaration<?>, Doc> memberRenderer) {
-        this.comments = comments;
         this.annotations = annotations;
         this.modifiers = modifiers;
         this.compactTypeLike = compactTypeLike;
@@ -53,7 +50,6 @@ final class AnnotationDeclarationPrinter {
      */
     Doc annotationDeclaration(AnnotationDeclaration declaration) {
         List<Doc> header = new ArrayList<>();
-        header.add(comments.leading(declaration));
         header.add(annotations.apply(declaration));
         header.add(Doc.text(modifiers.apply(declaration)));
         header.add(Doc.text("@interface " + declaration.getNameAsString() + " "));
@@ -84,7 +80,6 @@ final class AnnotationDeclarationPrinter {
      */
     Doc annotationMember(AnnotationMemberDeclaration declaration) {
         List<Doc> docs = new ArrayList<>();
-        docs.add(comments.leading(declaration));
         docs.add(annotations.apply(declaration));
         docs.add(Doc.text(modifiers.apply(declaration)));
         docs.add(Doc.text(compactTypeLike.apply(declaration.getType()) + " " + declaration.getNameAsString() + "()"));

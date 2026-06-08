@@ -4,7 +4,6 @@ import com.github.javaparser.Position;
 import com.github.javaparser.Range;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.comments.Comment;
-import com.github.javaparser.ast.comments.LineComment;
 import java.util.Comparator;
 import java.util.List;
 
@@ -28,7 +27,9 @@ final class CommentIndex {
      * Reports whether JavaParser found any contained line comments under {@code node}.
      */
     static boolean hasContainedLineComments(Node node) {
-        return node.getAllContainedComments().stream().anyMatch(LineComment.class::isInstance);
+        return node.getAllContainedComments().stream()
+                .map(JavaCommentTrivia::from)
+                .anyMatch(JavaCommentTrivia::isLine);
     }
 
     /**
@@ -42,10 +43,12 @@ final class CommentIndex {
         int previousLine = previous.getRange().map(range -> range.end.line).orElse(Integer.MIN_VALUE);
         int nextLine = next.getRange().map(range -> range.begin.line).orElse(Integer.MAX_VALUE);
         return container.getAllContainedComments().stream()
-                .filter(LineComment.class::isInstance)
-                .filter(comment -> comment.getRange()
+                .map(JavaCommentTrivia::from)
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.comment().getRange()
                         .map(range -> range.begin.line >= previousLine && range.begin.line < nextLine)
                         .orElse(false))
+                .map(JavaCommentTrivia::comment)
                 .sorted(sourceOrderComparator())
                 .toList();
     }

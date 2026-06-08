@@ -1,7 +1,6 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.comments.BlockComment;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.Optional;
 
@@ -31,8 +30,8 @@ final class CommentPlacement {
      * range comparison keeps that decision tied to the original source position.
      */
     Doc ownSameLineBlockCommentBeforeNode(Node node) {
-        return comments.ownComment(node, comment -> comment instanceof BlockComment
-                && comment.getRange()
+        return comments.ownTriviaComment(node, comment -> comment.isBlock()
+                && comment.comment().getRange()
                         .flatMap(commentRange -> node.getRange()
                                 .map(nodeRange -> commentRange.begin.line == nodeRange.begin.line
                                         && CommentIndex.startsBefore(commentRange, nodeRange)))
@@ -50,9 +49,11 @@ final class CommentPlacement {
         Optional<Node> parent = node.getParentNode();
         while (parent.isPresent()) {
             Optional<Doc> trailing = parent.orElseThrow().getAllContainedComments().stream()
-                    .filter(BlockComment.class::isInstance)
-                    .filter(comment -> comment.getCommentedNode().isEmpty())
-                    .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(node, comment))
+                    .map(JavaCommentTrivia::from)
+                    .filter(JavaCommentTrivia::isBlock)
+                    .filter(comment -> comment.comment().getCommentedNode().isEmpty())
+                    .filter(comment -> comment.startsAfterNodeOnSameLine(node))
+                    .map(JavaCommentTrivia::comment)
                     .findFirst()
                     .map(comments::comment);
             if (trailing.isPresent()) {

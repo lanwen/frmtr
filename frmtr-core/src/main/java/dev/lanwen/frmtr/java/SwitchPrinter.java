@@ -1,7 +1,6 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.RecordPatternExpr;
@@ -138,7 +137,7 @@ final class SwitchPrinter {
                     Doc.HARD_LINE,
                     Doc.text("}"));
         }
-        Doc selectorLineComment = comments.ownComment(statement.getSelector(), LineComment.class::isInstance);
+        Doc selectorLineComment = comments.ownTriviaComment(statement.getSelector(), JavaCommentTrivia::isLine);
         return Doc.concat(
                 prefix,
                 Doc.text("switch "),
@@ -190,13 +189,13 @@ final class SwitchPrinter {
      * local to switch rendering and delegates any nested statement or expression body to the existing renderers.
      */
     private Doc switchEntry(SwitchEntry entry) {
-        Doc leadingComment = comments.ownComment(entry, commentNode -> commentNode instanceof LineComment
-                && CommentIndex.startsBeforeBeginLine(commentNode, entry));
+        Doc leadingComment = comments.ownTriviaComment(entry, commentNode -> commentNode.isLine()
+                && commentNode.startsBeforeBeginLine(entry));
         if (leadingComment != Doc.EMPTY) {
             leadingComment = Doc.concat(leadingComment, Doc.HARD_LINE);
         }
-        Doc trailingComment = comments.ownComment(entry, commentNode -> commentNode instanceof LineComment
-                && CommentIndex.startsOnBeginLine(commentNode, entry));
+        Doc trailingComment = comments.ownTriviaComment(entry, commentNode -> commentNode.isLine()
+                && commentNode.startsOnBeginLine(entry));
         if (trailingComment == Doc.EMPTY) {
             Optional<Doc> raw = rawSingleLineSwitchEntry(entry);
             if (raw.isPresent()) {
@@ -403,7 +402,8 @@ final class SwitchPrinter {
 
     private boolean hasLeadingOwnComment(Statement statement) {
         return statement.getComment()
-                .filter(comment -> CommentIndex.startsBeforeBeginLine(comment, statement))
+                .map(JavaCommentTrivia::from)
+                .filter(comment -> comment.startsBeforeBeginLine(statement))
                 .isPresent();
     }
 

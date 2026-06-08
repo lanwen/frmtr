@@ -1,8 +1,5 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.comments.Comment;
-import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.EmptyStmt;
 import com.github.javaparser.ast.stmt.Statement;
@@ -147,7 +144,7 @@ final class BlockPrinter {
      * empty statement is formatting noise for this printer and is skipped by block sequencing.
      */
     private Optional<Doc> blockEmptyStatementComment(EmptyStmt statement) {
-        Doc lineComment = comments.ownComment(statement, LineComment.class::isInstance);
+        Doc lineComment = comments.ownTriviaComment(statement, JavaCommentTrivia::isLine);
         return lineComment == Doc.EMPTY ? Optional.empty() : Optional.of(lineComment);
     }
 
@@ -155,7 +152,7 @@ final class BlockPrinter {
      * Returns orphan comments that belong to the block itself rather than to nested statement bodies.
      */
     private List<Doc> blockOrphanCommentStatements(BlockStmt block) {
-        return comments.orphanCommentStatements(block, comment -> !commentInsideChildStatement(block, comment));
+        return comments.orphanTriviaCommentStatements(block, comment -> !commentInsideChildStatement(block, comment));
     }
 
     /**
@@ -164,8 +161,8 @@ final class BlockPrinter {
      * <p>JavaParser sometimes leaves comments as block orphans even though the line is part of a child statement. Those
      * comments stay with the child statement printer so block-level sequencing does not pull them out of context.
      */
-    private boolean commentInsideChildStatement(BlockStmt block, Comment comment) {
-        return block.getStatements().stream().anyMatch(statement -> CommentIndex.startsInsideLineRange(comment, statement));
+    private boolean commentInsideChildStatement(BlockStmt block, JavaCommentTrivia comment) {
+        return block.getStatements().stream().anyMatch(comment::startsInsideLineRange);
     }
 
     /**
@@ -176,8 +173,8 @@ final class BlockPrinter {
      */
     private int effectiveBeginLine(Statement statement, int fallback) {
         return statement.getComment()
-                .flatMap(Node::getRange)
-                .map(range -> range.begin.line)
+                .map(JavaCommentTrivia::from)
+                .map(comment -> comment.beginLine(fallback))
                 .orElse(fallback);
     }
 }

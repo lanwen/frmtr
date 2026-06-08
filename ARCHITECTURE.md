@@ -78,7 +78,9 @@ The public `Frmtr` API wraps recoverable internal formatter failures, including 
 
 `VariableDeclarationPrinter` renders local variable declaration expressions after statement dispatch selects `VariableDeclarationExpr`: annotation and modifier prefixes, breakable local types, comma-separated declarator layout, and local-only declaration-prefix decisions. It delegates declarator initializer rendering to `FieldDeclarationPrinter` so local and field variables keep one initializer behavior source while field declarations remain field-owned.
 
-`CommentTracker` preserves comments currently exposed by JavaParser as leading or orphan comments. Comment handling is expected to become more precise as the formatter grows.
+`CommentTracker` preserves comments currently exposed by JavaParser as leading or orphan comments. It renders comments through `JavaCommentTrivia` so printable comment claims and comment-kind checks share one identity-based path, while retaining raw `Comment` predicate entry points for formatter areas not yet migrated.
+
+`JavaCommentKind` and `JavaCommentTrivia` classify JavaParser comments as line, block, Javadoc, or unknown trivia, expose reusable source-position queries through `CommentIndex`, and let `CommentTracker` preserve identity-based printed-comment claims without making printers repeat raw subclass and range checks.
 
 `CommentIndex` centralizes read-only source-position classification for comments, including explicit-fallback begin/end line lookups, line/column comparisons, line-range containment, same-begin-line checks, source-order sorting, contained line-comment selection, and between-node comment gaps. It does not render comments or mutate printed-comment state; `CommentTracker` remains responsible for rendered comment docs and consumption, while caller printers and `CommentPlacement` decide spacing and layout context.
 

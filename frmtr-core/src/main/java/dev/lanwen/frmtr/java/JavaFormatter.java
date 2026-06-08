@@ -3,17 +3,17 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParseProblemException;
 import com.github.javaparser.ParseResult;
+import com.github.javaparser.ParseStart;
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.Providers;
 import com.github.javaparser.Problem;
 import com.github.javaparser.Position;
 import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.comments.Comment;
-import com.github.javaparser.ast.comments.LineComment;
-import com.github.javaparser.ast.comments.JavadocComment;
-import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ParseStart;
+import com.github.javaparser.ast.comments.BlockComment;
+import com.github.javaparser.ast.comments.Comment;
+import com.github.javaparser.ast.comments.JavadocComment;
+import com.github.javaparser.ast.comments.LineComment;
 import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
@@ -195,7 +195,8 @@ public final class JavaFormatter {
 
         Doc leading(Node node) {
             return node.getComment()
-                    .filter(printed::add)
+                    .map(JavaCommentTrivia::from)
+                    .filter(this::claim)
                     .map(JavaFormatter::commentDoc)
                     .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
                     .orElse(Doc.EMPTY);
@@ -203,9 +204,10 @@ public final class JavaFormatter {
 
         Doc trailingLineComment(Node node) {
             return node.getComment()
-                    .filter(LineComment.class::isInstance)
-                    .filter(comment -> CommentIndex.startsOnEndLine(node, comment))
-                    .filter(printed::add)
+                    .map(JavaCommentTrivia::from)
+                    .filter(JavaCommentTrivia::isLine)
+                    .filter(comment -> comment.startsOnEndLine(node))
+                    .filter(this::claim)
                     .map(JavaFormatter::commentDoc)
                     .orElse(Doc.EMPTY);
         }
@@ -216,8 +218,9 @@ public final class JavaFormatter {
 
         Doc orphanComments(Node node, Predicate<Comment> predicate) {
             return Doc.concat(node.getOrphanComments().stream()
-                    .filter(predicate)
-                    .filter(printed::add)
+                    .map(JavaCommentTrivia::from)
+                    .filter(trivia -> predicate.test(trivia.comment()))
+                    .filter(this::claim)
                     .map(comment -> Doc.concat(commentDoc(comment), Doc.HARD_LINE))
                     .toList());
         }
@@ -228,27 +231,62 @@ public final class JavaFormatter {
 
         List<Doc> orphanCommentStatements(Node node, Predicate<Comment> predicate) {
             return node.getOrphanComments().stream()
+                    .map(JavaCommentTrivia::from)
+                    .filter(trivia -> predicate.test(trivia.comment()))
+                    .filter(this::claim)
+                    .map(JavaFormatter::commentDoc)
+                    .toList();
+        }
+
+        List<Doc> orphanTriviaCommentStatements(Node node, Predicate<JavaCommentTrivia> predicate) {
+            return node.getOrphanComments().stream()
+                    .map(JavaCommentTrivia::from)
                     .filter(predicate)
-                    .filter(printed::add)
+                    .filter(this::claim)
                     .map(JavaFormatter::commentDoc)
                     .toList();
         }
 
         Doc ownComment(Node node, Predicate<Comment> predicate) {
             return node.getComment()
+                    .map(JavaCommentTrivia::from)
+                    .filter(trivia -> predicate.test(trivia.comment()))
+                    .filter(this::claim)
+                    .map(JavaFormatter::commentDoc)
+                    .orElse(Doc.EMPTY);
+        }
+
+        Doc ownTriviaComment(Node node, Predicate<JavaCommentTrivia> predicate) {
+            return node.getComment()
+                    .map(JavaCommentTrivia::from)
                     .filter(predicate)
-                    .filter(printed::add)
+                    .filter(this::claim)
                     .map(JavaFormatter::commentDoc)
                     .orElse(Doc.EMPTY);
         }
 
         Doc comment(Comment comment) {
-            return printed.add(comment) ? JavaFormatter.commentDoc(comment) : Doc.EMPTY;
+            JavaCommentTrivia trivia = JavaCommentTrivia.from(comment);
+            return claim(trivia) ? JavaFormatter.commentDoc(trivia) : Doc.EMPTY;
+        }
+
+        boolean isPrinted(JavaCommentTrivia trivia) {
+            return trivia.isClaimedBy(printed);
+        }
+
+        private boolean claim(JavaCommentTrivia trivia) {
+            return trivia.claim(printed);
         }
     }
 
     static Doc commentDoc(Comment comment) {
-        if (comment instanceof LineComment lineComment) {
+        return commentDoc(JavaCommentTrivia.from(comment));
+    }
+
+    static Doc commentDoc(JavaCommentTrivia trivia) {
+        Comment comment = trivia.comment();
+        if (trivia.isLine()) {
+            LineComment lineComment = (LineComment) comment;
             String text = lineComment.toString().stripTrailing();
             if (text.contains("\n")) {
                 return lineDoc(text);
@@ -256,14 +294,16 @@ public final class JavaFormatter {
             text = splitAdjacentLineComments("//" + lineComment.getContent().stripTrailing());
             return text.contains("\n") ? lineDoc(text) : Doc.text(text);
         }
-        if (comment instanceof JavadocComment javadocComment) {
+        if (trivia.isJavadoc()) {
+            JavadocComment javadocComment = (JavadocComment) comment;
             String raw = comment.getTokenRange().map(Object::toString).orElseGet(javadocComment::toString).strip();
             if (raw.lines().count() == 1) {
                 return Doc.text(raw);
             }
             return lineDoc(javadocComment.toString().stripTrailing());
         }
-        if (comment instanceof BlockComment blockComment) {
+        if (trivia.isBlock()) {
+            BlockComment blockComment = (BlockComment) comment;
             String text = blockComment.toString();
             String normalized = normalizeBlockComment(text);
             return normalized.equals(text.stripTrailing()) ? Doc.text(normalized) : lineDoc(normalized);

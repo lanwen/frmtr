@@ -50,7 +50,7 @@ final class JavaPrinter {
     private final CompilationUnitPrinter compilationUnits;
     private final FieldDeclarationPrinter fields;
     private final VariableDeclarationPrinter variableDeclarations;
-    private final ExpressionDispatcher expressionDispatcher;
+    private final ExpressionRuleEnvelope expressionRules;
     private final BodyDeclarationRuleEnvelope bodyDeclarations;
     private final StatementRuleEnvelope statementRules;
 
@@ -220,7 +220,7 @@ final class JavaPrinter {
                 objectCreations::brokenObjectCreation,
                 methodCalls::assignmentWithBrokenMethodCallArguments,
                 conditionals::assignmentWithConditionalValue);
-        this.expressionDispatcher = new ExpressionDispatcher(
+        ExpressionDispatcher expressionDispatcher = new ExpressionDispatcher(
                 assignments::assignment,
                 arrays::arrayAccess,
                 arrays::arrayCreation,
@@ -239,6 +239,7 @@ final class JavaPrinter {
                 switches::switchExpression,
                 textBlocks::textBlockLiteral,
                 compactSource);
+        this.expressionRules = new ExpressionRuleEnvelope(expressionDispatcher::expressionContent);
         this.returnExpressions = new ReturnExpressionPrinter(
                 options,
                 this::expression,
@@ -460,7 +461,7 @@ final class JavaPrinter {
     }
 
     private Doc expressionWithoutOwnComment(Expression expression) {
-        return expressionDispatcher.expressionWithoutOwnComment(expression);
+        return expressionRules.expressionWithoutOwnComment(expression);
     }
 
     private int currentIndentedWidth(String text) {
@@ -488,7 +489,7 @@ final class JavaPrinter {
     }
 
     private Doc expression(Expression expression) {
-        return expressionDispatcher.expression(expression);
+        return expressionRules.expression(expression);
     }
 
     private String commentText(Doc comment) {

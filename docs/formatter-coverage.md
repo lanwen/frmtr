@@ -82,7 +82,7 @@ line comments, and `TryStmt` comment exceptions. Formatted statement content the
 | `ThrowStmt` | `StatementPrinter` | Throws expressions delegate through expression rendering. |
 | `YieldStmt` | `StatementPrinter` | Used by switch entries and ordinary statement dispatch. |
 | `ExplicitConstructorInvocationStmt` | `StatementPrinter` | Owns `this(...)` and `super(...)` calls, type arguments, and huggable lambda arguments. |
-| `ExpressionStmt` | `StatementPrinter` | Local `VariableDeclarationExpr` routes to `VariableDeclarationPrinter`; wide method-call statements can route through `MethodCallPrinter`; other expressions delegate through `ExpressionDispatcher`. |
+| `ExpressionStmt` | `StatementPrinter` | Local `VariableDeclarationExpr` routes to `VariableDeclarationPrinter`; wide method-call statements can route through `MethodCallPrinter`; other expressions delegate through `ExpressionRuleEnvelope` and `ExpressionDispatcher`. |
 | `EmptyStmt` | `StatementPrinter` | Emits `;`. |
 | `AssertStmt` | `StatementPrinter` | Uses compact source text for check/message shape. |
 | `BreakStmt` | `StatementPrinter` | Owns label and inline block-comment handling. |
@@ -112,9 +112,10 @@ Switch-specific ownership:
 
 ## Expressions
 
-`ExpressionDispatcher` owns only broad expression subtype narrowing. Callers still choose the expression context,
-comment placement, and whether compact text is acceptable. Specialized expression printers own the layout decision tree
-for their selected AST kind.
+`ExpressionRuleEnvelope` owns the shared expression entry points, including the clone-before-own-comment-removal path
+used by expression callers that have already claimed the attached comment separately. Formatted expression content then
+routes through `ExpressionDispatcher`, which owns only broad subtype dispatch and compact fallback for unknown
+expression kinds. Specialized expression printers own the layout decision tree for their selected AST kind.
 
 | JavaParser AST kind | Structured owner | Notes |
 | --- | --- | --- |
@@ -135,7 +136,7 @@ for their selected AST kind.
 | `ObjectCreationExpr` | `ObjectCreationPrinter` | Owns constructor calls, argument breaks, lambda arguments, generic type-body breaks, and anonymous class member sequencing. |
 | `SwitchExpr` | `SwitchPrinter.switchExpression(...)` | Shares switch label, guard, entry, and block ownership with `SwitchStmt`. |
 | `TextBlockLiteralExpr` | `TextBlockPrinter` | Owns narrow fixture-backed content probes and raw source-derived fallback rendering for unrecognized text blocks. |
-| Other `Expression` subtypes | `ExpressionDispatcher` compact fallback | Emits `Doc.text(CompactSourceText.compact(expression))`. This covers simple names, literals, `this`, `super`, class literals, unary/postfix forms, pattern nodes outside switch-label paths, and any JavaParser expression kind without a dedicated branch. |
+| Other `Expression` subtypes | `ExpressionRuleEnvelope` then `ExpressionDispatcher` compact fallback | Emits `Doc.text(CompactSourceText.compact(expression))`. This covers simple names, literals, `this`, `super`, class literals, unary/postfix forms, pattern nodes outside switch-label paths, and any JavaParser expression kind without a dedicated branch. |
 
 Expression-adjacent owners that are selected by statement or declaration context rather than direct expression dispatch:
 

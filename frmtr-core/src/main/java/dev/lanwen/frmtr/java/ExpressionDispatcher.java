@@ -21,16 +21,16 @@ import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import dev.lanwen.frmtr.doc.Doc;
 
 /**
- * Narrows expression AST kinds after callers have already decided they need expression rendering.
+ * Routes already-formattable expression content to expression-specific printers.
  *
- * <p>This helper owns only the broad {@link Expression} subtype dispatch that chooses which specialized expression
- * printer should receive a node. The boundary exists so {@link JavaPrinter} can wire callbacks and outer syntax
- * contexts without also carrying the full expression-kind decision tree, while the specialized printers keep the
- * layout rules for assignments, calls, arrays, conditionals, lambdas, switches, and other expression shapes.
+ * <p>This helper owns only the broad {@link Expression} subtype dispatch after {@link ExpressionRuleEnvelope} has
+ * selected expression content rendering. The boundary exists so {@link JavaPrinter} can wire callbacks and outer syntax
+ * contexts without also carrying the full expression-kind decision tree, while the specialized printers keep the layout
+ * rules for assignments, calls, arrays, conditionals, lambdas, switches, and other expression shapes.
  *
- * <p>Callers still decide when an expression context is needed, how comments and formatter pragmas have already been
- * handled, and when compact source fallback is acceptable. Specialized expression printers decide their own wrapping,
- * source-sensitive formatting, and recursive expression callbacks.
+ * <p>Callers still decide when expression content rendering is allowed and provide each specialized renderer plus the
+ * compact fallback source policy. Specialized expression printers decide their own wrapping, source-sensitive
+ * formatting, and recursive expression callbacks.
  */
 final class ExpressionDispatcher {
     private final JavaFormatRule<AssignExpr> assignments;
@@ -98,7 +98,7 @@ final class ExpressionDispatcher {
      * switch formatting stays in the switch slice. This dispatcher does not own switch selectors, labels, guards,
      * entries, or switch block layout.
      */
-    Doc expression(Expression expression) {
+    Doc expressionContent(Expression expression) {
         if (expression instanceof AssignExpr assignExpr) {
             return assignments.format(assignExpr);
         }
@@ -151,17 +151,5 @@ final class ExpressionDispatcher {
             return textBlocks.format(textBlockLiteralExpr);
         }
         return Doc.text(compactSource.compact(expression));
-    }
-
-    /**
-     * Removes only the expression node's own attached comment before dispatching through normal expression rendering.
-     *
-     * <p>The expression is cloned first so the shared JavaParser tree keeps its original comment attachment for later
-     * layout decisions; only this one rendering request sees the comment-free node.
-     */
-    Doc expressionWithoutOwnComment(Expression expression) {
-        Expression clone = expression.clone();
-        clone.removeComment();
-        return expression(clone);
     }
 }

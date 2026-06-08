@@ -56,9 +56,11 @@ JavaParser printers are not the formatter engine. They may be useful as referenc
 - `IfBreak` selects different output for flat versus broken groups.
 
 `DocRenderer` is language-agnostic. Java-specific choices belong in `JavaPrinter`, not in the renderer.
-`DocDebugRenderer` provides a package-private, test-oriented structural dump of the document tree so formatter
-maintainers can inspect break opportunities, indentation scopes, groups, and flat-vs-broken alternatives. It is not a
-formatting policy surface and does not expose a CLI or public API hook.
+`DocDebugRenderer` provides a stable structural dump of the document tree so formatter maintainers can inspect break
+opportunities, indentation scopes, groups, and flat-vs-broken alternatives. `Frmtr.debugDoc(...)` exposes that view for
+one Java source string after parsing, transforms, and Java printing, without invoking width-based rendering. It always
+builds the document tree for the supplied source; pragma gating remains formatted-output behavior. It is a core debug API
+only, not a formatting policy surface or CLI hook.
 
 ## File-Oriented Runs
 
@@ -74,7 +76,7 @@ The runner owns deterministic path ordering and de-duplication for file lists su
 
 `JavaFormatter` owns JavaParser configuration, pragma gating, parse-error handling, and the declared transform stage between parsing and printing. It enables token storage and comment attribution because formatter rules need syntax-adjacent trivia. `FormatterOptions` exposes one canonical record constructor for fully specified configuration and named static factories for common partial configurations that keep the remaining formatter policy at defaults. `FormatterOptions.JavaLanguageLevel` is the public parser-level setting; `JavaFormatter` converts it to JavaParser's own language-level enum internally. The default is `LATEST_AVAILABLE`, which maps to JavaParser's bleeding-edge parser mode, while `UNSET` deliberately selects JavaParser raw mode. Callers that need a strict release gate should choose a concrete `JAVA_*` value. `FormatterOptions.requirePragma` is an opt-in API setting that formats only files whose leading Javadoc comment contains the public `@format` marker. `FormatterOptions.LambdaArrowParens` controls whether single-parameter lambdas preserve source parentheses, avoid parentheses when Java syntax allows it, or always emit parentheses. `FormatterOptions.BinaryOperatorPosition` controls whether broken binary continuation lines keep operators at the end of the previous line or move operators to the start of continuation lines. Parse failures are reported with nearby source lines and a caret marker at JavaParser's reported line and column; lexical failures that only include line and column in the parser message use that message position for the same source-context rendering.
 
-The public `Frmtr` API wraps recoverable internal formatter failures, including parser dependency linkage failures and assertions, as `FormatterException.internal(...)` so adapters can report concise failures without treating them as VM-level crashes.
+The public `Frmtr` API wraps recoverable internal formatter failures, including parser dependency linkage failures and assertions, as `FormatterException.internal(...)` so adapters can report concise failures without treating them as VM-level crashes. `Frmtr.debugDoc(...)` shares that wrapping and the same parser, transform, and Java printing path as formatting, but returns `DocDebugRenderer` output instead of rendered source.
 
 The audit-oriented formatter coverage map lives in [docs/formatter-coverage.md](docs/formatter-coverage.md). It maps JavaParser AST kinds to dispatcher and printer ownership, records the raw and compact fallback boundaries, and should be updated with formatter changes that alter the decision tree.
 

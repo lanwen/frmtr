@@ -16,6 +16,7 @@ import com.github.javaparser.ast.comments.LineComment;
 import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import dev.lanwen.frmtr.doc.DocDebugRenderer;
 import dev.lanwen.frmtr.doc.DocRenderer;
 import java.util.Comparator;
 import java.util.List;
@@ -45,12 +46,23 @@ public final class JavaFormatter {
         if (options.requirePragma() && !hasFormatPragma(source)) {
             return source;
         }
+        Doc doc = printDoc(source);
+        return new DocRenderer(options).render(doc);
+    }
+
+    /**
+     * Returns the structural document tree produced after parsing, transforms, and Java printing.
+     */
+    public String debugDoc(String source) {
+        return DocDebugRenderer.render(printDoc(source));
+    }
+
+    private Doc printDoc(String source) {
         CompilationUnit parsedUnit = parse(source);
         CompilationUnit transformedUnit = TRANSFORMS.transform(parsedUnit);
         SyntaxNodeView.from(transformedUnit);
         JavaPrinter printer = new JavaPrinter(options);
-        Doc doc = printer.print(transformedUnit);
-        return new DocRenderer(options).render(doc);
+        return printer.print(transformedUnit);
     }
 
     private boolean hasFormatPragma(String source) {

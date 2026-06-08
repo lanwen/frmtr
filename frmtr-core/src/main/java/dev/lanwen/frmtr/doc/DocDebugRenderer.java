@@ -9,7 +9,7 @@ package dev.lanwen.frmtr.doc;
  * endings, indentation text, trailing-newline policy, and Java syntax policy to {@link DocRenderer} and the language
  * printers.
  */
-final class DocDebugRenderer {
+public final class DocDebugRenderer {
     private static final String INDENT = "  ";
 
     private DocDebugRenderer() {}
@@ -18,7 +18,7 @@ final class DocDebugRenderer {
      * Returns a concise debug tree for the supplied document using {@code \n} separators regardless of platform line
      * endings.
      */
-    static String render(Doc doc) {
+    public static String render(Doc doc) {
         StringBuilder out = new StringBuilder();
         render(doc, out, 0);
         if (!out.isEmpty()) {

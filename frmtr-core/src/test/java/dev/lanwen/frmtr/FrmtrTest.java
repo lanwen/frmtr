@@ -95,6 +95,79 @@ final class FrmtrTest {
     }
 
     @Test
+    void debugsFormatterDocTreeForJavaSource() {
+        String rendered = Frmtr.debugDoc("class Demo{int value;}");
+
+        assertThat(rendered)
+                .contains("Group")
+                .contains("Concat")
+                .contains("Indent")
+                .contains("Text(\"class \")")
+                .contains("Text(\"Demo\")")
+                .contains("Text(\"int \")")
+                .contains("Text(\"value\")");
+    }
+
+    @Test
+    void debugDocUsesFormatterOptionsThatAffectPrinterShape() {
+        String source = """
+                class Demo {
+                    void method() {
+                        call(value -> firstVeryLongConditionName && secondVeryLongConditionName);
+                    }
+                }
+                """;
+        FormatterOptions end = new FormatterOptions(
+                40,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                false,
+                false,
+                FormatterOptions.LambdaArrowParens.PRESERVE,
+                FormatterOptions.BinaryOperatorPosition.END,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+        FormatterOptions start = new FormatterOptions(
+                40,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                false,
+                false,
+                FormatterOptions.LambdaArrowParens.PRESERVE,
+                FormatterOptions.BinaryOperatorPosition.START,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        assertThat(Frmtr.debugDoc(source, end)).contains("Text(\" &&\")");
+        assertThat(Frmtr.debugDoc(source, start)).contains("Text(\"&& \")");
+    }
+
+    @Test
+    void debugDocBuildsTreeWhenFormatWouldSkipForMissingPragma() {
+        FormatterOptions requirePragma = FormatterOptions.withPragmaRequirement(
+                80,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                true,
+                false,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String source = "class Demo{int value;}";
+
+        assertThat(Frmtr.format(source, requirePragma)).isEqualTo(source);
+        assertThat(Frmtr.debugDoc(source, requirePragma)).contains("Text(\"class \")");
+    }
+
+    @Test
+    void debugDocRejectsInvalidJavaLikeFormat() {
+        assertThatThrownBy(() -> Frmtr.debugDoc("class {")).isInstanceOf(FormatterException.class);
+    }
+
+    @Test
     void internalFormatterFailuresKeepCauseAndExplainTheFailure() {
         NoSuchFieldError cause = new NoSuchFieldError("variables");
 

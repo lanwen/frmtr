@@ -156,22 +156,38 @@ final class CompilationUnitPrinter {
     }
 
     /**
-     * Builds the import section from already-ordered static and ordinary import groups.
+     * Builds the import section from already-ordered import chunks.
      *
-     * <p>The section-level blank line between static and ordinary imports belongs here because it depends on both import
-     * groups being present. The transform stage has already sorted imports into formatter order, and rendering each
-     * individual import line remains with {@link ImportDeclarationPrinter}.
+     * <p>The section-level blank lines between static/ordinary import groups and between source-separated import chunks
+     * belong here because they depend on neighboring imports being present. Sort-only chunks for leading-commented
+     * imports do not automatically add blank lines. The transform stage has already sorted imports into formatter order
+     * inside safe chunks, and rendering each individual import line remains with {@link ImportDeclarationPrinter}.
      */
     private Optional<Doc> imports(CompilationUnit unit) {
-        List<ImportDeclaration> staticImports = unit.getImports().stream()
-                .filter(ImportDeclaration::isStatic)
-                .toList();
-        List<ImportDeclaration> normalImports = unit.getImports().stream()
-                .filter(importDeclaration -> !importDeclaration.isStatic())
-                .toList();
-        if (staticImports.isEmpty() && normalImports.isEmpty()) {
+        List<ImportChunks.ImportChunk> chunks = ImportChunks.orderedChunks(unit);
+        if (chunks.isEmpty()) {
             return Optional.empty();
         }
+        List<Doc> parts = new ArrayList<>();
+        for (ImportChunks.ImportChunk chunk : chunks) {
+            if (!parts.isEmpty()) {
+                parts.add(Doc.HARD_LINE);
+                if (chunk.separatorBefore()) {
+                    parts.add(Doc.HARD_LINE);
+                }
+            }
+            parts.add(importChunk(chunk));
+        }
+        return Optional.of(Doc.concat(parts));
+    }
+
+    private Doc importChunk(ImportChunks.ImportChunk chunk) {
+        List<ImportDeclaration> staticImports = chunk.imports().stream()
+                .filter(ImportDeclaration::isStatic)
+                .toList();
+        List<ImportDeclaration> normalImports = chunk.imports().stream()
+                .filter(importDeclaration -> !importDeclaration.isStatic())
+                .toList();
         List<Doc> blocks = new ArrayList<>();
         if (!staticImports.isEmpty()) {
             blocks.add(Doc.join(
@@ -186,6 +202,6 @@ final class CompilationUnitPrinter {
                     Doc.HARD_LINE,
                     normalImports.stream().map(importDeclarations::importDeclaration).toList()));
         }
-        return Optional.of(Doc.concat(blocks));
+        return Doc.concat(blocks);
     }
 }

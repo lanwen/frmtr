@@ -23,62 +23,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 final class PrettierJavaFixtureTest {
     private static final String FIXTURE_ROOT = "format/prettier-java/unit-test";
-    private static final FormatterOptions PRETTIER_COMPATIBILITY_OPTIONS = FormatterOptions.withRawTrailingWhitespace(
-            80,
-            FormatterOptions.IndentStyle.SPACE,
-            2,
-            FormatterOptions.LineEnding.LF,
-            true,
-            true,
-            FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
-    private static final FormatterOptions PRETTIER_REQUIRE_PRAGMA_OPTIONS = FormatterOptions.withPragmaRequirement(
-            80,
-            FormatterOptions.IndentStyle.SPACE,
-            2,
-            FormatterOptions.LineEnding.LF,
-            true,
-            true,
-            true,
-            FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
-    private static final FormatterOptions PRETTIER_WIDE_COMPATIBILITY_OPTIONS = FormatterOptions.withRawTrailingWhitespace(
-            320,
-            FormatterOptions.IndentStyle.SPACE,
-            2,
-            FormatterOptions.LineEnding.LF,
-            true,
-            true,
-            FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
-    private static final FormatterOptions PRETTIER_ARROW_PARENS_AVOID_OPTIONS = FormatterOptions.withLambdaArrowParens(
-            80,
-            FormatterOptions.IndentStyle.SPACE,
-            2,
-            FormatterOptions.LineEnding.LF,
-            true,
-            true,
-            false,
-            FormatterOptions.LambdaArrowParens.AVOID,
-            FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
-    private static final FormatterOptions PRETTIER_ARROW_PARENS_ALWAYS_OPTIONS = FormatterOptions.withLambdaArrowParens(
-            80,
-            FormatterOptions.IndentStyle.SPACE,
-            2,
-            FormatterOptions.LineEnding.LF,
-            true,
-            true,
-            false,
-            FormatterOptions.LambdaArrowParens.ALWAYS,
-            FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
-    private static final FormatterOptions PRETTIER_BINARY_OPERATOR_POSITION_START_OPTIONS = new FormatterOptions(
-            80,
-            FormatterOptions.IndentStyle.SPACE,
-            2,
-            FormatterOptions.LineEnding.LF,
-            true,
-            true,
-            false,
-            FormatterOptions.LambdaArrowParens.PRESERVE,
-            FormatterOptions.BinaryOperatorPosition.START,
-            FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
     private static final Set<String> PRETTIER_COMPATIBLE_FIXTURES = Set.of(
             "args",
             "arrays",
@@ -269,22 +213,7 @@ final class PrettierJavaFixtureTest {
     }
 
     private static FormatterOptions prettierCompatibilityOptions(Fixture fixture) {
-        if (fixture.name().startsWith("require-pragma/")) {
-            return PRETTIER_REQUIRE_PRAGMA_OPTIONS;
-        }
-        if (fixture.name().equals("unnamed-variables-and-patterns")) {
-            return PRETTIER_WIDE_COMPATIBILITY_OPTIONS;
-        }
-        if (fixture.name().equals("lambda/arrow-parens-avoid")) {
-            return PRETTIER_ARROW_PARENS_AVOID_OPTIONS;
-        }
-        if (fixture.name().equals("lambda/arrow-parens-always")) {
-            return PRETTIER_ARROW_PARENS_ALWAYS_OPTIONS;
-        }
-        if (fixture.name().equals("binary_expressions/operator-position-start")) {
-            return PRETTIER_BINARY_OPERATOR_POSITION_START_OPTIONS;
-        }
-        return PRETTIER_COMPATIBILITY_OPTIONS;
+        return PrettierJavaFixtureOptions.resolve(fixture.fixtureRoot(), fixture.directory());
     }
 
     private static Fixture fixture(Path root, Path input) {
@@ -292,6 +221,8 @@ final class PrettierJavaFixtureTest {
         Path name = root.relativize(directory);
         return new Fixture(
                 name.toString(),
+                root,
+                directory,
                 input,
                 directory.resolve("prettier.output.java"),
                 directory.resolve("frmtr.output.java"),
@@ -336,7 +267,14 @@ final class PrettierJavaFixtureTest {
         return Files.readString(path, StandardCharsets.UTF_8);
     }
 
-    private record Fixture(String name, Path input, Path prettierOutput, Path frmtrOutput, Path frmtrExampleOutput) {
+    private record Fixture(
+            String name,
+            Path fixtureRoot,
+            Path directory,
+            Path input,
+            Path prettierOutput,
+            Path frmtrOutput,
+            Path frmtrExampleOutput) {
         @Override
         public String toString() {
             return name;

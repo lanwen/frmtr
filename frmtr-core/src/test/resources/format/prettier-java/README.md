@@ -23,6 +23,14 @@ Each fixture directory contains:
 When JavaParser supports parsing the upstream syntax, the fixture directory also contains
 `frmtr.output.java`: the current frmtr output snapshot for the input.
 
+Fixture directories may also contain `frmtr.options.properties`: frmtr-only metadata that
+selects formatter options when a fixture is compared against Prettier reference output.
+Metadata is inherited from parent fixture directories to child fixture directories, so a
+fixture family can share one option override. Metadata under fixtures whose upstream syntax
+JavaParser does not parse yet is validated by tests but may remain future-facing until the
+fixture joins the active compatibility assertion. Supported keys are `lineWidth`,
+`requirePragma`, `lambdaArrowParens`, and `binaryOperatorPosition`.
+
 The `input.java` and `prettier.output.java` files are kept byte-for-byte aligned with the
 original upstream files. Some upstream samples use syntax that the bundled JavaParser
 dependency does not parse yet; those fixtures are explicitly enumerated by

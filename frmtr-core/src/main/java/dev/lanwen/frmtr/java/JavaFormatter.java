@@ -31,6 +31,8 @@ import java.util.regex.Pattern;
 public final class JavaFormatter {
     private static final int PARSE_ERROR_CONTEXT_LINES = 2;
     private static final Pattern MESSAGE_POSITION = Pattern.compile("line (\\d+), column (\\d+)");
+    private static final JavaTransformPipeline TRANSFORMS =
+            new JavaTransformPipeline(List.of(new ImportSortTransform()));
 
     private final FormatterOptions options;
     private final JavaParser parser;
@@ -48,10 +50,11 @@ public final class JavaFormatter {
         if (options.requirePragma() && !hasFormatPragma(source)) {
             return source;
         }
-        CompilationUnit unit = parse(source);
-        SyntaxNodeView.from(unit);
+        CompilationUnit parsedUnit = parse(source);
+        CompilationUnit transformedUnit = TRANSFORMS.transform(parsedUnit);
+        SyntaxNodeView.from(transformedUnit);
         JavaPrinter printer = new JavaPrinter(options);
-        Doc doc = printer.print(unit);
+        Doc doc = printer.print(transformedUnit);
         return new DocRenderer(options).render(doc);
     }
 

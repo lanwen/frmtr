@@ -8,7 +8,7 @@ import dev.lanwen.frmtr.doc.Doc;
  *
  * <p>This helper owns import-level leading comments, the keyword fork between {@code import} and {@code import static},
  * and the trailing asterisk marker for wildcard imports. It intentionally delegates import ordering, static-versus-
- * normal grouping, package declarations, and module declarations back to {@link ImportOrdering} and {@link
+ * normal grouping, package declarations, and module declarations back to {@link ImportSortTransform} and {@link
  * CompilationUnitPrinter} because those are transform and top-level layout decisions rather than single-import
  * formatting decisions.
  *

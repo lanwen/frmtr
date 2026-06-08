@@ -1,6 +1,7 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.modules.ModuleDeclaration;
@@ -14,12 +15,12 @@ import java.util.function.Function;
  * Sequences the layout of a Java compilation unit after the parser has exposed package, import, module, and type nodes.
  *
  * <p>This helper owns only whole-file ordering: source-leading package comments, orphan comments before the first type,
- * the package line, an ordered import section, optional module declarations, top-level declarations, compact
+ * the package line, an already-ordered import section, optional module declarations, top-level declarations, compact
  * unnamed-class member expansion, and trailing orphan comments. It intentionally delegates package declaration text to
- * {@link PackageDeclarationPrinter}, import grouping and sorting to {@link ImportOrdering}, individual imports to {@link
+ * {@link PackageDeclarationPrinter}, import sorting to {@link ImportSortTransform}, individual imports to {@link
  * ImportDeclarationPrinter}, module declaration formatting to {@link JavaPrinter}, and body declaration formatting back
- * to {@link JavaPrinter}. It does not print statements, expressions, raw body preservation, or any single-node
- * package/import behavior itself.
+ * to {@link JavaPrinter}. It does not print statements, expressions, raw body preservation, deterministic import
+ * ordering, or any single-node package/import behavior itself.
  *
  * <p>Representative fixture pairs live at
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/package_and_imports/classWithMixedImports/input.java}
@@ -158,30 +159,35 @@ final class CompilationUnitPrinter {
     }
 
     /**
-     * Builds the import section from ordered static and ordinary import groups.
+     * Builds the import section from already-ordered static and ordinary import groups.
      *
      * <p>The section-level blank line between static and ordinary imports belongs here because it depends on both import
-     * groups being present. Import grouping and ordering belongs to {@link ImportOrdering}, and rendering each individual
-     * import line remains with {@link ImportDeclarationPrinter}.
+     * groups being present. The transform stage has already sorted imports into formatter order, and rendering each
+     * individual import line remains with {@link ImportDeclarationPrinter}.
      */
     private Optional<Doc> imports(CompilationUnit unit) {
-        ImportOrdering orderedImports = ImportOrdering.order(unit.getImports());
-        if (orderedImports.isEmpty()) {
+        List<ImportDeclaration> staticImports = unit.getImports().stream()
+                .filter(ImportDeclaration::isStatic)
+                .toList();
+        List<ImportDeclaration> normalImports = unit.getImports().stream()
+                .filter(importDeclaration -> !importDeclaration.isStatic())
+                .toList();
+        if (staticImports.isEmpty() && normalImports.isEmpty()) {
             return Optional.empty();
         }
         List<Doc> blocks = new ArrayList<>();
-        if (!orderedImports.staticImports().isEmpty()) {
+        if (!staticImports.isEmpty()) {
             blocks.add(Doc.join(
                     Doc.HARD_LINE,
-                    orderedImports.staticImports().stream().map(importDeclarations::importDeclaration).toList()));
+                    staticImports.stream().map(importDeclarations::importDeclaration).toList()));
         }
-        if (!orderedImports.normalImports().isEmpty() && !orderedImports.staticImports().isEmpty()) {
+        if (!normalImports.isEmpty() && !staticImports.isEmpty()) {
             blocks.add(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE));
         }
-        if (!orderedImports.normalImports().isEmpty()) {
+        if (!normalImports.isEmpty()) {
             blocks.add(Doc.join(
                     Doc.HARD_LINE,
-                    orderedImports.normalImports().stream().map(importDeclarations::importDeclaration).toList()));
+                    normalImports.stream().map(importDeclarations::importDeclaration).toList()));
         }
         return Optional.of(Doc.concat(blocks));
     }

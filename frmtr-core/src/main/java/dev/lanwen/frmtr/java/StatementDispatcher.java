@@ -6,7 +6,6 @@ import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.stmt.SwitchStmt;
 import com.github.javaparser.ast.stmt.TryStmt;
 import dev.lanwen.frmtr.doc.Doc;
-import java.util.function.Function;
 
 /**
  * Applies statement-level pragma, raw-source, and comment gates before routing formatted statement bodies.
@@ -29,15 +28,15 @@ final class StatementDispatcher {
     private final JavaFormatter.CommentTracker comments;
     private final FormatterPragmas formatterPragmas;
     private final RawSource rawSource;
-    private final Function<Statement, Doc> statementRenderer;
-    private final Function<SwitchStmt, Doc> switchRenderer;
+    private final JavaFormatRule<Statement> statementRenderer;
+    private final JavaFormatRule<SwitchStmt> switchRenderer;
 
     StatementDispatcher(
             JavaFormatter.CommentTracker comments,
             FormatterPragmas formatterPragmas,
             RawSource rawSource,
-            Function<Statement, Doc> statementRenderer,
-            Function<SwitchStmt, Doc> switchRenderer) {
+            JavaFormatRule<Statement> statementRenderer,
+            JavaFormatRule<SwitchStmt> switchRenderer) {
         this.comments = comments;
         this.formatterPragmas = formatterPragmas;
         this.rawSource = rawSource;
@@ -63,8 +62,8 @@ final class StatementDispatcher {
         Doc trailing = statement instanceof TryStmt ? Doc.EMPTY : comments.trailingLineComment(statement);
         Doc leading = leadingComment(statement, trailing);
         Doc body = statement instanceof SwitchStmt switchStmt
-                ? switchRenderer.apply(switchStmt)
-                : statementRenderer.apply(statement);
+                ? switchRenderer.format(switchStmt)
+                : statementRenderer.format(statement);
         return Doc.concat(leading, body, trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing));
     }
 

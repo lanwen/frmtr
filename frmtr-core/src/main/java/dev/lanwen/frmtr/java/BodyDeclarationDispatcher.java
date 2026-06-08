@@ -31,32 +31,32 @@ final class BodyDeclarationDispatcher {
     private final Function<BodyDeclaration<?>, Doc> leadingComments;
     private final Function<BodyDeclaration<?>, String> rawWithoutOwnComment;
     private final Function<BodyDeclaration<?>, String> compactSource;
-    private final Function<ClassOrInterfaceDeclaration, Doc> classOrInterfaces;
-    private final Function<RecordDeclaration, Doc> records;
-    private final Function<EnumDeclaration, Doc> enums;
-    private final Function<AnnotationDeclaration, Doc> annotationDeclarations;
-    private final Function<AnnotationMemberDeclaration, Doc> annotationMembers;
-    private final Function<FieldDeclaration, Doc> fields;
-    private final Function<MethodDeclaration, Doc> methods;
-    private final Function<CompactConstructorDeclaration, Doc> compactConstructors;
-    private final Function<ConstructorDeclaration, Doc> constructors;
-    private final Function<InitializerDeclaration, Doc> initializers;
+    private final JavaFormatRule<ClassOrInterfaceDeclaration> classOrInterfaces;
+    private final JavaFormatRule<RecordDeclaration> records;
+    private final JavaFormatRule<EnumDeclaration> enums;
+    private final JavaFormatRule<AnnotationDeclaration> annotationDeclarations;
+    private final JavaFormatRule<AnnotationMemberDeclaration> annotationMembers;
+    private final JavaFormatRule<FieldDeclaration> fields;
+    private final JavaFormatRule<MethodDeclaration> methods;
+    private final JavaFormatRule<CompactConstructorDeclaration> compactConstructors;
+    private final JavaFormatRule<ConstructorDeclaration> constructors;
+    private final JavaFormatRule<InitializerDeclaration> initializers;
 
     BodyDeclarationDispatcher(
             FormatterPragmas formatterPragmas,
             Function<BodyDeclaration<?>, Doc> leadingComments,
             Function<BodyDeclaration<?>, String> rawWithoutOwnComment,
             Function<BodyDeclaration<?>, String> compactSource,
-            Function<ClassOrInterfaceDeclaration, Doc> classOrInterfaces,
-            Function<RecordDeclaration, Doc> records,
-            Function<EnumDeclaration, Doc> enums,
-            Function<AnnotationDeclaration, Doc> annotationDeclarations,
-            Function<AnnotationMemberDeclaration, Doc> annotationMembers,
-            Function<FieldDeclaration, Doc> fields,
-            Function<MethodDeclaration, Doc> methods,
-            Function<CompactConstructorDeclaration, Doc> compactConstructors,
-            Function<ConstructorDeclaration, Doc> constructors,
-            Function<InitializerDeclaration, Doc> initializers) {
+            JavaFormatRule<ClassOrInterfaceDeclaration> classOrInterfaces,
+            JavaFormatRule<RecordDeclaration> records,
+            JavaFormatRule<EnumDeclaration> enums,
+            JavaFormatRule<AnnotationDeclaration> annotationDeclarations,
+            JavaFormatRule<AnnotationMemberDeclaration> annotationMembers,
+            JavaFormatRule<FieldDeclaration> fields,
+            JavaFormatRule<MethodDeclaration> methods,
+            JavaFormatRule<CompactConstructorDeclaration> compactConstructors,
+            JavaFormatRule<ConstructorDeclaration> constructors,
+            JavaFormatRule<InitializerDeclaration> initializers) {
         this.formatterPragmas = formatterPragmas;
         this.leadingComments = leadingComments;
         this.rawWithoutOwnComment = rawWithoutOwnComment;
@@ -107,16 +107,16 @@ final class BodyDeclarationDispatcher {
      */
     private Doc bodyContent(BodyDeclaration<?> declaration) {
         return switch (declaration) {
-            case ClassOrInterfaceDeclaration classDeclaration -> classOrInterfaces.apply(classDeclaration);
-            case RecordDeclaration recordDeclaration -> records.apply(recordDeclaration);
-            case EnumDeclaration enumDeclaration -> enums.apply(enumDeclaration);
-            case AnnotationDeclaration annotationDeclaration -> annotationDeclarations.apply(annotationDeclaration);
-            case AnnotationMemberDeclaration annotationMemberDeclaration -> annotationMembers.apply(annotationMemberDeclaration);
-            case FieldDeclaration fieldDeclaration -> fields.apply(fieldDeclaration);
-            case MethodDeclaration methodDeclaration -> methods.apply(methodDeclaration);
-            case CompactConstructorDeclaration compactConstructorDeclaration -> compactConstructors.apply(compactConstructorDeclaration);
-            case ConstructorDeclaration constructorDeclaration -> constructors.apply(constructorDeclaration);
-            case InitializerDeclaration initializerDeclaration -> initializers.apply(initializerDeclaration);
+            case ClassOrInterfaceDeclaration classDeclaration -> classOrInterfaces.format(classDeclaration);
+            case RecordDeclaration recordDeclaration -> records.format(recordDeclaration);
+            case EnumDeclaration enumDeclaration -> enums.format(enumDeclaration);
+            case AnnotationDeclaration annotationDeclaration -> annotationDeclarations.format(annotationDeclaration);
+            case AnnotationMemberDeclaration annotationMemberDeclaration -> annotationMembers.format(annotationMemberDeclaration);
+            case FieldDeclaration fieldDeclaration -> fields.format(fieldDeclaration);
+            case MethodDeclaration methodDeclaration -> methods.format(methodDeclaration);
+            case CompactConstructorDeclaration compactConstructorDeclaration -> compactConstructors.format(compactConstructorDeclaration);
+            case ConstructorDeclaration constructorDeclaration -> constructors.format(constructorDeclaration);
+            case InitializerDeclaration initializerDeclaration -> initializers.format(initializerDeclaration);
             default -> rawDeclaration(declaration);
         };
     }

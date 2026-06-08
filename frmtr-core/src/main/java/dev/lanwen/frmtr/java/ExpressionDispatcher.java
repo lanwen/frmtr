@@ -33,42 +33,48 @@ import dev.lanwen.frmtr.doc.Doc;
  * source-sensitive formatting, and recursive expression callbacks.
  */
 final class ExpressionDispatcher {
-    private final AssignmentExpressionPrinter assignments;
-    private final ArrayExpressionPrinter arrays;
-    private final AnnotationExpressionPrinter annotationExpressions;
-    private final BinaryExpressionPrinter binaries;
-    private final CastExpressionPrinter casts;
-    private final ConditionalExpressionPrinter conditionals;
-    private final EnclosedExpressionPrinter enclosedExpressions;
-    private final FieldAccessPrinter fieldAccesses;
-    private final InstanceOfExpressionPrinter instanceOfExpressions;
-    private final LambdaExpressionPrinter lambdas;
-    private final MethodCallPrinter methodCalls;
-    private final MethodReferencePrinter methodReferences;
-    private final ObjectCreationPrinter objectCreations;
-    private final SwitchPrinter switches;
-    private final TextBlockPrinter textBlocks;
+    private final JavaFormatRule<AssignExpr> assignments;
+    private final JavaFormatRule<ArrayAccessExpr> arrayAccesses;
+    private final JavaFormatRule<ArrayCreationExpr> arrayCreations;
+    private final JavaFormatRule<ArrayInitializerExpr> arrayInitializers;
+    private final JavaFormatRule<AnnotationExpr> annotationExpressions;
+    private final JavaFormatRule<BinaryExpr> binaries;
+    private final JavaFormatRule<CastExpr> casts;
+    private final JavaFormatRule<ConditionalExpr> conditionals;
+    private final JavaFormatRule<EnclosedExpr> enclosedExpressions;
+    private final JavaFormatRule<FieldAccessExpr> fieldAccesses;
+    private final JavaFormatRule<InstanceOfExpr> instanceOfExpressions;
+    private final JavaFormatRule<LambdaExpr> lambdas;
+    private final JavaFormatRule<MethodCallExpr> methodCalls;
+    private final JavaFormatRule<MethodReferenceExpr> methodReferences;
+    private final JavaFormatRule<ObjectCreationExpr> objectCreations;
+    private final JavaFormatRule<SwitchExpr> switches;
+    private final JavaFormatRule<TextBlockLiteralExpr> textBlocks;
     private final CompactSourceText compactSource;
 
     ExpressionDispatcher(
-            AssignmentExpressionPrinter assignments,
-            ArrayExpressionPrinter arrays,
-            AnnotationExpressionPrinter annotationExpressions,
-            BinaryExpressionPrinter binaries,
-            CastExpressionPrinter casts,
-            ConditionalExpressionPrinter conditionals,
-            EnclosedExpressionPrinter enclosedExpressions,
-            FieldAccessPrinter fieldAccesses,
-            InstanceOfExpressionPrinter instanceOfExpressions,
-            LambdaExpressionPrinter lambdas,
-            MethodCallPrinter methodCalls,
-            MethodReferencePrinter methodReferences,
-            ObjectCreationPrinter objectCreations,
-            SwitchPrinter switches,
-            TextBlockPrinter textBlocks,
+            JavaFormatRule<AssignExpr> assignments,
+            JavaFormatRule<ArrayAccessExpr> arrayAccesses,
+            JavaFormatRule<ArrayCreationExpr> arrayCreations,
+            JavaFormatRule<ArrayInitializerExpr> arrayInitializers,
+            JavaFormatRule<AnnotationExpr> annotationExpressions,
+            JavaFormatRule<BinaryExpr> binaries,
+            JavaFormatRule<CastExpr> casts,
+            JavaFormatRule<ConditionalExpr> conditionals,
+            JavaFormatRule<EnclosedExpr> enclosedExpressions,
+            JavaFormatRule<FieldAccessExpr> fieldAccesses,
+            JavaFormatRule<InstanceOfExpr> instanceOfExpressions,
+            JavaFormatRule<LambdaExpr> lambdas,
+            JavaFormatRule<MethodCallExpr> methodCalls,
+            JavaFormatRule<MethodReferenceExpr> methodReferences,
+            JavaFormatRule<ObjectCreationExpr> objectCreations,
+            JavaFormatRule<SwitchExpr> switches,
+            JavaFormatRule<TextBlockLiteralExpr> textBlocks,
             CompactSourceText compactSource) {
         this.assignments = assignments;
-        this.arrays = arrays;
+        this.arrayAccesses = arrayAccesses;
+        this.arrayCreations = arrayCreations;
+        this.arrayInitializers = arrayInitializers;
         this.annotationExpressions = annotationExpressions;
         this.binaries = binaries;
         this.casts = casts;
@@ -94,55 +100,55 @@ final class ExpressionDispatcher {
      */
     Doc expression(Expression expression) {
         if (expression instanceof AssignExpr assignExpr) {
-            return assignments.assignment(assignExpr);
+            return assignments.format(assignExpr);
         }
         if (expression instanceof ArrayAccessExpr arrayAccessExpr) {
-            return arrays.arrayAccess(arrayAccessExpr);
+            return arrayAccesses.format(arrayAccessExpr);
         }
         if (expression instanceof ArrayCreationExpr arrayCreationExpr) {
-            return arrays.arrayCreation(arrayCreationExpr);
+            return arrayCreations.format(arrayCreationExpr);
         }
         if (expression instanceof ArrayInitializerExpr arrayInitializerExpr) {
-            return arrays.arrayInitializer(arrayInitializerExpr);
+            return arrayInitializers.format(arrayInitializerExpr);
         }
         if (expression instanceof AnnotationExpr annotationExpr) {
-            return annotationExpressions.annotation(annotationExpr);
+            return annotationExpressions.format(annotationExpr);
         }
         if (expression instanceof BinaryExpr binaryExpr) {
-            return binaries.binaryExpression(binaryExpr);
+            return binaries.format(binaryExpr);
         }
         if (expression instanceof CastExpr castExpr) {
-            return casts.castExpression(castExpr);
+            return casts.format(castExpr);
         }
         if (expression instanceof ConditionalExpr conditionalExpr) {
-            return conditionals.conditionalExpression(conditionalExpr);
+            return conditionals.format(conditionalExpr);
         }
         if (expression instanceof EnclosedExpr enclosedExpr) {
-            return enclosedExpressions.enclosedExpression(enclosedExpr);
+            return enclosedExpressions.format(enclosedExpr);
         }
         if (expression instanceof FieldAccessExpr fieldAccessExpr) {
-            return fieldAccesses.fieldAccess(fieldAccessExpr);
+            return fieldAccesses.format(fieldAccessExpr);
         }
         if (expression instanceof InstanceOfExpr instanceOfExpr) {
-            return instanceOfExpressions.instanceOfExpression(instanceOfExpr);
+            return instanceOfExpressions.format(instanceOfExpr);
         }
         if (expression instanceof LambdaExpr lambdaExpr) {
-            return lambdas.lambdaExpression(lambdaExpr);
+            return lambdas.format(lambdaExpr);
         }
         if (expression instanceof MethodCallExpr methodCallExpr) {
-            return methodCalls.methodCall(methodCallExpr);
+            return methodCalls.format(methodCallExpr);
         }
         if (expression instanceof MethodReferenceExpr methodReferenceExpr) {
-            return methodReferences.methodReference(methodReferenceExpr);
+            return methodReferences.format(methodReferenceExpr);
         }
         if (expression instanceof ObjectCreationExpr objectCreationExpr) {
-            return objectCreations.objectCreation(objectCreationExpr);
+            return objectCreations.format(objectCreationExpr);
         }
         if (expression instanceof SwitchExpr switchExpr) {
-            return switches.switchExpression(switchExpr);
+            return switches.format(switchExpr);
         }
         if (expression instanceof TextBlockLiteralExpr textBlockLiteralExpr) {
-            return textBlocks.textBlockLiteral(textBlockLiteralExpr);
+            return textBlocks.format(textBlockLiteralExpr);
         }
         return Doc.text(compactSource.compact(expression));
     }

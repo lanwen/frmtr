@@ -52,7 +52,10 @@ final class FrmtrGradlePluginFunctionalTest {
 
         assertThat(failedCheck.getOutput())
                 .contains("✗ src/main/java/demo/Main.java")
-                .contains("diff --git a/src/main/java/demo/Main.java b/src/main/java/demo/Main.java")
+                .contains("diff --git origin frmtr")
+                .contains("--- origin\n+++ frmtr")
+                .doesNotContain("a/src/main/java/demo/Main.java")
+                .doesNotContain("b/src/main/java/demo/Main.java")
                 .contains("-package demo; class Main{int value;}")
                 .doesNotContain("✓ src/main/java/demo/Main.java");
 

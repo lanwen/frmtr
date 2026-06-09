@@ -41,7 +41,10 @@ final class FormatterRunnerTest {
         assertThat(results.getFirst().status()).isEqualTo(FormatFileStatus.CHANGED);
         assertThat(results.getFirst().unifiedDiff())
                 .hasValueSatisfying(diff -> assertThat(diff)
-                        .contains("diff --git a/src/Changed.java b/src/Changed.java")
+                        .contains("diff --git origin frmtr")
+                        .contains("--- origin\n+++ frmtr")
+                        .doesNotContain("a/src/Changed.java")
+                        .doesNotContain("b/src/Changed.java")
                         .contains("-class Changed{int value;}")
                         .contains("+class Changed {"));
         assertThat(results.getLast().status()).isEqualTo(FormatFileStatus.UNCHANGED);

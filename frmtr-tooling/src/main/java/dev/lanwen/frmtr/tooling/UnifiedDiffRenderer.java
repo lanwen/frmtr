@@ -16,10 +16,9 @@ public final class UnifiedDiffRenderer {
 
     public static String render(Path displayPath, String original, String formatted) throws IOException {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        String path = displayPath.toString().replace('\\', '/');
-        output.write(("diff --git a/" + path + " b/" + path + "\n").getBytes(StandardCharsets.UTF_8));
-        output.write(("--- a/" + path + "\n").getBytes(StandardCharsets.UTF_8));
-        output.write(("+++ b/" + path + "\n").getBytes(StandardCharsets.UTF_8));
+        output.write("diff --git origin frmtr\n".getBytes(StandardCharsets.UTF_8));
+        output.write("--- origin\n".getBytes(StandardCharsets.UTF_8));
+        output.write("+++ frmtr\n".getBytes(StandardCharsets.UTF_8));
 
         RawText oldText = new RawText(original.getBytes(StandardCharsets.UTF_8));
         RawText newText = new RawText(formatted.getBytes(StandardCharsets.UTF_8));

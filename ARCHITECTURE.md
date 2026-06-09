@@ -79,7 +79,7 @@ It is a core debug API only, not a formatting policy surface or CLI hook.
 
 - `FormatterRunner.check(...)` formats selected files in memory and returns a `FormatRunResult` with per-file results and aggregate status helpers.
 - `FormatterRunner.write(...)` writes changed formatter output back to disk, continues after per-file failures, distinguishes write-step failures as partially written results, and reports the full run summary.
-- `UnifiedDiffRenderer` renders the same unified diff format for CLI and Gradle check output.
+- `UnifiedDiffRenderer` renders the same unified diff format for CLI and Gradle check output, using `origin` and `frmtr` as diff-side labels because adapters already print the file path on the surrounding status line.
 - `FormatterFailureRenderer` turns structured formatter failures into adapter-facing messages, including parse context, declaration-line context, and caret placement, without making the core exception message own terminal formatting.
 - `FormatterRunFailureRenderer` renders failed file results as outlined diagnostic blocks titled by the failure message while file identity stays with adapter status lines. Source diagnostics come from structured parser metadata, including line numbers, caret placement, wrapped messages, and vertical-dot gap markers inside the outline.
 
@@ -171,7 +171,7 @@ The CLI is an adapter over the public formatter API:
 - No selectors: discover `./**/*.java` and check formatting by default.
 - `--stdin`: read Java source from stdin and write formatted source to stdout; when combined with `--check` or `--diff`, compare stdin against formatter output using `stdin` as the display path. This mode is separate from file selectors and `--write`.
 - `--check`: report each checked Java file with a status marker and exit non-zero when changes are needed. `✓` means already formatted, `✗` means formatting would change, and `!` means parsing or reading failed. Non-stacktrace file-run failures are printed on stdout immediately after the failed file status line, and file check runs end with a concise stdout summary counting unchanged, would-change, and failed files.
-- `--diff`: in check mode, print unified diffs for sources marked `✗`; passed sources and parse/read failures do not produce diff blocks. With no selectors or `--stdin`, `--diff` implies check mode. Diff output and failure diagnostics follow their file status lines before the same check summary.
+- `--diff`: in check mode, print unified diffs for sources marked `✗`; passed sources and parse/read failures do not produce diff blocks. With no selectors or `--stdin`, `--diff` implies check mode. Diff output uses `origin` and `frmtr` labels instead of repeating the file path, and failure diagnostics follow their file status lines before the same check summary.
 - `--write`: rewrite files in place, group file-run failures on stderr by display path, and print a concise stdout processed summary counting formatted, failed, ignored, and unchanged files. Ignored files are `.java` files excluded by `.gitignore` during selector discovery.
 - `--version`: print the project version, Git commit SHA, and build timestamp.
 - `--java-level`: select the core Java parser language level; accepts enum names such as `LATEST_AVAILABLE` and `UNSET`, plus release shorthands such as `21` or `JAVA_21`.
@@ -196,7 +196,7 @@ The Gradle plugin ID is `dev.lanwen.frmtr`. Applying it creates project-local ag
 When the Gradle Java plugin is present, Java formatting is enabled by convention without requiring a `frmtr {}` block. The plugin registers:
 
 - `frmtrJavaFormat`: formats selected Java source-set files in place.
-- `frmtrJavaCheck`: checks selected Java source-set files, suppresses unchanged-file output by default, prints `✗` status lines, groups failed files by display path, and prints unified diffs for changed files by default.
+- `frmtrJavaCheck`: checks selected Java source-set files, suppresses unchanged-file output by default, prints `✗` status lines, groups failed files by display path, and prints unified diffs with `origin` and `frmtr` side labels for changed files by default.
 
 The plugin is project-local. Applying it to a root project does not automatically reach into subprojects; users should apply it in each project or through a convention plugin.
 

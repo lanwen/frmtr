@@ -86,8 +86,8 @@ final class MainTest {
         assertThat(result.exitCode()).isEqualTo(1);
         assertThat(result.out())
                 .startsWith("✗ stdin\n")
-                .contains("diff --git a/stdin b/stdin\n")
-                .contains("--- a/stdin\n+++ b/stdin\n")
+                .contains("diff --git origin frmtr\n")
+                .contains("--- origin\n+++ frmtr\n")
                 .contains("-class Demo{int value;}\n")
                 .contains("""
                         +class Demo {
@@ -131,7 +131,7 @@ final class MainTest {
         assertThat(result.exitCode()).isEqualTo(1);
         assertThat(result.out())
                 .startsWith("✗ src/Main.java\n")
-                .contains("diff --git a/src/Main.java b/src/Main.java\n");
+                .contains("diff --git origin frmtr\n");
         assertThat(result.err()).isEmpty();
     }
 
@@ -327,8 +327,8 @@ final class MainTest {
                         ✓ src/Formatted.java
                         ✗ src/Main.java
                         """)
-                .contains("diff --git a/src/Main.java b/src/Main.java\n")
-                .contains("--- a/src/Main.java\n+++ b/src/Main.java\n")
+                .contains("diff --git origin frmtr\n")
+                .contains("--- origin\n+++ frmtr\n")
                 .contains("-class Main{int value;}\n")
                 .contains("""
                         +class Main {
@@ -336,7 +336,13 @@ final class MainTest {
                         +    int value;
                         +}
                         """)
-                .doesNotContain("diff --git a/src/Formatted.java b/src/Formatted.java");
+                .doesNotContain("a/src/Main.java")
+                .doesNotContain("b/src/Main.java");
+        int formattedIndex = result.out().indexOf("✓ src/Formatted.java\n");
+        int changedIndex = result.out().indexOf("✗ src/Main.java\n");
+        int diffIndex = result.out().indexOf("diff --git origin frmtr\n");
+        assertThat(formattedIndex).isLessThan(changedIndex);
+        assertThat(changedIndex).isLessThan(diffIndex);
         assertThat(result.err()).isEmpty();
     }
 
@@ -350,7 +356,7 @@ final class MainTest {
         assertThat(result.exitCode()).isEqualTo(2);
         assertThat(result.out())
                 .startsWith("✗ src/AChanged.java\n")
-                .contains("diff --git a/src/AChanged.java b/src/AChanged.java\n")
+                .contains("diff --git origin frmtr\n")
                 .contains("""
                         +class AChanged {
                         +
@@ -363,7 +369,7 @@ final class MainTest {
                         │ 1  class {
                         """)
                 .endsWith("Checked 2 files: 1 would change, 1 failed.\n");
-        int diffIndex = result.out().indexOf("diff --git a/src/AChanged.java b/src/AChanged.java\n");
+        int diffIndex = result.out().indexOf("diff --git origin frmtr\n");
         int failureIndex = result.out().indexOf("! src/ZBroken.java\n┌─ Unable to parse Java source:\n");
         int summaryIndex = result.out().indexOf("Checked 2 files: 1 would change, 1 failed.\n");
         assertThat(diffIndex).isLessThan(failureIndex);

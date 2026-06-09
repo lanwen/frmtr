@@ -57,6 +57,35 @@ final class FrmtrTest {
     }
 
     @Test
+    void formatsStaticChainLaterBlockLambdaFixtureAtPreferredAndTightWidths() throws Exception {
+        String source = readResource("format/static-chain-later-block-lambda/input.java");
+        String preferredExpected = readResource("format/static-chain-later-block-lambda/frmtr.output.java");
+        String tightExpected = readResource("format/static-chain-later-block-lambda/frmtr-tight.output.java");
+        FormatterOptions preferredRootWidth = FormatterOptions.forLayout(
+                90,
+                FormatterOptions.IndentStyle.SPACE,
+                4,
+                FormatterOptions.LineEnding.LF,
+                true);
+        FormatterOptions tightRootWidth = FormatterOptions.forLayout(
+                50,
+                FormatterOptions.IndentStyle.SPACE,
+                4,
+                FormatterOptions.LineEnding.LF,
+                true);
+
+        String preferredRoot = Frmtr.format(source, preferredRootWidth);
+        String tightRoot = Frmtr.format(source, tightRootWidth);
+
+        assertThat(preferredRoot).isEqualTo(preferredExpected);
+        assertThat(Frmtr.format(preferredRoot, preferredRootWidth)).isEqualTo(preferredRoot);
+        assertThatCode(() -> StaticJavaParser.parse(preferredRoot)).doesNotThrowAnyException();
+        assertThat(tightRoot).isEqualTo(tightExpected);
+        assertThat(Frmtr.format(tightRoot, tightRootWidth)).isEqualTo(tightRoot);
+        assertThatCode(() -> StaticJavaParser.parse(tightRoot)).doesNotThrowAnyException();
+    }
+
+    @Test
     void formatsMethodCallCharLiteralFixtureAndIsIdempotent() throws Exception {
         String source = readResource("format/method-call-char-literal/input.java");
         String expected = readResource("format/method-call-char-literal/frmtr.output.java");

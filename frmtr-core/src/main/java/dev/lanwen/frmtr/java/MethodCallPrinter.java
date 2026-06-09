@@ -56,6 +56,7 @@ final class MethodCallPrinter {
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments;
     private final BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument;
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments;
+    private final Function<LambdaExpr, String> lambdaParameters;
     private final Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer;
     private final ToIntFunction<String> currentIndentedWidth;
     private final ToIntFunction<String> blockStatementWidth;
@@ -99,6 +100,9 @@ final class MethodCallPrinter {
         /** Render a promoted method-call root inline so its scope, name, and compact arguments stay on the root line. */
         INLINE_PROMOTED_METHOD_CALL,
 
+        /** Render a promoted static-style call as a group that can break between the type-like scope and first call. */
+        GROUPED_PROMOTED_METHOD_CALL,
+
         /** Render an object-creation root through the forced broken-constructor path selected by the caller. */
         BROKEN_OBJECT_CREATION
     }
@@ -127,6 +131,7 @@ final class MethodCallPrinter {
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,
             BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments,
+            Function<LambdaExpr, String> lambdaParameters,
             Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer,
             Function<BinaryExpr, Doc> brokenBinaryExpressionLinesRenderer,
             ToIntFunction<String> currentIndentedWidth,
@@ -143,6 +148,7 @@ final class MethodCallPrinter {
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.commentedExpressionLambdaArgument = commentedExpressionLambdaArgument;
         this.huggableExpressionLambdaArguments = huggableExpressionLambdaArguments;
+        this.lambdaParameters = lambdaParameters;
         this.unformattedTextBlockRenderer = unformattedTextBlockRenderer;
         this.currentIndentedWidth = currentIndentedWidth;
         this.blockStatementWidth = blockStatementWidth;
@@ -340,11 +346,17 @@ final class MethodCallPrinter {
         if (chainState.rootRendering() == ChainRootRendering.BROKEN_OBJECT_CREATION && calls.size() == 1) {
             return Optional.of(Doc.concat(rootDoc, methodCallChainSegment(calls.getFirst())));
         }
-        if (root instanceof MethodCallExpr
+        if (root instanceof MethodCallExpr methodRoot
                 && calls.size() == 1
                 && root.getAllContainedComments().isEmpty()
                 && calls.getFirst().getAllContainedComments().isEmpty()
                 && !methodCallSegmentHasComment(calls.getFirst())) {
+            if (chainState.rootRendering() == ChainRootRendering.GROUPED_PROMOTED_METHOD_CALL) {
+                if (methodCallSegmentHasBlockLambdaArgument(methodRoot)) {
+                    return Optional.of(Doc.concat(rootDoc, methodCallChainSegment(calls.getFirst())));
+                }
+                return Optional.of(groupedPromotedRootWithSingleSegment(root, rootDoc, calls.getFirst()));
+            }
             return Optional.of(Doc.concat(rootDoc, methodCallChainSegment(calls.getFirst())));
         }
         return Optional.of(Doc.concat(
@@ -365,6 +377,7 @@ final class MethodCallPrinter {
             if (methodCallChainShouldPromoteFirstCallForArgumentComments(root, calls)) {
                 root = calls.getFirst();
                 remainingCalls = new ArrayList<>(calls.subList(1, calls.size()));
+                rootRendering = promotedStaticFirstCallRendering(calls);
             } else {
                 int firstCommentedSegment = firstCommentedChainSegment(calls);
                 if (firstCommentedSegment > 0 && methodCallChainPromotesFirstCall(root)) {
@@ -382,9 +395,11 @@ final class MethodCallPrinter {
         } else if (methodCallChainShouldPromoteFirstCallForArgumentComments(root, calls)) {
             root = calls.getFirst();
             remainingCalls = new ArrayList<>(calls.subList(1, calls.size()));
+            rootRendering = promotedStaticFirstCallRendering(calls);
         } else if (methodCallChainShouldPromoteFirstCall(breakMode, root, calls)) {
             root = calls.getFirst();
             remainingCalls = new ArrayList<>(calls.subList(1, calls.size()));
+            rootRendering = promotedStaticFirstCallRendering(calls);
         }
         if (rootRendering == ChainRootRendering.EXPRESSION_RENDERER
                 && breakMode.isForced()
@@ -394,14 +409,88 @@ final class MethodCallPrinter {
         return new MethodCallChainState(root, remainingCalls, rootRendering);
     }
 
+    private ChainRootRendering promotedStaticFirstCallRendering(List<MethodCallExpr> calls) {
+        return calls.stream().anyMatch(this::methodCallSegmentHasBlockLambdaArgument)
+                        && groupedPromotedFirstCallCanKeepArgumentsFlat(calls.getFirst())
+                ? ChainRootRendering.GROUPED_PROMOTED_METHOD_CALL
+                : ChainRootRendering.EXPRESSION_RENDERER;
+    }
+
+    private boolean groupedPromotedFirstCallCanKeepArgumentsFlat(MethodCallExpr expression) {
+        return expression.getArguments().size() <= 1;
+    }
+
     private Doc methodCallChainRootDoc(MethodCallChainState chainState) {
         return switch (chainState.rootRendering()) {
             case INLINE_PROMOTED_METHOD_CALL -> chainState.root() instanceof MethodCallExpr methodCall
                     ? inlineMethodCall(methodCall)
                     : expressionRenderer.apply(chainState.root());
+            case GROUPED_PROMOTED_METHOD_CALL -> chainState.root() instanceof MethodCallExpr methodCall
+                    ? groupedPromotedMethodCall(methodCall)
+                    : expressionRenderer.apply(chainState.root());
             case BROKEN_OBJECT_CREATION -> brokenObjectCreationRenderer.apply((ObjectCreationExpr) chainState.root());
             case EXPRESSION_RENDERER -> expressionRenderer.apply(chainState.root());
         };
+    }
+
+    private Doc groupedPromotedMethodCall(MethodCallExpr expression) {
+        if (methodCallSegmentHasBlockLambdaArgument(expression)) {
+            return blockLambdaSegmentFirstLine(compactSource.compact(expression.getScope().orElseThrow()), expression)
+                    .filter(firstLine -> blockStatementWidth.applyAsInt(firstLine) <= options.lineWidth())
+                    .map(ignored -> expressionRenderer.apply(expression))
+                    .orElseGet(() -> Doc.concat(
+                            expressionRenderer.apply(expression.getScope().orElseThrow()),
+                            Doc.indent(Doc.concat(Doc.HARD_LINE, methodCallChainSegment(expression)))));
+        }
+        return expression.getScope()
+                .map(scope -> Doc.group(Doc.concat(
+                        expressionRenderer.apply(scope),
+                        Doc.indent(Doc.concat(Doc.SOFT_LINE, methodCallChainSegment(expression))))))
+                .orElseGet(() -> expressionRenderer.apply(expression));
+    }
+
+    private Doc groupedPromotedRootWithSingleSegment(Expression root, Doc rootDoc, MethodCallExpr expression) {
+        if (methodCallSegmentHasBlockLambdaArgument(expression)) {
+            return blockLambdaSegmentFirstLine(compactSource.compact(root), expression)
+                    .filter(firstLine -> blockStatementWidth.applyAsInt(firstLine) <= options.lineWidth())
+                    .map(ignored -> Doc.concat(rootDoc, methodCallChainSegment(expression)))
+                    .orElseGet(() -> Doc.concat(
+                            rootDoc,
+                            Doc.indent(Doc.concat(Doc.HARD_LINE, methodCallChainSegment(expression)))));
+        }
+        return Doc.group(Doc.concat(
+                rootDoc,
+                Doc.indent(Doc.concat(Doc.SOFT_LINE, methodCallChainSegment(expression)))));
+    }
+
+    private Optional<String> blockLambdaSegmentFirstLine(String root, MethodCallExpr expression) {
+        int lambdaIndex = blockLambdaArgumentIndex(expression.getArguments());
+        if (lambdaIndex < 0) {
+            return Optional.empty();
+        }
+        LambdaExpr lambdaExpr = (LambdaExpr) expression.getArguments().get(lambdaIndex);
+        String leadingArguments = compactSource.compactJoin(expression.getArguments().subList(0, lambdaIndex));
+        String prefix = root + "."
+                + expression.getTypeArguments()
+                        .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
+                        .orElse("")
+                + expression.getNameAsString()
+                + "("
+                + (leadingArguments.isEmpty() ? "" : leadingArguments + ", ");
+        return Optional.of(prefix + lambdaParameters.apply(lambdaExpr) + " -> {");
+    }
+
+    private int blockLambdaArgumentIndex(NodeList<Expression> arguments) {
+        int lambdaIndex = -1;
+        for (int i = 0; i < arguments.size(); i++) {
+            if (arguments.get(i) instanceof LambdaExpr lambdaExpr && lambdaExpr.getBody().isBlockStmt()) {
+                if (lambdaIndex >= 0) {
+                    return -1;
+                }
+                lambdaIndex = i;
+            }
+        }
+        return lambdaIndex;
     }
 
     private Optional<Doc> compactRootWithBrokenFinalSegment(Expression root, MethodCallExpr call) {
@@ -584,7 +673,11 @@ final class MethodCallPrinter {
         if (!methodCallChainPromotesFirstCall(root) || calls.isEmpty()) {
             return false;
         }
-        return breakMode.isForced() || calls.getFirst().getArguments().stream()
+        return breakMode.isForced() || calls.stream().anyMatch(this::methodCallSegmentHasBlockLambdaArgument);
+    }
+
+    private boolean methodCallSegmentHasBlockLambdaArgument(MethodCallExpr expression) {
+        return expression.getArguments().stream()
                 .anyMatch(argument -> argument instanceof LambdaExpr lambdaExpr
                         && lambdaExpr.getBody().isBlockStmt());
     }

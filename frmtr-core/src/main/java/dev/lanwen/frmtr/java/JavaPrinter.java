@@ -206,6 +206,7 @@ final class JavaPrinter {
                 lambdas::huggableBlockLambdaArguments,
                 lambdas::commentedExpressionLambdaArgument,
                 lambdas::huggableMethodCallExpressionLambdaArguments,
+                lambdas::lambdaParameters,
                 textBlocks::renderUnformattedTextBlock,
                 binaryExpr -> binaries.nestedLines(binaryExpr, true),
                 this::currentIndentedWidth,

@@ -217,9 +217,6 @@ final class AnnotationExpressionPrinter {
         if (values.isEmpty()) {
             return "{}";
         }
-        if (expression.getValues().stream().allMatch(Expression::isClassExpr)) {
-            return "{ " + values + " }";
-        }
-        return "{" + values + "}";
+        return "{ " + values + " }";
     }
 }

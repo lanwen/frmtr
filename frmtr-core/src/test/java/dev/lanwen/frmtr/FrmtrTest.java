@@ -145,6 +145,24 @@ final class FrmtrTest {
     }
 
     @Test
+    void formatsFieldRootMethodChainCurrentOutputFixtureAndIsIdempotent() throws Exception {
+        String source = readResource("format/field-root-method-chain-current-output/input.java");
+        String expected = readResource("format/field-root-method-chain-current-output/frmtr.output.java");
+        FormatterOptions options = FormatterOptions.forLayout(
+                120,
+                FormatterOptions.IndentStyle.SPACE,
+                4,
+                FormatterOptions.LineEnding.LF,
+                true);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted).isEqualTo(expected);
+        assertThat(Frmtr.format(formatted, options)).isEqualTo(formatted);
+        assertThatCode(() -> StaticJavaParser.parse(formatted)).doesNotThrowAnyException();
+    }
+
+    @Test
     void formatsMethodCallCharLiteralFixtureAndIsIdempotent() throws Exception {
         String source = readResource("format/method-call-char-literal/input.java");
         String expected = readResource("format/method-call-char-literal/frmtr.output.java");

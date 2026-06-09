@@ -66,7 +66,6 @@ final class PrettierJavaFixtureTest {
             "lambda/arrow-parens-avoid",
             "member_chain",
             "method_reference",
-            "marker_annotations",
             "modules",
             "package_and_imports/classWithMixedImports",
             "package_and_imports/classWithMixedCaseImports",

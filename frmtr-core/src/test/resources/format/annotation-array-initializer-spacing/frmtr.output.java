@@ -1,6 +1,7 @@
 package dev.example;
 
 @TypeBindings({ Demo.Inner.class })
+@SuppressWarnings({ "rawtypes", "unchecked" })
 @EmptyBindings({})
 class Demo {
 

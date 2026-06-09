@@ -90,6 +90,8 @@ The audit-oriented formatter coverage map lives in [docs/formatter-coverage.md](
 
 `RawPreservedSource` is the canonical raw-output boundary for Java printer fallbacks. It wraps `RawSource` output or already-computed source-derived text in `Doc.Text` while atomically accounting for comments preserved by that output, including the variant where the node's own attached comment has already been emitted separately.
 
+`SourceText` maps JavaParser line/column ranges to half-open source offsets and slices the original source text for future recovery paths, with `SourceRegion` carrying the offset span plus debug-oriented line/column labels.
+
 `DeclarationPrefixPrinter` centralizes declaration-prefix annotation and modifier policy: leading annotation docs, inline annotation text after modifiers, declaration-annotation classification for member spacing, and canonical modifier ordering. It delegates annotation expression docs and flat annotation text to `AnnotationExpressionPrinter`, and leaves declaration header assembly with the declaration-specific printers.
 
 `VariableDeclarationPrinter` renders local variable declaration expressions after statement dispatch selects `VariableDeclarationExpr`: annotation and modifier prefixes, breakable local types, comma-separated declarator layout, and local-only declaration-prefix decisions. It delegates declarator initializer rendering to `FieldDeclarationPrinter` so local and field variables keep one initializer behavior source while field declarations remain field-owned.

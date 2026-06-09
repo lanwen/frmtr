@@ -136,7 +136,7 @@ final class MemberBlockPrinter {
                 new SourceOrderedCommentInterleaver.Spacing<>() {
                     @Override
                     public int beginLine(BodyDeclaration<?> sibling) {
-                        return CommentIndex.beginLine(sibling, Integer.MAX_VALUE);
+                        return memberBeginLine(sibling);
                     }
 
                     @Override
@@ -161,6 +161,14 @@ final class MemberBlockPrinter {
                         return sourceLineSeparator(previous.endLine(), comment.beginLine(Integer.MAX_VALUE));
                     }
                 }));
+    }
+
+    private int memberBeginLine(BodyDeclaration<?> member) {
+        int declarationBeginLine = CommentIndex.beginLine(member, Integer.MAX_VALUE);
+        return commentPlacement.leadingComment(member)
+                .map(comment -> comment.beginLine(declarationBeginLine))
+                .filter(commentBeginLine -> commentBeginLine < declarationBeginLine)
+                .orElse(declarationBeginLine);
     }
 
     /**

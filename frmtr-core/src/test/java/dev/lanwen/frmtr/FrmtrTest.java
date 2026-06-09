@@ -197,6 +197,7 @@ final class FrmtrTest {
             "chain-comment-ownership, 120",
             "field-trailing-comments, 120",
             "member-blank-lines, 120",
+            "member-comment-spacing, 120",
             "multiline-if-condition, 120",
             "object-creation-statement-argument, 120",
             "record-implements, 120",

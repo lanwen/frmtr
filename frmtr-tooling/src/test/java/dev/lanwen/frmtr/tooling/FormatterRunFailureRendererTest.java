@@ -74,8 +74,8 @@ final class FormatterRunFailureRendererTest {
                 │ 2  class Broken {
                 │    ┌─────^
                 │    │
-                │    └─ Parse error message with enough words to force wrapping in the failure renderer
-                │       without losing connector indentation.
+                │    ├─ Parse error message with enough words to force wrapping in the failure renderer
+                │    └─ without losing connector indentation.
                 └─""");
     }
 

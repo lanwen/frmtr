@@ -118,9 +118,11 @@ public final class FormatterRunFailureRenderer {
             contentLineIndex++;
             boolean lastContentLine = contentLineIndex == contentLineCount;
             List<String> wrapped = wrapMessageLine(line);
-            appendLine(rendered, gutter + messagePrefix(contentLineCount, lastContentLine) + wrapped.getFirst());
-            for (String continuation : wrapped.subList(1, wrapped.size())) {
-                appendLine(rendered, gutter + messageContinuationPrefix(contentLineCount, lastContentLine) + continuation);
+            for (int wrappedIndex = 0; wrappedIndex < wrapped.size(); wrappedIndex++) {
+                appendLine(
+                        rendered,
+                        gutter + messageLinePrefix(contentLineCount, lastContentLine, wrappedIndex, wrapped.size())
+                                + wrapped.get(wrappedIndex));
             }
         }
     }
@@ -140,12 +142,14 @@ public final class FormatterRunFailureRenderer {
         return List.copyOf(wrapped);
     }
 
-    private static String messagePrefix(long contentLineCount, boolean lastContentLine) {
-        return contentLineCount == 1 || lastContentLine ? "└─ " : "├─ ";
-    }
-
-    private static String messageContinuationPrefix(long contentLineCount, boolean lastContentLine) {
-        return contentLineCount == 1 || lastContentLine ? "   " : "│  ";
+    private static String messageLinePrefix(
+            long contentLineCount, boolean lastContentLine, int wrappedIndex, int wrappedLineCount) {
+        boolean onlyRenderedLine = contentLineCount == 1 && wrappedLineCount == 1;
+        boolean lastRenderedLine = lastContentLine && wrappedIndex == wrappedLineCount - 1;
+        if (onlyRenderedLine || lastRenderedLine) {
+            return "└─ ";
+        }
+        return wrappedIndex == 0 ? "├─ " : "│  ";
     }
 
     private static int lineNumberWidth(List<FormatterException.SourceProblem> problems) {

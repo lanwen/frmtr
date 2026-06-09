@@ -6,12 +6,12 @@ import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.doc.Doc;
 
 /**
- * Applies body-declaration-level pragma, raw-source, and leading-comment gates before content dispatch.
+ * Applies body-declaration-level pragma, raw-source, and attached-comment gates before content dispatch.
  *
  * <p>This helper owns the outer body-declaration rule envelope: formatter off/on and ignore pragmas, raw source
- * recovery, and the leading comment slot attached to the declaration itself. The boundary keeps those source-sensitive
- * gates out of {@link BodyDeclarationDispatcher}, which only narrows already-formattable declaration content, and out of
- * declaration printers, which render the selected declaration grammar.
+ * recovery, and the leading/trailing comment slot attached to the declaration itself. The boundary keeps those
+ * source-sensitive gates out of {@link BodyDeclarationDispatcher}, which only narrows already-formattable declaration
+ * content, and out of declaration printers, which render the selected declaration grammar.
  *
  * <p>Callers still choose when a body-declaration context is reached and provide the already-wired content dispatcher.
  * Class, record, enum, annotation, field, method, constructor, initializer, member sequencing, and fallback content
@@ -54,13 +54,17 @@ final class BodyDeclarationRuleEnvelope {
     }
 
     /**
-     * Prints the declaration's leading comment slot before structured or compact-fallback declaration content.
+     * Prints the declaration's attached comment slot around structured or compact-fallback declaration content.
      *
      * <p>Declaration printers may still own nested comments inside the declaration grammar, but the outer attached
      * comment belongs to this envelope so all body declarations pass through one comment gate before content dispatch.
+     * A same-line trailing line comment is kept after the declaration instead of being reclassified as a leading comment.
      */
     private Doc formattedBody(BodyDeclaration<?> declaration) {
-        return Doc.concat(comments.leading(declaration), bodyContent.format(declaration));
+        Doc trailing = comments.trailingLineComment(declaration);
+        Doc leading = trailing == Doc.EMPTY ? comments.leading(declaration) : Doc.EMPTY;
+        Doc body = bodyContent.format(declaration);
+        return Doc.concat(leading, body, trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing));
     }
 
     /**

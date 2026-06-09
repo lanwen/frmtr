@@ -101,25 +101,35 @@ final class AnnotationExpressionPrinter {
     }
 
     /**
-     * Renders {@code @Name(value)} while keeping binary values readable when they force the annotation to break.
+     * Renders {@code @Name(value)} while keeping array-value overflow decisions scoped to the enclosing annotation.
      *
-     * <p>Non-binary values stay directly between the parentheses even if their own value renderer produces multiline
-     * output, matching the legacy array-initializer shape. Binary values use an indented continuation because their
-     * operator lines otherwise collide visually with the annotation prefix.
+     * <p>Array values that are too wide by themselves keep the legacy {@code @Name({ ... })} broken-array shape. When
+     * the array value still fits alone but {@code @Name(...)} does not, the value moves to an indented continuation so
+     * the annotation prefix and suffix cannot make the final line overflow. Binary values use the same indented slot
+     * because their operator lines otherwise collide visually with the annotation prefix.
      */
     private Doc singleMemberAnnotation(SingleMemberAnnotationExpr annotation) {
         String prefix = "@" + compact.apply(annotation.getName());
-        String flatValue = compactAnnotationValue(annotation.getMemberValue());
+        Expression memberValue = annotation.getMemberValue();
+        String flatValue = compactAnnotationValue(memberValue);
         String flat = prefix + "(" + flatValue + ")";
         if (currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
             return Doc.text(flat);
         }
-        if (!(annotation.getMemberValue() instanceof BinaryExpr)) {
-            return Doc.concat(Doc.text(prefix + "("), annotationValue(annotation.getMemberValue()), Doc.text(")"));
+        if (memberValue instanceof ArrayInitializerExpr
+                && currentIndentedWidth.applyAsInt(flatValue) <= options.lineWidth()) {
+            return brokenSingleMemberAnnotation(prefix, Doc.text(flatValue));
         }
+        if (!(memberValue instanceof BinaryExpr)) {
+            return Doc.concat(Doc.text(prefix + "("), annotationValue(memberValue), Doc.text(")"));
+        }
+        return brokenSingleMemberAnnotation(prefix, annotationValue(memberValue));
+    }
+
+    private Doc brokenSingleMemberAnnotation(String prefix, Doc value) {
         return Doc.concat(
                 Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, annotationValue(annotation.getMemberValue()))),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, value)),
                 Doc.HARD_LINE,
                 Doc.text(")"));
     }

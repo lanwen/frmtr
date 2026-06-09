@@ -195,11 +195,13 @@ final class FrmtrTest {
             "block-lambda-call-initializers, 120",
             "block-lambda-setup-initializer, 120",
             "chain-comment-ownership, 120",
+            "field-trailing-comments, 120",
             "member-blank-lines, 120",
             "multiline-if-condition, 120",
             "object-creation-statement-argument, 120",
             "record-implements, 120",
             "return-chain-final-argument, 120",
+            "single-member-annotation-array-width, 120",
             "switch-empty-rules, 120",
             "variable-chain-initializer, 120"
     })

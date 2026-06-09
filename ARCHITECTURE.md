@@ -1,6 +1,20 @@
 # Architecture
 
-`frmtr` is a Java formatter with a small public API, thin CLI and Gradle adapters, and a formatter engine built around JavaParser plus an internal document IR. The project is split into focused Gradle modules so formatter internals and build-tool integrations can evolve behind explicit dependency boundaries.
+`frmtr` is a Java formatter with a small public API, thin CLI and Gradle adapters, and a formatter engine built around
+JavaParser plus an internal document IR. The project is split into focused Gradle modules so formatter internals and
+build-tool integrations can evolve behind explicit dependency boundaries.
+
+This file is the architecture overview. Detailed formatter ownership, recovery behavior, and fixture strategy live under
+`docs/` so the overview stays readable:
+
+- [docs/java-formatter-internals.md](docs/java-formatter-internals.md) explains the formatter pipeline, printer graph,
+  helper boundaries, comments, raw source handling, and guardrails.
+- [docs/formatter-coverage.md](docs/formatter-coverage.md) maps JavaParser AST kinds to their current formatter owner
+  and records intentional raw or compact fallback paths.
+- [docs/error-recovery-behavior.md](docs/error-recovery-behavior.md) documents the implemented JavaParser parse-error
+  recovery behavior and historical design decisions.
+- [docs/testing-strategy.md](docs/testing-strategy.md) explains module-level coverage, golden fixtures, adopted
+  `prettier-java` fixtures, and native-image compatibility checks.
 
 ## Build
 
@@ -11,50 +25,73 @@ The project is a Gradle multi-module build:
 - Root project: aggregator only; it does not produce the formatter library or CLI artifact.
 - `:frmtr-core`: formatter library and engine.
 - `:frmtr-tooling`: reusable file-oriented runner, result summaries, and diff rendering for adapters.
-- `:frmtr-cli`: Picocli application and native executable entrypoint that depends on `:frmtr-core` and `:frmtr-tooling`.
-- `:frmtr-gradle-plugin`: Gradle plugin with project-local formatting tasks that depends on `:frmtr-core` and `:frmtr-tooling`.
-- `:frmtr-native-image-support`: GraalVM native-image build-time companion module for JavaParser reflection metadata. It is wired only through native-image configurations, not normal JVM runtime classpaths.
+- `:frmtr-cli`: Picocli application and native executable entrypoint that depends on `:frmtr-core` and
+  `:frmtr-tooling`.
+- `:frmtr-gradle-plugin`: Gradle plugin with project-local formatting tasks that depends on `:frmtr-core` and
+  `:frmtr-tooling`.
+- `:frmtr-native-image-support`: GraalVM native-image build-time companion module for JavaParser reflection metadata. It
+  is wired only through native-image configurations, not normal JVM runtime classpaths.
 
-Shared subproject conventions configure Java 25, UTF-8 compilation, `-Xlint:all`, JUnit Platform, and JaCoCo. External dependency versions and the GraalVM Native Build Tools plugin are managed through the Gradle version catalog in `gradle/libs.versions.toml`.
+Shared subproject conventions configure Java 25, UTF-8 compilation, `-Xlint:all`, JUnit Platform, and JaCoCo. External
+dependency versions and the GraalVM Native Build Tools plugin are managed through the Gradle version catalog in
+`gradle/libs.versions.toml`.
 
-`:frmtr-cli` generates a small `BuildInfo` source file during compilation. It embeds the project version, current Git commit SHA, and build timestamp so JVM and native CLI binaries report the same build identity through `--version`.
+`:frmtr-cli` generates a small `BuildInfo` source file during compilation. It embeds the project version, current Git
+commit SHA, and build timestamp so JVM and native CLI binaries report the same build identity through `--version`.
 
 ## Package Layout
 
-- `frmtr-core/src/main/java/dev/lanwen/frmtr`: public API and configuration.
-- `frmtr-core/src/main/java/dev/lanwen/frmtr/doc`: formatter document IR and renderer.
-- `frmtr-core/src/main/java/dev/lanwen/frmtr/java`: JavaParser-backed parser, syntax view, comment handling, formatter pragma state, raw source text helpers, and Java-specific printer.
-- `frmtr-tooling/src/main/java/dev/lanwen/frmtr/tooling`: reusable file-oriented check/write runner, run summaries, per-file results, and unified diff rendering shared by adapters.
-- `frmtr-cli/src/main/java/dev/lanwen/frmtr/cli`: Picocli command-line adapter, selector discovery, ignore handling, and output modes.
-- `frmtr-gradle-plugin/src/main/java/dev/lanwen/frmtr/gradle`: Gradle extension, Java source-set integration, and formatter tasks.
-- `frmtr-native-image-support/src/main/java/dev/lanwen/frmtr/nativeimage`: native-image feature code that registers JavaParser AST node fields for hosted reflection.
+```text
+frmtr-core/src/main/java/dev/lanwen/frmtr
+|-- public API and configuration
+|-- doc
+|   `-- formatter document IR and renderer
+`-- java
+    `-- JavaParser-backed parser, syntax view, comment handling,
+        formatter pragma state, raw source text helpers, and Java-specific printer
+
+frmtr-tooling/src/main/java/dev/lanwen/frmtr/tooling
+`-- reusable file-oriented check/write runner, run summaries, per-file results,
+    and unified diff rendering shared by adapters
+
+frmtr-cli/src/main/java/dev/lanwen/frmtr/cli
+`-- Picocli command-line adapter, selector discovery, ignore handling, and output modes
+
+frmtr-gradle-plugin/src/main/java/dev/lanwen/frmtr/gradle
+`-- Gradle extension, Java source-set integration, and formatter tasks
+
+frmtr-native-image-support/src/main/java/dev/lanwen/frmtr/nativeimage
+`-- native-image feature code that registers JavaParser AST node fields for hosted reflection
+```
 
 ## Formatting Pipeline
 
 Single-source formatting starts at `Frmtr.format(...)`.
 
 1. `Frmtr` applies default or caller-provided `FormatterOptions`.
-2. If `FormatterOptions.requirePragma` is enabled, `JavaFormatter` first checks the leading Javadoc comment for a recognized opt-in marker. The public marker is `@format`; source without an opt-in marker is returned unchanged.
+2. If `FormatterOptions.requirePragma` is enabled, `JavaFormatter` first checks the leading Javadoc comment for a
+   recognized opt-in marker. The public marker is `@format`; source without an opt-in marker is returned unchanged.
 3. `JavaFormatter` parses source with JavaParser using stored tokens and attributed comments, then wraps the raw parser
    response in an internal parse-result boundary.
 4. Parse problems follow `FormatterOptions.ParseErrorBehavior`: `FAIL` rejects immediately with `FormatterException`,
-   while default `RECOVER` enters the recovery boundary. The current recovery slices support malformed block statement
-   lists, class/interface/record member declaration lists, import declaration lists, top-level declaration lists, module
-   directive lists, switch entry lists, enum constant lists, and annotation declaration member lists by formatting safe
-   siblings and raw-preserving unsafe gaps; unsupported parse-problem contexts still fail with a recovery-specific
-   reason.
+   while default `RECOVER` enters the recovery boundary. See
+   [docs/error-recovery-behavior.md](docs/error-recovery-behavior.md) for supported recovery slices and unsupported
+   contexts.
 5. The declared transform pipeline applies source-equivalent AST normalization before printing only when parsing
-   completed without parse problems. Recovered parse trees skip transforms so partially recovered syntax is not
-   reordered or mutated before raw-region printing.
-6. The printable tree is adapted into `SyntaxNodeView` to keep formatter-owned syntax metadata separate from JavaParser APIs.
+   completed without parse problems. Recovered parse trees skip transforms so partially recovered syntax is not reordered
+   or mutated before raw-region printing.
+6. The printable tree is adapted into `SyntaxNodeView` to keep formatter-owned syntax metadata separate from JavaParser
+   APIs.
 7. `JavaPrinter` walks JavaParser declarations and statements and emits `Doc` values.
 8. `DocRenderer` renders the document IR using line width, indentation, line ending, and trailing-newline options.
 
-JavaParser printers are not the formatter engine. They may be useful as references, but final formatting is owned by the `Doc` pipeline.
+JavaParser printers are not the formatter engine. They may be useful as references, but final formatting is owned by the
+`Doc` pipeline.
 
 ## Document IR
 
-`Doc` is the intermediate representation between Java syntax rules and text output. It models formatting decisions instead of building strings directly:
+`Doc` is the intermediate representation between Java syntax rules and text output. It models formatting decisions
+instead of building strings directly:
 
 - `Text` emits literal text.
 - `Concat` joins documents.
@@ -66,125 +103,111 @@ JavaParser printers are not the formatter engine. They may be useful as referenc
 
 `DocRenderer` is language-agnostic. Java-specific choices belong in `JavaPrinter`, not in the renderer. Label nodes are
 transparent to rendering, fitting, and width calculations.
+
 `DocDebugRenderer` provides a stable structural dump of the document tree so formatter maintainers can inspect break
-opportunities, indentation scopes, groups, flat-vs-broken alternatives, and high-level formatter rule labels. Label
-names are diagnostic formatter-internal names and may evolve when rule boundaries move. `Frmtr.debugDoc(...)` exposes
-that view for one Java source string after parsing, transforms, and Java printing, without invoking width-based
-rendering. It always builds the document tree for the supplied source; pragma gating remains formatted-output behavior.
-It is a core debug API only, not a formatting policy surface or CLI hook.
+opportunities, indentation scopes, groups, flat-vs-broken alternatives, and high-level formatter rule labels. Label names
+are diagnostic formatter-internal names and may evolve when rule boundaries move. `Frmtr.debugDoc(...)` exposes that view
+for one Java source string after parsing, transforms, and Java printing, without invoking width-based rendering. It is a
+core debug API only, not a formatting policy surface or CLI hook.
 
 ## File-Oriented Runs
 
 `:frmtr-tooling` provides reusable file-oriented support for adapters that need to check or write many source files:
 
-- `FormatterRunner.check(...)` formats selected files in memory and returns a `FormatRunResult` with per-file results and aggregate status helpers.
-- `FormatterRunner.write(...)` writes changed formatter output back to disk, continues after per-file failures, distinguishes write-step failures as partially written results, and reports the full run summary.
-- `UnifiedDiffRenderer` renders the same unified diff format for CLI and Gradle check output, using `origin` and `frmtr` as diff-side labels because adapters already print the file path on the surrounding status line.
-- `FormatterFailureRenderer` turns structured formatter failures into adapter-facing messages, including parse context, declaration-line context, and caret placement, without making the core exception message own terminal formatting.
-- `FormatterRunFailureRenderer` renders failed file results as outlined diagnostic blocks titled by the failure message while file identity stays with adapter status lines. Source diagnostics come from structured parser metadata, including line numbers, caret placement, wrapped messages, and vertical-dot gap markers inside the outline.
+- `FormatterRunner.check(...)` formats selected files in memory and returns a `FormatRunResult` with per-file results
+  and aggregate status helpers.
+- `FormatterRunner.write(...)` writes changed formatter output back to disk, continues after per-file failures,
+  distinguishes write-step failures as partially written results, and reports the full run summary.
+- `UnifiedDiffRenderer` renders the same unified diff format for CLI and Gradle check output, using `origin` and `frmtr`
+  as diff-side labels because adapters already print the file path on the surrounding status line.
+- `FormatterFailureRenderer` turns structured formatter failures into adapter-facing messages, including parse context,
+  declaration-line context, and caret placement, without making the core exception message own terminal formatting.
+- `FormatterRunFailureRenderer` renders failed file results as outlined diagnostic blocks titled by the failure message
+  while file identity stays with adapter status lines.
 
-The runner owns deterministic path ordering and de-duplication for file lists supplied by adapters. Source discovery remains adapter-specific: the CLI uses selectors and `.gitignore`; the Gradle plugin builds one canonical file collection from Java source sets and Gradle-style source filters, then uses that same collection for task inputs and task actions.
+The runner owns deterministic path ordering and de-duplication for file lists supplied by adapters. Source discovery
+remains adapter-specific: the CLI uses selectors and `.gitignore`; the Gradle plugin builds one canonical file collection
+from Java source sets and Gradle-style source filters, then uses that same collection for task inputs and task actions.
 
 ## Java Formatter
 
 `JavaFormatter` owns JavaParser configuration, pragma gating, parse-error handling, and the declared transform stage
 between parsing and printing. It enables token storage and comment attribution because formatter rules need
-syntax-adjacent trivia. `FormatterOptions` exposes one canonical record constructor for fully specified configuration,
-named static factories for common partial configurations that keep the remaining formatter policy at defaults, and
-focused withers such as `withParseErrorBehavior(...)` for changing one policy from a factory result.
-`FormatterOptions.JavaLanguageLevel` is the public parser-level setting; `JavaFormatter` converts it to JavaParser's
-own language-level enum internally. The default is `LATEST_AVAILABLE`, which maps to JavaParser's bleeding-edge parser
-mode, while `UNSET` deliberately selects JavaParser raw mode. Callers that need a strict release gate should choose a
-concrete `JAVA_*` value. `FormatterOptions.ParseErrorBehavior` is the public parse-problem policy. The default is
-`RECOVER`, which lets JavaParser return a partial compilation unit for recovered block statement-list,
-class/interface/record member declaration-list, import declaration-list, top-level declaration-list,
-module directive-list, switch entry-list, enum constant-list, and annotation declaration member-list printing; `FAIL`
-preserves strict fail-on-any-problem behavior. In
-`RECOVER`, `JavaFormatter` preflights recovered nodes so only malformed block statement-list,
-class/interface/record member declaration-list, import declaration-list, top-level declaration-list,
-module directive-list, switch entry-list, enum constant-list, and annotation declaration member-list regions reach the
-printer, skips transforms for parse-problem trees, and still fails unsupported recovered contexts with a recovery-specific reason. The private `JavaParseResult` boundary
-carries the compilation unit, parser problems, and problem flag so later diagnostics/debug APIs and recovery printers
-have one handoff point. `FormatterOptions.requirePragma` is an opt-in API setting that formats only files whose leading
-Javadoc comment contains the public `@format` marker. `FormatterOptions.LambdaArrowParens` controls whether
-single-parameter lambdas preserve source parentheses, avoid parentheses when Java syntax allows it, or always emit
-parentheses. `FormatterOptions.BinaryOperatorPosition` controls whether broken binary continuation lines keep operators
-at the end of the previous line or move operators to the start of continuation lines. Parse failures are reported with
-structured `SourceProblem` entries on `FormatterException`: parser message, one-based location when known, nearest
-enclosing declaration source line when detected, and up to five lines above and below the failure. Long source lines are
-cropped to a 256-character column window around the reported position. JavaParser 3.28.1 does not expose typed line or
-column accessors for `TokenMgrException`; lexical failures that omit `Problem` locations therefore use a fallback that
-parses the generated token-manager message only for that typed exception. CLI and Gradle rendering is handled outside
-core through `FormatterFailureRenderer` for single failures and `FormatterRunFailureRenderer` for outlined per-file run
-failures.
+syntax-adjacent trivia.
 
-The public `Frmtr` API wraps recoverable internal formatter failures, including parser dependency linkage failures and assertions, as `FormatterException.internal(...)` so adapters can report concise failures without treating them as VM-level crashes. `Frmtr.debugDoc(...)` shares that wrapping and the same parser, transform, and Java printing path as formatting, but returns `DocDebugRenderer` output instead of rendered source.
+`FormatterOptions` exposes one canonical record constructor for fully specified configuration, named static factories
+for common partial configurations that keep the remaining formatter policy at defaults, and focused withers such as
+`withParseErrorBehavior(...)` for changing one policy from a factory result.
 
-The audit-oriented formatter coverage map lives in [docs/formatter-coverage.md](docs/formatter-coverage.md). It maps JavaParser AST kinds to dispatcher and printer ownership, records the raw and compact fallback boundaries, and should be updated with formatter changes that alter the decision tree.
+Current public formatter policy includes:
 
-`JavaPrinter` wires the current Java formatting collaborators for common type declarations, fields, methods, constructors, statements, and outer expression callbacks. It creates one per-run `JavaFormatContext` for formatter-wide options, comment tracking, comment placement policy, formatter pragmas, raw source recovery, compact source text, and source-position comment placement, then passes that context only where it is clearer than threading those shared dependencies separately. It keeps the v1 style deliberately opinionated and sparse on options. `JavaFormatTransform` is the package-private transform contract for source-equivalent AST normalization that runs after parse and before printing; each transform returns a `JavaTransformResult` carrying the transformed `CompilationUnit` plus transform identity metadata, while `JavaTransformPipeline` sequences those results over one JavaParser tree and currently exposes only the final unit to the formatter. `ImportChunks` models source import chunks whose blank/comment gaps and detached leading comments are hard boundaries; `ImportSortTransform` is the current transform and sorts the compilation unit's existing import declarations into static-then-ordinary name order inside those safe chunks without cloning nodes, leaving comments and node identity attached for the printer. `JavaFormatRule` is the package-private node-rule contract used at dispatcher boundaries: after `JavaPrinter` and a dispatcher or printer have selected a declaration, statement, or expression category, a typed rule formats exactly that AST node while callers still own pragma state, comment attachment, raw-source recovery, compact fallback policy, and context selection. `StatementRuleEnvelope` applies the outer statement pragma/raw/comment gate before formatted statement content dispatch. `StatementPrinter` renders structured statement bodies, including simple semicolon statements, switch statements, if/else chains, loops, synchronized blocks, and try/catch/finally, while delegating switch-entry grammar, expression formatting, local variable declarations, declaration bodies, and block rendering back to existing owners. `ExpressionRuleEnvelope` applies the outer expression entry gate, including clone-before-own-comment-removal rendering for callers that have already claimed an attached comment, before formatted expression content dispatch. `ExpressionDispatcher` narrows broad `Expression` AST kinds once the envelope has selected expression content rendering, then delegates assignments, arrays, annotations, binaries, casts, conditionals, enclosed expressions, field accesses, instance checks, lambdas, method calls, method references, object creation, switch expressions, text blocks, and compact fallback text to typed `JavaFormatRule` callbacks backed by the existing specialized owners. It deliberately leaves expression-context selection, comment-removal entry variants, recursive layout policy, statement envelope handling, and statement switch selection to `JavaPrinter`, `ExpressionRuleEnvelope`, `StatementRuleEnvelope`, `StatementPrinter`, caller printers, and `SwitchPrinter`. `BodyDeclarationRuleEnvelope` applies the outer body-declaration pragma/raw/leading-comment gate before formatted declaration content dispatch. `BodyDeclarationDispatcher` narrows broad `BodyDeclaration` AST kinds once the envelope has selected structured content rendering. It delegates class/interface, record, enum, annotation, field, method, constructor, initializer, and compact fallback rendering through typed `JavaFormatRule` callbacks, leaving formatter pragma state, body-leading comment attachment, body-level raw-source recovery, declaration layout, member sequencing, and compact source policy with the envelope, specialized printers, and source helpers that own those concerns. `SwitchPrinter` renders switch expressions and reusable switch-entry grammar used by statement switches: selector line comments, empty versus non-empty switch blocks, default and pattern labels, record-pattern label wrapping, guards, rule entries, statement-group entries, source-only raw single-line rule entries, and switch entry bodies. It deliberately delegates statement switch selection, nested statement rendering, expression rendering, ordinary block rendering, statement separators, compact source text, compact type text, modifiers, and width calculations back through `JavaPrinter`, `StatementRuleEnvelope`, `StatementPrinter`, `BlockPrinter`, `CompactSourceText`, and `TypePrinter` callbacks. `ControlConditionPrinter` renders expressions after statement grammar or statement-switch rendering has selected a parenthesized control-condition context: compact selector and loop/condition text, width-triggered broken conditions, and the block-comment placement fork that keeps comments before or after the expression according to source ranges. It leaves broad expression dispatch, raw-source normalization, statement grammar, statement-switch selector placement, and width policy with `JavaPrinter`, `ExpressionRuleEnvelope`, `StatementRuleEnvelope`, `ExpressionDispatcher`, `StatementPrinter`, `SwitchPrinter`, `CompactSourceText`, `RawSource`, and existing expression-printer callbacks. `AssignmentExpressionPrinter` renders assignment expressions after expression dispatch selects `AssignExpr`: flat fallback output, the full-expression-statement width gate, suffixed enclosed values, binary-value continuations including the cast-division exception, anonymous-class-free object creation values, method-call and conditional assignment hooks, and nested assignment continuations while delegating broad expression dispatch, compact text, suffix handling, binary layout, object creation layout, method-call assignment layout, conditional assignment layout, and width checks back through existing collaborators. `ReturnExpressionPrinter` renders return-statement expressions after statement dispatch selects `return value;`: the whole-return-line width gate, forced method-call chains, forced conditional breaks, logical-complement parenthesized breaks, enclosed-expression breaks, and binary-expression parenthesized breaks while leaving return-statement assembly, broad expression dispatch, compact source text, and reusable expression layouts with `StatementPrinter`, `JavaPrinter`, `ExpressionRuleEnvelope`, `ExpressionDispatcher`, `CompactSourceText`, `MethodCallPrinter`, `ConditionalExpressionPrinter`, and `EnclosedExpressionPrinter` callbacks. `ConditionalExpressionPrinter` renders conditional expressions and owns the ternary-specific decision tree for assignment values, variable initializers, comments around `?` and `:`, nested conditional branches, and binary condition wrapping while leaving general expression dispatch, assignment dispatch, field declaration layout, raw source handling, and binary-expression continuation policy with `ExpressionRuleEnvelope`, `ExpressionDispatcher`, `BinaryExpressionPrinter`, and existing collaborators. `LambdaExpressionPrinter` renders lambda expressions and owns the lambda-specific decision tree for parameter parentheses, commented parameter reconstruction, expression versus block bodies, parenthesized lambdas, broken logical bodies, and lambda arguments that can be hugged by method calls or object creation. It deliberately delegates broad expression dispatch, statement and block rendering, call-chain layout, source-position predicates, compact source text, and binary-expression continuation policy back through `JavaPrinter`, `ExpressionRuleEnvelope`, `ExpressionDispatcher`, `BlockPrinter`, `BinaryExpressionPrinter`, `MethodCallPrinter`, `CompactSourceText`, and `CommentIndex` callbacks while constructor-call layout stays in `ObjectCreationPrinter`. `MethodCallPrinter` renders method calls and method-call chains once expression dispatch selects a `MethodCallExpr`: auto versus forced chain breaks, compact-root broken-final-segment calls, mixed field/method chains, name comments on chain segments, empty argument comments, commented argument-gap fallback lists, text-block arguments, single binary arguments, and method-call suffixes on enclosed scopes. It deliberately delegates broad expression dispatch, lambda argument rendering, object-creation root breaks, binary-expression continuation policy, compact source text, type-argument text, text-block literal rendering, enclosed-scope suffix breaking, reusable commented expression-list rendering, and width calculations back through `JavaPrinter`, `ExpressionRuleEnvelope`, `ExpressionDispatcher`, `CompactSourceText`, `ObjectCreationPrinter`, `LambdaExpressionPrinter`, `CommentedExpressionListPrinter`, `BinaryExpressionPrinter`, `EnclosedExpressionPrinter`, `TextBlockPrinter`, and `TypePrinter` callbacks. `MethodReferencePrinter` renders method references after expression dispatch selects `MethodReferenceExpr`: compact fallback output for ordinary references, type-argument suffix text, and the parenthesized-scope suffix path that keeps `::...` attached after a broken enclosed scope while delegating compact source text, type-argument joining, parenthesized expression breaking, and width checks back through `CompactSourceText`, `EnclosedExpressionPrinter`, and `TypePrinter` callbacks. `EnclosedSuffixDispatcher` centralizes the small bridge used by assignment and field initializer layout when a broken enclosed expression may need a method-call or method-reference suffix preserved; it selects the appropriate suffix-aware printer and leaves the actual suffix layout with `MethodCallPrinter` and `MethodReferencePrinter`. `TextBlockPrinter` renders text-block literal expressions after expression dispatch selects a `TextBlockLiteralExpr`: narrow HTML/JSON/Java/TypeScript content probes, formatted text-block reconstruction, raw fallback rendering, same-line closing-delimiter preservation, escaped triple-quote source spelling, and parent-depth content indentation. It deliberately leaves broad expression dispatch and single-argument method-call placement to `ExpressionRuleEnvelope`, `ExpressionDispatcher`, `JavaPrinter`, and `MethodCallPrinter` while using `RawSource` for token-sensitive literal text. `ObjectCreationPrinter` renders object creation after expression dispatch selects an `ObjectCreationExpr`: constructor-call prefixes, block comments around `new` and created types, forced constructor argument breaks, generic type-body breaks for empty constructor calls, lambda arguments that hug constructors, commented constructor argument gaps, and anonymous class body member sequencing. It deliberately delegates broad expression dispatch, compact source text, lambda argument shapes, reusable commented expression-list rendering, and declaration/member body rendering back through `JavaPrinter`, `ExpressionRuleEnvelope`, `ExpressionDispatcher`, `CompactSourceText`, `LambdaExpressionPrinter`, `CommentedExpressionListPrinter`, and `TypePrinter` callbacks. `ArrayExpressionPrinter` renders array access, array creation, array initializer braces, compact literal initializer acceptance, array-creation type breaks, forced initializer breaks for declaration callers, and initializer comments while delegating broad expression dispatch, compact source text, enclosed-scope suffix breaking, and width checks back through `JavaPrinter`, `ExpressionRuleEnvelope`, `ExpressionDispatcher`, `CompactSourceText`, and `EnclosedExpressionPrinter`; reusable source-position predicates come directly from `CommentIndex`. `AnnotationExpressionPrinter` renders annotation expressions after expression dispatch or declaration placement selects an annotation node: marker, normal, and single-member annotation shapes, annotation member pairs, compact annotation text, raw string-literal tokens inside compact annotation values, annotation array member values, trailing line comments, and binary annotation-value continuations while delegating broad expression dispatch, binary continuation policy, compact non-annotation source text, and width checks back through `JavaPrinter`, `ExpressionRuleEnvelope`, `ExpressionDispatcher`, `CompactSourceText`, and `BinaryExpressionPrinter` callbacks. `BinaryExpressionPrinter` renders binary expressions and shared binary continuation lines: same-operator flattening, start/end operator placement, line comments between operands, precedence parentheses, end-position method-call operand breaks, and cast-division continuation decisions while delegating ordinary expression and method-call docs back through `JavaPrinter`, `ExpressionRuleEnvelope`, `ExpressionDispatcher`, `MethodCallPrinter`, and `JavaCommentPlacementPolicy` callbacks. `CastExpressionPrinter` renders cast expressions and cast types after expression dispatch or field-initializer layout selects cast syntax: ordinary parenthesized cast types, line-width-aware intersection type breaks, operand rendering, and nested cast depth checks for the remaining enclosed-expression cast fork while delegating broad expression dispatch, compact type text, and width calculation back through `JavaPrinter`, `ExpressionRuleEnvelope`, `ExpressionDispatcher`, and `CompactSourceText` callbacks. `EnclosedExpressionPrinter` renders parenthesized expressions after expression dispatch selects `EnclosedExpr`: compact enclosed expressions, deeper cast-chain breaks, width-triggered conditional breaks inside parentheses, expression-statement lambda parentheses, return-expression parenthesized breaks, and broken enclosed scopes that keep array, method-call, and method-reference suffixes attached while delegating broad expression dispatch, compact text, cast-depth detection, lambda parenthesized breaks, conditional expression layout, binary continuation layout, and width checks back through existing collaborators. `InstanceOfExpressionPrinter` renders instance checks after expression dispatch selects `InstanceOfExpr`: flat output when the compact expression fits, otherwise a broken continuation whose `instanceof` placement follows the binary-operator position while delegating left-expression rendering, compact pattern/type text, and width checks back through `JavaPrinter`, `ExpressionRuleEnvelope`, `ExpressionDispatcher`, and `CompactSourceText` callbacks. `FieldAccessPrinter` renders dotted field accesses after expression dispatch selects `FieldAccessExpr`: scope rendering plus the comment-sensitive split when a line or block comment is attached to the accessed name token, while leaving compact field-access text and method-call chain layout with `CompactSourceText` and `MethodCallPrinter`. `CompilationUnitPrinter` sequences whole-file layout for source-leading package comments, orphan comments, package declarations, the import section built from already-ordered import chunks, optional module declarations, top-level declarations, compact unnamed-class member expansion, and trailing orphan comments while delegating module and body rendering back to `JavaPrinter` collaborators. `PackageDeclarationPrinter` renders package declarations and source-leading package comments while leaving compilation-unit ordering, orphan comments, import rendering, module declarations, and top-level declaration dispatch in `CompilationUnitPrinter`. `ImportDeclarationPrinter` renders individual import declarations while leaving import ordering to `ImportSortTransform`, and package/import/module sequencing plus import chunk construction and separation to `CompilationUnitPrinter`. `ModuleDeclarationPrinter` renders module declaration headers, chooses between raw commented module reconstruction and the structured header path, and delegates annotation rendering, compact module names, and brace-delimited module body rendering to collaborators. `ModuleBlockPrinter` prints normal structured module blocks and directives while leaving module header assembly and raw commented module fallback handling to `ModuleDeclarationPrinter` and `CommentedModulePrinter`. `TypePrinter` centralizes shared type-clause rendering, declaration type-parameter flat text, compact type-list joining, and breakable generic type bodies while accepting compact type text from `CompactSourceText` because that text still depends on raw-source normalization and expression compacting policy. `ClassOrInterfaceDeclarationPrinter` renders class and interface declaration headers, chooses the raw commented-interface fallback versus the structured path, and owns flat-versus-broken clause layout while delegating shared type-clause rendering to `TypePrinter` and member sequencing back to `JavaPrinter` collaborators. `RecordDeclarationPrinter` renders record headers, component lists, implements clauses, and same-line-versus-broken body starts while delegating annotation expression text to `AnnotationExpressionPrinter`, shared flat type-parameter and compact type-list text to `TypePrinter`, and member sequencing back to `MemberBlockPrinter`. `EnumDeclarationPrinter` renders enum headers, constant lists, source-sensitive enum semicolons, body orphan comments, and enum constant argument layout while delegating shared implements-clause rendering to `TypePrinter` and ordinary member rendering back to `JavaPrinter`. `AnnotationDeclarationPrinter` renders annotation type headers, annotation member blocks, and annotation member default values while delegating member declarations back through `JavaPrinter`. `FieldDeclarationPrinter` renders field declarations, comma-separated field variables, and variable-initializer break decisions while delegating shared expression, type, array-expression, method-call, binary-expression, cast-expression, object-creation, conditional-expression, and lambda rendering back to `JavaPrinter`, `ExpressionRuleEnvelope`, `ExpressionDispatcher`, `CompactSourceText`, `ArrayExpressionPrinter`, `ObjectCreationPrinter`, `MethodCallPrinter`, `BinaryExpressionPrinter`, `CastExpressionPrinter`, `ConditionalExpressionPrinter`, `LambdaExpressionPrinter`, and `TypePrinter` callbacks. `ConstructorDeclarationPrinter` renders normal and compact constructor headers while delegating parameter lists to `CallableSignaturePrinter`, shared throws-clause placement to `ThrowsClausePrinter`, compact type-parameter text to `CompactSourceText`, and body rendering to `BlockPrinter`. `MethodDeclarationPrinter` renders structured method headers, body-versus-semicolon suffixes, and the raw commented-method fallback handoff while delegating parameter lists to `CallableSignaturePrinter`, commented signature reconstruction to `CommentedMethodSignaturePrinter`, shared throws-clause placement to `ThrowsClausePrinter`, compact default values to `CompactSourceText`, and body rendering to `BlockPrinter`. `InitializerDeclarationPrinter` renders static and instance initializer declarations while delegating initializer body rendering to `BlockPrinter`. `MemberBlockPrinter` sequences already-rendered type members with orphan comments, opening-brace line comments, and source-range-sensitive blank lines without deciding how declarations render. `BlockPrinter` sequences already-rendered statements inside block bodies with orphan comments, printable empty statements, formatter-pragma separator rules, and source-range-sensitive blank lines without deciding how statements render. `CallableSignaturePrinter` renders callable receiver parameters, ordinary parameters, and declaration type-parameter lists while leaving method, constructor, class, and record header assembly to their declaration printers and breakable type bodies to `TypePrinter`. `ThrowsClausePrinter` renders shared method and constructor throws-clause placement, including compact exception joining and the width fork between already-broken parameters and flat signatures, while leaving declaration header assembly, parameter-list docs, suffix selection, compact source policy, and current indentation width to callers. `CommentedModulePrinter` owns the raw-source escape hatch for module headers and module directives whose inline comments are not exposed by JavaParser in a structured form useful to normal module directive printing. `CommentedMethodSignaturePrinter` owns the raw-source escape hatch for method signatures whose comments are not exposed by JavaParser in a structured form useful to normal method-signature printing. `CommentedInterfacePrinter` owns the raw-source escape hatch for interface headers and abstract method signatures whose inline comments are not exposed by JavaParser in a structured form useful to normal interface declaration printing. `JavaFormatContext` carries the per-run shared `FormatterOptions`, `CommentTracker`, `JavaCommentPlacementPolicy`, `FormatterPragmas`, `RawSource`, `CompactSourceText`, and `CommentPlacement` for `JavaPrinter`-owned composition without exposing printer instances or dispatch callbacks. `FormatterPragmas` tracks formatter off/on and ignore pragmas for printer dispatch without deciding how declarations or statements render. `RawSource` centralizes JavaParser token-range text access and whitespace normalization used by printer rules when formatting requires raw source text or compact source-derived text. `CompactSourceText` centralizes source-equivalent compact text: raw string-literal token spelling, recursive field-access reconstruction, comment-free method-call reconstruction, generic delimiter spacing cleanup for type-like snippets, comma joining, and clone-before-comment-removal behavior. It deliberately leaves broad expression dispatch, doc layout, comment attachment, width policy, and type-clause layout to the caller printers. `CommentPlacement` recovers source-position-sensitive attached and unattached block-comment docs through `JavaCommentPlacementPolicy` while leaving comment rendering and claim state to `CommentTracker`, and spacing and surrounding layout to caller printers. `CommentedExpressionListPrinter` centralizes broken parenthesized expression lists whose argument gaps contain line comments, including comments before the first argument, between arguments, after the last argument, and same-line trailing comments. `SourceOrderedCommentInterleaver` centralizes source-order merging of syntax siblings with orphan comments for block-like printers while callers retain grammar-specific separator decisions. `CommentedTokenText` centralizes the small comment-aware tokenization and token-line text helpers used by raw-source fallback formatting.
+- `FormatterOptions.JavaLanguageLevel`: the public parser-level setting. `LATEST_AVAILABLE` maps to JavaParser's
+  bleeding-edge parser mode, while `UNSET` deliberately selects JavaParser raw mode.
+- `FormatterOptions.ParseErrorBehavior`: the public parse-problem policy. The default is `RECOVER`; `FAIL` preserves
+  strict fail-on-any-problem behavior.
+- `FormatterOptions.requirePragma`: an opt-in setting that formats only files whose leading Javadoc comment contains the
+  public `@format` marker.
+- `FormatterOptions.LambdaArrowParens`: controls whether single-parameter lambdas preserve, avoid, or always emit
+  parentheses.
+- `FormatterOptions.BinaryOperatorPosition`: controls whether broken binary continuation lines keep operators at the end
+  of the previous line or move operators to the start of continuation lines.
 
-For parse-problem `RECOVER` runs, `JavaFormatContext` also carries `SourceText`, `RecoveredListPlanner`, and
-`RecoveredSourceRegions` into the printer graph. `BlockPrinter` uses those helpers for block statement-list recovery:
-safe statement siblings render normally, unsafe sibling spans become raw source islands, comments fully contained by raw
-islands are raw-accounted by `RecoveredSourceRegions`, and unsafe planner results fail formatting rather than dropping
-source. `MemberBlockPrinter` uses the same helpers for class/interface/record member declaration-list recovery,
-activating only for immediate member-block parsedness problems so nested statement recovery remains owned by
-`BlockPrinter`; safe member siblings render through the normal declaration formatter, while unsafe member gaps become
-raw islands. `CompilationUnitPrinter` uses the same helpers for top-level declaration-list recovery, activating only for
-immediate top-level type parsedness problems and bounding raw gaps to the type-declaration list so file headers, package
-declarations, imports, and module declarations stay outside raw recovery. `ModuleBlockPrinter` uses the same helpers for
-module directive-list recovery, keeping the module header and braces formatter-owned while safe directive siblings render
-through normal directive formatting and unsafe directive gaps become raw islands limited to the module body.
-`SwitchPrinter` uses the same helpers for switch entry-list recovery, keeping the selector and switch braces
-formatter-owned while safe entry siblings render normally and unsafe entry gaps become raw islands limited to the switch
-block interior. `EnumDeclarationPrinter` uses the same helpers for enum constant-list recovery, keeping enum braces and
-body members formatter-owned while safe constant siblings render normally and unsafe constant gaps become raw islands
-limited to the enum constant list before the body semicolon or closing brace. `AnnotationDeclarationPrinter` uses the
-same helpers for annotation declaration member-list recovery, keeping annotation braces formatter-owned while safe member
-siblings render normally and unsafe member gaps become raw islands limited to the annotation body interior. Statement,
-expression, and declaration envelopes keep conservative guards so recovered regions outside these slices do not flow
-through unsupported printers as normal parsed nodes.
+Parse failures are reported with structured `SourceProblem` entries on `FormatterException`: parser message, one-based
+location when known, nearest enclosing declaration source line when detected, and source context around the failure. CLI
+and Gradle rendering is handled outside core through `FormatterFailureRenderer` for single failures and
+`FormatterRunFailureRenderer` for outlined per-file run failures.
 
-`RawPreservedSource` is the canonical raw-output boundary for Java printer fallbacks. It wraps `RawSource` output or already-computed source-derived text in `Doc.Text` while atomically accounting for comments preserved by that output, including the variant where the node's own attached comment has already been emitted separately.
+The public `Frmtr` API wraps recoverable internal formatter failures, including parser dependency linkage failures and
+assertions, as `FormatterException.internal(...)` so adapters can report concise failures without treating them as
+VM-level crashes. `Frmtr.debugDoc(...)` shares that wrapping and the same parser, transform, and Java printing path as
+formatting, but returns `DocDebugRenderer` output instead of rendered source.
 
-`SourceText` maps JavaParser line/column ranges to half-open source offsets and slices the original source text for recovery paths, with `SourceRegion` carrying the offset span plus debug-oriented line/column labels. `RecoveredListPlanner` plans formatter-owned sibling lists into valid siblings and raw gaps, while `RecoveredSourceRegions` emits those raw gaps as labeled source islands and accounts fully contained comments.
-
-`DeclarationPrefixPrinter` centralizes declaration-prefix annotation and modifier policy: leading annotation docs, inline annotation text after modifiers, declaration-annotation classification for member spacing, and canonical modifier ordering. It delegates annotation expression docs and flat annotation text to `AnnotationExpressionPrinter`, and leaves declaration header assembly with the declaration-specific printers.
-
-`VariableDeclarationPrinter` renders local variable declaration expressions after statement dispatch selects `VariableDeclarationExpr`: annotation and modifier prefixes, breakable local types, comma-separated declarator layout, and local-only declaration-prefix decisions. It delegates declarator initializer rendering to `FieldDeclarationPrinter` so local and field variables keep one initializer behavior source while field declarations remain field-owned.
-
-`CommentTracker` is the package-private per-run comment accounting helper for comments selected by `JavaCommentPlacementPolicy` as leading, trailing, or orphan comments. It renders comments through `JavaCommentTrivia` so printable comment claims and comment-kind checks share one identity-based path, stores raw-preserved comment marks supplied by `RawPreservedSource`, and exposes the debug-only end-of-compilation-unit assertion that all JavaParser-visible comments were either printed or raw-accounted. It retains raw `Comment` predicate entry points for formatter areas not yet migrated and leaves layout decisions with caller printers.
-
-`JavaCommentMap` captures JavaParser's own, orphan, and contained comment associations once at the `JavaPrinter.print(CompilationUnit)` boundary. `JavaCommentPlacementPolicy` reads that map to answer leading, trailing-line, orphan, contained, before-first-child, between-neighbor, after-last-child, and same-line placement queries without rendering docs or mutating claim state.
-
-`JavaCommentKind` and `JavaCommentTrivia` classify JavaParser comments as line, block, Javadoc, or unknown trivia, expose reusable source-position queries through `CommentIndex`, and let `CommentTracker` preserve identity-based printed-comment claims without making printers repeat raw subclass and range checks.
-
-`CommentIndex` centralizes read-only source-position classification for comments, including explicit-fallback begin/end line lookups, line/column comparisons, line-range containment, same-begin-line checks, source-order sorting, contained line-comment selection, and between-node comment gaps. It does not render comments or mutate printed-comment state; `CommentTracker` remains responsible for rendered comment docs and consumption, while caller printers and `CommentPlacement` decide spacing and layout context.
-
-`FormatterGuardrails` hosts opt-in internal pipeline diagnostics. Setting `dev.lanwen.frmtr.debug.guardrails=true` enables development-only checks such as duplicate comment-claim failures, end-of-format missed-comment accounting failures, and transform identity checks while the default path keeps existing best-effort skip behavior and formatter output unchanged. Transform checks run from `JavaTransformPipeline` and assert that source-equivalent transforms keep the same `CompilationUnit` root and preserve existing JavaParser child-node identities across the tree, preserve JavaParser-visible comment identities, and reorder existing import declarations without cloning or moving their attached comments. Raw-source fallback paths that intentionally preserve JavaParser-visible comments go through `RawPreservedSource`, so the final assertion reports only comments that were neither structured-printed nor deliberately raw-preserved.
+`JavaPrinter` creates one per-run `JavaFormatContext`, wires formatter collaborators, and keeps the v1 style
+deliberately opinionated and sparse on options. Formatter ownership then narrows through envelope gates, dispatcher
+boundaries, and specialized declaration, statement, expression, type, comment, raw-source, and recovery helpers. See
+[docs/java-formatter-internals.md](docs/java-formatter-internals.md) for those collaborator boundaries and
+[docs/formatter-coverage.md](docs/formatter-coverage.md) for the AST ownership map.
 
 ## CLI
 
 The CLI is an adapter over the public formatter API:
 
 - No selectors: discover `./**/*.java` and check formatting by default.
-- `--stdin`: read Java source from stdin and write formatted source to stdout; when combined with `--check` or `--diff`, compare stdin against formatter output using `stdin` as the display path. This mode is separate from file selectors and `--write`.
-- `--check`: report each checked Java file with a status marker and exit non-zero when changes are needed. `✓` means already formatted, `✗` means formatting would change, and `!` means parsing or reading failed. Non-stacktrace file-run failures are printed on stdout immediately after the failed file status line, and file check runs end with a concise stdout summary counting unchanged, would-change, and failed files.
-- `--diff`: in check mode, print unified diffs for sources marked `✗`; passed sources and parse/read failures do not produce diff blocks. With no selectors or `--stdin`, `--diff` implies check mode. Diff output uses `origin` and `frmtr` labels instead of repeating the file path, and failure diagnostics follow their file status lines before the same check summary.
-- `--write`: rewrite files in place, group file-run failures on stderr by display path, and print a concise stdout processed summary counting formatted, failed, ignored, and unchanged files. Ignored files are `.java` files excluded by `.gitignore` during selector discovery.
+- `--stdin`: read Java source from stdin and write formatted source to stdout; when combined with `--check` or `--diff`,
+  compare stdin against formatter output using `stdin` as the display path. This mode is separate from file selectors and
+  `--write`.
+- `--check`: report each checked Java file with a status marker and exit non-zero when changes are needed. `✓` means
+  already formatted, `✗` means formatting would change, and `!` means parsing or reading failed. Non-stacktrace file-run
+  failures are printed on stdout immediately after the failed file status line, and file check runs end with a concise
+  stdout summary counting unchanged, would-change, and failed files.
+- `--diff`: in check mode, print unified diffs for sources marked `✗`; passed sources and parse/read failures do not
+  produce diff blocks. With no selectors or `--stdin`, `--diff` implies check mode. Diff output uses `origin` and
+  `frmtr` labels instead of repeating the file path, and failure diagnostics follow their file status lines before the
+  same check summary.
+- `--write`: rewrite files in place, group file-run failures on stderr by display path, and print a concise stdout
+  processed summary counting formatted, failed, ignored, and unchanged files. Ignored files are `.java` files excluded by
+  `.gitignore` during selector discovery.
 - `--version`: print the project version, Git commit SHA, and build timestamp.
-- `--java-level`: select the core Java parser language level; accepts enum names such as `LATEST_AVAILABLE` and `UNSET`, plus release shorthands such as `21` or `JAVA_21`.
-- `--parse-error-behavior`: select the core parse-error policy; defaults to `recover` and accepts `fail` for strict parse failures.
-- `--stacktrace`: include formatter or I/O stack traces in failure output; default CLI failures stay concise. Internal formatter failures are reported as internal bugs with the original failure summary and a stacktrace hint.
+- `--java-level`: select the core Java parser language level; accepts enum names such as `LATEST_AVAILABLE` and `UNSET`,
+  plus release shorthands such as `21` or `JAVA_21`.
+- `--parse-error-behavior`: select the core parse-error policy; defaults to `recover` and accepts `fail` for strict parse
+  failures.
+- `--stacktrace`: include formatter or I/O stack traces in failure output; default CLI failures stay concise. Internal
+  formatter failures are reported as internal bugs with the original failure summary and a stacktrace hint.
 - Selectors may be repeated, comma-separated, files, directories, or glob patterns.
 - Directory and glob traversal formats `.java` files, skips unknown extensions silently, and respects `.gitignore`.
-- Missing explicit `.java` file selectors are tool errors reported on stderr with exit code 2. Empty glob or directory matches are not tool errors, but the CLI reports `No Java files matched.` on stderr instead of exiting silently.
-- Multiple matched files without `--write` or `--check` are printed to stdout with filename headers. Because stdout is formatted source in this mode, the final processed summary is printed to stderr and counts printed, failed, and ignored files.
+- Missing explicit `.java` file selectors are tool errors reported on stderr with exit code 2. Empty glob or directory
+  matches are not tool errors, but the CLI reports `No Java files matched.` on stderr instead of exiting silently.
+- Multiple matched files without `--write` or `--check` are printed to stdout with filename headers. Because stdout is
+  formatted source in this mode, the final processed summary is printed to stderr and counts printed, failed, and ignored
+  files.
 
-CLI behavior should not own formatting policy. New formatting behavior belongs in the API and Java formatter pipeline first.
+CLI behavior should not own formatting policy. New formatting behavior belongs in the API and Java formatter pipeline
+first.
 
-The CLI module owns application packaging and Gradle `run` wiring. Local execution uses `./gradlew :frmtr-cli:run --args='...'`; the `run` task uses the root project as its working directory and forwards `System.in` so selectors, default discovery, and `--stdin` behave like the native binary during local development.
+The CLI module owns application packaging and Gradle `run` wiring. Local execution uses
+`./gradlew :frmtr-cli:run --args='...'`; the `run` task uses the root project as its working directory and forwards
+`System.in` so selectors, default discovery, and `--stdin` behave like the native binary during local development.
 
 ## Gradle Plugin
 
@@ -193,40 +216,60 @@ The Gradle plugin ID is `dev.lanwen.frmtr`. Applying it creates project-local ag
 - `frmtrFormat`: mutating formatter task aggregate, never wired into lifecycle tasks.
 - `frmtrCheck`: verification aggregate wired into Gradle's `check` lifecycle.
 
-When the Gradle Java plugin is present, Java formatting is enabled by convention without requiring a `frmtr {}` block. The plugin registers:
+When the Gradle Java plugin is present, Java formatting is enabled by convention without requiring a `frmtr {}` block.
+The plugin registers:
 
 - `frmtrJavaFormat`: formats selected Java source-set files in place.
-- `frmtrJavaCheck`: checks selected Java source-set files, suppresses unchanged-file output by default, prints `✗` status lines, groups failed files by display path, and prints unified diffs with `origin` and `frmtr` side labels for changed files by default.
+- `frmtrJavaCheck`: checks selected Java source-set files, suppresses unchanged-file output by default, prints `✗`
+  status lines, groups failed files by display path, and prints unified diffs with `origin` and `frmtr` side labels for
+  changed files by default.
 
-The plugin is project-local. Applying it to a root project does not automatically reach into subprojects; users should apply it in each project or through a convention plugin.
+The plugin is project-local. Applying it to a root project does not automatically reach into subprojects; users should
+apply it in each project or through a convention plugin.
 
-Default Java source selection covers all Java source sets, de-duplicates files by normalized path, and excludes files under the project's Gradle build directory. `frmtr { java { include(...) exclude(...) } }` narrows source-set selection using source-root-relative Gradle patterns. Formatter tasks do not depend on source-generation tasks by default.
+Default Java source selection covers all Java source sets, de-duplicates files by normalized path, and excludes files
+under the project's Gradle build directory. `frmtr { java { include(...) exclude(...) } }` narrows source-set selection
+using source-root-relative Gradle patterns. Formatter tasks do not depend on source-generation tasks by default.
 
-Gradle exposes parser language level as semantic DSL choices instead of mirroring every core Java release. `AUTO` infers from `sourceCompatibility` first, then the Java toolchain language version, and otherwise falls back to `LATEST_AVAILABLE`. `LATEST_AVAILABLE` explicitly ignores the Gradle project target and uses the core bleeding-edge JavaParser mode. `UNDEFINED` maps to the core `UNSET` raw parser mode. Gradle stack trace output is controlled by Gradle's native `--stacktrace`; the plugin does not define a formatter-specific stacktrace switch.
+Gradle exposes parser language level as semantic DSL choices instead of mirroring every core Java release. `AUTO` infers
+from `sourceCompatibility` first, then the Java toolchain language version, and otherwise falls back to
+`LATEST_AVAILABLE`. `LATEST_AVAILABLE` explicitly ignores the Gradle project target and uses the core bleeding-edge
+JavaParser mode. `UNDEFINED` maps to the core `UNSET` raw parser mode. Gradle stack trace output is controlled by
+Gradle's native `--stacktrace`; the plugin does not define a formatter-specific stacktrace switch.
 
 ## Native Binary
 
-`frmtr-cli` applies GraalVM Native Build Tools and configures the native executable name as `frmtr`. It adds `:frmtr-native-image-support` to `nativeImageCompileOnly` and `nativeImageTestCompileOnly` so the companion module is visible to native-image builds and native tests without becoming part of `implementation` or ordinary JVM runtime classpaths.
+`frmtr-cli` applies GraalVM Native Build Tools and configures the native executable name as `frmtr`. It adds
+`:frmtr-native-image-support` to `nativeImageCompileOnly` and `nativeImageTestCompileOnly` so the companion module is
+visible to native-image builds and native tests without becoming part of `implementation` or ordinary JVM runtime
+classpaths.
 
-Picocli's annotation processor generates CLI reflection and resource metadata during `:frmtr-cli:compileJava`. Proxy metadata generation is disabled because the CLI does not require dynamic proxy entries and GraalVM 25 deprecates `proxy-config.json` files discovered under `META-INF/native-image`.
+Picocli's annotation processor generates CLI reflection and resource metadata during `:frmtr-cli:compileJava`. Proxy
+metadata generation is disabled because the CLI does not require dynamic proxy entries and GraalVM 25 deprecates
+`proxy-config.json` files discovered under `META-INF/native-image`.
 
-`:frmtr-native-image-support` contributes `dev.lanwen.frmtr.nativeimage.JavaParserReflectionFeature` through native-image metadata. The feature iterates `JavaParserMetaModel.getNodeMetaModels()` and registers every declared field on each JavaParser AST node type with GraalVM hosted reflection APIs.
+`:frmtr-native-image-support` contributes `dev.lanwen.frmtr.nativeimage.JavaParserReflectionFeature` through native-image
+metadata. The feature iterates `JavaParserMetaModel.getNodeMetaModels()` and registers every declared field on each
+JavaParser AST node type with GraalVM hosted reflection APIs.
 
-Docker is the default Linux native build path. `Dockerfile.native` builds inside `ghcr.io/graalvm/native-image-community:25` and emits a glibc-linked Linux binary. Docker on macOS still produces a Linux binary because native-image targets the build operating system and toolchain.
+Docker is the default Linux native build path. `Dockerfile.native` builds inside
+`ghcr.io/graalvm/native-image-community:25` and emits a glibc-linked Linux binary. Docker on macOS still produces a Linux
+binary because native-image targets the build operating system and toolchain.
 
 Local host-native builds use SDKMAN-managed GraalVM from `.sdkmanrc`, then `./gradlew :frmtr-cli:nativeCompile`.
 
 ## Tests
 
-The test suite covers:
+The test suite is module-scoped:
 
-- `:frmtr-core`: Doc rendering behavior, formatter output, idempotence, reparse validity, comments, parse errors, and fixture corpus checks.
-- `:frmtr-tooling`: file-oriented run summaries, deterministic ordering, de-duplication, diffs, write behavior, and per-file failure handling.
-- `:frmtr-cli`: CLI selector parsing, glob/directory discovery, ignore handling, stdout/write/check behavior, end-of-run summaries, explicit no-file diagnostics, option validation, and exit codes.
-- `:frmtr-gradle-plugin`: TestKit functional coverage for task registration, zero-configuration Java defaults, `check` lifecycle wiring, no-op non-Java projects, Gradle and source-set source filters, build-directory exclusion, check diff output, Java language-level inference, and explicit Gradle language-level overrides.
-- `:frmtr-native-image-support`: JavaParser metamodel coverage for native-image reflection registration, including known-risk AST fields used by field and variable declarations.
-- `:frmtr-cli:nativeTest`: native-image compatibility coverage for JavaParser reflection-sensitive syntax. It is explicit native coverage and is not wired into the default JVM `check` lifecycle.
-- Golden resources under `frmtr-core/src/test/resources/format`, using directory-local companion files such as `input.java` and `frmtr.output.java`.
-- The adopted upstream `prettier-java` fixture set under `frmtr-core/src/test/resources/format/prettier-java`, with verbatim upstream `input.java` and `prettier.output.java` files, checked-in `frmtr.output.java` snapshots for fixtures whose upstream syntax JavaParser can parse, and an explicit upstream-compatibility subset compared directly against `prettier.output.java` using an 80-column, two-space, raw-trailing-whitespace-preserving compatibility baseline. Fixture-local `frmtr.options.properties` metadata, inherited from parent fixture directories, records option-matrix overrides such as pragma-gated mode, lambda arrow-parens mode, binary-operator position, or wider line width without changing Java fixture inputs or expected outputs. Fixtures using upstream syntax unsupported by the bundled JavaParser dependency stay in the adopted tree, are explicitly enumerated in tests, and are skipped by formatter assertions until parser support exists. `frmtr-output-examples` preserves formatter snapshots from earlier parseable adaptations of unsupported fixtures as examples only.
+- `:frmtr-core`: formatter engine, document rendering, parser behavior, Java output, and formatter fixtures.
+- `:frmtr-tooling`: file-oriented runs, diffs, ordering, de-duplication, write behavior, and per-file failure handling.
+- `:frmtr-cli`: selector parsing, discovery, ignore handling, stdin/stdout/write/check modes, summaries, diagnostics,
+  option validation, and exit codes.
+- `:frmtr-gradle-plugin`: TestKit functional coverage for task registration, Java defaults, lifecycle wiring, source
+  filters, build-directory exclusion, diff output, and Java language-level inference.
+- `:frmtr-native-image-support`: JavaParser metamodel coverage for native-image reflection registration.
+- `:frmtr-cli:nativeTest`: explicit native-image compatibility coverage outside the default JVM `check` lifecycle.
 
-New formatter rules should include golden coverage plus idempotence and reparse checks where practical.
+Golden fixture strategy, the adopted upstream `prettier-java` corpus, and new-rule coverage expectations are documented
+in [docs/testing-strategy.md](docs/testing-strategy.md).

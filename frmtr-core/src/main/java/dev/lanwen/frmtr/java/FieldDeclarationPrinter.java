@@ -21,6 +21,7 @@ import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.ast.type.IntersectionType;
 import com.github.javaparser.ast.type.Type;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
@@ -340,6 +341,12 @@ final class FieldDeclarationPrinter {
                     castType.apply(castExpr.getType()),
                     Doc.text(" "),
                     brokenMethodCall.apply(methodCall));
+        }
+        if (currentIndentedWidth(flat) > options.lineWidth()
+                && initializer instanceof CastExpr castExpr
+                && castTypeNeedsBreak(declarationPrefix + variable.getNameAsString(), castExpr.getType())
+                && !initializerHasOwnBreak(initializer)) {
+            return variableWithCastTypeBreak(name, declarationPrefix + variable.getNameAsString(), castExpr);
         }
         if (currentIndentedWidth(flat) > options.lineWidth()
                 && initializer instanceof ConditionalExpr conditionalExpr
@@ -692,6 +699,43 @@ final class FieldDeclarationPrinter {
             return variable.getNameAsString();
         }
         return commentText(leadingBlockComment) + " " + variable.getNameAsString();
+    }
+
+    /**
+     * Keeps assignment and cast opener together when the cast type itself owns the first useful break.
+     *
+     * <p>Simple casts still use the ordinary wide-initializer fallback because they do not provide an internal type break
+     * that can absorb the overflow after {@code =}.
+     */
+    private Doc variableWithCastTypeBreak(String name, String flatName, CastExpr castExpr) {
+        Doc initializer = expression.apply(castExpr);
+        if (castTypeOpenerFitsOnEqualsLine(flatName, castExpr.getType())) {
+            return Doc.group(Doc.concat(Doc.text(name + " = "), initializer));
+        }
+        return Doc.group(Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.LINE, initializer))));
+    }
+
+    private boolean castTypeNeedsBreak(String flatName, Type type) {
+        return castTypeCanBreak(type)
+                && currentIndentedWidth(flatName + " = (" + compactTypeLike.apply(type) + ")") > options.lineWidth();
+    }
+
+    private boolean castTypeOpenerFitsOnEqualsLine(String flatName, Type type) {
+        return currentIndentedWidth(flatName + " = " + castTypeOpener(type)) <= options.lineWidth();
+    }
+
+    private String castTypeOpener(Type type) {
+        if (type instanceof ClassOrInterfaceType classOrInterfaceType
+                && classOrInterfaceType.getTypeArguments().isPresent()) {
+            return "(" + typeNameWithoutArguments.apply(classOrInterfaceType) + "<";
+        }
+        return "(";
+    }
+
+    private boolean castTypeCanBreak(Type type) {
+        return type instanceof IntersectionType
+                || (type instanceof ClassOrInterfaceType classOrInterfaceType
+                        && classOrInterfaceType.getTypeArguments().isPresent());
     }
 
     /**

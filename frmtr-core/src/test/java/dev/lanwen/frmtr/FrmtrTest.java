@@ -1276,6 +1276,25 @@ final class FrmtrTest {
     }
 
     @Test
+    void formatsGenericTypeBodyBreaksFixtureAndIsIdempotent() throws Exception {
+        String source = readResource("format/generic-type-body-breaks/input.java");
+        String expected = readResource("format/generic-type-body-breaks/frmtr.output.java");
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
+                120,
+                FormatterOptions.IndentStyle.SPACE,
+                4,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted).isEqualTo(expected);
+        assertThat(Frmtr.format(formatted, options)).isEqualTo(formatted);
+        assertThatCode(() -> assertLatestJavaParses(formatted)).doesNotThrowAnyException();
+    }
+
+    @Test
     void binaryOperatorPositionOptionControlsBrokenAnnotationValues() {
         String source = """
                 class Demo {
@@ -1906,9 +1925,7 @@ final class FrmtrTest {
     void parsesSwitchExpressionYieldCases() {
         String formatted = Frmtr.format(switchExpressionYieldSource());
 
-        var parser = new JavaParser(new ParserConfiguration().setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_25));
-        assertThat(parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(formatted)).isSuccessful())
-                .isTrue();
+        assertLatestJavaParses(formatted);
     }
 
     @Test
@@ -1942,6 +1959,12 @@ final class FrmtrTest {
                         };
                     }
                 }""";
+    }
+
+    private static void assertLatestJavaParses(String source) {
+        var parser = new JavaParser(new ParserConfiguration().setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_25));
+        assertThat(parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source)).isSuccessful())
+                .isTrue();
     }
 
     private static FormatterOptions failOnParseErrorsOptions() {

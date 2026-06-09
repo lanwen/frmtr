@@ -121,8 +121,8 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
   line comments, and binary annotation-value continuations.
 - `BinaryExpressionPrinter`: binary flattening, operator position, line comments between operands, precedence
   parentheses, end-position method-call operand breaks, and cast-division continuation decisions.
-- `CastExpressionPrinter`: cast type layout, line-width-aware intersection type breaks, operand rendering, and nested cast
-  depth checks.
+- `CastExpressionPrinter`: cast type layout, line-width-aware intersection and generic type-body breaks, operand rendering,
+  and nested cast depth checks.
 - `EnclosedExpressionPrinter`: parenthesized expression layout and broken enclosed scopes that keep array, method-call,
   and method-reference suffixes attached.
 - `InstanceOfExpressionPrinter`: instance-check continuations and binary-operator-position-aware placement.
@@ -143,10 +143,11 @@ Declaration and type printers own Java declaration grammar after `BodyDeclaratio
 - `TypePrinter`: shared type-clause rendering, declaration type-parameter flat text, compact type-list joining, and
   breakable generic type bodies.
 - `ClassOrInterfaceDeclarationPrinter`, `RecordDeclarationPrinter`, `EnumDeclarationPrinter`, and
-  `AnnotationDeclarationPrinter`: type-specific headers, body starts, member sequencing handoffs, and type-specific
-  recovery boundaries.
+  `AnnotationDeclarationPrinter`: type-specific headers, record component type bodies, body starts, member sequencing
+  handoffs, and type-specific recovery boundaries.
 - `FieldDeclarationPrinter` and `VariableDeclarationPrinter`: field and local variable declaration layout, shared
-  initializer policy, declaration prefixes, and local-only declaration-prefix decisions.
+  initializer policy including equals-line cast type-body breaks, declaration prefixes, and local-only declaration-prefix
+  decisions.
 - `ConstructorDeclarationPrinter`, `MethodDeclarationPrinter`, `InitializerDeclarationPrinter`,
   `CallableSignaturePrinter`, and `ThrowsClausePrinter`: callable headers, signatures, throws-clause placement,
   body-versus-semicolon suffixes, and initializer bodies.

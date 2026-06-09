@@ -153,6 +153,7 @@ final class JavaPrinter {
                 options,
                 this::expression,
                 compactSource::compactTypeLike,
+                types::typeBody,
                 this::currentIndentedWidth);
         this.enclosedExpressions = new EnclosedExpressionPrinter(
                 options,
@@ -383,6 +384,7 @@ final class JavaPrinter {
                 compactSource::compactJoin,
                 types::compactJoinTypeLike,
                 compactSource::compactTypeLike,
+                types::typeBody,
                 annotationExpressions::annotation,
                 annotationExpressions::annotationFlatText,
                 this::currentIndentedWidth,

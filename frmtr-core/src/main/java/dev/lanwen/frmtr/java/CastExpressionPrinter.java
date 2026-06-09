@@ -30,16 +30,19 @@ final class CastExpressionPrinter {
     private final FormatterOptions options;
     private final JavaFormatRule<Expression> expression;
     private final Function<Node, String> compactTypeLike;
+    private final Function<Type, Doc> typeBody;
     private final ToIntFunction<String> currentIndentedWidth;
 
     CastExpressionPrinter(
             FormatterOptions options,
             JavaFormatRule<Expression> expression,
             Function<Node, String> compactTypeLike,
+            Function<Type, Doc> typeBody,
             ToIntFunction<String> currentIndentedWidth) {
         this.options = options;
         this.expression = expression;
         this.compactTypeLike = compactTypeLike;
+        this.typeBody = typeBody;
         this.currentIndentedWidth = currentIndentedWidth;
     }
 
@@ -57,11 +60,12 @@ final class CastExpressionPrinter {
     }
 
     /**
-     * Renders the parenthesized cast type, breaking only wide intersection casts.
+     * Renders the parenthesized cast type, breaking wide intersection casts or generic type bodies.
      *
      * <p>Ordinary casts stay as {@code (Type)}. Intersection casts such as {@code (A & B & C)} get one type per line
      * only when the whole parenthesized type would overflow; that keeps the rare multi-bound cast readable without
-     * changing short casts or handing compact type spelling to this helper.
+     * changing short casts. Generic casts reuse the shared type-body renderer so long type arguments can break inside the
+     * cast instead of forcing the surrounding assignment to keep an over-wide atomic type string.
      */
     Doc castType(Type type) {
         if (type instanceof IntersectionType intersectionType
@@ -79,7 +83,7 @@ final class CastExpressionPrinter {
                     Doc.HARD_LINE,
                     Doc.text(")"));
         }
-        return Doc.text("(" + compactTypeLike.apply(type) + ")");
+        return Doc.group(Doc.concat(Doc.text("("), typeBody.apply(type), Doc.text(")")));
     }
 
     /**

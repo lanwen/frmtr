@@ -48,7 +48,7 @@ layout, and `MemberBlockPrinter` owns member sequencing inside type bodies.
 | JavaParser AST kind | Structured owner | Fallback or boundary notes |
 | --- | --- | --- |
 | `ClassOrInterfaceDeclaration` | `ClassOrInterfaceDeclarationPrinter` | Interfaces whose headers contain inline block comments route through `CommentedInterfacePrinter` and `RawPreservedSource`. |
-| `RecordDeclaration` | `RecordDeclarationPrinter` | Owns record headers, component lists, implements clauses, and body start layout. Members return to `MemberBlockPrinter` and the body-declaration envelope/dispatcher path. |
+| `RecordDeclaration` | `RecordDeclarationPrinter` | Owns record headers, component lists including breakable generic component type bodies, implements clauses, and body start layout. Members return to `MemberBlockPrinter` and the body-declaration envelope/dispatcher path. |
 | `EnumDeclaration` | `EnumDeclarationPrinter` | Owns enum headers, constants, enum semicolons, body orphan comments, and enum constant argument layout. Ordinary members return to body dispatch; recovered enum-constant gaps stay inside this printer. |
 | `AnnotationDeclaration` | `AnnotationDeclarationPrinter` | Owns annotation type headers and member blocks; recovered annotation-member gaps stay inside this printer. |
 | `AnnotationMemberDeclaration` | `AnnotationDeclarationPrinter` | Owns annotation member declarations and default values, delegating default expressions back through expression rendering. Unsafe recovered members preserve their default-value source as raw body gaps. |
@@ -127,7 +127,7 @@ expression kinds. Specialized expression printers own the layout decision tree f
 | `ArrayInitializerExpr` | `ArrayExpressionPrinter` | Owns initializer braces, compact initializer acceptance, and initializer comments. |
 | `AnnotationExpr` and subclasses | `AnnotationExpressionPrinter` | Covers marker, normal, and single-member annotations plus annotation member values. |
 | `BinaryExpr` | `BinaryExpressionPrinter` | Owns binary flattening, operator position, line comments between operands, precedence parentheses, and cast-division continuation policy. |
-| `CastExpr` | `CastExpressionPrinter` | Owns cast type layout and nested cast depth checks. |
+| `CastExpr` | `CastExpressionPrinter` | Owns cast type layout, including breakable generic and intersection cast types, and nested cast depth checks. |
 | `ConditionalExpr` | `ConditionalExpressionPrinter` | Owns ternary layout for assignments, initializers, comments around `?` and `:`, nested branches, and binary condition wrapping. |
 | `EnclosedExpr` | `EnclosedExpressionPrinter` | Owns parenthesized expression layout and suffix preservation for array, method-call, and method-reference suffixes. |
 | `FieldAccessExpr` | `FieldAccessPrinter` | Owns dotted field access and comment-sensitive name splitting. Compact field-access text is also reconstructed by `CompactSourceText`. |

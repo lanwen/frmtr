@@ -8,6 +8,7 @@ import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
+import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
@@ -44,6 +45,7 @@ final class RecordDeclarationPrinter {
     private final Function<List<? extends Node>, String> compactJoin;
     private final Function<List<? extends Node>, String> compactJoinTypeLike;
     private final Function<Node, String> compactTypeLike;
+    private final Function<Type, Doc> typeBody;
     private final JavaFormatRule<AnnotationExpr> annotation;
     private final Function<AnnotationExpr, String> annotationFlatText;
     private final ToIntFunction<String> currentIndentedWidth;
@@ -60,6 +62,7 @@ final class RecordDeclarationPrinter {
             Function<List<? extends Node>, String> compactJoin,
             Function<List<? extends Node>, String> compactJoinTypeLike,
             Function<Node, String> compactTypeLike,
+            Function<Type, Doc> typeBody,
             JavaFormatRule<AnnotationExpr> annotation,
             Function<AnnotationExpr, String> annotationFlatText,
             ToIntFunction<String> currentIndentedWidth,
@@ -74,6 +77,7 @@ final class RecordDeclarationPrinter {
         this.compactJoin = compactJoin;
         this.compactJoinTypeLike = compactJoinTypeLike;
         this.compactTypeLike = compactTypeLike;
+        this.typeBody = typeBody;
         this.annotation = annotation;
         this.annotationFlatText = annotationFlatText;
         this.currentIndentedWidth = currentIndentedWidth;
@@ -190,7 +194,7 @@ final class RecordDeclarationPrinter {
             parts.add(typeComment);
             parts.add(Doc.HARD_LINE);
         }
-        parts.add(Doc.text(recordComponentTail(parameter)));
+        parts.add(recordComponentTailDoc(parameter));
         return Doc.concat(parts);
     }
 
@@ -214,6 +218,23 @@ final class RecordDeclarationPrinter {
             type += varargsAnnotations.isEmpty() ? "..." : " " + varargsAnnotations + "...";
         }
         return type + " " + parameter.getNameAsString();
+    }
+
+    /**
+     * Builds the rendered component tail while preserving the same varargs suffix spelling as the flat width estimate.
+     *
+     * <p>The type body is grouped with the component name so ordinary components stay on one line when they fit, while
+     * long generic component types can break at type-argument boundaries before the name is appended.
+     */
+    private Doc recordComponentTailDoc(Parameter parameter) {
+        List<Doc> parts = new ArrayList<>();
+        parts.add(typeBody.apply(parameter.getType()));
+        if (parameter.isVarArgs()) {
+            String varargsAnnotations = compactJoin.apply(parameter.getVarArgsAnnotations());
+            parts.add(Doc.text(varargsAnnotations.isEmpty() ? "..." : " " + varargsAnnotations + "..."));
+        }
+        parts.add(Doc.text(" " + parameter.getNameAsString()));
+        return Doc.group(Doc.concat(parts));
     }
 
     /**

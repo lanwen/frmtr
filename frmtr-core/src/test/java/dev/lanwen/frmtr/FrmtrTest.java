@@ -199,11 +199,13 @@ final class FrmtrTest {
             "member-blank-lines, 120",
             "member-comment-spacing, 120",
             "multiline-if-condition, 120",
+            "object-creation-diamond-break, 120",
             "object-creation-statement-argument, 120",
             "record-implements, 120",
             "return-chain-final-argument, 120",
             "single-member-annotation-array-width, 120",
             "switch-empty-rules, 120",
+            "type-header-brace-placement, 120",
             "variable-chain-initializer, 120"
     })
     void formatsLineWidthFixtureAndIsIdempotent(String fixtureName, int lineWidth) throws Exception {

@@ -169,7 +169,7 @@ final class ClassOrInterfaceDeclarationPrinter {
         typeClause.print("extends", declaration.getExtendedTypes(), breakClauses).ifPresent(header::add);
         typeClause.print("implements", declaration.getImplementedTypes(), breakClauses).ifPresent(header::add);
         typeClause.print("permits", declaration.getPermittedTypes(), breakClauses).ifPresent(header::add);
-        header.add(emptyMemberBlock(declaration) || !breakClauses ? Doc.text(" ") : Doc.HARD_LINE);
+        header.add(Doc.text(" "));
         header.add(memberBlock.apply(declaration));
         return Doc.concat(header);
     }

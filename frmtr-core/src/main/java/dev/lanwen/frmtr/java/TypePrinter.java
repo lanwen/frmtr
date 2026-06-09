@@ -141,7 +141,7 @@ final class TypePrinter {
      */
     boolean typeCanBreak(Type type) {
         return type instanceof ClassOrInterfaceType classOrInterfaceType
-                && classOrInterfaceType.getTypeArguments().isPresent();
+                && hasNonEmptyTypeArguments(classOrInterfaceType);
     }
 
     /**
@@ -210,6 +210,10 @@ final class TypePrinter {
 
     private int typeArgumentCount(ClassOrInterfaceType type) {
         return type.getTypeArguments().map(NodeList::size).orElse(0);
+    }
+
+    private boolean hasNonEmptyTypeArguments(ClassOrInterfaceType type) {
+        return type.getTypeArguments().map(arguments -> !arguments.isEmpty()).orElse(false);
     }
 
     /**

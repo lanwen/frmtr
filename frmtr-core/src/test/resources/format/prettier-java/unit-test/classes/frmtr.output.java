@@ -56,8 +56,7 @@ class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc> extends Dddddddddd<Eeeeeeeeee, Ffffffff
 
 class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg>
     extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj>
-    implements Kkkkkkkkkk, Llllllllll
-{
+    implements Kkkkkkkkkk, Llllllllll {
 
     void a() {}
 }
@@ -68,8 +67,7 @@ class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Ggg
 
 class Aaaaaaaaaa<Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg>
     extends Hhhhhhhhhh<Iiiiiiiiii, Jjjjjjjjjj, Kkkkkkkkkk, Llllllllll, Mmmmmmmmmm, Nnnnnnnnnn>
-    implements Oooooooooo, Pppppppppp, Qqqqqqqqqq, Rrrrrrrrrr, Ssssssssss, Tttttttttt, Uuuuuuuuuu
-{
+    implements Oooooooooo, Pppppppppp, Qqqqqqqqqq, Rrrrrrrrrr, Ssssssssss, Tttttttttt, Uuuuuuuuuu {
 
     void a() {}
 }

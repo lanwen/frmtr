@@ -560,7 +560,7 @@ final class FieldDeclarationPrinter {
             return Optional.empty();
         }
         ClassOrInterfaceType type = objectCreation.getType().asClassOrInterfaceType();
-        if (type.getTypeArguments().isEmpty()
+        if (!hasNonEmptyTypeArguments(type)
                 || currentIndentedWidth(flatName + " = new " + typeNameWithoutArguments.apply(type) + "<") > options.lineWidth()) {
             return Optional.empty();
         }
@@ -761,6 +761,10 @@ final class FieldDeclarationPrinter {
         return type instanceof IntersectionType
                 || (type instanceof ClassOrInterfaceType classOrInterfaceType
                         && classOrInterfaceType.getTypeArguments().isPresent());
+    }
+
+    private boolean hasNonEmptyTypeArguments(ClassOrInterfaceType type) {
+        return type.getTypeArguments().map(arguments -> !arguments.isEmpty()).orElse(false);
     }
 
     /**

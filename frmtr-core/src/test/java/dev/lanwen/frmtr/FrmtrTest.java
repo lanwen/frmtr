@@ -98,6 +98,35 @@ final class FrmtrTest {
     }
 
     @Test
+    void formatsObjectCreationAssignmentPrefixFixtureAtPreferredAndTightWidths() throws Exception {
+        String source = readResource("format/object-creation-assignment-prefix/input.java");
+        String preferredExpected = readResource("format/object-creation-assignment-prefix/frmtr.output.java");
+        String tightExpected = readResource("format/object-creation-assignment-prefix/frmtr-tight.output.java");
+        FormatterOptions preferredWidth = FormatterOptions.forLayout(
+                120,
+                FormatterOptions.IndentStyle.SPACE,
+                4,
+                FormatterOptions.LineEnding.LF,
+                true);
+        FormatterOptions tightWidth = FormatterOptions.forLayout(
+                38,
+                FormatterOptions.IndentStyle.SPACE,
+                4,
+                FormatterOptions.LineEnding.LF,
+                true);
+
+        String preferred = Frmtr.format(source, preferredWidth);
+        String tight = Frmtr.format(source, tightWidth);
+
+        assertThat(preferred).isEqualTo(preferredExpected);
+        assertThat(Frmtr.format(preferred, preferredWidth)).isEqualTo(preferred);
+        assertThatCode(() -> StaticJavaParser.parse(preferred)).doesNotThrowAnyException();
+        assertThat(tight).isEqualTo(tightExpected);
+        assertThat(Frmtr.format(tight, tightWidth)).isEqualTo(tight);
+        assertThatCode(() -> StaticJavaParser.parse(tight)).doesNotThrowAnyException();
+    }
+
+    @Test
     void formatsMethodCallCharLiteralFixtureAndIsIdempotent() throws Exception {
         String source = readResource("format/method-call-char-literal/input.java");
         String expected = readResource("format/method-call-char-literal/frmtr.output.java");

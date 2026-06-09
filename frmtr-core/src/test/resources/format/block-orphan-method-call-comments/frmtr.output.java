@@ -10,15 +10,14 @@ class Demo {
         // Scenario: reduce capacity to 1/3 from Friday 7pm to Sunday 7pm
         // Default pool: min=9, max=30
         // Weekend pool: min=3, max=10
-        var schedule =
-            new Config.Schedule(
-                ZoneId.of("Europe/Madrid"),
-                List.of(
-                    new Config.Schedule.Shift("0 0 19 * * 5", 3, 10), // Friday 7pm: start weekend mode
-                    new Config.Schedule.Shift("0 0 19 * * 0", Config.UNSET, Config.UNSET)
-                    // Sunday 7pm: restore defaults
-                )
-            );
+        var schedule = new Config.Schedule(
+            ZoneId.of("Europe/Madrid"),
+            List.of(
+                new Config.Schedule.Shift("0 0 19 * * 5", 3, 10), // Friday 7pm: start weekend mode
+                new Config.Schedule.Shift("0 0 19 * * 0", Config.UNSET, Config.UNSET)
+                // Sunday 7pm: restore defaults
+            )
+        );
         var matcher = new Matcher(schedule);
 
         // Friday January 24, 2025 at 6pm Madrid time (17:00 UTC in winter) - before weekend mode

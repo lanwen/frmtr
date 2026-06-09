@@ -474,15 +474,37 @@ final class FieldDeclarationPrinter {
             String name,
             String flatName,
             ObjectCreationExpr objectCreation) {
-        if (objectCreation.getAnonymousClassBody().isPresent()
-                || !objectCreation.getAllContainedComments().isEmpty()) {
+        if (objectCreation.getAnonymousClassBody().isPresent()) {
             return Optional.empty();
+        }
+        if (!objectCreation.getAllContainedComments().isEmpty()) {
+            return variableWithCommentedObjectCreation(name, flatName, objectCreation);
         }
         Optional<Doc> typeArguments = variableWithBrokenObjectCreationTypeArguments(name, flatName, objectCreation);
         if (typeArguments.isPresent()) {
             return typeArguments;
         }
         return variableWithBrokenObjectCreationArguments(name, flatName, objectCreation);
+    }
+
+    /**
+     * Keeps {@code name = new Type(} together for commented constructor calls when that first line still fits, while
+     * leaving the nested comment placement to the normal object-creation renderer.
+     */
+    private Optional<Doc> variableWithCommentedObjectCreation(
+            String name,
+            String flatName,
+            ObjectCreationExpr objectCreation) {
+        if (objectCreation.getArguments().isEmpty()
+                || objectCreation.getComment().filter(BlockComment.class::isInstance).isPresent()
+                || objectCreation.getType().getComment().filter(BlockComment.class::isInstance).isPresent()) {
+            return Optional.empty();
+        }
+        String prefix = objectCreationPrefix.apply(objectCreation);
+        if (currentIndentedWidth(flatName + " = " + prefix + "(") > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(Doc.text(name + " = "), expression.apply(objectCreation)));
     }
 
     /**

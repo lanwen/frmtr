@@ -333,33 +333,58 @@ final class LambdaExpressionPrinter {
      * lambda block, so the normal call formatter handles that case.
      */
     Optional<Doc> huggableBlockLambdaArguments(String prefix, NodeList<Expression> arguments) {
-        int lambdaIndex = blockLambdaArgumentIndex(arguments);
-        if (lambdaIndex < 0) {
+        Optional<HuggableBlockLambdaArgument> huggable = huggableBlockLambdaArgument(prefix, arguments);
+        if (huggable.isEmpty()) {
             return Optional.empty();
         }
-        if (lambdaIndex > 0 && lambdaIndex < arguments.size() - 1) {
+        HuggableBlockLambdaArgument argument = huggable.orElseThrow();
+        if (blockStatementWidth.applyAsInt(argument.firstLine()) > options.lineWidth()) {
+            return Optional.empty();
+        }
+        String trailingArguments = compactJoin.apply(arguments.subList(argument.lambdaIndex() + 1, arguments.size()));
+        return Optional.of(Doc.concat(
+                Doc.text(prefix + "(" + (argument.leadingArguments().isEmpty() ? "" : argument.leadingArguments() + ", ")),
+                lambdaExpression(argument.lambdaExpr()),
+                Doc.text((trailingArguments.isEmpty() ? "" : ", " + trailingArguments) + ")")));
+    }
+
+    /**
+     * Returns the exact first line used by the huggable block-lambda argument layout before width is considered.
+     */
+    Optional<String> huggableBlockLambdaFirstLine(String prefix, NodeList<Expression> arguments) {
+        return huggableBlockLambdaArgument(prefix, arguments).map(HuggableBlockLambdaArgument::firstLine);
+    }
+
+    /**
+     * Applies the shared block-lambda argument eligibility rules for both rendering and external first-line probing.
+     */
+    private Optional<HuggableBlockLambdaArgument> huggableBlockLambdaArgument(
+            String prefix,
+            NodeList<Expression> arguments) {
+        int lambdaIndex = blockLambdaArgumentIndex(arguments);
+        if (lambdaIndex < 0 || (lambdaIndex > 0 && lambdaIndex < arguments.size() - 1)) {
             return Optional.empty();
         }
         if (hasOtherLambdaArgument(arguments, lambdaIndex)) {
             return Optional.empty();
         }
         LambdaExpr lambdaExpr = (LambdaExpr) arguments.get(lambdaIndex);
-        if (lambdaParametersShouldBreak(lambdaExpr, lambdaParameters(lambdaExpr))) {
+        String parameters = lambdaParameters(lambdaExpr);
+        if (lambdaParametersShouldBreak(lambdaExpr, parameters)) {
             return Optional.empty();
         }
         String leadingArguments = compactJoin.apply(arguments.subList(0, lambdaIndex));
         String firstLine = prefix + "("
                 + (leadingArguments.isEmpty() ? "" : leadingArguments + ", ")
-                + lambdaParameters(lambdaExpr) + " -> {";
-        if (blockStatementWidth.applyAsInt(firstLine) > options.lineWidth()) {
-            return Optional.empty();
-        }
-        String trailingArguments = compactJoin.apply(arguments.subList(lambdaIndex + 1, arguments.size()));
-        return Optional.of(Doc.concat(
-                Doc.text(prefix + "(" + (leadingArguments.isEmpty() ? "" : leadingArguments + ", ")),
-                lambdaExpression(lambdaExpr),
-                Doc.text((trailingArguments.isEmpty() ? "" : ", " + trailingArguments) + ")")));
+                + parameters + " -> {";
+        return Optional.of(new HuggableBlockLambdaArgument(lambdaIndex, lambdaExpr, leadingArguments, firstLine));
     }
+
+    private record HuggableBlockLambdaArgument(
+            int lambdaIndex,
+            LambdaExpr lambdaExpr,
+            String leadingArguments,
+            String firstLine) {}
 
     /**
      * Rebuilds a single expression-lambda argument when comments sit around the lambda boundary.

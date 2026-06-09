@@ -54,9 +54,9 @@ final class MethodCallPrinter {
     private final Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer;
     private final Function<BinaryExpr, Doc> brokenBinaryExpressionLinesRenderer;
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments;
+    private final BiFunction<String, NodeList<Expression>, Optional<String>> huggableBlockLambdaFirstLine;
     private final BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument;
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments;
-    private final Function<LambdaExpr, String> lambdaParameters;
     private final Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer;
     private final ToIntFunction<String> currentIndentedWidth;
     private final ToIntFunction<String> blockStatementWidth;
@@ -88,7 +88,7 @@ final class MethodCallPrinter {
     }
 
     /**
-     * Names how a selected method-chain root should be printed after root promotion has adjusted the chain.
+     * Names how a selected method-chain root should be printed after root promotion has adjusted the chain plan.
      *
      * <p>The enum is deliberately narrower than the chain collector: it only records the rendering policy for the root
      * expression. Segment collection, comment detection, and argument layout stay with the existing chain methods.
@@ -113,11 +113,27 @@ final class MethodCallPrinter {
      * <p>This keeps root promotion from leaking boolean flags into the final chain assembly. The model does not own
      * segment rendering or decide whether a chain should be printed at all.
      */
-    private record MethodCallChainState(
+    private record MethodCallChainPlan(
             Expression root,
             List<MethodCallExpr> calls,
             ChainRootRendering rootRendering) {
-        MethodCallChainState {
+        MethodCallChainPlan {
+            calls = List.copyOf(calls);
+        }
+    }
+
+    /**
+     * Captures chain structure and traits once so eligibility and planning do not rescan the same calls repeatedly.
+     */
+    private record MethodCallChainAnalysis(
+            Expression root,
+            List<MethodCallExpr> calls,
+            boolean hasComments,
+            boolean hasBlockLambdaArgument,
+            boolean rootHasBlockLambdaArgument,
+            boolean rootHasComments,
+            boolean singleCommentedSegment) {
+        MethodCallChainAnalysis {
             calls = List.copyOf(calls);
         }
     }
@@ -129,9 +145,9 @@ final class MethodCallPrinter {
             BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix,
             Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,
+            BiFunction<String, NodeList<Expression>, Optional<String>> huggableBlockLambdaFirstLine,
             BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments,
-            Function<LambdaExpr, String> lambdaParameters,
             Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer,
             Function<BinaryExpr, Doc> brokenBinaryExpressionLinesRenderer,
             ToIntFunction<String> currentIndentedWidth,
@@ -146,9 +162,9 @@ final class MethodCallPrinter {
         this.brokenObjectCreationRenderer = brokenObjectCreationRenderer;
         this.brokenBinaryExpressionLinesRenderer = brokenBinaryExpressionLinesRenderer;
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
+        this.huggableBlockLambdaFirstLine = huggableBlockLambdaFirstLine;
         this.commentedExpressionLambdaArgument = commentedExpressionLambdaArgument;
         this.huggableExpressionLambdaArguments = huggableExpressionLambdaArguments;
-        this.lambdaParameters = lambdaParameters;
         this.unformattedTextBlockRenderer = unformattedTextBlockRenderer;
         this.currentIndentedWidth = currentIndentedWidth;
         this.blockStatementWidth = blockStatementWidth;
@@ -300,25 +316,22 @@ final class MethodCallPrinter {
     }
 
     private Optional<Doc> methodCallChain(MethodCallExpr expression, MethodCallBreakMode breakMode) {
-        boolean chainHasComments = methodCallChainHasComments(expression);
-        boolean chainHasBlockLambdaArgument = methodCallChainHasBlockLambdaArgument(expression);
+        MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
         if ((!breakMode.isForced()
-                        && !chainHasComments
-                        && !chainHasBlockLambdaArgument
+                        && !analysis.hasComments()
+                        && !analysis.hasBlockLambdaArgument()
                         && compactSource.compact(expression).length() <= options.lineWidth())
                 || expression.getScope().isEmpty()) {
             return Optional.empty();
         }
-        List<MethodCallExpr> calls = new ArrayList<>();
-        Expression root = methodCallChainRoot(expression, calls);
-        boolean singleCommentedSegment = calls.size() == 1 && methodCallSegmentHasNameComment(calls.getFirst());
-        boolean rootHasComments = !root.getAllContainedComments().isEmpty();
+        Expression root = analysis.root();
+        List<MethodCallExpr> calls = analysis.calls();
         if (calls.isEmpty()
                 || (calls.size() < 2
                         && !(root instanceof MethodCallExpr)
                         && !(breakMode.isForced() && root instanceof ObjectCreationExpr)
-                        && !rootHasComments
-                        && !singleCommentedSegment)) {
+                        && !analysis.rootHasComments()
+                        && !analysis.singleCommentedSegment())) {
             return Optional.empty();
         }
         if (breakMode.isForced()
@@ -326,7 +339,7 @@ final class MethodCallPrinter {
                 && root.getAllContainedComments().isEmpty()
                 && calls.getFirst().getAllContainedComments().isEmpty()
                 && !methodCallSegmentHasComment(calls.getFirst())
-                && !methodCallRootHasBlockLambdaArgument(root)) {
+                && !analysis.rootHasBlockLambdaArgument()) {
             Optional<Doc> compactRootWithBrokenSegment = compactRootWithBrokenFinalSegment(root, calls.getFirst());
             if (compactRootWithBrokenSegment.isPresent()) {
                 return compactRootWithBrokenSegment;
@@ -342,11 +355,11 @@ final class MethodCallPrinter {
                     expressionRenderer.apply(methodRoot),
                     Doc.indent(Doc.concat(Doc.HARD_LINE, fieldAccessMethodCallSegment(fieldAccess, calls.getFirst())))));
         }
-        MethodCallChainState chainState = methodCallChainState(root, calls, chainHasComments, breakMode);
-        root = chainState.root();
-        calls = chainState.calls();
-        Doc rootDoc = methodCallChainRootDoc(chainState);
-        if (chainState.rootRendering() == ChainRootRendering.BROKEN_OBJECT_CREATION && calls.size() == 1) {
+        MethodCallChainPlan chainPlan = methodCallChainPlan(analysis, breakMode);
+        root = chainPlan.root();
+        calls = chainPlan.calls();
+        Doc rootDoc = methodCallChainRootDoc(chainPlan);
+        if (chainPlan.rootRendering() == ChainRootRendering.BROKEN_OBJECT_CREATION && calls.size() == 1) {
             return Optional.of(Doc.concat(rootDoc, methodCallChainSegment(calls.getFirst())));
         }
         if (root instanceof MethodCallExpr methodRoot
@@ -354,7 +367,7 @@ final class MethodCallPrinter {
                 && root.getAllContainedComments().isEmpty()
                 && calls.getFirst().getAllContainedComments().isEmpty()
                 && !methodCallSegmentHasComment(calls.getFirst())) {
-            if (chainState.rootRendering() == ChainRootRendering.GROUPED_PROMOTED_METHOD_CALL) {
+            if (chainPlan.rootRendering() == ChainRootRendering.GROUPED_PROMOTED_METHOD_CALL) {
                 if (methodCallSegmentHasBlockLambdaArgument(methodRoot)) {
                     return Optional.of(Doc.concat(rootDoc, methodCallChainSegment(calls.getFirst())));
                 }
@@ -369,14 +382,14 @@ final class MethodCallPrinter {
                         .toList())))));
     }
 
-    private MethodCallChainState methodCallChainState(
-            Expression root,
-            List<MethodCallExpr> calls,
-            boolean chainHasComments,
+    private MethodCallChainPlan methodCallChainPlan(
+            MethodCallChainAnalysis analysis,
             MethodCallBreakMode breakMode) {
+        Expression root = analysis.root();
+        List<MethodCallExpr> calls = analysis.calls();
         ChainRootRendering rootRendering = ChainRootRendering.EXPRESSION_RENDERER;
         List<MethodCallExpr> remainingCalls = calls;
-        if (chainHasComments) {
+        if (analysis.hasComments()) {
             if (methodCallChainShouldPromoteFirstCallForArgumentComments(root, calls)) {
                 root = calls.getFirst();
                 remainingCalls = new ArrayList<>(calls.subList(1, calls.size()));
@@ -409,7 +422,7 @@ final class MethodCallPrinter {
                 && root instanceof ObjectCreationExpr) {
             rootRendering = ChainRootRendering.BROKEN_OBJECT_CREATION;
         }
-        return new MethodCallChainState(root, remainingCalls, rootRendering);
+        return new MethodCallChainPlan(root, remainingCalls, rootRendering);
     }
 
     private ChainRootRendering promotedStaticFirstCallRendering(List<MethodCallExpr> calls) {
@@ -423,16 +436,16 @@ final class MethodCallPrinter {
         return expression.getArguments().size() <= 1;
     }
 
-    private Doc methodCallChainRootDoc(MethodCallChainState chainState) {
-        return switch (chainState.rootRendering()) {
-            case INLINE_PROMOTED_METHOD_CALL -> chainState.root() instanceof MethodCallExpr methodCall
+    private Doc methodCallChainRootDoc(MethodCallChainPlan chainPlan) {
+        return switch (chainPlan.rootRendering()) {
+            case INLINE_PROMOTED_METHOD_CALL -> chainPlan.root() instanceof MethodCallExpr methodCall
                     ? inlineMethodCall(methodCall)
-                    : expressionRenderer.apply(chainState.root());
-            case GROUPED_PROMOTED_METHOD_CALL -> chainState.root() instanceof MethodCallExpr methodCall
+                    : expressionRenderer.apply(chainPlan.root());
+            case GROUPED_PROMOTED_METHOD_CALL -> chainPlan.root() instanceof MethodCallExpr methodCall
                     ? groupedPromotedMethodCall(methodCall)
-                    : expressionRenderer.apply(chainState.root());
-            case BROKEN_OBJECT_CREATION -> brokenObjectCreationRenderer.apply((ObjectCreationExpr) chainState.root());
-            case EXPRESSION_RENDERER -> expressionRenderer.apply(chainState.root());
+                    : expressionRenderer.apply(chainPlan.root());
+            case BROKEN_OBJECT_CREATION -> brokenObjectCreationRenderer.apply((ObjectCreationExpr) chainPlan.root());
+            case EXPRESSION_RENDERER -> expressionRenderer.apply(chainPlan.root());
         };
     }
 
@@ -467,33 +480,12 @@ final class MethodCallPrinter {
     }
 
     private Optional<String> blockLambdaSegmentFirstLine(String root, MethodCallExpr expression) {
-        int lambdaIndex = blockLambdaArgumentIndex(expression.getArguments());
-        if (lambdaIndex < 0) {
-            return Optional.empty();
-        }
-        LambdaExpr lambdaExpr = (LambdaExpr) expression.getArguments().get(lambdaIndex);
-        String leadingArguments = compactSource.compactJoin(expression.getArguments().subList(0, lambdaIndex));
         String prefix = root + "."
                 + expression.getTypeArguments()
                         .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
                         .orElse("")
-                + expression.getNameAsString()
-                + "("
-                + (leadingArguments.isEmpty() ? "" : leadingArguments + ", ");
-        return Optional.of(prefix + lambdaParameters.apply(lambdaExpr) + " -> {");
-    }
-
-    private int blockLambdaArgumentIndex(NodeList<Expression> arguments) {
-        int lambdaIndex = -1;
-        for (int i = 0; i < arguments.size(); i++) {
-            if (arguments.get(i) instanceof LambdaExpr lambdaExpr && lambdaExpr.getBody().isBlockStmt()) {
-                if (lambdaIndex >= 0) {
-                    return -1;
-                }
-                lambdaIndex = i;
-            }
-        }
-        return lambdaIndex;
+                + expression.getNameAsString();
+        return huggableBlockLambdaFirstLine.apply(prefix, expression.getArguments());
     }
 
     private Optional<Doc> compactRootWithBrokenFinalSegment(Expression root, MethodCallExpr call) {
@@ -621,20 +613,27 @@ final class MethodCallPrinter {
     }
 
     boolean methodCallChainHasComments(MethodCallExpr expression) {
-        List<MethodCallExpr> calls = new ArrayList<>();
-        Expression root = methodCallChainRoot(expression, calls);
-        return !root.getAllContainedComments().isEmpty() || calls.stream().anyMatch(this::methodCallSegmentHasComment);
+        return methodCallChainAnalysis(expression).hasComments();
     }
 
-    private boolean methodCallChainHasBlockLambdaArgument(MethodCallExpr expression) {
+    private MethodCallChainAnalysis methodCallChainAnalysis(MethodCallExpr expression) {
         List<MethodCallExpr> calls = new ArrayList<>();
         Expression root = methodCallChainRoot(expression, calls);
-        return methodCallRootHasBlockLambdaArgument(root)
+        boolean rootHasComments = !root.getAllContainedComments().isEmpty();
+        boolean rootHasBlockLambdaArgument = root instanceof MethodCallExpr methodRoot
+                && methodCallSegmentHasBlockLambdaArgument(methodRoot);
+        boolean hasComments = rootHasComments || calls.stream().anyMatch(this::methodCallSegmentHasComment);
+        boolean hasBlockLambdaArgument = rootHasBlockLambdaArgument
                 || calls.stream().anyMatch(this::methodCallSegmentHasBlockLambdaArgument);
-    }
-
-    private boolean methodCallRootHasBlockLambdaArgument(Expression root) {
-        return root instanceof MethodCallExpr methodRoot && methodCallSegmentHasBlockLambdaArgument(methodRoot);
+        boolean singleCommentedSegment = calls.size() == 1 && methodCallSegmentHasNameComment(calls.getFirst());
+        return new MethodCallChainAnalysis(
+                root,
+                calls,
+                hasComments,
+                hasBlockLambdaArgument,
+                rootHasBlockLambdaArgument,
+                rootHasComments,
+                singleCommentedSegment);
     }
 
     boolean methodCallChainRootIsObjectCreation(MethodCallExpr expression) {

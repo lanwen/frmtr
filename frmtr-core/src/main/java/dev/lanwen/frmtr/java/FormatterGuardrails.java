@@ -4,6 +4,7 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.comments.Comment;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -48,7 +49,14 @@ final class FormatterGuardrails {
      * Records comments that reached the output through an explicit raw-source preservation path.
      */
     static void accountRawComments(Node node, Set<Comment> rawRenderedComments) {
-        rawRenderedComments.addAll(node.getAllContainedComments());
+        accountRawComments(node.getAllContainedComments(), rawRenderedComments);
+    }
+
+    /**
+     * Records source-selected comments that reached the output through an explicit raw-source preservation path.
+     */
+    static void accountRawComments(Collection<? extends Comment> comments, Set<Comment> rawRenderedComments) {
+        rawRenderedComments.addAll(comments);
     }
 
     /**

@@ -4,6 +4,7 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.comments.Comment;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -134,6 +135,17 @@ final class CommentTracker {
      */
     void accountRaw(Node node) {
         FormatterGuardrails.accountRawComments(node, rawRendered);
+    }
+
+    /**
+     * Records source-region-selected comments that reached output through raw-preserved source text.
+     *
+     * <p>{@link RecoveredSourceRegions} uses this after it has already checked offset boundaries. The tracker still
+     * owns the raw-rendered identity set, while recovery owns deciding which comments are fully contained by a raw
+     * source island.
+     */
+    void accountRaw(Collection<? extends Comment> comments) {
+        FormatterGuardrails.accountRawComments(comments, rawRendered);
     }
 
     /**

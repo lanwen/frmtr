@@ -86,6 +86,18 @@ final class FrmtrTest {
     }
 
     @Test
+    void formatsBlockLambdaChainedSuffixFixtureAndIsIdempotent() throws Exception {
+        String source = readResource("format/block-lambda-chained-suffix/input.java");
+        String expected = readResource("format/block-lambda-chained-suffix/frmtr.output.java");
+
+        String formatted = Frmtr.format(source);
+
+        assertThat(formatted).isEqualTo(expected);
+        assertThat(Frmtr.format(formatted)).isEqualTo(formatted);
+        assertThatCode(() -> StaticJavaParser.parse(formatted)).doesNotThrowAnyException();
+    }
+
+    @Test
     void formatsMethodCallCharLiteralFixtureAndIsIdempotent() throws Exception {
         String source = readResource("format/method-call-char-literal/input.java");
         String expected = readResource("format/method-call-char-literal/frmtr.output.java");

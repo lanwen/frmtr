@@ -301,8 +301,10 @@ final class MethodCallPrinter {
 
     private Optional<Doc> methodCallChain(MethodCallExpr expression, MethodCallBreakMode breakMode) {
         boolean chainHasComments = methodCallChainHasComments(expression);
+        boolean chainHasBlockLambdaArgument = methodCallChainHasBlockLambdaArgument(expression);
         if ((!breakMode.isForced()
                         && !chainHasComments
+                        && !chainHasBlockLambdaArgument
                         && compactSource.compact(expression).length() <= options.lineWidth())
                 || expression.getScope().isEmpty()) {
             return Optional.empty();
@@ -323,7 +325,8 @@ final class MethodCallPrinter {
                 && calls.size() == 1
                 && root.getAllContainedComments().isEmpty()
                 && calls.getFirst().getAllContainedComments().isEmpty()
-                && !methodCallSegmentHasComment(calls.getFirst())) {
+                && !methodCallSegmentHasComment(calls.getFirst())
+                && !methodCallRootHasBlockLambdaArgument(root)) {
             Optional<Doc> compactRootWithBrokenSegment = compactRootWithBrokenFinalSegment(root, calls.getFirst());
             if (compactRootWithBrokenSegment.isPresent()) {
                 return compactRootWithBrokenSegment;
@@ -621,6 +624,17 @@ final class MethodCallPrinter {
         List<MethodCallExpr> calls = new ArrayList<>();
         Expression root = methodCallChainRoot(expression, calls);
         return !root.getAllContainedComments().isEmpty() || calls.stream().anyMatch(this::methodCallSegmentHasComment);
+    }
+
+    private boolean methodCallChainHasBlockLambdaArgument(MethodCallExpr expression) {
+        List<MethodCallExpr> calls = new ArrayList<>();
+        Expression root = methodCallChainRoot(expression, calls);
+        return methodCallRootHasBlockLambdaArgument(root)
+                || calls.stream().anyMatch(this::methodCallSegmentHasBlockLambdaArgument);
+    }
+
+    private boolean methodCallRootHasBlockLambdaArgument(Expression root) {
+        return root instanceof MethodCallExpr methodRoot && methodCallSegmentHasBlockLambdaArgument(methodRoot);
     }
 
     boolean methodCallChainRootIsObjectCreation(MethodCallExpr expression) {

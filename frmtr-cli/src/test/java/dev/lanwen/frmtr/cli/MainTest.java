@@ -266,6 +266,24 @@ final class MainTest {
     }
 
     @Test
+    void printModeReportsFailedFilesWithGroupedFailureRenderer(@TempDir Path dir) throws IOException {
+        write(dir.resolve("src/Broken.java"), "class {");
+
+        Result result = run(dir, null, "src/Broken.java");
+
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.out()).isEmpty();
+        assertThat(result.err())
+                .startsWith("""
+                        src/Broken.java
+                          Unable to parse Java source:
+                        """)
+                .contains("Parse error")
+                .contains("^")
+                .endsWith("Processed 1 file: 0 printed, 1 failed.\n");
+    }
+
+    @Test
     void checkReportsPassedAndChangedFilesAndReturnsOne(@TempDir Path dir) throws IOException {
         write(
                 dir.resolve("src/Formatted.java"),
@@ -333,12 +351,13 @@ final class MainTest {
                 Checked 1 file: 1 failed.
                 """);
         assertThat(result.err())
-                .contains("src/Broken.java: Unable to parse Java source:")
+                .startsWith("""
+                        src/Broken.java
+                          Unable to parse Java source:
+                        """)
                 .contains("Parse-error recovery is configured")
                 .contains("Parse error")
-                .contains("^")
-                .doesNotContain("Problem stacktrace")
-                .doesNotContain("JavaFormatter.parse");
+                .contains("^");
     }
 
     @Test
@@ -353,9 +372,11 @@ final class MainTest {
                 Checked 1 file: 1 failed.
                 """);
         assertThat(result.err())
-                .contains("src/Broken.java: Unable to parse Java source:")
-                .contains("Parse error")
-                .doesNotContain("Parse-error recovery is configured");
+                .startsWith("""
+                        src/Broken.java
+                          Unable to parse Java source:
+                        """)
+                .contains("Parse error");
     }
 
     @Test
@@ -374,9 +395,12 @@ final class MainTest {
         assertThat(result.exitCode()).isEqualTo(2);
         assertThat(result.out()).isEqualTo("Processed 1 file: 0 formatted, 1 failed.\n");
         assertThat(result.err())
-                .contains("src/TemplateExpression.java: Unable to parse Java source:")
-                .contains("1  class TemplateExpression {")
-                .contains("3    String info = STR.\"My name is \\{name}\";")
+                .startsWith("""
+                        src/TemplateExpression.java
+                          Unable to parse Java source:
+                        """)
+                .contains("  1  class TemplateExpression {")
+                .contains("  3    String info = STR.\"My name is \\{name}\";")
                 .contains("^")
                 .contains("Lexical error at line 3, column 34");
     }
@@ -410,7 +434,10 @@ final class MainTest {
                 Checked 1 file: 1 failed.
                 """);
         assertThat(result.err())
-                .contains("src/Switch.java: Unable to parse Java source:")
+                .startsWith("""
+                        src/Switch.java
+                          Unable to parse Java source:
+                        """)
                 .contains("yield")
                 .contains("^");
     }

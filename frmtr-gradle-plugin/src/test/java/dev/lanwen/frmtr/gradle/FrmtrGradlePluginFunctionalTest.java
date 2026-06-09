@@ -228,8 +228,10 @@ final class FrmtrGradlePluginFunctionalTest {
         BuildResult result = gradle("frmtrCheck").buildAndFail();
 
         assertThat(result.getOutput())
-                .contains("! src/main/java/demo/TextBlockDemo.java")
-                .contains("src/main/java/demo/TextBlockDemo.java: Unable to parse Java source:")
+                .contains("""
+                        src/main/java/demo/TextBlockDemo.java
+                          Unable to parse Java source:
+                        """)
                 .contains("\"\"\"")
                 .contains("^");
     }

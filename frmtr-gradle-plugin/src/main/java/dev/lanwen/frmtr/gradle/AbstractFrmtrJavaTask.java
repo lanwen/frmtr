@@ -1,9 +1,8 @@
 package dev.lanwen.frmtr.gradle;
 
 import dev.lanwen.frmtr.FormatterOptions;
-import dev.lanwen.frmtr.tooling.FormatFileResult;
 import dev.lanwen.frmtr.tooling.FormatRunResult;
-import dev.lanwen.frmtr.tooling.FormatterFailureRenderer;
+import dev.lanwen.frmtr.tooling.FormatterRunFailureRenderer;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
@@ -96,11 +95,10 @@ public abstract class AbstractFrmtrJavaTask extends DefaultTask {
                 .toList();
     }
 
-    protected void printFailed(FormatFileResult result) {
-        getLogger().lifecycle("! {}", result.displayPath());
-        result.failureException()
-                .ifPresent(exception -> getLogger()
-                        .lifecycle("{}: {}", result.displayPath(), FormatterFailureRenderer.render(exception)));
+    protected void printFailures(FormatRunResult run) {
+        if (run.hasFailures()) {
+            getLogger().lifecycle(FormatterRunFailureRenderer.render(run));
+        }
     }
 
     protected GradleException formatterFailure(String action, FormatRunResult run) {

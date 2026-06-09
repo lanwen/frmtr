@@ -7,6 +7,7 @@ import dev.lanwen.frmtr.tooling.FormatFileResult;
 import dev.lanwen.frmtr.tooling.FormatFileStatus;
 import dev.lanwen.frmtr.tooling.FormatRunResult;
 import dev.lanwen.frmtr.tooling.FormatterFailureRenderer;
+import dev.lanwen.frmtr.tooling.FormatterRunFailureRenderer;
 import dev.lanwen.frmtr.tooling.FormatterRunner;
 import dev.lanwen.frmtr.tooling.UnifiedDiffRenderer;
 import java.io.IOException;
@@ -204,10 +205,8 @@ public final class Main implements Callable<Integer> {
         for (FormatFileResult result : run.results()) {
             out.println(statusLine(statusMarker(result.status()), result.displayPath()));
             result.unifiedDiff().ifPresent(out::print);
-            if (result.failed()) {
-                result.failureException().ifPresent(exception -> printFailure(result.displayPath().toString(), exception));
-            }
         }
+        printRunFailures(run);
         printCheckSummary(run);
         out.flush();
         if (run.hasFailures()) {
@@ -218,16 +217,14 @@ public final class Main implements Callable<Integer> {
 
     private int writeFiles(List<Path> files, FormatterOptions options, long ignored) {
         FormatRunResult run = FormatterRunner.write(workingDirectory, files, options);
-        run.failedResults().stream()
-                .forEach(result -> result.failureException()
-                        .ifPresent(exception -> printFailure(result.displayPath().toString(), exception)));
+        printRunFailures(run);
         printWriteSummary(run, ignored);
         out.flush();
         return run.hasFailures() ? 2 : 0;
     }
 
     private int printFiles(List<Path> files, FormatterOptions options, long ignored) {
-        long failed = 0;
+        List<FormatFileResult> failures = new ArrayList<>();
         long printed = 0;
         for (int i = 0; i < files.size(); i++) {
             Path file = files.get(i);
@@ -236,12 +233,18 @@ public final class Main implements Callable<Integer> {
                 printFormatted(files, i, file, formatted);
                 printed++;
             } catch (FormatterException | IOException exception) {
-                failed++;
-                printFailure(displayPath(file).toString(), exception);
+                failures.add(new FormatFileResult(
+                        file,
+                        displayPath(file),
+                        FormatFileStatus.FAILED,
+                        "",
+                        exception));
             }
         }
-        printPrintSummary(files.size(), printed, failed, ignored);
-        return failed > 0 ? 2 : 0;
+        FormatRunResult failureRun = new FormatRunResult(failures);
+        printRunFailures(failureRun);
+        printPrintSummary(files.size(), printed, failureRun.failureCount(), ignored);
+        return failureRun.hasFailures() ? 2 : 0;
     }
 
     private String readStdin() throws IOException {
@@ -347,6 +350,19 @@ public final class Main implements Callable<Integer> {
         if (stacktrace) {
             exception.printStackTrace(err);
         }
+        err.flush();
+    }
+
+    private void printRunFailures(FormatRunResult run) {
+        if (!run.hasFailures()) {
+            return;
+        }
+        if (stacktrace) {
+            run.failedResults().forEach(result -> result.failureException()
+                    .ifPresent(exception -> printFailure(result.displayPath().toString(), exception)));
+            return;
+        }
+        err.println(FormatterRunFailureRenderer.render(run));
         err.flush();
     }
 

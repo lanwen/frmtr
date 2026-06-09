@@ -28,7 +28,7 @@ public abstract class FrmtrJavaCheckTask extends AbstractFrmtrJavaTask {
     public void checkFormatting() {
         FormatRunResult run = FormatterRunner.check(displayRoot(), selectedFiles(), formatterOptions(), printDiffs.get());
         run.changedResults().forEach(this::printChanged);
-        run.failedResults().forEach(this::printFailed);
+        printFailures(run);
 
         if (run.hasFailures()) {
             throw formatterFailure("check", run);

@@ -54,7 +54,7 @@ frmtr {
 }
 ```
 
-Java source files under the Gradle build directory are excluded by default. The Gradle parser language level defaults to `AUTO`, which uses the Java toolchain first, then `sourceCompatibility`, and otherwise falls back to `LATEST_AVAILABLE`. Set `LATEST_AVAILABLE` to ignore the Gradle project target and use JavaParser's bleeding-edge parser mode, or `UNDEFINED` for JavaParser raw mode. Check output prints changed and failed files; unified diffs for changed files are enabled by default.
+Java source files under the Gradle build directory are excluded by default. The Gradle parser language level defaults to `AUTO`, which uses the Java toolchain first, then `sourceCompatibility`, and otherwise falls back to `LATEST_AVAILABLE`. Set `LATEST_AVAILABLE` to ignore the Gradle project target and use JavaParser's bleeding-edge parser mode, or `UNDEFINED` for JavaParser raw mode. Check output prints changed and failed files; unified diffs for changed files are enabled by default. When files fail, Gradle renders each failed path with an indented failure block and JavaParser source context when available before failing the task.
 
 ## CLI
 
@@ -80,7 +80,7 @@ Selectors can be repeated, comma-separated, files, directories, or glob patterns
 
 With no selectors, the CLI uses `./**/*.java` and checks formatting by default. Pass `--stdin` to read Java source from stdin and write formatted source to stdout, or combine `--stdin` with `--check` or `--diff` to compare piped source against formatter output.
 
-`--check` prints `✓` for files that are already formatted, `✗` for files that need formatting, and `!` for files that failed to parse or could not be read, followed by a concise summary. `--write` ends with a processed summary that counts files formatted, failed, and ignored by `.gitignore`. Add `--diff` to render unified diffs for files marked `✗`. Failure output is concise by default and includes source context for parse locations reported by JavaParser; add `--stacktrace` when debugging formatter or I/O failures.
+`--check` prints `✓` for files that are already formatted, `✗` for files that need formatting, and `!` for files that failed to parse or could not be read, followed by a concise summary. `--write` ends with a processed summary that counts files formatted, failed, and ignored by `.gitignore`. For multi-file runs, `--check` and `--write` continue after formatter failures and render failed files on stderr as path-grouped blocks with indented messages and JavaParser source context when available. Add `--diff` to render unified diffs for files marked `✗`, or `--stacktrace` when debugging formatter or I/O failures.
 
 Use `--java-level` to choose the parser language level. The default is `LATEST_AVAILABLE`, which uses JavaParser's bleeding-edge parser mode. Use `UNSET` for JavaParser raw mode, or a release value such as `17`, `JAVA_21`, or `JAVA_25` when you need a strict release gate.
 

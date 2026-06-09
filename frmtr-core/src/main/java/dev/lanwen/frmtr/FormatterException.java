@@ -7,6 +7,10 @@ import java.util.Optional;
 
 /**
  * Raised when source cannot be parsed or formatted.
+ *
+ * <p>Parse failures may carry structured {@link SourceProblem} entries with source locations and context lines. API
+ * consumers should prefer {@link #sourceProblems()} for diagnostics and reserve the exception message for a concise
+ * human summary.
  */
 public final class FormatterException extends RuntimeException {
     @Serial
@@ -47,6 +51,13 @@ public final class FormatterException extends RuntimeException {
         return internal;
     }
 
+    /**
+     * Returns structured source diagnostics reported for this failure.
+     *
+     * <p>The list is empty when no structured diagnostics were provided. Individual {@link SourceProblem} entries may
+     * omit location and context when that metadata is unavailable. Renderers and adapters should use this metadata
+     * instead of parsing {@link #getMessage()}, because the message is not a stable source-context contract.
+     */
     public List<SourceProblem> sourceProblems() {
         return sourceProblems == null ? List.of() : sourceProblems;
     }
@@ -54,6 +65,10 @@ public final class FormatterException extends RuntimeException {
     /**
      * Source-oriented context for one formatter failure, separated from the exception message so adapters can choose
      * their own display format.
+     *
+     * <p>{@code location} is the parser's exact position when available, {@code enclosingUnitLine} is the closest
+     * enclosing declaration or source unit line used as orientation, and {@code contextLines} is the cropped source
+     * window intended for human diagnostics.
      */
     public record SourceProblem(
             String message,

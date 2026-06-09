@@ -115,12 +115,12 @@ public final class FrmtrGradlePlugin implements Plugin<Project> {
     }
 
     private static FormatterOptions.JavaLanguageLevel inferJavaLanguageLevel(JavaPluginExtension java) {
-        if (java.getToolchain().getLanguageVersion().isPresent()) {
-            return fromMajor(java.getToolchain().getLanguageVersion().get().asInt());
-        }
         JavaVersion sourceCompatibility = java.getSourceCompatibility();
         if (sourceCompatibility != null) {
             return fromMajor(Integer.parseInt(sourceCompatibility.getMajorVersion()));
+        }
+        if (java.getToolchain().getLanguageVersion().isPresent()) {
+            return fromMajor(java.getToolchain().getLanguageVersion().get().asInt());
         }
         return FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE;
     }

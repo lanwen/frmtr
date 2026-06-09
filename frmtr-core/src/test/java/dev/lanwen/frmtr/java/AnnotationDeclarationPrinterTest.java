@@ -66,11 +66,12 @@ final class AnnotationDeclarationPrinterTest {
         assertThat(result.getResult()).isPresent();
         assertThat(result.getResult().orElseThrow().getParsed()).isEqualTo(Node.Parsedness.UNPARSABLE);
         assertThat(result.getResult().orElseThrow().findAll(AnnotationDeclaration.class)).isEmpty();
-        assertThat(thrown)
-                .isInstanceOf(FormatterException.class)
-                .hasMessageContaining("Unable to parse Java source:")
-                .hasMessageContaining("annotation declaration member lists")
-                .hasMessageContaining("Unsupported recovered node: CompilationUnit");
+        assertThat(thrown).isInstanceOfSatisfying(FormatterException.class, exception -> {
+            assertThat(exception).hasMessage("Unable to parse Java source");
+            assertThat(exception.sourceProblems()).first().satisfies(problem -> assertThat(problem.message())
+                    .contains("annotation declaration member lists")
+                    .contains("Unsupported recovered node: CompilationUnit"));
+        });
     }
 
     private static Statement recoveredStatement(BodyDeclaration<?> declaration) {

@@ -2,8 +2,8 @@ package dev.lanwen.frmtr.gradle;
 
 public enum FrmtrJavaLanguageLevel {
     /**
-     * Infers the parser language level from Gradle Java configuration, using the toolchain first and then
-     * sourceCompatibility.
+     * Infers the parser language level from Gradle Java configuration, using sourceCompatibility first and then the
+     * Java toolchain language version.
      */
     AUTO,
     /**

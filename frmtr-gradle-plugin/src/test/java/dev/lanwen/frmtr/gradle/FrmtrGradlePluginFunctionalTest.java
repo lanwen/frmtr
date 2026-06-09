@@ -223,14 +223,14 @@ final class FrmtrGradlePluginFunctionalTest {
                     sourceCompatibility = JavaVersion.VERSION_1_8
                 }
                 """);
-        write("src/main/java/demo/SwitchDemo.java", switchExpressionYieldSource());
+        write("src/main/java/demo/TextBlockDemo.java", textBlockSource());
 
         BuildResult result = gradle("frmtrCheck").buildAndFail();
 
         assertThat(result.getOutput())
-                .contains("! src/main/java/demo/SwitchDemo.java")
-                .contains("src/main/java/demo/SwitchDemo.java: Unable to parse Java source:")
-                .contains("yield")
+                .contains("! src/main/java/demo/TextBlockDemo.java")
+                .contains("src/main/java/demo/TextBlockDemo.java: Unable to parse Java source:")
+                .contains("\"\"\"")
                 .contains("^");
     }
 
@@ -310,6 +310,16 @@ final class FrmtrGradlePluginFunctionalTest {
                             case DeleteCommand cmd -> new Deleted(cmd.id());
                         };
                     }
+                }""";
+    }
+
+    private static String textBlockSource() {
+        return """
+                package demo;
+                class TextBlockDemo {
+                    String value = \"""
+                            text
+                            \""";
                 }""";
     }
 }

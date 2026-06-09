@@ -318,10 +318,11 @@ final class FrmtrTest {
         assertThat(result.getResult().orElseThrow().getParsed()).isEqualTo(Node.Parsedness.UNPARSABLE);
         assertThat(result.getResult().orElseThrow().getImports()).isEmpty();
         assertThat(result.getResult().orElseThrow().getTypes()).isEmpty();
-        assertThat(thrown)
-                .isInstanceOf(FormatterException.class)
-                .hasMessageContaining("Unable to parse Java source:")
-                .hasMessageContaining("Unsupported recovered node: CompilationUnit");
+        assertThat(thrown).isInstanceOfSatisfying(FormatterException.class, exception -> {
+            assertThat(exception).hasMessage("Unable to parse Java source");
+            assertThat(exception.sourceProblems()).first().satisfies(problem -> assertThat(problem.message())
+                    .contains("Unsupported recovered node: CompilationUnit"));
+        });
     }
 
     @Test
@@ -334,11 +335,12 @@ final class FrmtrTest {
 
         Throwable thrown = catchThrowable(() -> Frmtr.format(source));
 
-        assertThat(thrown)
-                .isInstanceOf(FormatterException.class)
-                .hasMessageContaining("Unable to parse Java source:")
-                .hasMessageContaining("Parse-error recovery is configured")
-                .hasMessageContaining("module directive lists");
+        assertThat(thrown).isInstanceOfSatisfying(FormatterException.class, exception -> {
+            assertThat(exception).hasMessage("Unable to parse Java source");
+            assertThat(exception.sourceProblems()).first().satisfies(problem -> assertThat(problem.message())
+                    .contains("Parse-error recovery is configured")
+                    .contains("module directive lists"));
+        });
     }
 
     @Test
@@ -360,10 +362,11 @@ final class FrmtrTest {
         assertThat(result.getResult()).isPresent();
         assertThat(result.getResult().orElseThrow().getParsed()).isEqualTo(Node.Parsedness.UNPARSABLE);
         assertThat(result.getResult().orElseThrow().getTypes()).isEmpty();
-        assertThat(thrown)
-                .isInstanceOf(FormatterException.class)
-                .hasMessageContaining("Unable to parse Java source:")
-                .hasMessageContaining("Unsupported recovered node: CompilationUnit");
+        assertThat(thrown).isInstanceOfSatisfying(FormatterException.class, exception -> {
+            assertThat(exception).hasMessage("Unable to parse Java source");
+            assertThat(exception.sourceProblems()).first().satisfies(problem -> assertThat(problem.message())
+                    .contains("Unsupported recovered node: CompilationUnit"));
+        });
     }
 
     @Test
@@ -387,11 +390,12 @@ final class FrmtrTest {
         assertThat(result.getResult()).isPresent();
         assertThat(result.getResult().orElseThrow().getParsed()).isEqualTo(Node.Parsedness.UNPARSABLE);
         assertThat(result.getResult().orElseThrow().getModule()).isEmpty();
-        assertThat(thrown)
-                .isInstanceOf(FormatterException.class)
-                .hasMessageContaining("Unable to parse Java source:")
-                .hasMessageContaining("module directive lists")
-                .hasMessageContaining("Unsupported recovered node: CompilationUnit");
+        assertThat(thrown).isInstanceOfSatisfying(FormatterException.class, exception -> {
+            assertThat(exception).hasMessage("Unable to parse Java source");
+            assertThat(exception.sourceProblems()).first().satisfies(problem -> assertThat(problem.message())
+                    .contains("module directive lists")
+                    .contains("Unsupported recovered node: CompilationUnit"));
+        });
     }
 
     @Test
@@ -1677,29 +1681,39 @@ final class FrmtrTest {
                     }
                 }""";
 
-        Throwable thrown = catchThrowable(() -> Frmtr.format(source, failOnParseErrorsOptions()));
+        FormatterException exception = formatterException(source, failOnParseErrorsOptions());
 
-        assertThat(thrown)
-                .isInstanceOf(FormatterException.class)
-                .hasMessageContaining("2      void method() {")
-                .hasMessageContaining("3          var something =")
-                .hasMessageContaining("----------------------^")
-                .hasMessageContaining("4      }")
-                .hasMessageContaining("(line 3,col 23) Parse error");
+        assertThat(exception).hasMessage("Unable to parse Java source");
+        assertThat(exception.sourceProblems()).singleElement().satisfies(problem -> {
+            assertThat(problem.message()).contains("(line 3,col 23) Parse error");
+            assertThat(problem.location()).hasValue(new FormatterException.SourceLocation(3, 23));
+            assertThat(problem.enclosingUnitLine())
+                    .hasValue(new FormatterException.SourceLine(2, 1, "    void method() {"));
+            assertThat(problem.contextLines())
+                    .extracting(FormatterException.SourceLine::lineNumber)
+                    .containsExactly(1, 2, 3, 4, 5);
+            assertThat(problem.contextLines())
+                    .contains(new FormatterException.SourceLine(2, 1, "    void method() {"))
+                    .contains(new FormatterException.SourceLine(3, 1, "        var something ="));
+        });
     }
 
     @Test
     void lexicalParseErrorsIncludeSourceContextFromMessagePosition() throws Exception {
         String source = readResource("format/prettier-java/unit-test/template-expression/prettier.output.java");
 
-        Throwable thrown = catchThrowable(() -> Frmtr.format(source, failOnParseErrorsOptions()));
+        FormatterException exception = formatterException(source, failOnParseErrorsOptions());
 
-        assertThat(thrown)
-                .isInstanceOf(FormatterException.class)
-                .hasMessageContaining("1  class TemplateExpression {")
-                .hasMessageContaining("3    String info = STR.\"My name is \\{name}\";")
-                .hasMessageContaining("^")
-                .hasMessageContaining("Lexical error at line 3, column 34");
+        assertThat(exception).hasMessage("Unable to parse Java source");
+        assertThat(exception.sourceProblems()).first().satisfies(problem -> {
+            assertThat(problem.message()).contains("Lexical error at line 3, column 34");
+            assertThat(problem.location()).hasValue(new FormatterException.SourceLocation(3, 34));
+            assertThat(problem.enclosingUnitLine())
+                    .hasValue(new FormatterException.SourceLine(1, 1, "class TemplateExpression {"));
+            assertThat(problem.contextLines())
+                    .contains(new FormatterException.SourceLine(1, 1, "class TemplateExpression {"))
+                    .contains(new FormatterException.SourceLine(3, 1, "  String info = STR.\"My name is \\{name}\";"));
+        });
     }
 
     @Test
@@ -1714,17 +1728,72 @@ final class FrmtrTest {
                     }
                 }""";
 
-        Throwable thrown = catchThrowable(() -> Frmtr.format(source, failOnParseErrorsOptions()));
+        FormatterException exception = formatterException(source, failOnParseErrorsOptions());
 
-        assertThat(thrown)
-                .isInstanceOf(FormatterException.class)
-                .hasMessageContaining(System.lineSeparator()
-                        + System.lineSeparator()
-                        + "// ..."
-                        + System.lineSeparator()
-                        + System.lineSeparator())
-                .hasMessageContaining("(line 3,col 17) Parse error")
-                .hasMessageContaining("(line 6,col 17) Parse error");
+        assertThat(exception).hasMessage("Unable to parse Java source");
+        assertThat(exception.sourceProblems())
+                .hasSize(2)
+                .anySatisfy(problem -> assertThat(problem.message()).contains("(line 3,col 17) Parse error"))
+                .anySatisfy(problem -> assertThat(problem.message()).contains("(line 6,col 17) Parse error"));
+    }
+
+    @Test
+    void parseErrorContextKeepsFiveLinesAroundPosition() {
+        String source = """
+                class Demo {
+                    void method() {
+                        int before1 = 1;
+                        int before2 = 2;
+                        int before3 = 3;
+                        int before4 = 4;
+                        int before5 = 5;
+                        var value =
+                        int after1 = 1;
+                        int after2 = 2;
+                        int after3 = 3;
+                        int after4 = 4;
+                        int after5 = 5;
+                        int after6 = 6;
+                    }
+                }""";
+
+        FormatterException exception = formatterException(source, failOnParseErrorsOptions());
+
+        assertThat(exception.sourceProblems()).first().satisfies(problem -> assertThat(problem.contextLines())
+                .extracting(FormatterException.SourceLine::lineNumber)
+                .containsExactly(3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13));
+        assertThat(exception.sourceProblems()).first().satisfies(problem -> assertThat(problem.enclosingUnitLine())
+                .hasValue(new FormatterException.SourceLine(2, 1, "    void method() {")));
+    }
+
+    @Test
+    void parseErrorContextCropsLongLinesAroundPosition() {
+        String linePrefix = "        int value = 1;";
+        String source = "class Demo {\n"
+                + "    void method() {\n"
+                + linePrefix
+                + " ".repeat(4128 - linePrefix.length() - 1)
+                + "public int next = 2;"
+                + " ".repeat(300)
+                + "\n"
+                + "    }\n"
+                + "}\n";
+
+        FormatterException exception = formatterException(source, failOnParseErrorsOptions());
+
+        assertThat(exception.sourceProblems()).first().satisfies(problem -> {
+            FormatterException.SourceLocation location = problem.location().orElseThrow();
+            FormatterException.SourceLine errorLine = problem.contextLines().stream()
+                    .filter(line -> line.lineNumber() == location.line())
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(location.column()).isEqualTo(4128);
+            assertThat(errorLine.startColumn()).isEqualTo(4000);
+            assertThat(errorLine.text()).hasSize(256);
+            assertThat(location.column()).isBetween(
+                    errorLine.startColumn(),
+                    errorLine.startColumn() + errorLine.text().length());
+        });
     }
 
     @Test
@@ -1740,9 +1809,19 @@ final class FrmtrTest {
     void unsetJavaLanguageLevelUsesRawParserMode() {
         FormatterOptions options = failOnParseErrorsOptions(FormatterOptions.JavaLanguageLevel.UNSET);
 
-        assertThatThrownBy(() -> Frmtr.format(switchExpressionYieldSource(), options))
-                .isInstanceOf(FormatterException.class)
-                .hasMessageContaining("yield");
+        FormatterException exception = formatterException(switchExpressionYieldSource(), options);
+
+        assertThat(exception.sourceProblems()).anySatisfy(problem -> assertThat(problem.message()).contains("yield"));
+    }
+
+    private static FormatterException formatterException(String source) {
+        return formatterException(source, FormatterOptions.defaults());
+    }
+
+    private static FormatterException formatterException(String source, FormatterOptions options) {
+        Throwable thrown = catchThrowable(() -> Frmtr.format(source, options));
+        assertThat(thrown).isInstanceOf(FormatterException.class);
+        return (FormatterException) thrown;
     }
 
     private static String switchExpressionYieldSource() {

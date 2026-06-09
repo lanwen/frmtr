@@ -6,6 +6,7 @@ import dev.lanwen.frmtr.Frmtr;
 import dev.lanwen.frmtr.tooling.FormatFileResult;
 import dev.lanwen.frmtr.tooling.FormatFileStatus;
 import dev.lanwen.frmtr.tooling.FormatRunResult;
+import dev.lanwen.frmtr.tooling.FormatterFailureRenderer;
 import dev.lanwen.frmtr.tooling.FormatterRunner;
 import dev.lanwen.frmtr.tooling.UnifiedDiffRenderer;
 import java.io.IOException;
@@ -355,7 +356,7 @@ public final class Main implements Callable<Integer> {
                 && !stacktrace) {
             return exception.getMessage() + " (run with --stacktrace for details)";
         }
-        return exception.getMessage();
+        return FormatterFailureRenderer.render(exception);
     }
 
     private Path displayPath(Path file) {

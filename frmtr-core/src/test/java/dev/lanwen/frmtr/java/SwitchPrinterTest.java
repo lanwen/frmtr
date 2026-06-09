@@ -267,11 +267,12 @@ final class SwitchPrinterTest {
                     assertThat(SwitchPrinter.isCollapsedMalformedSwitchStatement(statement, new SourceText(source)))
                             .isTrue();
                 });
-        assertThat(thrown)
-                .isInstanceOf(FormatterException.class)
-                .hasMessageContaining("Unable to parse Java source:")
-                .hasMessageContaining("switch entry lists")
-                .hasMessageContaining("Unsupported recovered node: UnparsableStmt");
+        assertThat(thrown).isInstanceOfSatisfying(FormatterException.class, exception -> {
+            assertThat(exception).hasMessage("Unable to parse Java source");
+            assertThat(exception.sourceProblems()).first().satisfies(problem -> assertThat(problem.message())
+                    .contains("switch entry lists")
+                    .contains("Unsupported recovered node: UnparsableStmt"));
+        });
     }
 
     @Test
@@ -295,11 +296,12 @@ final class SwitchPrinterTest {
         assertThat(unit.getParsed()).isEqualTo(Node.Parsedness.UNPARSABLE);
         assertThat(unit.findAll(SwitchStmt.class)).isEmpty();
         assertThat(unit.findAll(Statement.class)).isEmpty();
-        assertThat(thrown)
-                .isInstanceOf(FormatterException.class)
-                .hasMessageContaining("Unable to parse Java source:")
-                .hasMessageContaining("switch entry lists")
-                .hasMessageContaining("Unsupported recovered node: CompilationUnit");
+        assertThat(thrown).isInstanceOfSatisfying(FormatterException.class, exception -> {
+            assertThat(exception).hasMessage("Unable to parse Java source");
+            assertThat(exception.sourceProblems()).first().satisfies(problem -> assertThat(problem.message())
+                    .contains("switch entry lists")
+                    .contains("Unsupported recovered node: CompilationUnit"));
+        });
     }
 
     @Test
@@ -328,11 +330,12 @@ final class SwitchPrinterTest {
                     assertThat(SwitchPrinter.isCollapsedMalformedSwitchStatement(statement, new SourceText(source)))
                             .isTrue();
                 });
-        assertThat(thrown)
-                .isInstanceOf(FormatterException.class)
-                .hasMessageContaining("Unable to parse Java source:")
-                .hasMessageContaining("switch entry lists")
-                .hasMessageContaining("Unsupported recovered node: UnparsableStmt");
+        assertThat(thrown).isInstanceOfSatisfying(FormatterException.class, exception -> {
+            assertThat(exception).hasMessage("Unable to parse Java source");
+            assertThat(exception.sourceProblems()).first().satisfies(problem -> assertThat(problem.message())
+                    .contains("switch entry lists")
+                    .contains("Unsupported recovered node: UnparsableStmt"));
+        });
     }
 
     private static String printRecovered(CompilationUnit unit, String source) {

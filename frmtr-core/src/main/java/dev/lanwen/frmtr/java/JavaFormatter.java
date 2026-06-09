@@ -5,9 +5,9 @@ import com.github.javaparser.ParseProblemException;
 import com.github.javaparser.ParseResult;
 import com.github.javaparser.ParseStart;
 import com.github.javaparser.ParserConfiguration;
-import com.github.javaparser.Providers;
 import com.github.javaparser.Problem;
-import com.github.javaparser.Position;
+import com.github.javaparser.Providers;
+import com.github.javaparser.TokenMgrException;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
@@ -28,15 +28,10 @@ import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import dev.lanwen.frmtr.doc.DocDebugRenderer;
 import dev.lanwen.frmtr.doc.DocRenderer;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public final class JavaFormatter {
-    private static final int PARSE_ERROR_CONTEXT_LINES = 2;
-    private static final Pattern MESSAGE_POSITION = Pattern.compile("line (\\d+), column (\\d+)");
     private static final JavaTransformPipeline TRANSFORMS =
             new JavaTransformPipeline(List.of(new ImportSortTransform()));
 
@@ -107,6 +102,11 @@ public final class JavaFormatter {
             ParseResult<CompilationUnit> result =
                     parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source));
             return parseResult(source, result);
+        } catch (TokenMgrException exception) {
+            throw new FormatterException(
+                    "Unable to parse Java source",
+                    exception,
+                    ParseErrorSourceContext.from(source, exception));
         } catch (ParseProblemException exception) {
             throw parseFailure(source, exception.getProblems(), exception, thrownBeforeRecoveredCompilationUnit());
         }
@@ -140,15 +140,29 @@ public final class JavaFormatter {
             List<Problem> problems,
             ParseProblemException cause,
             Optional<String> recoveryFailureReason) {
-        String message = "Unable to parse Java source:" + System.lineSeparator();
+        List<FormatterException.SourceProblem> sourceProblems = ParseErrorSourceContext.from(source, problems);
         if (options.parseErrorBehavior() == FormatterOptions.ParseErrorBehavior.RECOVER
                 && recoveryFailureReason.isPresent()) {
-            message += recoveryFailureReason.orElseThrow()
-                    + System.lineSeparator()
-                    + System.lineSeparator();
+            sourceProblems = withRecoveryFailureReason(sourceProblems, recoveryFailureReason.orElseThrow());
         }
-        message += formatProblems(source, problems);
-        return new FormatterException(message, cause);
+        return new FormatterException("Unable to parse Java source", cause, sourceProblems);
+    }
+
+    private static List<FormatterException.SourceProblem> withRecoveryFailureReason(
+            List<FormatterException.SourceProblem> sourceProblems,
+            String reason) {
+        if (sourceProblems.isEmpty()) {
+            return List.of(new FormatterException.SourceProblem(reason, Optional.empty(), Optional.empty(), List.of()));
+        }
+        FormatterException.SourceProblem first = sourceProblems.getFirst();
+        List<FormatterException.SourceProblem> withReason = new java.util.ArrayList<>();
+        withReason.add(new FormatterException.SourceProblem(
+                reason + System.lineSeparator() + System.lineSeparator() + first.message(),
+                first.location(),
+                first.enclosingUnitLine(),
+                first.contextLines()));
+        withReason.addAll(sourceProblems.subList(1, sourceProblems.size()));
+        return List.copyOf(withReason);
     }
 
     private Optional<String> parseProblemsUnsupportedByCurrentPrinters() {
@@ -414,81 +428,6 @@ public final class JavaFormatter {
         };
     }
 
-    private static String formatProblems(String source, List<Problem> problems) {
-        List<String> lines = source.lines().toList();
-        return problems.stream()
-                .sorted(Comparator.comparing(problem -> problem.getLocation().map(Object::toString).orElse("")))
-                .map(problem -> formatProblem(lines, problem))
-                .reduce((left, right) -> left + parseProblemSeparator() + right)
-                .orElse("unknown parse error");
-    }
-
-    private static String parseProblemSeparator() {
-        return System.lineSeparator()
-                + System.lineSeparator()
-                + "// ..."
-                + System.lineSeparator()
-                + System.lineSeparator();
-    }
-
-    private static String formatProblem(List<String> lines, Problem problem) {
-        return problemPosition(problem)
-                .map(position -> formatProblemAtPosition(lines, position, problem.getVerboseMessage()))
-                .orElse(problem.getVerboseMessage());
-    }
-
-    private static Optional<Position> problemPosition(Problem problem) {
-        return problem.getLocation()
-                .flatMap(location -> location.toRange().map(range -> range.begin))
-                .filter(Position::valid)
-                .or(() -> messagePosition(problem.getVerboseMessage()));
-    }
-
-    private static Optional<Position> messagePosition(String message) {
-        if (message == null) {
-            return Optional.empty();
-        }
-        Matcher matcher = MESSAGE_POSITION.matcher(message);
-        if (!matcher.find()) {
-            return Optional.empty();
-        }
-        Position position = new Position(
-                Integer.parseInt(matcher.group(1)),
-                Integer.parseInt(matcher.group(2)));
-        return position.valid() ? Optional.of(position) : Optional.empty();
-    }
-
-    private static String formatProblemAtPosition(List<String> lines, Position position, String message) {
-        if (position.line < 1 || position.line > lines.size()) {
-            return message;
-        }
-        int startLine = Math.max(1, position.line - PARSE_ERROR_CONTEXT_LINES);
-        int endLine = Math.min(lines.size(), position.line + PARSE_ERROR_CONTEXT_LINES);
-        int width = Integer.toString(endLine).length();
-        StringBuilder formatted = new StringBuilder();
-        appendSourceLines(formatted, lines, startLine, position.line, width);
-        formatted.append(System.lineSeparator())
-                .repeat(" ", width + 2)
-                .repeat("-", Math.max(0, position.column - 1))
-                .append("^")
-                .append(System.lineSeparator());
-        formatted.append(message);
-        if (position.line < endLine) {
-            formatted.append(System.lineSeparator());
-            appendSourceLines(formatted, lines, position.line + 1, endLine, width);
-        }
-        return formatted.toString();
-    }
-
-    private static void appendSourceLines(StringBuilder formatted, List<String> lines, int startLine, int endLine, int width) {
-        for (int line = startLine; line <= endLine; line++) {
-            if (!formatted.isEmpty()) {
-                formatted.append(System.lineSeparator());
-            }
-            formatted.append(String.format("%" + width + "d  %s", line, lines.get(line - 1)));
-        }
-    }
-
     private record JavaParseResult(
             CompilationUnit compilationUnit,
             List<Problem> problems,
@@ -496,6 +435,10 @@ public final class JavaFormatter {
         private JavaParseResult {
             problems = List.copyOf(problems);
         }
+    }
+
+    static Doc commentDoc(Comment comment) {
+        return commentDoc(JavaCommentTrivia.from(comment));
     }
 
     static Doc commentDoc(JavaCommentTrivia trivia) {

@@ -80,6 +80,7 @@ It is a core debug API only, not a formatting policy surface or CLI hook.
 - `FormatterRunner.check(...)` formats selected files in memory and returns a `FormatRunResult` with per-file results and aggregate status helpers.
 - `FormatterRunner.write(...)` writes changed formatter output back to disk, continues after per-file failures, distinguishes write-step failures as partially written results, and reports the full run summary.
 - `UnifiedDiffRenderer` renders the same unified diff format for CLI and Gradle check output.
+- `FormatterFailureRenderer` turns structured formatter failures into adapter-facing messages, including parse context, declaration-line context, and caret placement, without making the core exception message own terminal formatting.
 
 The runner owns deterministic path ordering and de-duplication for file lists supplied by adapters. Source discovery remains adapter-specific: the CLI uses selectors and `.gitignore`; the Gradle plugin builds one canonical file collection from Java source sets and Gradle-style source filters, then uses that same collection for task inputs and task actions.
 
@@ -108,8 +109,12 @@ Javadoc comment contains the public `@format` marker. `FormatterOptions.LambdaAr
 single-parameter lambdas preserve source parentheses, avoid parentheses when Java syntax allows it, or always emit
 parentheses. `FormatterOptions.BinaryOperatorPosition` controls whether broken binary continuation lines keep operators
 at the end of the previous line or move operators to the start of continuation lines. Parse failures are reported with
-nearby source lines and a caret marker at JavaParser's reported line and column; lexical failures that only include line
-and column in the parser message use that message position for the same source-context rendering.
+structured `SourceProblem` entries on `FormatterException`: parser message, one-based location when known, nearest
+enclosing declaration source line when detected, and up to five lines above and below the failure. Long source lines are
+cropped to a 256-character column window around the reported position. JavaParser 3.28.1 does not expose typed line or
+column accessors for `TokenMgrException`; lexical failures that omit `Problem` locations therefore use a fallback that
+parses the generated token-manager message only for that typed exception. CLI and Gradle rendering is handled outside
+core through `FormatterFailureRenderer`.
 
 The public `Frmtr` API wraps recoverable internal formatter failures, including parser dependency linkage failures and assertions, as `FormatterException.internal(...)` so adapters can report concise failures without treating them as VM-level crashes. `Frmtr.debugDoc(...)` shares that wrapping and the same parser, transform, and Java printing path as formatting, but returns `DocDebugRenderer` output instead of rendered source.
 
@@ -195,7 +200,7 @@ The plugin is project-local. Applying it to a root project does not automaticall
 
 Default Java source selection covers all Java source sets, de-duplicates files by normalized path, and excludes files under the project's Gradle build directory. `frmtr { java { include(...) exclude(...) } }` narrows source-set selection using source-root-relative Gradle patterns. Formatter tasks do not depend on source-generation tasks by default.
 
-Gradle exposes parser language level as semantic DSL choices instead of mirroring every core Java release. `AUTO` infers from the Java toolchain language version first, then `sourceCompatibility`, and otherwise falls back to `LATEST_AVAILABLE`. `LATEST_AVAILABLE` explicitly ignores the Gradle project target and uses the core bleeding-edge JavaParser mode. `UNDEFINED` maps to the core `UNSET` raw parser mode. Gradle stack trace output is controlled by Gradle's native `--stacktrace`; the plugin does not define a formatter-specific stacktrace switch.
+Gradle exposes parser language level as semantic DSL choices instead of mirroring every core Java release. `AUTO` infers from `sourceCompatibility` first, then the Java toolchain language version, and otherwise falls back to `LATEST_AVAILABLE`. `LATEST_AVAILABLE` explicitly ignores the Gradle project target and uses the core bleeding-edge JavaParser mode. `UNDEFINED` maps to the core `UNSET` raw parser mode. Gradle stack trace output is controlled by Gradle's native `--stacktrace`; the plugin does not define a formatter-specific stacktrace switch.
 
 ## Native Binary
 

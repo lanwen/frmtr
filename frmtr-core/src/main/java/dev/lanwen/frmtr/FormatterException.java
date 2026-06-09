@@ -1,7 +1,9 @@
 package dev.lanwen.frmtr;
 
 import java.io.Serial;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Raised when source cannot be parsed or formatted.
@@ -11,18 +13,24 @@ public final class FormatterException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
     private final boolean internal;
+    private final transient List<SourceProblem> sourceProblems;
 
     public FormatterException(String message) {
-        this(message, null, false);
+        this(message, null, false, List.of());
     }
 
     public FormatterException(String message, Throwable cause) {
-        this(message, cause, false);
+        this(message, cause, false, List.of());
     }
 
-    private FormatterException(String message, Throwable cause, boolean internal) {
+    public FormatterException(String message, Throwable cause, List<SourceProblem> sourceProblems) {
+        this(message, cause, false, sourceProblems);
+    }
+
+    private FormatterException(String message, Throwable cause, boolean internal, List<SourceProblem> sourceProblems) {
         super(message, cause);
         this.internal = internal;
+        this.sourceProblems = List.copyOf(Objects.requireNonNull(sourceProblems, "sourceProblems"));
     }
 
     public static FormatterException internal(Throwable cause) {
@@ -31,11 +39,63 @@ public final class FormatterException extends RuntimeException {
                 "Internal formatter error. This is a bug in frmtr or one of its parser dependencies: "
                         + failureSummary(cause),
                 cause,
-                true);
+                true,
+                List.of());
     }
 
     public boolean internal() {
         return internal;
+    }
+
+    public List<SourceProblem> sourceProblems() {
+        return sourceProblems == null ? List.of() : sourceProblems;
+    }
+
+    /**
+     * Source-oriented context for one formatter failure, separated from the exception message so adapters can choose
+     * their own display format.
+     */
+    public record SourceProblem(
+            String message,
+            Optional<SourceLocation> location,
+            Optional<SourceLine> enclosingUnitLine,
+            List<SourceLine> contextLines) {
+        public SourceProblem {
+            Objects.requireNonNull(message, "message");
+            Objects.requireNonNull(location, "location");
+            Objects.requireNonNull(enclosingUnitLine, "enclosingUnitLine");
+            contextLines = List.copyOf(Objects.requireNonNull(contextLines, "contextLines"));
+        }
+    }
+
+    /**
+     * One-based source position reported by the parser.
+     */
+    public record SourceLocation(int line, int column) {
+        public SourceLocation {
+            if (line < 1) {
+                throw new IllegalArgumentException("line must be positive");
+            }
+            if (column < 1) {
+                throw new IllegalArgumentException("column must be positive");
+            }
+        }
+    }
+
+    /**
+     * One displayed source line. {@code startColumn} is one-based and records where {@code text} starts in the original
+     * line when a long line has been cropped.
+     */
+    public record SourceLine(int lineNumber, int startColumn, String text) {
+        public SourceLine {
+            if (lineNumber < 1) {
+                throw new IllegalArgumentException("lineNumber must be positive");
+            }
+            if (startColumn < 1) {
+                throw new IllegalArgumentException("startColumn must be positive");
+            }
+            Objects.requireNonNull(text, "text");
+        }
     }
 
     private static String failureSummary(Throwable cause) {

@@ -216,7 +216,7 @@ final class PrettierJavaFixtureTest {
         assertThat(thrown)
                 .describedAs("%s should stay skipped until JavaParser can parse its input: %s", fixture, unsupportedReason(fixture))
                 .isInstanceOf(FormatterException.class)
-                .hasMessageContaining("Unable to parse Java source:");
+                .hasMessage("Unable to parse Java source");
     }
 
     private static Stream<Fixture> fixtures() throws IOException, URISyntaxException {

@@ -8,16 +8,15 @@ import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
-import java.util.Arrays;
 import java.util.Optional;
 
 /**
  * Renders Java text-block literal expressions after broad expression dispatch has selected text-block syntax.
  *
  * <p>This helper owns text-block content recognition, fixture-backed HTML/JSON/Java/TypeScript formatting probes, raw
- * text-block fallback rendering, closing-delimiter placement, and indentation reconstruction from the surrounding AST.
- * The boundary exists because text-block literals need source-token spelling and parent-depth indentation, while the
- * rest of expression dispatch only needs a rendered doc once it knows the expression is a text block.
+ * text-block fallback rendering, and indentation reconstruction for formatted embedded snippets. The boundary exists
+ * because text-block literals need source-token spelling and parent-depth indentation, while the rest of expression
+ * dispatch only needs a rendered doc once it knows the expression is a text block.
  *
  * <p>{@link JavaPrinter} still owns broad expression dispatch and the surrounding statement/declaration pipeline.
  * {@link MethodCallPrinter} still decides when a single text-block argument should be isolated from the call prefix; it
@@ -150,54 +149,14 @@ final class TextBlockPrinter {
     }
 
     /**
-     * Renders unrecognized text blocks from source-derived content.
+     * Renders unrecognized text blocks from the original source token.
      *
-     * <p>Text blocks whose closing delimiter shares a line with content need a separate path because the closing
-     * delimiter must stay attached to that last content line instead of moving to its own indented line.
+     * <p>Unknown text blocks may contain layout-sensitive config, SQL, shell, traces, or other snippets. The formatter
+     * must not reinterpret their incidental indentation from AST depth, so this path preserves the literal body and
+     * closing delimiter exactly as written.
      */
     String renderUnformattedTextBlock(TextBlockLiteralExpr expression) {
-        String raw = rawSource.raw(expression);
-        if (hasSameLineTextBlockClosingDelimiter(raw)) {
-            return renderTextBlockWithSameLineClosingDelimiter(
-                    stripSameLineTextBlockIndent(raw), textBlockContentIndent(expression));
-        }
-        return renderFormattedTextBlock(
-                stripTerminalTextBlockNewline(expression.stripIndent()), textBlockContentIndent(expression));
-    }
-
-    private boolean hasSameLineTextBlockClosingDelimiter(String raw) {
-        int closingDelimiter = raw.lastIndexOf("\"\"\"");
-        if (closingDelimiter <= 0) {
-            return false;
-        }
-        int lineStart = raw.lastIndexOf('\n', closingDelimiter - 1) + 1;
-        return !raw.substring(lineStart, closingDelimiter).isBlank();
-    }
-
-    /**
-     * Removes only the common content indent before rendering a same-line closing delimiter text block.
-     *
-     * <p>The normal JavaParser {@code stripIndent()} value no longer tells us that the closing delimiter was on the last
-     * content line, so this path reads the raw token text, strips the opening and closing delimiters, then removes the
-     * minimum indent from non-blank content lines.
-     */
-    private String stripSameLineTextBlockIndent(String raw) {
-        int firstLineBreak = raw.indexOf('\n');
-        int closingDelimiter = raw.lastIndexOf("\"\"\"");
-        if (firstLineBreak < 0 || closingDelimiter <= firstLineBreak) {
-            return stripTerminalTextBlockNewline(raw);
-        }
-        String content = raw.substring(firstLineBreak + 1, closingDelimiter);
-        String[] lines = content.split("\n", -1);
-        int indent = Arrays.stream(lines)
-                .filter(line -> !line.isBlank())
-                .mapToInt(this::leadingSpaces)
-                .min()
-                .orElse(0);
-        return Arrays.stream(lines)
-                .map(line -> line.length() >= indent ? line.substring(indent) : line)
-                .reduce((left, right) -> left + "\n" + right)
-                .orElse("");
+        return rawSource.raw(expression);
     }
 
     /**
@@ -217,44 +176,6 @@ final class TextBlockPrinter {
         }
         text.append(indent).append("\"\"\"");
         return text.toString();
-    }
-
-    /**
-     * Rebuilds text blocks whose closing delimiter was attached to the last content line.
-     *
-     * <p>The loop omits the final newline before {@code """} only for the last split segment; earlier segments preserve
-     * the same newline structure as the standard text-block renderer.
-     */
-    private String renderTextBlockWithSameLineClosingDelimiter(String content, String indent) {
-        StringBuilder text = new StringBuilder("\"\"\"\n");
-        String[] lines = content.split("\n", -1);
-        for (int index = 0; index < lines.length; index++) {
-            String line = lines[index];
-            if (!line.isEmpty()) {
-                text.append(indent).append(line);
-            }
-            if (index == lines.length - 1) {
-                text.append("\"\"\"");
-            } else {
-                text.append("\n");
-            }
-        }
-        return text.toString();
-    }
-
-    private String stripTerminalTextBlockNewline(String content) {
-        if (content.endsWith("\n")) {
-            return content.substring(0, content.length() - 1);
-        }
-        return content;
-    }
-
-    private int leadingSpaces(String value) {
-        int index = 0;
-        while (index < value.length() && value.charAt(index) == ' ') {
-            index++;
-        }
-        return index;
     }
 
     /**

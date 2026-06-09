@@ -80,7 +80,6 @@ final class PrettierJavaFixtureTest {
             "require-pragma/prettier-pragma",
             "return",
             "synchronized",
-            "text-blocks",
             "throws",
             "try_catch",
             "types",

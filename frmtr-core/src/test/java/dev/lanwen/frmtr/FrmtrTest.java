@@ -205,6 +205,7 @@ final class FrmtrTest {
             "return-chain-final-argument, 120",
             "single-member-annotation-array-width, 120",
             "switch-empty-rules, 120",
+            "text-block-raw-method-call, 120",
             "type-header-brace-placement, 120",
             "variable-chain-initializer, 120"
     })
@@ -1455,8 +1456,8 @@ final class FrmtrTest {
                 .contains("System.out.println(\n"
                         + "      // leading comment\n"
                         + "      \"\"\"\n"
-                        + "      text\n"
-                        + "      \"\"\" // trailing comment\n"
+                        + "            text\n"
+                        + "            \"\"\" // trailing comment\n"
                         + "    );");
     }
 
@@ -1485,10 +1486,10 @@ final class FrmtrTest {
 
         assertThat(formatted)
                 .contains("String source = \"\"\"\n"
-                        + "      public void print(%s object) {\n"
-                        + "          System.out.println(Objects.toString(object));\n"
-                        + "      }\n"
-                        + "      \"\"\".formatted(type);");
+                        + "                    public void print(%s object) {\n"
+                        + "                        System.out.println(Objects.toString(object));\n"
+                        + "                    }\n"
+                        + "                    \"\"\".formatted(type);");
     }
 
     @Test

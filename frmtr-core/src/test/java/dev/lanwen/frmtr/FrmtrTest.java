@@ -247,6 +247,36 @@ final class FrmtrTest {
     }
 
     @Test
+    void defaultParseErrorRecoveryRejectsCollapsedMalformedImportList() {
+        String source = """
+                package dev.example;
+
+                import java.util.List;
+                import ; // JavaParser collapses this import list today
+                import java.io.File;
+
+                class Demo {}
+                """;
+        var result = new JavaParser(new ParserConfiguration()
+                        .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
+                        .setStoreTokens(true)
+                        .setAttributeComments(true))
+                .parse(ParseStart.COMPILATION_UNIT, Providers.provider(source));
+
+        Throwable thrown = catchThrowable(() -> Frmtr.format(source));
+
+        assertThat(result.isSuccessful()).isFalse();
+        assertThat(result.getResult()).isPresent();
+        assertThat(result.getResult().orElseThrow().getParsed()).isEqualTo(Node.Parsedness.UNPARSABLE);
+        assertThat(result.getResult().orElseThrow().getImports()).isEmpty();
+        assertThat(result.getResult().orElseThrow().getTypes()).isEmpty();
+        assertThat(thrown)
+                .isInstanceOf(FormatterException.class)
+                .hasMessageContaining("Unable to parse Java source:")
+                .hasMessageContaining("Unsupported recovered node: CompilationUnit");
+    }
+
+    @Test
     void defaultParseErrorRecoveryRejectsUnsupportedMemberRecovery() {
         String source = """
                 class Demo {
@@ -260,7 +290,7 @@ final class FrmtrTest {
                 .isInstanceOf(FormatterException.class)
                 .hasMessageContaining("Unable to parse Java source:")
                 .hasMessageContaining("Parse-error recovery is configured")
-                .hasMessageContaining("only supports malformed block statement lists, class/interface/record member declaration lists, and top-level declaration lists");
+                .hasMessageContaining("only supports malformed block statement lists, class/interface/record member declaration lists, import declaration lists, and top-level declaration lists");
     }
 
     @Test

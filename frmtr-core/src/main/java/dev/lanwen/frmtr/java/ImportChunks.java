@@ -100,6 +100,10 @@ final class ImportChunks {
         return boundaryBeginLine - previousEndLine > 1;
     }
 
+    static boolean hasSourceSeparatorBefore(ImportDeclaration previous, ImportDeclaration current) {
+        return hasSeparatorBefore(previous, current);
+    }
+
     private static boolean hasDetachedLeadingComment(ImportDeclaration importDeclaration) {
         int importBeginLine = CommentIndex.beginLine(importDeclaration, Integer.MAX_VALUE);
         if (importBeginLine == Integer.MAX_VALUE) {

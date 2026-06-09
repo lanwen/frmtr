@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -59,10 +60,28 @@ final class RecoveredListPlanner {
             SourceRegion listRegion,
             List<N> siblings,
             Predicate<? super N> validSibling) {
+        return plan(owner, listRegion, siblings, validSibling, this::siblingRegion);
+    }
+
+    /**
+     * Plans ordered valid sibling and raw gap entries using caller-supplied source regions for each sibling.
+     *
+     * <p>Most recovered lists can use the node's own JavaParser range, but some source lists have caller-owned trivia
+     * that must move with a sibling to keep raw gaps from claiming comments that structured rendering will print. The
+     * source-region hook lets those callers widen or narrow sibling boundaries while keeping the same ordered-list
+     * recovery checks.
+     */
+    <N extends Node> Plan<N> plan(
+            Node owner,
+            SourceRegion listRegion,
+            List<N> siblings,
+            Predicate<? super N> validSibling,
+            Function<? super N, Optional<SourceRegion>> regionForSibling) {
         Objects.requireNonNull(owner, "owner");
         Objects.requireNonNull(listRegion, "listRegion");
         Objects.requireNonNull(siblings, "siblings");
         Objects.requireNonNull(validSibling, "validSibling");
+        Objects.requireNonNull(regionForSibling, "regionForSibling");
 
         SourceRegion boundary;
         try {
@@ -78,7 +97,7 @@ final class RecoveredListPlanner {
         int previousEndOffset = boundary.beginOffset();
         for (N sibling : siblings) {
             Objects.requireNonNull(sibling, "sibling");
-            Optional<SourceRegion> maybeRegion = siblingRegion(sibling);
+            Optional<SourceRegion> maybeRegion = regionForSibling.apply(sibling);
             if (maybeRegion.isEmpty()) {
                 return Plan.unsafe("sibling %s is missing a source range"
                         .formatted(sibling.getClass().getSimpleName()));

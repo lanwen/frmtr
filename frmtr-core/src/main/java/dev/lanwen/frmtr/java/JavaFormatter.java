@@ -9,6 +9,7 @@ import com.github.javaparser.Providers;
 import com.github.javaparser.Problem;
 import com.github.javaparser.Position;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
@@ -153,7 +154,7 @@ public final class JavaFormatter {
             return Optional.empty();
         }
         return Optional.of(
-                "Parse-error recovery is configured, but this recovery slice only supports malformed block statement lists, class/interface/record member declaration lists, and top-level declaration lists.");
+                "Parse-error recovery is configured, but this recovery slice only supports malformed block statement lists, class/interface/record member declaration lists, import declaration lists, and top-level declaration lists.");
     }
 
     private Optional<String> unsupportedRecoveryReason(CompilationUnit unit) {
@@ -178,6 +179,7 @@ public final class JavaFormatter {
     private static boolean isSupportedRecovery(Node recoveredNode) {
         return isSupportedBlockStatementListRecovery(recoveredNode)
                 || isSupportedMemberDeclarationListRecovery(recoveredNode)
+                || isSupportedImportDeclarationListRecovery(recoveredNode)
                 || isSupportedTopLevelDeclarationListRecovery(recoveredNode);
     }
 
@@ -238,6 +240,44 @@ public final class JavaFormatter {
                     return false;
                 })
                 .isPresent();
+    }
+
+    private static boolean isSupportedImportDeclarationListRecovery(Node recoveredNode) {
+        if (recoveredNode instanceof CompilationUnit unit) {
+            return CompilationUnitPrinter.hasRecoverableImportDeclarationListProblem(unit.getImports());
+        }
+        return nearestImportDeclarationListSibling(recoveredNode)
+                .filter(JavaFormatter::hasRecoverableImportDeclarationListProblem)
+                .isPresent();
+    }
+
+    private static Optional<ImportDeclaration> nearestImportDeclarationListSibling(Node recoveredNode) {
+        Optional<Node> current = Optional.of(recoveredNode);
+        while (current.isPresent()) {
+            Node node = current.orElseThrow();
+            if (node instanceof ImportDeclaration importDeclaration && isCompilationUnitImport(importDeclaration)) {
+                return Optional.of(importDeclaration);
+            }
+            current = node.getParentNode();
+        }
+        return Optional.empty();
+    }
+
+    private static boolean isCompilationUnitImport(ImportDeclaration importDeclaration) {
+        return importDeclaration.getParentNode()
+                .filter(CompilationUnit.class::isInstance)
+                .map(CompilationUnit.class::cast)
+                .filter(unit -> unit.getImports().contains(importDeclaration))
+                .isPresent();
+    }
+
+    private static boolean hasRecoverableImportDeclarationListProblem(ImportDeclaration importDeclaration) {
+        return importDeclaration.getParentNode()
+                .filter(CompilationUnit.class::isInstance)
+                .map(CompilationUnit.class::cast)
+                .map(CompilationUnit::getImports)
+                .map(CompilationUnitPrinter::hasRecoverableImportDeclarationListProblem)
+                .orElse(false);
     }
 
     private static boolean isSupportedTopLevelDeclarationListRecovery(Node recoveredNode) {

@@ -204,9 +204,15 @@ public final class Main implements Callable<Integer> {
         FormatRunResult run = FormatterRunner.check(workingDirectory, files, options, diff);
         for (FormatFileResult result : run.results()) {
             out.println(statusLine(statusMarker(result.status()), result.displayPath()));
-            result.unifiedDiff().ifPresent(out::print);
+            if (result.failed() && !stacktrace) {
+                out.println(FormatterRunFailureRenderer.render(result));
+            } else {
+                result.unifiedDiff().ifPresent(out::print);
+            }
         }
-        printRunFailures(run);
+        if (stacktrace) {
+            printRunFailures(run);
+        }
         printCheckSummary(run);
         out.flush();
         if (run.hasFailures()) {

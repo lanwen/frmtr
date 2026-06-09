@@ -13,11 +13,11 @@ public final class FormatterRunFailureRenderer {
 
     public static String render(FormatRunResult run) {
         return run.failedResults().stream()
-                .map(FormatterRunFailureRenderer::renderFailedFile)
+                .map(FormatterRunFailureRenderer::render)
                 .collect(Collectors.joining(fileSeparator()));
     }
 
-    private static String renderFailedFile(FormatFileResult result) {
+    public static String render(FormatFileResult result) {
         Exception exception = result.failureException().orElseThrow();
         return outline(renderFailureTitle(exception), renderFailureBody(exception));
     }

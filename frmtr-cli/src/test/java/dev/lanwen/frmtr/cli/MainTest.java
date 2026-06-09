@@ -341,25 +341,55 @@ final class MainTest {
     }
 
     @Test
+    void checkDiffPrintsFailureDiagnosticsNextToFailedFiles(@TempDir Path dir) throws IOException {
+        write(dir.resolve("src/AChanged.java"), "class AChanged{int value;}");
+        write(dir.resolve("src/ZBroken.java"), "class {");
+
+        Result result = run(dir, null, "--check", "--diff", "src");
+
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.out())
+                .startsWith("✗ src/AChanged.java\n")
+                .contains("diff --git a/src/AChanged.java b/src/AChanged.java\n")
+                .contains("""
+                        +class AChanged {
+                        +
+                        +    int value;
+                        +}
+                        """)
+                .contains("""
+                        ! src/ZBroken.java
+                        ┌─ Unable to parse Java source:
+                        │ 1  class {
+                        """)
+                .endsWith("Checked 2 files: 1 would change, 1 failed.\n");
+        int diffIndex = result.out().indexOf("diff --git a/src/AChanged.java b/src/AChanged.java\n");
+        int failureIndex = result.out().indexOf("! src/ZBroken.java\n┌─ Unable to parse Java source:\n");
+        int summaryIndex = result.out().indexOf("Checked 2 files: 1 would change, 1 failed.\n");
+        assertThat(diffIndex).isLessThan(failureIndex);
+        assertThat(failureIndex).isLessThan(summaryIndex);
+        assertThat(result.err()).isEmpty();
+    }
+
+    @Test
     void checkReportsFailedFilesWithoutStacktraceByDefault(@TempDir Path dir) throws IOException {
         write(dir.resolve("src/Broken.java"), "class {");
 
         Result result = run(dir, null, "--check", "src");
 
         assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.out()).isEqualTo("""
-                ! src/Broken.java
-                Checked 1 file: 1 failed.
-                """);
-        assertThat(result.err())
+        assertThat(result.out())
                 .startsWith("""
+                        ! src/Broken.java
                         ┌─ Unable to parse Java source:
                         │ 1  class {
                         """)
                 .contains("Parse-error recovery is configured")
                 .contains("Parse error")
                 .contains("│    │")
-                .contains("^");
+                .contains("^")
+                .endsWith("Checked 1 file: 1 failed.\n");
+        assertThat(result.err()).isEmpty();
     }
 
     @Test
@@ -369,16 +399,15 @@ final class MainTest {
         Result result = run(dir, null, "--check", "--parse-error-behavior", "fail", "src");
 
         assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.out()).isEqualTo("""
-                ! src/Broken.java
-                Checked 1 file: 1 failed.
-                """);
-        assertThat(result.err())
+        assertThat(result.out())
                 .startsWith("""
+                        ! src/Broken.java
                         ┌─ Unable to parse Java source:
                         │ 1  class {
                         """)
-                .contains("Parse error");
+                .contains("Parse error")
+                .endsWith("Checked 1 file: 1 failed.\n");
+        assertThat(result.err()).isEmpty();
     }
 
     @Test
@@ -432,19 +461,18 @@ final class MainTest {
         Result result = run(dir, null, "--check", "--parse-error-behavior", "fail", "--java-level", "unset", "src");
 
         assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.out()).isEqualTo("""
-                ! src/Switch.java
-                Checked 1 file: 1 failed.
-                """);
-        assertThat(result.err())
+        assertThat(result.out())
                 .startsWith("""
+                        ! src/Switch.java
                         ┌─ Unable to parse Java source:
                         │ 1  class Switch {
                         """)
                 .contains("yield")
                 .contains("│ 4              case CreateCommand cmd -> {")
                 .contains("│    │")
-                .contains("^");
+                .contains("^")
+                .endsWith("Checked 1 file: 1 failed.\n");
+        assertThat(result.err()).isEmpty();
     }
 
     @Test

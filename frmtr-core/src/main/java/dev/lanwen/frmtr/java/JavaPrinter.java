@@ -416,6 +416,7 @@ final class JavaPrinter {
                 commentPlacement::ownSameLineBlockCommentBeforeNode,
                 this::currentIndentedWidth);
         this.annotationDeclarations = new AnnotationDeclarationPrinter(
+                context,
                 declarationPrefixes::annotations,
                 declarationPrefixes::modifiers,
                 compactSource::compactTypeLike,

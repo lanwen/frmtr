@@ -50,8 +50,8 @@ layout, and `MemberBlockPrinter` owns member sequencing inside type bodies.
 | `ClassOrInterfaceDeclaration` | `ClassOrInterfaceDeclarationPrinter` | Interfaces whose headers contain inline block comments route through `CommentedInterfacePrinter` and `RawPreservedSource`. |
 | `RecordDeclaration` | `RecordDeclarationPrinter` | Owns record headers, component lists, implements clauses, and body start layout. Members return to `MemberBlockPrinter` and the body-declaration envelope/dispatcher path. |
 | `EnumDeclaration` | `EnumDeclarationPrinter` | Owns enum headers, constants, enum semicolons, body orphan comments, and enum constant argument layout. Ordinary members return to body dispatch; recovered enum-constant gaps stay inside this printer. |
-| `AnnotationDeclaration` | `AnnotationDeclarationPrinter` | Owns annotation type headers and member blocks. |
-| `AnnotationMemberDeclaration` | `AnnotationDeclarationPrinter` | Owns annotation member declarations and default values, delegating default expressions back through expression rendering. |
+| `AnnotationDeclaration` | `AnnotationDeclarationPrinter` | Owns annotation type headers and member blocks; recovered annotation-member gaps stay inside this printer. |
+| `AnnotationMemberDeclaration` | `AnnotationDeclarationPrinter` | Owns annotation member declarations and default values, delegating default expressions back through expression rendering. Unsafe recovered members preserve their default-value source as raw body gaps. |
 | `FieldDeclaration` | `FieldDeclarationPrinter` | Owns field declarations, variables, initializer break decisions, and shared variable initializer policy. |
 | `MethodDeclaration` | `MethodDeclarationPrinter` | Commented signatures with small bodies can route through `CommentedMethodSignaturePrinter` and `RawPreservedSource`; ordinary bodies delegate to `BlockPrinter`. |
 | `CompactConstructorDeclaration` | `ConstructorDeclarationPrinter` | Owns compact constructor headers and delegates bodies to `BlockPrinter`. |
@@ -192,6 +192,7 @@ branch, fixture coverage for source/comment edge cases, and update this map.
 | Source-only switch rule entries | `SwitchPrinter.rawSingleLineSwitchEntry(...)` sees single-line rule text with block comments or `null, default`. | Structured representation of those label/body comment positions or source-only labels, plus switch fixtures. |
 | Recovered malformed switch entries | `SwitchPrinter` plans `SwitchEntry` sibling gaps in parse-error recovery mode. | Structured recovery for additional JavaParser switch-entry shapes once JavaParser exposes them without collapsing the switch owner. |
 | Recovered malformed enum constants | `EnumDeclarationPrinter` plans `EnumConstantDeclaration` sibling gaps in parse-error recovery mode. | Structured recovery for additional JavaParser enum-constant shapes once JavaParser exposes them without collapsing the compilation unit. |
+| Recovered malformed annotation declaration members | `AnnotationDeclarationPrinter` plans annotation body member gaps in parse-error recovery mode. | Structured recovery for additional JavaParser annotation-member shapes once JavaParser exposes them without collapsing the compilation unit. |
 | Unrecognized text-block content | `TextBlockPrinter` content probes decline. | A real content formatter or additional probe, plus text-block fixtures for raw spelling, indentation, closing delimiter placement, and escapes. |
 
 Compact text is also a normal support mechanism for flat width checks, type-like snippets, labels, resources, and other

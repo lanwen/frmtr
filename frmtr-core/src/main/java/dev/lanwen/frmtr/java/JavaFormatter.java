@@ -156,7 +156,7 @@ public final class JavaFormatter {
             return Optional.empty();
         }
         return Optional.of(
-                "Parse-error recovery is configured, but this recovery slice only supports malformed block statement lists, class/interface/record member declaration lists, import declaration lists, top-level declaration lists, module directive lists, switch entry lists, and enum constant lists.");
+                "Parse-error recovery is configured, but this recovery slice only supports malformed block statement lists, class/interface/record member declaration lists, import declaration lists, top-level declaration lists, module directive lists, switch entry lists, enum constant lists, and annotation declaration member lists.");
     }
 
     private Optional<String> unsupportedRecoveryReason(CompilationUnit unit, SourceText sourceText) {
@@ -185,6 +185,7 @@ public final class JavaFormatter {
     private static boolean isSupportedRecovery(Node recoveredNode, Optional<SourceText> sourceText) {
         return isSupportedSwitchEntryListRecovery(recoveredNode)
                 || isSupportedEnumConstantListRecovery(recoveredNode)
+                || isSupportedAnnotationMemberListRecovery(recoveredNode)
                 || isSupportedBlockStatementListRecovery(recoveredNode, sourceText)
                 || isSupportedMemberDeclarationListRecovery(recoveredNode)
                 || isSupportedImportDeclarationListRecovery(recoveredNode)
@@ -204,11 +205,18 @@ public final class JavaFormatter {
                 .isPresent();
     }
 
+    private static boolean isSupportedAnnotationMemberListRecovery(Node recoveredNode) {
+        return AnnotationDeclarationPrinter.nearestAnnotationMemberListSibling(recoveredNode)
+                .filter(AnnotationDeclarationPrinter::isRecoverableAnnotationMemberListSibling)
+                .isPresent();
+    }
+
     private static boolean isSupportedBlockStatementListRecovery(
             Node recoveredNode,
             Optional<SourceText> sourceText) {
         if (SwitchPrinter.nearestSwitchEntryListSibling(recoveredNode).isPresent()
                 || EnumDeclarationPrinter.nearestEnumConstantListSibling(recoveredNode).isPresent()
+                || AnnotationDeclarationPrinter.nearestAnnotationMemberListSibling(recoveredNode).isPresent()
                 || isCollapsedMalformedSwitchStatement(recoveredNode, sourceText)) {
             return false;
         }

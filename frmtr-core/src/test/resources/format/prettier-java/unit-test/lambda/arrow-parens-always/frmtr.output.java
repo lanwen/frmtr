@@ -52,7 +52,12 @@ public class Lambda {
     }
 
     public void chainCallWithLambda() {
-        Stream .of(1, 2) .map(n -> { // testing method return n * 2; }).collect(Collectors.toList());
+        Stream.of(1, 2)
+            .map(n -> {
+                // testing method
+                return n * 2;
+            })
+            .collect(Collectors.toList());
     }
 
     public void lambdaWithLongListOfParameters() {

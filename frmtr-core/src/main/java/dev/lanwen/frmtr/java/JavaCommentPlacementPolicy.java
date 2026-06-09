@@ -145,11 +145,36 @@ final class JavaCommentPlacementPolicy {
     List<JavaCommentTrivia> lineCommentsBetween(Node container, Node previous, Node next) {
         int previousLine = CommentIndex.endLine(previous, Integer.MIN_VALUE);
         int nextLine = CommentIndex.beginLine(next, Integer.MAX_VALUE);
+        return lineCommentsInRange(container, previousLine, nextLine);
+    }
+
+    /**
+     * Finds line comments after an opening delimiter and before the first child node in {@code container}.
+     */
+    List<JavaCommentTrivia> lineCommentsBeforeFirst(Node container, Node first) {
+        int containerLine = CommentIndex.beginLine(container, Integer.MIN_VALUE);
+        int firstLine = CommentIndex.beginLine(first, Integer.MAX_VALUE);
+        return lineCommentsInRange(container, containerLine, firstLine);
+    }
+
+    /**
+     * Finds line comments after the last child node and before {@code container}'s closing delimiter.
+     */
+    List<JavaCommentTrivia> lineCommentsAfterLast(Node container, Node last) {
+        int lastLine = CommentIndex.endLine(last, Integer.MIN_VALUE);
+        int containerEndLine = CommentIndex.endLine(container, Integer.MAX_VALUE);
+        return lineCommentsInRange(container, lastLine, containerEndLine);
+    }
+
+    private List<JavaCommentTrivia> lineCommentsInRange(
+            Node container,
+            int beginLineInclusive,
+            int endLineExclusive) {
         return containedComments(container).stream()
                 .filter(JavaCommentTrivia::isLine)
                 .filter(comment -> comment.comment()
                         .getRange()
-                        .map(range -> range.begin.line >= previousLine && range.begin.line < nextLine)
+                        .map(range -> range.begin.line >= beginLineInclusive && range.begin.line < endLineExclusive)
                         .orElse(false))
                 .sorted(Comparator.comparing(comment -> comment.comment(), CommentIndex.sourceOrderComparator()))
                 .toList();

@@ -29,6 +29,7 @@ final class BlockPrinter {
     private final SourceText sourceText;
     private final RecoveredListPlanner recoveredListPlanner;
     private final RecoveredRawGapPrinter rawGaps;
+    private final SourceOrderedCommentInterleaver<Statement> commentInterleaver;
     private final boolean recoverParseProblems;
     private final JavaFormatRule<Statement> statementRenderer;
     private final Predicate<Statement> hasPragma;
@@ -42,6 +43,7 @@ final class BlockPrinter {
         this.sourceText = context.sourceText;
         this.recoveredListPlanner = context.recoveredListPlanner;
         this.rawGaps = new RecoveredRawGapPrinter(context, BlockPrinter::blockStatementListRecoveryFailure);
+        this.commentInterleaver = new SourceOrderedCommentInterleaver<>(comments);
         this.recoverParseProblems = context.recoverParseProblems;
         this.statementRenderer = statementRenderer;
         this.hasPragma = hasPragma;
@@ -50,8 +52,8 @@ final class BlockPrinter {
     /**
      * Prints a brace-delimited statement block while preserving source-only comments and blank lines.
      *
-     * <p>Plain blocks keep orphan comments as a joined prelude before regular statement sequencing. Comments that fall
-     * inside child statement ranges are left to the child statement printer so they are not emitted twice.
+     * <p>Plain blocks interleave orphan comments with regular statements by source line. Comments that fall inside child
+     * statement ranges are left to the child statement printer so they are not emitted twice.
      */
     Doc block(BlockStmt block) {
         Optional<RecoveredListPlanner.Plan<Statement>> recoveryPlan = recoveryPlan(block);
@@ -61,12 +63,7 @@ final class BlockPrinter {
         if (block.getStatements().isEmpty() && !commentPlacement.hasOrphanComments(block)) {
             return Doc.text("{}");
         }
-        List<Doc> statements = new ArrayList<>();
-        List<Doc> orphanComments = blockOrphanCommentStatements(block);
-        if (!orphanComments.isEmpty()) {
-            statements.add(Doc.join(Doc.HARD_LINE, orphanComments));
-        }
-        appendBlockStatements(statements, block.getStatements());
+        List<Doc> statements = blockContents(block);
         if (statements.isEmpty()) {
             return Doc.text("{}");
         }
@@ -94,8 +91,11 @@ final class BlockPrinter {
         if (leadingInside != Doc.EMPTY) {
             statements.add(leadingInside);
         }
-        statements.addAll(blockOrphanCommentStatements(block));
-        appendBlockStatements(statements, block.getStatements());
+        List<Doc> contents = blockContents(block);
+        if (!statements.isEmpty() && !contents.isEmpty()) {
+            statements.add(Doc.HARD_LINE);
+        }
+        statements.addAll(contents);
         return statementBlock(statements);
     }
 
@@ -128,30 +128,61 @@ final class BlockPrinter {
      * Other empty statements are printable only when they own a line comment; bare semicolon placeholders disappear from
      * formatted block output.
      */
-    private void appendBlockStatements(List<Doc> statements, List<Statement> sourceStatements) {
-        Statement previousStatement = null;
-        for (Statement currentStatement : sourceStatements) {
-            if (currentStatement.isEmptyStmt() && previousStatement instanceof SwitchStmt) {
-                continue;
-            }
-            if (currentStatement instanceof EmptyStmt emptyStmt) {
-                Optional<Doc> emptyStatementComment = blockEmptyStatementComment(emptyStmt);
-                if (emptyStatementComment.isEmpty()) {
-                    continue;
-                }
-                if (!statements.isEmpty()) {
-                    statements.add(statementSeparator(previousStatement, currentStatement));
-                }
-                statements.add(emptyStatementComment.orElseThrow());
-                previousStatement = currentStatement;
-                continue;
-            }
-            if (!statements.isEmpty()) {
-                statements.add(statementSeparator(previousStatement, currentStatement));
-            }
-            statements.add(statementRenderer.format(currentStatement));
-            previousStatement = currentStatement;
+    private List<Doc> blockContents(BlockStmt block) {
+        return commentInterleaver.interleave(
+                block.getStatements(),
+                blockOrphanComments(block),
+                this::printableStatement,
+                new SourceOrderedCommentInterleaver.Spacing<>() {
+                    @Override
+                    public int beginLine(Statement sibling) {
+                        return sibling.getRange()
+                                .map(range -> effectiveBeginLine(sibling, range.begin.line))
+                                .orElse(Integer.MAX_VALUE);
+                    }
+
+                    @Override
+                    public int endLine(Statement sibling) {
+                        return CommentIndex.endLine(sibling, beginLine(sibling));
+                    }
+
+                    @Override
+                    public Doc separatorBeforeSibling(
+                            SourceOrderedCommentInterleaver.PreviousEntry<Statement> previous,
+                            Statement currentSibling) {
+                        if (previous.kind() == SourceOrderedCommentInterleaver.EntryKind.SIBLING) {
+                            return statementSeparator(previous.sibling().orElseThrow(), currentSibling);
+                        }
+                        return sourceLineSeparator(previous.endLine(), beginLine(currentSibling));
+                    }
+
+                    @Override
+                    public Doc separatorBeforeComment(
+                            SourceOrderedCommentInterleaver.PreviousEntry<Statement> previous,
+                            JavaCommentTrivia comment) {
+                        return sourceLineSeparator(previous.endLine(), comment.beginLine(Integer.MAX_VALUE));
+                    }
+                });
+    }
+
+    private Optional<Doc> printableStatement(
+            Optional<Statement> previousStatement,
+            Statement currentStatement,
+            int ignoredIndex) {
+        if (currentStatement.isEmptyStmt() && previousStatement.orElse(null) instanceof SwitchStmt) {
+            return Optional.empty();
         }
+        if (currentStatement instanceof EmptyStmt emptyStmt) {
+            return blockEmptyStatementComment(emptyStmt);
+        }
+        return Optional.of(statementRenderer.format(currentStatement));
+    }
+
+    private Doc sourceLineSeparator(int previousEndLine, int currentBeginLine) {
+        if (previousEndLine == Integer.MIN_VALUE || currentBeginLine == Integer.MAX_VALUE) {
+            return Doc.HARD_LINE;
+        }
+        return currentBeginLine > previousEndLine + 1 ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;
     }
 
     /**
@@ -326,11 +357,8 @@ final class BlockPrinter {
     /**
      * Returns orphan comments that belong to the block itself rather than to nested statement bodies.
      */
-    private List<Doc> blockOrphanCommentStatements(BlockStmt block) {
-        return commentPlacement.orphanCommentsOutsideChildRanges(block, block.getStatements()).stream()
-                .map(comments::comment)
-                .filter(doc -> doc != Doc.EMPTY)
-                .toList();
+    private List<JavaCommentTrivia> blockOrphanComments(BlockStmt block) {
+        return commentPlacement.orphanCommentsOutsideChildRanges(block, block.getStatements());
     }
 
     private List<Doc> blockOrphanCommentStatements(BlockStmt block, List<SourceRegion> rawRegions) {

@@ -30,6 +30,7 @@ import java.util.function.Function;
 final class ObjectCreationPrinter {
     private final CommentTracker comments;
     private final TypePrinter types;
+    private final CommentedExpressionListPrinter commentedExpressionLists;
     private final JavaFormatRule<Expression> expressionRenderer;
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments;
     private final JavaFormatRule<BodyDeclaration<?>> bodyRenderer;
@@ -40,7 +41,7 @@ final class ObjectCreationPrinter {
     private final Function<Doc, String> commentText;
 
     ObjectCreationPrinter(
-            CommentTracker comments,
+            JavaFormatContext context,
             TypePrinter types,
             JavaFormatRule<Expression> expressionRenderer,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,
@@ -50,8 +51,9 @@ final class ObjectCreationPrinter {
             Function<Node, String> compactTypeLike,
             Function<Node, String> compactTypeLikeWithoutOwnComment,
             Function<Doc, String> commentText) {
-        this.comments = comments;
+        this.comments = context.comments;
         this.types = types;
+        this.commentedExpressionLists = new CommentedExpressionListPrinter(context, expressionRenderer::format);
         this.expressionRenderer = expressionRenderer;
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.bodyRenderer = bodyRenderer;
@@ -89,6 +91,10 @@ final class ObjectCreationPrinter {
         Optional<Doc> huggableLambda = huggableLambdaArgument(prefix, expression.getArguments());
         if (huggableLambda.isPresent()) {
             return huggableLambda.orElseThrow();
+        }
+        Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments());
+        if (commentedArguments.isPresent()) {
+            return commentedArguments.orElseThrow();
         }
         Doc call = Doc.concat(
                 Doc.text(prefix + "("),

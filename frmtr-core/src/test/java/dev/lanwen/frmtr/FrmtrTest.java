@@ -69,6 +69,18 @@ final class FrmtrTest {
     }
 
     @Test
+    void formatsBlockOrphanAndMethodCallArgumentCommentsFixtureAndIsIdempotent() throws Exception {
+        String source = readResource("format/block-orphan-method-call-comments/input.java");
+        String expected = readResource("format/block-orphan-method-call-comments/frmtr.output.java");
+
+        String formatted = Frmtr.format(source);
+
+        assertThat(formatted).isEqualTo(expected);
+        assertThat(Frmtr.format(formatted)).isEqualTo(formatted);
+        assertThatCode(() -> StaticJavaParser.parse(formatted)).doesNotThrowAnyException();
+    }
+
+    @Test
     void formatsCommonJavaAndIsIdempotent() {
         String source = """
                 package dev.example;

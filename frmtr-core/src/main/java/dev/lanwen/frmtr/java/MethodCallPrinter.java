@@ -33,8 +33,8 @@ import java.util.function.ToIntFunction;
  * segment handling, mixed field/method chains, name comments on chain segments, empty argument comments, text-block
  * arguments, and single binary arguments. The boundary exists so {@link JavaPrinter} can keep broad expression
  * dispatch, enclosed suffix breaking, and binary-expression policy in their current owners while object creation stays
- * in {@link ObjectCreationPrinter}, lambda argument rendering stays in {@link LambdaExpressionPrinter}, and method-call
- * layout reads as one state machine.
+ * in {@link ObjectCreationPrinter}, lambda argument rendering stays in {@link LambdaExpressionPrinter}, commented
+ * argument lists stay in {@link CommentedExpressionListPrinter}, and method-call layout reads as one state machine.
  *
  * <p>Representative fixture pairs live at
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/member_chain/input.java} with
@@ -48,6 +48,7 @@ final class MethodCallPrinter {
     private final FormatterOptions options;
     private final CompactSourceText compactSource;
     private final TypePrinter types;
+    private final CommentedExpressionListPrinter commentedExpressionLists;
     private final Function<Expression, Doc> expressionRenderer;
     private final BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix;
     private final Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer;
@@ -134,6 +135,7 @@ final class MethodCallPrinter {
         this.options = context.options;
         this.compactSource = context.compactSource;
         this.types = types;
+        this.commentedExpressionLists = new CommentedExpressionListPrinter(context, expressionRenderer);
         this.expressionRenderer = expressionRenderer;
         this.brokenEnclosedForSuffix = brokenEnclosedForSuffix;
         this.brokenObjectCreationRenderer = brokenObjectCreationRenderer;
@@ -210,6 +212,10 @@ final class MethodCallPrinter {
         if (singleBinaryArgument.isPresent()) {
             return singleBinaryArgument.orElseThrow();
         }
+        Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments());
+        if (commentedArguments.isPresent()) {
+            return commentedArguments.orElseThrow();
+        }
         Doc call = Doc.concat(
                 Doc.text(prefix + "("),
                 Doc.indent(Doc.concat(
@@ -241,6 +247,10 @@ final class MethodCallPrinter {
                 return commentedArguments.orElseThrow();
             }
             return Doc.text(prefix + "()");
+        }
+        Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments());
+        if (commentedArguments.isPresent()) {
+            return commentedArguments.orElseThrow();
         }
         return Doc.group(Doc.concat(
                 Doc.text(prefix + "("),
@@ -293,7 +303,7 @@ final class MethodCallPrinter {
         }
         List<MethodCallExpr> calls = new ArrayList<>();
         Expression root = methodCallChainRoot(expression, calls);
-        boolean singleCommentedSegment = calls.size() == 1 && methodCallSegmentHasComment(calls.getFirst());
+        boolean singleCommentedSegment = calls.size() == 1 && methodCallSegmentHasNameComment(calls.getFirst());
         boolean rootHasComments = !root.getAllContainedComments().isEmpty();
         if (calls.isEmpty()
                 || (calls.size() < 2
@@ -352,17 +362,22 @@ final class MethodCallPrinter {
         ChainRootRendering rootRendering = ChainRootRendering.EXPRESSION_RENDERER;
         List<MethodCallExpr> remainingCalls = calls;
         if (chainHasComments) {
-            int firstCommentedSegment = firstCommentedChainSegment(calls);
-            if (firstCommentedSegment > 0 && methodCallChainPromotesFirstCall(root)) {
-                root = calls.get(firstCommentedSegment - 1);
-                remainingCalls = new ArrayList<>(calls.subList(firstCommentedSegment, calls.size()));
-            } else if (firstCommentedSegment == 0
-                    && root instanceof FieldAccessExpr
-                    && !root.getAllContainedComments().isEmpty()
-                    && calls.size() > 1) {
+            if (methodCallChainShouldPromoteFirstCallForArgumentComments(root, calls)) {
                 root = calls.getFirst();
                 remainingCalls = new ArrayList<>(calls.subList(1, calls.size()));
-                rootRendering = ChainRootRendering.INLINE_PROMOTED_METHOD_CALL;
+            } else {
+                int firstCommentedSegment = firstCommentedChainSegment(calls);
+                if (firstCommentedSegment > 0 && methodCallChainPromotesFirstCall(root)) {
+                    root = calls.get(firstCommentedSegment - 1);
+                    remainingCalls = new ArrayList<>(calls.subList(firstCommentedSegment, calls.size()));
+                } else if (firstCommentedSegment == 0
+                        && root instanceof FieldAccessExpr
+                        && !root.getAllContainedComments().isEmpty()
+                        && calls.size() > 1) {
+                    root = calls.getFirst();
+                    remainingCalls = new ArrayList<>(calls.subList(1, calls.size()));
+                    rootRendering = ChainRootRendering.INLINE_PROMOTED_METHOD_CALL;
+                }
             }
         } else if (methodCallChainShouldPromoteFirstCallForArgumentComments(root, calls)) {
             root = calls.getFirst();
@@ -537,6 +552,15 @@ final class MethodCallPrinter {
     }
 
     private boolean methodCallSegmentHasComment(MethodCallExpr expression) {
+        return methodCallSegmentHasNameComment(expression)
+                || methodCallSegmentHasArgumentGapComment(expression);
+    }
+
+    private boolean methodCallSegmentHasArgumentGapComment(MethodCallExpr expression) {
+        return commentedExpressionLists.hasUnprintedLineComments(expression, expression.getArguments());
+    }
+
+    private boolean methodCallSegmentHasNameComment(MethodCallExpr expression) {
         return expression.getName().getComment()
                 .filter(comment -> CommentIndex.startsBefore(comment, expression.getName()))
                 .isPresent();
@@ -570,8 +594,8 @@ final class MethodCallPrinter {
             List<MethodCallExpr> calls) {
         return methodCallChainPromotesFirstCall(root)
                 && calls.size() > 1
-                && calls.getFirst().getAllContainedComments().isEmpty()
-                && calls.stream().skip(1).anyMatch(call -> !call.getAllContainedComments().isEmpty());
+                && !methodCallSegmentHasArgumentGapComment(calls.getFirst())
+                && calls.stream().skip(1).anyMatch(this::methodCallSegmentHasArgumentGapComment);
     }
 
     private Doc inlineMethodCall(MethodCallExpr expression) {
@@ -625,6 +649,10 @@ final class MethodCallPrinter {
         Optional<Doc> commentedExpressionLambda = commentedExpressionLambdaArgument.apply(prefix, expression);
         if (commentedExpressionLambda.isPresent()) {
             return Doc.concat(segmentPrefix, commentedExpressionLambda.orElseThrow());
+        }
+        Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments());
+        if (commentedArguments.isPresent()) {
+            return Doc.concat(segmentPrefix, commentedArguments.orElseThrow());
         }
         return Doc.concat(segmentPrefix, Doc.group(Doc.concat(
                 Doc.text(prefix + "("),

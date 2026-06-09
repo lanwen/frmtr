@@ -35,6 +35,7 @@ final class MemberBlockPrinter {
     private final SourceText sourceText;
     private final RecoveredListPlanner recoveredListPlanner;
     private final RecoveredRawGapPrinter rawGaps;
+    private final SourceOrderedCommentInterleaver<BodyDeclaration<?>> commentInterleaver;
     private final boolean recoverParseProblems;
     private final Predicate<BodyDeclaration<?>> hasDeclarationAnnotations;
 
@@ -46,6 +47,7 @@ final class MemberBlockPrinter {
         this.sourceText = context.sourceText;
         this.recoveredListPlanner = context.recoveredListPlanner;
         this.rawGaps = new RecoveredRawGapPrinter(context, MemberBlockPrinter::memberDeclarationListRecoveryFailure);
+        this.commentInterleaver = new SourceOrderedCommentInterleaver<>(comments);
         this.recoverParseProblems = context.recoverParseProblems;
         this.hasDeclarationAnnotations = hasDeclarationAnnotations;
     }
@@ -127,62 +129,38 @@ final class MemberBlockPrinter {
      * those comments back before, between, or after the already-rendered member docs.
      */
     private Doc memberContents(Node owner, NodeList<BodyDeclaration<?>> members, List<Doc> memberDocs) {
-        List<Doc> contents = new ArrayList<>();
-        List<JavaCommentTrivia> orphanComments = commentPlacement.orphanCommentsInSourceOrder(owner);
-        int orphanIndex = 0;
-        int previousEndLine = Integer.MIN_VALUE;
-        BodyDeclaration<?> previousMember = null;
-        boolean previousWasMember = false;
-        for (int i = 0; i < memberDocs.size(); i++) {
-            BodyDeclaration<?> currentMember = members.get(i);
-            int currentBeginLine = CommentIndex.beginLine(currentMember, Integer.MAX_VALUE);
-            // Orphan comments that start before this declaration belong in the source gap before the member.
-            while (orphanIndex < orphanComments.size()
-                    && orphanComments.get(orphanIndex).beginLine(Integer.MAX_VALUE) < currentBeginLine) {
-                JavaCommentTrivia comment = orphanComments.get(orphanIndex++);
-                addMemberContentSeparator(
-                        contents,
-                        owner,
-                        previousEndLine,
-                        comment.beginLine(Integer.MAX_VALUE),
-                        previousWasMember,
-                        null,
-                        null);
-                Doc commentDoc = comments.comment(comment);
-                // Already-printed comments return EMPTY, so separator state only moves when text is emitted.
-                if (commentDoc != Doc.EMPTY) {
-                    contents.add(commentDoc);
-                    previousEndLine = comment.endLine(Integer.MAX_VALUE);
-                    previousWasMember = false;
-                }
-            }
-            addMemberContentSeparator(
-                    contents, owner, previousEndLine, currentBeginLine, previousWasMember, previousMember, currentMember);
-            contents.add(memberDocs.get(i));
-            previousEndLine = CommentIndex.endLine(currentMember, Integer.MAX_VALUE);
-            previousMember = currentMember;
-            previousWasMember = true;
-        }
-        // Anything left after the declaration walk is trailing source trivia in the member block.
-        while (orphanIndex < orphanComments.size()) {
-            JavaCommentTrivia comment = orphanComments.get(orphanIndex++);
-            addMemberContentSeparator(
-                    contents,
-                    owner,
-                    previousEndLine,
-                    comment.beginLine(Integer.MAX_VALUE),
-                    previousWasMember,
-                    null,
-                    null);
-            Doc commentDoc = comments.comment(comment);
-            // Already-printed comments return EMPTY, so separator state only moves when text is emitted.
-            if (commentDoc != Doc.EMPTY) {
-                contents.add(commentDoc);
-                previousEndLine = comment.endLine(Integer.MAX_VALUE);
-                previousWasMember = false;
-            }
-        }
-        return Doc.concat(contents);
+        return Doc.concat(commentInterleaver.interleave(
+                members,
+                commentPlacement.orphanCommentsInSourceOrder(owner),
+                (previous, current, index) -> Optional.of(memberDocs.get(index)),
+                new SourceOrderedCommentInterleaver.Spacing<>() {
+                    @Override
+                    public int beginLine(BodyDeclaration<?> sibling) {
+                        return CommentIndex.beginLine(sibling, Integer.MAX_VALUE);
+                    }
+
+                    @Override
+                    public int endLine(BodyDeclaration<?> sibling) {
+                        return CommentIndex.endLine(sibling, Integer.MAX_VALUE);
+                    }
+
+                    @Override
+                    public Doc separatorBeforeSibling(
+                            SourceOrderedCommentInterleaver.PreviousEntry<BodyDeclaration<?>> previous,
+                            BodyDeclaration<?> currentSibling) {
+                        if (previous.kind() == SourceOrderedCommentInterleaver.EntryKind.SIBLING) {
+                            return memberSeparator(owner, previous.sibling().orElseThrow(), currentSibling);
+                        }
+                        return sourceLineSeparator(previous.endLine(), beginLine(currentSibling));
+                    }
+
+                    @Override
+                    public Doc separatorBeforeComment(
+                            SourceOrderedCommentInterleaver.PreviousEntry<BodyDeclaration<?>> previous,
+                            JavaCommentTrivia comment) {
+                        return sourceLineSeparator(previous.endLine(), comment.beginLine(Integer.MAX_VALUE));
+                    }
+                }));
     }
 
     /**
@@ -478,32 +456,6 @@ final class MemberBlockPrinter {
 
     private static FormatterException memberDeclarationListRecoveryFailure(String reason, Throwable cause) {
         return new FormatterException(MEMBER_DECLARATION_LIST_RECOVERY_FAILURE + reason, cause);
-    }
-
-    /**
-     * Appends the separator needed before the next printed member-block item.
-     *
-     * <p>Member-to-member gaps use semantic declaration rules, while gaps involving orphan comments use only original
-     * line distance because comments are source trivia rather than declarations.
-     */
-    private void addMemberContentSeparator(
-            List<Doc> contents,
-            Node owner,
-            int previousEndLine,
-            int currentBeginLine,
-            boolean previousWasMember,
-            BodyDeclaration<?> previousMember,
-            BodyDeclaration<?> currentMember) {
-        // The first emitted item is already separated from the opening brace by the block opening break.
-        if (contents.isEmpty()) {
-            return;
-        }
-        // Only two real declarations can use member-specific policies such as interface method compaction.
-        if (previousWasMember && previousMember != null && currentMember != null) {
-            contents.add(memberSeparator(owner, previousMember, currentMember));
-            return;
-        }
-        contents.add(sourceLineSeparator(previousEndLine, currentBeginLine));
     }
 
     /**

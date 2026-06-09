@@ -173,7 +173,7 @@ final class JavaPrinter {
                 compactSource::compact,
                 this::currentIndentedWidth);
         this.objectCreations = new ObjectCreationPrinter(
-                comments,
+                context,
                 types,
                 this::expression,
                 lambdas::huggableBlockLambdaArguments,

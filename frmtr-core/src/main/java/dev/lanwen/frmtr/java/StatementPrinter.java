@@ -859,15 +859,33 @@ final class StatementPrinter {
                     + emptyBodyHeaderExpression(statement.getIterable(), statement.getBody()) + ");"
                     + trailingEmptyBodyBlockComment(statement));
         }
-        String header = "for (" + forEachVariable(statement) + " : " + compact.apply(statement.getIterable()) + ")";
+        Doc header = forEachHeader(statement);
         Optional<Doc> lineComment = lineCommentBeforeNestedBody(statement);
         if (lineComment.isPresent() && !statement.getBody().isBlockStmt()) {
             return Doc.concat(
-                    Doc.text(header + " "),
+                    header,
+                    Doc.text(" "),
                     lineComment.orElseThrow(),
                     Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement.getBody()))));
         }
-        return Doc.concat(Doc.text(header + " "), nestedStatement(statement.getBody()));
+        return Doc.concat(header, Doc.text(" "), nestedStatement(statement.getBody()));
+    }
+
+    /**
+     * Lets the iterable own method-call argument breaks when the enhanced-for header would otherwise overflow.
+     */
+    private Doc forEachHeader(ForEachStmt statement) {
+        String variable = forEachVariable(statement);
+        Expression iterable = statement.getIterable();
+        String header = "for (" + variable + " : " + compact.apply(iterable) + ")";
+        if (currentIndentedWidth.applyAsInt(header + " {}") <= options.lineWidth()
+                || !(iterable instanceof MethodCallExpr methodCall)) {
+            return Doc.text(header);
+        }
+        return Doc.concat(
+                Doc.text("for (" + variable + " : "),
+                brokenMethodCallRenderer.apply(methodCall),
+                Doc.text(")"));
     }
 
     private String forEachVariable(ForEachStmt statement) {

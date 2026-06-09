@@ -10,6 +10,7 @@ import com.github.javaparser.ParseStart;
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.Providers;
 import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.ast.Node;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
@@ -259,7 +260,32 @@ final class FrmtrTest {
                 .isInstanceOf(FormatterException.class)
                 .hasMessageContaining("Unable to parse Java source:")
                 .hasMessageContaining("Parse-error recovery is configured")
-                .hasMessageContaining("only supports malformed block statement lists and class/interface/record member declaration lists");
+                .hasMessageContaining("only supports malformed block statement lists, class/interface/record member declaration lists, and top-level declaration lists");
+    }
+
+    @Test
+    void defaultParseErrorRecoveryRejectsCollapsedTopLevelDeclarationRecovery() {
+        String source = """
+                class Before {}
+                int broken = ; // keep raw
+                class After {}
+                """;
+        var result = new JavaParser(new ParserConfiguration()
+                        .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
+                        .setStoreTokens(true)
+                        .setAttributeComments(true))
+                .parse(ParseStart.COMPILATION_UNIT, Providers.provider(source));
+
+        Throwable thrown = catchThrowable(() -> Frmtr.format(source));
+
+        assertThat(result.isSuccessful()).isFalse();
+        assertThat(result.getResult()).isPresent();
+        assertThat(result.getResult().orElseThrow().getParsed()).isEqualTo(Node.Parsedness.UNPARSABLE);
+        assertThat(result.getResult().orElseThrow().getTypes()).isEmpty();
+        assertThat(thrown)
+                .isInstanceOf(FormatterException.class)
+                .hasMessageContaining("Unable to parse Java source:")
+                .hasMessageContaining("Unsupported recovered node: CompilationUnit");
     }
 
     @Test

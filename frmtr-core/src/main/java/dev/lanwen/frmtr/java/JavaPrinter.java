@@ -253,7 +253,7 @@ final class JavaPrinter {
         PackageDeclarationPrinter packageDeclarations = new PackageDeclarationPrinter(comments, rawSource, options);
         ImportDeclarationPrinter importDeclarations = new ImportDeclarationPrinter(comments);
         this.compilationUnits = new CompilationUnitPrinter(
-                comments,
+                context,
                 packageDeclarations,
                 importDeclarations,
                 moduleDeclarations::moduleDeclaration,

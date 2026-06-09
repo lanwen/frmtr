@@ -2,9 +2,11 @@ package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.modules.ModuleDeclaration;
+import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,19 +35,32 @@ import java.util.Optional;
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/unnamed-class-compilation-unit/frmtr.output.java}.
  */
 final class CompilationUnitPrinter {
+    private static final String TOP_LEVEL_DECLARATION_LIST_RECOVERY_FAILURE =
+            "Unable to recover Java parse error inside top-level declaration list: ";
+
     private final CommentTracker comments;
+    private final SourceText sourceText;
+    private final RecoveredListPlanner recoveredListPlanner;
+    private final RecoveredRawGapPrinter rawGaps;
+    private final boolean recoverParseProblems;
     private final PackageDeclarationPrinter packageDeclarations;
     private final ImportDeclarationPrinter importDeclarations;
     private final JavaFormatRule<ModuleDeclaration> moduleDeclarations;
     private final JavaFormatRule<BodyDeclaration<?>> bodyDeclarations;
 
     CompilationUnitPrinter(
-            CommentTracker comments,
+            JavaFormatContext context,
             PackageDeclarationPrinter packageDeclarations,
             ImportDeclarationPrinter importDeclarations,
             JavaFormatRule<ModuleDeclaration> moduleDeclarations,
             JavaFormatRule<BodyDeclaration<?>> bodyDeclarations) {
-        this.comments = comments;
+        this.comments = context.comments;
+        this.sourceText = context.sourceText;
+        this.recoveredListPlanner = context.recoveredListPlanner;
+        this.rawGaps = new RecoveredRawGapPrinter(
+                context,
+                CompilationUnitPrinter::topLevelDeclarationListRecoveryFailure);
+        this.recoverParseProblems = context.recoverParseProblems;
         this.packageDeclarations = packageDeclarations;
         this.importDeclarations = importDeclarations;
         this.moduleDeclarations = moduleDeclarations;
@@ -100,13 +115,13 @@ final class CompilationUnitPrinter {
             parts.add(moduleDeclarations.format(moduleDeclaration));
         });
         hasStructuralParts = hasStructuralParts || module.isPresent();
-        List<Doc> topLevelDeclarations = topLevelDeclarations(unit);
-        if (!topLevelDeclarations.isEmpty()) {
+        Optional<Doc> topLevelDeclarations = topLevelDeclarations(unit);
+        if (topLevelDeclarations.isPresent()) {
             if (hasStructuralParts) {
                 parts.add(Doc.HARD_LINE);
                 parts.add(Doc.HARD_LINE);
             }
-            parts.add(Doc.join(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE), topLevelDeclarations));
+            parts.add(topLevelDeclarations.orElseThrow());
         }
         Doc trailingOrphanComments = comments.orphanCommentsAfterLine(unit, lastTypeLine(unit));
         if (trailingOrphanComments != Doc.EMPTY) {
@@ -118,12 +133,134 @@ final class CompilationUnitPrinter {
         return Doc.label("java.compilationUnit", Doc.concat(parts));
     }
 
-    private List<Doc> topLevelDeclarations(CompilationUnit unit) {
+    private Optional<Doc> topLevelDeclarations(CompilationUnit unit) {
         Optional<ClassOrInterfaceDeclaration> compactClass = compactClass(unit);
         if (compactClass.isPresent()) {
-            return compactClass.orElseThrow().getMembers().stream().map(bodyDeclarations::format).toList();
+            return joinedTopLevelDeclarations(compactClass.orElseThrow().getMembers().stream()
+                    .map(bodyDeclarations::format)
+                    .toList());
         }
-        return unit.getTypes().stream().map(bodyDeclarations::format).toList();
+        List<BodyDeclaration<?>> declarations = topLevelTypes(unit);
+        if (declarations.isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<RecoveredListPlanner.Plan<BodyDeclaration<?>>> recoveryPlan = recoveryPlan(unit, declarations);
+        if (recoveryPlan.isPresent() && hasRawGap(recoveryPlan.orElseThrow())) {
+            return Optional.of(recoveredTopLevelDeclarations(unit, recoveryPlan.orElseThrow()));
+        }
+        return joinedTopLevelDeclarations(declarations.stream().map(bodyDeclarations::format).toList());
+    }
+
+    /**
+     * Emits a recovered top-level declaration sequence without adding formatter-owned separators around raw gaps.
+     *
+     * <p>Raw top-level gaps carry the original source spacing between the nearest valid type declarations. This path
+     * therefore keeps normal blank-line separation only between adjacent valid top-level declarations while allowing raw
+     * islands to own malformed source and the comments fully contained by that source. Package, import, and module
+     * declarations stay outside the recovered list boundary.
+     */
+    private Doc recoveredTopLevelDeclarations(
+            CompilationUnit unit,
+            RecoveredListPlanner.Plan<BodyDeclaration<?>> plan) {
+        List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions = rawGaps.rawGapRegions(plan);
+        rawGaps.requireRecoverableRawRegions(unit, rawGapRegions);
+
+        List<Doc> contents = new ArrayList<>();
+        EntryKind previousEntry = EntryKind.NONE;
+        int rawGapIndex = 0;
+        for (RecoveredListPlanner.Entry<BodyDeclaration<?>> entry : plan.entries()) {
+            switch (entry) {
+                case RecoveredListPlanner.ValidSibling<?> valid -> {
+                    appendSeparatorBeforeRecoveredTopLevelDeclaration(contents, previousEntry);
+                    contents.add(bodyDeclarations.format((BodyDeclaration<?>) valid.sibling()));
+                    previousEntry = EntryKind.VALID_DECLARATION;
+                }
+                case RecoveredListPlanner.RawGap<?> ignored -> {
+                    RecoveredRawGapPrinter.RawGapRegion rawRegion = rawGapRegions.get(rawGapIndex++);
+                    if (rawRegion.region().beginOffset() < rawRegion.region().endOffset()) {
+                        contents.add(rawGaps.raw(unit, rawRegion, "topLevelDeclarationList"));
+                    }
+                    previousEntry = rawRegion.trailingBreakReplaced()
+                            ? EntryKind.RAW_GAP_WITH_TRAILING_BREAK
+                            : EntryKind.RAW_GAP;
+                }
+            }
+        }
+        return Doc.concat(contents);
+    }
+
+    private void appendSeparatorBeforeRecoveredTopLevelDeclaration(List<Doc> contents, EntryKind previousEntry) {
+        if (contents.isEmpty()) {
+            return;
+        }
+        switch (previousEntry) {
+            case VALID_DECLARATION -> contents.add(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE));
+            case RAW_GAP_WITH_TRAILING_BREAK -> contents.add(Doc.HARD_LINE);
+            case NONE, RAW_GAP -> {
+                // Raw source already owns the separation before this declaration.
+            }
+        }
+    }
+
+    private Optional<RecoveredListPlanner.Plan<BodyDeclaration<?>>> recoveryPlan(
+            CompilationUnit unit,
+            List<BodyDeclaration<?>> declarations) {
+        if (!recoverParseProblems || !hasRecoverableTopLevelDeclarationListProblem(declarations)) {
+            return Optional.empty();
+        }
+        RecoveredListPlanner.Plan<BodyDeclaration<?>> plan = recoveredListPlanner.plan(
+                unit,
+                topLevelDeclarationListRegion(declarations),
+                declarations,
+                declaration -> declaration.getParsed() == Node.Parsedness.PARSED);
+        if (!plan.isSafe()) {
+            throw topLevelDeclarationListRecoveryFailure(plan.unsafe().orElseThrow().reason());
+        }
+        return Optional.of(plan);
+    }
+
+    private SourceRegion topLevelDeclarationListRegion(List<BodyDeclaration<?>> declarations) {
+        int beginOffset = Integer.MAX_VALUE;
+        int endOffset = Integer.MIN_VALUE;
+        try {
+            for (BodyDeclaration<?> declaration : declarations) {
+                SourceRegion declarationRegion = declaration.getRange()
+                        .map(sourceText::region)
+                        .filter(region -> region.beginOffset() < region.endOffset())
+                        .orElseThrow(() -> new IllegalArgumentException(
+                                declaration.getClass().getSimpleName() + " is missing a source range"));
+                beginOffset = Math.min(beginOffset, declarationRegion.beginOffset());
+                endOffset = Math.max(endOffset, declarationRegion.endOffset());
+            }
+            if (beginOffset == Integer.MAX_VALUE || beginOffset >= endOffset) {
+                throw new IllegalArgumentException("top-level declaration list has no recoverable source range");
+            }
+            return sourceText.region(beginOffset, endOffset);
+        } catch (IllegalArgumentException exception) {
+            throw topLevelDeclarationListRecoveryFailure(exception.getMessage(), exception);
+        }
+    }
+
+    private Optional<Doc> joinedTopLevelDeclarations(List<Doc> declarations) {
+        if (declarations.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.join(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE), declarations));
+    }
+
+    private static List<BodyDeclaration<?>> topLevelTypes(CompilationUnit unit) {
+        List<BodyDeclaration<?>> declarations = new ArrayList<>(unit.getTypes().size());
+        declarations.addAll(unit.getTypes());
+        return declarations;
+    }
+
+    private static boolean hasRecoverableTopLevelDeclarationListProblem(List<BodyDeclaration<?>> declarations) {
+        return declarations.stream().anyMatch(declaration -> declaration.getParsed() != Node.Parsedness.PARSED)
+                && declarations.stream().anyMatch(declaration -> declaration.getParsed() == Node.Parsedness.PARSED);
+    }
+
+    private static boolean hasRawGap(RecoveredListPlanner.Plan<BodyDeclaration<?>> plan) {
+        return plan.entries().stream().anyMatch(RecoveredListPlanner.RawGap.class::isInstance);
     }
 
     /**
@@ -138,6 +275,36 @@ final class CompilationUnitPrinter {
             return Optional.empty();
         }
         return declaration.isCompact() ? Optional.of(declaration) : Optional.empty();
+    }
+
+    private static FormatterException topLevelDeclarationListRecoveryFailure(String reason) {
+        return new FormatterException(TOP_LEVEL_DECLARATION_LIST_RECOVERY_FAILURE + reason);
+    }
+
+    private static FormatterException topLevelDeclarationListRecoveryFailure(String reason, Throwable cause) {
+        return new FormatterException(TOP_LEVEL_DECLARATION_LIST_RECOVERY_FAILURE + reason, cause);
+    }
+
+    private enum EntryKind {
+        /**
+         * No top-level declaration-list entry has been emitted yet.
+         */
+        NONE,
+
+        /**
+         * The previous entry was a normally formatted top-level declaration.
+         */
+        VALID_DECLARATION,
+
+        /**
+         * The previous entry was a raw source island that still owns the following separator.
+         */
+        RAW_GAP,
+
+        /**
+         * The previous entry was a raw source island whose final line break was replaced by formatter-owned output.
+         */
+        RAW_GAP_WITH_TRAILING_BREAK
     }
 
     private int firstTypeLine(CompilationUnit unit) {

@@ -13,6 +13,7 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.RecordDeclaration;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.JavadocComment;
@@ -152,7 +153,7 @@ public final class JavaFormatter {
             return Optional.empty();
         }
         return Optional.of(
-                "Parse-error recovery is configured, but this recovery slice only supports malformed block statement lists and class/interface/record member declaration lists.");
+                "Parse-error recovery is configured, but this recovery slice only supports malformed block statement lists, class/interface/record member declaration lists, and top-level declaration lists.");
     }
 
     private Optional<String> unsupportedRecoveryReason(CompilationUnit unit) {
@@ -176,7 +177,8 @@ public final class JavaFormatter {
 
     private static boolean isSupportedRecovery(Node recoveredNode) {
         return isSupportedBlockStatementListRecovery(recoveredNode)
-                || isSupportedMemberDeclarationListRecovery(recoveredNode);
+                || isSupportedMemberDeclarationListRecovery(recoveredNode)
+                || isSupportedTopLevelDeclarationListRecovery(recoveredNode);
     }
 
     private static boolean isSupportedBlockStatementListRecovery(Node recoveredNode) {
@@ -236,6 +238,20 @@ public final class JavaFormatter {
                     return false;
                 })
                 .isPresent();
+    }
+
+    private static boolean isSupportedTopLevelDeclarationListRecovery(Node recoveredNode) {
+        if (!(recoveredNode instanceof TypeDeclaration<?> type)
+                || type.getParsed() == Node.Parsedness.PARSED) {
+            return false;
+        }
+        return type.getParentNode()
+                .filter(CompilationUnit.class::isInstance)
+                .map(CompilationUnit.class::cast)
+                .filter(unit -> unit.getTypes().contains(type))
+                .map(unit -> unit.getTypes().stream()
+                        .anyMatch(sibling -> sibling != type && sibling.getParsed() == Node.Parsedness.PARSED))
+                .orElse(false);
     }
 
     private Optional<String> noRecoveredCompilationUnit() {

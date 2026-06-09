@@ -10,6 +10,9 @@ import com.github.javaparser.Problem;
 import com.github.javaparser.Position;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.body.BodyDeclaration;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.JavadocComment;
@@ -149,7 +152,7 @@ public final class JavaFormatter {
             return Optional.empty();
         }
         return Optional.of(
-                "Parse-error recovery is configured, but this recovery slice only supports malformed block statement lists.");
+                "Parse-error recovery is configured, but this recovery slice only supports malformed block statement lists and class/interface/record member declaration lists.");
     }
 
     private Optional<String> unsupportedRecoveryReason(CompilationUnit unit) {
@@ -163,12 +166,17 @@ public final class JavaFormatter {
             return parseProblemsUnsupportedByCurrentPrinters();
         }
         return recoveredNodes.stream()
-                .filter(node -> !isSupportedBlockStatementListRecovery(node))
+                .filter(node -> !isSupportedRecovery(node))
                 .findFirst()
                 .map(node -> parseProblemsUnsupportedByCurrentPrinters().orElseThrow()
                         + " Unsupported recovered node: "
                         + node.getClass().getSimpleName()
                         + node.getRange().map(range -> " at " + range).orElse("."));
+    }
+
+    private static boolean isSupportedRecovery(Node recoveredNode) {
+        return isSupportedBlockStatementListRecovery(recoveredNode)
+                || isSupportedMemberDeclarationListRecovery(recoveredNode);
     }
 
     private static boolean isSupportedBlockStatementListRecovery(Node recoveredNode) {
@@ -195,6 +203,38 @@ public final class JavaFormatter {
                 .filter(BlockStmt.class::isInstance)
                 .map(BlockStmt.class::cast)
                 .filter(block -> block.getStatements().contains(statement))
+                .isPresent();
+    }
+
+    private static boolean isSupportedMemberDeclarationListRecovery(Node recoveredNode) {
+        return nearestClassInterfaceOrRecordMemberSibling(recoveredNode)
+                .filter(member -> member.getParsed() != Node.Parsedness.PARSED)
+                .isPresent();
+    }
+
+    private static Optional<BodyDeclaration<?>> nearestClassInterfaceOrRecordMemberSibling(Node recoveredNode) {
+        Optional<Node> current = Optional.of(recoveredNode);
+        while (current.isPresent()) {
+            Node node = current.orElseThrow();
+            if (node instanceof BodyDeclaration<?> member && isClassInterfaceOrRecordMember(member)) {
+                return Optional.of(member);
+            }
+            current = node.getParentNode();
+        }
+        return Optional.empty();
+    }
+
+    private static boolean isClassInterfaceOrRecordMember(BodyDeclaration<?> member) {
+        return member.getParentNode()
+                .filter(parent -> {
+                    if (parent instanceof ClassOrInterfaceDeclaration declaration) {
+                        return declaration.getMembers().contains(member);
+                    }
+                    if (parent instanceof RecordDeclaration declaration) {
+                        return declaration.getMembers().contains(member);
+                    }
+                    return false;
+                })
                 .isPresent();
     }
 

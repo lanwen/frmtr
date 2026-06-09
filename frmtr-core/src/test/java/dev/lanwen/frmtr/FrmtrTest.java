@@ -188,6 +188,36 @@ final class FrmtrTest {
     }
 
     @Test
+    void defaultParseErrorRecoveryFormatsValidMemberSiblingsAroundRawMalformedInitializer() {
+        String source = """
+                class Demo{int before=1;{
+                        var broken = ; // keep raw
+                }int after=2;}""";
+        var result = new JavaParser(new ParserConfiguration()
+                        .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
+                        .setStoreTokens(true)
+                        .setAttributeComments(true))
+                .parse(ParseStart.COMPILATION_UNIT, Providers.provider(source));
+
+        String formatted = Frmtr.format(source);
+
+        assertThat(result.isSuccessful()).isFalse();
+        assertThat(result.getResult()).isPresent();
+        assertThat(formatted).isEqualTo("""
+                class Demo {
+
+                    int before = 1;
+
+                    {
+                        var broken = ; // keep raw
+                    }
+
+                    int after = 2;
+                }
+                """);
+    }
+
+    @Test
     void parseErrorRecoverySkipsTransformsBeforePrintingRecoveredTree() {
         String source = """
                 import java.util.List;
@@ -229,7 +259,7 @@ final class FrmtrTest {
                 .isInstanceOf(FormatterException.class)
                 .hasMessageContaining("Unable to parse Java source:")
                 .hasMessageContaining("Parse-error recovery is configured")
-                .hasMessageContaining("only supports malformed block statement lists");
+                .hasMessageContaining("only supports malformed block statement lists and class/interface/record member declaration lists");
     }
 
     @Test

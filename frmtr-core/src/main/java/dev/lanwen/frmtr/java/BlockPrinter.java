@@ -28,7 +28,7 @@ final class BlockPrinter {
     private final JavaCommentPlacementPolicy commentPlacement;
     private final SourceText sourceText;
     private final RecoveredListPlanner recoveredListPlanner;
-    private final RecoveredSourceRegions recoveredSourceRegions;
+    private final RecoveredRawGapPrinter rawGaps;
     private final boolean recoverParseProblems;
     private final JavaFormatRule<Statement> statementRenderer;
     private final Predicate<Statement> hasPragma;
@@ -41,7 +41,7 @@ final class BlockPrinter {
         this.commentPlacement = context.commentPlacementPolicy;
         this.sourceText = context.sourceText;
         this.recoveredListPlanner = context.recoveredListPlanner;
-        this.recoveredSourceRegions = context.recoveredSourceRegions;
+        this.rawGaps = new RecoveredRawGapPrinter(context, BlockPrinter::blockStatementListRecoveryFailure);
         this.recoverParseProblems = context.recoverParseProblems;
         this.statementRenderer = statementRenderer;
         this.hasPragma = hasPragma;
@@ -165,9 +165,9 @@ final class BlockPrinter {
             BlockStmt block,
             List<Doc> leadingInside,
             RecoveredListPlanner.Plan<Statement> plan) {
-        List<RawGapRegion> rawGapRegions = rawGapRegions(plan);
-        List<SourceRegion> rawRegions = rawGapRegions.stream().map(RawGapRegion::region).toList();
-        requireRecoverableRawRegions(block, rawRegions);
+        List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions = rawGaps.rawGapRegions(plan);
+        List<SourceRegion> rawRegions = rawGaps.regions(rawGapRegions);
+        rawGaps.requireRecoverableRawRegions(block, rawGapRegions);
         List<Doc> leadingDocs = new ArrayList<>(leadingInside);
         leadingDocs.addAll(blockOrphanCommentStatements(block, rawRegions));
 
@@ -202,9 +202,9 @@ final class BlockPrinter {
                     previousEntry = EntryKind.VALID_STATEMENT;
                 }
                 case RecoveredListPlanner.RawGap<?> ignored -> {
-                    RawGapRegion rawRegion = rawGapRegions.get(rawGapIndex++);
+                    RecoveredRawGapPrinter.RawGapRegion rawRegion = rawGapRegions.get(rawGapIndex++);
                     if (rawRegion.region().beginOffset() < rawRegion.region().endOffset()) {
-                        contents.add(rawBlockStatementList(block, rawRegion.region()));
+                        contents.add(rawGaps.raw(block, rawRegion, "blockStatementList"));
                     }
                     previousEntry = rawRegion.trailingBreakReplaced()
                             ? EntryKind.RAW_GAP_WITH_TRAILING_BREAK
@@ -221,66 +221,6 @@ final class BlockPrinter {
             case NONE, LEADING_DOC, VALID_STATEMENT, RAW_GAP_WITH_TRAILING_BREAK -> Doc.HARD_LINE;
         };
         return Doc.concat(Doc.text("{"), Doc.indent(Doc.concat(contents)), closingBreak, Doc.text("}"));
-    }
-
-    private List<RawGapRegion> rawGapRegions(RecoveredListPlanner.Plan<Statement> plan) {
-        return plan.entries().stream()
-                .filter(RecoveredListPlanner.RawGap.class::isInstance)
-                .map(entry -> rawGapRegion(entry.region()))
-                .toList();
-    }
-
-    private void requireRecoverableRawRegions(BlockStmt block, List<SourceRegion> rawRegions) {
-        rawRegions.stream()
-                .filter(region -> region.beginOffset() < region.endOffset())
-                .forEach(region -> {
-                    try {
-                        recoveredSourceRegions.commentAccounting(block, region).requireNoCrossing(region);
-                    } catch (RecoveredSourceRegions.CrossingCommentBoundaryException exception) {
-                        throw blockStatementListRecoveryFailure(exception.getMessage(), exception);
-                    }
-                });
-    }
-
-    private Doc rawBlockStatementList(BlockStmt block, SourceRegion region) {
-        try {
-            return recoveredSourceRegions.raw(block, region, "blockStatementList");
-        } catch (RecoveredSourceRegions.CrossingCommentBoundaryException exception) {
-            throw blockStatementListRecoveryFailure(exception.getMessage(), exception);
-        }
-    }
-
-    private RawGapRegion rawGapRegion(SourceRegion region) {
-        String raw = sourceText.slice(region);
-        int cursor = raw.length();
-        while (cursor > 0 && isHorizontalWhitespace(raw.charAt(cursor - 1))) {
-            cursor--;
-        }
-        int lineBreakStart = trailingLineBreakStart(raw, cursor);
-        if (lineBreakStart < 0) {
-            return new RawGapRegion(region, false);
-        }
-        return new RawGapRegion(
-                sourceText.region(region.beginOffset(), region.beginOffset() + lineBreakStart),
-                true);
-    }
-
-    private static int trailingLineBreakStart(String raw, int endExclusive) {
-        if (endExclusive <= 0) {
-            return -1;
-        }
-        char last = raw.charAt(endExclusive - 1);
-        if (last == '\n') {
-            return endExclusive > 1 && raw.charAt(endExclusive - 2) == '\r' ? endExclusive - 2 : endExclusive - 1;
-        }
-        if (last == '\r') {
-            return endExclusive - 1;
-        }
-        return -1;
-    }
-
-    private static boolean isHorizontalWhitespace(char value) {
-        return value != '\r' && value != '\n' && Character.isWhitespace(value);
     }
 
     private Optional<Doc> printableStatement(Statement previousStatement, Statement currentStatement) {
@@ -363,16 +303,12 @@ final class BlockPrinter {
     private List<Doc> blockOrphanCommentStatements(BlockStmt block, List<SourceRegion> rawRegions) {
         return commentPlacement.orphanCommentsOutsideChildRanges(block, block.getStatements()).stream()
                 .filter(comment -> comment.comment().getRange().isEmpty()
-                        || rawRegions.stream().noneMatch(region -> contains(
+                        || rawRegions.stream().noneMatch(region -> RecoveredRawGapPrinter.contains(
                                 region,
                                 sourceText.region(comment.comment().getRange().orElseThrow()))))
                 .map(comments::comment)
                 .filter(doc -> doc != Doc.EMPTY)
                 .toList();
-    }
-
-    private static boolean contains(SourceRegion region, SourceRegion nested) {
-        return region.beginOffset() <= nested.beginOffset() && nested.endOffset() <= region.endOffset();
     }
 
     /**
@@ -421,6 +357,4 @@ final class BlockPrinter {
          */
         RAW_GAP_WITH_TRAILING_BREAK
     }
-
-    private record RawGapRegion(SourceRegion region, boolean trailingBreakReplaced) {}
 }

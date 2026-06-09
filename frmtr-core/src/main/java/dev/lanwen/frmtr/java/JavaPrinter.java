@@ -104,9 +104,7 @@ final class JavaPrinter {
                 compactSource::compact,
                 moduleBlocks::moduleBlock);
         this.memberBlocks = new MemberBlockPrinter(
-                rawSource,
-                comments,
-                commentPlacementPolicy,
+                context,
                 declarationPrefixes::hasDeclarationAnnotations);
         this.controlConditions = new ControlConditionPrinter(
                 comments,

@@ -1,6 +1,7 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.expr.CharLiteralExpr;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
@@ -33,14 +34,14 @@ final class CompactSourceText {
     /**
      * Returns compact source-equivalent text for a node.
      *
-     * <p>String literals use raw token text so escape spelling and quote-sensitive source details survive the compact
-     * path. Field accesses are reconstructed from the compact scope and parsed name so dotted chains keep canonical dot
-     * spacing. Comment-free method calls are reconstructed through the same compact policy for scopes, type arguments,
-     * and arguments; calls that contain comments stay on normalized token text so the compact path does not silently
-     * discard comment content.
+     * <p>String and character literals use raw token text so escape spelling and quote-sensitive source details survive
+     * the compact path. Field accesses are reconstructed from the compact scope and parsed name so dotted chains keep
+     * canonical dot spacing. Comment-free method calls are reconstructed through the same compact policy for scopes, type
+     * arguments, and arguments; calls that contain comments stay on normalized token text so the compact path does not
+     * silently discard comment content.
      */
     String compact(Node node) {
-        if (node instanceof StringLiteralExpr) {
+        if (node instanceof StringLiteralExpr || node instanceof CharLiteralExpr) {
             return rawSource.raw(node);
         }
         if (node instanceof FieldAccessExpr fieldAccessExpr) {

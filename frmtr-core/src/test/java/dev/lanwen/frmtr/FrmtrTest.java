@@ -57,6 +57,18 @@ final class FrmtrTest {
     }
 
     @Test
+    void formatsMethodCallCharLiteralFixtureAndIsIdempotent() throws Exception {
+        String source = readResource("format/method-call-char-literal/input.java");
+        String expected = readResource("format/method-call-char-literal/frmtr.output.java");
+
+        String formatted = Frmtr.format(source);
+
+        assertThat(formatted).isEqualTo(expected);
+        assertThat(Frmtr.format(formatted)).isEqualTo(formatted);
+        assertThatCode(() -> StaticJavaParser.parse(formatted)).doesNotThrowAnyException();
+    }
+
+    @Test
     void formatsCommonJavaAndIsIdempotent() {
         String source = """
                 package dev.example;

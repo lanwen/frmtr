@@ -7,6 +7,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public final class FormatterRunFailureRenderer {
+    private static final int MAX_MESSAGE_LINE_LENGTH = 80;
+
     private FormatterRunFailureRenderer() {}
 
     public static String render(FormatRunResult run) {
@@ -86,30 +88,64 @@ public final class FormatterRunFailureRenderer {
             return false;
         }
         String gutter = " ".repeat(lineNumberWidth + 2);
-        appendLine(rendered, gutter + "┌" + "─".repeat(pointerOffset) + "^");
+        appendLine(rendered, gutter + pointerLine(pointerOffset));
         appendLine(rendered, gutter + "│");
         appendMessage(rendered, gutter, problem.message());
         return true;
     }
 
+    private static String pointerLine(int pointerOffset) {
+        if (pointerOffset == 0) {
+            return "^";
+        }
+        return "┌" + "─".repeat(pointerOffset - 1) + "^";
+    }
+
     private static void appendMessage(StringBuilder rendered, String gutter, String message) {
         List<String> lines = message.lines().toList();
+        long contentLineCount = lines.stream().filter(line -> !line.isEmpty()).count();
+        int contentLineIndex = 0;
+        if (contentLineCount == 0) {
+            appendLine(rendered, gutter + "└─ ");
+            return;
+        }
         for (int index = 0; index < lines.size(); index++) {
-            appendLine(rendered, gutter + messagePrefix(index, lines.size(), lines.get(index)));
+            String line = lines.get(index);
+            if (line.isEmpty()) {
+                appendLine(rendered, gutter + "│");
+                continue;
+            }
+            contentLineIndex++;
+            boolean lastContentLine = contentLineIndex == contentLineCount;
+            List<String> wrapped = wrapMessageLine(line);
+            appendLine(rendered, gutter + messagePrefix(contentLineCount, lastContentLine) + wrapped.getFirst());
+            for (String continuation : wrapped.subList(1, wrapped.size())) {
+                appendLine(rendered, gutter + messageContinuationPrefix(contentLineCount, lastContentLine) + continuation);
+            }
         }
     }
 
-    private static String messagePrefix(int index, int lineCount, String line) {
-        if (lineCount == 1) {
-            return "└─ " + line;
+    private static List<String> wrapMessageLine(String line) {
+        List<String> wrapped = new ArrayList<>();
+        String remaining = line;
+        while (remaining.length() > MAX_MESSAGE_LINE_LENGTH) {
+            int breakAt = remaining.lastIndexOf(' ', MAX_MESSAGE_LINE_LENGTH);
+            if (breakAt <= 0) {
+                breakAt = MAX_MESSAGE_LINE_LENGTH;
+            }
+            wrapped.add(remaining.substring(0, breakAt).stripTrailing());
+            remaining = remaining.substring(breakAt).stripLeading();
         }
-        if (index == 0) {
-            return "├─ " + line;
-        }
-        if (index == lineCount - 1) {
-            return "└─ " + line;
-        }
-        return line.isEmpty() ? "│" : "│  " + line;
+        wrapped.add(remaining);
+        return List.copyOf(wrapped);
+    }
+
+    private static String messagePrefix(long contentLineCount, boolean lastContentLine) {
+        return contentLineCount == 1 || lastContentLine ? "└─ " : "├─ ";
+    }
+
+    private static String messageContinuationPrefix(long contentLineCount, boolean lastContentLine) {
+        return contentLineCount == 1 || lastContentLine ? "   " : "│  ";
     }
 
     private static int lineNumberWidth(List<FormatterException.SourceProblem> problems) {
@@ -158,4 +194,5 @@ public final class FormatterRunFailureRenderer {
                 + gapLine(lineNumberWidth)
                 + System.lineSeparator();
     }
+
 }

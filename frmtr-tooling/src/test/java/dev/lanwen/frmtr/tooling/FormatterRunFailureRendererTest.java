@@ -39,19 +39,43 @@ final class FormatterRunFailureRendererTest {
                 ┌─ Unable to parse Java source:
                 │ 1  class Broken {
                 │ 2      int value =
-                │    ┌───────────^
+                │    ┌──────────^
                 │    │
                 │    └─ (line 2,col 12) Parse error
                 │ ⋮
                 │ 1  class Broken {
                 │ ⋮
                 │ 3      int other =
-                │    ┌───────────^
+                │    ┌──────────^
                 │    │
                 │    └─ (line 3,col 12) Parse error
                 └─
 
                 ┌─ Cannot read source
+                └─""");
+    }
+
+    @Test
+    void wrapsLongMessagesUnderConnector() {
+        FormatterException exception = new FormatterException(
+                "Unable to parse Java source",
+                null,
+                List.of(new FormatterException.SourceProblem(
+                        "Parse error message with enough words to force wrapping in the failure renderer without losing connector indentation.",
+                        Optional.of(new FormatterException.SourceLocation(2, 7)),
+                        Optional.empty(),
+                        List.of(new FormatterException.SourceLine(2, 1, "class Broken {")))));
+        FormatRunResult run = new FormatRunResult(List.of(failed("src/Broken.java", exception)));
+
+        String rendered = FormatterRunFailureRenderer.render(run);
+
+        assertThat(rendered).isEqualTo("""
+                ┌─ Unable to parse Java source:
+                │ 2  class Broken {
+                │    ┌─────^
+                │    │
+                │    └─ Parse error message with enough words to force wrapping in the failure renderer
+                │       without losing connector indentation.
                 └─""");
     }
 

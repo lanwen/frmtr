@@ -81,7 +81,7 @@ It is a core debug API only, not a formatting policy surface or CLI hook.
 - `FormatterRunner.write(...)` writes changed formatter output back to disk, continues after per-file failures, distinguishes write-step failures as partially written results, and reports the full run summary.
 - `UnifiedDiffRenderer` renders the same unified diff format for CLI and Gradle check output.
 - `FormatterFailureRenderer` turns structured formatter failures into adapter-facing messages, including parse context, declaration-line context, and caret placement, without making the core exception message own terminal formatting.
-- `FormatterRunFailureRenderer` renders failed file results as outlined diagnostic blocks titled by the failure message while file identity stays with adapter status lines. Source diagnostics come from structured parser metadata, including line numbers, caret placement, and vertical-dot gap markers inside the outline.
+- `FormatterRunFailureRenderer` renders failed file results as outlined diagnostic blocks titled by the failure message while file identity stays with adapter status lines. Source diagnostics come from structured parser metadata, including line numbers, caret placement, wrapped messages, and vertical-dot gap markers inside the outline.
 
 The runner owns deterministic path ordering and de-duplication for file lists supplied by adapters. Source discovery remains adapter-specific: the CLI uses selectors and `.gitignore`; the Gradle plugin builds one canonical file collection from Java source sets and Gradle-style source filters, then uses that same collection for task inputs and task actions.
 

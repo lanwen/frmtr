@@ -26,16 +26,13 @@ final class PrettierJavaFixtureTest {
     private static final String FIXTURE_ROOT = "format/prettier-java/unit-test";
     private static final Set<String> PRETTIER_COMPATIBLE_FIXTURES = Set.of(
             "args",
-            "arrays",
             "annotation_interface_declaration",
             "assert",
-            "blank_lines",
             "bug-fixes",
             "cast",
             "char_literal",
             "classes",
             "comments/bug-fixes",
-            "comments/class",
             "comments/comments-blocks-and-statements/end-of-block",
             "comments/comments-blocks-and-statements/if-statement",
             "comments/comments-blocks-and-statements/labeled-statement",
@@ -84,14 +81,12 @@ final class PrettierJavaFixtureTest {
             "require-pragma/invalid-pragma",
             "require-pragma/prettier-pragma",
             "return",
-            "sealed",
             "synchronized",
             "text-blocks",
             "throws",
             "try_catch",
             "types",
             "unnamed-class-compilation-unit",
-            "variables",
             "while",
             "yield-statement");
     private static final Map<String, String> JAVA_PARSER_UNSUPPORTED_FIXTURES = Map.ofEntries(

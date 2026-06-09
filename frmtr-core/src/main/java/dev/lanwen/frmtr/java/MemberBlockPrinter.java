@@ -468,10 +468,15 @@ final class MemberBlockPrinter {
     /**
      * Chooses the blank-line policy between two adjacent member declarations.
      *
-     * <p>Interfaces keep adjacent unannotated abstract methods tight, adjacent fields preserve the source's blank-line
-     * choice unless declaration annotations force separation, and all other member pairs use a blank line.
+     * <p>A blank source line between adjacent members is always preserved. Otherwise, interfaces keep adjacent unannotated
+     * abstract methods tight, adjacent fields are separated as standalone declarations, and all other member pairs use a
+     * blank line.
      */
     private Doc memberSeparator(Node owner, BodyDeclaration<?> previous, BodyDeclaration<?> current) {
+        Optional<Boolean> hasSourceBlankLineBetween = hasSourceBlankLineBetween(previous, current);
+        if (hasSourceBlankLineBetween.orElse(false)) {
+            return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
+        }
         // Interface methods without bodies read as a signature list unless annotations make each item standalone.
         if (owner instanceof ClassOrInterfaceDeclaration declaration
                 && declaration.isInterface()
@@ -483,18 +488,17 @@ final class MemberBlockPrinter {
                 && !hasDeclarationAnnotations.test(current)) {
             return Doc.HARD_LINE;
         }
-        // Mixed member kinds and non-field declarations keep the formatter's normal blank-line separation.
-        if (!(previous instanceof FieldDeclaration) || !(current instanceof FieldDeclaration)) {
+        if (previous instanceof FieldDeclaration && current instanceof FieldDeclaration) {
             return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
         }
-        // Adjacent fields preserve source grouping unless annotations make the declarations visually heavier.
-        boolean hasBlankLineBetween = previous.getRange()
+        // Mixed member kinds and non-field declarations keep the formatter's normal blank-line separation.
+        return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
+    }
+
+    private Optional<Boolean> hasSourceBlankLineBetween(BodyDeclaration<?> previous, BodyDeclaration<?> current) {
+        return previous.getRange()
                 .flatMap(previousRange -> current.getRange()
-                        .map(currentRange -> currentRange.begin.line > previousRange.end.line + 1))
-                .orElse(true);
-        return hasBlankLineBetween || hasDeclarationAnnotations.test(previous) || hasDeclarationAnnotations.test(current)
-                ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE)
-                : Doc.HARD_LINE;
+                        .map(currentRange -> currentRange.begin.line > previousRange.end.line + 1));
     }
 
     private enum EntryKind {

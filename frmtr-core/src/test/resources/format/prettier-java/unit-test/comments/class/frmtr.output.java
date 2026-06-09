@@ -132,11 +132,14 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
     }
 
     private final ImmutableList<R> rowList;
+
     private final ImmutableList<C> columnList;
 
     // TODO(jlevy): Add getters returning rowKeyToIndex and columnKeyToIndex?
     private final ImmutableMap<R, Integer> rowKeyToIndex;
+
     private final ImmutableMap<C, Integer> columnKeyToIndex;
+
     private final V[][] array;
 
     private ArrayTable(Iterable<? extends R> rowKeys, Iterable<? extends C> columnKeys) {

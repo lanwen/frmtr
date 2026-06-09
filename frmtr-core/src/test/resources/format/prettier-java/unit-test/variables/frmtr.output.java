@@ -1,58 +1,97 @@
 public class Variables {
 
     public static int STATIC_VARIABLE = 123;
+
     private static final Logger LOGGER = LoggerFactory.getLogger(ComplexFilterTest.class);
 
     int packageVariable = 234;
+
     private float privateVariable = 0.9f;
 
     private Integer nullVariable = null;
+
     private Integer createVariable = new Integer();
 
     private List<String> genericVariable1 = new ArrayList<>();
+
     private final Map<String, Button> buttonMap = new HashMap<>();
+
     private Bean<String> genericVariable2 = new Bean<String>("abc");
+
     private Bean<String> genericVariable2 = new Bean<String>("abc", "def", "ghi", "jkl");
+
     private Map<Integer, String> genericVariable4 = new HashMap<Integer, String>();
+
     private Map<Integer, String, Integer, String> genericVariable5 = new HashMap<Integer, String, Integer>();
 
     private Object variableWithComment1 /* comment */ = new Object();
+
     private Object variableWithComment2 = /* comment */ new Object();
+
     private Object variableWithComment3 /* very very very long comment */ = new Object();
+
     private Object variableWithComment4 = /* very very very long comment */ new Object();
 
     private Object[] arrayVariable1 = new Object[3];
+
     private Object[][] arrayVariable2 = new Object[3][3];
+
     private Object[] arrayVariable3 = new Object[] {};
+
     private Object[] arrayVariable4 = new Object[] {"abc", "def", "ghi"};
+
     private Object[] arrayVariable5 = new Object[] {"abc", "def", "ghi", "jkl", "mno"};
+
     private Object[] arrayVariable6 = {"abc", "def", "ghi"};
 
     private Range creator1 = this.dateRangeField.new Range(from, to);
+
     private Range creator2 = this.dateRangeField.new <Integer>Range(from, to);
+
     private Range<Date> creator3 = this.dateRangeField.new <Integer>Range<>(from, to);
+
     private Range<Date> creator3 = new <Integer>Range<>(from, to);
 
     private int intLiteral = 1__0;
+
     private int intLiteral = 0_00_00;
+
     private int intLiteral = 0_7;
+
     private int intLiteral = 0__7;
+
     private int hexLiteral = 0x0000;
+
     private int hexLiteral = 0xa__b;
+
     private int hexLiteral = 0x1p0993;
+
     private int hexLiteral = 0x1p-0993;
+
     private int octLiteral = 001;
+
     private int binaryLiteral = 0b1__0;
+
     private double floatingPointLiteral = 0d;
+
     private double floatingPointLiteral = 0D;
+
     private double floatingPointLiteral = 00d;
+
     private double floatingPointLiteral = 1.0d;
+
     private double floatingPointLiteral = 1.0D;
+
     private float floatingPointLiteral = 1.0f;
+
     private float floatingPointLiteral = 1.0F;
+
     private float floatingPointLiteral = 1e4f;
+
     private double floatingPointLiteral = 1e4d;
+
     private float floatingPointLiteral = 007f;
+
     private double floatingPointLiteral = 00e1;
 
     private Interface anonymousClassVariable = new Interface() {

@@ -122,6 +122,11 @@ final class PrettierJavaFixtureTest {
             Map.entry(
                     "unnamed-variables-and-patterns",
                     "uses multiple switch pattern labels, which JavaParser 3.28.1 does not parse"));
+    private static final Set<String> FORMATTER_RECOVERED_FIXTURES = Set.of(
+            "comments/expression",
+            "conditional-expression/spaces",
+            "conditional-expression/tabs",
+            "expressions");
     private static final JavaParser PARSER = new JavaParser(new ParserConfiguration()
             .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
             .setStoreTokens(true)
@@ -136,7 +141,7 @@ final class PrettierJavaFixtureTest {
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("javaParserSupportedFixtures")
+    @MethodSource("formatterSupportedFixtures")
     void currentFormatterOutputMatchesCheckedInSnapshot(Fixture fixture) throws IOException {
         String input = read(fixture.input());
 
@@ -163,8 +168,8 @@ final class PrettierJavaFixtureTest {
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("javaParserSupportedFixtures")
-    void javaParserSupportedPrettierJavaFixtureSnapshotsArePresent(Fixture fixture) {
+    @MethodSource("formatterSupportedFixtures")
+    void formatterSupportedPrettierJavaFixtureSnapshotsArePresent(Fixture fixture) {
         assertThat(fixture.frmtrOutput()).isRegularFile();
     }
 
@@ -183,9 +188,18 @@ final class PrettierJavaFixtureTest {
                     assertThat(fixtureNames).contains(fixture.name());
                     assertThat(PRETTIER_COMPATIBLE_FIXTURES).doesNotContain(fixtureName);
                     assertThat(reason).isNotBlank();
-                    assertThat(fixture.frmtrOutput()).doesNotExist();
-                    assertThat(fixture.frmtrExampleOutput()).isRegularFile();
+                    if (FORMATTER_RECOVERED_FIXTURES.contains(fixtureName)) {
+                        assertThat(fixture.frmtrOutput()).isRegularFile();
+                    } else {
+                        assertThat(fixture.frmtrOutput()).doesNotExist();
+                        assertThat(fixture.frmtrExampleOutput()).isRegularFile();
+                    }
                 });
+
+        assertThat(FORMATTER_RECOVERED_FIXTURES).allSatisfy(fixtureName -> {
+            assertThat(fixtureNames).contains(fixtureName);
+            assertThat(JAVA_PARSER_UNSUPPORTED_FIXTURES).containsKey(fixtureName);
+        });
 
         assertThat(fixtures.stream()
                         .filter(fixture -> !isJavaParserSupported(fixture))
@@ -194,8 +208,8 @@ final class PrettierJavaFixtureTest {
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("javaParserUnsupportedFixtures")
-    void javaParserUnsupportedPrettierJavaFixtureInputsFailWithFormatterParseError(Fixture fixture)
+    @MethodSource("formatterUnsupportedFixtures")
+    void formatterUnsupportedPrettierJavaFixtureInputsFailWithFormatterParseError(Fixture fixture)
             throws IOException {
         Throwable thrown = catchThrowable(() -> Frmtr.format(read(fixture.input())));
 
@@ -225,8 +239,12 @@ final class PrettierJavaFixtureTest {
         return fixtures().filter(fixture -> !JAVA_PARSER_UNSUPPORTED_FIXTURES.containsKey(fixture.name()));
     }
 
-    private static Stream<Fixture> javaParserUnsupportedFixtures() throws IOException, URISyntaxException {
-        return fixtures().filter(fixture -> JAVA_PARSER_UNSUPPORTED_FIXTURES.containsKey(fixture.name()));
+    private static Stream<Fixture> formatterSupportedFixtures() throws IOException, URISyntaxException {
+        return fixtures().filter(PrettierJavaFixtureTest::isFormatterSupported);
+    }
+
+    private static Stream<Fixture> formatterUnsupportedFixtures() throws IOException, URISyntaxException {
+        return fixtures().filter(fixture -> !isFormatterSupported(fixture));
     }
 
     private static String unsupportedReason(Fixture fixture) {
@@ -272,6 +290,11 @@ final class PrettierJavaFixtureTest {
 
     private static boolean isJavaParserSupported(Fixture fixture) {
         return isParseable(fixture.input()) && isParseable(fixture.prettierOutput());
+    }
+
+    private static boolean isFormatterSupported(Fixture fixture) {
+        return !JAVA_PARSER_UNSUPPORTED_FIXTURES.containsKey(fixture.name())
+                || FORMATTER_RECOVERED_FIXTURES.contains(fixture.name());
     }
 
     private static boolean isParseable(Path file) {

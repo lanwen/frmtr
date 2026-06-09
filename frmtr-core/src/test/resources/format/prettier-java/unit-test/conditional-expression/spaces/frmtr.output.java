@@ -15,7 +15,7 @@ class ConditionalExpression {
     }
 
     void ternaryOperationThatShouldBreak3() {
-        value = aaaaaaaaaa && bbbbbbbbbb && cccccccccc && dddddddddd && eeeeeeeeee && ffffffffff ? gggggggggg : hhhhhhhhhh;
+        aaaaaaaaaa && bbbbbbbbbb && cccccccccc && dddddddddd && eeeeeeeeee && ffffffffff ? gggggggggg : hhhhhhhhhh;
         var v = aaaaaaaaaa && bbbbbbbbbb && cccccccccc && dddddddddd && eeeeeeeeee && ffffffffff ? gggggggggg : hhhhhhhhhh;
         v = aaaaaaaaaa && bbbbbbbbbb && cccccccccc && dddddddddd && eeeeeeeeee && ffffffffff ? gggggggggg : hhhhhhhhhh;
         f(aaaaaaaaaa && bbbbbbbbbb && cccccccccc && dddddddddd && eeeeeeeeee && ffffffffff ? gggggggggg : hhhhhhhhhh);
@@ -28,31 +28,31 @@ class ConditionalExpression {
     }
 
     void nestedTernary() {
-        value = aaaaaaaaaa ? bbbbbbbbbb : cccccccccc ? dddddddddd : eeeeeeeeee ? ffffffffff : gggggggggg;
+        aaaaaaaaaa ? bbbbbbbbbb : cccccccccc ? dddddddddd : eeeeeeeeee ? ffffffffff : gggggggggg;
     }
 
     void ternaryWithComments() {
-        value = a
+        a
             ? // b
-              b
+            b
             : // c
-              c;
-        value = a
-            ? // b
-              b
-            : // c
-              c;
-        value = a // b
+            c;
+        a
+            // b
             ? b
+            // c
+            : c;
+        a ? // b
+            b
             : // c
-              c;
-        value = a
+            c;
+        a
             ? b // b
             : c; // c
     }
 
     void ternaryInParentheses() {
-        value = (aaaaaaaaaa ? bbbbbbbbbb : cccccccccc.dddddddddd().eeeeeeeeee().ffffffffff());
+        (aaaaaaaaaa ? bbbbbbbbbb : cccccccccc.dddddddddd().eeeeeeeeee().ffffffffff());
     }
 
     void assignment() {

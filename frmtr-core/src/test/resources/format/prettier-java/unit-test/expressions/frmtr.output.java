@@ -109,7 +109,7 @@ public class Expressions {
     }
 
     public void printWhile() {
-        while (/*infinite*/ true) /*stop the program*/ throw new RuntimeException();
+        while (true) throw new RuntimeException();
 
         while (myValue == 42 || myValue == 42 && myValue == 42 && myValue == 42 || myValue == 42 && myValue == 42) {}
 
@@ -195,7 +195,7 @@ public class Expressions {
 
     void parenthesesWithLeadingAndTrailingBreak() {
         (aaaaaaaaaa + bbbbbbbbbb + cccccccccc + dddddddddd + eeeeeeeeee).ffffffffff();
-        value = (aaaaaaaaaa + bbbbbbbbbb + cccccccccc + dddddddddd + eeeeeeeeee)::ffffffffff;
+    (aaaaaaaaaa + bbbbbbbbbb + cccccccccc + dddddddddd + eeeeeeeeee)::ffffffffff;
 
         aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
         aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
@@ -216,14 +216,14 @@ public class Expressions {
 
     void parenthesesWithTrailingBreak() {
         (aaaaaaaaaa && bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
-        value = (aaaaaaaaaa && bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
-        value = (aaaaaaaaaa && bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
+    (aaaaaaaaaa && bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
+        (aaaaaaaaaa && bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
     }
 
     void parenthesesWithoutBreak() {
         (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
-        value = (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
-        value = (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
+    (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
+        (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
 
         aaaaaaaaaa = (bbbbbbbbbb -> cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
         aaaaaaaaaa = (bbbbbbbbbb -> cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;

@@ -1,6 +1,7 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.BlockComment;
@@ -32,6 +33,7 @@ import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.ToIntFunction;
 
 /**
  * Prints field declarations and their variable initializer decision tree after body dispatch has selected the field
@@ -86,6 +88,7 @@ final class FieldDeclarationPrinter {
     private final Function<ClassOrInterfaceType, Doc> brokenClassOrInterfaceType;
     private final Predicate<Expression> shouldPrintScopeAsDoc;
     private final Function<MethodCallExpr, String> methodCallPrefix;
+    private final HuggableArgumentsRenderer huggableBlockLambdaArguments;
     private final Function<LambdaExpr, String> lambdaParameters;
     private final BiPredicate<LambdaExpr, String> lambdaParametersShouldBreak;
     private final Function<LambdaExpr, Doc> lambdaExpression;
@@ -127,6 +130,7 @@ final class FieldDeclarationPrinter {
             Function<ClassOrInterfaceType, Doc> brokenClassOrInterfaceType,
             Predicate<Expression> shouldPrintScopeAsDoc,
             Function<MethodCallExpr, String> methodCallPrefix,
+            HuggableArgumentsRenderer huggableBlockLambdaArguments,
             Function<LambdaExpr, String> lambdaParameters,
             BiPredicate<LambdaExpr, String> lambdaParametersShouldBreak,
             Function<LambdaExpr, Doc> lambdaExpression) {
@@ -166,6 +170,7 @@ final class FieldDeclarationPrinter {
         this.brokenClassOrInterfaceType = brokenClassOrInterfaceType;
         this.shouldPrintScopeAsDoc = shouldPrintScopeAsDoc;
         this.methodCallPrefix = methodCallPrefix;
+        this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.lambdaParameters = lambdaParameters;
         this.lambdaParametersShouldBreak = lambdaParametersShouldBreak;
         this.lambdaExpression = lambdaExpression;
@@ -316,7 +321,7 @@ final class FieldDeclarationPrinter {
             if (compactObjectCreationChain.isPresent()) {
                 return compactObjectCreationChain.orElseThrow();
             }
-            Optional<Doc> chain = mixedFieldMethodCallChain.apply(methodCall).or(() -> forcedMethodCallChain.apply(methodCall));
+            Optional<Doc> chain = forcedMethodCallChain.apply(methodCall).or(() -> mixedFieldMethodCallChain.apply(methodCall));
             if (chain.isPresent()) {
                 return variableWithMethodCallChain(
                         name,
@@ -578,6 +583,10 @@ final class FieldDeclarationPrinter {
             return Optional.empty();
         }
         String callPrefix = methodCallPrefix.apply(methodCall);
+        Optional<Doc> blockLambdaCall = variableWithHuggableBlockLambdaArguments(name, flatName, methodCall, callPrefix);
+        if (blockLambdaCall.isPresent()) {
+            return blockLambdaCall;
+        }
         String firstLine = flatName + " = " + callPrefix + "(";
         if (currentIndentedWidth(firstLine) > options.lineWidth()) {
             return Optional.empty();
@@ -591,6 +600,22 @@ final class FieldDeclarationPrinter {
                                 .toList()))),
                 Doc.HARD_LINE,
                 Doc.text(")")));
+    }
+
+    /**
+     * Keeps block-lambda method-call initializers on the assignment line until the lambda opener no longer fits.
+     *
+     * <p>The ordinary argument-break fallback remains available for long call prefixes or lambda parameter lists. This
+     * branch only wins when the assignment line through the lambda opener fits after the declaration prefix.
+     */
+    private Optional<Doc> variableWithHuggableBlockLambdaArguments(
+            String name,
+            String flatName,
+            MethodCallExpr methodCall,
+            String callPrefix) {
+        return huggableBlockLambdaArguments
+                .render(callPrefix, methodCall.getArguments(), firstLine -> currentIndentedWidth(flatName + " = " + firstLine))
+                .map(call -> Doc.concat(Doc.text(name + " = "), call));
     }
 
     /**
@@ -800,5 +825,13 @@ final class FieldDeclarationPrinter {
             return text.value();
         }
         return "";
+    }
+
+    @FunctionalInterface
+    interface HuggableArgumentsRenderer {
+        Optional<Doc> render(
+                String prefix,
+                NodeList<Expression> arguments,
+                ToIntFunction<String> firstLineWidth);
     }
 }

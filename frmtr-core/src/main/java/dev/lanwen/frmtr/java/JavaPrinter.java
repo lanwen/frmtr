@@ -109,10 +109,13 @@ final class JavaPrinter {
                 declarationPrefixes::hasDeclarationAnnotations);
         this.controlConditions = new ControlConditionPrinter(
                 comments,
+                rawSource,
                 options,
+                this::expression,
                 compactSource::compact,
                 compactSource::compactWithoutOwnComment,
-                binaries::lines,
+                binaries::expressionHasParenthesizedNestedBinary,
+                expression -> binaries.lines(expression, true),
                 this::currentIndentedWidth);
         this.switches = new SwitchPrinter(
                 context,
@@ -249,6 +252,7 @@ final class JavaPrinter {
                 this::expression,
                 compactSource::compact,
                 this::currentIndentedWidth,
+                methodCalls::compactRootWithBrokenFinalChainSegment,
                 methodCalls::forcedMethodCallChain,
                 conditionals::conditionalExpression,
                 enclosedExpressions::parenthesizedBreak);
@@ -298,6 +302,7 @@ final class JavaPrinter {
                 types::brokenClassOrInterfaceType,
                 methodCalls::shouldPrintScopeAsDoc,
                 methodCalls::methodCallPrefix,
+                lambdas::huggableBlockLambdaArguments,
                 lambdas::lambdaParameters,
                 lambdas::lambdaParametersShouldBreak,
                 lambdas::lambdaExpression);
@@ -407,13 +412,13 @@ final class JavaPrinter {
                 compactSource::compactTypeLike,
                 types::compactJoinTypeLike,
                 lambdas::huggableBlockLambdaArguments,
+                methodCalls::sourceMultilineSingleObjectCreationArgumentStatement,
                 methodCalls::forcedMethodCallChain,
                 methodCalls::brokenMethodCall,
                 methodCalls::methodCallChainHasComments,
                 methodCalls::methodCallChainRootIsObjectCreation,
                 methodCalls::methodCallChainRootIsFieldAccess,
-                binaries::expressionHasParenthesizedNestedBinary,
-                binaries::lines,
+                controlConditions::ifCondition,
                 controlConditions::controlCondition,
                 controlConditions::compactWithOwnBlockComment,
                 commentPlacement::ownSameLineBlockCommentBeforeNode,

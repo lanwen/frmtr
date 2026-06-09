@@ -65,7 +65,8 @@ The main envelope and dispatcher boundaries are:
 - `StatementRuleEnvelope`: applies the outer statement pragma, raw, and comment gate before formatted statement content
   dispatch.
 - `StatementPrinter`: renders structured statement bodies and delegates switch-entry grammar, expression formatting,
-  local variable declarations, declaration bodies, and block rendering back to existing owners.
+  local variable declarations, declaration bodies, method-call statement shape, control-condition shape, and block
+  rendering back to existing owners.
 - `ExpressionRuleEnvelope`: applies the outer expression entry gate, including clone-before-own-comment-removal
   rendering for callers that have already claimed an attached comment.
 - `ExpressionDispatcher`: narrows broad `Expression` AST kinds and delegates to specialized expression printers or
@@ -78,15 +79,16 @@ The main envelope and dispatcher boundaries are:
 ## Statement And Control Printers
 
 `SwitchPrinter` renders switch expressions and reusable switch-entry grammar used by statement switches: selector line
-comments, empty versus non-empty switch blocks, default and pattern labels, record-pattern label wrapping, guards, rule
-entries, statement-group entries, source-only raw single-line rule entries, and switch entry bodies. It leaves statement
-switch selection, nested statement rendering, expression rendering, ordinary block rendering, statement separators,
-compact source text, compact type text, modifiers, and width calculations with its callers and collaborators.
+comments, empty versus non-empty switch blocks, default and pattern labels, record-pattern label wrapping, guards,
+compact empty rule blocks, rule entries, statement-group entries, source-only raw single-line rule entries, and switch
+entry bodies. It leaves statement switch selection, nested statement rendering, expression rendering, ordinary block
+rendering, statement separators, compact source text, compact type text, modifiers, and width calculations with its
+callers and collaborators.
 
 `ControlConditionPrinter` renders expressions after statement grammar or statement-switch rendering has selected a
-parenthesized control-condition context. It owns compact selector and loop/condition text, width-triggered broken
-conditions, and the block-comment placement fork that keeps comments before or after the expression according to source
-ranges.
+parenthesized control-condition context. It owns compact selector, if, and loop condition text, width-triggered broken
+conditions, source-multiline binary `if` condition preservation, and the block-comment placement fork that keeps comments
+before or after the expression according to source ranges.
 
 `BlockPrinter` sequences already-rendered statements inside block bodies with orphan comments, printable empty
 statements, formatter-pragma separator rules, and source-range-sensitive blank lines without deciding how statements
@@ -104,8 +106,10 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
 - `LambdaExpressionPrinter`: lambda parameter parentheses, commented parameter reconstruction, expression versus block
   bodies, parenthesized lambdas, broken logical bodies, and lambda arguments that can be hugged by method calls or object
   creation.
-- `MethodCallPrinter`: method calls and call chains, chain comments, empty argument comments, commented argument-gap
-  fallback lists, text-block arguments, single binary arguments, and suffixes on enclosed scopes.
+- `MethodCallPrinter`: method calls and call chains, chain comments including same-line comments between chained calls,
+  empty argument comments, commented argument-gap fallback lists, text-block arguments, single binary arguments, static
+  first-call root promotion, source-multiline single-object-creation call statements, compact-root plus
+  broken-final-segment calls, and suffixes on enclosed scopes.
 - `MethodReferencePrinter`: method references, type-argument suffix text, and parenthesized-scope suffixes.
 - `EnclosedSuffixDispatcher`: the bridge used when a broken enclosed expression may need a method-call or
   method-reference suffix preserved.
@@ -143,11 +147,11 @@ Declaration and type printers own Java declaration grammar after `BodyDeclaratio
 - `TypePrinter`: shared type-clause rendering, declaration type-parameter flat text, compact type-list joining, and
   breakable generic type bodies.
 - `ClassOrInterfaceDeclarationPrinter`, `RecordDeclarationPrinter`, `EnumDeclarationPrinter`, and
-  `AnnotationDeclarationPrinter`: type-specific headers, record component type bodies, body starts, member sequencing
-  handoffs, and type-specific recovery boundaries.
+  `AnnotationDeclarationPrinter`: type-specific headers, record component type bodies, record full-header wrapping,
+  body starts, member sequencing handoffs, and type-specific recovery boundaries.
 - `FieldDeclarationPrinter` and `VariableDeclarationPrinter`: field and local variable declaration layout, shared
-  initializer policy including equals-line cast type-body breaks, declaration prefixes, and local-only declaration-prefix
-  decisions.
+  initializer policy including equals-line cast type-body breaks and huggable block-lambda method-call initializers,
+  declaration prefixes, and local-only declaration-prefix decisions.
 - `ConstructorDeclarationPrinter`, `MethodDeclarationPrinter`, `InitializerDeclarationPrinter`,
   `CallableSignaturePrinter`, and `ThrowsClausePrinter`: callable headers, signatures, throws-clause placement,
   body-versus-semicolon suffixes, and initializer bodies.

@@ -18,6 +18,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 final class FrmtrTest {
     @Test
@@ -184,6 +186,39 @@ final class FrmtrTest {
         assertThat(formatted).isEqualTo(expected);
         assertThat(Frmtr.format(formatted)).isEqualTo(formatted);
         assertThatCode(() -> StaticJavaParser.parse(formatted)).doesNotThrowAnyException();
+    }
+
+    @ParameterizedTest(name = "{0} @ {1}")
+    @CsvSource({
+            "binary-method-call-operand, 120",
+            "block-lambda-call-initializers, 40",
+            "block-lambda-call-initializers, 120",
+            "block-lambda-setup-initializer, 120",
+            "chain-comment-ownership, 120",
+            "multiline-if-condition, 120",
+            "object-creation-statement-argument, 120",
+            "record-implements, 120",
+            "return-chain-final-argument, 120",
+            "switch-empty-rules, 120",
+            "variable-chain-initializer, 120"
+    })
+    void formatsLineWidthFixtureAndIsIdempotent(String fixtureName, int lineWidth) throws Exception {
+        String fixtureRoot = "format/" + fixtureName + "/";
+        String source = readResource(fixtureRoot + "input.java");
+        String expected = readResource(fixtureRoot + "frmtr-" + lineWidth + ".output.java");
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
+                lineWidth,
+                FormatterOptions.IndentStyle.SPACE,
+                4,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted).isEqualTo(expected);
+        assertThat(Frmtr.format(formatted, options)).isEqualTo(formatted);
+        assertThatCode(() -> assertLatestJavaParses(formatted)).doesNotThrowAnyException();
     }
 
     @Test

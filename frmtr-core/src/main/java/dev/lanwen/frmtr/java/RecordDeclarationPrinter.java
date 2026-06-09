@@ -98,7 +98,7 @@ final class RecordDeclarationPrinter {
         }
         boolean breakParameters = recordParametersBreak(prefix, declaration);
         header.add(recordParameters(declaration, breakParameters));
-        recordImplementsTypes(declaration).ifPresent(header::add);
+        recordImplementsTypes(prefix, declaration, breakParameters).ifPresent(header::add);
         header.add(recordBodyBreak(declaration) ? Doc.HARD_LINE : Doc.text(" "));
         header.add(memberBlock.apply(declaration));
         return Doc.concat(header);
@@ -116,10 +116,12 @@ final class RecordDeclarationPrinter {
                 .map(this::recordComponentFlat)
                 .reduce((left, right) -> left + ", " + right)
                 .orElse("");
-        String implementsClause = declaration.getImplementedTypes().isEmpty()
-                ? ""
-                : " implements " + compactJoinTypeLike.apply(declaration.getImplementedTypes());
-        return currentIndentedWidth.applyAsInt(prefix + "(" + parameters + ")" + implementsClause + " {}")
+        String parameterHeader = prefix + "(" + parameters + ")";
+        if (declaration.getImplementedTypes().isEmpty()) {
+            return currentIndentedWidth.applyAsInt(parameterHeader + " {}") > options.lineWidth();
+        }
+        String implementedTypes = compactJoinTypeLike.apply(declaration.getImplementedTypes());
+        return currentIndentedWidth.applyAsInt(parameterHeader + " implements " + implementedTypes + " {}")
                 > options.lineWidth();
     }
 
@@ -241,12 +243,21 @@ final class RecordDeclarationPrinter {
      * Places implemented types on the record header when they fit after the closing component list; otherwise breaks
      * them under an {@code implements} continuation.
      */
-    private Optional<Doc> recordImplementsTypes(RecordDeclaration declaration) {
+    private Optional<Doc> recordImplementsTypes(
+            String prefix,
+            RecordDeclaration declaration,
+            boolean parametersBreak) {
         if (declaration.getImplementedTypes().isEmpty()) {
             return Optional.empty();
         }
         String flat = "implements " + compactJoinTypeLike.apply(declaration.getImplementedTypes());
-        if (currentIndentedWidth.applyAsInt(") " + flat + " {}") <= options.lineWidth()) {
+        String parameterHeader = parametersBreak
+                ? ")"
+                : prefix + "(" + declaration.getParameters().stream()
+                        .map(this::recordComponentFlat)
+                        .reduce((left, right) -> left + ", " + right)
+                        .orElse("") + ")";
+        if (currentIndentedWidth.applyAsInt(parameterHeader + " " + flat + " {}") <= options.lineWidth()) {
             return Optional.of(Doc.text(" " + flat));
         }
         return Optional.of(Doc.concat(

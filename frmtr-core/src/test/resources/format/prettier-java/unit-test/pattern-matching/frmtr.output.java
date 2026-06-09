@@ -67,8 +67,7 @@ class T {
             case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when (
                 this.longVariableName > longVariableName && this.longVariableName > longVariableName
             ) -> longMethodName(longVariableName, longVariableName, longVariableName, longVariableName);
-            case Outer.Inner(String s) -> {
-            }
+            case Outer.Inner(String s) -> {}
             case final String s -> s;
         };
     }

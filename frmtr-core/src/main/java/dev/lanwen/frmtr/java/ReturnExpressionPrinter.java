@@ -30,6 +30,7 @@ final class ReturnExpressionPrinter {
     private final Function<Expression, Doc> expression;
     private final Function<Expression, String> compact;
     private final ToIntFunction<String> currentIndentedWidth;
+    private final Function<MethodCallExpr, Optional<Doc>> compactRootWithBrokenFinalChainSegment;
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain;
     private final BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression;
     private final Function<Expression, Doc> parenthesizedBreak;
@@ -39,6 +40,7 @@ final class ReturnExpressionPrinter {
             Function<Expression, Doc> expression,
             Function<Expression, String> compact,
             ToIntFunction<String> currentIndentedWidth,
+            Function<MethodCallExpr, Optional<Doc>> compactRootWithBrokenFinalChainSegment,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain,
             BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression,
             Function<Expression, Doc> parenthesizedBreak) {
@@ -46,6 +48,7 @@ final class ReturnExpressionPrinter {
         this.expression = expression;
         this.compact = compact;
         this.currentIndentedWidth = currentIndentedWidth;
+        this.compactRootWithBrokenFinalChainSegment = compactRootWithBrokenFinalChainSegment;
         this.forcedMethodCallChain = forcedMethodCallChain;
         this.conditionalExpression = conditionalExpression;
         this.parenthesizedBreak = parenthesizedBreak;
@@ -96,7 +99,7 @@ final class ReturnExpressionPrinter {
         if (!(expression instanceof MethodCallExpr methodCall)) {
             return Optional.empty();
         }
-        return forcedMethodCallChain.apply(methodCall);
+        return compactRootWithBrokenFinalChainSegment.apply(methodCall).or(() -> forcedMethodCallChain.apply(methodCall));
     }
 
     private Optional<Doc> returnWithForcedConditionalBreak(Expression expression) {

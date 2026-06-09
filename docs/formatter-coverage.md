@@ -48,11 +48,11 @@ layout, and `MemberBlockPrinter` owns member sequencing inside type bodies.
 | JavaParser AST kind | Structured owner | Fallback or boundary notes |
 | --- | --- | --- |
 | `ClassOrInterfaceDeclaration` | `ClassOrInterfaceDeclarationPrinter` | Interfaces whose headers contain inline block comments route through `CommentedInterfacePrinter` and `RawPreservedSource`. |
-| `RecordDeclaration` | `RecordDeclarationPrinter` | Owns record headers, component lists including breakable generic component type bodies, implements clauses, and body start layout. Members return to `MemberBlockPrinter` and the body-declaration envelope/dispatcher path. |
+| `RecordDeclaration` | `RecordDeclarationPrinter` | Owns record headers, component lists including breakable generic component type bodies, full-header width checks, implements continuations, and body start layout. Members return to `MemberBlockPrinter` and the body-declaration envelope/dispatcher path. |
 | `EnumDeclaration` | `EnumDeclarationPrinter` | Owns enum headers, constants, enum semicolons, body orphan comments, and enum constant argument layout. Ordinary members return to body dispatch; recovered enum-constant gaps stay inside this printer. |
 | `AnnotationDeclaration` | `AnnotationDeclarationPrinter` | Owns annotation type headers and member blocks; recovered annotation-member gaps stay inside this printer. |
 | `AnnotationMemberDeclaration` | `AnnotationDeclarationPrinter` | Owns annotation member declarations and default values, delegating default expressions back through expression rendering. Unsafe recovered members preserve their default-value source as raw body gaps. |
-| `FieldDeclaration` | `FieldDeclarationPrinter` | Owns field declarations, variables, initializer break decisions, and shared variable initializer policy. |
+| `FieldDeclaration` | `FieldDeclarationPrinter` | Owns field declarations, variables, initializer break decisions, huggable block-lambda method-call initializers, and shared variable initializer policy. |
 | `MethodDeclaration` | `MethodDeclarationPrinter` | Commented signatures with small bodies can route through `CommentedMethodSignaturePrinter` and `RawPreservedSource`; ordinary bodies delegate to `BlockPrinter`. |
 | `CompactConstructorDeclaration` | `ConstructorDeclarationPrinter` | Owns compact constructor headers and delegates bodies to `BlockPrinter`. |
 | `ConstructorDeclaration` | `ConstructorDeclarationPrinter` | Owns constructor headers, parameter lists, throws clauses, and body delegation. |
@@ -82,7 +82,7 @@ switch-entry layout to `SwitchPrinter`.
 | `ThrowStmt` | `StatementPrinter` | Throws expressions delegate through expression rendering. |
 | `YieldStmt` | `StatementPrinter` | Used by switch entries and ordinary statement dispatch. |
 | `ExplicitConstructorInvocationStmt` | `StatementPrinter` | Owns `this(...)` and `super(...)` calls, type arguments, and huggable lambda arguments. |
-| `ExpressionStmt` | `StatementPrinter` | Local `VariableDeclarationExpr` routes to `VariableDeclarationPrinter`; wide method-call statements can route through `MethodCallPrinter`; other expressions delegate through `ExpressionRuleEnvelope` and `ExpressionDispatcher`. |
+| `ExpressionStmt` | `StatementPrinter` | Local `VariableDeclarationExpr` routes to `VariableDeclarationPrinter`; wide method-call statements and preserved multiline single-object-creation calls can route through `MethodCallPrinter`; other expressions delegate through `ExpressionRuleEnvelope` and `ExpressionDispatcher`. |
 | `EmptyStmt` | `StatementPrinter` | Emits `;`. |
 | `AssertStmt` | `StatementPrinter` | Uses compact source text for check/message shape. |
 | `BreakStmt` | `StatementPrinter` | Owns label and inline block-comment handling. |
@@ -90,7 +90,7 @@ switch-entry layout to `SwitchPrinter`.
 | `LabeledStmt` | `StatementPrinter` | Owns label/comment extraction, then delegates nested block or statement formatting back to the normal owners. |
 | `LocalClassDeclarationStmt` | `StatementPrinter` then `BodyDeclarationRuleEnvelope` then `BodyDeclarationDispatcher` | The contained class declaration is formatted as a body declaration. |
 | `LocalRecordDeclarationStmt` | `StatementPrinter` then `BodyDeclarationRuleEnvelope` then `BodyDeclarationDispatcher` | The contained record declaration is formatted as a body declaration. |
-| `IfStmt` | `StatementPrinter` | Owns if/else chain structure, empty branches, and between-branch comments; nested statements return through statement dispatch. |
+| `IfStmt` | `StatementPrinter` and `ControlConditionPrinter` | `StatementPrinter` owns if/else chain structure, empty branches, and between-branch comments; `ControlConditionPrinter` owns parenthesized condition layout including source-multiline binary condition breaks. Nested statements return through statement dispatch. |
 | `WhileStmt` | `StatementPrinter` | Conditions route through `ControlConditionPrinter`; bodies route through statement/block owners. |
 | `DoStmt` | `StatementPrinter` | Conditions route through `ControlConditionPrinter`; bodies route through statement/block owners. |
 | `TryStmt` | `StatementPrinter` | Owns resource layout, catch/finally sequencing, and adjacent block-comment handoff. Blocks route to `BlockPrinter`. |
@@ -103,8 +103,8 @@ Switch-specific ownership:
 
 - `StatementPrinter` owns `SwitchStmt` selection with the other statements, while `SwitchPrinter` owns reusable labels,
   guards, statement groups, rule entries, and switch block layout for statement and expression switches.
-- `SwitchEntry` layout is local to `SwitchPrinter`: statement groups, empty rules, commented rule bodies, and inline rule
-  bodies.
+- `SwitchEntry` layout is local to `SwitchPrinter`: statement groups, compact empty rule blocks, commented rule bodies,
+  and inline rule bodies.
 - In parse-error recovery mode, malformed switch entries stay inside `SwitchPrinter`: safe entry siblings render normally,
   while unsafe entry gaps are raw-preserved inside the switch block so selectors and switch braces remain formatter-owned.
 - `TypePatternExpr` and `RecordPatternExpr` labels are switch-label concerns. Flat labels use normalized source text;
@@ -133,7 +133,7 @@ expression kinds. Specialized expression printers own the layout decision tree f
 | `FieldAccessExpr` | `FieldAccessPrinter` | Owns dotted field access and comment-sensitive name splitting. Compact field-access text is also reconstructed by `CompactSourceText`. |
 | `InstanceOfExpr` | `InstanceOfExpressionPrinter` | Owns `instanceof` continuations and binary-operator-position-aware placement. |
 | `LambdaExpr` | `LambdaExpressionPrinter` | Owns parameter parentheses policy, commented parameter reconstruction, expression/block bodies, and huggable lambda argument shapes. |
-| `MethodCallExpr` | `MethodCallPrinter` | Owns calls, call chains, chain comments, method-call suffixes, text-block arguments, lambda arguments, and broken chain roots. |
+| `MethodCallExpr` | `MethodCallPrinter` | Owns calls, call chains, chain comments, same-line chained-call comment ownership, method-call suffixes, text-block arguments, lambda arguments, static first-call root promotion, source-multiline single-object-creation call statements, return compact-root/final-argument breaks, and broken chain roots. |
 | `MethodReferenceExpr` | `MethodReferencePrinter` | Owns method references, type-argument suffix text, and parenthesized-scope suffixes. |
 | `ObjectCreationExpr` | `ObjectCreationPrinter` | Owns constructor calls, argument breaks, lambda arguments, generic type-body breaks, and anonymous class member sequencing. |
 | `SwitchExpr` | `SwitchPrinter.switchExpression(...)` | Uses the same reusable switch label, guard, entry, and block layout as `SwitchStmt` without owning statement dispatch. |
@@ -146,8 +146,8 @@ Expression-adjacent owners that are selected by statement or declaration context
   declaration statement.
 - `ReturnExpressionPrinter` owns return-value wrapping after `StatementPrinter` identifies a `ReturnStmt`.
 - `ControlConditionPrinter` owns parenthesized conditions for `if`, loops, synchronized statements, and statement-switch
-  selectors after the statement or statement-switch renderer selects that context; switch expressions use compact selector
-  text directly.
+  selectors after the statement or statement-switch renderer selects that context, including source-multiline binary `if`
+  condition breaks; switch expressions use compact selector text directly.
 - `EnclosedSuffixDispatcher` is the bridge for broken enclosed expressions that need method-call or method-reference
   suffixes preserved.
 

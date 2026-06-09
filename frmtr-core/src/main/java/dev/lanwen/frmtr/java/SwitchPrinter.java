@@ -679,12 +679,12 @@ final class SwitchPrinter {
     /**
      * Prints the block body of a rule entry after {@code ->}.
      *
-     * <p>Rule-entry empty blocks intentionally use the same expanded shape as old-style statement group blocks. Any
-     * real statement or orphan comment inside the block returns to normal block rendering.
+     * <p>Rule-entry empty blocks stay compact as {@code {}} so no-op arrow rules keep their source-level visual weight.
+     * Any real statement or orphan comment inside the block returns to normal block rendering.
      */
     private Doc switchRuleBlock(BlockStmt block) {
         if (block.getStatements().isEmpty() && block.getOrphanComments().isEmpty()) {
-            return Doc.concat(Doc.text("{"), Doc.HARD_LINE, Doc.text("}"));
+            return Doc.text("{}");
         }
         return blockRenderer.format(block);
     }

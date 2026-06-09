@@ -87,13 +87,13 @@ final class StatementPrinter {
     private final Function<Node, String> compactTypeLike;
     private final Function<List<? extends Node>, String> compactJoinTypeLike;
     private final HuggableArgumentsRenderer huggableBlockLambdaArguments;
+    private final BiFunction<MethodCallExpr, ExpressionStmt, Optional<Doc>> sourceMultilineMethodCallStatementRenderer;
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer;
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
     private final Predicate<MethodCallExpr> methodCallChainHasComments;
     private final Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation;
     private final Predicate<MethodCallExpr> methodCallChainRootIsFieldAccess;
-    private final Predicate<Expression> expressionHasParenthesizedNestedBinary;
-    private final Function<Expression, Doc> binaryExpressionLinesRenderer;
+    private final Function<Expression, Doc> ifConditionRenderer;
     private final Function<Expression, Doc> controlConditionRenderer;
     private final Function<Expression, String> compactWithOwnBlockComment;
     private final Function<Node, Doc> sameLineBlockCommentBeforeNode;
@@ -117,13 +117,13 @@ final class StatementPrinter {
             Function<Node, String> compactTypeLike,
             Function<List<? extends Node>, String> compactJoinTypeLike,
             HuggableArgumentsRenderer huggableBlockLambdaArguments,
+            BiFunction<MethodCallExpr, ExpressionStmt, Optional<Doc>> sourceMultilineMethodCallStatementRenderer,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
             Predicate<MethodCallExpr> methodCallChainHasComments,
             Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation,
             Predicate<MethodCallExpr> methodCallChainRootIsFieldAccess,
-            Predicate<Expression> expressionHasParenthesizedNestedBinary,
-            Function<Expression, Doc> binaryExpressionLinesRenderer,
+            Function<Expression, Doc> ifConditionRenderer,
             Function<Expression, Doc> controlConditionRenderer,
             Function<Expression, String> compactWithOwnBlockComment,
             Function<Node, Doc> sameLineBlockCommentBeforeNode,
@@ -145,13 +145,13 @@ final class StatementPrinter {
         this.compactTypeLike = compactTypeLike;
         this.compactJoinTypeLike = compactJoinTypeLike;
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
+        this.sourceMultilineMethodCallStatementRenderer = sourceMultilineMethodCallStatementRenderer;
         this.forcedMethodCallChainRenderer = forcedMethodCallChainRenderer;
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
         this.methodCallChainHasComments = methodCallChainHasComments;
         this.methodCallChainRootIsObjectCreation = methodCallChainRootIsObjectCreation;
         this.methodCallChainRootIsFieldAccess = methodCallChainRootIsFieldAccess;
-        this.expressionHasParenthesizedNestedBinary = expressionHasParenthesizedNestedBinary;
-        this.binaryExpressionLinesRenderer = binaryExpressionLinesRenderer;
+        this.ifConditionRenderer = ifConditionRenderer;
         this.controlConditionRenderer = controlConditionRenderer;
         this.compactWithOwnBlockComment = compactWithOwnBlockComment;
         this.sameLineBlockCommentBeforeNode = sameLineBlockCommentBeforeNode;
@@ -364,6 +364,12 @@ final class StatementPrinter {
                             ? forcedMethodCallChainRenderer.apply(methodCall).orElseGet(() -> brokenMethodCallRenderer.apply(methodCall))
                             : brokenMethodCallRenderer.apply(methodCall),
                     Doc.text(";"));
+        }
+        if (expression instanceof MethodCallExpr methodCall) {
+            Optional<Doc> sourceMultilineCall = sourceMultilineMethodCallStatementRenderer.apply(methodCall, statement);
+            if (sourceMultilineCall.isPresent()) {
+                return Doc.concat(sourceMultilineCall.orElseThrow(), Doc.text(";"));
+            }
         }
         Optional<Comment> trailingConditionalComment = conditionalElseStatementTrailingComment(statement);
         Doc trailing = trailingConditionalComment
@@ -623,7 +629,7 @@ final class StatementPrinter {
         List<Doc> docs = new ArrayList<>();
         Doc thenTrailingLineComment = trailingLineComment(statement.getThenStmt());
         Doc betweenThenAndElseBlockComment = blockCommentBetweenThenAndElse(statement);
-        docs.add(ifCondition(statement.getCondition()));
+        docs.add(ifCondition(statement));
         docs.add(ifThenStatement(statement));
         statement.getElseStmt().ifPresent(elseStatement -> {
             if (elseStatement.isEmptyStmt()) {
@@ -713,71 +719,12 @@ final class StatementPrinter {
         return Doc.text(prefix + trailingEmptyBodyBlockComment(elseStatement));
     }
 
-    private Doc ifCondition(Expression condition) {
-        Doc commented = commentedIfCondition(condition);
-        if (commented != Doc.EMPTY) {
-            return commented;
-        }
-        String flat = compact.apply(condition);
-        if (currentIndentedWidth.applyAsInt("if (" + flat + ") {}") <= options.lineWidth()) {
-            if (expressionHasParenthesizedNestedBinary.test(condition)) {
-                return Doc.concat(Doc.text("if ("), expressionRenderer.format(condition), Doc.text(") "));
-            }
-            return Doc.text("if (" + flat + ") ");
-        }
-        return Doc.concat(
-                Doc.text("if ("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLinesRenderer.apply(condition))),
-                Doc.HARD_LINE,
-                Doc.text(") "));
-    }
-
-    private Doc commentedIfCondition(Expression condition) {
-        Optional<Comment> ownComment = condition.getComment();
-        if (ownComment.filter(LineComment.class::isInstance).isPresent()) {
-            Comment comment = ownComment.orElseThrow();
-            Doc printedComment = comments.comment(comment);
-            Doc conditionDoc = conditionCommentStartsBeforeExpression(condition, comment)
-                    ? Doc.join(Doc.HARD_LINE, List.of(printedComment, Doc.text(compactWithoutOwnComment.apply(condition))))
-                    : Doc.text(compactWithoutOwnComment.apply(condition) + " " + commentText(printedComment));
-            return Doc.concat(
-                    Doc.text("if ("),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, conditionDoc)),
-                    Doc.HARD_LINE,
-                    Doc.text(") "));
-        }
-        if (ownComment.filter(BlockComment.class::isInstance).isPresent()) {
-            Comment comment = ownComment.orElseThrow();
-            String text = commentText(comments.comment(comment));
-            String expressionText = compactWithoutOwnComment.apply(condition);
-            String conditionText = conditionCommentStartsBeforeExpression(condition, comment)
-                    ? text + " " + expressionText
-                    : expressionText + " " + text;
-            return Doc.text("if (" + conditionText + ") ");
-        }
-        Doc trailingBlock = trailingBlockCommentBeforeCloseParen(condition);
-        if (trailingBlock != Doc.EMPTY) {
-            return Doc.text("if (" + compact.apply(condition) + " " + commentText(trailingBlock) + ") ");
-        }
-        return Doc.EMPTY;
+    private Doc ifCondition(IfStmt statement) {
+        return Doc.concat(Doc.text("if "), ifConditionRenderer.apply(statement.getCondition()), Doc.text(" "));
     }
 
     private boolean conditionCommentStartsBeforeExpression(Expression condition, Comment comment) {
         return CommentIndex.startsBefore(comment, condition);
-    }
-
-    private Doc trailingBlockCommentBeforeCloseParen(Expression condition) {
-        return condition.getParentNode()
-                .stream()
-                .flatMap(parent -> parent.getAllContainedComments().stream())
-                .filter(BlockComment.class::isInstance)
-                .filter(comment -> comment.getCommentedNode()
-                        .map(BlockStmt.class::isInstance)
-                        .orElse(false))
-                .filter(comment -> CommentIndex.startsImmediatelyAfterNodeOnSameLine(condition, comment))
-                .findFirst()
-                .map(comments::comment)
-                .orElse(Doc.EMPTY);
     }
 
     private Doc ifThenStatement(IfStmt statement) {

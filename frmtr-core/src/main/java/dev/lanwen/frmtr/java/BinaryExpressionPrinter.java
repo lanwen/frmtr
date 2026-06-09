@@ -161,6 +161,12 @@ final class BinaryExpressionPrinter {
                 && shouldParenthesizeNestedBinary(operator, binaryOperand.getOperator())) {
             return Doc.concat(Doc.text("("), expressionRenderer.format(binaryOperand), Doc.text(")"));
         }
+        if (operand instanceof MethodCallExpr && operand.getAllContainedComments().isEmpty()) {
+            String flat = compact.apply(operand);
+            if (continuationStatementWidth.applyAsInt(flat) <= options.lineWidth()) {
+                return Doc.text(flat);
+            }
+        }
         return expressionRenderer.format(operand);
     }
 

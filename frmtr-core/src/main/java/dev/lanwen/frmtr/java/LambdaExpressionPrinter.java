@@ -333,12 +333,26 @@ final class LambdaExpressionPrinter {
      * lambda block, so the normal call formatter handles that case.
      */
     Optional<Doc> huggableBlockLambdaArguments(String prefix, NodeList<Expression> arguments) {
+        return huggableBlockLambdaArguments(prefix, arguments, blockStatementWidth);
+    }
+
+    /**
+     * Hugs a block-lambda argument after the caller supplies the width check for the first rendered line.
+     *
+     * <p>Statement, method-call, and object-creation contexts use normal block-statement width. Field declarations include
+     * the declaration prefix before the call, so they provide their own width probe while sharing the same eligibility and
+     * rendering rules.
+     */
+    Optional<Doc> huggableBlockLambdaArguments(
+            String prefix,
+            NodeList<Expression> arguments,
+            ToIntFunction<String> firstLineWidth) {
         Optional<HuggableBlockLambdaArgument> huggable = huggableBlockLambdaArgument(prefix, arguments);
         if (huggable.isEmpty()) {
             return Optional.empty();
         }
         HuggableBlockLambdaArgument argument = huggable.orElseThrow();
-        if (blockStatementWidth.applyAsInt(argument.firstLine()) > options.lineWidth()) {
+        if (firstLineWidth.applyAsInt(argument.firstLine()) > options.lineWidth()) {
             return Optional.empty();
         }
         String trailingArguments = compactJoin.apply(arguments.subList(argument.lambdaIndex() + 1, arguments.size()));

@@ -2,11 +2,17 @@ package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
+import com.github.javaparser.ast.comments.LineComment;
+import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.InstanceOfExpr;
+import com.github.javaparser.ast.stmt.BlockStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
 
 /**
@@ -14,8 +20,8 @@ import java.util.function.ToIntFunction;
  *
  * <p>This helper owns the condition-specific boundary between compact source text and broken expression docs,
  * including the block-comment placement rules that preserve source shape inside condition parentheses. The boundary
- * exists because while, do-while, synchronized, and statement-switch selectors all need one condition layout policy after
- * their caller has already chosen the surrounding keyword, body, and statement separator behavior.
+ * exists because if, while, do-while, synchronized, and statement-switch selectors all need one condition layout policy
+ * after their caller has already chosen the surrounding keyword, body, and statement separator behavior.
  *
  * <p>{@link JavaPrinter} still owns broad expression dispatch, raw-source normalization, and width calculation policy.
  * {@link StatementPrinter} owns ordinary statement grammar, and {@link SwitchPrinter} owns statement-switch selector
@@ -24,23 +30,32 @@ import java.util.function.ToIntFunction;
  */
 final class ControlConditionPrinter {
     private final CommentTracker comments;
+    private final RawSource rawSource;
     private final FormatterOptions options;
+    private final Function<Expression, Doc> expressionRenderer;
     private final Function<Expression, String> compact;
     private final Function<Expression, String> compactWithoutOwnComment;
+    private final Predicate<Expression> expressionHasParenthesizedNestedBinary;
     private final Function<Expression, Doc> brokenExpressionLines;
     private final ToIntFunction<String> currentIndentedWidth;
 
     ControlConditionPrinter(
             CommentTracker comments,
+            RawSource rawSource,
             FormatterOptions options,
+            Function<Expression, Doc> expressionRenderer,
             Function<Expression, String> compact,
             Function<Expression, String> compactWithoutOwnComment,
+            Predicate<Expression> expressionHasParenthesizedNestedBinary,
             Function<Expression, Doc> brokenExpressionLines,
             ToIntFunction<String> currentIndentedWidth) {
         this.comments = comments;
+        this.rawSource = rawSource;
         this.options = options;
+        this.expressionRenderer = expressionRenderer;
         this.compact = compact;
         this.compactWithoutOwnComment = compactWithoutOwnComment;
+        this.expressionHasParenthesizedNestedBinary = expressionHasParenthesizedNestedBinary;
         this.brokenExpressionLines = brokenExpressionLines;
         this.currentIndentedWidth = currentIndentedWidth;
     }
@@ -58,11 +73,92 @@ final class ControlConditionPrinter {
         if (currentIndentedWidth.applyAsInt("(" + flat + ") {}") <= options.lineWidth()) {
             return Doc.text("(" + flat + ")");
         }
+        return brokenCondition(expression);
+    }
+
+    /**
+     * Renders the parenthesized condition for an {@code if} statement after the statement printer has selected if/else
+     * grammar.
+     *
+     * <p>The width gate includes the {@code if} keyword and an empty block because if conditions have a slightly wider
+     * surrounding line than loop tails. Source-multiline {@code instanceof && ...} conditions intentionally keep a broken
+     * operand layout even when the compact condition would fit.
+     */
+    Doc ifCondition(Expression expression) {
+        Optional<Doc> commented = commentedIfCondition(expression);
+        if (commented.isPresent()) {
+            return commented.orElseThrow();
+        }
+        if (sourceMultilineInstanceofAndCondition(expression)) {
+            return brokenCondition(expression);
+        }
+        String flat = compact.apply(expression);
+        if (currentIndentedWidth.applyAsInt("if (" + flat + ") {}") <= options.lineWidth()) {
+            if (expressionHasParenthesizedNestedBinary.test(expression)) {
+                return Doc.concat(Doc.text("("), expressionRenderer.apply(expression), Doc.text(")"));
+            }
+            return Doc.text("(" + flat + ")");
+        }
+        return brokenCondition(expression);
+    }
+
+    private Doc brokenCondition(Expression expression) {
         return Doc.concat(
                 Doc.text("("),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, brokenExpressionLines.apply(expression))),
                 Doc.HARD_LINE,
                 Doc.text(")"));
+    }
+
+    private Optional<Doc> commentedIfCondition(Expression condition) {
+        Optional<Comment> ownComment = condition.getComment();
+        if (ownComment.filter(LineComment.class::isInstance).isPresent()) {
+            Comment comment = ownComment.orElseThrow();
+            Doc printedComment = comments.comment(comment);
+            Doc conditionDoc = conditionCommentStartsBeforeExpression(condition, comment)
+                    ? Doc.join(Doc.HARD_LINE, List.of(printedComment, Doc.text(compactWithoutOwnComment.apply(condition))))
+                    : Doc.text(compactWithoutOwnComment.apply(condition) + " " + commentText(printedComment));
+            return Optional.of(Doc.concat(
+                    Doc.text("("),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, conditionDoc)),
+                    Doc.HARD_LINE,
+                    Doc.text(")")));
+        }
+        if (ownComment.filter(BlockComment.class::isInstance).isPresent()) {
+            Comment comment = ownComment.orElseThrow();
+            String text = commentText(comments.comment(comment));
+            String expressionText = compactWithoutOwnComment.apply(condition);
+            String conditionText = conditionCommentStartsBeforeExpression(condition, comment)
+                    ? text + " " + expressionText
+                    : expressionText + " " + text;
+            return Optional.of(Doc.text("(" + conditionText + ")"));
+        }
+        Doc trailingBlock = trailingBlockCommentBeforeCloseParen(condition);
+        if (trailingBlock != Doc.EMPTY) {
+            return Optional.of(Doc.text("(" + compact.apply(condition) + " " + commentText(trailingBlock) + ")"));
+        }
+        return Optional.empty();
+    }
+
+    private boolean sourceMultilineInstanceofAndCondition(Expression condition) {
+        return condition instanceof BinaryExpr binaryExpr
+                && binaryExpr.getOperator() == BinaryExpr.Operator.AND
+                && binaryExpr.getLeft() instanceof InstanceOfExpr
+                && rawSource.rawWithoutOwnComment(condition).contains("\n");
+    }
+
+    private Doc trailingBlockCommentBeforeCloseParen(Expression condition) {
+        return condition.getParentNode()
+                .stream()
+                .flatMap(parent -> parent.getAllContainedComments().stream())
+                .filter(BlockComment.class::isInstance)
+                .filter(comment -> comment.getCommentedNode()
+                        .map(BlockStmt.class::isInstance)
+                        .orElse(false))
+                .filter(comment -> CommentIndex.startsImmediatelyAfterNodeOnSameLine(condition, comment))
+                .findFirst()
+                .map(comments::comment)
+                .orElse(Doc.EMPTY);
     }
 
     /**

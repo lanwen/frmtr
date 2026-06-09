@@ -33,6 +33,18 @@ final class FrmtrTest {
     }
 
     @Test
+    void formatsAnnotationArrayInitializerSpacingFixtureAndIsIdempotent() throws Exception {
+        String source = readResource("format/annotation-array-initializer-spacing/input.java");
+        String expected = readResource("format/annotation-array-initializer-spacing/frmtr.output.java");
+
+        String formatted = Frmtr.format(source);
+
+        assertThat(formatted).isEqualTo(expected);
+        assertThat(Frmtr.format(formatted)).isEqualTo(formatted);
+        assertThatCode(() -> StaticJavaParser.parse(formatted)).doesNotThrowAnyException();
+    }
+
+    @Test
     void formatsCommonJavaAndIsIdempotent() {
         String source = """
                 package dev.example;

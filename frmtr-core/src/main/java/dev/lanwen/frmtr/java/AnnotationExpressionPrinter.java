@@ -210,9 +210,16 @@ final class AnnotationExpressionPrinter {
     }
 
     private String compactAnnotationArrayInitializer(ArrayInitializerExpr expression) {
-        return "{" + expression.getValues().stream()
+        String values = expression.getValues().stream()
                 .map(this::compactAnnotationValue)
                 .reduce((left, right) -> left + ", " + right)
-                .orElse("") + "}";
+                .orElse("");
+        if (values.isEmpty()) {
+            return "{}";
+        }
+        if (expression.getValues().stream().allMatch(Expression::isClassExpr)) {
+            return "{ " + values + " }";
+        }
+        return "{" + values + "}";
     }
 }

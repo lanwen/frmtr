@@ -165,12 +165,62 @@ final class FrmtrTest {
     }
 
     @Test
-    void defaultParseErrorRecoveryReportsUnsupportedRecoveredPrintingUntilWired() {
+    void defaultParseErrorRecoveryFormatsValidBlockStatementSiblingsAroundRawMalformedGap() {
+        String source = """
+                class Demo{void method(){
+                        before( 1 );
+                        var broken = ; // keep raw
+                        after( 2 );
+                }}""";
+
+        String formatted = Frmtr.format(source);
+
+        assertThat(formatted).isEqualTo("""
+                class Demo {
+
+                    void method() {
+                        before(1);
+                        var broken = ; // keep raw
+                        after(2);
+                    }
+                }
+                """);
+    }
+
+    @Test
+    void parseErrorRecoverySkipsTransformsBeforePrintingRecoveredTree() {
+        String source = """
+                import java.util.List;
+                import java.io.File;
+                class Demo{void method(){
+                        before( 1 );
+                        var broken = ;
+                        after( 2 );
+                }}""";
+
+        String formatted = Frmtr.format(source);
+
+        assertThat(formatted).isEqualTo("""
+                import java.util.List;
+                import java.io.File;
+
+                class Demo {
+
+                    void method() {
+                        before(1);
+                        var broken = ;
+                        after(2);
+                    }
+                }
+                """);
+    }
+
+    @Test
+    void defaultParseErrorRecoveryRejectsUnsupportedMemberRecovery() {
         String source = """
                 class Demo {
-                    void method() {
-                        var something =
-                    }
+                    int = ;
+                    void method() {}
                 }""";
 
         Throwable thrown = catchThrowable(() -> Frmtr.format(source));
@@ -179,7 +229,7 @@ final class FrmtrTest {
                 .isInstanceOf(FormatterException.class)
                 .hasMessageContaining("Unable to parse Java source:")
                 .hasMessageContaining("Parse-error recovery is configured")
-                .hasMessageContaining("not yet supported");
+                .hasMessageContaining("only supports malformed block statement lists");
     }
 
     @Test

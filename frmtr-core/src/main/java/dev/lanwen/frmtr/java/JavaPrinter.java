@@ -54,8 +54,8 @@ final class JavaPrinter {
     private final BodyDeclarationRuleEnvelope bodyDeclarations;
     private final StatementRuleEnvelope statementRules;
 
-    JavaPrinter(FormatterOptions options) {
-        this.context = new JavaFormatContext(options);
+    JavaPrinter(FormatterOptions options, SourceText sourceText, boolean recoverParseProblems) {
+        this.context = new JavaFormatContext(options, sourceText, recoverParseProblems);
         CommentTracker comments = context.comments;
         JavaCommentPlacementPolicy commentPlacementPolicy = context.commentPlacementPolicy;
         FormatterPragmas formatterPragmas = context.formatterPragmas;
@@ -64,7 +64,10 @@ final class JavaPrinter {
         CompactSourceText compactSource = context.compactSource;
         CommentPlacement commentPlacement = context.commentPlacement;
         this.types = new TypePrinter(options, compactSource::compactTypeLike);
-        this.blocks = new BlockPrinter(comments, commentPlacementPolicy, this::statement, formatterPragmas::hasPragma);
+        this.blocks = new BlockPrinter(
+                context,
+                this::statement,
+                formatterPragmas::hasPragma);
         this.binaries = new BinaryExpressionPrinter(
                 comments,
                 commentPlacementPolicy,

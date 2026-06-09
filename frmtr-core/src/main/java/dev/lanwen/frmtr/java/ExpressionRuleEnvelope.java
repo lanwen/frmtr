@@ -1,6 +1,8 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.expr.Expression;
+import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.doc.Doc;
 
 /**
@@ -26,6 +28,7 @@ final class ExpressionRuleEnvelope {
      * Routes a normal expression rendering request to expression-content dispatch.
      */
     Doc expression(Expression expression) {
+        requireFullyParsed(expression);
         return Doc.label("java.expression:" + expression.getClass().getSimpleName(), expressionContent.format(expression));
     }
 
@@ -39,5 +42,14 @@ final class ExpressionRuleEnvelope {
         Expression clone = expression.clone();
         clone.removeComment();
         return expression(clone);
+    }
+
+    private static void requireFullyParsed(Expression expression) {
+        if (expression.stream().allMatch(node -> node.getParsed() == Node.Parsedness.PARSED)) {
+            return;
+        }
+        // TODO: Expose the rejected recovered expression through formatter diagnostics once recovery reporting exists.
+        throw new FormatterException("Unsupported Java parse-error recovery reached expression formatter: "
+                + expression.getClass().getSimpleName());
     }
 }

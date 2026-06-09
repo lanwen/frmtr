@@ -22,16 +22,24 @@ final class JavaFormatContext {
     final FormatterPragmas formatterPragmas;
     final RawSource rawSource;
     final RawPreservedSource rawPreservedSource;
+    final SourceText sourceText;
+    final RecoveredListPlanner recoveredListPlanner;
+    final RecoveredSourceRegions recoveredSourceRegions;
     final CompactSourceText compactSource;
     final CommentPlacement commentPlacement;
+    final boolean recoverParseProblems;
 
-    JavaFormatContext(FormatterOptions options) {
+    JavaFormatContext(FormatterOptions options, SourceText sourceText, boolean recoverParseProblems) {
         this.options = options;
+        this.sourceText = sourceText;
+        this.recoverParseProblems = recoverParseProblems;
         this.commentPlacementPolicy = new JavaCommentPlacementPolicy();
         this.comments = new CommentTracker(commentPlacementPolicy);
         this.formatterPragmas = new FormatterPragmas();
         this.rawSource = new RawSource(options);
         this.rawPreservedSource = new RawPreservedSource(rawSource, comments);
+        this.recoveredListPlanner = new RecoveredListPlanner(sourceText);
+        this.recoveredSourceRegions = new RecoveredSourceRegions(sourceText, options, comments);
         this.compactSource = new CompactSourceText(rawSource);
         this.commentPlacement = new CommentPlacement(comments, commentPlacementPolicy);
     }

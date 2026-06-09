@@ -9,10 +9,13 @@ import com.github.javaparser.Providers;
 import com.github.javaparser.Problem;
 import com.github.javaparser.Position;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.JavadocComment;
 import com.github.javaparser.ast.comments.LineComment;
+import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.stmt.Statement;
 import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
@@ -60,10 +63,23 @@ public final class JavaFormatter {
     private Doc printDoc(String source) {
         JavaParseResult parseResult = parse(source);
         // TODO: Expose parseResult.problems() through a future diagnostics/debug result API.
-        CompilationUnit transformedUnit = TRANSFORMS.transform(parseResult.compilationUnit());
-        SyntaxNodeView.from(transformedUnit);
-        JavaPrinter printer = new JavaPrinter(options);
-        return printer.print(transformedUnit);
+        SourceText sourceText = new SourceText(source);
+        if (parseResult.hasParseProblems()) {
+            unsupportedRecoveryReason(parseResult.compilationUnit())
+                    .ifPresent(reason -> {
+                        throw parseFailure(
+                                source,
+                                parseResult.problems(),
+                                new ParseProblemException(parseResult.problems()),
+                                Optional.of(reason));
+                    });
+        }
+        CompilationUnit printableUnit = parseResult.hasParseProblems()
+                ? parseResult.compilationUnit()
+                : TRANSFORMS.transform(parseResult.compilationUnit());
+        SyntaxNodeView.from(printableUnit);
+        JavaPrinter printer = new JavaPrinter(options, sourceText, parseResult.hasParseProblems());
+        return printer.print(printableUnit);
     }
 
     private boolean hasFormatPragma(String source) {
@@ -101,13 +117,13 @@ public final class JavaFormatter {
                 result.getResult().orElseThrow(),
                 result.getProblems(),
                 !result.isSuccessful() || !result.getProblems().isEmpty());
-        // TODO: Thread JavaParseResult through recovered-region printing instead of failing here in RECOVER mode.
-        if (parseResult.hasParseProblems()) {
+        if (parseResult.hasParseProblems()
+                && options.parseErrorBehavior() == FormatterOptions.ParseErrorBehavior.FAIL) {
             throw parseFailure(
                     source,
                     parseResult.problems(),
                     new ParseProblemException(parseResult.problems()),
-                    parseProblemsUnsupportedByCurrentPrinters());
+                    Optional.empty());
         }
         return parseResult;
     }
@@ -133,7 +149,53 @@ public final class JavaFormatter {
             return Optional.empty();
         }
         return Optional.of(
-                "Parse-error recovery is configured, but recovered-region printing is not yet supported by the current printers.");
+                "Parse-error recovery is configured, but this recovery slice only supports malformed block statement lists.");
+    }
+
+    private Optional<String> unsupportedRecoveryReason(CompilationUnit unit) {
+        if (options.parseErrorBehavior() == FormatterOptions.ParseErrorBehavior.FAIL) {
+            return Optional.empty();
+        }
+        List<Node> recoveredNodes = unit.stream()
+                .filter(node -> node.getParsed() != Node.Parsedness.PARSED)
+                .toList();
+        if (recoveredNodes.isEmpty()) {
+            return parseProblemsUnsupportedByCurrentPrinters();
+        }
+        return recoveredNodes.stream()
+                .filter(node -> !isSupportedBlockStatementListRecovery(node))
+                .findFirst()
+                .map(node -> parseProblemsUnsupportedByCurrentPrinters().orElseThrow()
+                        + " Unsupported recovered node: "
+                        + node.getClass().getSimpleName()
+                        + node.getRange().map(range -> " at " + range).orElse("."));
+    }
+
+    private static boolean isSupportedBlockStatementListRecovery(Node recoveredNode) {
+        if (recoveredNode instanceof BlockStmt) {
+            return true;
+        }
+        return nearestBlockStatementListSibling(recoveredNode).isPresent();
+    }
+
+    private static Optional<Statement> nearestBlockStatementListSibling(Node recoveredNode) {
+        Optional<Node> current = Optional.of(recoveredNode);
+        while (current.isPresent()) {
+            Node node = current.orElseThrow();
+            if (node instanceof Statement statement && isBlockStatementListSibling(statement)) {
+                return Optional.of(statement);
+            }
+            current = node.getParentNode();
+        }
+        return Optional.empty();
+    }
+
+    private static boolean isBlockStatementListSibling(Statement statement) {
+        return statement.getParentNode()
+                .filter(BlockStmt.class::isInstance)
+                .map(BlockStmt.class::cast)
+                .filter(block -> block.getStatements().contains(statement))
+                .isPresent();
     }
 
     private Optional<String> noRecoveredCompilationUnit() {

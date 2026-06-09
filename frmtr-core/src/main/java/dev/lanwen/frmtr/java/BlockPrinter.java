@@ -1,9 +1,11 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.EmptyStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.stmt.SwitchStmt;
+import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,18 +21,28 @@ import java.util.function.Predicate;
  * does not decide how any individual {@link Statement} renders or how formatter pragmas change statement print actions.
  */
 final class BlockPrinter {
+    private static final String BLOCK_STATEMENT_LIST_RECOVERY_FAILURE =
+            "Unable to recover Java parse error inside block statement list: ";
+
     private final CommentTracker comments;
     private final JavaCommentPlacementPolicy commentPlacement;
+    private final SourceText sourceText;
+    private final RecoveredListPlanner recoveredListPlanner;
+    private final RecoveredSourceRegions recoveredSourceRegions;
+    private final boolean recoverParseProblems;
     private final JavaFormatRule<Statement> statementRenderer;
     private final Predicate<Statement> hasPragma;
 
     BlockPrinter(
-            CommentTracker comments,
-            JavaCommentPlacementPolicy commentPlacement,
+            JavaFormatContext context,
             JavaFormatRule<Statement> statementRenderer,
             Predicate<Statement> hasPragma) {
-        this.comments = comments;
-        this.commentPlacement = commentPlacement;
+        this.comments = context.comments;
+        this.commentPlacement = context.commentPlacementPolicy;
+        this.sourceText = context.sourceText;
+        this.recoveredListPlanner = context.recoveredListPlanner;
+        this.recoveredSourceRegions = context.recoveredSourceRegions;
+        this.recoverParseProblems = context.recoverParseProblems;
         this.statementRenderer = statementRenderer;
         this.hasPragma = hasPragma;
     }
@@ -42,6 +54,10 @@ final class BlockPrinter {
      * inside child statement ranges are left to the child statement printer so they are not emitted twice.
      */
     Doc block(BlockStmt block) {
+        Optional<RecoveredListPlanner.Plan<Statement>> recoveryPlan = recoveryPlan(block);
+        if (recoveryPlan.isPresent() && hasRawGap(recoveryPlan.orElseThrow())) {
+            return recoveredBlock(block, List.of(), recoveryPlan.orElseThrow());
+        }
         if (block.getStatements().isEmpty() && !commentPlacement.hasOrphanComments(block)) {
             return Doc.text("{}");
         }
@@ -64,6 +80,11 @@ final class BlockPrinter {
      * though JavaParser exposes them on the preceding clause. The caller keeps any special empty-block shape decisions.
      */
     Doc blockWithLeading(BlockStmt block, Doc leadingInside) {
+        Optional<RecoveredListPlanner.Plan<Statement>> recoveryPlan = recoveryPlan(block);
+        if (recoveryPlan.isPresent() && hasRawGap(recoveryPlan.orElseThrow())) {
+            List<Doc> leadingDocs = leadingInside == Doc.EMPTY ? List.of() : List.of(leadingInside);
+            return recoveredBlock(block, leadingDocs, recoveryPlan.orElseThrow());
+        }
         if (block.getStatements().isEmpty()
                 && !commentPlacement.hasOrphanComments(block)
                 && leadingInside == Doc.EMPTY) {
@@ -133,6 +154,183 @@ final class BlockPrinter {
         }
     }
 
+    /**
+     * Emits a recovered block interior by letting raw gaps own their original source spacing.
+     *
+     * <p>Raw gap regions already include the whitespace between the nearest valid siblings or block braces. This path
+     * therefore inserts formatter separators only between adjacent valid siblings; adding normal separators around raw
+     * gaps would duplicate source line breaks and shift the preserved malformed text.
+     */
+    private Doc recoveredBlock(
+            BlockStmt block,
+            List<Doc> leadingInside,
+            RecoveredListPlanner.Plan<Statement> plan) {
+        List<RawGapRegion> rawGapRegions = rawGapRegions(plan);
+        List<SourceRegion> rawRegions = rawGapRegions.stream().map(RawGapRegion::region).toList();
+        requireRecoverableRawRegions(block, rawRegions);
+        List<Doc> leadingDocs = new ArrayList<>(leadingInside);
+        leadingDocs.addAll(blockOrphanCommentStatements(block, rawRegions));
+
+        List<Doc> contents = new ArrayList<>();
+        if (!leadingDocs.isEmpty()) {
+            contents.add(Doc.HARD_LINE);
+            contents.add(Doc.join(Doc.HARD_LINE, leadingDocs));
+        }
+
+        Statement previousValidStatement = null;
+        EntryKind previousEntry = leadingDocs.isEmpty() ? EntryKind.NONE : EntryKind.LEADING_DOC;
+        int rawGapIndex = 0;
+        for (RecoveredListPlanner.Entry<Statement> entry : plan.entries()) {
+            switch (entry) {
+                case RecoveredListPlanner.ValidSibling<?> valid -> {
+                    Statement currentStatement = (Statement) valid.sibling();
+                    Optional<Doc> maybeStatement = printableStatement(previousValidStatement, currentStatement);
+                    if (maybeStatement.isEmpty()) {
+                        continue;
+                    }
+                    if (contents.isEmpty()) {
+                        contents.add(Doc.HARD_LINE);
+                    } else if (previousEntry == EntryKind.VALID_STATEMENT) {
+                        contents.add(statementSeparator(previousValidStatement, currentStatement));
+                    } else if (previousEntry == EntryKind.LEADING_DOC) {
+                        contents.add(Doc.HARD_LINE);
+                    } else if (previousEntry == EntryKind.RAW_GAP_WITH_TRAILING_BREAK) {
+                        contents.add(Doc.HARD_LINE);
+                    }
+                    contents.add(maybeStatement.orElseThrow());
+                    previousValidStatement = currentStatement;
+                    previousEntry = EntryKind.VALID_STATEMENT;
+                }
+                case RecoveredListPlanner.RawGap<?> ignored -> {
+                    RawGapRegion rawRegion = rawGapRegions.get(rawGapIndex++);
+                    if (rawRegion.region().beginOffset() < rawRegion.region().endOffset()) {
+                        contents.add(rawBlockStatementList(block, rawRegion.region()));
+                    }
+                    previousEntry = rawRegion.trailingBreakReplaced()
+                            ? EntryKind.RAW_GAP_WITH_TRAILING_BREAK
+                            : EntryKind.RAW_GAP;
+                }
+            }
+        }
+
+        if (contents.isEmpty()) {
+            return Doc.text("{}");
+        }
+        Doc closingBreak = switch (previousEntry) {
+            case RAW_GAP -> Doc.EMPTY;
+            case NONE, LEADING_DOC, VALID_STATEMENT, RAW_GAP_WITH_TRAILING_BREAK -> Doc.HARD_LINE;
+        };
+        return Doc.concat(Doc.text("{"), Doc.indent(Doc.concat(contents)), closingBreak, Doc.text("}"));
+    }
+
+    private List<RawGapRegion> rawGapRegions(RecoveredListPlanner.Plan<Statement> plan) {
+        return plan.entries().stream()
+                .filter(RecoveredListPlanner.RawGap.class::isInstance)
+                .map(entry -> rawGapRegion(entry.region()))
+                .toList();
+    }
+
+    private void requireRecoverableRawRegions(BlockStmt block, List<SourceRegion> rawRegions) {
+        rawRegions.stream()
+                .filter(region -> region.beginOffset() < region.endOffset())
+                .forEach(region -> {
+                    try {
+                        recoveredSourceRegions.commentAccounting(block, region).requireNoCrossing(region);
+                    } catch (RecoveredSourceRegions.CrossingCommentBoundaryException exception) {
+                        throw blockStatementListRecoveryFailure(exception.getMessage(), exception);
+                    }
+                });
+    }
+
+    private Doc rawBlockStatementList(BlockStmt block, SourceRegion region) {
+        try {
+            return recoveredSourceRegions.raw(block, region, "blockStatementList");
+        } catch (RecoveredSourceRegions.CrossingCommentBoundaryException exception) {
+            throw blockStatementListRecoveryFailure(exception.getMessage(), exception);
+        }
+    }
+
+    private RawGapRegion rawGapRegion(SourceRegion region) {
+        String raw = sourceText.slice(region);
+        int cursor = raw.length();
+        while (cursor > 0 && isHorizontalWhitespace(raw.charAt(cursor - 1))) {
+            cursor--;
+        }
+        int lineBreakStart = trailingLineBreakStart(raw, cursor);
+        if (lineBreakStart < 0) {
+            return new RawGapRegion(region, false);
+        }
+        return new RawGapRegion(
+                sourceText.region(region.beginOffset(), region.beginOffset() + lineBreakStart),
+                true);
+    }
+
+    private static int trailingLineBreakStart(String raw, int endExclusive) {
+        if (endExclusive <= 0) {
+            return -1;
+        }
+        char last = raw.charAt(endExclusive - 1);
+        if (last == '\n') {
+            return endExclusive > 1 && raw.charAt(endExclusive - 2) == '\r' ? endExclusive - 2 : endExclusive - 1;
+        }
+        if (last == '\r') {
+            return endExclusive - 1;
+        }
+        return -1;
+    }
+
+    private static boolean isHorizontalWhitespace(char value) {
+        return value != '\r' && value != '\n' && Character.isWhitespace(value);
+    }
+
+    private Optional<Doc> printableStatement(Statement previousStatement, Statement currentStatement) {
+        if (currentStatement.isEmptyStmt() && previousStatement instanceof SwitchStmt) {
+            return Optional.empty();
+        }
+        if (currentStatement instanceof EmptyStmt emptyStmt) {
+            return blockEmptyStatementComment(emptyStmt);
+        }
+        return Optional.of(statementRenderer.format(currentStatement));
+    }
+
+    private Optional<RecoveredListPlanner.Plan<Statement>> recoveryPlan(BlockStmt block) {
+        if (!recoverParseProblems) {
+            return Optional.empty();
+        }
+        RecoveredListPlanner.Plan<Statement> plan = recoveredListPlanner.plan(
+                block,
+                blockInteriorRegion(block),
+                block.getStatements(),
+                statement -> statement.getParsed() == Node.Parsedness.PARSED);
+        if (!plan.isSafe()) {
+            throw blockStatementListRecoveryFailure(plan.unsafe().orElseThrow().reason());
+        }
+        return Optional.of(plan);
+    }
+
+    private SourceRegion blockInteriorRegion(BlockStmt block) {
+        if (block.getRange().isEmpty()) {
+            throw blockStatementListRecoveryFailure("block is missing a source range");
+        }
+        try {
+            SourceRegion blockRegion = sourceText.region(block.getRange().orElseThrow());
+            if (blockRegion.endOffset() - blockRegion.beginOffset() < 2) {
+                throw new IllegalArgumentException("block source range is too small to contain braces");
+            }
+            String blockSource = sourceText.slice(blockRegion);
+            if (blockSource.charAt(0) != '{' || blockSource.charAt(blockSource.length() - 1) != '}') {
+                throw new IllegalArgumentException("block source range must start with '{' and end with '}'");
+            }
+            return sourceText.region(blockRegion.beginOffset() + 1, blockRegion.endOffset() - 1);
+        } catch (IllegalArgumentException exception) {
+            throw blockStatementListRecoveryFailure(exception.getMessage(), exception);
+        }
+    }
+
+    private static boolean hasRawGap(RecoveredListPlanner.Plan<Statement> plan) {
+        return plan.entries().stream().anyMatch(RecoveredListPlanner.RawGap.class::isInstance);
+    }
+
     private Doc statementBlock(List<Doc> statements) {
         return Doc.concat(
                 Doc.text("{"),
@@ -162,6 +360,21 @@ final class BlockPrinter {
                 .toList();
     }
 
+    private List<Doc> blockOrphanCommentStatements(BlockStmt block, List<SourceRegion> rawRegions) {
+        return commentPlacement.orphanCommentsOutsideChildRanges(block, block.getStatements()).stream()
+                .filter(comment -> comment.comment().getRange().isEmpty()
+                        || rawRegions.stream().noneMatch(region -> contains(
+                                region,
+                                sourceText.region(comment.comment().getRange().orElseThrow()))))
+                .map(comments::comment)
+                .filter(doc -> doc != Doc.EMPTY)
+                .toList();
+    }
+
+    private static boolean contains(SourceRegion region, SourceRegion nested) {
+        return region.beginOffset() <= nested.beginOffset() && nested.endOffset() <= region.endOffset();
+    }
+
     /**
      * Returns the line that should start separator calculations for a statement.
      *
@@ -173,4 +386,41 @@ final class BlockPrinter {
                 .map(comment -> comment.beginLine(fallback))
                 .orElse(fallback);
     }
+
+    private static FormatterException blockStatementListRecoveryFailure(String reason) {
+        return new FormatterException(BLOCK_STATEMENT_LIST_RECOVERY_FAILURE + reason);
+    }
+
+    private static FormatterException blockStatementListRecoveryFailure(String reason, Throwable cause) {
+        return new FormatterException(BLOCK_STATEMENT_LIST_RECOVERY_FAILURE + reason, cause);
+    }
+
+    private enum EntryKind {
+        /**
+         * No recovered block content has been emitted yet, so the next printable entry opens the block body.
+         */
+        NONE,
+
+        /**
+         * Caller-provided or block-orphan docs were emitted before the statement list and need one hard-line separator.
+         */
+        LEADING_DOC,
+
+        /**
+         * The previous emitted entry was a parsed statement, so the next parsed statement can use normal separator rules.
+         */
+        VALID_STATEMENT,
+
+        /**
+         * The previous emitted entry was a raw recovered gap that kept its trailing line break in the raw source.
+         */
+        RAW_GAP,
+
+        /**
+         * The previous emitted entry was a raw recovered gap whose trailing line break was moved to formatter-owned docs.
+         */
+        RAW_GAP_WITH_TRAILING_BREAK
+    }
+
+    private record RawGapRegion(SourceRegion region, boolean trailingBreakReplaced) {}
 }

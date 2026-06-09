@@ -1,6 +1,8 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.BodyDeclaration;
+import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.doc.Doc;
 
 /**
@@ -40,6 +42,7 @@ final class BodyDeclarationRuleEnvelope {
      * output has been ruled out and the declaration's leading comment slot has been claimed.
      */
     Doc body(BodyDeclaration<?> declaration) {
+        requireParsedDeclarationNode(declaration);
         FormatterPragmas.PrintAction action = formatterPragmas.bodyAction(declaration);
         Doc doc = switch (action) {
             case RAW -> rawBody(declaration);
@@ -68,5 +71,14 @@ final class BodyDeclarationRuleEnvelope {
      */
     private Doc rawBody(BodyDeclaration<?> declaration) {
         return Doc.concat(comments.leading(declaration), rawPreservedSource.rawWithoutOwnComment(declaration));
+    }
+
+    private static void requireParsedDeclarationNode(BodyDeclaration<?> declaration) {
+        if (declaration.getParsed() == Node.Parsedness.PARSED) {
+            return;
+        }
+        // TODO: Expose the rejected recovered declaration through formatter diagnostics once recovery reporting exists.
+        throw new FormatterException("Unsupported Java parse-error recovery reached declaration formatter: "
+                + declaration.getClass().getSimpleName());
     }
 }

@@ -1,9 +1,11 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.stmt.BreakStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.stmt.SwitchStmt;
 import com.github.javaparser.ast.stmt.TryStmt;
+import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.doc.Doc;
 
 /**
@@ -51,6 +53,7 @@ final class StatementRuleEnvelope {
      * leading comments, and trailing line comments have been selected.
      */
     Doc statement(Statement statement) {
+        requireFullyParsed(statement);
         FormatterPragmas.PrintAction action = formatterPragmas.statementAction(statement);
         if (action == FormatterPragmas.PrintAction.RAW_WITH_TRAILING_HARD_LINE) {
             return label(statement, Doc.concat(rawStatement(statement), Doc.HARD_LINE));
@@ -85,6 +88,15 @@ final class StatementRuleEnvelope {
             return Doc.EMPTY;
         }
         return trailing == Doc.EMPTY ? comments.leading(statement) : Doc.EMPTY;
+    }
+
+    private static void requireFullyParsed(Statement statement) {
+        if (statement.stream().allMatch(node -> node.getParsed() == Node.Parsedness.PARSED)) {
+            return;
+        }
+        // TODO: Expose the rejected recovered statement through formatter diagnostics once recovery reporting exists.
+        throw new FormatterException("Unsupported Java parse-error recovery reached statement formatter: "
+                + statement.getClass().getSimpleName());
     }
 
     /**

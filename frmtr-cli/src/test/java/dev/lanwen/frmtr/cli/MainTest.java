@@ -275,10 +275,11 @@ final class MainTest {
         assertThat(result.out()).isEmpty();
         assertThat(result.err())
                 .startsWith("""
-                        src/Broken.java
-                          Unable to parse Java source:
+                        ┌─ Unable to parse Java source:
+                        │ 1  class {
                         """)
                 .contains("Parse error")
+                .contains("│    │")
                 .contains("^")
                 .endsWith("Processed 1 file: 0 printed, 1 failed.\n");
     }
@@ -352,11 +353,12 @@ final class MainTest {
                 """);
         assertThat(result.err())
                 .startsWith("""
-                        src/Broken.java
-                          Unable to parse Java source:
+                        ┌─ Unable to parse Java source:
+                        │ 1  class {
                         """)
                 .contains("Parse-error recovery is configured")
                 .contains("Parse error")
+                .contains("│    │")
                 .contains("^");
     }
 
@@ -373,8 +375,8 @@ final class MainTest {
                 """);
         assertThat(result.err())
                 .startsWith("""
-                        src/Broken.java
-                          Unable to parse Java source:
+                        ┌─ Unable to parse Java source:
+                        │ 1  class {
                         """)
                 .contains("Parse error");
     }
@@ -396,11 +398,12 @@ final class MainTest {
         assertThat(result.out()).isEqualTo("Processed 1 file: 0 formatted, 1 failed.\n");
         assertThat(result.err())
                 .startsWith("""
-                        src/TemplateExpression.java
-                          Unable to parse Java source:
+                        ┌─ Unable to parse Java source:
+                        │ 1  class TemplateExpression {
                         """)
-                .contains("  1  class TemplateExpression {")
-                .contains("  3    String info = STR.\"My name is \\{name}\";")
+                .contains("│ 1  class TemplateExpression {")
+                .contains("│ 3    String info = STR.\"My name is \\{name}\";")
+                .contains("│    │")
                 .contains("^")
                 .contains("Lexical error at line 3, column 34");
     }
@@ -435,10 +438,12 @@ final class MainTest {
                 """);
         assertThat(result.err())
                 .startsWith("""
-                        src/Switch.java
-                          Unable to parse Java source:
+                        ┌─ Unable to parse Java source:
+                        │ 1  class Switch {
                         """)
                 .contains("yield")
+                .contains("│ 4              case CreateCommand cmd -> {")
+                .contains("│    │")
                 .contains("^");
     }
 

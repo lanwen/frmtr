@@ -81,7 +81,7 @@ It is a core debug API only, not a formatting policy surface or CLI hook.
 - `FormatterRunner.write(...)` writes changed formatter output back to disk, continues after per-file failures, distinguishes write-step failures as partially written results, and reports the full run summary.
 - `UnifiedDiffRenderer` renders the same unified diff format for CLI and Gradle check output.
 - `FormatterFailureRenderer` turns structured formatter failures into adapter-facing messages, including parse context, declaration-line context, and caret placement, without making the core exception message own terminal formatting.
-- `FormatterRunFailureRenderer` groups failed file results into one block per display path and delegates each exception body to `FormatterFailureRenderer`, so adapter file-run output shares the same parse-context rendering.
+- `FormatterRunFailureRenderer` renders failed file results as outlined diagnostic blocks titled by the failure message while file identity stays with adapter status lines. Source diagnostics come from structured parser metadata, including line numbers, caret placement, and vertical-dot gap markers inside the outline.
 
 The runner owns deterministic path ordering and de-duplication for file lists supplied by adapters. Source discovery remains adapter-specific: the CLI uses selectors and `.gitignore`; the Gradle plugin builds one canonical file collection from Java source sets and Gradle-style source filters, then uses that same collection for task inputs and task actions.
 
@@ -115,7 +115,8 @@ enclosing declaration source line when detected, and up to five lines above and 
 cropped to a 256-character column window around the reported position. JavaParser 3.28.1 does not expose typed line or
 column accessors for `TokenMgrException`; lexical failures that omit `Problem` locations therefore use a fallback that
 parses the generated token-manager message only for that typed exception. CLI and Gradle rendering is handled outside
-core through `FormatterFailureRenderer`.
+core through `FormatterFailureRenderer` for single failures and `FormatterRunFailureRenderer` for outlined per-file run
+failures.
 
 The public `Frmtr` API wraps recoverable internal formatter failures, including parser dependency linkage failures and assertions, as `FormatterException.internal(...)` so adapters can report concise failures without treating them as VM-level crashes. `Frmtr.debugDoc(...)` shares that wrapping and the same parser, transform, and Java printing path as formatting, but returns `DocDebugRenderer` output instead of rendered source.
 

@@ -19,6 +19,8 @@ import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.JavadocComment;
 import com.github.javaparser.ast.comments.LineComment;
+import com.github.javaparser.ast.modules.ModuleDeclaration;
+import com.github.javaparser.ast.modules.ModuleDirective;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import dev.lanwen.frmtr.FormatterException;
@@ -154,7 +156,7 @@ public final class JavaFormatter {
             return Optional.empty();
         }
         return Optional.of(
-                "Parse-error recovery is configured, but this recovery slice only supports malformed block statement lists, class/interface/record member declaration lists, import declaration lists, and top-level declaration lists.");
+                "Parse-error recovery is configured, but this recovery slice only supports malformed block statement lists, class/interface/record member declaration lists, import declaration lists, top-level declaration lists, and module directive lists.");
     }
 
     private Optional<String> unsupportedRecoveryReason(CompilationUnit unit) {
@@ -176,11 +178,12 @@ public final class JavaFormatter {
                         + node.getRange().map(range -> " at " + range).orElse("."));
     }
 
-    private static boolean isSupportedRecovery(Node recoveredNode) {
+    static boolean isSupportedRecovery(Node recoveredNode) {
         return isSupportedBlockStatementListRecovery(recoveredNode)
                 || isSupportedMemberDeclarationListRecovery(recoveredNode)
                 || isSupportedImportDeclarationListRecovery(recoveredNode)
-                || isSupportedTopLevelDeclarationListRecovery(recoveredNode);
+                || isSupportedTopLevelDeclarationListRecovery(recoveredNode)
+                || isSupportedModuleDirectiveListRecovery(recoveredNode);
     }
 
     private static boolean isSupportedBlockStatementListRecovery(Node recoveredNode) {
@@ -291,6 +294,40 @@ public final class JavaFormatter {
                 .filter(unit -> unit.getTypes().contains(type))
                 .map(unit -> unit.getTypes().stream()
                         .anyMatch(sibling -> sibling != type && sibling.getParsed() == Node.Parsedness.PARSED))
+                .orElse(false);
+    }
+
+    private static boolean isSupportedModuleDirectiveListRecovery(Node recoveredNode) {
+        return nearestModuleDirectiveListSibling(recoveredNode)
+                .filter(JavaFormatter::hasRecoverableModuleDirectiveListProblem)
+                .isPresent();
+    }
+
+    private static Optional<ModuleDirective> nearestModuleDirectiveListSibling(Node recoveredNode) {
+        Optional<Node> current = Optional.of(recoveredNode);
+        while (current.isPresent()) {
+            Node node = current.orElseThrow();
+            if (node instanceof ModuleDirective directive && isModuleDeclarationDirective(directive)) {
+                return Optional.of(directive);
+            }
+            current = node.getParentNode();
+        }
+        return Optional.empty();
+    }
+
+    private static boolean isModuleDeclarationDirective(ModuleDirective directive) {
+        return directive.getParentNode()
+                .filter(ModuleDeclaration.class::isInstance)
+                .map(ModuleDeclaration.class::cast)
+                .filter(module -> module.getDirectives().contains(directive))
+                .isPresent();
+    }
+
+    private static boolean hasRecoverableModuleDirectiveListProblem(ModuleDirective directive) {
+        return directive.getParentNode()
+                .filter(ModuleDeclaration.class::isInstance)
+                .map(ModuleDeclaration.class::cast)
+                .map(ModuleBlockPrinter::hasRecoverableModuleDirectiveListProblem)
                 .orElse(false);
     }
 

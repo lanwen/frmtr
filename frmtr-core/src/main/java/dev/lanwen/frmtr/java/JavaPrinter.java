@@ -89,8 +89,7 @@ final class JavaPrinter {
                 annotationExpressions::annotation,
                 annotationExpressions::annotationFlatText);
         this.moduleBlocks = new ModuleBlockPrinter(
-                comments,
-                options,
+                context,
                 compactSource::compact,
                 compactSource::compactJoin,
                 declarationPrefixes::modifiers);
@@ -102,7 +101,9 @@ final class JavaPrinter {
                 declarationPrefixes::annotations,
                 this::commentText,
                 compactSource::compact,
-                moduleBlocks::moduleBlock);
+                moduleBlocks::moduleBlock,
+                moduleBlocks::canUseStructuredRecoveryForCommentedModule,
+                context.recoverParseProblems);
         this.memberBlocks = new MemberBlockPrinter(
                 context,
                 declarationPrefixes::hasDeclarationAnnotations);

@@ -1,5 +1,7 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.GeneratedJavaParserConstants;
+import com.github.javaparser.JavaToken;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.Name;
@@ -10,10 +12,12 @@ import com.github.javaparser.ast.modules.ModuleOpensDirective;
 import com.github.javaparser.ast.modules.ModuleProvidesDirective;
 import com.github.javaparser.ast.modules.ModuleRequiresDirective;
 import com.github.javaparser.ast.modules.ModuleUsesDirective;
+import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Function;
 
 /**
@@ -33,20 +37,30 @@ import java.util.function.Function;
  * format/prettier-java/unit-test/modules/frmtr.output.java} shows the expected structured module behavior.
  */
 final class ModuleBlockPrinter {
+    private static final String MODULE_DIRECTIVE_LIST_RECOVERY_FAILURE =
+            "Unable to recover Java parse error inside module directive list: ";
+
     private final CommentTracker comments;
     private final FormatterOptions options;
+    private final SourceText sourceText;
+    private final RecoveredListPlanner recoveredListPlanner;
+    private final RecoveredRawGapPrinter rawGaps;
+    private final boolean recoverParseProblems;
     private final Function<Node, String> compact;
     private final Function<List<? extends Node>, String> compactJoin;
     private final Function<ModuleRequiresDirective, String> requiresModifiers;
 
     ModuleBlockPrinter(
-            CommentTracker comments,
-            FormatterOptions options,
+            JavaFormatContext context,
             Function<Node, String> compact,
             Function<List<? extends Node>, String> compactJoin,
             Function<ModuleRequiresDirective, String> requiresModifiers) {
-        this.comments = comments;
-        this.options = options;
+        this.comments = context.comments;
+        this.options = context.options;
+        this.sourceText = context.sourceText;
+        this.recoveredListPlanner = context.recoveredListPlanner;
+        this.rawGaps = new RecoveredRawGapPrinter(context, ModuleBlockPrinter::moduleDirectiveListRecoveryFailure);
+        this.recoverParseProblems = context.recoverParseProblems;
         this.compact = compact;
         this.compactJoin = compactJoin;
         this.requiresModifiers = requiresModifiers;
@@ -59,6 +73,13 @@ final class ModuleBlockPrinter {
      * <p>Empty modules stay on one line because there is no directive or orphan-comment sequencing to preserve.
      */
     Doc moduleBlock(ModuleDeclaration declaration) {
+        Optional<RecoveredListPlanner.Plan<ModuleDirective>> recoveryPlan = recoveryPlan(declaration);
+        if (recoveryPlan.isPresent() && hasRawGap(recoveryPlan.orElseThrow())) {
+            return recoveredModuleBlock(
+                    declaration,
+                    recoveryPlan.orElseThrow(),
+                    recoverableRawGapRegions(declaration, recoveryPlan.orElseThrow()));
+        }
         if (declaration.getDirectives().isEmpty()) {
             return Doc.text("{}");
         }
@@ -93,6 +114,206 @@ final class ModuleBlockPrinter {
                         .map(currentRange -> currentRange.begin.line > previousRange.end.line + 1))
                 .orElse(false);
         return hasBlankLineBetween ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;
+    }
+
+    /**
+     * Emits a recovered module directive body while keeping valid directive siblings on their normal renderer.
+     *
+     * <p>The module header and braces remain formatter-owned. Raw gaps are limited to the brace interior selected from
+     * the declaration token range, so malformed directive source cannot consume the module declaration boundary.
+     */
+    private Doc recoveredModuleBlock(
+            ModuleDeclaration declaration,
+            RecoveredListPlanner.Plan<ModuleDirective> plan,
+            List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions) {
+        List<Doc> contents = new ArrayList<>();
+        EntryKind previousEntry = EntryKind.NONE;
+        ModuleDirective previousDirective = null;
+        int rawGapIndex = 0;
+        for (RecoveredListPlanner.Entry<ModuleDirective> entry : plan.entries()) {
+            switch (entry) {
+                case RecoveredListPlanner.ValidSibling<?> valid -> {
+                    ModuleDirective currentDirective = (ModuleDirective) valid.sibling();
+                    appendSeparatorBeforeRecoveredDirective(
+                            contents,
+                            previousEntry,
+                            previousDirective,
+                            currentDirective);
+                    contents.add(moduleDirective(currentDirective));
+                    previousDirective = currentDirective;
+                    previousEntry = EntryKind.VALID_DIRECTIVE;
+                }
+                case RecoveredListPlanner.RawGap<?> ignored -> {
+                    RecoveredRawGapPrinter.RawGapRegion rawRegion = rawGapRegions.get(rawGapIndex++);
+                    if (rawRegion.region().beginOffset() < rawRegion.region().endOffset()) {
+                        contents.add(rawGaps.raw(declaration, rawRegion, "moduleDirectiveList"));
+                    }
+                    previousEntry = rawRegion.trailingBreakReplaced()
+                            ? EntryKind.RAW_GAP_WITH_TRAILING_BREAK
+                            : EntryKind.RAW_GAP;
+                }
+            }
+        }
+        if (contents.isEmpty()) {
+            return Doc.text("{}");
+        }
+        Doc closingBreak = switch (previousEntry) {
+            case RAW_GAP -> Doc.EMPTY;
+            case NONE, VALID_DIRECTIVE, RAW_GAP_WITH_TRAILING_BREAK -> Doc.HARD_LINE;
+        };
+        return Doc.concat(Doc.text("{"), Doc.indent(Doc.concat(contents)), closingBreak, Doc.text("}"));
+    }
+
+    /**
+     * Reports whether structured recovery can safely replace the commented-module raw fallback.
+     *
+     * <p>That is only true when every comment marker inside the module declaration source sits inside a recovered raw
+     * directive-list gap. Comments in the module header or normally formatted directive siblings still belong to the
+     * whole-module raw fallback because the structured module path does not preserve those source-only comment slots.
+     */
+    boolean canUseStructuredRecoveryForCommentedModule(ModuleDeclaration declaration) {
+        Optional<RecoveredListPlanner.Plan<ModuleDirective>> recoveryPlan = recoveryPlan(declaration);
+        if (recoveryPlan.isEmpty() || !hasRawGap(recoveryPlan.orElseThrow())) {
+            return false;
+        }
+        List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions =
+                rawGaps.rawGapRegions(recoveryPlan.orElseThrow());
+        if (hasCommentOutsideRawGaps(declaration, rawGapRegions)) {
+            return false;
+        }
+        rawGaps.requireRecoverableRawRegions(declaration, rawGapRegions);
+        return true;
+    }
+
+    private void appendSeparatorBeforeRecoveredDirective(
+            List<Doc> contents,
+            EntryKind previousEntry,
+            ModuleDirective previousDirective,
+            ModuleDirective currentDirective) {
+        if (contents.isEmpty()) {
+            contents.add(Doc.HARD_LINE);
+            return;
+        }
+        switch (previousEntry) {
+            case VALID_DIRECTIVE -> contents.add(moduleDirectiveSeparator(previousDirective, currentDirective));
+            case RAW_GAP_WITH_TRAILING_BREAK -> contents.add(Doc.HARD_LINE);
+            case NONE, RAW_GAP -> {
+                // Raw source already owns the separation before this directive.
+            }
+        }
+    }
+
+    private Optional<RecoveredListPlanner.Plan<ModuleDirective>> recoveryPlan(ModuleDeclaration declaration) {
+        if (!recoverParseProblems || !hasRecoverableModuleDirectiveListProblem(declaration)) {
+            return Optional.empty();
+        }
+        RecoveredListPlanner.Plan<ModuleDirective> plan = recoveredListPlanner.plan(
+                declaration,
+                requireModuleBlockInteriorRegion(declaration),
+                declaration.getDirectives(),
+                directive -> directive.getParsed() == Node.Parsedness.PARSED);
+        if (!plan.isSafe()) {
+            throw moduleDirectiveListRecoveryFailure(plan.unsafe().orElseThrow().reason());
+        }
+        return Optional.of(plan);
+    }
+
+    private List<RecoveredRawGapPrinter.RawGapRegion> recoverableRawGapRegions(
+            ModuleDeclaration declaration,
+            RecoveredListPlanner.Plan<ModuleDirective> plan) {
+        List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions = rawGaps.rawGapRegions(plan);
+        rawGaps.requireRecoverableRawRegions(declaration, rawGapRegions);
+        return rawGapRegions;
+    }
+
+    static boolean hasRecoverableModuleDirectiveListProblem(ModuleDeclaration declaration) {
+        return declaration.getDirectives().stream().anyMatch(directive -> !isFullyParsed(directive));
+    }
+
+    private SourceRegion requireModuleBlockInteriorRegion(ModuleDeclaration declaration) {
+        try {
+            return moduleBlockInteriorRegion(declaration);
+        } catch (IllegalArgumentException exception) {
+            throw moduleDirectiveListRecoveryFailure(exception.getMessage(), exception);
+        }
+    }
+
+    private SourceRegion moduleBlockInteriorRegion(ModuleDeclaration declaration) {
+        List<JavaToken> tokens = declaration.getTokenRange()
+                .map(tokenRange -> {
+                    List<JavaToken> collected = new ArrayList<>();
+                    tokenRange.forEach(collected::add);
+                    return collected;
+                })
+                .orElseThrow(() -> new IllegalArgumentException("module declaration is missing a token range"));
+        JavaToken openingBrace = tokens.stream()
+                .filter(token -> token.getKind() == GeneratedJavaParserConstants.LBRACE)
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("module body source range is missing an opening brace"));
+        JavaToken closingBrace = null;
+        for (int i = tokens.size() - 1; i >= 0; i--) {
+            JavaToken token = tokens.get(i);
+            if (token.getKind() == GeneratedJavaParserConstants.RBRACE) {
+                closingBrace = token;
+                break;
+            }
+        }
+        if (closingBrace == null) {
+            throw new IllegalArgumentException("module body source range is missing a closing brace");
+        }
+        SourceRegion openingRegion = tokenRegion(openingBrace, "opening brace");
+        SourceRegion closingRegion = tokenRegion(closingBrace, "closing brace");
+        if (closingRegion.beginOffset() < openingRegion.endOffset()) {
+            throw new IllegalArgumentException("module body braces are not ordered");
+        }
+        return sourceText.region(openingRegion.endOffset(), closingRegion.beginOffset());
+    }
+
+    private SourceRegion tokenRegion(JavaToken token, String description) {
+        return token.getRange()
+                .map(sourceText::region)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "module body " + description + " is missing a source range"));
+    }
+
+    private static boolean hasRawGap(RecoveredListPlanner.Plan<ModuleDirective> plan) {
+        return plan.entries().stream().anyMatch(RecoveredListPlanner.RawGap.class::isInstance);
+    }
+
+    private boolean hasCommentOutsideRawGaps(
+            ModuleDeclaration declaration,
+            List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions) {
+        SourceRegion moduleRegion = declaration.getRange()
+                .map(sourceText::region)
+                .orElseThrow(() -> moduleDirectiveListRecoveryFailure("module declaration is missing a source range"));
+        List<SourceRegion> rawRegions = rawGaps.regions(rawGapRegions).stream()
+                .filter(region -> region.beginOffset() < region.endOffset())
+                .sorted((left, right) -> Integer.compare(left.beginOffset(), right.beginOffset()))
+                .toList();
+        int cursor = moduleRegion.beginOffset();
+        for (SourceRegion rawRegion : rawRegions) {
+            if (containsCommentMarker(sourceText.slice(sourceText.region(cursor, rawRegion.beginOffset())))) {
+                return true;
+            }
+            cursor = rawRegion.endOffset();
+        }
+        return containsCommentMarker(sourceText.slice(sourceText.region(cursor, moduleRegion.endOffset())));
+    }
+
+    private static boolean containsCommentMarker(String source) {
+        return source.contains("/*") || source.contains("//");
+    }
+
+    private static boolean isFullyParsed(Node node) {
+        return node.stream().allMatch(descendant -> descendant.getParsed() == Node.Parsedness.PARSED);
+    }
+
+    private static FormatterException moduleDirectiveListRecoveryFailure(String reason) {
+        return new FormatterException(MODULE_DIRECTIVE_LIST_RECOVERY_FAILURE + reason);
+    }
+
+    private static FormatterException moduleDirectiveListRecoveryFailure(String reason, Throwable cause) {
+        return new FormatterException(MODULE_DIRECTIVE_LIST_RECOVERY_FAILURE + reason, cause);
     }
 
     /**
@@ -163,5 +384,27 @@ final class ModuleBlockPrinter {
 
     private int currentIndentedWidth(String text) {
         return options.indentUnit().length() + text.length();
+    }
+
+    private enum EntryKind {
+        /**
+         * No recovered module directive entry has been emitted yet.
+         */
+        NONE,
+
+        /**
+         * The previous entry was a normally formatted valid module directive.
+         */
+        VALID_DIRECTIVE,
+
+        /**
+         * The previous entry was raw source whose final line break is still present in that source.
+         */
+        RAW_GAP,
+
+        /**
+         * The previous entry was raw source whose final line break moved to formatter-owned output.
+         */
+        RAW_GAP_WITH_TRAILING_BREAK
     }
 }

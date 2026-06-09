@@ -6,6 +6,7 @@ import com.github.javaparser.ast.modules.ModuleDeclaration;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Prints module declaration headers after compilation-unit ordering has selected the optional module position.
@@ -35,6 +36,8 @@ final class ModuleDeclarationPrinter {
     private final Function<Doc, String> commentText;
     private final Function<Node, String> compact;
     private final Function<ModuleDeclaration, Doc> moduleBlock;
+    private final Predicate<ModuleDeclaration> structuredRecoveryCommentSafety;
+    private final boolean recoverParseProblems;
 
     ModuleDeclarationPrinter(
             CommentTracker comments,
@@ -44,7 +47,9 @@ final class ModuleDeclarationPrinter {
             Function<NodeWithAnnotations<?>, Doc> annotations,
             Function<Doc, String> commentText,
             Function<Node, String> compact,
-            Function<ModuleDeclaration, Doc> moduleBlock) {
+            Function<ModuleDeclaration, Doc> moduleBlock,
+            Predicate<ModuleDeclaration> structuredRecoveryCommentSafety,
+            boolean recoverParseProblems) {
         this.comments = comments;
         this.rawSource = rawSource;
         this.rawPreservedSource = rawPreservedSource;
@@ -53,6 +58,8 @@ final class ModuleDeclarationPrinter {
         this.commentText = commentText;
         this.compact = compact;
         this.moduleBlock = moduleBlock;
+        this.structuredRecoveryCommentSafety = structuredRecoveryCommentSafety;
+        this.recoverParseProblems = recoverParseProblems;
     }
 
     /**
@@ -61,11 +68,18 @@ final class ModuleDeclarationPrinter {
      *
      * <p>{@code open module} and plain {@code module} share the same structured path because {@link ModuleDeclaration}
      * exposes the {@code open} keyword as a boolean; the fallback path is only for comment placement that the structured
-     * module AST cannot represent without losing source nuance.
+     * module AST cannot represent without losing source nuance. Recovered directive-list bodies skip that fallback only
+     * when the directive-list recovery plan proves every raw comment marker remains inside recovered raw gaps.
      */
     Doc moduleDeclaration(ModuleDeclaration declaration) {
         String raw = rawSource.raw(declaration);
-        if (raw.contains("/*") || raw.contains("//")) {
+        boolean recoveredDirectiveList = recoverParseProblems
+                && ModuleBlockPrinter.hasRecoverableModuleDirectiveListProblem(declaration);
+        boolean commentedModule = raw.contains("/*") || raw.contains("//");
+        boolean canUseStructuredRecovery = commentedModule
+                && recoveredDirectiveList
+                && structuredRecoveryCommentSafety.test(declaration);
+        if (commentedModule && !canUseStructuredRecovery) {
             Doc leadingBlock = comments.ownComment(declaration, BlockComment.class::isInstance);
             String leadingText = commentText.apply(leadingBlock);
             String commentedRaw = leadingText.isEmpty() ? raw : leadingText + raw;

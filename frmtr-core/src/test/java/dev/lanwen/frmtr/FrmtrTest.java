@@ -290,7 +290,7 @@ final class FrmtrTest {
                 .isInstanceOf(FormatterException.class)
                 .hasMessageContaining("Unable to parse Java source:")
                 .hasMessageContaining("Parse-error recovery is configured")
-                .hasMessageContaining("only supports malformed block statement lists, class/interface/record member declaration lists, import declaration lists, and top-level declaration lists");
+                .hasMessageContaining("module directive lists");
     }
 
     @Test
@@ -315,6 +315,34 @@ final class FrmtrTest {
         assertThat(thrown)
                 .isInstanceOf(FormatterException.class)
                 .hasMessageContaining("Unable to parse Java source:")
+                .hasMessageContaining("Unsupported recovered node: CompilationUnit");
+    }
+
+    @Test
+    void defaultParseErrorRecoveryRejectsCollapsedMalformedModuleDirectiveList() {
+        String source = """
+                module demo {
+                    requires before;
+                    exports ; // keep raw
+                    uses after.Service;
+                }
+                """;
+        var result = new JavaParser(new ParserConfiguration()
+                        .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
+                        .setStoreTokens(true)
+                        .setAttributeComments(true))
+                .parse(ParseStart.COMPILATION_UNIT, Providers.provider(source));
+
+        Throwable thrown = catchThrowable(() -> Frmtr.format(source));
+
+        assertThat(result.isSuccessful()).isFalse();
+        assertThat(result.getResult()).isPresent();
+        assertThat(result.getResult().orElseThrow().getParsed()).isEqualTo(Node.Parsedness.UNPARSABLE);
+        assertThat(result.getResult().orElseThrow().getModule()).isEmpty();
+        assertThat(thrown)
+                .isInstanceOf(FormatterException.class)
+                .hasMessageContaining("Unable to parse Java source:")
+                .hasMessageContaining("module directive lists")
                 .hasMessageContaining("Unsupported recovered node: CompilationUnit");
     }
 

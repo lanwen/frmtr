@@ -60,7 +60,7 @@ final class RecoveredListPlanner {
             SourceRegion listRegion,
             List<N> siblings,
             Predicate<? super N> validSibling) {
-        return plan(owner, listRegion, siblings, validSibling, this::siblingRegion);
+        return plan(owner, listRegion, siblings, validSibling, this::siblingRegion, true);
     }
 
     /**
@@ -77,10 +77,35 @@ final class RecoveredListPlanner {
             List<N> siblings,
             Predicate<? super N> validSibling,
             Function<? super N, Optional<SourceRegion>> regionForSibling) {
+        return plan(owner, listRegion, siblings, validSibling, regionForSibling, true);
+    }
+
+    /**
+     * Plans ordered entries using a caller-owned safe-sibling predicate.
+     *
+     * <p>Unlike {@link #plan(Node, SourceRegion, List, Predicate)}, this variant does not add an implicit full-subtree
+     * parsedness check after the predicate succeeds. Callers use it only when a sibling can safely render through a
+     * nested recovery owner, and the predicate must reject every sibling the structured renderer cannot handle.
+     */
+    <N extends Node> Plan<N> planWithCallerOwnedSafety(
+            Node owner,
+            SourceRegion listRegion,
+            List<N> siblings,
+            Predicate<? super N> safeSibling) {
+        return plan(owner, listRegion, siblings, safeSibling, this::siblingRegion, false);
+    }
+
+    private <N extends Node> Plan<N> plan(
+            Node owner,
+            SourceRegion listRegion,
+            List<N> siblings,
+            Predicate<? super N> safeSibling,
+            Function<? super N, Optional<SourceRegion>> regionForSibling,
+            boolean requireFullyParsedSibling) {
         Objects.requireNonNull(owner, "owner");
         Objects.requireNonNull(listRegion, "listRegion");
         Objects.requireNonNull(siblings, "siblings");
-        Objects.requireNonNull(validSibling, "validSibling");
+        Objects.requireNonNull(safeSibling, "safeSibling");
         Objects.requireNonNull(regionForSibling, "regionForSibling");
 
         SourceRegion boundary;
@@ -111,7 +136,8 @@ final class RecoveredListPlanner {
                 return Plan.unsafe("sibling source ranges are not ordered and non-overlapping");
             }
             previousEndOffset = region.endOffset();
-            boolean safeToFormat = validSibling.test(sibling) && fullyParsed(sibling);
+            boolean safeToFormat = safeSibling.test(sibling)
+                    && (!requireFullyParsedSibling || fullyParsed(sibling));
             siblingRegions.add(new SiblingRegion<>(sibling, region, safeToFormat));
         }
 

@@ -234,18 +234,51 @@ final class BlockPrinter {
     }
 
     private Optional<RecoveredListPlanner.Plan<Statement>> recoveryPlan(BlockStmt block) {
-        if (!recoverParseProblems) {
+        if (!recoverParseProblems || !hasRecoverableBlockStatementListProblem(block)) {
             return Optional.empty();
         }
-        RecoveredListPlanner.Plan<Statement> plan = recoveredListPlanner.plan(
+        RecoveredListPlanner.Plan<Statement> plan = recoveredListPlanner.planWithCallerOwnedSafety(
                 block,
                 blockInteriorRegion(block),
                 block.getStatements(),
-                statement -> statement.getParsed() == Node.Parsedness.PARSED);
+                this::isSafeBlockStatementRecoverySibling);
         if (!plan.isSafe()) {
             throw blockStatementListRecoveryFailure(plan.unsafe().orElseThrow().reason());
         }
         return Optional.of(plan);
+    }
+
+    private boolean hasRecoverableBlockStatementListProblem(BlockStmt block) {
+        if (block.getStatements().stream().anyMatch(this::isCollapsedMalformedSwitchStatement)) {
+            return false;
+        }
+        if (block.getParsed() != Node.Parsedness.PARSED) {
+            return true;
+        }
+        return block.getStatements().stream().anyMatch(this::requiresBlockStatementListRecovery);
+    }
+
+    private boolean requiresBlockStatementListRecovery(Statement statement) {
+        return !isSafeBlockStatementRecoverySibling(statement);
+    }
+
+    private boolean isSafeBlockStatementRecoverySibling(Statement statement) {
+        if (statement.getParsed() != Node.Parsedness.PARSED) {
+            return false;
+        }
+        if (statement instanceof SwitchStmt switchStmt
+                && SwitchPrinter.hasRecoverableSwitchEntryListProblem(switchStmt)) {
+            return true;
+        }
+        return isFullyParsed(statement);
+    }
+
+    private boolean isCollapsedMalformedSwitchStatement(Statement statement) {
+        return SwitchPrinter.isCollapsedMalformedSwitchStatement(statement, sourceText);
+    }
+
+    private static boolean isFullyParsed(Node node) {
+        return node.stream().allMatch(descendant -> descendant.getParsed() == Node.Parsedness.PARSED);
     }
 
     private SourceRegion blockInteriorRegion(BlockStmt block) {

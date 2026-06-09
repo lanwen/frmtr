@@ -72,7 +72,7 @@ public final class JavaFormatter {
         // TODO: Expose parseResult.problems() through a future diagnostics/debug result API.
         SourceText sourceText = new SourceText(source);
         if (parseResult.hasParseProblems()) {
-            unsupportedRecoveryReason(parseResult.compilationUnit())
+            unsupportedRecoveryReason(parseResult.compilationUnit(), sourceText)
                     .ifPresent(reason -> {
                         throw parseFailure(
                                 source,
@@ -156,10 +156,10 @@ public final class JavaFormatter {
             return Optional.empty();
         }
         return Optional.of(
-                "Parse-error recovery is configured, but this recovery slice only supports malformed block statement lists, class/interface/record member declaration lists, import declaration lists, top-level declaration lists, and module directive lists.");
+                "Parse-error recovery is configured, but this recovery slice only supports malformed block statement lists, class/interface/record member declaration lists, import declaration lists, top-level declaration lists, module directive lists, and switch entry lists.");
     }
 
-    private Optional<String> unsupportedRecoveryReason(CompilationUnit unit) {
+    private Optional<String> unsupportedRecoveryReason(CompilationUnit unit, SourceText sourceText) {
         if (options.parseErrorBehavior() == FormatterOptions.ParseErrorBehavior.FAIL) {
             return Optional.empty();
         }
@@ -170,7 +170,7 @@ public final class JavaFormatter {
             return parseProblemsUnsupportedByCurrentPrinters();
         }
         return recoveredNodes.stream()
-                .filter(node -> !isSupportedRecovery(node))
+                .filter(node -> !isSupportedRecovery(node, Optional.of(sourceText)))
                 .findFirst()
                 .map(node -> parseProblemsUnsupportedByCurrentPrinters().orElseThrow()
                         + " Unsupported recovered node: "
@@ -179,18 +179,44 @@ public final class JavaFormatter {
     }
 
     static boolean isSupportedRecovery(Node recoveredNode) {
-        return isSupportedBlockStatementListRecovery(recoveredNode)
+        return isSupportedRecovery(recoveredNode, Optional.empty());
+    }
+
+    private static boolean isSupportedRecovery(Node recoveredNode, Optional<SourceText> sourceText) {
+        return isSupportedSwitchEntryListRecovery(recoveredNode)
+                || isSupportedBlockStatementListRecovery(recoveredNode, sourceText)
                 || isSupportedMemberDeclarationListRecovery(recoveredNode)
                 || isSupportedImportDeclarationListRecovery(recoveredNode)
                 || isSupportedTopLevelDeclarationListRecovery(recoveredNode)
                 || isSupportedModuleDirectiveListRecovery(recoveredNode);
     }
 
-    private static boolean isSupportedBlockStatementListRecovery(Node recoveredNode) {
+    private static boolean isSupportedSwitchEntryListRecovery(Node recoveredNode) {
+        return SwitchPrinter.nearestSwitchEntryListSibling(recoveredNode)
+                .filter(SwitchPrinter::isRecoverableSwitchEntryListSibling)
+                .isPresent();
+    }
+
+    private static boolean isSupportedBlockStatementListRecovery(
+            Node recoveredNode,
+            Optional<SourceText> sourceText) {
+        if (SwitchPrinter.nearestSwitchEntryListSibling(recoveredNode).isPresent()
+                || isCollapsedMalformedSwitchStatement(recoveredNode, sourceText)) {
+            return false;
+        }
         if (recoveredNode instanceof BlockStmt) {
             return true;
         }
         return nearestBlockStatementListSibling(recoveredNode).isPresent();
+    }
+
+    private static boolean isCollapsedMalformedSwitchStatement(
+            Node recoveredNode,
+            Optional<SourceText> sourceText) {
+        return sourceText
+                .filter(source -> recoveredNode instanceof Statement statement
+                        && SwitchPrinter.isCollapsedMalformedSwitchStatement(statement, source))
+                .isPresent();
     }
 
     private static Optional<Statement> nearestBlockStatementListSibling(Node recoveredNode) {

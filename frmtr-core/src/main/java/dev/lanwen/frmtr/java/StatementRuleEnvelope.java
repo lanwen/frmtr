@@ -94,6 +94,10 @@ final class StatementRuleEnvelope {
         if (statement.stream().allMatch(node -> node.getParsed() == Node.Parsedness.PARSED)) {
             return;
         }
+        if (statement instanceof SwitchStmt switchStmt
+                && SwitchPrinter.hasRecoverableSwitchEntryListProblem(switchStmt)) {
+            return;
+        }
         // TODO: Expose the rejected recovered statement through formatter diagnostics once recovery reporting exists.
         throw new FormatterException("Unsupported Java parse-error recovery reached statement formatter: "
                 + statement.getClass().getSimpleName());

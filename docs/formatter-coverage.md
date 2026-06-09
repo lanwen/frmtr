@@ -105,6 +105,8 @@ Switch-specific ownership:
   guards, statement groups, rule entries, and switch block layout for statement and expression switches.
 - `SwitchEntry` layout is local to `SwitchPrinter`: statement groups, empty rules, commented rule bodies, and inline rule
   bodies.
+- In parse-error recovery mode, malformed switch entries stay inside `SwitchPrinter`: safe entry siblings render normally,
+  while unsafe entry gaps are raw-preserved inside the switch block so selectors and switch braces remain formatter-owned.
 - `TypePatternExpr` and `RecordPatternExpr` labels are switch-label concerns. Flat labels use normalized source text;
   wide record patterns can wrap structurally.
 - Single-line rule entries with source-only syntax, currently block comments inside the rule text or `null, default`,
@@ -188,6 +190,7 @@ branch, fixture coverage for source/comment edge cases, and update this map.
 | Commented interface headers and abstract signatures | `ClassOrInterfaceDeclarationPrinter` detects a commented interface header. | Structured comment slots for interface headers, extends clauses, and abstract method signatures. |
 | Commented method signatures | `MethodDeclarationPrinter` receives a non-empty result from `CommentedMethodSignaturePrinter`. | Structured signature comment slots that work for larger method bodies without source-string body formatting. |
 | Source-only switch rule entries | `SwitchPrinter.rawSingleLineSwitchEntry(...)` sees single-line rule text with block comments or `null, default`. | Structured representation of those label/body comment positions or source-only labels, plus switch fixtures. |
+| Recovered malformed switch entries | `SwitchPrinter` plans `SwitchEntry` sibling gaps in parse-error recovery mode. | Structured recovery for additional JavaParser switch-entry shapes once JavaParser exposes them without collapsing the switch owner. |
 | Unrecognized text-block content | `TextBlockPrinter` content probes decline. | A real content formatter or additional probe, plus text-block fixtures for raw spelling, indentation, closing delimiter placement, and escapes. |
 
 Compact text is also a normal support mechanism for flat width checks, type-like snippets, labels, resources, and other

@@ -361,9 +361,7 @@ final class JavaPrinter {
                 this::block);
         this.initializers = new InitializerDeclarationPrinter(this::block);
         this.enums = new EnumDeclarationPrinter(
-                comments,
-                rawSource,
-                options,
+                context,
                 declarationPrefixes::annotations,
                 declarationPrefixes::modifiers,
                 enumTypes -> types.typeClause("implements", enumTypes),

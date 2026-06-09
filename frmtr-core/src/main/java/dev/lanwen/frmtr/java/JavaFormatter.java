@@ -156,7 +156,7 @@ public final class JavaFormatter {
             return Optional.empty();
         }
         return Optional.of(
-                "Parse-error recovery is configured, but this recovery slice only supports malformed block statement lists, class/interface/record member declaration lists, import declaration lists, top-level declaration lists, module directive lists, and switch entry lists.");
+                "Parse-error recovery is configured, but this recovery slice only supports malformed block statement lists, class/interface/record member declaration lists, import declaration lists, top-level declaration lists, module directive lists, switch entry lists, and enum constant lists.");
     }
 
     private Optional<String> unsupportedRecoveryReason(CompilationUnit unit, SourceText sourceText) {
@@ -184,6 +184,7 @@ public final class JavaFormatter {
 
     private static boolean isSupportedRecovery(Node recoveredNode, Optional<SourceText> sourceText) {
         return isSupportedSwitchEntryListRecovery(recoveredNode)
+                || isSupportedEnumConstantListRecovery(recoveredNode)
                 || isSupportedBlockStatementListRecovery(recoveredNode, sourceText)
                 || isSupportedMemberDeclarationListRecovery(recoveredNode)
                 || isSupportedImportDeclarationListRecovery(recoveredNode)
@@ -197,10 +198,17 @@ public final class JavaFormatter {
                 .isPresent();
     }
 
+    private static boolean isSupportedEnumConstantListRecovery(Node recoveredNode) {
+        return EnumDeclarationPrinter.nearestEnumConstantListSibling(recoveredNode)
+                .filter(EnumDeclarationPrinter::isRecoverableEnumConstantListSibling)
+                .isPresent();
+    }
+
     private static boolean isSupportedBlockStatementListRecovery(
             Node recoveredNode,
             Optional<SourceText> sourceText) {
         if (SwitchPrinter.nearestSwitchEntryListSibling(recoveredNode).isPresent()
+                || EnumDeclarationPrinter.nearestEnumConstantListSibling(recoveredNode).isPresent()
                 || isCollapsedMalformedSwitchStatement(recoveredNode, sourceText)) {
             return false;
         }

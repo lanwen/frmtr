@@ -40,8 +40,8 @@ Single-source formatting starts at `Frmtr.format(...)`.
 4. Parse problems follow `FormatterOptions.ParseErrorBehavior`: `FAIL` rejects immediately with `FormatterException`,
    while default `RECOVER` enters the recovery boundary. The current recovery slices support malformed block statement
    lists, class/interface/record member declaration lists, import declaration lists, top-level declaration lists, module
-   directive lists, and switch entry lists by formatting safe siblings and raw-preserving unsafe gaps; unsupported
-   parse-problem contexts still fail with a recovery-specific reason.
+   directive lists, switch entry lists, and enum constant lists by formatting safe siblings and raw-preserving unsafe
+   gaps; unsupported parse-problem contexts still fail with a recovery-specific reason.
 5. The declared transform pipeline applies source-equivalent AST normalization before printing only when parsing
    completed without parse problems. Recovered parse trees skip transforms so partially recovered syntax is not
    reordered or mutated before raw-region printing.
@@ -95,11 +95,12 @@ mode, while `UNSET` deliberately selects JavaParser raw mode. Callers that need 
 concrete `JAVA_*` value. `FormatterOptions.ParseErrorBehavior` is the public parse-problem policy. The default is
 `RECOVER`, which lets JavaParser return a partial compilation unit for recovered block statement-list,
 class/interface/record member declaration-list, import declaration-list, top-level declaration-list,
-module directive-list, and switch entry-list printing; `FAIL` preserves strict fail-on-any-problem behavior. In
+module directive-list, switch entry-list, and enum constant-list printing; `FAIL` preserves strict
+fail-on-any-problem behavior. In
 `RECOVER`, `JavaFormatter` preflights recovered nodes so only malformed block statement-list,
 class/interface/record member declaration-list, import declaration-list, top-level declaration-list,
-module directive-list, and switch entry-list regions reach the printer, skips transforms for parse-problem trees, and
-still fails unsupported recovered contexts with a recovery-specific reason. The private `JavaParseResult` boundary
+module directive-list, switch entry-list, and enum constant-list regions reach the printer, skips transforms for
+parse-problem trees, and still fails unsupported recovered contexts with a recovery-specific reason. The private `JavaParseResult` boundary
 carries the compilation unit, parser problems, and problem flag so later diagnostics/debug APIs and recovery printers
 have one handoff point. `FormatterOptions.requirePragma` is an opt-in API setting that formats only files whose leading
 Javadoc comment contains the public `@format` marker. `FormatterOptions.LambdaArrowParens` controls whether
@@ -129,8 +130,11 @@ module directive-list recovery, keeping the module header and braces formatter-o
 through normal directive formatting and unsafe directive gaps become raw islands limited to the module body.
 `SwitchPrinter` uses the same helpers for switch entry-list recovery, keeping the selector and switch braces
 formatter-owned while safe entry siblings render normally and unsafe entry gaps become raw islands limited to the switch
-block interior. Statement, expression, and declaration envelopes keep conservative guards so recovered regions outside
-these slices do not flow through unsupported printers as normal parsed nodes.
+block interior. `EnumDeclarationPrinter` uses the same helpers for enum constant-list recovery, keeping enum braces and
+body members formatter-owned while safe constant siblings render normally and unsafe constant gaps become raw islands
+limited to the enum constant list before the body semicolon or closing brace. Statement, expression, and declaration
+envelopes keep conservative guards so recovered regions outside these slices do not flow through unsupported printers as
+normal parsed nodes.
 
 `RawPreservedSource` is the canonical raw-output boundary for Java printer fallbacks. It wraps `RawSource` output or already-computed source-derived text in `Doc.Text` while atomically accounting for comments preserved by that output, including the variant where the node's own attached comment has already been emitted separately.
 

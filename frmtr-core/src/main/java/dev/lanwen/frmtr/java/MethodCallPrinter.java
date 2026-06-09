@@ -396,7 +396,12 @@ final class MethodCallPrinter {
         String typeArguments = call.getTypeArguments()
                 .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
                 .orElse("");
-        String prefix = compactSource.compact(root) + "." + typeArguments + call.getNameAsString() + "(";
+        String callPrefix = compactSource.compact(root) + "." + typeArguments + call.getNameAsString();
+        Optional<Doc> huggableLambda = huggableBlockLambdaArguments.apply(callPrefix, call.getArguments());
+        if (huggableLambda.isPresent()) {
+            return huggableLambda;
+        }
+        String prefix = callPrefix + "(";
         if (currentIndentedWidth.applyAsInt(prefix + ")") > options.lineWidth()) {
             return Optional.empty();
         }

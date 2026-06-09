@@ -58,8 +58,9 @@ public final class JavaFormatter {
     }
 
     private Doc printDoc(String source) {
-        CompilationUnit parsedUnit = parse(source);
-        CompilationUnit transformedUnit = TRANSFORMS.transform(parsedUnit);
+        JavaParseResult parseResult = parse(source);
+        // TODO: Expose parseResult.problems() through a future diagnostics/debug result API.
+        CompilationUnit transformedUnit = TRANSFORMS.transform(parseResult.compilationUnit());
         SyntaxNodeView.from(transformedUnit);
         JavaPrinter printer = new JavaPrinter(options);
         return printer.print(transformedUnit);
@@ -78,25 +79,76 @@ public final class JavaFormatter {
         return leadingDocComment.contains("@format") || leadingDocComment.contains("@prettier");
     }
 
-    private CompilationUnit parse(String source) {
+    private JavaParseResult parse(String source) {
         try {
             ParseResult<CompilationUnit> result =
                     parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source));
-            if (!result.isSuccessful() || result.getResult().isEmpty()) {
-                throw new FormatterException(
-                        "Unable to parse Java source:"
-                                + System.lineSeparator()
-                                + formatProblems(source, result.getProblems()),
-                        new ParseProblemException(result.getProblems()));
-            }
-            return result.getResult().orElseThrow();
+            return parseResult(source, result);
         } catch (ParseProblemException exception) {
-            throw new FormatterException(
-                    "Unable to parse Java source:"
-                            + System.lineSeparator()
-                            + formatProblems(source, exception.getProblems()),
-                    exception);
+            throw parseFailure(source, exception.getProblems(), exception, thrownBeforeRecoveredCompilationUnit());
         }
+    }
+
+    private JavaParseResult parseResult(String source, ParseResult<CompilationUnit> result) {
+        if (result.getResult().isEmpty()) {
+            throw parseFailure(
+                    source,
+                    result.getProblems(),
+                    new ParseProblemException(result.getProblems()),
+                    noRecoveredCompilationUnit());
+        }
+        var parseResult = new JavaParseResult(
+                result.getResult().orElseThrow(),
+                result.getProblems(),
+                !result.isSuccessful() || !result.getProblems().isEmpty());
+        // TODO: Thread JavaParseResult through recovered-region printing instead of failing here in RECOVER mode.
+        if (parseResult.hasParseProblems()) {
+            throw parseFailure(
+                    source,
+                    parseResult.problems(),
+                    new ParseProblemException(parseResult.problems()),
+                    parseProblemsUnsupportedByCurrentPrinters());
+        }
+        return parseResult;
+    }
+
+    private FormatterException parseFailure(
+            String source,
+            List<Problem> problems,
+            ParseProblemException cause,
+            Optional<String> recoveryFailureReason) {
+        String message = "Unable to parse Java source:" + System.lineSeparator();
+        if (options.parseErrorBehavior() == FormatterOptions.ParseErrorBehavior.RECOVER
+                && recoveryFailureReason.isPresent()) {
+            message += recoveryFailureReason.orElseThrow()
+                    + System.lineSeparator()
+                    + System.lineSeparator();
+        }
+        message += formatProblems(source, problems);
+        return new FormatterException(message, cause);
+    }
+
+    private Optional<String> parseProblemsUnsupportedByCurrentPrinters() {
+        if (options.parseErrorBehavior() == FormatterOptions.ParseErrorBehavior.FAIL) {
+            return Optional.empty();
+        }
+        return Optional.of(
+                "Parse-error recovery is configured, but recovered-region printing is not yet supported by the current printers.");
+    }
+
+    private Optional<String> noRecoveredCompilationUnit() {
+        if (options.parseErrorBehavior() == FormatterOptions.ParseErrorBehavior.FAIL) {
+            return Optional.empty();
+        }
+        return Optional.of("Parse-error recovery is configured, but JavaParser did not return a compilation unit to recover.");
+    }
+
+    private Optional<String> thrownBeforeRecoveredCompilationUnit() {
+        if (options.parseErrorBehavior() == FormatterOptions.ParseErrorBehavior.FAIL) {
+            return Optional.empty();
+        }
+        return Optional.of(
+                "Parse-error recovery is configured, but JavaParser threw before returning a recovered compilation unit.");
     }
 
     private static ParserConfiguration.LanguageLevel javaParserLanguageLevel(
@@ -197,6 +249,15 @@ public final class JavaFormatter {
                 formatted.append(System.lineSeparator());
             }
             formatted.append(String.format("%" + width + "d  %s", line, lines.get(line - 1)));
+        }
+    }
+
+    private record JavaParseResult(
+            CompilationUnit compilationUnit,
+            List<Problem> problems,
+            boolean hasParseProblems) {
+        private JavaParseResult {
+            problems = List.copyOf(problems);
         }
     }
 

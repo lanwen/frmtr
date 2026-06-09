@@ -54,6 +54,14 @@ public final class Main implements Callable<Integer> {
             converter = JavaLanguageLevelConverter.class)
     FormatterOptions.JavaLanguageLevel javaLanguageLevel;
 
+    @Option(
+            names = "--parse-error-behavior",
+            paramLabel = "recover|fail",
+            description = "Parse-error behavior. Use RECOVER by default or FAIL for strict parse failures.",
+            defaultValue = "RECOVER",
+            converter = ParseErrorBehaviorConverter.class)
+    FormatterOptions.ParseErrorBehavior parseErrorBehavior;
+
     @Parameters(arity = "0..*", paramLabel = "SELECTOR", description = "Java files, directories, globs, or comma-separated selectors.")
     List<String> selectors = List.of();
 
@@ -148,12 +156,13 @@ public final class Main implements Callable<Integer> {
 
     private FormatterOptions formatterOptions() {
         return FormatterOptions.withJavaLanguageLevel(
-                lineWidth,
-                FormatterOptions.IndentStyle.SPACE,
-                FormatterOptions.DEFAULT_INDENT_WIDTH,
-                FormatterOptions.LineEnding.LF,
-                true,
-                javaLanguageLevel);
+                        lineWidth,
+                        FormatterOptions.IndentStyle.SPACE,
+                        FormatterOptions.DEFAULT_INDENT_WIDTH,
+                        FormatterOptions.LineEnding.LF,
+                        true,
+                        javaLanguageLevel)
+                .withParseErrorBehavior(parseErrorBehavior);
     }
 
     private int formatStdin(FormatterOptions options) {
@@ -365,6 +374,15 @@ public final class Main implements Callable<Integer> {
                 normalized = "JAVA_" + normalized;
             }
             return FormatterOptions.JavaLanguageLevel.valueOf(normalized);
+        }
+    }
+
+    static final class ParseErrorBehaviorConverter
+            implements CommandLine.ITypeConverter<FormatterOptions.ParseErrorBehavior> {
+        @Override
+        public FormatterOptions.ParseErrorBehavior convert(String value) {
+            String normalized = value.trim().toUpperCase().replace('-', '_');
+            return FormatterOptions.ParseErrorBehavior.valueOf(normalized);
         }
     }
 

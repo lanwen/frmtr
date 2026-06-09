@@ -334,10 +334,28 @@ final class MainTest {
                 """);
         assertThat(result.err())
                 .contains("src/Broken.java: Unable to parse Java source:")
+                .contains("Parse-error recovery is configured")
                 .contains("Parse error")
                 .contains("^")
                 .doesNotContain("Problem stacktrace")
                 .doesNotContain("JavaFormatter.parse");
+    }
+
+    @Test
+    void parseErrorBehaviorFailReportsStrictParseErrors(@TempDir Path dir) throws IOException {
+        write(dir.resolve("src/Broken.java"), "class {");
+
+        Result result = run(dir, null, "--check", "--parse-error-behavior", "fail", "src");
+
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.out()).isEqualTo("""
+                ! src/Broken.java
+                Checked 1 file: 1 failed.
+                """);
+        assertThat(result.err())
+                .contains("src/Broken.java: Unable to parse Java source:")
+                .contains("Parse error")
+                .doesNotContain("Parse-error recovery is configured");
     }
 
     @Test
@@ -384,7 +402,7 @@ final class MainTest {
     void javaLevelUnsetUsesRawParserMode(@TempDir Path dir) throws IOException {
         write(dir.resolve("src/Switch.java"), switchExpressionYieldSource());
 
-        Result result = run(dir, null, "--check", "--java-level", "unset", "src");
+        Result result = run(dir, null, "--check", "--parse-error-behavior", "fail", "--java-level", "unset", "src");
 
         assertThat(result.exitCode()).isEqualTo(2);
         assertThat(result.out()).isEqualTo("""

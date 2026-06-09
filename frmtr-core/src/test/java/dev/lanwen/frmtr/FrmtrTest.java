@@ -95,6 +95,94 @@ final class FrmtrTest {
     }
 
     @Test
+    void formatterOptionFactoriesDefaultToParseErrorRecovery() {
+        assertThat(FormatterOptions.defaults().parseErrorBehavior())
+                .isEqualTo(FormatterOptions.ParseErrorBehavior.RECOVER);
+        assertThat(FormatterOptions.forLayout(
+                        80,
+                        FormatterOptions.IndentStyle.SPACE,
+                        2,
+                        FormatterOptions.LineEnding.LF,
+                        true)
+                .parseErrorBehavior())
+                .isEqualTo(FormatterOptions.ParseErrorBehavior.RECOVER);
+        assertThat(FormatterOptions.withJavaLanguageLevel(
+                        80,
+                        FormatterOptions.IndentStyle.SPACE,
+                        2,
+                        FormatterOptions.LineEnding.LF,
+                        true,
+                        FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE)
+                .parseErrorBehavior())
+                .isEqualTo(FormatterOptions.ParseErrorBehavior.RECOVER);
+        assertThat(FormatterOptions.withRawTrailingWhitespace(
+                        80,
+                        FormatterOptions.IndentStyle.SPACE,
+                        2,
+                        FormatterOptions.LineEnding.LF,
+                        true,
+                        true,
+                        FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE)
+                .parseErrorBehavior())
+                .isEqualTo(FormatterOptions.ParseErrorBehavior.RECOVER);
+        assertThat(FormatterOptions.withPragmaRequirement(
+                        80,
+                        FormatterOptions.IndentStyle.SPACE,
+                        2,
+                        FormatterOptions.LineEnding.LF,
+                        true,
+                        false,
+                        true,
+                        FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE)
+                .parseErrorBehavior())
+                .isEqualTo(FormatterOptions.ParseErrorBehavior.RECOVER);
+        assertThat(FormatterOptions.withLambdaArrowParens(
+                        80,
+                        FormatterOptions.IndentStyle.SPACE,
+                        2,
+                        FormatterOptions.LineEnding.LF,
+                        true,
+                        false,
+                        false,
+                        FormatterOptions.LambdaArrowParens.AVOID,
+                        FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE)
+                .parseErrorBehavior())
+                .isEqualTo(FormatterOptions.ParseErrorBehavior.RECOVER);
+    }
+
+    @Test
+    void formatterOptionParseErrorBehaviorWitherSelectsFail() {
+        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
+                        80,
+                        FormatterOptions.IndentStyle.SPACE,
+                        2,
+                        FormatterOptions.LineEnding.LF,
+                        true,
+                        FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE)
+                .withParseErrorBehavior(FormatterOptions.ParseErrorBehavior.FAIL);
+
+        assertThat(options.parseErrorBehavior()).isEqualTo(FormatterOptions.ParseErrorBehavior.FAIL);
+    }
+
+    @Test
+    void defaultParseErrorRecoveryReportsUnsupportedRecoveredPrintingUntilWired() {
+        String source = """
+                class Demo {
+                    void method() {
+                        var something =
+                    }
+                }""";
+
+        Throwable thrown = catchThrowable(() -> Frmtr.format(source));
+
+        assertThat(thrown)
+                .isInstanceOf(FormatterException.class)
+                .hasMessageContaining("Unable to parse Java source:")
+                .hasMessageContaining("Parse-error recovery is configured")
+                .hasMessageContaining("not yet supported");
+    }
+
+    @Test
     void debugsFormatterDocTreeForJavaSource() {
         String rendered = Frmtr.debugDoc("class Demo{int value;}");
 
@@ -139,6 +227,7 @@ final class FrmtrTest {
                 false,
                 FormatterOptions.LambdaArrowParens.PRESERVE,
                 FormatterOptions.BinaryOperatorPosition.END,
+                FormatterOptions.ParseErrorBehavior.RECOVER,
                 FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
         FormatterOptions start = new FormatterOptions(
                 40,
@@ -150,6 +239,7 @@ final class FrmtrTest {
                 false,
                 FormatterOptions.LambdaArrowParens.PRESERVE,
                 FormatterOptions.BinaryOperatorPosition.START,
+                FormatterOptions.ParseErrorBehavior.RECOVER,
                 FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
 
         assertThat(Frmtr.debugDoc(source, end)).contains("Text(\" &&\")");
@@ -814,6 +904,7 @@ final class FrmtrTest {
                 false,
                 FormatterOptions.LambdaArrowParens.PRESERVE,
                 FormatterOptions.BinaryOperatorPosition.START,
+                FormatterOptions.ParseErrorBehavior.RECOVER,
                 FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
         FormatterOptions end = new FormatterOptions(
                 40,
@@ -825,6 +916,7 @@ final class FrmtrTest {
                 false,
                 FormatterOptions.LambdaArrowParens.PRESERVE,
                 FormatterOptions.BinaryOperatorPosition.END,
+                FormatterOptions.ParseErrorBehavior.RECOVER,
                 FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
 
         assertThat(Frmtr.format(source, start))
@@ -879,6 +971,7 @@ final class FrmtrTest {
                 false,
                 FormatterOptions.LambdaArrowParens.PRESERVE,
                 FormatterOptions.BinaryOperatorPosition.START,
+                FormatterOptions.ParseErrorBehavior.RECOVER,
                 FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
         FormatterOptions end = new FormatterOptions(
                 80,
@@ -890,6 +983,7 @@ final class FrmtrTest {
                 false,
                 FormatterOptions.LambdaArrowParens.PRESERVE,
                 FormatterOptions.BinaryOperatorPosition.END,
+                FormatterOptions.ParseErrorBehavior.RECOVER,
                 FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
 
         assertThat(Frmtr.format(source, start))
@@ -923,6 +1017,7 @@ final class FrmtrTest {
                 false,
                 FormatterOptions.LambdaArrowParens.PRESERVE,
                 FormatterOptions.BinaryOperatorPosition.START,
+                FormatterOptions.ParseErrorBehavior.RECOVER,
                 FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
         FormatterOptions end = new FormatterOptions(
                 80,
@@ -934,6 +1029,7 @@ final class FrmtrTest {
                 false,
                 FormatterOptions.LambdaArrowParens.PRESERVE,
                 FormatterOptions.BinaryOperatorPosition.END,
+                FormatterOptions.ParseErrorBehavior.RECOVER,
                 FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
 
         assertThat(Frmtr.format(source, start))
@@ -1282,6 +1378,7 @@ final class FrmtrTest {
                 false,
                 FormatterOptions.LambdaArrowParens.PRESERVE,
                 FormatterOptions.BinaryOperatorPosition.START,
+                FormatterOptions.ParseErrorBehavior.RECOVER,
                 FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
         FormatterOptions end = new FormatterOptions(
                 80,
@@ -1293,6 +1390,7 @@ final class FrmtrTest {
                 false,
                 FormatterOptions.LambdaArrowParens.PRESERVE,
                 FormatterOptions.BinaryOperatorPosition.END,
+                FormatterOptions.ParseErrorBehavior.RECOVER,
                 FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
 
         assertThat(Frmtr.format(source, start))
@@ -1367,7 +1465,7 @@ final class FrmtrTest {
                     }
                 }""";
 
-        Throwable thrown = catchThrowable(() -> Frmtr.format(source));
+        Throwable thrown = catchThrowable(() -> Frmtr.format(source, failOnParseErrorsOptions()));
 
         assertThat(thrown)
                 .isInstanceOf(FormatterException.class)
@@ -1382,7 +1480,7 @@ final class FrmtrTest {
     void lexicalParseErrorsIncludeSourceContextFromMessagePosition() throws Exception {
         String source = readResource("format/prettier-java/unit-test/template-expression/prettier.output.java");
 
-        Throwable thrown = catchThrowable(() -> Frmtr.format(source));
+        Throwable thrown = catchThrowable(() -> Frmtr.format(source, failOnParseErrorsOptions()));
 
         assertThat(thrown)
                 .isInstanceOf(FormatterException.class)
@@ -1404,7 +1502,7 @@ final class FrmtrTest {
                     }
                 }""";
 
-        Throwable thrown = catchThrowable(() -> Frmtr.format(source));
+        Throwable thrown = catchThrowable(() -> Frmtr.format(source, failOnParseErrorsOptions()));
 
         assertThat(thrown)
                 .isInstanceOf(FormatterException.class)
@@ -1428,13 +1526,7 @@ final class FrmtrTest {
 
     @Test
     void unsetJavaLanguageLevelUsesRawParserMode() {
-        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
-                FormatterOptions.DEFAULT_LINE_WIDTH,
-                FormatterOptions.IndentStyle.SPACE,
-                FormatterOptions.DEFAULT_INDENT_WIDTH,
-                FormatterOptions.LineEnding.LF,
-                true,
-                FormatterOptions.JavaLanguageLevel.UNSET);
+        FormatterOptions options = failOnParseErrorsOptions(FormatterOptions.JavaLanguageLevel.UNSET);
 
         assertThatThrownBy(() -> Frmtr.format(switchExpressionYieldSource(), options))
                 .isInstanceOf(FormatterException.class)
@@ -1453,6 +1545,21 @@ final class FrmtrTest {
                         };
                     }
                 }""";
+    }
+
+    private static FormatterOptions failOnParseErrorsOptions() {
+        return failOnParseErrorsOptions(FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+    }
+
+    private static FormatterOptions failOnParseErrorsOptions(FormatterOptions.JavaLanguageLevel javaLanguageLevel) {
+        return FormatterOptions.withJavaLanguageLevel(
+                        FormatterOptions.DEFAULT_LINE_WIDTH,
+                        FormatterOptions.IndentStyle.SPACE,
+                        FormatterOptions.DEFAULT_INDENT_WIDTH,
+                        FormatterOptions.LineEnding.LF,
+                        true,
+                        javaLanguageLevel)
+                .withParseErrorBehavior(FormatterOptions.ParseErrorBehavior.FAIL);
     }
 
     private static String readResource(String name) throws IOException, URISyntaxException {

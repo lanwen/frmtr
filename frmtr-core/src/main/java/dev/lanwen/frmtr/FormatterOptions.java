@@ -11,11 +11,12 @@ import java.util.Objects;
  *
  * <p>The default configuration is returned by {@link #defaults()}: 140 columns, four-space indentation, LF line
  * endings, a trailing newline, no raw-trailing-whitespace preservation, no require-pragma gate, source-preserving
- * single-parameter lambda parentheses, binary operators at the end of broken continuation lines, and the latest Java
- * language level exposed by the bundled JavaParser dependency's bleeding-edge parser mode.
+ * single-parameter lambda parentheses, binary operators at the end of broken continuation lines, parse-error recovery,
+ * and the latest Java language level exposed by the bundled JavaParser dependency's bleeding-edge parser mode.
  *
  * <p>Use the canonical record constructor when every option is intentionally selected. Use the static factory methods
- * for common partial configurations where the remaining formatter policy should stay at defaults.
+ * for common partial configurations where the remaining formatter policy should stay at defaults, then use focused
+ * withers such as {@link #withParseErrorBehavior(ParseErrorBehavior)} for one-policy changes from those presets.
  *
  * @param lineWidth target maximum rendered line width. The renderer and Java-specific width gates use this value to
  *     decide whether grouped docs can stay flat or should break across lines. The value is a formatting target rather
@@ -45,6 +46,9 @@ import java.util.Objects;
  *     of how {@code value -> value}, {@code (value) -> value}, and typed parameters are handled.
  * @param binaryOperatorPosition where binary operators appear when a binary expression breaks across continuation
  *     lines. See {@link BinaryOperatorPosition} for examples of end-position and start-position output.
+ * @param parseErrorBehavior whether JavaParser parse problems should enter formatter recovery or fail immediately.
+ *     Recovery is the default public behavior, while {@link ParseErrorBehavior#FAIL} keeps strict fail-on-problem
+ *     behavior for callers that need parse errors to stop formatting.
  * @param javaLanguageLevel JavaParser language level used while parsing source before formatting. This controls which
  *     Java syntax the parser accepts; it does not otherwise select a different formatter style.
  */
@@ -58,6 +62,7 @@ public record FormatterOptions(
         boolean requirePragma,
         LambdaArrowParens lambdaArrowParens,
         BinaryOperatorPosition binaryOperatorPosition,
+        ParseErrorBehavior parseErrorBehavior,
         JavaLanguageLevel javaLanguageLevel) {
 
     /**
@@ -91,6 +96,7 @@ public record FormatterOptions(
         Objects.requireNonNull(lineEnding, "lineEnding");
         Objects.requireNonNull(lambdaArrowParens, "lambdaArrowParens");
         Objects.requireNonNull(binaryOperatorPosition, "binaryOperatorPosition");
+        Objects.requireNonNull(parseErrorBehavior, "parseErrorBehavior");
         Objects.requireNonNull(javaLanguageLevel, "javaLanguageLevel");
     }
 
@@ -108,6 +114,7 @@ public record FormatterOptions(
                 false,
                 LambdaArrowParens.PRESERVE,
                 BinaryOperatorPosition.END,
+                ParseErrorBehavior.RECOVER,
                 JavaLanguageLevel.LATEST_AVAILABLE);
     }
 
@@ -115,8 +122,9 @@ public record FormatterOptions(
      * Creates options for callers that only configure document-rendering shape.
      *
      * <p>Raw trailing whitespace is not preserved, require-pragma is disabled, lambda parentheses preserve source
-     * spelling, broken binary operators stay at the end of continuation lines, and the Java language level defaults to
-     * {@link JavaLanguageLevel#LATEST_AVAILABLE}.
+     * spelling, broken binary operators stay at the end of continuation lines, parse-error behavior defaults to
+     * {@link ParseErrorBehavior#RECOVER}, and the Java language level defaults to {@link
+     * JavaLanguageLevel#LATEST_AVAILABLE}.
      */
     public static FormatterOptions forLayout(
             int lineWidth,
@@ -132,7 +140,8 @@ public record FormatterOptions(
      * Creates options for callers that configure document-rendering shape and parser language level.
      *
      * <p>Raw trailing whitespace is not preserved, require-pragma is disabled, lambda parentheses preserve source
-     * spelling, and broken binary operators stay at the end of continuation lines.
+     * spelling, broken binary operators stay at the end of continuation lines, and parse-error behavior defaults to
+     * {@link ParseErrorBehavior#RECOVER}.
      */
     public static FormatterOptions withJavaLanguageLevel(
             int lineWidth,
@@ -148,8 +157,8 @@ public record FormatterOptions(
     /**
      * Creates options for callers that need raw trailing-whitespace preservation in formatter-ignore paths.
      *
-     * <p>Require-pragma is disabled, lambda parentheses preserve source spelling, and broken binary operators stay at
-     * the end of continuation lines.
+     * <p>Require-pragma is disabled, lambda parentheses preserve source spelling, broken binary operators stay at
+     * the end of continuation lines, and parse-error behavior defaults to {@link ParseErrorBehavior#RECOVER}.
      */
     public static FormatterOptions withRawTrailingWhitespace(
             int lineWidth,
@@ -173,7 +182,8 @@ public record FormatterOptions(
     /**
      * Creates options for callers that configure raw preservation and require-pragma behavior.
      *
-     * <p>Lambda parentheses preserve source spelling and broken binary operators stay at the end of continuation lines.
+     * <p>Lambda parentheses preserve source spelling, broken binary operators stay at the end of continuation lines,
+     * and parse-error behavior defaults to {@link ParseErrorBehavior#RECOVER}.
      */
     public static FormatterOptions withPragmaRequirement(
             int lineWidth,
@@ -220,6 +230,28 @@ public record FormatterOptions(
                 requirePragma,
                 lambdaArrowParens,
                 BinaryOperatorPosition.END,
+                ParseErrorBehavior.RECOVER,
+                javaLanguageLevel);
+    }
+
+    /**
+     * Returns options that keep this instance's existing formatter policy while changing parse-error behavior.
+     *
+     * <p>Use this after a named factory method when only parse-problem handling should differ from that factory's
+     * defaults.
+     */
+    public FormatterOptions withParseErrorBehavior(ParseErrorBehavior parseErrorBehavior) {
+        return new FormatterOptions(
+                lineWidth,
+                indentStyle,
+                indentWidth,
+                lineEnding,
+                trailingNewline,
+                preserveRawTrailingWhitespace,
+                requirePragma,
+                lambdaArrowParens,
+                binaryOperatorPosition,
+                parseErrorBehavior,
                 javaLanguageLevel);
     }
 
@@ -350,6 +382,30 @@ public record FormatterOptions(
          * }</pre>
          */
         START
+    }
+
+    /**
+     * Selects how formatter entry points respond when JavaParser reports parse problems.
+     *
+     * <p>This option controls the boundary between parsing and printing. It does not repair Java syntax; recovery, when
+     * supported by the formatter pipeline, preserves unparsed source regions while formatting safe parsed siblings.
+     */
+    public enum ParseErrorBehavior {
+        /**
+         * Attempts formatter recovery when JavaParser returns a partial compilation unit with parse problems.
+         *
+         * <p>Use this for editor and local formatting flows where valid surrounding code should still be formatted while
+         * broken source is preserved. If JavaParser cannot provide a usable compilation unit, or if the current printers
+         * cannot safely preserve the recovered region, formatting still fails with a parse-error exception.
+         */
+        RECOVER,
+        /**
+         * Fails formatting as soon as JavaParser reports any parse problem.
+         *
+         * <p>Use this for strict automation and compatibility flows that require the previous all-or-nothing parse
+         * behavior. No recovered compilation unit is passed to the printer in this mode.
+         */
+        FAIL
     }
 
     /**

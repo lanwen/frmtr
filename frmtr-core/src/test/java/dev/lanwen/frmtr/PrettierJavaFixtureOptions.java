@@ -176,6 +176,7 @@ final class PrettierJavaFixtureOptions {
                     requirePragma,
                     lambdaArrowParens,
                     binaryOperatorPosition,
+                    FormatterOptions.ParseErrorBehavior.RECOVER,
                     FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
         }
     }

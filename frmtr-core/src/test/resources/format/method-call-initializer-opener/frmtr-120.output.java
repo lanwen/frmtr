@@ -12,6 +12,12 @@ class MethodCallInitializerOpenerSample {
                 return item.compute(alpha(), beta(), gamma(), delta());
             })
         );
+        var scoped = provider().call(
+            Builders.<Result<AlphaBetaGammaDelta>>wrap(item -> {
+                return item.compute(alpha(), beta(), gamma(), delta());
+            }),
+            "sample-%s".formatted(alpha())
+        );
         var sampleNameWithEnoughLengthToForceTheReceiverCallOpenerOntoAContinuationLineWhenTheInitializerBreaks =
             receiver.call(
                 Builders.<Result<AlphaBetaGammaDelta>>wrap(item -> {

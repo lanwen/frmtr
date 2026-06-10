@@ -332,7 +332,7 @@ final class FieldDeclarationPrinter {
                     return directCall.orElseThrow();
                 }
             }
-            if (methodCallHasSimpleScope(methodCall)) {
+            if (methodCallHasAttachableScope(methodCall)) {
                 Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
                         name,
                         declarationPrefix + variable.getNameAsString(),
@@ -640,12 +640,25 @@ final class FieldDeclarationPrinter {
     }
 
     /**
-     * Identifies single receiver-call initializers where the assignment opener should be tried before chain fallback.
+     * Identifies receiver-call initializers where the assignment opener should be tried before chain fallback.
      */
-    private boolean methodCallHasSimpleScope(MethodCallExpr methodCall) {
+    private boolean methodCallHasAttachableScope(MethodCallExpr methodCall) {
         return methodCall.getScope()
-                .filter(scope -> scope.isNameExpr() || scope.isThisExpr() || scope.isSuperExpr())
+                .filter(scope -> scope.isNameExpr()
+                        || scope.isThisExpr()
+                        || scope.isSuperExpr()
+                        || scope instanceof MethodCallExpr scopedCall
+                                && scopedCall.getAllContainedComments().isEmpty()
+                                && methodCallScopeEndsOnNameLine(scopedCall, methodCall))
                 .isPresent();
+    }
+
+    private boolean methodCallScopeEndsOnNameLine(MethodCallExpr scope, MethodCallExpr methodCall) {
+        return scope.getRange()
+                .flatMap(scopeRange -> methodCall.getName()
+                        .getRange()
+                        .map(nameRange -> scopeRange.end.line == nameRange.begin.line))
+                .orElse(false);
     }
 
     private boolean methodCallHasOwnComment(MethodCallExpr methodCall) {

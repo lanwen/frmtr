@@ -118,8 +118,10 @@ core debug API only, not a formatting policy surface or CLI hook.
   and aggregate status helpers.
 - `FormatterRunner.write(...)` writes changed formatter output back to disk, continues after per-file failures,
   distinguishes write-step failures as partially written results, and reports the full run summary.
-- `UnifiedDiffRenderer` renders the same unified diff format for CLI and Gradle check output, using `origin` and `frmtr`
-  as diff-side labels because adapters already print the file path on the surrounding status line.
+- `UnifiedDiffRenderer` renders the same patch-like unified diff format for CLI and Gradle check output, using `origin`
+  and `frmtr` as diff-side labels because adapters already print the file path on the surrounding status line. It also
+  owns an opt-in terminal decoration mode that marks nearby hunk source columns with a dotted line-width guide without
+  changing the plain patch-like default.
 - `FormatterFailureRenderer` turns structured formatter failures into adapter-facing messages, including parse context,
   declaration-line context, and caret placement, without making the core exception message own terminal formatting.
 - `FormatterRunFailureRenderer` renders failed file results as outlined diagnostic blocks titled by the failure message
@@ -193,10 +195,15 @@ The CLI is an adapter over the public formatter API:
   already formatted, `✗` means formatting would change, and `!` means parsing or reading failed. Non-stacktrace file-run
   failures are printed on stdout immediately after the failed file status line, and file check runs end with a concise
   stdout summary counting unchanged, would-change, and failed files.
-- `--diff`: in check mode, print unified diffs for sources marked `✗`; passed sources and parse/read failures do not
-  produce diff blocks. With no selectors or `--stdin`, `--diff` implies check mode. Diff output uses `origin` and
-  `frmtr` labels instead of repeating the file path, and failure diagnostics follow their file status lines before the
-  same check summary.
+- `--diff`: in check mode, print patch-like unified diffs for sources marked `✗`; passed sources and parse/read
+  failures do not produce diff blocks. With no selectors or `--stdin`, `--diff` implies check mode. Diff output uses
+  `origin` and `frmtr` labels instead of repeating the file path, and failure diagnostics follow their file status lines
+  before the same check summary.
+- `--render-line-width`: print terminal-only diff output for sources marked `✗` with a numbered width guide on each hunk
+  header, plus vertical-ellipsis guide lines around hunk lines that approach or cross the configured source line width.
+  Diff prefixes are metadata and do not count toward the guide column. Nearby and overflowing source lines use the same
+  vertical-ellipsis cutoff marker; lines that cross the guide preserve their full text and receive a marker-prefixed
+  overflow count.
 - `--write`: rewrite files in place, group file-run failures on stderr by display path, and print a concise stdout
   processed summary counting formatted, failed, ignored, and unchanged files. Ignored files are `.java` files excluded by
   `.gitignore` during selector discovery.

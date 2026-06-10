@@ -17,8 +17,17 @@ public final class FormatterRunner {
 
     public static FormatRunResult check(
             Path displayRoot, List<Path> files, FormatterOptions options, boolean includeDiffs) {
+        return check(displayRoot, files, options, includeDiffs, UnifiedDiffRenderer.RenderMode.PATCH);
+    }
+
+    public static FormatRunResult check(
+            Path displayRoot,
+            List<Path> files,
+            FormatterOptions options,
+            boolean includeDiffs,
+            UnifiedDiffRenderer.RenderMode diffRenderMode) {
         return new FormatRunResult(selectedFiles(displayRoot, files).stream()
-                .map(file -> checkFile(displayRoot, file, options, includeDiffs))
+                .map(file -> checkFile(displayRoot, file, options, includeDiffs, diffRenderMode))
                 .toList());
     }
 
@@ -29,7 +38,11 @@ public final class FormatterRunner {
     }
 
     private static FormatFileResult checkFile(
-            Path displayRoot, Path file, FormatterOptions options, boolean includeDiffs) {
+            Path displayRoot,
+            Path file,
+            FormatterOptions options,
+            boolean includeDiffs,
+            UnifiedDiffRenderer.RenderMode diffRenderMode) {
         Path displayPath = displayPath(displayRoot, file);
         try {
             String original = Files.readString(file, StandardCharsets.UTF_8);
@@ -37,7 +50,9 @@ public final class FormatterRunner {
             if (formatted.equals(original)) {
                 return new FormatFileResult(file, displayPath, FormatFileStatus.UNCHANGED, "", null);
             }
-            String diff = includeDiffs ? UnifiedDiffRenderer.render(displayPath, original, formatted) : "";
+            String diff = includeDiffs
+                    ? UnifiedDiffRenderer.render(displayPath, original, formatted, options.lineWidth(), diffRenderMode)
+                    : "";
             return new FormatFileResult(file, displayPath, FormatFileStatus.CHANGED, diff, null);
         } catch (FormatterException | IOException exception) {
             return new FormatFileResult(file, displayPath, FormatFileStatus.FAILED, "", exception);

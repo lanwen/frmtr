@@ -10,6 +10,7 @@ import dev.lanwen.frmtr.tooling.FormatterFailureRenderer;
 import dev.lanwen.frmtr.tooling.FormatterRunFailureRenderer;
 import dev.lanwen.frmtr.tooling.FormatterRunner;
 import dev.lanwen.frmtr.tooling.UnifiedDiffRenderer;
+import dev.lanwen.frmtr.tooling.UnifiedDiffRenderer.RenderMode;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
@@ -39,6 +40,9 @@ public final class Main implements Callable<Integer> {
 
     @Option(names = "--diff", description = "Print unified diffs for checked sources that need formatting.")
     boolean diff;
+
+    @Option(names = "--render-line-width", description = "Print diff output with a dotted width guide.")
+    boolean renderLineWidth;
 
     @Option(names = "--write", description = "Rewrite files in place.")
     boolean write;
@@ -114,15 +118,16 @@ public final class Main implements Callable<Integer> {
                 return 2;
             }
             FormatterOptions options = formatterOptions();
-            if (check || diff) {
+            if (check || diff || renderLineWidth) {
                 return checkStdin(options);
             }
             return formatStdin(options);
         }
         boolean usingDefaultSelectors = selectors.isEmpty();
         boolean effectiveCheck = check || (usingDefaultSelectors && !write);
-        if (diff && !effectiveCheck) {
-            err.println("--diff requires --check");
+        boolean effectiveDiff = diff || renderLineWidth;
+        if (effectiveDiff && !effectiveCheck) {
+            err.println(renderLineWidth && !diff ? "--render-line-width requires --check" : "--diff requires --check");
             return 2;
         }
         if (check && write) {
@@ -189,8 +194,8 @@ public final class Main implements Callable<Integer> {
                 return 0;
             }
             out.println(statusLine(statusMarker(FormatFileStatus.CHANGED), displayPath));
-            if (diff) {
-                out.print(UnifiedDiffRenderer.render(displayPath, original, formatted));
+            if (diff || renderLineWidth) {
+                out.print(UnifiedDiffRenderer.render(displayPath, original, formatted, options.lineWidth(), diffMode()));
             }
             out.flush();
             return 1;
@@ -201,7 +206,7 @@ public final class Main implements Callable<Integer> {
     }
 
     private int checkFiles(List<Path> files, FormatterOptions options) {
-        FormatRunResult run = FormatterRunner.check(workingDirectory, files, options, diff);
+        FormatRunResult run = FormatterRunner.check(workingDirectory, files, options, diff || renderLineWidth, diffMode());
         for (FormatFileResult result : run.results()) {
             out.println(statusLine(statusMarker(result.status()), result.displayPath()));
             if (result.failed() && !stacktrace) {
@@ -219,6 +224,10 @@ public final class Main implements Callable<Integer> {
             return 2;
         }
         return run.hasChanges() ? 1 : 0;
+    }
+
+    private RenderMode diffMode() {
+        return renderLineWidth ? RenderMode.LINE_WIDTH_RULER : RenderMode.PATCH;
     }
 
     private int writeFiles(List<Path> files, FormatterOptions options, long ignored) {

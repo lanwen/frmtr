@@ -99,6 +99,22 @@ final class MainTest {
     }
 
     @Test
+    void renderLineWidthStdinPrintsDecoratedDiffAtConfiguredLineWidth() {
+        Result result = run(Path.of("."), "class Demo{int value;}", "--stdin", "--render-line-width", "--line-width", "20");
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.out())
+                .startsWith("✗ stdin\n")
+                .contains("diff --git origin frmtr\n")
+                .contains("@@ -1 +1,4 @@        ⋮ 20\n")
+                .contains("-class Demo{int value⋮;}\n                     ⋮+2\n")
+                .contains("+class Demo {        ⋮\n")
+                .doesNotContain("frmtr: line width")
+                .doesNotContain("source columns:");
+        assertThat(result.err()).isEmpty();
+    }
+
+    @Test
     void noArgsChecksJavaFilesByDefault(@TempDir Path dir) throws IOException {
         write(
                 dir.resolve("Formatted.java"),
@@ -180,6 +196,19 @@ final class MainTest {
         assertThat(exitCode).isEqualTo(2);
         assertThat(out.toString()).isEmpty();
         assertThat(err.toString()).isEqualTo("--diff requires --check\n");
+    }
+
+    @Test
+    void rejectsRenderLineWidthWithoutCheck() {
+        StringWriter out = new StringWriter();
+        StringWriter err = new StringWriter();
+        Main main = new Main(new PrintWriter(out, true), new PrintWriter(err, true), "");
+
+        int exitCode = Main.commandLine(main).execute("--render-line-width", "src");
+
+        assertThat(exitCode).isEqualTo(2);
+        assertThat(out.toString()).isEmpty();
+        assertThat(err.toString()).isEqualTo("--render-line-width requires --check\n");
     }
 
     @Test

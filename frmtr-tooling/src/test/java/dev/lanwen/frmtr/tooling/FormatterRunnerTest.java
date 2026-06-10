@@ -51,6 +51,30 @@ final class FormatterRunnerTest {
     }
 
     @Test
+    void checkCanDecorateDiffsWithTheConfiguredLineWidthRuler(@TempDir Path dir) {
+        Path changed = write(dir.resolve("src/Changed.java"), "class Changed{int value;}");
+        FormatterOptions options = FormatterOptions.forLayout(
+                20,
+                FormatterOptions.IndentStyle.SPACE,
+                FormatterOptions.DEFAULT_INDENT_WIDTH,
+                FormatterOptions.LineEnding.LF,
+                true);
+
+        FormatRunResult run = FormatterRunner.check(
+                dir,
+                List.of(changed),
+                options,
+                true,
+                UnifiedDiffRenderer.RenderMode.LINE_WIDTH_RULER);
+
+        assertThat(run.results().getFirst().unifiedDiff()).hasValueSatisfying(diff -> assertThat(diff)
+                .contains("@@ -1 +1,4 @@        ⋮ 20")
+                .contains("-class Changed{int va⋮lue;}")
+                .contains("                     ⋮+5")
+                .contains("+class Changed {     ⋮"));
+    }
+
+    @Test
     void writesChangedFilesAndContinuesAfterFailures(@TempDir Path dir) throws IOException {
         Path changed = write(dir.resolve("src/Changed.java"), "class Changed{int value;}");
         Path broken = write(dir.resolve("src/Broken.java"), "class {");

@@ -3,6 +3,7 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.comments.Comment;
@@ -12,17 +13,18 @@ import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 /**
  * Sequences the layout of a Java compilation unit after the parser has exposed package, import, module, and type nodes.
  *
  * <p>This helper owns only whole-file ordering: source-leading package comments, orphan comments before the first type,
  * the package line, an already-ordered import section, optional module declarations, top-level declarations, compact
- * unnamed-class member expansion, and trailing orphan comments. It intentionally delegates package declaration text to
- * {@link PackageDeclarationPrinter}, import sorting to {@link ImportSortTransform}, individual imports to {@link
- * ImportDeclarationPrinter}, module declaration formatting to {@link JavaPrinter}, and body declaration formatting back
- * to {@link JavaPrinter}. It does not print statements, expressions, raw body preservation, deterministic import
- * ordering, or any single-node package/import behavior itself.
+ * unnamed-class member expansion, formatter pragma adjacency between top-level declarations, and trailing orphan
+ * comments. It intentionally delegates package declaration text to {@link PackageDeclarationPrinter}, import sorting to
+ * {@link ImportSortTransform}, individual imports to {@link ImportDeclarationPrinter}, module declaration formatting to
+ * {@link JavaPrinter}, and body declaration formatting back to {@link JavaPrinter}. It does not print statements,
+ * expressions, raw body preservation, deterministic import ordering, or any single-node package/import behavior itself.
  *
  * <p>Representative fixture pairs live at
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/package_and_imports/classWithMixedImports/input.java}
@@ -51,6 +53,7 @@ final class CompilationUnitPrinter {
     private final ImportDeclarationPrinter importDeclarations;
     private final JavaFormatRule<ModuleDeclaration> moduleDeclarations;
     private final JavaFormatRule<BodyDeclaration<?>> bodyDeclarations;
+    private final Predicate<BodyDeclaration<?>> hasPragma;
 
     CompilationUnitPrinter(
             JavaFormatContext context,
@@ -72,6 +75,7 @@ final class CompilationUnitPrinter {
         this.importDeclarations = importDeclarations;
         this.moduleDeclarations = moduleDeclarations;
         this.bodyDeclarations = bodyDeclarations;
+        this.hasPragma = context.formatterPragmas::hasPragma;
     }
 
     /**
@@ -173,7 +177,8 @@ final class CompilationUnitPrinter {
     private Optional<Doc> topLevelDeclarations(CompilationUnit unit) {
         Optional<ClassOrInterfaceDeclaration> compactClass = compactClass(unit);
         if (compactClass.isPresent()) {
-            return joinedTopLevelDeclarations(compactClass.orElseThrow().getMembers().stream()
+            NodeList<BodyDeclaration<?>> members = compactClass.orElseThrow().getMembers();
+            return joinedTopLevelDeclarations(members, members.stream()
                     .map(bodyDeclarations::format)
                     .toList());
         }
@@ -185,7 +190,7 @@ final class CompilationUnitPrinter {
         if (recoveryPlan.isPresent() && hasRawGap(recoveryPlan.orElseThrow())) {
             return Optional.of(recoveredTopLevelDeclarations(unit, recoveryPlan.orElseThrow()));
         }
-        return joinedTopLevelDeclarations(declarations.stream().map(bodyDeclarations::format).toList());
+        return joinedTopLevelDeclarations(declarations, declarations.stream().map(bodyDeclarations::format).toList());
     }
 
     /**
@@ -204,12 +209,19 @@ final class CompilationUnitPrinter {
 
         List<Doc> contents = new ArrayList<>();
         EntryKind previousEntry = EntryKind.NONE;
+        BodyDeclaration<?> previousDeclaration = null;
         int rawGapIndex = 0;
         for (RecoveredListPlanner.Entry<BodyDeclaration<?>> entry : plan.entries()) {
             switch (entry) {
                 case RecoveredListPlanner.ValidSibling<?> valid -> {
-                    appendSeparatorBeforeRecoveredTopLevelDeclaration(contents, previousEntry);
-                    contents.add(bodyDeclarations.format((BodyDeclaration<?>) valid.sibling()));
+                    BodyDeclaration<?> currentDeclaration = (BodyDeclaration<?>) valid.sibling();
+                    appendSeparatorBeforeRecoveredTopLevelDeclaration(
+                            contents,
+                            previousEntry,
+                            previousDeclaration,
+                            currentDeclaration);
+                    contents.add(bodyDeclarations.format(currentDeclaration));
+                    previousDeclaration = currentDeclaration;
                     previousEntry = EntryKind.VALID_DECLARATION;
                 }
                 case RecoveredListPlanner.RawGap<?> ignored -> {
@@ -226,12 +238,16 @@ final class CompilationUnitPrinter {
         return Doc.concat(contents);
     }
 
-    private void appendSeparatorBeforeRecoveredTopLevelDeclaration(List<Doc> contents, EntryKind previousEntry) {
+    private void appendSeparatorBeforeRecoveredTopLevelDeclaration(
+            List<Doc> contents,
+            EntryKind previousEntry,
+            BodyDeclaration<?> previousDeclaration,
+            BodyDeclaration<?> currentDeclaration) {
         if (contents.isEmpty()) {
             return;
         }
         switch (previousEntry) {
-            case VALID_DECLARATION -> contents.add(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE));
+            case VALID_DECLARATION -> contents.add(topLevelDeclarationSeparator(previousDeclaration, currentDeclaration));
             case RAW_GAP_WITH_TRAILING_BREAK -> contents.add(Doc.HARD_LINE);
             case NONE, RAW_GAP -> {
                 // Raw source already owns the separation before this declaration.
@@ -278,11 +294,27 @@ final class CompilationUnitPrinter {
         }
     }
 
-    private Optional<Doc> joinedTopLevelDeclarations(List<Doc> declarations) {
-        if (declarations.isEmpty()) {
+    private Optional<Doc> joinedTopLevelDeclarations(
+            List<? extends BodyDeclaration<?>> declarations,
+            List<Doc> declarationDocs) {
+        if (declarationDocs.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(Doc.join(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE), declarations));
+        List<Doc> parts = new ArrayList<>();
+        for (int i = 0; i < declarationDocs.size(); i++) {
+            if (i > 0) {
+                parts.add(topLevelDeclarationSeparator(declarations.get(i - 1), declarations.get(i)));
+            }
+            parts.add(declarationDocs.get(i));
+        }
+        return Optional.of(Doc.concat(parts));
+    }
+
+    private Doc topLevelDeclarationSeparator(BodyDeclaration<?> previous, BodyDeclaration<?> current) {
+        if (previous != null && (hasPragma.test(previous) || hasPragma.test(current))) {
+            return Doc.HARD_LINE;
+        }
+        return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
     }
 
     private static List<BodyDeclaration<?>> topLevelTypes(CompilationUnit unit) {

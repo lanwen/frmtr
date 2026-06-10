@@ -107,7 +107,8 @@ final class JavaPrinter {
                 context.recoverParseProblems);
         this.memberBlocks = new MemberBlockPrinter(
                 context,
-                declarationPrefixes::hasDeclarationAnnotations);
+                declarationPrefixes::hasDeclarationAnnotations,
+                formatterPragmas::hasPragma);
         this.controlConditions = new ControlConditionPrinter(
                 comments,
                 rawSource,
@@ -300,6 +301,7 @@ final class JavaPrinter {
                 arrays::arrayCreationTypeBreaks,
                 arrays::arrayCreationPrefix,
                 arrays::arrayInitializer,
+                arrays::compactArrayInitializerWithSourceSpacing,
                 objectCreations::objectCreationPrefix,
                 types::typeNameWithoutArguments,
                 types::brokenClassOrInterfaceType,

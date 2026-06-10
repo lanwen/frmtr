@@ -23,10 +23,11 @@ import java.util.function.ToIntFunction;
  * Renders array expressions after broad expression dispatch has selected array syntax.
  *
  * <p>This helper owns array-access layout, array-creation prefixes and breakable element types, compact literal
- * initializer acceptance, forced initializer breaks for declaration callers, orphan comments inside initializer braces,
- * and source-position-sensitive block comments between initializer values. The boundary exists because array creation
- * and initializer layout are reused by expression dispatch and field-initializer break decisions, while the formatter
- * still needs one place to preserve compact/raw/comment behavior for array syntax.
+ * initializer acceptance, source-spaced compact initializer braces, forced initializer breaks for declaration callers,
+ * orphan comments inside initializer braces, and source-position-sensitive block comments between initializer values.
+ * The boundary exists because array creation and initializer layout are reused by expression dispatch and
+ * field-initializer break decisions, while the formatter still needs one place to preserve compact/raw/comment behavior
+ * for array syntax.
  *
  * <p>{@link JavaPrinter} still owns broad expression dispatch, parenthesized suffix breaking, raw-source compact text,
  * width calculations. Field declaration layout still decides when an initializer line has
@@ -128,7 +129,31 @@ final class ArrayExpressionPrinter {
                 .map(compact)
                 .reduce((left, right) -> left + ", " + right)
                 .orElse("");
-        return Optional.of("{" + values + "}");
+        if (values.isEmpty()) {
+            return Optional.of("{}");
+        }
+        return Optional.of(compactArrayInitializerWithSourceSpacing(initializer, values));
+    }
+
+    /**
+     * Applies the array-initializer source brace-spacing policy to already-compacted value text.
+     *
+     * <p>Callers that own special compact-value predicates can still reuse the same brace source-shape decision without
+     * duplicating token-range trivia checks outside the array initializer boundary.
+     */
+    String compactArrayInitializerWithSourceSpacing(ArrayInitializerExpr initializer, String values) {
+        return compactArrayInitializerUsesInteriorSpacing(initializer) ? "{ " + values + " }" : "{" + values + "}";
+    }
+
+    private boolean compactArrayInitializerUsesInteriorSpacing(ArrayInitializerExpr initializer) {
+        return initializer.getTokenRange()
+                .map(Object::toString)
+                .map(String::strip)
+                .filter(source -> !source.contains("\n"))
+                .filter(source -> source.length() > 2)
+                .map(source -> Character.isWhitespace(source.charAt(1))
+                        || Character.isWhitespace(source.charAt(source.length() - 2)))
+                .orElse(false);
     }
 
     private boolean compactArrayInitializerValue(Expression value) {

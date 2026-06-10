@@ -83,6 +83,7 @@ final class FieldDeclarationPrinter {
     private final Predicate<ArrayCreationExpr> arrayCreationTypeBreaks;
     private final Function<ArrayCreationExpr, String> arrayCreationPrefix;
     private final BiFunction<ArrayInitializerExpr, Boolean, Doc> arrayInitializer;
+    private final BiFunction<ArrayInitializerExpr, String, String> compactArrayInitializerWithSourceSpacing;
     private final Function<ObjectCreationExpr, String> objectCreationPrefix;
     private final Function<ClassOrInterfaceType, String> typeNameWithoutArguments;
     private final Function<ClassOrInterfaceType, Doc> brokenClassOrInterfaceType;
@@ -125,6 +126,7 @@ final class FieldDeclarationPrinter {
             Predicate<ArrayCreationExpr> arrayCreationTypeBreaks,
             Function<ArrayCreationExpr, String> arrayCreationPrefix,
             BiFunction<ArrayInitializerExpr, Boolean, Doc> arrayInitializer,
+            BiFunction<ArrayInitializerExpr, String, String> compactArrayInitializerWithSourceSpacing,
             Function<ObjectCreationExpr, String> objectCreationPrefix,
             Function<ClassOrInterfaceType, String> typeNameWithoutArguments,
             Function<ClassOrInterfaceType, Doc> brokenClassOrInterfaceType,
@@ -165,6 +167,7 @@ final class FieldDeclarationPrinter {
         this.arrayCreationTypeBreaks = arrayCreationTypeBreaks;
         this.arrayCreationPrefix = arrayCreationPrefix;
         this.arrayInitializer = arrayInitializer;
+        this.compactArrayInitializerWithSourceSpacing = compactArrayInitializerWithSourceSpacing;
         this.objectCreationPrefix = objectCreationPrefix;
         this.typeNameWithoutArguments = typeNameWithoutArguments;
         this.brokenClassOrInterfaceType = brokenClassOrInterfaceType;
@@ -463,7 +466,8 @@ final class FieldDeclarationPrinter {
                 || initializer.getValues().stream().anyMatch(value -> !compactObjectCreationArrayValue(value))) {
             return Optional.empty();
         }
-        return Optional.of("{" + compactJoin.apply(initializer.getValues()) + "}");
+        String values = compactJoin.apply(initializer.getValues());
+        return Optional.of(compactArrayInitializerWithSourceSpacing.apply(initializer, values));
     }
 
     /**

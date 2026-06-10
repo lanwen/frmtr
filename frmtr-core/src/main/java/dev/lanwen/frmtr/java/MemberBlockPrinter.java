@@ -21,10 +21,10 @@ import java.util.function.Predicate;
  * Sequences already formatted type members inside Java member blocks.
  *
  * <p>This helper owns the source-range-sensitive ordering of declarations, orphan comments, opening-brace line comments,
- * and blank lines inside class, interface, record, enum, and annotation bodies. The boundary exists so {@link
- * JavaPrinter} can keep declaration formatting decisions local to each declaration printer while member-block trivia
- * rules stay together. It intentionally does not choose how declarations render, how statements inside methods render,
- * or which annotations count as declaration annotations.
+ * blank lines, and formatter pragma adjacency inside class, interface, record, enum, and annotation bodies. The boundary
+ * exists so {@link JavaPrinter} can keep declaration formatting decisions local to each declaration printer while
+ * member-block trivia rules stay together. It intentionally does not choose how declarations render, how statements
+ * inside methods render, or which annotations count as declaration annotations.
  */
 final class MemberBlockPrinter {
     private static final String MEMBER_DECLARATION_LIST_RECOVERY_FAILURE =
@@ -38,10 +38,12 @@ final class MemberBlockPrinter {
     private final SourceOrderedCommentInterleaver<BodyDeclaration<?>> commentInterleaver;
     private final boolean recoverParseProblems;
     private final Predicate<BodyDeclaration<?>> hasDeclarationAnnotations;
+    private final Predicate<BodyDeclaration<?>> hasPragma;
 
     MemberBlockPrinter(
             JavaFormatContext context,
-            Predicate<BodyDeclaration<?>> hasDeclarationAnnotations) {
+            Predicate<BodyDeclaration<?>> hasDeclarationAnnotations,
+            Predicate<BodyDeclaration<?>> hasPragma) {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
         this.sourceText = context.sourceText;
@@ -50,6 +52,7 @@ final class MemberBlockPrinter {
         this.commentInterleaver = new SourceOrderedCommentInterleaver<>(comments);
         this.recoverParseProblems = context.recoverParseProblems;
         this.hasDeclarationAnnotations = hasDeclarationAnnotations;
+        this.hasPragma = hasPragma;
     }
 
     /**
@@ -476,11 +479,15 @@ final class MemberBlockPrinter {
     /**
      * Chooses the blank-line policy between two adjacent member declarations.
      *
-     * <p>A blank source line between adjacent members is always preserved. Otherwise, interfaces keep adjacent unannotated
-     * abstract methods tight, adjacent fields are separated as standalone declarations, and all other member pairs use a
-     * blank line.
+     * <p>Formatter pragmas force a single hard line so the pragma comment stays adjacent to the declaration it controls.
+     * A blank source line between adjacent members is otherwise preserved. Interfaces keep adjacent unannotated abstract
+     * methods tight, adjacent fields are separated as standalone declarations, and all other member pairs use a blank
+     * line.
      */
     private Doc memberSeparator(Node owner, BodyDeclaration<?> previous, BodyDeclaration<?> current) {
+        if (hasPragma.test(previous) || hasPragma.test(current)) {
+            return Doc.HARD_LINE;
+        }
         Optional<Boolean> hasSourceBlankLineBetween = hasSourceBlankLineBetween(previous, current);
         if (hasSourceBlankLineBetween.orElse(false)) {
             return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);

@@ -22,10 +22,10 @@ import java.util.function.ToIntFunction;
  * Prints record declarations after the surrounding body-dispatch decision has already selected the record branch.
  *
  * <p>This helper owns the record-specific header decision tree: whether record components wrap, how source blank lines
- * between components are preserved, when component annotations break onto their own lines, how varargs component tails
- * attach annotations before {@code ...}, where the {@code implements} clause is placed, and whether the member body
- * starts on the same line or a broken line. It intentionally leaves unrelated declaration kinds, callable-signature
- * internals, type/member body sequencing, and raw-source fallback decisions with {@link JavaPrinter},
+ * between components are normalized, when component annotations break onto their own lines, how varargs component
+ * tails attach annotations before {@code ...}, where the {@code implements} clause is placed, and whether the member
+ * body starts on the same line or a broken line. It intentionally leaves unrelated declaration kinds,
+ * callable-signature internals, type/member body sequencing, and raw-source fallback decisions with {@link JavaPrinter},
  * {@link CallableSignaturePrinter}, and {@link MemberBlockPrinter}.
  *
  * <p>Representative fixture pairs live at
@@ -135,10 +135,7 @@ final class RecordDeclarationPrinter {
         List<Doc> parameters = new ArrayList<>();
         for (int i = 0; i < declaration.getParameters().size(); i++) {
             if (i > 0) {
-                parameters.add(recordParameterSeparator(
-                        declaration.getParameters().get(i - 1),
-                        declaration.getParameters().get(i),
-                        forceBreak));
+                parameters.add(recordParameterSeparator(forceBreak));
             }
             parameters.add(recordComponent(declaration.getParameters().get(i)));
         }
@@ -152,32 +149,10 @@ final class RecordDeclarationPrinter {
     }
 
     /**
-     * Preserves intentional blank lines between neighboring components before applying the current wrapping mode.
+     * Separates neighboring record components without adding blank lines inside the record header.
      */
-    private Doc recordParameterSeparator(Parameter previous, Parameter current, boolean forceBreak) {
-        boolean blankLineBetween = previous.getRange()
-                .flatMap(previousRange -> current.getRange()
-                        .map(currentRange -> firstCurrentComponentLine(current, currentRange.begin.line)
-                                > previousRange.end.line + 1))
-                .orElse(false);
-        if (blankLineBetween) {
-            return Doc.concat(Doc.text(","), Doc.HARD_LINE, Doc.HARD_LINE);
-        }
+    private Doc recordParameterSeparator(boolean forceBreak) {
         return Doc.concat(Doc.text(","), forceBreak ? Doc.HARD_LINE : Doc.LINE);
-    }
-
-    private int firstCurrentComponentLine(Parameter current, int parameterBeginLine) {
-        return immediateLeadingLineCommentBeginLine(current, parameterBeginLine)
-                .or(() -> immediateLeadingLineCommentBeginLine(current.getType(), parameterBeginLine))
-                .orElse(parameterBeginLine);
-    }
-
-    private Optional<Integer> immediateLeadingLineCommentBeginLine(Node node, int nextLine) {
-        return node.getComment()
-                .filter(LineComment.class::isInstance)
-                .flatMap(comment -> comment.getRange()
-                        .filter(range -> range.end.line + 1 == nextLine)
-                        .map(range -> range.begin.line));
     }
 
     /**
@@ -191,12 +166,7 @@ final class RecordDeclarationPrinter {
         if (leading != Doc.EMPTY) {
             parts.add(leading);
         }
-        boolean breakAnnotations = parameter.getAnnotations().size() > 1
-                || parameter.getAnnotations().stream()
-                        .anyMatch(annotation -> currentIndentedWidth.applyAsInt(
-                                        annotationFlatText.apply(annotation) + " " + recordComponentTail(parameter))
-                                > options.lineWidth());
-        if (breakAnnotations) {
+        if (recordComponentAnnotationsShouldBreak(parameter)) {
             parameter.getAnnotations().stream()
                     .map(annotation::format)
                     .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
@@ -218,6 +188,29 @@ final class RecordDeclarationPrinter {
             parts.add(trailing);
         }
         return Doc.concat(parts);
+    }
+
+    private boolean recordComponentAnnotationsShouldBreak(Parameter parameter) {
+        if (parameter.getAnnotations().isEmpty()) {
+            return false;
+        }
+        if (recordComponentAnnotationsSpanMultipleSourceLines(parameter)) {
+            return true;
+        }
+        return currentIndentedWidth.applyAsInt(recordComponentFlat(parameter)) > options.lineWidth();
+    }
+
+    private boolean recordComponentAnnotationsSpanMultipleSourceLines(Parameter parameter) {
+        Optional<Integer> firstAnnotationLine = parameter.getAnnotations().stream()
+                .findFirst()
+                .flatMap(annotation -> annotation.getRange().map(range -> range.begin.line));
+        if (firstAnnotationLine.isEmpty()) {
+            return false;
+        }
+        int firstLine = firstAnnotationLine.orElseThrow();
+        return parameter.getAnnotations().stream()
+                .flatMap(annotation -> annotation.getRange().stream())
+                .anyMatch(range -> range.begin.line > firstLine || range.begin.line < range.end.line);
     }
 
     private Doc recordComponentTrailingLineComment(Parameter parameter) {

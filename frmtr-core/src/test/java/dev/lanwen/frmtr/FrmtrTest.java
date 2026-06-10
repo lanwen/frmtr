@@ -233,6 +233,7 @@ final class FrmtrTest {
             "return-chain-final-argument, 120",
             "single-member-annotation-array-width, 120",
             "source-multiline-shapes, 120",
+            "switch-expression-initializer, 120",
             "switch-empty-rules, 120",
             "text-block-raw-method-call, 120",
             "type-header-brace-placement, 120",

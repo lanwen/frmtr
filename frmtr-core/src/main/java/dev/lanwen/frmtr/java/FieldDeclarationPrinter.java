@@ -18,6 +18,7 @@ import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
+import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
@@ -783,6 +784,9 @@ final class FieldDeclarationPrinter {
         }
         if (initializer instanceof ObjectCreationExpr objectCreationExpr
                 && objectCreationExpr.getAnonymousClassBody().isPresent()) {
+            return true;
+        }
+        if (initializer instanceof SwitchExpr) {
             return true;
         }
         if (initializer instanceof MethodCallExpr methodCallExpr) {

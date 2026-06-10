@@ -10,6 +10,7 @@ import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
@@ -136,9 +137,9 @@ final class VariableDeclarationPrinter {
     /**
      * Supplies the already-flat declaration prefix only to initializer shapes that use it for width-sensitive breaking.
      *
-     * <p>Array creation, binary, cast, conditional, lambda, method-call, and object-creation initializers can compare
-     * their continuation against the full local declaration prefix. Simpler initializers keep an empty prefix so their
-     * existing flat rendering is not affected by the surrounding declaration text.
+     * <p>Array creation, binary, cast, conditional, lambda, method-call, object-creation, and switch-expression
+     * initializers can compare their continuation against the full local declaration prefix. Simpler initializers keep
+     * an empty prefix so their existing flat rendering is not affected by the surrounding declaration text.
      */
     private String localVariableDeclarationPrefix(VariableDeclarator variable, String declarationPrefix) {
         return variable.getInitializer()
@@ -148,7 +149,8 @@ final class VariableDeclarationPrinter {
                         || initializer instanceof ConditionalExpr
                         || initializer instanceof LambdaExpr
                         || initializer instanceof MethodCallExpr
-                        || initializer instanceof ObjectCreationExpr)
+                        || initializer instanceof ObjectCreationExpr
+                        || initializer instanceof SwitchExpr)
                 .map(ignored -> declarationPrefix)
                 .orElse("");
     }

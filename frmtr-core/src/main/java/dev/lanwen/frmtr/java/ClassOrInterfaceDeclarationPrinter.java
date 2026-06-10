@@ -1,7 +1,9 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
@@ -52,7 +54,6 @@ final class ClassOrInterfaceDeclarationPrinter {
     private final TypeClausePrinter typeClause;
     private final Function<NodeList<TypeParameter>, String> flatTypeParameters;
     private final BiFunction<String, NodeList<ClassOrInterfaceType>, String> flatTypeClause;
-    private final ToIntFunction<String> currentIndentedWidth;
     private final Function<ClassOrInterfaceDeclaration, Doc> memberBlock;
 
     ClassOrInterfaceDeclarationPrinter(
@@ -70,7 +71,6 @@ final class ClassOrInterfaceDeclarationPrinter {
             TypeClausePrinter typeClause,
             Function<NodeList<TypeParameter>, String> flatTypeParameters,
             BiFunction<String, NodeList<ClassOrInterfaceType>, String> flatTypeClause,
-            ToIntFunction<String> currentIndentedWidth,
             Function<ClassOrInterfaceDeclaration, Doc> memberBlock) {
         this.comments = comments;
         this.rawSource = rawSource;
@@ -86,7 +86,6 @@ final class ClassOrInterfaceDeclarationPrinter {
         this.typeClause = typeClause;
         this.flatTypeParameters = flatTypeParameters;
         this.flatTypeClause = flatTypeClause;
-        this.currentIndentedWidth = currentIndentedWidth;
         this.memberBlock = memberBlock;
     }
 
@@ -146,7 +145,10 @@ final class ClassOrInterfaceDeclarationPrinter {
                 + flatTypeClause.apply("extends", declaration.getExtendedTypes())
                 + flatTypeClause.apply("implements", declaration.getImplementedTypes())
                 + flatTypeClause.apply("permits", declaration.getPermittedTypes());
-        return flatHeader.length() + 1 + flatMemberBlockWidth(declaration) > options.lineWidth();
+        return classOrInterfaceHeaderWidth(
+                        declaration,
+                        flatHeader + " " + (emptyMemberBlock(declaration) ? "{}" : "{"))
+                > options.lineWidth();
     }
 
     /**
@@ -172,9 +174,24 @@ final class ClassOrInterfaceDeclarationPrinter {
             header.add(callableSignatures.typeParameters(declaration.getTypeParameters()));
         }
         boolean breakClauses = classOrInterfaceHeaderClauses(declaration) > 1 || !breakTypeParameters;
-        typeClause.print("extends", declaration.getExtendedTypes(), breakClauses).ifPresent(header::add);
-        typeClause.print("implements", declaration.getImplementedTypes(), breakClauses).ifPresent(header::add);
-        typeClause.print("permits", declaration.getPermittedTypes(), breakClauses).ifPresent(header::add);
+        typeClause.print(
+                        "extends",
+                        declaration.getExtendedTypes(),
+                        breakClauses,
+                        text -> classOrInterfaceClauseWidth(declaration, text))
+                .ifPresent(header::add);
+        typeClause.print(
+                        "implements",
+                        declaration.getImplementedTypes(),
+                        breakClauses,
+                        text -> classOrInterfaceClauseWidth(declaration, text))
+                .ifPresent(header::add);
+        typeClause.print(
+                        "permits",
+                        declaration.getPermittedTypes(),
+                        breakClauses,
+                        text -> classOrInterfaceClauseWidth(declaration, text))
+                .ifPresent(header::add);
         header.add(Doc.text(" "));
         header.add(memberBlock.apply(declaration));
         return Doc.concat(header);
@@ -196,13 +213,16 @@ final class ClassOrInterfaceDeclarationPrinter {
                     + (declaration.isInterface() ? "interface " : "class ")
                     + declaration.getNameAsString()
                     + flatTypeParameters.apply(declaration.getTypeParameters());
-            return currentIndentedWidth.applyAsInt(headerHead) > options.lineWidth();
+            return classOrInterfaceHeaderWidth(declaration, headerHead) > options.lineWidth();
         }
         if (declaration.getTypeParameters().size() > 2) {
             return true;
         }
-        return classOrInterfaceHeaderClauses(declaration) == 1
-                && declaration.getExtendedTypes().stream().anyMatch(this::hasTypeArguments);
+        String headerHead = modifiers.apply(declaration)
+                + (declaration.isInterface() ? "interface " : "class ")
+                + declaration.getNameAsString()
+                + flatTypeParameters.apply(declaration.getTypeParameters());
+        return classOrInterfaceHeaderWidth(declaration, headerHead) > options.lineWidth();
     }
 
     private Doc nameLeadingLineComment(ClassOrInterfaceDeclaration declaration) {
@@ -229,13 +249,6 @@ final class ClassOrInterfaceDeclarationPrinter {
     }
 
     /**
-     * Reports whether a class/interface type carries explicit generic arguments.
-     */
-    private boolean hasTypeArguments(ClassOrInterfaceType type) {
-        return type.getTypeArguments().map(arguments -> !arguments.isEmpty()).orElse(false);
-    }
-
-    /**
      * Treats a declaration with only orphan comments as non-empty because the member block must print a real body.
      */
     private boolean emptyMemberBlock(ClassOrInterfaceDeclaration declaration) {
@@ -249,8 +262,33 @@ final class ClassOrInterfaceDeclarationPrinter {
         return emptyMemberBlock(declaration) ? "{}".length() : "{".length();
     }
 
+    private int classOrInterfaceHeaderWidth(ClassOrInterfaceDeclaration declaration, String text) {
+        return classOrInterfaceIndentWidth(declaration) + text.length();
+    }
+
+    private int classOrInterfaceClauseWidth(ClassOrInterfaceDeclaration declaration, String text) {
+        return classOrInterfaceIndentWidth(declaration) + options.indentUnit().length() + text.length();
+    }
+
+    private int classOrInterfaceIndentWidth(ClassOrInterfaceDeclaration declaration) {
+        int enclosingTypes = 0;
+        Optional<Node> parent = declaration.getParentNode();
+        while (parent.isPresent()) {
+            Node node = parent.orElseThrow();
+            if (node instanceof TypeDeclaration<?>) {
+                enclosingTypes++;
+            }
+            parent = node.getParentNode();
+        }
+        return enclosingTypes * options.indentUnit().length();
+    }
+
     @FunctionalInterface
     interface TypeClausePrinter {
-        Optional<Doc> print(String keyword, NodeList<ClassOrInterfaceType> types, boolean breakBeforeClause);
+        Optional<Doc> print(
+                String keyword,
+                NodeList<ClassOrInterfaceType> types,
+                boolean breakBeforeClause,
+                ToIntFunction<String> width);
     }
 }

@@ -1,11 +1,13 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.InstanceOfExpr;
+import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
@@ -34,10 +36,12 @@ final class ControlConditionPrinter {
     private final FormatterOptions options;
     private final Function<Expression, Doc> expressionRenderer;
     private final Function<Expression, String> compact;
+    private final Function<List<? extends Node>, String> compactJoin;
     private final Function<Expression, String> compactWithoutOwnComment;
     private final Predicate<Expression> expressionHasParenthesizedNestedBinary;
     private final Function<Expression, Doc> brokenExpressionLines;
     private final ToIntFunction<String> currentIndentedWidth;
+    private final ToIntFunction<String> blockStatementWidth;
 
     ControlConditionPrinter(
             CommentTracker comments,
@@ -45,19 +49,23 @@ final class ControlConditionPrinter {
             FormatterOptions options,
             Function<Expression, Doc> expressionRenderer,
             Function<Expression, String> compact,
+            Function<List<? extends Node>, String> compactJoin,
             Function<Expression, String> compactWithoutOwnComment,
             Predicate<Expression> expressionHasParenthesizedNestedBinary,
             Function<Expression, Doc> brokenExpressionLines,
-            ToIntFunction<String> currentIndentedWidth) {
+            ToIntFunction<String> currentIndentedWidth,
+            ToIntFunction<String> blockStatementWidth) {
         this.comments = comments;
         this.rawSource = rawSource;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.compact = compact;
+        this.compactJoin = compactJoin;
         this.compactWithoutOwnComment = compactWithoutOwnComment;
         this.expressionHasParenthesizedNestedBinary = expressionHasParenthesizedNestedBinary;
         this.brokenExpressionLines = brokenExpressionLines;
         this.currentIndentedWidth = currentIndentedWidth;
+        this.blockStatementWidth = blockStatementWidth;
     }
 
     /**
@@ -93,13 +101,46 @@ final class ControlConditionPrinter {
             return brokenCondition(expression);
         }
         String flat = compact.apply(expression);
-        if (currentIndentedWidth.applyAsInt("if (" + flat + ") {}") <= options.lineWidth()) {
+        if (blockStatementWidth.applyAsInt("if (" + flat + ") {}") <= options.lineWidth()) {
             if (expressionHasParenthesizedNestedBinary.test(expression)) {
                 return Doc.concat(Doc.text("("), expressionRenderer.apply(expression), Doc.text(")"));
             }
             return Doc.text("(" + flat + ")");
         }
+        if (expression instanceof MethodCallExpr methodCall) {
+            Optional<Doc> brokenMethodCall = brokenMethodCallCondition(methodCall);
+            if (brokenMethodCall.isPresent()) {
+                return brokenMethodCall.orElseThrow();
+            }
+        }
         return brokenCondition(expression);
+    }
+
+    private Optional<Doc> brokenMethodCallCondition(MethodCallExpr expression) {
+        if (expression.getArguments().isEmpty() || !expression.getAllContainedComments().isEmpty()) {
+            return Optional.empty();
+        }
+        String prefix = methodCallPrefix(expression);
+        if (blockStatementWidth.applyAsInt("if (" + prefix + "(") > options.lineWidth()) {
+            return Optional.empty();
+        }
+        Doc argumentLines = Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), expression.getArguments().stream()
+                .map(expressionRenderer)
+                .toList());
+        return Optional.of(Doc.concat(
+                Doc.text("(" + prefix + "("),
+                Doc.indent(Doc.indent(Doc.concat(Doc.HARD_LINE, argumentLines))),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.text("))")))));
+    }
+
+    private String methodCallPrefix(MethodCallExpr expression) {
+        return expression.getScope().map(scope -> compact.apply(scope) + ".").orElse("")
+                + expression.getTypeArguments()
+                        .map(typeArguments -> "<" + compactJoin.apply(typeArguments) + ">")
+                        .orElse("")
+                + expression.getNameAsString();
     }
 
     private Doc brokenCondition(Expression expression) {

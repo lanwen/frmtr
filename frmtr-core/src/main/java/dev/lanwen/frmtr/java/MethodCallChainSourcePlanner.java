@@ -153,8 +153,14 @@ final class MethodCallChainSourcePlanner {
                 remainingCalls = new ArrayList<>(calls.subList(1, calls.size()));
                 rootRendering = promotedStaticFirstCallRendering(calls);
             } else if (analysis.firstCommentedSegment() > 0 && promotesFirstCall(root)) {
-                root = calls.get(analysis.firstCommentedSegment() - 1);
-                remainingCalls = new ArrayList<>(calls.subList(analysis.firstCommentedSegment(), calls.size()));
+                if (analysis.sourceMultilineChain()) {
+                    root = calls.getFirst();
+                    remainingCalls = new ArrayList<>(calls.subList(1, calls.size()));
+                    rootRendering = promotedStaticFirstCallRendering(calls);
+                } else {
+                    root = calls.get(analysis.firstCommentedSegment() - 1);
+                    remainingCalls = new ArrayList<>(calls.subList(analysis.firstCommentedSegment(), calls.size()));
+                }
             } else if (analysis.firstCommentedSegment() == 0
                     && root instanceof FieldAccessExpr
                     && !root.getAllContainedComments().isEmpty()
@@ -177,7 +183,6 @@ final class MethodCallChainSourcePlanner {
             rootRendering = promotedStaticFirstCallRendering(calls);
         }
         if (rootRendering == ChainRootRendering.EXPRESSION_RENDERER
-                && forceBreak
                 && root instanceof ObjectCreationExpr objectCreation
                 && !sourceCompactConstructorRoot(objectCreation)) {
             rootRendering = ChainRootRendering.BROKEN_OBJECT_CREATION;
@@ -193,6 +198,11 @@ final class MethodCallChainSourcePlanner {
 
     boolean rootIsObjectCreation(MethodCallExpr expression) {
         return methodCallChainRoot(expression, new ArrayList<>()) instanceof ObjectCreationExpr;
+    }
+
+    boolean rootObjectCreationNeedsBreak(MethodCallChainAnalysis analysis) {
+        return analysis.root() instanceof ObjectCreationExpr objectCreation
+                && !sourceCompactConstructorRoot(objectCreation);
     }
 
     boolean rootIsFieldAccess(MethodCallExpr expression) {
@@ -214,14 +224,13 @@ final class MethodCallChainSourcePlanner {
 
     boolean promotesFirstCall(Expression root) {
         if (root.isNameExpr()) {
-            String name = root.asNameExpr().getNameAsString();
-            return !name.isEmpty() && Character.isUpperCase(name.charAt(0));
+            return startsWithUppercase(root.asNameExpr().getNameAsString());
         }
         if (root instanceof FieldAccessExpr fieldAccess) {
-            return fieldAccessRootName(fieldAccess)
-                    .filter(name -> !name.isEmpty())
-                    .map(name -> Character.isUpperCase(name.charAt(0)))
-                    .orElse(false);
+            return startsWithUppercase(fieldAccess.getNameAsString())
+                    || fieldAccessRootName(fieldAccess)
+                            .map(this::startsWithUppercase)
+                            .orElse(false);
         }
         return false;
     }
@@ -278,14 +287,16 @@ final class MethodCallChainSourcePlanner {
 
     private boolean typeLikeChainRoot(Expression root) {
         if (root.isNameExpr()) {
-            String name = root.asNameExpr().getNameAsString();
-            return !name.isEmpty() && Character.isUpperCase(name.charAt(0));
+            return startsWithUppercase(root.asNameExpr().getNameAsString());
         }
         if (root instanceof FieldAccessExpr fieldAccess) {
-            String name = fieldAccess.getNameAsString();
-            return !name.isEmpty() && Character.isUpperCase(name.charAt(0));
+            return startsWithUppercase(fieldAccess.getNameAsString());
         }
         return false;
+    }
+
+    private boolean startsWithUppercase(String name) {
+        return !name.isEmpty() && Character.isUpperCase(name.charAt(0));
     }
 
     private boolean shouldPromoteFirstCallForArgumentComments(

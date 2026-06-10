@@ -80,6 +80,21 @@ final class AnnotationExpressionPrinter {
         return formatted;
     }
 
+    Doc annotationPreservingSourceBreaks(AnnotationExpr annotation) {
+        if (!sourceMultilineAnnotation(annotation)) {
+            return annotation(annotation);
+        }
+        if (annotation instanceof NormalAnnotationExpr normalAnnotation) {
+            return brokenNormalAnnotation(normalAnnotation);
+        }
+        if (annotation instanceof SingleMemberAnnotationExpr singleMemberAnnotation) {
+            return brokenSingleMemberAnnotation(
+                    "@" + compact.apply(singleMemberAnnotation.getName()),
+                    annotationValue(singleMemberAnnotation.getMemberValue()));
+        }
+        return annotation(annotation);
+    }
+
     /**
      * Renders {@code @Name(...)} member pairs, keeping empty normal-annotation parentheses explicit.
      *
@@ -98,12 +113,23 @@ final class AnnotationExpressionPrinter {
                 return Doc.text(flat);
             }
         }
+        return brokenNormalAnnotation(annotation);
+    }
+
+    private Doc brokenNormalAnnotation(NormalAnnotationExpr annotation) {
+        String prefix = "@" + compact.apply(annotation.getName());
         return Doc.concat(
-                Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                        annotation.getPairs().stream().map(this::annotationPair).toList()))),
+            Doc.text(prefix + "("),
+            Doc.indent(Doc.concat(
                 Doc.HARD_LINE,
-                Doc.text(")"));
+                Doc.join(
+                    Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                    annotation.getPairs().stream().map(this::annotationPair).toList()
+                )
+            )),
+            Doc.HARD_LINE,
+            Doc.text(")")
+        );
     }
 
     /**
@@ -288,5 +314,11 @@ final class AnnotationExpressionPrinter {
                 || commentPlacement.leadingComment(value)
                         .filter(JavaCommentTrivia::isLine)
                         .isPresent();
+    }
+
+    private boolean sourceMultilineAnnotation(AnnotationExpr annotation) {
+        return annotation.getRange()
+                .map(range -> range.begin.line < range.end.line)
+                .orElse(false);
     }
 }

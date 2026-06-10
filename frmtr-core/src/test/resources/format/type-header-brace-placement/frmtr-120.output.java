@@ -12,3 +12,21 @@ final class WideImplementation
         return "wide";
     }
 }
+
+abstract class CompactGenericHeaderWithEnoughNameToPreferClauseBreakFallback<T extends Item>
+    extends BaseHeaderProcessor<T> {}
+
+class NestedHeaderFixtureSample {
+
+    static class Runner
+        extends FixtureProcessor<
+            Command,
+            NestedHeaderFixtureSample.Runner.Output,
+            NestedHeaderFixtureSample.Runner.State
+        > {
+
+        String id() {
+            return "nested";
+        }
+    }
+}

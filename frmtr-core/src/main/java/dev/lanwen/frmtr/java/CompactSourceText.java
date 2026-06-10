@@ -3,8 +3,11 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.expr.CharLiteralExpr;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.ClassExpr;
+import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
@@ -61,6 +64,9 @@ final class CompactSourceText {
         }
         if (node instanceof StringLiteralExpr || node instanceof CharLiteralExpr) {
             return rawSource.raw(node);
+        }
+        if (node instanceof ClassExpr classExpr) {
+            return compactTypeLike(classExpr.getType()) + ".class";
         }
         if (node instanceof FieldAccessExpr fieldAccessExpr) {
             return compact(fieldAccessExpr.getScope()) + "." + fieldAccessExpr.getNameAsString();
@@ -163,6 +169,49 @@ final class CompactSourceText {
         Node clone = node.clone();
         clone.removeComment();
         return compact(clone);
+    }
+
+    /**
+     * Returns compact expression text after removing all comments from the expression subtree.
+     *
+     * <p>Anonymous-class constructor headers use this for their argument list before the body opens; those arguments
+     * are source-like header text, not normal expression docs. The method keeps name, field access, method call, and
+     * method-reference reconstruction consistent with {@link #compact(Node)} while making the comment-stripping policy
+     * explicit for callers that already printed the comments elsewhere.
+     */
+    String commentFree(Expression expression) {
+        if (expression.isNameExpr()) {
+            return expression.asNameExpr().getNameAsString();
+        }
+        if (expression instanceof FieldAccessExpr fieldAccess) {
+            return commentFree(fieldAccess.getScope()) + "." + fieldAccess.getNameAsString();
+        }
+        if (expression instanceof MethodCallExpr methodCall && methodCall.getAllContainedComments().isEmpty()) {
+            String scope = methodCall.getScope()
+                    .map(this::commentFree)
+                    .map(text -> text + ".")
+                    .orElse("");
+            String typeArguments = methodCall.getTypeArguments()
+                    .map(arguments -> "<" + compactJoinTypeLike(arguments) + ">")
+                    .orElse("");
+            String arguments = methodCall.getArguments().stream()
+                    .map(this::commentFree)
+                    .reduce((left, right) -> left + ", " + right)
+                    .orElse("");
+            return scope + typeArguments + methodCall.getNameAsString() + "(" + arguments + ")";
+        }
+        if (expression instanceof MethodReferenceExpr methodReference
+                && methodReference.getAllContainedComments().isEmpty()) {
+            String typeArguments = methodReference.getTypeArguments()
+                    .map(arguments -> "<" + compactJoinTypeLike(arguments) + ">")
+                    .orElse("");
+            return commentFree(methodReference.getScope()) + "::" + typeArguments + methodReference.getIdentifier();
+        }
+        Expression clone = expression.clone();
+        clone.removeComment();
+        List.copyOf(clone.getOrphanComments()).forEach(clone::removeOrphanComment);
+        List.copyOf(clone.getAllContainedComments()).forEach(Node::remove);
+        return clone.toString();
     }
 
     /**

@@ -2,6 +2,12 @@ package sample;
 
 final class NestedGenericTypeBreaks {
 
+    private ProcessorHarnessWithVeryLongFormatterFixtureName<
+        FirstSignal,
+        SignalResult<FirstSignal>,
+        SignalState<FirstSignal>
+    > runner;
+
     void connect(Source source) {
         final OperationWithVeryLongFormatterFixtureName<
             FirstSubject,

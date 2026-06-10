@@ -37,6 +37,17 @@ final class ObjectCreationLayoutPolicy {
     }
 
     /**
+     * Reports whether an anonymous-class constructor should keep an existing source-multiline argument list.
+     *
+     * <p>Anonymous class bodies often contain comments under the same object-creation subtree. Those body comments must
+     * not make the constructor header collapse or get treated as argument comments, so this variant keeps the same
+     * argument-count rule while ignoring comments that belong to the anonymous body.
+     */
+    boolean shouldPreserveAnonymousSourceMultilineArguments(ObjectCreationExpr expression) {
+        return sourceShape.objectCreationArgumentsSpanMultipleLines(expression) && !hasFlatArgumentCount(expression);
+    }
+
+    /**
      * Reports whether a constructor root can stay compact when a surrounding method-call chain is forced to break.
      */
     boolean canKeepCompactChainRoot(ObjectCreationExpr expression, int compactWidth, int lineWidth) {

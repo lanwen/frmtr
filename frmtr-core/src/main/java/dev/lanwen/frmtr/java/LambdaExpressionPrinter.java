@@ -10,6 +10,7 @@ import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import dev.lanwen.frmtr.FormatterOptions;
@@ -47,6 +48,7 @@ import java.util.function.ToIntFunction;
 final class LambdaExpressionPrinter {
     private final CommentTracker comments;
     private final RawSource rawSource;
+    private final ObjectCreationLayoutPolicy objectCreationLayoutPolicy;
     private final FormatterOptions options;
     private final JavaFormatRule<Expression> expressionRenderer;
     private final JavaFormatRule<Statement> statementRenderer;
@@ -63,6 +65,7 @@ final class LambdaExpressionPrinter {
     LambdaExpressionPrinter(
             CommentTracker comments,
             RawSource rawSource,
+            ObjectCreationLayoutPolicy objectCreationLayoutPolicy,
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
             JavaFormatRule<Statement> statementRenderer,
@@ -77,6 +80,7 @@ final class LambdaExpressionPrinter {
             BiPredicate<Comment, Node> startsOnSameLine) {
         this.comments = comments;
         this.rawSource = rawSource;
+        this.objectCreationLayoutPolicy = objectCreationLayoutPolicy;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.statementRenderer = statementRenderer;
@@ -382,6 +386,9 @@ final class LambdaExpressionPrinter {
         if (hasOtherLambdaArgument(arguments, lambdaIndex)) {
             return Optional.empty();
         }
+        if (nonLambdaArgumentHasConstructorChainRootNeedingBreak(arguments, lambdaIndex)) {
+            return Optional.empty();
+        }
         LambdaExpr lambdaExpr = (LambdaExpr) arguments.get(lambdaIndex);
         String parameters = lambdaParameters(lambdaExpr);
         if (lambdaParametersShouldBreak(lambdaExpr, parameters)) {
@@ -392,6 +399,46 @@ final class LambdaExpressionPrinter {
                 + (leadingArguments.isEmpty() ? "" : leadingArguments + ", ")
                 + parameters + " -> {";
         return Optional.of(new HuggableBlockLambdaArgument(lambdaIndex, lambdaExpr, leadingArguments, firstLine));
+    }
+
+    private boolean nonLambdaArgumentHasConstructorChainRootNeedingBreak(
+            NodeList<Expression> arguments,
+            int lambdaIndex) {
+        for (int index = 0; index < arguments.size(); index++) {
+            if (index != lambdaIndex && expressionHasConstructorChainRootNeedingBreak(arguments.get(index))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean expressionHasConstructorChainRootNeedingBreak(Expression expression) {
+        return expression.findAll(MethodCallExpr.class).stream()
+                .anyMatch(this::methodCallRootConstructorNeedsBreak);
+    }
+
+    private boolean methodCallRootConstructorNeedsBreak(MethodCallExpr expression) {
+        List<MethodCallExpr> calls = new ArrayList<>();
+        Expression root = methodCallChainRoot(expression, calls);
+        return !calls.isEmpty()
+                && root instanceof ObjectCreationExpr objectCreation
+                && !objectCreationLayoutPolicy.canKeepCompactChainRoot(
+                        objectCreation,
+                        currentIndentedWidth.applyAsInt(compact.apply(objectCreation)),
+                        options.lineWidth());
+    }
+
+    private Expression methodCallChainRoot(MethodCallExpr expression, List<MethodCallExpr> calls) {
+        if (expression.getScope().orElse(null) instanceof MethodCallExpr methodCallExpr) {
+            Expression root = methodCallChainRoot(methodCallExpr, calls);
+            calls.add(expression);
+            return root;
+        }
+        if (expression.getScope().isEmpty()) {
+            return expression;
+        }
+        calls.add(expression);
+        return expression.getScope().orElseThrow();
     }
 
     private record HuggableBlockLambdaArgument(

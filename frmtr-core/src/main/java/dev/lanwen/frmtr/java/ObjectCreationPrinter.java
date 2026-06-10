@@ -6,6 +6,7 @@ import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
@@ -39,6 +40,7 @@ final class ObjectCreationPrinter {
     private final Function<List<? extends Node>, String> compactJoin;
     private final Function<Node, String> compactTypeLike;
     private final Function<Node, String> compactTypeLikeWithoutOwnComment;
+    private final Function<Expression, String> commentFreeExpression;
     private final Function<Doc, String> commentText;
 
     ObjectCreationPrinter(
@@ -51,6 +53,7 @@ final class ObjectCreationPrinter {
             Function<List<? extends Node>, String> compactJoin,
             Function<Node, String> compactTypeLike,
             Function<Node, String> compactTypeLikeWithoutOwnComment,
+            Function<Expression, String> commentFreeExpression,
             Function<Doc, String> commentText) {
         this.comments = context.comments;
         this.layoutPolicy = context.objectCreationLayoutPolicy;
@@ -63,6 +66,7 @@ final class ObjectCreationPrinter {
         this.compactJoin = compactJoin;
         this.compactTypeLike = compactTypeLike;
         this.compactTypeLikeWithoutOwnComment = compactTypeLikeWithoutOwnComment;
+        this.commentFreeExpression = commentFreeExpression;
         this.commentText = commentText;
     }
 
@@ -71,7 +75,11 @@ final class ObjectCreationPrinter {
     }
 
     Doc brokenObjectCreation(ObjectCreationExpr expression) {
-        return objectCreation(expression, true);
+        return objectCreation(expression, true, "");
+    }
+
+    Doc objectCreationWithSuffix(ObjectCreationExpr expression, String suffix) {
+        return objectCreation(expression, false, suffix);
     }
 
     /**
@@ -83,24 +91,30 @@ final class ObjectCreationPrinter {
      * grouping.
      */
     private Doc objectCreation(ObjectCreationExpr expression, boolean forceBreak) {
+        return objectCreation(expression, forceBreak, "");
+    }
+
+    private Doc objectCreation(ObjectCreationExpr expression, boolean forceBreak, String suffix) {
         String prefix = objectCreationPrefix(expression);
         if (expression.getAnonymousClassBody().isPresent()) {
-            return anonymousObjectCreation(expression, prefix);
+            return Doc.concat(anonymousObjectCreation(expression, prefix), Doc.text(suffix));
         }
         if (expression.getArguments().isEmpty()) {
-            return objectCreationWithBrokenType(expression).orElseGet(() -> Doc.text(prefix + "()"));
+            return objectCreationWithBrokenType(expression)
+                    .map(doc -> Doc.concat(doc, Doc.text(suffix)))
+                    .orElseGet(() -> Doc.text(prefix + "()" + suffix));
         }
-        Optional<Doc> sourceMultilineArguments = sourceMultilineArguments(expression, prefix);
+        Optional<Doc> sourceMultilineArguments = sourceMultilineArguments(expression, prefix, suffix);
         if (sourceMultilineArguments.isPresent()) {
             return sourceMultilineArguments.orElseThrow();
         }
         Optional<Doc> huggableLambda = huggableLambdaArgument(prefix, expression.getArguments());
         if (huggableLambda.isPresent()) {
-            return huggableLambda.orElseThrow();
+            return Doc.concat(huggableLambda.orElseThrow(), Doc.text(suffix));
         }
         Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments());
         if (commentedArguments.isPresent()) {
-            return commentedArguments.orElseThrow();
+            return Doc.concat(commentedArguments.orElseThrow(), Doc.text(suffix));
         }
         Doc call = Doc.concat(
                 Doc.text(prefix + "("),
@@ -110,7 +124,7 @@ final class ObjectCreationPrinter {
                                 .map(expressionRenderer::format)
                                 .toList()))),
                 objectCreationLine(forceBreak),
-                Doc.text(")"));
+                Doc.text(")" + suffix));
         return forceBreak ? call : Doc.group(call);
     }
 
@@ -125,7 +139,7 @@ final class ObjectCreationPrinter {
         return huggableBlockLambdaArguments.apply(prefix, arguments);
     }
 
-    private Optional<Doc> sourceMultilineArguments(ObjectCreationExpr expression, String prefix) {
+    private Optional<Doc> sourceMultilineArguments(ObjectCreationExpr expression, String prefix, String suffix) {
         if (!layoutPolicy.shouldPreserveSourceMultilineArguments(expression)) {
             return Optional.empty();
         }
@@ -137,7 +151,7 @@ final class ObjectCreationPrinter {
                                 .map(expressionRenderer::format)
                                 .toList()))),
                 Doc.HARD_LINE,
-                Doc.text(")")));
+                Doc.text(")" + suffix)));
     }
 
     String objectCreationPrefix(ObjectCreationExpr expression) {
@@ -172,15 +186,13 @@ final class ObjectCreationPrinter {
     /**
      * Renders an anonymous-class creation header while delegating every body declaration through the caller.
      *
-     * <p>The constructor arguments remain compact in the anonymous-class header, matching the legacy layout. Member
-     * declarations are rendered by the injected body callback so fields, methods, constructors, nested types, comments,
-     * and formatter pragmas keep the same behavior they have in normal declaration bodies.
+     * <p>The constructor arguments reuse the ordinary grouped argument shape so wide anonymous-class headers do not
+     * overflow while the body opener stays attached after the closing parenthesis. Member declarations are rendered by
+     * the injected body callback so fields, methods, constructors, nested types, comments, and formatter pragmas keep the
+     * same behavior they have in normal declaration bodies.
      */
     private Doc anonymousObjectCreation(ObjectCreationExpr expression, String prefix) {
-        String arguments = expression.getArguments().isEmpty()
-                ? ""
-                : compactJoin.apply(expression.getArguments());
-        Doc header = Doc.text(prefix + "(" + arguments + ") ");
+        Doc header = anonymousObjectCreationHeader(expression, prefix);
         List<BodyDeclaration<?>> declarations = expression.getAnonymousClassBody().orElseThrow();
         List<Doc> members = declarations.stream().map(bodyRenderer::format).toList();
         if (members.isEmpty()) {
@@ -192,6 +204,47 @@ final class ObjectCreationPrinter {
                 Doc.indent(Doc.concat(Doc.HARD_LINE, anonymousClassMembers(declarations, members))),
                 Doc.HARD_LINE,
                 Doc.text("}"));
+    }
+
+    private Doc anonymousObjectCreationHeader(ObjectCreationExpr expression, String prefix) {
+        if (expression.getArguments().isEmpty()) {
+            return Doc.text(prefix + "() ");
+        }
+        Optional<Doc> sourceMultilineArguments = anonymousSourceMultilineArguments(expression, prefix);
+        if (sourceMultilineArguments.isPresent()) {
+            return sourceMultilineArguments.orElseThrow();
+        }
+        Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments());
+        if (commentedArguments.isPresent()) {
+            return Doc.concat(commentedArguments.orElseThrow(), Doc.text(" "));
+        }
+        return Doc.group(Doc.concat(
+                Doc.text(prefix + "("),
+                Doc.indent(Doc.concat(
+                        Doc.SOFT_LINE,
+                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), anonymousArgumentDocs(expression)))),
+                Doc.SOFT_LINE,
+                Doc.text(") ")));
+    }
+
+    private Optional<Doc> anonymousSourceMultilineArguments(ObjectCreationExpr expression, String prefix) {
+        if (!layoutPolicy.shouldPreserveAnonymousSourceMultilineArguments(expression)) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+                Doc.text(prefix + "("),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), anonymousArgumentDocs(expression)))),
+                Doc.HARD_LINE,
+                Doc.text(") ")));
+    }
+
+    private List<Doc> anonymousArgumentDocs(ObjectCreationExpr expression) {
+        return expression.getArguments().stream()
+                .map(commentFreeExpression)
+                .map(Doc::text)
+                .toList();
     }
 
     /**

@@ -43,6 +43,7 @@ import java.util.function.ToIntFunction;
 final class ConditionalExpressionPrinter {
     private final CommentTracker comments;
     private final FormatterOptions options;
+    private final RawSource rawSource;
     private final SourceShape sourceShape;
     private final CompactSourceText compactSource;
     private final Function<Expression, Doc> expressionRenderer;
@@ -105,6 +106,7 @@ final class ConditionalExpressionPrinter {
             Predicate<Expression> expressionHasParenthesizedNestedBinary) {
         this.comments = context.comments;
         this.options = context.options;
+        this.rawSource = context.rawSource;
         this.sourceShape = context.sourceShape;
         this.compactSource = context.compactSource;
         this.expressionRenderer = expressionRenderer;
@@ -408,6 +410,9 @@ final class ConditionalExpressionPrinter {
     private Doc conditionalBranch(Expression branch) {
         if (branch instanceof ConditionalExpr conditionalExpr) {
             return conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED);
+        }
+        if (branch instanceof MethodCallExpr && sourceShape.spansMultipleLines(branch)) {
+            return Doc.text(rawSource.rawWithoutOwnComment(branch));
         }
         return expressionRenderer.apply(branch);
     }

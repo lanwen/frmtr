@@ -10,6 +10,10 @@ class MethodCallInitializerOpenerSample {
         var scoped = provider().call(Builders.<Result<AlphaBetaGammaDelta>>wrap(item -> {
             return item.compute(alpha(), beta(), gamma(), delta());
         }), "sample-%s".formatted(alpha()));
+        var handle = openFixtureEntry(
+            new FixtureRequest(DEFAULT_GROUP, owner),
+            FixtureSupport.KEY
+        ).handle();
         var sampleNameWithEnoughLengthToForceTheReceiverCallOpenerOntoAContinuationLineWhenTheInitializerBreaks = receiver.call(Builders.<Result<AlphaBetaGammaDelta>>wrap(item -> {
             return item.compute(alpha(), beta(), gamma(), delta());
         }));

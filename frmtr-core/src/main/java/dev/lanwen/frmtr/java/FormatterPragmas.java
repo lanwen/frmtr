@@ -64,28 +64,44 @@ final class FormatterPragmas {
         return pragma(node) != Pragma.NONE;
     }
 
+    /**
+     * Reports whether a statement-level pragma already contributes its legacy trailing hard line.
+     */
+    boolean hasStatementTrailingBreakPragma(Node node) {
+        return pragma(node) == Pragma.IGNORE;
+    }
+
+    /**
+     * Reports whether a standalone comment closes a formatter-off range.
+     */
+    boolean isRangeEndPragma(JavaCommentTrivia comment) {
+        Pragma pragma = pragmaContent(comment.comment().getContent());
+        return pragma == Pragma.ON || pragma == Pragma.END;
+    }
+
     private Pragma pragma(Node node) {
         return node.getComment()
-                .map(comment -> {
-                    String content = comment.getContent();
-                    if (content.contains("@formatter:off")) {
-                        return Pragma.OFF;
-                    }
-                    if (content.contains("@formatter:on")) {
-                        return Pragma.ON;
-                    }
-                    if (content.contains("prettier-ignore-start")) {
-                        return Pragma.START;
-                    }
-                    if (content.contains("prettier-ignore-end")) {
-                        return Pragma.END;
-                    }
-                    if (content.contains("prettier-ignore")) {
-                        return Pragma.IGNORE;
-                    }
-                    return Pragma.NONE;
-                })
+                .map(comment -> pragmaContent(comment.getContent()))
                 .orElse(Pragma.NONE);
+    }
+
+    private Pragma pragmaContent(String content) {
+        if (content.contains("@formatter:off")) {
+            return Pragma.OFF;
+        }
+        if (content.contains("@formatter:on")) {
+            return Pragma.ON;
+        }
+        if (content.contains("prettier-ignore-start")) {
+            return Pragma.START;
+        }
+        if (content.contains("prettier-ignore-end")) {
+            return Pragma.END;
+        }
+        if (content.contains("prettier-ignore")) {
+            return Pragma.IGNORE;
+        }
+        return Pragma.NONE;
     }
 
     enum PrintAction {

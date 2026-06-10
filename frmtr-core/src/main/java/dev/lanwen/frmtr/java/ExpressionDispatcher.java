@@ -7,6 +7,7 @@ import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.CastExpr;
+import com.github.javaparser.ast.expr.ClassExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
@@ -40,6 +41,7 @@ final class ExpressionDispatcher {
     private final JavaFormatRule<AnnotationExpr> annotationExpressions;
     private final JavaFormatRule<BinaryExpr> binaries;
     private final JavaFormatRule<CastExpr> casts;
+    private final JavaFormatRule<ClassExpr> classExpressions;
     private final JavaFormatRule<ConditionalExpr> conditionals;
     private final JavaFormatRule<EnclosedExpr> enclosedExpressions;
     private final JavaFormatRule<FieldAccessExpr> fieldAccesses;
@@ -60,6 +62,7 @@ final class ExpressionDispatcher {
             JavaFormatRule<AnnotationExpr> annotationExpressions,
             JavaFormatRule<BinaryExpr> binaries,
             JavaFormatRule<CastExpr> casts,
+            JavaFormatRule<ClassExpr> classExpressions,
             JavaFormatRule<ConditionalExpr> conditionals,
             JavaFormatRule<EnclosedExpr> enclosedExpressions,
             JavaFormatRule<FieldAccessExpr> fieldAccesses,
@@ -78,6 +81,7 @@ final class ExpressionDispatcher {
         this.annotationExpressions = annotationExpressions;
         this.binaries = binaries;
         this.casts = casts;
+        this.classExpressions = classExpressions;
         this.conditionals = conditionals;
         this.enclosedExpressions = enclosedExpressions;
         this.fieldAccesses = fieldAccesses;
@@ -119,6 +123,9 @@ final class ExpressionDispatcher {
         }
         if (expression instanceof CastExpr castExpr) {
             return casts.format(castExpr);
+        }
+        if (expression instanceof ClassExpr classExpr) {
+            return classExpressions.format(classExpr);
         }
         if (expression instanceof ConditionalExpr conditionalExpr) {
             return conditionals.format(conditionalExpr);

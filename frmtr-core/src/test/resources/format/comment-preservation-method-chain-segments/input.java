@@ -11,6 +11,16 @@ class MethodChainSegmentCommentSample {
             .waitingFor(new WaitStrategy())
             .withLabel("k", "v");
     }
+
+    void waitForSignal() {
+        StepRunner.begin()
+            .interval(tick)
+            // keep later segment note
+            .deadline(limit)
+            .verify(() -> {
+                assertReady();
+            });
+    }
 }
 
 class Container {

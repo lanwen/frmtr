@@ -32,6 +32,7 @@ final class BlockPrinter {
     private final SourceOrderedCommentInterleaver<Statement> commentInterleaver;
     private final boolean recoverParseProblems;
     private final JavaFormatRule<Statement> statementRenderer;
+    private final FormatterPragmas formatterPragmas;
     private final Predicate<Statement> hasPragma;
 
     BlockPrinter(
@@ -46,6 +47,7 @@ final class BlockPrinter {
         this.commentInterleaver = new SourceOrderedCommentInterleaver<>(comments);
         this.recoverParseProblems = context.recoverParseProblems;
         this.statementRenderer = statementRenderer;
+        this.formatterPragmas = context.formatterPragmas;
         this.hasPragma = hasPragma;
     }
 
@@ -160,6 +162,13 @@ final class BlockPrinter {
                     public Doc separatorBeforeComment(
                             SourceOrderedCommentInterleaver.PreviousEntry<Statement> previous,
                             JavaCommentTrivia comment) {
+                        if (previous.kind() == SourceOrderedCommentInterleaver.EntryKind.SIBLING
+                                && formatterPragmas.hasStatementTrailingBreakPragma(previous.sibling().orElseThrow())
+                                && formatterPragmas.isRangeEndPragma(comment)) {
+                            return sourceLineSeparatorAfterTrailingBreak(
+                                    previous.endLine(),
+                                    comment.beginLine(Integer.MAX_VALUE));
+                        }
                         return sourceLineSeparator(previous.endLine(), comment.beginLine(Integer.MAX_VALUE));
                     }
                 });
@@ -183,6 +192,13 @@ final class BlockPrinter {
             return Doc.HARD_LINE;
         }
         return currentBeginLine > previousEndLine + 1 ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;
+    }
+
+    private Doc sourceLineSeparatorAfterTrailingBreak(int previousEndLine, int currentBeginLine) {
+        if (previousEndLine == Integer.MIN_VALUE || currentBeginLine == Integer.MAX_VALUE) {
+            return Doc.EMPTY;
+        }
+        return currentBeginLine > previousEndLine + 1 ? Doc.HARD_LINE : Doc.EMPTY;
     }
 
     /**

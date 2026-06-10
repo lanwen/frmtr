@@ -107,11 +107,12 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
 - `LambdaExpressionPrinter`: lambda parameter parentheses, commented parameter reconstruction, expression versus block
   bodies, parenthesized lambdas, broken logical bodies, and lambda arguments that can be hugged by method calls or object
   creation.
-- `MethodCallPrinter`: method calls and call chains, chain comments including same-line comments between chained calls
-  and leading line-comment clusters before chained segments, empty argument comments, commented argument-gap fallback
-  lists, text-block arguments, over-wide binary arguments,
-  source-multiline single-object-creation call statements, field-root fluent-chain preservation for already-multiline
-  statement chains, compact-root plus broken-final-segment calls, and suffixes on enclosed scopes.
+- `MethodCallPrinter`: ordinary method-call argument dispatch, empty argument comments, commented argument-gap fallback
+  lists, text-block arguments, over-wide binary arguments, and suffixes on enclosed scopes. `MethodCallChainPrinter`
+  owns chain doc assembly: chain comments including same-line comments between chained calls and leading line-comment
+  clusters before chained segments, source-multiline single-object-creation call statements, field-root fluent-chain
+  preservation for already-multiline statement chains, compact-root plus broken-final-segment calls, root promotion, and
+  final-segment tails.
 - `MethodReferencePrinter`: method references, type-argument suffix text, and parenthesized-scope suffixes.
 - `EnclosedSuffixDispatcher`: the bridge used when a broken enclosed expression may need a method-call or
   method-reference suffix preserved.
@@ -151,10 +152,11 @@ Declaration and type printers own Java declaration grammar after `BodyDeclaratio
 - `ClassOrInterfaceDeclarationPrinter`, `RecordDeclarationPrinter`, `EnumDeclarationPrinter`, and
   `AnnotationDeclarationPrinter`: type-specific headers, record component type bodies, record full-header wrapping,
   body starts, member sequencing handoffs, and type-specific recovery boundaries.
-- `FieldDeclarationPrinter` and `VariableDeclarationPrinter`: field and local variable declaration layout, shared
-  initializer policy including equals-line cast type-body breaks, direct block-lambda openers, object-creation-root
-  method-call opener grouping, switch-expression body preservation, huggable block-lambda method-call initializers,
-  declaration prefixes, and local-only declaration-prefix decisions.
+- `FieldDeclarationPrinter` and `VariableDeclarationPrinter`: field and local variable declaration layout, declaration
+  prefixes, local-only declaration-prefix decisions, and handoff to `VariableInitializerLayout`.
+  `VariableInitializerLayout` owns shared initializer policy including equals-line cast type-body breaks, direct
+  block-lambda openers, object-creation-root method-call opener grouping, switch-expression body preservation, huggable
+  block-lambda method-call initializers, comments around `=`, and initializer-specific width fallbacks.
 - `ConstructorDeclarationPrinter`, `MethodDeclarationPrinter`, `InitializerDeclarationPrinter`,
   `CallableSignaturePrinter`, and `ThrowsClausePrinter`: callable headers, signatures, throws-clause placement,
   body-versus-semicolon suffixes, and initializer bodies.
@@ -171,9 +173,10 @@ including the variant where the node's own attached comment has already been emi
 
 `RawSource` centralizes JavaParser token-range text access and whitespace normalization used by printer rules when
 formatting requires raw source text or compact source-derived text. `CompactSourceText` centralizes source-equivalent
-compact text: raw string-literal token spelling, recursive field-access reconstruction, comment-free method-call
-reconstruction, generic delimiter spacing cleanup for type-like snippets, comma joining, and clone-before-comment-removal
-behavior.
+compact text: raw string-literal token spelling, recursive field-access reconstruction, comment-free expression
+reconstruction for anonymous-class headers, generic delimiter spacing cleanup for type-like snippets, comma joining, and
+clone-before-comment-removal behavior. `LayoutWidth` centralizes the indentation baselines used for flat-width probes so
+statement, field, and chain helpers do not each recreate their own width arithmetic.
 
 `SourceShape` centralizes source-line-shape predicates used to preserve existing multiline forms when the structured
 formatter has an otherwise equivalent compact form. It uses JavaParser node ranges first and bounded `SourceText` slices
@@ -186,10 +189,11 @@ when source-multiline constructor arguments are meaningful enough to preserve, a
 compact when a surrounding method-call chain is forced to break. It does not render constructor docs; direct constructor
 printing, return expressions, and method-call chain planning keep their surrounding grammar decisions.
 
-`MethodCallChainSourcePlanner` owns method-call chain source-shape planning before `MethodCallPrinter` assembles docs:
-structural root collection, selector-line preservation, source-multiline chain signals for statement routing, type-like
-and builder-root promotion, and delegation to `ObjectCreationLayoutPolicy` for constructor-root compactness before broken
-chains. `MethodCallPrinter` keeps comment accounting, argument rendering, lambda handling, and final doc assembly.
+`MethodCallChainSourcePlanner` owns method-call chain source-shape planning before `MethodCallChainPrinter` assembles
+docs: structural root collection, selector-line preservation, source-multiline chain signals for statement routing,
+type-like and builder-root promotion, and delegation to `ObjectCreationLayoutPolicy` for constructor-root compactness
+before broken chains. `MethodCallPrinter` keeps ordinary argument rendering and delegates chain root, comment, and
+final-tail assembly to `MethodCallChainPrinter`.
 
 `CommentedModulePrinter`, `CommentedMethodSignaturePrinter`, and `CommentedInterfacePrinter` own raw-source escape
 hatches for module declarations, method signatures, interface headers, and abstract method signatures whose inline

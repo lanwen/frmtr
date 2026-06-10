@@ -10,6 +10,9 @@ class MultilineShapes {
         value = input == null || input.isEmpty()
             ? List.of()
             : List.copyOf(input);
+        var routed = keys.isEmpty()
+            ? trimmedValues(source.entries())
+            : List.<String>of();
         return pkg.sample.Widget.builder()
             .name("demo")
             .build();

@@ -5,5 +5,7 @@ class RecordImplementsSample {
 
         record AcceptedSignal(Reference<Command<Result<Item>>> command, String serial, Item item) implements
             InternalSignal {}
+
+        record UpdateEntry(String id, String item, String state, Map<String, String> values) implements InternalSignal {}
     }
 }

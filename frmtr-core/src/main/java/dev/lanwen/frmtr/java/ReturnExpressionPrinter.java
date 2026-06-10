@@ -35,6 +35,7 @@ final class ReturnExpressionPrinter {
     private final Function<MethodCallExpr, Optional<Doc>> compactRootWithBrokenFinalChainSegment;
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain;
     private final Function<ObjectCreationExpr, Doc> brokenObjectCreation;
+    private final BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix;
     private final BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression;
     private final BiFunction<Expression, Boolean, Doc> parenthesizedBreak;
 
@@ -47,6 +48,7 @@ final class ReturnExpressionPrinter {
             Function<MethodCallExpr, Optional<Doc>> compactRootWithBrokenFinalChainSegment,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain,
             Function<ObjectCreationExpr, Doc> brokenObjectCreation,
+            BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
             BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression,
             BiFunction<Expression, Boolean, Doc> parenthesizedBreak) {
         this.options = options;
@@ -57,8 +59,16 @@ final class ReturnExpressionPrinter {
         this.compactRootWithBrokenFinalChainSegment = compactRootWithBrokenFinalChainSegment;
         this.forcedMethodCallChain = forcedMethodCallChain;
         this.brokenObjectCreation = brokenObjectCreation;
+        this.objectCreationWithSuffix = objectCreationWithSuffix;
         this.conditionalExpression = conditionalExpression;
         this.parenthesizedBreak = parenthesizedBreak;
+    }
+
+    Doc returnStatement(Expression expression) {
+        if (expression instanceof ObjectCreationExpr objectCreation) {
+            return Doc.concat(Doc.text("return "), objectCreationWithSuffix.apply(objectCreation, ";"));
+        }
+        return Doc.concat(Doc.text("return "), returnExpression(expression), Doc.text(";"));
     }
 
     /**

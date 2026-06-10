@@ -19,4 +19,16 @@ class MultilineIfConditionSample {
         }
         return false;
     }
+
+    void settle(CaseState state, CaseEvent event, Interactions interactions) {
+        if (ResultLedgerTransitionBindingsWithVerboseFixturePrefix.cleanupCompleteAfter(
+                state.snapshot(),
+                event.key(),
+                event.binding()
+            )) {
+            ResultLedgerInteractions.PendingTransitionWithExtremelyLongFixtureName transitionToComplete =
+                interactions.drainPendingTransitions();
+            complete(transitionToComplete);
+        }
+    }
 }

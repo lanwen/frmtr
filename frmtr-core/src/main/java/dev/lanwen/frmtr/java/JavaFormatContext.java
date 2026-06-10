@@ -28,6 +28,7 @@ final class JavaFormatContext {
     final RecoveredListPlanner recoveredListPlanner;
     final RecoveredSourceRegions recoveredSourceRegions;
     final CompactSourceText compactSource;
+    final LayoutWidth layoutWidth;
     final CommentPlacement commentPlacement;
     final boolean recoverParseProblems;
 
@@ -45,6 +46,7 @@ final class JavaFormatContext {
         this.recoveredListPlanner = new RecoveredListPlanner(sourceText);
         this.recoveredSourceRegions = new RecoveredSourceRegions(sourceText, options, comments);
         this.compactSource = new CompactSourceText(rawSource);
+        this.layoutWidth = new LayoutWidth(options);
         this.commentPlacement = new CommentPlacement(comments, commentPlacementPolicy);
     }
 

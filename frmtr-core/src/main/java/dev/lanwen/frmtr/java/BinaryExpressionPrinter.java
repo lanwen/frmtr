@@ -3,6 +3,7 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.CastExpr;
+import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.InstanceOfExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
@@ -35,6 +36,7 @@ final class BinaryExpressionPrinter {
     private final FormatterOptions options;
     private final JavaFormatRule<Expression> expressionRenderer;
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
+    private final SourceShape sourceShape;
     private final Function<Node, String> compact;
     private final Function<Node, String> compactWithoutOwnComment;
     private final ToIntFunction<String> continuationStatementWidth;
@@ -46,6 +48,7 @@ final class BinaryExpressionPrinter {
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
+            SourceShape sourceShape,
             Function<Node, String> compact,
             Function<Node, String> compactWithoutOwnComment,
             ToIntFunction<String> continuationStatementWidth,
@@ -55,6 +58,7 @@ final class BinaryExpressionPrinter {
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
+        this.sourceShape = sourceShape;
         this.compact = compact;
         this.compactWithoutOwnComment = compactWithoutOwnComment;
         this.continuationStatementWidth = continuationStatementWidth;
@@ -156,6 +160,13 @@ final class BinaryExpressionPrinter {
                 return Doc.concat(Doc.text("("), nestedLines(binaryOperand, true), Doc.text(")"));
             }
             return Doc.concat(Doc.text("("), expressionRenderer.format(binaryOperand), Doc.text(")"));
+        }
+        if (operator == BinaryExpr.Operator.OR
+                && operand instanceof EnclosedExpr enclosedOperand
+                && enclosedOperand.getInner() instanceof BinaryExpr binaryOperand
+                && binaryOperand.getOperator() == BinaryExpr.Operator.AND
+                && sourceShape.spansMultipleLines(enclosedOperand)) {
+            return Doc.concat(Doc.text("("), nestedLines(binaryOperand, true), Doc.text(")"));
         }
         if (operand instanceof BinaryExpr binaryOperand
                 && shouldParenthesizeNestedBinary(operator, binaryOperand.getOperator())) {

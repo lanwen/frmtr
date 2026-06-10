@@ -29,6 +29,7 @@ final class JavaPrinter {
     private final ObjectCreationPrinter objectCreations;
     private final TextBlockPrinter textBlocks;
     private final CastExpressionPrinter casts;
+    private final ClassExpressionPrinter classExpressions;
     private final EnclosedExpressionPrinter enclosedExpressions;
     private final InstanceOfExpressionPrinter instanceOfExpressions;
     private final FieldAccessPrinter fieldAccesses;
@@ -74,6 +75,7 @@ final class JavaPrinter {
                 options,
                 this::expression,
                 this::brokenMethodCall,
+                context.sourceShape,
                 compactSource::compact,
                 compactSource::compactWithoutOwnComment,
                 this::continuationStatementWidth,
@@ -116,10 +118,12 @@ final class JavaPrinter {
                 options,
                 this::expression,
                 compactSource::compact,
+                compactSource::compactJoin,
                 compactSource::compactWithoutOwnComment,
                 binaries::expressionHasParenthesizedNestedBinary,
                 expression -> binaries.lines(expression, true),
-                this::currentIndentedWidth);
+                this::currentIndentedWidth,
+                this::blockStatementWidth);
         this.switches = new SwitchPrinter(
                 context,
                 this::statement,
@@ -143,6 +147,7 @@ final class JavaPrinter {
         this.lambdas = new LambdaExpressionPrinter(
                 comments,
                 rawSource,
+                context.objectCreationLayoutPolicy,
                 options,
                 this::expression,
                 this::statement,
@@ -161,6 +166,7 @@ final class JavaPrinter {
                 compactSource::compactTypeLike,
                 types::typeBody,
                 this::currentIndentedWidth);
+        this.classExpressions = new ClassExpressionPrinter(compactSource::compactTypeLike);
         this.enclosedExpressions = new EnclosedExpressionPrinter(
                 options,
                 this::expression,
@@ -191,6 +197,7 @@ final class JavaPrinter {
                 compactSource::compactJoin,
                 compactSource::compactTypeLike,
                 compactSource::compactTypeLikeWithoutOwnComment,
+                compactSource::commentFree,
                 this::commentText);
         this.textBlocks = new TextBlockPrinter(rawSource, options);
         this.instanceOfExpressions = new InstanceOfExpressionPrinter(
@@ -212,6 +219,7 @@ final class JavaPrinter {
                 this::expression,
                 enclosedExpressions::brokenEnclosedForSuffix,
                 objectCreations::brokenObjectCreation,
+                objectCreations::objectCreationWithSuffix,
                 objectCreations::objectCreationPrefix,
                 lambdas::huggableBlockLambdaArguments,
                 lambdas::huggableBlockLambdaFirstLine,
@@ -233,6 +241,7 @@ final class JavaPrinter {
                 binaries::lines,
                 objectCreations::brokenObjectCreation,
                 methodCalls::assignmentWithBrokenMethodCallArguments,
+                methodCalls::assignmentWithBrokenMethodCallArgumentsAndSemicolon,
                 conditionals::assignmentWithConditionalValue);
         ExpressionDispatcher expressionDispatcher = new ExpressionDispatcher(
                 assignments::assignment,
@@ -242,6 +251,7 @@ final class JavaPrinter {
                 annotationExpressions::annotation,
                 binaries::binaryExpression,
                 casts::castExpression,
+                classExpressions::classExpression,
                 conditionals::conditionalExpression,
                 enclosedExpressions::enclosedExpression,
                 fieldAccesses::fieldAccess,
@@ -263,6 +273,7 @@ final class JavaPrinter {
                 methodCalls::compactRootWithBrokenFinalChainSegment,
                 methodCalls::forcedMethodCallChain,
                 objectCreations::brokenObjectCreation,
+                objectCreations::objectCreationWithSuffix,
                 conditionals::conditionalExpression,
                 enclosedExpressions::parenthesizedBreak);
         this.commentedMethodSignatures = new CommentedMethodSignaturePrinter(options);
@@ -278,10 +289,13 @@ final class JavaPrinter {
                 comments,
                 rawSource,
                 options,
+                context.layoutWidth,
                 declarationPrefixes::declarationAnnotations,
                 declarationPrefixes::modifiers,
                 declarationPrefixes::inlineAnnotations,
                 compactSource::compactTypeLike,
+                types::typeBody,
+                types::typeCanBreak,
                 compactSource::compact,
                 compactSource::compactWithoutOwnComment,
                 compactSource::compactJoin,
@@ -297,9 +311,12 @@ final class JavaPrinter {
                 methodCalls::brokenMethodCall,
                 methodCalls::mixedFieldMethodCallChain,
                 methodCalls::forcedMethodCallChain,
+                methodCalls::forcedMethodCallChainWithSemicolon,
+                methodCalls::methodCallChainHasFinalTrailingLineComment,
                 methodCalls::mixedFieldMethodCallRoot,
                 methodCalls::methodCallChainFirstLine,
                 methodCalls::methodCallChainRootIsObjectCreation,
+                methodCalls::methodCallChainIsSourceMultiline,
                 casts::castType,
                 conditional -> conditionals.conditionalExpression(conditional, true),
                 conditionals::shouldBreakBeforeConditionalInitializer,
@@ -324,6 +341,7 @@ final class JavaPrinter {
                 types::typeBody,
                 types::typeCanBreak,
                 fields::variable,
+                fields::variableWithStatementTerminator,
                 this::currentIndentedWidth);
         this.callableSignatures = new CallableSignaturePrinter(
                 comments,
@@ -356,7 +374,6 @@ final class JavaPrinter {
                 types::typeClause,
                 types::flatTypeParameters,
                 types::flatTypeClause,
-                this::currentIndentedWidth,
                 declaration -> memberBlocks.memberBlock(declaration.getMembers(), declaration, this::body));
         this.constructors = new ConstructorDeclarationPrinter(
                 callableSignatures,
@@ -394,6 +411,7 @@ final class JavaPrinter {
                 this::body);
         this.records = new RecordDeclarationPrinter(
                 comments,
+                commentPlacementPolicy,
                 options,
                 declarationPrefixes::annotations,
                 declarationPrefixes::modifiers,
@@ -404,7 +422,7 @@ final class JavaPrinter {
                 types::compactJoinTypeLike,
                 compactSource::compactTypeLike,
                 types::typeBody,
-                annotationExpressions::annotation,
+                annotationExpressions::annotationPreservingSourceBreaks,
                 annotationExpressions::annotationFlatText,
                 this::currentIndentedWidth,
                 declaration -> memberBlocks.memberBlock(declaration.getMembers(), declaration, this::body));
@@ -420,8 +438,11 @@ final class JavaPrinter {
                 blocks::blockWithLeading,
                 this::body,
                 this::expression,
-                returnExpressions::returnExpression,
+                assignments::assignmentStatement,
+                returnExpressions::returnStatement,
+                objectCreations::objectCreationWithSuffix,
                 variableDeclarations::variableDeclaration,
+                variableDeclarations::variableDeclarationStatement,
                 compactSource::compact,
                 compactSource::compactWithoutOwnComment,
                 compactSource::compactJoin,
@@ -430,6 +451,7 @@ final class JavaPrinter {
                 lambdas::huggableBlockLambdaArguments,
                 methodCalls::sourceMultilineSingleObjectCreationArgumentStatement,
                 methodCalls::forcedMethodCallChain,
+                methodCalls::forcedMethodCallChainWithSemicolon,
                 methodCalls::brokenMethodCall,
                 methodCalls::methodCallChainHasComments,
                 methodCalls::methodCallChainIsSourceMultiline,
@@ -489,15 +511,15 @@ final class JavaPrinter {
     }
 
     private int currentIndentedWidth(String text) {
-        return context.options.indentUnit().length() + text.length();
+        return context.layoutWidth.currentIndented(text);
     }
 
     private int blockStatementWidth(String text) {
-        return (context.options.indentUnit().length() * 2) + text.length();
+        return context.layoutWidth.blockStatement(text);
     }
 
     private int continuationStatementWidth(String text) {
-        return (context.options.indentUnit().length() * 3) + text.length();
+        return context.layoutWidth.continuationStatement(text);
     }
 
     private Doc block(BlockStmt block) {

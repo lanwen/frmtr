@@ -12,5 +12,9 @@ class Demo {
                 .withFifth(fifthValue)
                 .finish();
         }).isProblem(ExpectedProblem.class);
+        Flow.from(() -> {
+            // keep comment inside lambda body
+            return source.read().orElseGet(() -> fallback.create());
+        }).scheduleOn(worker);
     }
 }

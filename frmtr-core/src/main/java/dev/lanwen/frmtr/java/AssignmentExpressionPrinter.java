@@ -39,6 +39,7 @@ final class AssignmentExpressionPrinter {
     private final BiFunction<Expression, Boolean, Doc> binaryExpressionLines;
     private final Function<ObjectCreationExpr, Doc> brokenObjectCreation;
     private final BiFunction<AssignExpr, MethodCallExpr, Optional<Doc>> methodCallAssignment;
+    private final BiFunction<AssignExpr, MethodCallExpr, Optional<Doc>> methodCallAssignmentWithSemicolon;
     private final BiFunction<AssignExpr, ConditionalExpr, Optional<Doc>> conditionalAssignment;
 
     AssignmentExpressionPrinter(
@@ -51,6 +52,7 @@ final class AssignmentExpressionPrinter {
             BiFunction<Expression, Boolean, Doc> binaryExpressionLines,
             Function<ObjectCreationExpr, Doc> brokenObjectCreation,
             BiFunction<AssignExpr, MethodCallExpr, Optional<Doc>> methodCallAssignment,
+            BiFunction<AssignExpr, MethodCallExpr, Optional<Doc>> methodCallAssignmentWithSemicolon,
             BiFunction<AssignExpr, ConditionalExpr, Optional<Doc>> conditionalAssignment) {
         this.options = options;
         this.expression = expression;
@@ -61,6 +63,7 @@ final class AssignmentExpressionPrinter {
         this.binaryExpressionLines = binaryExpressionLines;
         this.brokenObjectCreation = brokenObjectCreation;
         this.methodCallAssignment = methodCallAssignment;
+        this.methodCallAssignmentWithSemicolon = methodCallAssignmentWithSemicolon;
         this.conditionalAssignment = conditionalAssignment;
     }
 
@@ -80,6 +83,18 @@ final class AssignmentExpressionPrinter {
             }
         }
         return flatAssignment(expression);
+    }
+
+    Doc assignmentStatement(AssignExpr expression) {
+        String flat = compact.apply(expression);
+        if (blockStatementWidth.applyAsInt(flat + ";") > options.lineWidth()
+                && expression.getValue() instanceof MethodCallExpr methodCall) {
+            Optional<Doc> methodCallValue = methodCallAssignmentWithSemicolon.apply(expression, methodCall);
+            if (methodCallValue.isPresent()) {
+                return methodCallValue.orElseThrow();
+            }
+        }
+        return Doc.concat(assignment(expression), Doc.text(";"));
     }
 
     /**

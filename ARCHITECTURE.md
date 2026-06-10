@@ -177,14 +177,17 @@ Comment preservation is centralized through a per-run `JavaCommentMap`, read-onl
 and stateful `CommentTracker` claims so adjacent leading clusters, line comments inside annotation arrays, and line
 comments before fluent-chain segments are printed once while syntax-specific printers keep the surrounding layout.
 
-Variable initializer wrapping is owned by the declaration printers that know the full declaration prefix. Direct
-block-lambda initializers and object-creation-root method-call initializers keep the assignment with the opener while it
-fits before falling back to a break after `=`, method-call initializers preserve huggable block-lambda call shapes before
-falling back to hard-broken argument lists, and switch expression initializers keep their multiline body on the equals
-line. Source-shape helpers and shared constructor layout policy preserve existing multiline call, field-root fluent-chain,
-ternary, callable-header, constructor-root, builder-root, and try-resource forms using JavaParser ranges and bounded
-source slices before printers assemble equivalent docs. Record headers try the full header first, then open component
-lists before moving implemented types to their own continuation.
+Variable initializer wrapping is coordinated through `VariableInitializerLayout`, with declaration printers supplying the
+full declaration prefix and keeping ownership of variable sequencing. Direct block-lambda initializers and
+object-creation-root method-call initializers keep the assignment with the opener while it fits before falling back to a
+break after `=`, method-call initializers preserve huggable block-lambda call shapes before falling back to hard-broken
+argument lists, and switch expression initializers keep their multiline body on the equals line. `LayoutWidth`
+centralizes the indentation baselines used by these width probes. Source-shape helpers and shared constructor layout
+policy preserve existing multiline call, field-root fluent-chain, ternary, callable-header, constructor-root,
+builder-root, and try-resource forms using JavaParser ranges and bounded source slices before printers assemble
+equivalent docs. Method-call chain doc assembly is split from ordinary method-call argument dispatch so source-chain
+planning, root promotion, final-segment tails, and chain comments stay in the chain helper. Record headers try the full
+header first, then open component lists before moving implemented types to their own continuation.
 
 ## CLI
 

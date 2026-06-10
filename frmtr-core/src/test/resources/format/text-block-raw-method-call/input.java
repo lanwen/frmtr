@@ -13,4 +13,16 @@ final class TextBlockRawMethodCall {
         );
         sink(merged);
     }
+
+    void format(String sshPublicKey) {
+        String payload = """
+            #cloud-config
+            content: "%s"
+            """.formatted(
+                Base64.getEncoder().encodeToString(
+                    (sshPublicKey.strip() + System.lineSeparator()).getBytes(StandardCharsets.UTF_8)
+                )
+            );
+        sink(payload);
+    }
 }

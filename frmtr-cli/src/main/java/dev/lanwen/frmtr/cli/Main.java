@@ -3,6 +3,9 @@ package dev.lanwen.frmtr.cli;
 import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.Frmtr;
+import dev.lanwen.frmtr.tooling.DiagnosticSpan;
+import dev.lanwen.frmtr.tooling.DiagnosticStyle;
+import dev.lanwen.frmtr.tooling.DiagnosticText;
 import dev.lanwen.frmtr.tooling.FormatFileResult;
 import dev.lanwen.frmtr.tooling.FormatFileStatus;
 import dev.lanwen.frmtr.tooling.FormatRunResult;
@@ -58,7 +61,7 @@ public final class Main implements Callable<Integer> {
     @Option(
             names = "--color",
             paramLabel = "auto|always|never",
-            description = "Color status markers and diff output. Defaults to ${DEFAULT-VALUE}.",
+            description = "Color status markers, diff output, and diagnostics. Defaults to ${DEFAULT-VALUE}.",
             defaultValue = "auto",
             converter = ColorModeConverter.class)
     ColorMode colorMode;
@@ -224,7 +227,7 @@ public final class Main implements Callable<Integer> {
         for (FormatFileResult result : run.results()) {
             out.println(statusLine(statusMarker(result.status()), result.displayPath()));
             if (result.failed() && !stacktrace) {
-                out.println(FormatterRunFailureRenderer.render(result));
+                out.println(colorizeDiagnostic(FormatterRunFailureRenderer.renderDiagnostic(result)));
             } else {
                 result.unifiedDiff().map(this::colorizeDiff).ifPresent(out::print);
             }
@@ -462,6 +465,30 @@ public final class Main implements Callable<Integer> {
         return cursor;
     }
 
+    private String colorizeDiagnostic(DiagnosticText diagnostic) {
+        if (!ansi().enabled()) {
+            return diagnostic.plainText();
+        }
+        StringBuilder colored = new StringBuilder(diagnostic.plainText().length());
+        for (int lineIndex = 0; lineIndex < diagnostic.lines().size(); lineIndex++) {
+            if (lineIndex > 0) {
+                colored.append(System.lineSeparator());
+            }
+            for (DiagnosticSpan span : diagnostic.lines().get(lineIndex).spans()) {
+                colored.append(styled(span.text(), diagnosticStyle(span.style())));
+            }
+        }
+        return colored.toString();
+    }
+
+    private IStyle[] diagnosticStyle(DiagnosticStyle style) {
+        return switch (style) {
+            case ERROR_TEXT, POINTER -> new IStyle[] {Style.fg_red};
+            case LINE_NUMBER, BORDER_GUTTER, GAP -> new IStyle[] {LINE_BORDER_STYLE};
+            case SOURCE_TEXT -> new IStyle[0];
+        };
+    }
+
     private String styled(String value, IStyle... styles) {
         Ansi ansi = ansi();
         if (!ansi.enabled() || styles.length == 0) {
@@ -491,7 +518,7 @@ public final class Main implements Callable<Integer> {
                     .ifPresent(exception -> printFailure(result.displayPath().toString(), exception)));
             return;
         }
-        err.println(FormatterRunFailureRenderer.render(run));
+        err.println(colorizeDiagnostic(FormatterRunFailureRenderer.renderDiagnostic(run)));
         err.flush();
     }
 
@@ -501,7 +528,7 @@ public final class Main implements Callable<Integer> {
                 && !stacktrace) {
             return exception.getMessage() + " (run with --stacktrace for details)";
         }
-        return FormatterFailureRenderer.render(exception);
+        return colorizeDiagnostic(FormatterFailureRenderer.renderDiagnostic(exception));
     }
 
     private Path displayPath(Path file) {

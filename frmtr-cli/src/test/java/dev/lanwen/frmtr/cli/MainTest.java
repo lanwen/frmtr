@@ -179,6 +179,31 @@ final class MainTest {
     }
 
     @Test
+    void colorAlwaysColorsFailureDiagnosticSpans(@TempDir Path dir) throws IOException {
+        write(dir.resolve("src/Broken.java"), "class {");
+
+        Result plain = run(dir, null, "--check", "--color", "never", "src");
+        Result colored = run(dir, null, "--check", "--color", "always", "src");
+
+        assertThat(colored.exitCode()).isEqualTo(2);
+        assertThat(stripAnsi(colored.out())).isEqualTo(plain.out());
+        assertThat(plain.out())
+                .startsWith("""
+                        ! src/Broken.java
+                        ┌─ Unable to parse Java source:
+                        │ 1  class {
+                        """)
+                .endsWith("Checked 1 file: 1 failed.\n");
+        assertThat(colored.out())
+                .contains("\u001B[31m!\u001B[0m src/Broken.java\n")
+                .contains("\u001B[38;5;8m┌─ \u001B[0m\u001B[31mUnable to parse Java source:\u001B[0m")
+                .contains("\u001B[38;5;8m│ \u001B[0m\u001B[38;5;8m1\u001B[0m\u001B[38;5;8m  \u001B[0mclass {\n")
+                .containsPattern("\u001B\\[31m[^\\n]*\\^\u001B\\[0m");
+        assertThat(plain.out()).doesNotContain("\u001B[");
+        assertThat(colored.err()).isEmpty();
+    }
+
+    @Test
     void colorNeverPreservesPlainStatusAndDiffOutput() {
         Result result = run(Path.of("."), "class Demo{int value;}", "--stdin", "--diff", "--color", "never");
 

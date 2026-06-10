@@ -123,9 +123,12 @@ core debug API only, not a formatting policy surface or CLI hook.
   owns an opt-in terminal decoration mode that marks nearby hunk source columns with a dotted line-width guide without
   changing the plain patch-like default.
 - `FormatterFailureRenderer` turns structured formatter failures into adapter-facing messages, including parse context,
-  declaration-line context, and caret placement, without making the core exception message own terminal formatting.
+  declaration-line context, and caret placement, without making the core exception message own terminal formatting. It
+  returns diagnostic text split into semantic spans so adapters can preserve the same plain text while applying their own
+  presentation.
 - `FormatterRunFailureRenderer` renders failed file results as outlined diagnostic blocks titled by the failure message
-  while file identity stays with adapter status lines.
+  while file identity stays with adapter status lines, using the same semantic diagnostic spans for outline glyphs,
+  source line numbers, source text, pointer markers, gaps, and error text.
 
 The runner owns deterministic path ordering and de-duplication for file lists supplied by adapters. Source discovery
 remains adapter-specific: the CLI uses selectors and `.gitignore`; the Gradle plugin builds one canonical file collection
@@ -204,10 +207,12 @@ The CLI is an adapter over the public formatter API:
   the nearest neighboring hunk rows, including blank rows, so guide continuity stays on existing diff lines. Diff
   prefixes are metadata and do not count toward the guide column. Lines that cross the guide preserve their full text and
   receive a marker-prefixed overflow count.
-- `--color`: controls ANSI presentation for status markers and CLI-printed diffs. The default `auto` uses Picocli's
+- `--color`: controls ANSI presentation for status markers, CLI-printed diffs, and CLI-rendered failure diagnostics.
+  The default `auto` uses Picocli's
   terminal detection, `always` forces color for captured or redirected runs, and `never` keeps output plain for logs,
-  scripts, or patch consumers. Colorization happens after adapter diff rendering, so formatted source stdout and
-  `:frmtr-tooling` diff strings remain uncolored.
+  scripts, or patch consumers. Colorization happens after adapter diff and diagnostic rendering, so formatted source
+  stdout and `:frmtr-tooling` diff and diagnostic strings remain uncolored. Diagnostic semantic spans come from
+  `:frmtr-tooling`; the CLI only maps those roles to terminal colors.
 - `--write`: rewrite files in place, group file-run failures on stderr by display path, and print a concise stdout
   processed summary counting formatted, failed, ignored, and unchanged files. Ignored files are `.java` files excluded by
   `.gitignore` during selector discovery.

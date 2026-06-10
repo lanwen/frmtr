@@ -17,7 +17,7 @@ import java.util.function.ToIntFunction;
  *
  * <p>This helper owns the chain decisions that depend on source shape rather than rendered document structure: finding
  * the structural root, detecting selectors that were already split onto later source lines, promoting type-like roots
- * and static builder roots, and keeping simple single-argument constructor roots compact when the original source did.
+ * and static builder roots, and keeping small constructor roots compact when the original source did.
  * The boundary exists so the method-call printer can stay focused on argument docs, comments, and final chain assembly.
  *
  * <p>Callers still provide comment and block-lambda predicates because those are rendering concerns owned by
@@ -25,7 +25,7 @@ import java.util.function.ToIntFunction;
  * render comments, build method-call segment docs, or decide ordinary argument-list layout.
  */
 final class MethodCallChainSourcePlanner {
-    private final SourceShape sourceShape;
+    private final ObjectCreationLayoutPolicy objectCreationLayoutPolicy;
     private final CompactSourceText compactSource;
     private final FormatterOptions options;
     private final ToIntFunction<String> currentIndentedWidth;
@@ -33,7 +33,7 @@ final class MethodCallChainSourcePlanner {
     MethodCallChainSourcePlanner(
             JavaFormatContext context,
             ToIntFunction<String> currentIndentedWidth) {
-        this.sourceShape = context.sourceShape;
+        this.objectCreationLayoutPolicy = context.objectCreationLayoutPolicy;
         this.compactSource = context.compactSource;
         this.options = context.options;
         this.currentIndentedWidth = currentIndentedWidth;
@@ -179,7 +179,7 @@ final class MethodCallChainSourcePlanner {
         if (rootRendering == ChainRootRendering.EXPRESSION_RENDERER
                 && forceBreak
                 && root instanceof ObjectCreationExpr objectCreation
-                && !sourceCompactSingleArgumentConstructorRoot(objectCreation)) {
+                && !sourceCompactConstructorRoot(objectCreation)) {
             rootRendering = ChainRootRendering.BROKEN_OBJECT_CREATION;
         }
         if (rootRendering == ChainRootRendering.EXPRESSION_RENDERER
@@ -317,12 +317,11 @@ final class MethodCallChainSourcePlanner {
         return expression.getArguments().size() <= 1;
     }
 
-    private boolean sourceCompactSingleArgumentConstructorRoot(ObjectCreationExpr expression) {
-        return expression.getArguments().size() == 1
-                && expression.getAnonymousClassBody().isEmpty()
-                && expression.getAllContainedComments().isEmpty()
-                && !sourceShape.objectCreationArgumentsSpanMultipleLines(expression)
-                && currentIndentedWidth.applyAsInt(compactSource.compact(expression)) <= options.lineWidth();
+    private boolean sourceCompactConstructorRoot(ObjectCreationExpr expression) {
+        return objectCreationLayoutPolicy.canKeepCompactChainRoot(
+                expression,
+                currentIndentedWidth.applyAsInt(compactSource.compact(expression)),
+                options.lineWidth());
     }
 
     private Optional<String> fieldAccessRootName(FieldAccessExpr fieldAccess) {

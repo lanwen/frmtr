@@ -4,12 +4,9 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
-import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
-import com.github.javaparser.ast.expr.VariableDeclarationExpr;
-import com.github.javaparser.ast.stmt.TryStmt;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,7 +29,7 @@ import java.util.function.Function;
  */
 final class ObjectCreationPrinter {
     private final CommentTracker comments;
-    private final SourceShape sourceShape;
+    private final ObjectCreationLayoutPolicy layoutPolicy;
     private final TypePrinter types;
     private final CommentedExpressionListPrinter commentedExpressionLists;
     private final JavaFormatRule<Expression> expressionRenderer;
@@ -56,7 +53,7 @@ final class ObjectCreationPrinter {
             Function<Node, String> compactTypeLikeWithoutOwnComment,
             Function<Doc, String> commentText) {
         this.comments = context.comments;
-        this.sourceShape = context.sourceShape;
+        this.layoutPolicy = context.objectCreationLayoutPolicy;
         this.types = types;
         this.commentedExpressionLists = new CommentedExpressionListPrinter(context, expressionRenderer::format);
         this.expressionRenderer = expressionRenderer;
@@ -129,9 +126,7 @@ final class ObjectCreationPrinter {
     }
 
     private Optional<Doc> sourceMultilineArguments(ObjectCreationExpr expression, String prefix) {
-        if (!expression.getAllContainedComments().isEmpty()
-                || !isTryResourceObjectCreation(expression)
-                || !sourceShape.objectCreationArgumentsSpanMultipleLines(expression)) {
+        if (!layoutPolicy.shouldPreserveSourceMultilineArguments(expression)) {
             return Optional.empty();
         }
         return Optional.of(Doc.concat(
@@ -143,16 +138,6 @@ final class ObjectCreationPrinter {
                                 .toList()))),
                 Doc.HARD_LINE,
                 Doc.text(")")));
-    }
-
-    private boolean isTryResourceObjectCreation(ObjectCreationExpr expression) {
-        return expression.getParentNode()
-                .filter(VariableDeclarator.class::isInstance)
-                .flatMap(Node::getParentNode)
-                .filter(VariableDeclarationExpr.class::isInstance)
-                .flatMap(Node::getParentNode)
-                .filter(TryStmt.class::isInstance)
-                .isPresent();
     }
 
     String objectCreationPrefix(ObjectCreationExpr expression) {

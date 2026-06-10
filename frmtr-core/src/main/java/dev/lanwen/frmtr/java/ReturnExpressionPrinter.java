@@ -28,7 +28,7 @@ import java.util.function.ToIntFunction;
  */
 final class ReturnExpressionPrinter {
     private final FormatterOptions options;
-    private final SourceShape sourceShape;
+    private final ObjectCreationLayoutPolicy objectCreationLayoutPolicy;
     private final Function<Expression, Doc> expression;
     private final Function<Expression, String> compact;
     private final ToIntFunction<String> currentIndentedWidth;
@@ -40,7 +40,7 @@ final class ReturnExpressionPrinter {
 
     ReturnExpressionPrinter(
             FormatterOptions options,
-            SourceShape sourceShape,
+            ObjectCreationLayoutPolicy objectCreationLayoutPolicy,
             Function<Expression, Doc> expression,
             Function<Expression, String> compact,
             ToIntFunction<String> currentIndentedWidth,
@@ -50,7 +50,7 @@ final class ReturnExpressionPrinter {
             BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression,
             BiFunction<Expression, Boolean, Doc> parenthesizedBreak) {
         this.options = options;
-        this.sourceShape = sourceShape;
+        this.objectCreationLayoutPolicy = objectCreationLayoutPolicy;
         this.expression = expression;
         this.compact = compact;
         this.currentIndentedWidth = currentIndentedWidth;
@@ -91,8 +91,7 @@ final class ReturnExpressionPrinter {
 
     private boolean sourceMultilineObjectCreation(Expression expression) {
         return expression instanceof ObjectCreationExpr objectCreationExpr
-                && objectCreationExpr.getAllContainedComments().isEmpty()
-                && sourceShape.objectCreationArgumentsSpanMultipleLines(objectCreationExpr);
+                && objectCreationLayoutPolicy.shouldPreserveSourceMultilineArguments(objectCreationExpr);
     }
 
     private boolean returnLineFits(Expression expression) {

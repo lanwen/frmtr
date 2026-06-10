@@ -75,7 +75,7 @@ final class FieldDeclarationPrinter {
     private final Function<MethodCallExpr, Optional<Doc>> mixedFieldMethodCallChain;
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain;
     private final Function<MethodCallExpr, Optional<Expression>> mixedFieldMethodCallRoot;
-    private final BiFunction<MethodCallExpr, List<MethodCallExpr>, Expression> methodCallChainRoot;
+    private final Function<MethodCallExpr, String> methodCallChainFirstLine;
     private final Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation;
     private final Function<Type, Doc> castType;
     private final Function<ConditionalExpr, Doc> brokenConditionalExpression;
@@ -118,7 +118,7 @@ final class FieldDeclarationPrinter {
             Function<MethodCallExpr, Optional<Doc>> mixedFieldMethodCallChain,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain,
             Function<MethodCallExpr, Optional<Expression>> mixedFieldMethodCallRoot,
-            BiFunction<MethodCallExpr, List<MethodCallExpr>, Expression> methodCallChainRoot,
+            Function<MethodCallExpr, String> methodCallChainFirstLine,
             Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation,
             Function<Type, Doc> castType,
             Function<ConditionalExpr, Doc> brokenConditionalExpression,
@@ -159,7 +159,7 @@ final class FieldDeclarationPrinter {
         this.mixedFieldMethodCallChain = mixedFieldMethodCallChain;
         this.forcedMethodCallChain = forcedMethodCallChain;
         this.mixedFieldMethodCallRoot = mixedFieldMethodCallRoot;
-        this.methodCallChainRoot = methodCallChainRoot;
+        this.methodCallChainFirstLine = methodCallChainFirstLine;
         this.methodCallChainRootIsObjectCreation = methodCallChainRootIsObjectCreation;
         this.castType = castType;
         this.brokenConditionalExpression = brokenConditionalExpression;
@@ -631,8 +631,9 @@ final class FieldDeclarationPrinter {
             MethodCallExpr methodCall,
             Doc chain) {
         String firstLine = mixedFieldMethodCallRoot.apply(methodCall)
+                .filter(root -> !(root instanceof ObjectCreationExpr))
                 .map(compact)
-                .orElseGet(() -> methodCallChainFirstLine(methodCall));
+                .orElseGet(() -> methodCallChainFirstLine.apply(methodCall));
         if (methodCallChainRootIsObjectCreation.test(methodCall)
                 && blockStatementWidth(flatName + " = " + firstLine + ";") > options.lineWidth()) {
             return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
@@ -641,18 +642,6 @@ final class FieldDeclarationPrinter {
             return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
         }
         return Doc.concat(Doc.text(name + " = "), chain);
-    }
-
-    /**
-     * Finds the text that will occupy the first line of a broken method-call chain for assignment-width checks.
-     */
-    private String methodCallChainFirstLine(MethodCallExpr methodCall) {
-        List<MethodCallExpr> calls = new ArrayList<>();
-        Expression root = methodCallChainRoot.apply(methodCall, calls);
-        if (root instanceof MethodCallExpr && calls.size() == 1) {
-            return compact.apply(methodCall);
-        }
-        return compact.apply(root);
     }
 
     /**

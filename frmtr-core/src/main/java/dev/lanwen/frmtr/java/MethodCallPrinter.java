@@ -57,6 +57,7 @@ final class MethodCallPrinter {
     private final Function<Expression, Doc> expressionRenderer;
     private final BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix;
     private final Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer;
+    private final Function<ObjectCreationExpr, String> objectCreationPrefix;
     private final Function<BinaryExpr, Doc> brokenBinaryExpressionLinesRenderer;
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments;
     private final BiFunction<String, NodeList<Expression>, Optional<String>> huggableBlockLambdaFirstLine;
@@ -98,6 +99,7 @@ final class MethodCallPrinter {
             Function<Expression, Doc> expressionRenderer,
             BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix,
             Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer,
+            Function<ObjectCreationExpr, String> objectCreationPrefix,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,
             BiFunction<String, NodeList<Expression>, Optional<String>> huggableBlockLambdaFirstLine,
             BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument,
@@ -118,6 +120,7 @@ final class MethodCallPrinter {
         this.expressionRenderer = expressionRenderer;
         this.brokenEnclosedForSuffix = brokenEnclosedForSuffix;
         this.brokenObjectCreationRenderer = brokenObjectCreationRenderer;
+        this.objectCreationPrefix = objectCreationPrefix;
         this.brokenBinaryExpressionLinesRenderer = brokenBinaryExpressionLinesRenderer;
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.huggableBlockLambdaFirstLine = huggableBlockLambdaFirstLine;
@@ -594,8 +597,16 @@ final class MethodCallPrinter {
         return methodChainPlanner.rootIsFieldAccess(expression);
     }
 
-    Expression methodCallChainRoot(MethodCallExpr expression, List<MethodCallExpr> calls) {
-        return methodChainPlanner.methodCallChainRoot(expression, calls);
+    String methodCallChainFirstLine(MethodCallExpr expression) {
+        MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
+        if (analysis.root() instanceof MethodCallExpr && analysis.calls().size() == 1) {
+            return compactSource.compact(expression);
+        }
+        MethodCallChainSourcePlanner.MethodCallChainPlan plan = methodChainPlanner.plan(analysis, true);
+        if (plan.rootRendering() == MethodCallChainSourcePlanner.ChainRootRendering.BROKEN_OBJECT_CREATION) {
+            return objectCreationPrefix.apply((ObjectCreationExpr) plan.root()) + "(";
+        }
+        return compactSource.compact(plan.root());
     }
 
     private boolean methodCallSegmentHasComment(MethodCallExpr expression) {
@@ -619,7 +630,7 @@ final class MethodCallPrinter {
                 return true;
             }
         }
-        return false;
+        return !calls.isEmpty() && !finalTrailingLineComments(calls.getLast()).isEmpty();
     }
 
     private boolean methodCallSegmentHasBlockLambdaArgument(MethodCallExpr expression) {
@@ -691,7 +702,9 @@ final class MethodCallPrinter {
 
     private Doc methodCallChainSegment(MethodCallExpr expression, Optional<MethodCallExpr> nextCall) {
         Doc segment = methodCallChainSegment(expression);
-        Doc trailingComment = trailingLineCommentBeforeNextSegment(expression, nextCall);
+        Doc trailingComment = nextCall
+                .map(next -> trailingLineCommentBeforeNextSegment(expression, Optional.of(next)))
+                .orElseGet(() -> finalTrailingLineComment(expression));
         return trailingComment == Doc.EMPTY ? segment : Doc.concat(segment, Doc.text(" "), trailingComment);
     }
 
@@ -728,6 +741,28 @@ final class MethodCallPrinter {
         return commentPlacement.containedComments(next).stream()
                 .filter(JavaCommentTrivia::isLine)
                 .toList();
+    }
+
+    /**
+     * Keeps a final segment's same-line comment after the rendered call, even when the call arguments break.
+     */
+    private Doc finalTrailingLineComment(MethodCallExpr expression) {
+        List<Doc> sourceComments = finalTrailingLineComments(expression).stream()
+                .map(comments::comment)
+                .filter(comment -> comment != Doc.EMPTY)
+                .toList();
+        return sourceComments.isEmpty() ? Doc.EMPTY : Doc.join(Doc.text(" "), sourceComments);
+    }
+
+    private List<JavaCommentTrivia> finalTrailingLineComments(MethodCallExpr expression) {
+        List<JavaCommentTrivia> sourceComments = new ArrayList<>();
+        commentPlacement.trailingLineComment(expression).ifPresent(sourceComments::add);
+        commentPlacement.containedComments(expression).stream()
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.startsAfterNodeOnSameLine(expression))
+                .filter(comment -> sourceComments.stream().noneMatch(existing -> existing.comment() == comment.comment()))
+                .forEach(sourceComments::add);
+        return sourceComments;
     }
 
     private Doc fieldAccessMethodCallSegment(FieldAccessExpr fieldAccess, MethodCallExpr methodCall) {

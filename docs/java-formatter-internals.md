@@ -52,8 +52,9 @@ inside those safe chunks without cloning nodes, leaving comments and node identi
 `JavaPrinter` wires the current Java formatting collaborators for common type declarations, fields, methods,
 constructors, statements, and outer expression callbacks. It creates one per-run `JavaFormatContext` for formatter-wide
 options, comment tracking, comment placement policy, formatter pragmas, raw source recovery, compact source text, and
-source-position comment placement, then passes that context only where it is clearer than threading those shared
-dependencies separately. It keeps the v1 style deliberately opinionated and sparse on options.
+source-position comment placement, plus shared source-shape layout policy for constructor calls, then passes that context
+only where it is clearer than threading those shared dependencies separately. It keeps the v1 style deliberately
+opinionated and sparse on options.
 
 `JavaFormatRule` is the package-private node-rule contract used at dispatcher boundaries. After `JavaPrinter` and a
 dispatcher or printer have selected a declaration, statement, or expression category, a typed rule formats exactly that
@@ -116,8 +117,8 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
 - `TextBlockPrinter`: narrow content probes, formatted text-block reconstruction, raw fallback rendering, same-line
   closing-delimiter preservation, escaped triple-quote source spelling, and parent-depth content indentation.
 - `ObjectCreationPrinter`: constructor-call prefixes, comments around `new` and created types, forced constructor
-  argument breaks, generic type-body breaks, huggable lambda arguments, commented constructor argument gaps, and anonymous
-  class body member sequencing.
+  argument breaks selected by `ObjectCreationLayoutPolicy`, generic type-body breaks, huggable lambda arguments, commented
+  constructor argument gaps, and anonymous class body member sequencing.
 - `ArrayExpressionPrinter`: array access, array creation, array initializer braces, compact literal initializer
   acceptance, array-creation type breaks, forced initializer breaks, and initializer comments.
 - `AnnotationExpressionPrinter`: marker, normal, and single-member annotation shapes, annotation member pairs, compact
@@ -178,10 +179,15 @@ between neighboring AST-owned syntax, such as the first thrown exception line or
 rather than scanning an entire declaration or statement for delimiters and keywords. Printers still decide what doc to
 build after a shape predicate is true.
 
+`ObjectCreationLayoutPolicy` centralizes constructor-call source-shape decisions that several expression contexts share:
+when source-multiline constructor arguments are meaningful enough to preserve, and whether a constructor root may stay
+compact when a surrounding method-call chain is forced to break. It does not render constructor docs; direct constructor
+printing, return expressions, and method-call chain planning keep their surrounding grammar decisions.
+
 `MethodCallChainSourcePlanner` owns method-call chain source-shape planning before `MethodCallPrinter` assembles docs:
-structural root collection, selector-line preservation, type-like and builder-root promotion, and the simple constructor
-root policy that keeps compact source roots compact before broken chains. `MethodCallPrinter` keeps comment accounting,
-argument rendering, lambda handling, and final doc assembly.
+structural root collection, selector-line preservation, type-like and builder-root promotion, and delegation to
+`ObjectCreationLayoutPolicy` for constructor-root compactness before broken chains. `MethodCallPrinter` keeps comment
+accounting, argument rendering, lambda handling, and final doc assembly.
 
 `CommentedModulePrinter`, `CommentedMethodSignaturePrinter`, and `CommentedInterfacePrinter` own raw-source escape
 hatches for module declarations, method signatures, interface headers, and abstract method signatures whose inline

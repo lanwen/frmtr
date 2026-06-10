@@ -104,10 +104,22 @@ final class CommentedExpressionListPrinter {
             if (index + 1 < arguments.size()) {
                 gaps.add(commentPlacement.lineCommentsBetween(container, argument, arguments.get(index + 1)));
             } else {
-                gaps.add(commentPlacement.lineCommentsAfterLast(container, argument));
+                gaps.add(trailingArgumentComments(container, argument));
             }
         }
         return gaps;
+    }
+
+    /**
+     * Keeps comments after the completed call or constructor out of the final argument gap.
+     *
+     * <p>A line comment in {@code call(arg) // note} belongs to the enclosing syntax, not to {@code arg}; chain and
+     * statement printers need to keep that comment at the completed-call boundary.
+     */
+    private List<JavaCommentTrivia> trailingArgumentComments(Node container, Expression argument) {
+        return commentPlacement.lineCommentsAfterLast(container, argument).stream()
+                .filter(comment -> !comment.startsAfterNodeOnSameLine(container))
+                .toList();
     }
 
     private Node argumentListAnchor(Node container) {

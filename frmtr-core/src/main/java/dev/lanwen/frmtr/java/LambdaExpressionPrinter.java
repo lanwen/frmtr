@@ -405,7 +405,8 @@ final class LambdaExpressionPrinter {
      *
      * <p>JavaParser can attach those comments to the call, the method name, or the lambda itself. This method collects
      * only line and block comments around the single lambda argument, then prints leading comments before the lambda and
-     * trailing comments after it inside the broken call argument list.
+     * trailing comments after it inside the broken call argument list. Comments after the completed call stay out of this
+     * path so chain renderers can keep them after the call's closing parenthesis.
      */
     Optional<Doc> commentedExpressionLambdaArgument(String prefix, MethodCallExpr expression) {
         if (expression.getArguments().size() != 1
@@ -416,12 +417,15 @@ final class LambdaExpressionPrinter {
         List<Comment> commentsAroundLambda = new ArrayList<>();
         expression.getOrphanComments().stream()
                 .filter(this::isLineOrBlockComment)
+                .filter(comment -> !trailsCompletedCall(expression, comment))
                 .forEach(commentsAroundLambda::add);
         lambdaExpr.getComment()
                 .filter(this::isLineOrBlockComment)
+                .filter(comment -> !trailsCompletedCall(expression, comment))
                 .ifPresent(commentsAroundLambda::add);
         expression.getName().getComment()
                 .filter(this::isLineOrBlockComment)
+                .filter(comment -> !trailsCompletedCall(expression, comment))
                 .filter(comment -> startsBefore.test(comment, lambdaExpr))
                 .ifPresent(commentsAroundLambda::add);
         if (commentsAroundLambda.isEmpty()) {
@@ -462,6 +466,10 @@ final class LambdaExpressionPrinter {
 
     private boolean isLineOrBlockComment(Comment comment) {
         return comment instanceof LineComment || comment instanceof BlockComment;
+    }
+
+    private boolean trailsCompletedCall(MethodCallExpr expression, Comment comment) {
+        return CommentIndex.startsAfterNodeOnSameLine(expression, comment);
     }
 
     /**

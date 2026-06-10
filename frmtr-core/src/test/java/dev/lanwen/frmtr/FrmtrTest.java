@@ -209,14 +209,18 @@ final class FrmtrTest {
     @ParameterizedTest(name = "{0} @ {1}")
     @CsvSource({
             "binary-method-call-operand, 120",
+            "binary-return-comments, 120",
             "block-lambda-call-initializers, 40",
             "block-lambda-call-initializers, 120",
             "block-lambda-setup-initializer, 120",
             "chain-comment-ownership, 120",
+            "constructor-chain-roots, 120",
+            "direct-constructor-source-multiline, 120",
             "field-trailing-comments, 120",
             "member-blank-lines, 120",
             "member-comment-spacing, 120",
             "method-chain-trailing-empty-call-comment, 120",
+            "method-chain-trailing-lambda-comment, 120",
             "multiline-if-condition, 120",
             "nested-generic-type-breaks, 120",
             "object-creation-diamond-break, 120",

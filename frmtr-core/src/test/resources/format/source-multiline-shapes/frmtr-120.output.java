@@ -22,10 +22,7 @@ class MultilineShapes {
             Event.Type.class,
             ref -> {
                 ref.accept("x");
-                return new Wrapped(
-                    "id",
-                    new Done()
-                );
+                return new Wrapped("id", new Done());
             }
         );
     }

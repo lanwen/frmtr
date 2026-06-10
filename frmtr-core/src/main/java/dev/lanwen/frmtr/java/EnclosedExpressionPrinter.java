@@ -12,6 +12,7 @@ import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
 
 /**
@@ -31,6 +32,8 @@ final class EnclosedExpressionPrinter {
     private final FormatterOptions options;
     private final Function<Expression, Doc> expression;
     private final BiFunction<Expression, Boolean, Doc> binaryLines;
+    private final Predicate<BinaryExpr> binaryExpressionHasLineComments;
+    private final Function<BinaryExpr, Doc> binaryLinesWithComments;
     private final Function<Node, String> compact;
     private final ToIntFunction<String> currentIndentedWidth;
     private final ToIntFunction<String> continuationStatementWidth;
@@ -42,6 +45,8 @@ final class EnclosedExpressionPrinter {
             FormatterOptions options,
             Function<Expression, Doc> expression,
             BiFunction<Expression, Boolean, Doc> binaryLines,
+            Predicate<BinaryExpr> binaryExpressionHasLineComments,
+            Function<BinaryExpr, Doc> binaryLinesWithComments,
             Function<Node, String> compact,
             ToIntFunction<String> currentIndentedWidth,
             ToIntFunction<String> continuationStatementWidth,
@@ -51,6 +56,8 @@ final class EnclosedExpressionPrinter {
         this.options = options;
         this.expression = expression;
         this.binaryLines = binaryLines;
+        this.binaryExpressionHasLineComments = binaryExpressionHasLineComments;
+        this.binaryLinesWithComments = binaryLinesWithComments;
         this.compact = compact;
         this.currentIndentedWidth = currentIndentedWidth;
         this.continuationStatementWidth = continuationStatementWidth;
@@ -116,9 +123,16 @@ final class EnclosedExpressionPrinter {
     Doc parenthesizedBreak(Expression expression, boolean forceBinaryBreak) {
         return Doc.concat(
                 Doc.text("("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, binaryLines.apply(expression, forceBinaryBreak))),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, parenthesizedBreakContent(expression, forceBinaryBreak))),
                 Doc.HARD_LINE,
                 Doc.text(")"));
+    }
+
+    private Doc parenthesizedBreakContent(Expression expression, boolean forceBinaryBreak) {
+        if (expression instanceof BinaryExpr binaryExpr && binaryExpressionHasLineComments.test(binaryExpr)) {
+            return binaryLinesWithComments.apply(binaryExpr);
+        }
+        return binaryLines.apply(expression, forceBinaryBreak);
     }
 
     /**

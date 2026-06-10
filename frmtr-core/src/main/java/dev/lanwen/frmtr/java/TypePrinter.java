@@ -130,7 +130,7 @@ final class TypePrinter {
                         Doc.HARD_LINE,
                         Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), type.getTypeArguments().stream()
                                 .flatMap(NodeList::stream)
-                                .map(this::typeBody)
+                                .map(this::groupedTypeBody)
                                 .toList()))),
                 Doc.HARD_LINE,
                 Doc.text(">"));
@@ -169,10 +169,14 @@ final class TypePrinter {
                         Doc.SOFT_LINE,
                         Doc.join(Doc.concat(Doc.text(","), Doc.LINE), type.getTypeArguments().stream()
                                 .flatMap(NodeList::stream)
-                                .map(this::typeBody)
+                                .map(this::groupedTypeBody)
                                 .toList()))),
                 Doc.SOFT_LINE,
                 Doc.text(">"));
+    }
+
+    private Doc groupedTypeBody(Type type) {
+        return Doc.group(typeBody(type));
     }
 
     /**

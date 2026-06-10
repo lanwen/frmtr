@@ -364,6 +364,8 @@ final class JavaPrinter {
                 types::flatTypeParameters,
                 declarationPrefixes::inlineAnnotations,
                 compactSource::compact,
+                types::typeBody,
+                types::typeCanBreak,
                 throwsClauses::throwsClause,
                 this::block);
         this.initializers = new InitializerDeclarationPrinter(this::block);

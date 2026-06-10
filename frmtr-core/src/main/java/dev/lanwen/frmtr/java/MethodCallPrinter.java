@@ -395,6 +395,15 @@ final class MethodCallPrinter {
         root = chainPlan.root();
         calls = chainPlan.calls();
         Doc rootDoc = methodCallChainRootDoc(chainPlan);
+        Doc rootTrailingComment = rootTrailingLineCommentBeforeFirstSegment(root, calls);
+        if (rootTrailingComment != Doc.EMPTY) {
+            rootDoc = Doc.concat(rootDoc, Doc.text(" "), rootTrailingComment);
+            if (calls.size() == 1) {
+                return Optional.of(Doc.concat(
+                        rootDoc,
+                        Doc.indent(Doc.concat(Doc.HARD_LINE, methodCallChainSegment(calls.getFirst())))));
+            }
+        }
         if (chainPlan.rootRendering() == ChainRootRendering.BROKEN_OBJECT_CREATION && calls.size() == 1) {
             return Optional.of(Doc.concat(rootDoc, methodCallChainSegment(calls.getFirst())));
         }
@@ -425,6 +434,10 @@ final class MethodCallPrinter {
         List<MethodCallExpr> remainingCalls = calls;
         if (analysis.hasComments()) {
             if (methodCallChainShouldPromoteFirstCallForArgumentComments(root, calls)) {
+                root = calls.getFirst();
+                remainingCalls = new ArrayList<>(calls.subList(1, calls.size()));
+                rootRendering = promotedStaticFirstCallRendering(calls);
+            } else if (methodCallChainShouldPromoteFirstCallForTrailingComments(root, calls)) {
                 root = calls.getFirst();
                 remainingCalls = new ArrayList<>(calls.subList(1, calls.size()));
                 rootRendering = promotedStaticFirstCallRendering(calls);
@@ -662,7 +675,9 @@ final class MethodCallPrinter {
         boolean rootHasComments = !root.getAllContainedComments().isEmpty();
         boolean rootHasBlockLambdaArgument = root instanceof MethodCallExpr methodRoot
                 && methodCallSegmentHasBlockLambdaArgument(methodRoot);
-        boolean hasComments = rootHasComments || calls.stream().anyMatch(this::methodCallSegmentHasComment);
+        boolean hasComments = rootHasComments
+                || calls.stream().anyMatch(this::methodCallSegmentHasComment)
+                || methodCallChainHasTrailingLineComments(calls);
         boolean hasBlockLambdaArgument = rootHasBlockLambdaArgument
                 || calls.stream().anyMatch(this::methodCallSegmentHasBlockLambdaArgument);
         boolean singleCommentedSegment = calls.size() == 1 && methodCallSegmentHasNameComment(calls.getFirst());
@@ -706,6 +721,15 @@ final class MethodCallPrinter {
         return expression.getName().getComment()
                 .filter(comment -> CommentIndex.startsBefore(comment, expression.getName()))
                 .isPresent();
+    }
+
+    private boolean methodCallChainHasTrailingLineComments(List<MethodCallExpr> calls) {
+        for (int index = 0; index + 1 < calls.size(); index++) {
+            if (!trailingLineCommentsBeforeNextSegment(calls.get(index), calls.get(index + 1)).isEmpty()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -756,6 +780,14 @@ final class MethodCallPrinter {
                 && calls.size() > 1
                 && !methodCallSegmentHasArgumentGapComment(calls.getFirst())
                 && calls.stream().skip(1).anyMatch(this::methodCallSegmentHasArgumentGapComment);
+    }
+
+    private boolean methodCallChainShouldPromoteFirstCallForTrailingComments(
+            Expression root,
+            List<MethodCallExpr> calls) {
+        return methodCallChainPromotesFirstCall(root)
+                && calls.size() > 1
+                && methodCallChainHasTrailingLineComments(calls);
     }
 
     private Doc inlineMethodCall(MethodCallExpr expression) {
@@ -843,15 +875,28 @@ final class MethodCallPrinter {
             return Doc.EMPTY;
         }
         MethodCallExpr next = nextCall.orElseThrow();
-        if (next.getArguments().isEmpty()) {
-            return Doc.EMPTY;
-        }
-        List<Doc> sourceComments = commentPlacement.lineCommentsBeforeFirst(next, next.getArguments().get(0)).stream()
-                .filter(comment -> comment.startsOnEndLine(expression))
+        List<Doc> sourceComments = trailingLineCommentsBeforeNextSegment(expression, next).stream()
                 .map(comments::comment)
                 .filter(comment -> comment != Doc.EMPTY)
                 .toList();
         return sourceComments.isEmpty() ? Doc.EMPTY : Doc.join(Doc.text(" "), sourceComments);
+    }
+
+    private Doc rootTrailingLineCommentBeforeFirstSegment(Expression root, List<MethodCallExpr> calls) {
+        if (!(root instanceof MethodCallExpr methodRoot) || calls.isEmpty()) {
+            return Doc.EMPTY;
+        }
+        return trailingLineCommentBeforeNextSegment(methodRoot, Optional.of(calls.getFirst()));
+    }
+
+    private List<JavaCommentTrivia> trailingLineCommentsBeforeNextSegment(MethodCallExpr previous, MethodCallExpr next) {
+        if (next.getArguments().isEmpty()) {
+            return List.of();
+        }
+        return commentPlacement.lineCommentsBeforeFirst(next, next.getArguments().get(0)).stream()
+                .filter(comment -> comment.startsAfterNodeOnSameLine(previous))
+                .filter(comment -> comment.startsBeforeBeginLine(next.getName()))
+                .toList();
     }
 
     private Doc fieldAccessMethodCallSegment(FieldAccessExpr fieldAccess, MethodCallExpr methodCall) {
@@ -883,13 +928,15 @@ final class MethodCallPrinter {
     private Optional<Doc> emptyMethodCallArguments(String prefix, MethodCallExpr expression) {
         List<Doc> argumentComments = new ArrayList<>();
         Doc firstArgumentComment = comments.ownComment(expression, comment -> comment instanceof LineComment
-                && CommentIndex.startsOnBeginLine(comment, expression));
+                && CommentIndex.startsOnBeginLine(comment, expression)
+                && CommentIndex.startsBeforeEnd(comment, expression));
         if (firstArgumentComment != Doc.EMPTY) {
             argumentComments.add(firstArgumentComment);
         }
         expression.getScope()
                 .map(scope -> comments.ownComment(scope, comment -> comment instanceof LineComment
-                        && CommentIndex.startsOnBeginLine(comment, expression)))
+                        && CommentIndex.startsOnBeginLine(comment, expression)
+                        && CommentIndex.startsBeforeEnd(comment, expression)))
                 .filter(comment -> comment != Doc.EMPTY)
                 .ifPresent(argumentComments::add);
         argumentComments.addAll(comments.orphanCommentStatements(expression));

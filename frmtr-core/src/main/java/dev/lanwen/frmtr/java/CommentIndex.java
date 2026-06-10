@@ -189,6 +189,24 @@ final class CommentIndex {
     }
 
     /**
+     * Reports whether {@code comment} begins before the source end of {@code node}.
+     *
+     * <p>Callers use this when a same-line comment may either belong inside an unterminated syntax gap, such as
+     * {@code call( // note )}, or trail the completed node, such as {@code call() // note}. Line comparison keeps comments
+     * on earlier lines inside multiline nodes, while same-line comments must begin no later than the node end column.
+     */
+    static boolean startsBeforeEnd(Comment comment, Node node) {
+        return comment.getRange()
+                .flatMap(commentRange -> node.getRange().map(nodeRange -> {
+                    if (commentRange.begin.line != nodeRange.end.line) {
+                        return commentRange.begin.line < nodeRange.end.line;
+                    }
+                    return commentRange.begin.column <= nodeRange.end.column;
+                }))
+                .orElse(false);
+    }
+
+    /**
      * Compares two JavaParser ranges by their starting source position.
      */
     static boolean startsBefore(Range left, Range right) {

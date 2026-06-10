@@ -7,12 +7,14 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Prints method declarations after body dispatch has selected the method branch.
@@ -41,6 +43,8 @@ final class MethodDeclarationPrinter {
     private final Function<NodeList<TypeParameter>, String> flatTypeParameters;
     private final Function<NodeWithAnnotations<?>, String> inlineAnnotations;
     private final Function<Node, String> compact;
+    private final Function<Type, Doc> typeBody;
+    private final Predicate<Type> typeCanBreak;
     private final ThrowsClauseRenderer throwsClause;
     private final Function<BlockStmt, Doc> block;
 
@@ -54,6 +58,8 @@ final class MethodDeclarationPrinter {
             Function<NodeList<TypeParameter>, String> flatTypeParameters,
             Function<NodeWithAnnotations<?>, String> inlineAnnotations,
             Function<Node, String> compact,
+            Function<Type, Doc> typeBody,
+            Predicate<Type> typeCanBreak,
             ThrowsClauseRenderer throwsClause,
             Function<BlockStmt, Doc> block) {
         this.rawSource = rawSource;
@@ -65,6 +71,8 @@ final class MethodDeclarationPrinter {
         this.flatTypeParameters = flatTypeParameters;
         this.inlineAnnotations = inlineAnnotations;
         this.compact = compact;
+        this.typeBody = typeBody;
+        this.typeCanBreak = typeCanBreak;
         this.throwsClause = throwsClause;
         this.block = block;
     }
@@ -89,15 +97,15 @@ final class MethodDeclarationPrinter {
             docs.add(callableSignatures.typeParameters(declaration.getTypeParameters()));
             docs.add(Doc.text(" "));
         }
-        String signature = inlineAnnotations.apply(declaration)
-                + compact.apply(declaration.getType())
-                + " "
-                + declaration.getNameAsString();
+        String returnType = inlineAnnotations.apply(declaration) + compact.apply(declaration.getType());
+        String signature = returnType + " " + declaration.getNameAsString();
         prefix += signature;
-        docs.add(Doc.text(signature));
+        boolean breakReturnType = shouldBreakReturnType(declaration, prefix);
+        docs.add(returnType(declaration, returnType, breakReturnType));
         docs.add(callableSignatures.parameters(
                 declaration,
-                callableSignatures.parametersBreak(prefix, declaration, methodParameterSuffix(declaration))));
+                !breakReturnType
+                        && callableSignatures.parametersBreak(prefix, declaration, methodParameterSuffix(declaration))));
         if (!declaration.getThrownExceptions().isEmpty()) {
             docs.add(throwsClause.render(
                     prefix,
@@ -119,6 +127,23 @@ final class MethodDeclarationPrinter {
         return declaration.getBody()
                 .map(body -> body.getStatements().isEmpty() && body.getOrphanComments().isEmpty() ? " {}" : " {")
                 .orElse(";");
+    }
+
+    private boolean shouldBreakReturnType(MethodDeclaration declaration, String prefix) {
+        return declaration.getParameters().isEmpty()
+                && declaration.getReceiverParameter().isEmpty()
+                && typeCanBreak.test(declaration.getType())
+                && callableSignatures.parametersBreak(prefix, declaration, methodParameterSuffix(declaration));
+    }
+
+    private Doc returnType(MethodDeclaration declaration, String returnType, boolean breakReturnType) {
+        if (!breakReturnType) {
+            return Doc.text(returnType + " " + declaration.getNameAsString());
+        }
+        return Doc.group(Doc.concat(
+                Doc.text(inlineAnnotations.apply(declaration)),
+                typeBody.apply(declaration.getType()),
+                Doc.text(" " + declaration.getNameAsString())));
     }
 
     /**

@@ -3,6 +3,7 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.MethodCallExpr;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
@@ -95,7 +96,9 @@ final class CommentedExpressionListPrinter {
 
     private List<List<JavaCommentTrivia>> argumentCommentGaps(Node container, NodeList<Expression> arguments) {
         List<List<JavaCommentTrivia>> gaps = new ArrayList<>();
-        gaps.add(commentPlacement.lineCommentsBeforeFirst(container, arguments.get(0)));
+        gaps.add(commentPlacement.lineCommentsBeforeFirst(container, arguments.get(0)).stream()
+                .filter(comment -> !comment.startsBeforeBeginLine(argumentListAnchor(container)))
+                .toList());
         for (int index = 0; index < arguments.size(); index++) {
             Expression argument = arguments.get(index);
             if (index + 1 < arguments.size()) {
@@ -105,6 +108,10 @@ final class CommentedExpressionListPrinter {
             }
         }
         return gaps;
+    }
+
+    private Node argumentListAnchor(Node container) {
+        return container instanceof MethodCallExpr methodCall ? methodCall.getName() : container;
     }
 
     private boolean hasUnprintedComments(List<List<JavaCommentTrivia>> commentGaps) {

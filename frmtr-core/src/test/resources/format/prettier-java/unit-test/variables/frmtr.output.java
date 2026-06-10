@@ -209,10 +209,7 @@ public class Variables {
         A extends ShortClassName & ShortClassName & ShortClassName & ShortClassName,
         B extends ShortClassName & ShortClassName & ShortClassName & ShortClassName & ShortClassName,
         C extends ExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<
-                ExtremelyLongAndObnoxiousClassName,
-                ExtremelyLongAndObnoxiousClassName
-            >,
+            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
             ExtremelyLongAndObnoxiousClassName
         >
             & ExtremelyLongAndObnoxiousInterfaceName
@@ -221,64 +218,40 @@ public class Variables {
     > void breakOnTypeArguments(
         ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName> parameter,
         ExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<
-                ExtremelyLongAndObnoxiousClassName,
-                ExtremelyLongAndObnoxiousClassName
-            >,
+            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
             ExtremelyLongAndObnoxiousClassName
         > parameter
     ) {
         ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName> variable;
 
         ExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<
-                ExtremelyLongAndObnoxiousClassName,
-                ExtremelyLongAndObnoxiousClassName
-            >,
+            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
             ExtremelyLongAndObnoxiousClassName
         > variable;
 
         ExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<
-                ExtremelyLongAndObnoxiousClassName,
-                ExtremelyLongAndObnoxiousClassName
-            >,
+            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
             ExtremelyLongAndObnoxiousClassName
         > variable = new MyExtremelyLongAndObnoxiousClassName<>();
 
         ExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<
-                ExtremelyLongAndObnoxiousClassName,
-                ExtremelyLongAndObnoxiousClassName
-            >,
+            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
             ExtremelyLongAndObnoxiousClassName
         > variable = new MyExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<
-                ExtremelyLongAndObnoxiousClassName,
-                ExtremelyLongAndObnoxiousClassName
-            >,
+            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
             ExtremelyLongAndObnoxiousClassName
         >();
 
         ExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<
-                ExtremelyLongAndObnoxiousClassName,
-                ExtremelyLongAndObnoxiousClassName
-            >,
+            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
             ExtremelyLongAndObnoxiousClassName
         > aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new MyExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<
-                ExtremelyLongAndObnoxiousClassName,
-                ExtremelyLongAndObnoxiousClassName
-            >,
+            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
             ExtremelyLongAndObnoxiousClassName
         >();
 
         new MyExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<
-                ExtremelyLongAndObnoxiousClassName,
-                ExtremelyLongAndObnoxiousClassName
-            >,
+            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
             ExtremelyLongAndObnoxiousClassName
         >().method();
     }

@@ -92,6 +92,9 @@ final class CallableSignaturePrinter {
         List<Doc> parameters = new ArrayList<>();
         declaration.getReceiverParameter().map(this::receiverParameter).ifPresent(parameters::add);
         declaration.getParameters().stream().map(this::parameter).forEach(parameters::add);
+        if (parameters.isEmpty()) {
+            return Doc.text("()");
+        }
         Doc doc = Doc.concat(
                 Doc.text("("),
                 Doc.indent(Doc.concat(

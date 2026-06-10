@@ -109,7 +109,7 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
   creation.
 - `MethodCallPrinter`: method calls and call chains, chain comments including same-line comments between chained calls
   and leading line-comment clusters before chained segments, empty argument comments, commented argument-gap fallback
-  lists, text-block arguments, single binary arguments,
+  lists, text-block arguments, over-wide binary arguments,
   source-multiline single-object-creation call statements, field-root fluent-chain preservation for already-multiline
   statement chains, compact-root plus broken-final-segment calls, and suffixes on enclosed scopes.
 - `MethodReferencePrinter`: method references, type-argument suffix text, and parenthesized-scope suffixes.

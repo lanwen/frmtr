@@ -32,7 +32,7 @@ import java.util.function.ToIntFunction;
  *
  * <p>This helper owns the call-specific decision tree: auto versus forced chain breaks, compact root plus broken final
  * segment handling, mixed field/method chains, name comments on chain segments, empty argument comments, text-block
- * arguments, and single binary arguments. The boundary exists so {@link JavaPrinter} can keep broad expression
+ * arguments, and over-wide binary arguments. The boundary exists so {@link JavaPrinter} can keep broad expression
  * dispatch, enclosed suffix breaking, and binary-expression policy in their current owners while object creation stays
  * in {@link ObjectCreationPrinter}, lambda argument rendering stays in {@link LambdaExpressionPrinter}, commented
  * argument lists stay in {@link CommentedExpressionListPrinter}, and method-call layout reads as one state machine.
@@ -65,6 +65,7 @@ final class MethodCallPrinter {
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments;
     private final Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer;
     private final ToIntFunction<String> currentIndentedWidth;
+    private final ToIntFunction<String> continuationStatementWidth;
     private final ToIntFunction<String> blockStatementWidth;
 
     /**
@@ -107,6 +108,7 @@ final class MethodCallPrinter {
             Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer,
             Function<BinaryExpr, Doc> brokenBinaryExpressionLinesRenderer,
             ToIntFunction<String> currentIndentedWidth,
+            ToIntFunction<String> continuationStatementWidth,
             ToIntFunction<String> blockStatementWidth) {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
@@ -128,6 +130,7 @@ final class MethodCallPrinter {
         this.huggableExpressionLambdaArguments = huggableExpressionLambdaArguments;
         this.unformattedTextBlockRenderer = unformattedTextBlockRenderer;
         this.currentIndentedWidth = currentIndentedWidth;
+        this.continuationStatementWidth = continuationStatementWidth;
         this.blockStatementWidth = blockStatementWidth;
     }
 
@@ -207,9 +210,7 @@ final class MethodCallPrinter {
                 Doc.text(prefix + "("),
                 Doc.indent(Doc.concat(
                         methodCallLine(breakMode),
-                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), expression.getArguments().stream()
-                                .map(expressionRenderer)
-                                .toList()))),
+                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), methodCallArgumentDocs(expression.getArguments())))),
                 methodCallLine(breakMode),
                 Doc.text(")"));
         return breakMode.isForced() ? call : Doc.group(call);
@@ -243,9 +244,7 @@ final class MethodCallPrinter {
                 Doc.text(prefix + "("),
                 Doc.indent(Doc.concat(
                         Doc.SOFT_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), expression.getArguments().stream()
-                                .map(expressionRenderer)
-                                .toList()))),
+                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), methodCallArgumentDocs(expression.getArguments())))),
                 Doc.SOFT_LINE,
                 Doc.text(")")));
     }
@@ -475,9 +474,7 @@ final class MethodCallPrinter {
                 Doc.text(prefix),
                 Doc.indent(Doc.concat(
                         Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), call.getArguments().stream()
-                                .map(expressionRenderer)
-                                .toList()))),
+                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), methodCallArgumentDocs(call.getArguments())))),
                 Doc.HARD_LINE,
                 Doc.text(")")));
     }
@@ -692,9 +689,9 @@ final class MethodCallPrinter {
         }
         return Doc.concat(segmentPrefix, Doc.group(Doc.concat(
                 Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.join(Doc.concat(Doc.text(","), Doc.LINE), expression.getArguments().stream()
-                        .map(expressionRenderer)
-                        .toList()))),
+                Doc.indent(Doc.concat(
+                        Doc.SOFT_LINE,
+                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), methodCallArgumentDocs(expression.getArguments())))),
                 Doc.SOFT_LINE,
                 Doc.text(")"))));
     }
@@ -888,9 +885,7 @@ final class MethodCallPrinter {
                 Doc.text(prefix + "("),
                 Doc.indent(Doc.concat(
                         Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), expression.getArguments().stream()
-                                .map(expressionRenderer)
-                                .toList()))),
+                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), methodCallArgumentDocs(expression.getArguments())))),
                 Doc.HARD_LINE,
                 Doc.text(")")));
     }
@@ -903,6 +898,28 @@ final class MethodCallPrinter {
             return Doc.concat(leading, Doc.HARD_LINE, literal, trailing);
         }
         return Doc.concat(literal, trailing);
+    }
+
+    private List<Doc> methodCallArgumentDocs(NodeList<Expression> arguments) {
+        return arguments.stream().map(this::methodCallArgumentDoc).toList();
+    }
+
+    /**
+     * Keeps a wide binary expression breakable when it appears as one argument in a method-call argument list.
+     *
+     * <p>The ordinary expression renderer owns the flat binary spelling. Once the surrounding call list breaks, the
+     * binary-expression helper owns the continuation lines so long string concatenations do not collapse back onto an
+     * over-wide argument line.
+     */
+    private Doc methodCallArgumentDoc(Expression argument) {
+        if (!(argument instanceof BinaryExpr binaryExpr)
+                || !argument.getAllContainedComments().isEmpty()
+                || continuationStatementWidth.applyAsInt(compactSource.compact(binaryExpr)) <= options.lineWidth()) {
+            return expressionRenderer.apply(argument);
+        }
+        return Doc.ifBreak(
+                brokenBinaryExpressionLinesRenderer.apply(binaryExpr),
+                expressionRenderer.apply(argument));
     }
 
     private Doc textBlockSameLineTrailingComment(TextBlockLiteralExpr textBlockLiteralExpr, MethodCallExpr expression) {

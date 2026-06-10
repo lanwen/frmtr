@@ -220,6 +220,7 @@ final class JavaPrinter {
                 textBlocks::renderUnformattedTextBlock,
                 binaryExpr -> binaries.nestedLines(binaryExpr, true),
                 this::currentIndentedWidth,
+                this::continuationStatementWidth,
                 this::blockStatementWidth);
         this.enclosedSuffixes = new EnclosedSuffixDispatcher(methodCalls, methodReferences);
         this.assignments = new AssignmentExpressionPrinter(

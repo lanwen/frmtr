@@ -80,6 +80,19 @@ final class FormatterRunFailureRendererTest {
     }
 
     @Test
+    void rendersInternalFormatterFailuresWithStacktraceHint() {
+        FormatterException exception = FormatterException.internal(new UnsupportedOperationException());
+        FormatRunResult run = new FormatRunResult(List.of(failed("src/Broken.java", exception)));
+
+        String rendered = FormatterRunFailureRenderer.render(run);
+
+        assertThat(rendered).isEqualTo("""
+                ┌─ Internal formatter error. This is a bug in frmtr or one of its parser dependencies: UnsupportedOperationException
+                │ Run with --stacktrace to get more details.
+                └─""");
+    }
+
+    @Test
     void rendersFailedRunAsStructuredDiagnosticText() {
         FormatterException.SourceProblem firstProblem = new FormatterException.SourceProblem(
                 "(line 2,col 12) Parse error",

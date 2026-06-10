@@ -52,7 +52,15 @@ public final class FormatterRunFailureRenderer {
                 && !formatterException.sourceProblems().isEmpty()) {
             return renderFormatterException(formatterException);
         }
+        if (exception instanceof FormatterException formatterException && formatterException.internal()) {
+            return stacktraceHint();
+        }
         return diagnosticText();
+    }
+
+    private static DiagnosticText stacktraceHint() {
+        return diagnosticText(diagnosticLine(
+                span("Run with --stacktrace to get more details.", DiagnosticStyle.ERROR_TEXT)));
     }
 
     private static DiagnosticText renderFormatterException(FormatterException exception) {

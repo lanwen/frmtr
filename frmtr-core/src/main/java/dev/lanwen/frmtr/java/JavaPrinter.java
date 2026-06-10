@@ -250,11 +250,13 @@ final class JavaPrinter {
         this.expressionRules = new ExpressionRuleEnvelope(expressionDispatcher::expressionContent);
         this.returnExpressions = new ReturnExpressionPrinter(
                 options,
+                context.sourceShape,
                 this::expression,
                 compactSource::compact,
                 this::currentIndentedWidth,
                 methodCalls::compactRootWithBrokenFinalChainSegment,
                 methodCalls::forcedMethodCallChain,
+                objectCreations::brokenObjectCreation,
                 conditionals::conditionalExpression,
                 enclosedExpressions::parenthesizedBreak);
         this.commentedMethodSignatures = new CommentedMethodSignaturePrinter(options);
@@ -358,6 +360,7 @@ final class JavaPrinter {
                 this::block);
         this.methods = new MethodDeclarationPrinter(
                 rawSource,
+                context.sourceShape,
                 rawPreservedSource,
                 commentedMethodSignatures,
                 callableSignatures,
@@ -401,6 +404,7 @@ final class JavaPrinter {
         this.statements = new StatementPrinter(
                 comments,
                 rawSource,
+                context.sourceShape,
                 options,
                 this::statement,
                 switches::switchStatement,

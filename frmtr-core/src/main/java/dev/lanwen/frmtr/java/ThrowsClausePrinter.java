@@ -50,13 +50,28 @@ final class ThrowsClausePrinter {
             NodeList<Parameter> parameters,
             NodeList<? extends Node> thrownExceptions,
             String suffix) {
+        return throwsClause(prefix, parameters, thrownExceptions, suffix, false);
+    }
+
+    /**
+     * Places {@code throws ...} on the current line or preserves a caller-detected source break before it.
+     */
+    Doc throwsClause(
+            String prefix,
+            NodeList<Parameter> parameters,
+            NodeList<? extends Node> thrownExceptions,
+            String suffix,
+            boolean forceBreak) {
         String exceptions = compactJoin.apply(thrownExceptions);
+        String throwsText = "throws " + exceptions;
+        if (forceBreak) {
+            return Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(throwsText)));
+        }
         String flatParameters = "(" + parameters.stream()
                 .map(compact)
                 .reduce((left, right) -> left + ", " + right)
                 .orElse("") + ")";
         String flatSignature = prefix + flatParameters;
-        String throwsText = "throws " + exceptions;
         boolean parametersBreak = currentIndentedWidth.applyAsInt(flatSignature) > options.lineWidth();
         int sameLineWidth = parametersBreak
                 ? currentIndentedWidth.applyAsInt(") " + throwsText + suffix)

@@ -72,6 +72,7 @@ import java.util.function.ToIntFunction;
 final class StatementPrinter {
     private final CommentTracker comments;
     private final RawSource rawSource;
+    private final SourceShape sourceShape;
     private final FormatterOptions options;
     private final JavaFormatRule<Statement> statementRenderer;
     private final JavaFormatRule<SwitchStmt> switchStatementRenderer;
@@ -102,6 +103,7 @@ final class StatementPrinter {
     StatementPrinter(
             CommentTracker comments,
             RawSource rawSource,
+            SourceShape sourceShape,
             FormatterOptions options,
             JavaFormatRule<Statement> statementRenderer,
             JavaFormatRule<SwitchStmt> switchStatementRenderer,
@@ -130,6 +132,7 @@ final class StatementPrinter {
             ToIntFunction<String> currentIndentedWidth) {
         this.comments = comments;
         this.rawSource = rawSource;
+        this.sourceShape = sourceShape;
         this.options = options;
         this.statementRenderer = statementRenderer;
         this.switchStatementRenderer = switchStatementRenderer;
@@ -458,7 +461,8 @@ final class StatementPrinter {
         if (statement.getResources().isEmpty()) {
             return Doc.EMPTY;
         }
-        boolean trailingSemicolon = tryResourcesHaveTrailingSemicolon(statement);
+        SourceShape.TryResourcesShape resourceShape = sourceShape.tryResources(statement);
+        boolean trailingSemicolon = resourceShape.trailingSemicolon();
         String flatResources = statement.getResources().stream()
                 .map(compact)
                 .reduce((left, right) -> left + "; " + right)
@@ -467,7 +471,9 @@ final class StatementPrinter {
             flatResources += ";";
         }
         String flat = "try (" + flatResources + ")";
-        if (statement.getResources().size() == 1 && currentIndentedWidth.applyAsInt(flat + " {}") <= options.lineWidth()) {
+        if (!resourceShape.spansMultipleLines()
+                && statement.getResources().size() == 1
+                && currentIndentedWidth.applyAsInt(flat + " {}") <= options.lineWidth()) {
             return Doc.text(" (" + flatResources + ")");
         }
         return Doc.concat(
@@ -476,24 +482,17 @@ final class StatementPrinter {
                         Doc.HARD_LINE,
                         Doc.join(
                                 Doc.concat(Doc.text(";"), Doc.HARD_LINE),
-                                statement.getResources().stream().map(resource -> Doc.text(compact.apply(resource))).toList()),
+                                statement.getResources().stream().map(this::tryResource).toList()),
                         trailingSemicolon ? Doc.text(";") : Doc.EMPTY)),
                 Doc.HARD_LINE,
                 Doc.text(")"));
     }
 
-    private boolean tryResourcesHaveTrailingSemicolon(TryStmt statement) {
-        String raw = rawSource.rawWithoutOwnComment(statement);
-        int resourceStart = raw.indexOf('(');
-        int blockStart = raw.indexOf('{', resourceStart);
-        if (resourceStart < 0 || blockStart < 0) {
-            return false;
+    private Doc tryResource(Expression resource) {
+        if (sourceShape.spansMultipleLines(resource) && resource instanceof VariableDeclarationExpr declaration) {
+            return variableDeclarationRenderer.format(declaration);
         }
-        int resourceEnd = raw.substring(resourceStart, blockStart).lastIndexOf(')');
-        if (resourceEnd < 0) {
-            return false;
-        }
-        return raw.substring(resourceStart + 1, resourceStart + resourceEnd).stripTrailing().endsWith(";");
+        return Doc.text(compact.apply(resource));
     }
 
     private Doc trailingCommentAfterClause(CatchClause clause) {

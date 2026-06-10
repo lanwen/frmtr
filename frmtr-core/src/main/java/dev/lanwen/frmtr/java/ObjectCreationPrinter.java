@@ -4,9 +4,12 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.VariableDeclarationExpr;
+import com.github.javaparser.ast.stmt.TryStmt;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,6 +32,7 @@ import java.util.function.Function;
  */
 final class ObjectCreationPrinter {
     private final CommentTracker comments;
+    private final SourceShape sourceShape;
     private final TypePrinter types;
     private final CommentedExpressionListPrinter commentedExpressionLists;
     private final JavaFormatRule<Expression> expressionRenderer;
@@ -52,6 +56,7 @@ final class ObjectCreationPrinter {
             Function<Node, String> compactTypeLikeWithoutOwnComment,
             Function<Doc, String> commentText) {
         this.comments = context.comments;
+        this.sourceShape = context.sourceShape;
         this.types = types;
         this.commentedExpressionLists = new CommentedExpressionListPrinter(context, expressionRenderer::format);
         this.expressionRenderer = expressionRenderer;
@@ -88,6 +93,10 @@ final class ObjectCreationPrinter {
         if (expression.getArguments().isEmpty()) {
             return objectCreationWithBrokenType(expression).orElseGet(() -> Doc.text(prefix + "()"));
         }
+        Optional<Doc> sourceMultilineArguments = sourceMultilineArguments(expression, prefix);
+        if (sourceMultilineArguments.isPresent()) {
+            return sourceMultilineArguments.orElseThrow();
+        }
         Optional<Doc> huggableLambda = huggableLambdaArgument(prefix, expression.getArguments());
         if (huggableLambda.isPresent()) {
             return huggableLambda.orElseThrow();
@@ -117,6 +126,33 @@ final class ObjectCreationPrinter {
      */
     private Optional<Doc> huggableLambdaArgument(String prefix, NodeList<Expression> arguments) {
         return huggableBlockLambdaArguments.apply(prefix, arguments);
+    }
+
+    private Optional<Doc> sourceMultilineArguments(ObjectCreationExpr expression, String prefix) {
+        if (!expression.getAllContainedComments().isEmpty()
+                || !isTryResourceObjectCreation(expression)
+                || !sourceShape.objectCreationArgumentsSpanMultipleLines(expression)) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+                Doc.text(prefix + "("),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), expression.getArguments().stream()
+                                .map(expressionRenderer::format)
+                                .toList()))),
+                Doc.HARD_LINE,
+                Doc.text(")")));
+    }
+
+    private boolean isTryResourceObjectCreation(ObjectCreationExpr expression) {
+        return expression.getParentNode()
+                .filter(VariableDeclarator.class::isInstance)
+                .flatMap(Node::getParentNode)
+                .filter(VariableDeclarationExpr.class::isInstance)
+                .flatMap(Node::getParentNode)
+                .filter(TryStmt.class::isInstance)
+                .isPresent();
     }
 
     String objectCreationPrefix(ObjectCreationExpr expression) {

@@ -169,9 +169,10 @@ boundaries, and specialized declaration, statement, expression, type, comment, r
 [docs/formatter-coverage.md](docs/formatter-coverage.md) for the AST ownership map.
 
 Variable initializer wrapping is owned by the declaration printers that know the full declaration prefix. Method-call
-initializers preserve huggable block-lambda call shapes before falling back to hard-broken argument lists, and
-static-style chain roots keep the first call with the type-like root before later chain segments break. Record headers
-try the full header first, then open component lists before moving implemented types to their own continuation.
+initializers preserve huggable block-lambda call shapes before falling back to hard-broken argument lists. Source-shape
+helpers preserve existing multiline call, ternary, callable-header, constructor-root, builder-root, and try-resource
+forms using JavaParser ranges and bounded source slices before printers assemble equivalent docs. Record headers try the
+full header first, then open component lists before moving implemented types to their own continuation.
 
 ## CLI
 

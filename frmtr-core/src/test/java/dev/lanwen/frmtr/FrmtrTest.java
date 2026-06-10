@@ -224,6 +224,7 @@ final class FrmtrTest {
             "record-implements, 120",
             "return-chain-final-argument, 120",
             "single-member-annotation-array-width, 120",
+            "source-multiline-shapes, 120",
             "switch-empty-rules, 120",
             "text-block-raw-method-call, 120",
             "type-header-brace-placement, 120",

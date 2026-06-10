@@ -101,6 +101,53 @@ final class SourceText {
     }
 
     /**
+     * Returns the source gap after one parsed range and before the next parsed range.
+     *
+     * <p>Shape helpers use this when JavaParser exposes the neighboring syntax nodes but not the delimiter token between
+     * them, such as text between the last try resource and the try block. The slice is bounded by AST-owned ranges so
+     * callers do not have to search from the start of a whole declaration or statement.
+     */
+    String sliceBetween(Range before, Range after) {
+        Objects.requireNonNull(before, "before");
+        Objects.requireNonNull(after, "after");
+        int beginOffset = offsetAfter(before.end);
+        int endOffset = offset(after.begin);
+        if (endOffset < beginOffset) {
+            return "";
+        }
+        return source.substring(beginOffset, endOffset);
+    }
+
+    /**
+     * Returns the source from the beginning of {@code position}'s line up to {@code position}.
+     *
+     * <p>This lets callers classify keyword placement on a known AST line without scanning an entire declaration body
+     * for a token that could also appear inside annotations, strings, or nested syntax.
+     */
+    String linePrefix(Position position) {
+        Objects.requireNonNull(position, "position");
+        int lineIndex = lineIndex(position);
+        return source.substring(lineStartOffsets[lineIndex], offset(position));
+    }
+
+    /**
+     * Returns the source after one parsed range through the end of a containing parsed range.
+     *
+     * <p>Argument-list shape checks use this bounded suffix to notice a closing delimiter on a later line without
+     * searching for parentheses that may occur inside nested arguments.
+     */
+    String sliceAfterWithin(Range before, Range containing) {
+        Objects.requireNonNull(before, "before");
+        Objects.requireNonNull(containing, "containing");
+        int beginOffset = offsetAfter(before.end);
+        int endOffset = offsetAfter(containing.end);
+        if (endOffset < beginOffset) {
+            return "";
+        }
+        return source.substring(beginOffset, endOffset);
+    }
+
+    /**
      * Returns the raw source slice after applying the formatter's raw trailing-whitespace option.
      *
      * <p>When raw trailing whitespace is not preserved, stripping happens line-by-line without changing the slice's

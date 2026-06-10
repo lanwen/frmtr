@@ -107,9 +107,9 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
   bodies, parenthesized lambdas, broken logical bodies, and lambda arguments that can be hugged by method calls or object
   creation.
 - `MethodCallPrinter`: method calls and call chains, chain comments including same-line comments between chained calls,
-  empty argument comments, commented argument-gap fallback lists, text-block arguments, single binary arguments, static
-  first-call root promotion, source-multiline single-object-creation call statements, compact-root plus
-  broken-final-segment calls, and suffixes on enclosed scopes.
+  empty argument comments, commented argument-gap fallback lists, text-block arguments, single binary arguments,
+  source-multiline single-object-creation call statements, compact-root plus broken-final-segment calls, and suffixes on
+  enclosed scopes.
 - `MethodReferencePrinter`: method references, type-argument suffix text, and parenthesized-scope suffixes.
 - `EnclosedSuffixDispatcher`: the bridge used when a broken enclosed expression may need a method-call or
   method-reference suffix preserved.
@@ -171,6 +171,17 @@ formatting requires raw source text or compact source-derived text. `CompactSour
 compact text: raw string-literal token spelling, recursive field-access reconstruction, comment-free method-call
 reconstruction, generic delimiter spacing cleanup for type-like snippets, comma joining, and clone-before-comment-removal
 behavior.
+
+`SourceShape` centralizes source-line-shape predicates used to preserve existing multiline forms when the structured
+formatter has an otherwise equivalent compact form. It uses JavaParser node ranges first and bounded `SourceText` slices
+between neighboring AST-owned syntax, such as the first thrown exception line or the gap after the last try resource,
+rather than scanning an entire declaration or statement for delimiters and keywords. Printers still decide what doc to
+build after a shape predicate is true.
+
+`MethodCallChainSourcePlanner` owns method-call chain source-shape planning before `MethodCallPrinter` assembles docs:
+structural root collection, selector-line preservation, type-like and builder-root promotion, and the simple constructor
+root policy that keeps compact source roots compact before broken chains. `MethodCallPrinter` keeps comment accounting,
+argument rendering, lambda handling, and final doc assembly.
 
 `CommentedModulePrinter`, `CommentedMethodSignaturePrinter`, and `CommentedInterfacePrinter` own raw-source escape
 hatches for module declarations, method signatures, interface headers, and abstract method signatures whose inline

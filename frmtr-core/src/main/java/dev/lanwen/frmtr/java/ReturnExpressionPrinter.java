@@ -5,6 +5,7 @@ import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
@@ -27,29 +28,35 @@ import java.util.function.ToIntFunction;
  */
 final class ReturnExpressionPrinter {
     private final FormatterOptions options;
+    private final SourceShape sourceShape;
     private final Function<Expression, Doc> expression;
     private final Function<Expression, String> compact;
     private final ToIntFunction<String> currentIndentedWidth;
     private final Function<MethodCallExpr, Optional<Doc>> compactRootWithBrokenFinalChainSegment;
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain;
+    private final Function<ObjectCreationExpr, Doc> brokenObjectCreation;
     private final BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression;
     private final BiFunction<Expression, Boolean, Doc> parenthesizedBreak;
 
     ReturnExpressionPrinter(
             FormatterOptions options,
+            SourceShape sourceShape,
             Function<Expression, Doc> expression,
             Function<Expression, String> compact,
             ToIntFunction<String> currentIndentedWidth,
             Function<MethodCallExpr, Optional<Doc>> compactRootWithBrokenFinalChainSegment,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain,
+            Function<ObjectCreationExpr, Doc> brokenObjectCreation,
             BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression,
             BiFunction<Expression, Boolean, Doc> parenthesizedBreak) {
         this.options = options;
+        this.sourceShape = sourceShape;
         this.expression = expression;
         this.compact = compact;
         this.currentIndentedWidth = currentIndentedWidth;
         this.compactRootWithBrokenFinalChainSegment = compactRootWithBrokenFinalChainSegment;
         this.forcedMethodCallChain = forcedMethodCallChain;
+        this.brokenObjectCreation = brokenObjectCreation;
         this.conditionalExpression = conditionalExpression;
         this.parenthesizedBreak = parenthesizedBreak;
     }
@@ -65,6 +72,9 @@ final class ReturnExpressionPrinter {
         if (sourceMultilineEnclosedBinary(expression)) {
             return parenthesizedBreak.apply(((EnclosedExpr) expression).getInner(), true);
         }
+        if (sourceMultilineObjectCreation(expression)) {
+            return brokenObjectCreation.apply((ObjectCreationExpr) expression);
+        }
         if (returnLineFits(expression)) {
             return this.expression.apply(expression);
         }
@@ -77,6 +87,12 @@ final class ReturnExpressionPrinter {
                 && expression.getRange()
                         .map(range -> range.begin.line < range.end.line)
                         .orElse(false);
+    }
+
+    private boolean sourceMultilineObjectCreation(Expression expression) {
+        return expression instanceof ObjectCreationExpr objectCreationExpr
+                && objectCreationExpr.getAllContainedComments().isEmpty()
+                && sourceShape.objectCreationArgumentsSpanMultipleLines(objectCreationExpr);
     }
 
     private boolean returnLineFits(Expression expression) {

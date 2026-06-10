@@ -35,6 +35,7 @@ import java.util.function.Predicate;
  */
 final class MethodDeclarationPrinter {
     private final RawSource rawSource;
+    private final SourceShape sourceShape;
     private final RawPreservedSource rawPreservedSource;
     private final CommentedMethodSignaturePrinter commentedMethodSignatures;
     private final CallableSignaturePrinter callableSignatures;
@@ -50,6 +51,7 @@ final class MethodDeclarationPrinter {
 
     MethodDeclarationPrinter(
             RawSource rawSource,
+            SourceShape sourceShape,
             RawPreservedSource rawPreservedSource,
             CommentedMethodSignaturePrinter commentedMethodSignatures,
             CallableSignaturePrinter callableSignatures,
@@ -63,6 +65,7 @@ final class MethodDeclarationPrinter {
             ThrowsClauseRenderer throwsClause,
             Function<BlockStmt, Doc> block) {
         this.rawSource = rawSource;
+        this.sourceShape = sourceShape;
         this.rawPreservedSource = rawPreservedSource;
         this.commentedMethodSignatures = commentedMethodSignatures;
         this.callableSignatures = callableSignatures;
@@ -101,17 +104,20 @@ final class MethodDeclarationPrinter {
         String signature = returnType + " " + declaration.getNameAsString();
         prefix += signature;
         boolean breakReturnType = shouldBreakReturnType(declaration, prefix);
+        boolean sourceParametersBreak = sourceShape.callableParametersSpanMultipleLines(declaration);
         docs.add(returnType(declaration, returnType, breakReturnType));
         docs.add(callableSignatures.parameters(
                 declaration,
-                !breakReturnType
+                sourceParametersBreak
+                        || !breakReturnType
                         && callableSignatures.parametersBreak(prefix, declaration, methodParameterSuffix(declaration))));
         if (!declaration.getThrownExceptions().isEmpty()) {
             docs.add(throwsClause.render(
                     prefix,
                     declaration.getParameters(),
                     declaration.getThrownExceptions(),
-                    declaration.getBody().isPresent() ? " {" : ";"));
+                    declaration.getBody().isPresent() ? " {" : ";",
+                    sourceShape.throwsStartsOnOwnLine(declaration)));
         }
         docs.add(declaration.getBody().map(body -> Doc.concat(Doc.text(" "), block.apply(body))).orElse(Doc.text(";")));
         return Doc.concat(docs);
@@ -155,6 +161,7 @@ final class MethodDeclarationPrinter {
                 String prefix,
                 NodeList<Parameter> parameters,
                 NodeList<? extends Node> thrownExceptions,
-                String suffix);
+                String suffix,
+                boolean forceBreak);
     }
 }

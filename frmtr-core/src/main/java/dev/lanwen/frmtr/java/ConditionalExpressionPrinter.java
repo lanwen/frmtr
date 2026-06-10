@@ -43,6 +43,7 @@ import java.util.function.ToIntFunction;
 final class ConditionalExpressionPrinter {
     private final CommentTracker comments;
     private final FormatterOptions options;
+    private final SourceShape sourceShape;
     private final CompactSourceText compactSource;
     private final Function<Expression, Doc> expressionRenderer;
     private final Function<Expression, Doc> expressionWithoutOwnCommentRenderer;
@@ -104,6 +105,7 @@ final class ConditionalExpressionPrinter {
             Predicate<Expression> expressionHasParenthesizedNestedBinary) {
         this.comments = context.comments;
         this.options = context.options;
+        this.sourceShape = context.sourceShape;
         this.compactSource = context.compactSource;
         this.expressionRenderer = expressionRenderer;
         this.expressionWithoutOwnCommentRenderer = expressionWithoutOwnCommentRenderer;
@@ -124,6 +126,12 @@ final class ConditionalExpressionPrinter {
      * {@code :} branches break below it.
      */
     Optional<Doc> assignmentWithConditionalValue(AssignExpr assignExpr, ConditionalExpr conditionalExpr) {
+        if (sourceShape.spansMultipleLines(conditionalExpr) && sourceShape.startsOnSameLine(assignExpr, conditionalExpr)) {
+            return Optional.of(Doc.concat(
+                    expressionRenderer.apply(assignExpr.getTarget()),
+                    Doc.text(" " + assignExpr.getOperator().asString() + " "),
+                    conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED)));
+        }
         if (shouldBreakBeforeConditionalInitializer(conditionalExpr)
                 || shouldBreakBeforeConditionalAssignment(conditionalExpr)) {
             return Optional.of(Doc.concat(
@@ -182,6 +190,9 @@ final class ConditionalExpressionPrinter {
             return commented.orElseThrow();
         }
         String flat = compactSource.compact(expression);
+        if (!breakMode.isForced() && sourceShape.spansMultipleLines(expression)) {
+            return brokenConditionalExpression(expression);
+        }
         if (!breakMode.isForced() && currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
             if (expressionHasParenthesizedNestedBinary.test(expression)) {
                 return Doc.concat(
@@ -193,6 +204,10 @@ final class ConditionalExpressionPrinter {
             }
             return Doc.text(flat);
         }
+        return brokenConditionalExpression(expression);
+    }
+
+    private Doc brokenConditionalExpression(ConditionalExpr expression) {
         return Doc.concat(
                 conditionalCondition(expression),
                 Doc.indent(Doc.concat(

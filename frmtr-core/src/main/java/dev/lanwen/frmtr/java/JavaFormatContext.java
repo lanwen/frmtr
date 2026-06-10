@@ -23,6 +23,7 @@ final class JavaFormatContext {
     final RawSource rawSource;
     final RawPreservedSource rawPreservedSource;
     final SourceText sourceText;
+    final SourceShape sourceShape;
     final RecoveredListPlanner recoveredListPlanner;
     final RecoveredSourceRegions recoveredSourceRegions;
     final CompactSourceText compactSource;
@@ -37,6 +38,7 @@ final class JavaFormatContext {
         this.comments = new CommentTracker(commentPlacementPolicy);
         this.formatterPragmas = new FormatterPragmas();
         this.rawSource = new RawSource(options);
+        this.sourceShape = new SourceShape(rawSource, sourceText);
         this.rawPreservedSource = new RawPreservedSource(rawSource, comments);
         this.recoveredListPlanner = new RecoveredListPlanner(sourceText);
         this.recoveredSourceRegions = new RecoveredSourceRegions(sourceText, options, comments);

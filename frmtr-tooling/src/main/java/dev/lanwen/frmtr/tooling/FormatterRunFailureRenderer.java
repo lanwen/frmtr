@@ -5,6 +5,13 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
+/**
+ * Renders failed formatter runs and files with enough framing for tooling output.
+ *
+ * <p>This helper owns the run-level and file-level failure outline around formatter source diagnostics so adapters can
+ * reuse both plain diagnostic text and structured diagnostic spans. It intentionally leaves stream selection, exit
+ * handling, and terminal color mapping to callers.
+ */
 public final class FormatterRunFailureRenderer {
     private static final int MAX_MESSAGE_LINE_LENGTH = 80;
 

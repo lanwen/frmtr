@@ -4,6 +4,13 @@ import dev.lanwen.frmtr.FormatterException;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Renders one formatter failure into adapter-facing diagnostic text.
+ *
+ * <p>This helper owns the fallback presentation for formatter exceptions and source-problem context so adapters can
+ * reuse both plain diagnostic text and structured diagnostic spans. It intentionally leaves surrounding file/run
+ * framing and terminal color mapping to callers.
+ */
 public final class FormatterFailureRenderer {
     private FormatterFailureRenderer() {}
 

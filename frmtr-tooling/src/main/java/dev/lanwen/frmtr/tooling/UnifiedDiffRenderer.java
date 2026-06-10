@@ -30,7 +30,7 @@ public final class UnifiedDiffRenderer {
         PATCH,
 
         /**
-         * Adds a dotted source-width marker around hunk lines near or over the configured formatter width.
+         * Adds a dotted source-width marker to and around hunk lines near or over the configured formatter width.
          */
         LINE_WIDTH_RULER
     }
@@ -73,35 +73,24 @@ public final class UnifiedDiffRenderer {
             throw new IllegalArgumentException("lineWidth must be at least 1");
         }
         var lines = diffLines(diff);
+        boolean[] lineWidthMarkers = lineWidthMarkers(lines, lineWidth);
         StringBuilder decorated = new StringBuilder(diff.length());
-        boolean inHunk = false;
-        boolean insideDecoratedRun = false;
         for (int i = 0; i < lines.size(); i++) {
             DiffLine diffLine = lines.get(i);
             String line = diffLine.text();
             if (line.startsWith("@@ ")) {
-                inHunk = true;
-                insideDecoratedRun = false;
                 appendHunkHeader(decorated, line, lineWidth);
                 if (diffLine.hasLineEnding()) {
                     decorated.append('\n');
                 }
                 continue;
             }
-            boolean decoratedLine = shouldDecorateLine(inHunk, line, lineWidth);
-            if (decoratedLine && !insideDecoratedRun) {
-                appendGuideLine(decorated, lineWidth);
-                insideDecoratedRun = true;
-            }
+            boolean decoratedLine = lineWidthMarkers[i];
             decorated.append(decoratedLine ? decorateLine(line, lineWidth) : line);
             if (diffLine.hasLineEnding()) {
                 decorated.append('\n');
             } else if (decoratedLine) {
                 decorated.append('\n');
-            }
-            if (decoratedLine && !nextLineDecorates(lines, i + 1, inHunk, lineWidth)) {
-                appendGuideLine(decorated, lineWidth);
-                insideDecoratedRun = false;
             }
         }
         return decorated.toString();
@@ -120,25 +109,56 @@ public final class UnifiedDiffRenderer {
         return List.copyOf(lines);
     }
 
-    private static boolean nextLineDecorates(List<DiffLine> lines, int nextLine, boolean inHunk, int lineWidth) {
-        if (nextLine >= lines.size()) {
-            return false;
+    private static boolean[] lineWidthMarkers(List<DiffLine> lines, int lineWidth) {
+        boolean[] markers = new boolean[lines.size()];
+        boolean inHunk = false;
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i).text();
+            if (line.startsWith("@@ ")) {
+                inHunk = true;
+                continue;
+            }
+            if (shouldDecorateLine(inHunk, line, lineWidth)) {
+                markers[i] = true;
+                markNearestNeighbor(lines, markers, i - 1, -1);
+                markNearestNeighbor(lines, markers, i + 1, 1);
+            }
         }
-        String line = lines.get(nextLine).text();
-        return shouldDecorateLine(inHunk || line.startsWith("@@ "), line, lineWidth);
+        return markers;
+    }
+
+    private static void markNearestNeighbor(List<DiffLine> lines, boolean[] markers, int index, int step) {
+        for (int i = index; i >= 0 && i < lines.size(); i += step) {
+            String line = lines.get(i).text();
+            if (line.startsWith("@@ ")) {
+                return;
+            }
+            if (isNonBlankHunkSourceLine(line)) {
+                markers[i] = true;
+                return;
+            }
+        }
     }
 
     private static boolean shouldDecorateLine(boolean inHunk, String line, int lineWidth) {
-        if (!inHunk || line.isEmpty() || line.charAt(0) == '\\') {
-            return false;
-        }
-        char prefix = line.charAt(0);
-        if (prefix != '+' && prefix != '-' && prefix != ' ') {
+        if (!inHunk || !isHunkSourceLine(line)) {
             return false;
         }
         int sourceWidth = line.length() - 1;
         int proximityStart = Math.max(0, lineWidth - LINE_WIDTH_RULER_PROXIMITY);
         return sourceWidth >= proximityStart;
+    }
+
+    private static boolean isNonBlankHunkSourceLine(String line) {
+        return isHunkSourceLine(line) && !line.substring(1).isBlank();
+    }
+
+    private static boolean isHunkSourceLine(String line) {
+        if (line.isEmpty() || line.charAt(0) == '\\') {
+            return false;
+        }
+        char prefix = line.charAt(0);
+        return prefix == '+' || prefix == '-' || prefix == ' ';
     }
 
     private static String decorateLine(String line, int lineWidth) {
@@ -164,15 +184,6 @@ public final class UnifiedDiffRenderer {
         int guideColumn = lineWidth + 1;
         decorated.append(" ".repeat(Math.max(1, guideColumn - line.length())));
         decorated.append(LINE_WIDTH_MARKER).append(' ').append(lineWidth);
-    }
-
-    private static void appendGuideLine(StringBuilder decorated, int lineWidth) {
-        appendGuidePrefix(decorated, lineWidth);
-        decorated.append(LINE_WIDTH_MARKER).append('\n');
-    }
-
-    private static void appendGuidePrefix(StringBuilder decorated, int lineWidth) {
-        decorated.append(" ".repeat(lineWidth + 1));
     }
 
     private record DiffLine(String text, boolean hasLineEnding) {}

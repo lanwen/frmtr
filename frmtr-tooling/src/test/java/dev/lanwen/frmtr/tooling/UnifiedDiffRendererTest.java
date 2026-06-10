@@ -19,23 +19,25 @@ final class UnifiedDiffRendererTest {
     }
 
     @Test
-    void lineWidthRulerDecoratesOnlyHunkSourceLinesNearTheLimitAndIgnoresDiffPrefix() {
+    void lineWidthRulerDecoratesNearLinesAndNeighboringHunkRowsWithoutInsertedGuideRows() {
         String diff = """
                 diff --git origin frmtr
                 --- origin
                 +++ frmtr
-                @@ -1,3 +1,3 @@
+                @@ -1,4 +1,4 @@
+                 before
                 -12345678901234567890
                 +12345678901234567890123
-                 context
+                 after
                 +short
                 \\ No newline at end of file
                 """;
 
         String decorated = UnifiedDiffRenderer.decorateWithLineWidthRuler(diff, 20);
-        String hunkHeader = "@@ -1,3 +1,3 @@";
-        String guide = " ".repeat(21) + "⋮\n";
+        String hunkHeader = "@@ -1,4 +1,4 @@";
         String numberedHunkHeader = hunkHeader + " ".repeat(21 - hunkHeader.length()) + "⋮ 20\n";
+        String topNeighbor = " before" + " ".repeat(20 - "before".length()) + "⋮\n";
+        String bottomNeighbor = " after" + " ".repeat(20 - "after".length()) + "⋮\n";
         String overflow = " ".repeat(21) + "⋮+3\n";
 
         assertThat(decorated).isEqualTo("""
@@ -44,17 +46,17 @@ final class UnifiedDiffRendererTest {
                 +++ frmtr
                 """
                 + numberedHunkHeader
-                + guide
+                + topNeighbor
                 + """
                 -12345678901234567890⋮
                 +12345678901234567890⋮123
                 """
                 + overflow
-                + guide
+                + bottomNeighbor
                 + """
-                 context
                 +short
                 \\ No newline at end of file
                 """);
+        assertThat(decorated).doesNotContain("\n                     ⋮\n");
     }
 }

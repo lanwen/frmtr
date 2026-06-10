@@ -152,8 +152,9 @@ Declaration and type printers own Java declaration grammar after `BodyDeclaratio
   `AnnotationDeclarationPrinter`: type-specific headers, record component type bodies, record full-header wrapping,
   body starts, member sequencing handoffs, and type-specific recovery boundaries.
 - `FieldDeclarationPrinter` and `VariableDeclarationPrinter`: field and local variable declaration layout, shared
-  initializer policy including equals-line cast type-body breaks, switch-expression body preservation, huggable
-  block-lambda method-call initializers, declaration prefixes, and local-only declaration-prefix decisions.
+  initializer policy including equals-line cast type-body breaks, direct block-lambda openers, object-creation-root
+  method-call opener grouping, switch-expression body preservation, huggable block-lambda method-call initializers,
+  declaration prefixes, and local-only declaration-prefix decisions.
 - `ConstructorDeclarationPrinter`, `MethodDeclarationPrinter`, `InitializerDeclarationPrinter`,
   `CallableSignaturePrinter`, and `ThrowsClausePrinter`: callable headers, signatures, throws-clause placement,
   body-versus-semicolon suffixes, and initializer bodies.

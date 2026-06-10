@@ -231,6 +231,7 @@ final class FrmtrTest {
             "object-creation-statement-argument, 120",
             "array-initializer-spacing, 120",
             "formatter-pragma-spacing, 120",
+            "initializer-equals-grouping, 120",
             "record-component-inline-annotations, 120",
             "record-component-spacing, 120",
             "record-implements, 120",

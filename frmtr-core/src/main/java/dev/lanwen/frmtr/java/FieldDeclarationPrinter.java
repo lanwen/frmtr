@@ -42,8 +42,9 @@ import java.util.function.ToIntFunction;
  *
  * <p>This helper owns declaration-level annotations and modifiers, the comma-joined variable list, comments before and
  * after {@code =}, source-leading initializer line comments, and the field-width forks that decide when array creation,
- * object creation, method-call chains, conditional expressions, and lambda parameters should break. It intentionally
- * delegates general expression, type, method-call, binary-expression, object-creation, lambda, and raw-source-sensitive
+ * object creation, method-call chains, conditional expressions, direct block-lambda openers, and lambda parameters
+ * should break. It intentionally delegates general expression, type, method-call, binary-expression, object-creation,
+ * lambda, and raw-source-sensitive
  * formatting back to {@link JavaPrinter}, {@link ObjectCreationPrinter}, and other shared-printer callbacks so those
  * shared printers keep one behavior source.
  *
@@ -321,6 +322,15 @@ final class FieldDeclarationPrinter {
         if (currentIndentedWidth(flat) > options.lineWidth()
                 && initializer instanceof MethodCallExpr methodCall
                 && !initializerHasOwnBreak(initializer)) {
+            if (methodCallChainRootIsObjectCreation.test(methodCall)) {
+                Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
+                        name,
+                        declarationPrefix + variable.getNameAsString(),
+                        methodCall);
+                if (directCall.isPresent()) {
+                    return directCall.orElseThrow();
+                }
+            }
             Optional<Doc> compactObjectCreationChain = variableWithCompactObjectCreationChain(name, methodCall);
             if (compactObjectCreationChain.isPresent()) {
                 return compactObjectCreationChain.orElseThrow();
@@ -365,6 +375,13 @@ final class FieldDeclarationPrinter {
         if (currentIndentedWidth(flat) > options.lineWidth()
                 && initializer instanceof LambdaExpr lambdaExpr
                 && !initializerHasOwnBreak(initializer)) {
+            Optional<Doc> blockLambdaInitializer = variableWithBlockLambdaInitializer(
+                    name,
+                    declarationPrefix + variable.getNameAsString(),
+                    lambdaExpr);
+            if (blockLambdaInitializer.isPresent()) {
+                return blockLambdaInitializer.orElseThrow();
+            }
             Optional<Doc> lambdaInitializer = variableWithBrokenLambdaParameters(
                     name,
                     declarationPrefix + variable.getNameAsString(),
@@ -385,7 +402,8 @@ final class FieldDeclarationPrinter {
     }
 
     /**
-     * Keeps a compact object-creation method chain on the continuation line when the whole chain fits after the break.
+     * Keeps a compact object-creation method chain on the continuation line when the opener cannot stay with
+     * {@code =}, but the whole chain fits after the break.
      */
     private Optional<Doc> variableWithCompactObjectCreationChain(String name, MethodCallExpr methodCall) {
         if (!methodCallChainRootIsObjectCreation.test(methodCall)
@@ -576,7 +594,7 @@ final class FieldDeclarationPrinter {
     }
 
     /**
-     * Breaks a direct method-call initializer at its arguments when the call prefix still fits on the assignment line.
+     * Breaks a method-call initializer at its arguments when the call prefix still fits on the assignment line.
      */
     private Optional<Doc> variableWithBrokenMethodCallArguments(
             String name,
@@ -682,6 +700,24 @@ final class FieldDeclarationPrinter {
         if (!lambdaExpr.getBody().isBlockStmt()
                 || !lambdaParametersShouldBreak.test(lambdaExpr, parameters)
                 || currentIndentedWidth(flatName + " = (") > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(Doc.text(name + " = "), lambdaExpression.apply(lambdaExpr)));
+    }
+
+    /**
+     * Keeps direct block-lambda initializers on the assignment line while the lambda opener still fits.
+     */
+    private Optional<Doc> variableWithBlockLambdaInitializer(
+            String name,
+            String flatName,
+            LambdaExpr lambdaExpr) {
+        if (!lambdaExpr.getBody().isBlockStmt()) {
+            return Optional.empty();
+        }
+        String parameters = lambdaParameters.apply(lambdaExpr);
+        if (lambdaParametersShouldBreak.test(lambdaExpr, parameters)
+                || currentIndentedWidth(flatName + " = " + parameters + " -> {") > options.lineWidth()) {
             return Optional.empty();
         }
         return Optional.of(Doc.concat(Doc.text(name + " = "), lambdaExpression.apply(lambdaExpr)));

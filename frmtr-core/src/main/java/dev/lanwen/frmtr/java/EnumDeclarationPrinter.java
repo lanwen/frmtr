@@ -515,9 +515,17 @@ final class EnumDeclarationPrinter {
         Doc trailing = enumConstantTrailingComment(owner, declaration, next, last);
         return Doc.concat(
                 comments.leading(declaration),
+                enumConstantAnnotations(declaration),
                 Doc.text(declaration.getNameAsString()),
                 enumConstantArguments(declaration),
                 trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing));
+    }
+
+    private Doc enumConstantAnnotations(EnumConstantDeclaration declaration) {
+        if (declaration.getAnnotations().isEmpty()) {
+            return Doc.EMPTY;
+        }
+        return Doc.concat(annotations.apply(declaration), Doc.EMPTY);
     }
 
     /**

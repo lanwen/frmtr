@@ -543,12 +543,24 @@ final class SwitchPrinter {
 
     private String defaultSwitchEntryLabel(SwitchEntry entry) {
         String raw = rawSource.raw(entry);
-        int colon = raw.indexOf(':');
-        if (colon < 0) {
+        int boundary = defaultLabelBoundary(raw);
+        if (boundary < 0) {
             return "default";
         }
-        String label = CommentedTokenText.tokenLine(CommentedTokenText.tokens(raw.substring(0, colon)));
+        String label = CommentedTokenText.tokenLine(CommentedTokenText.tokens(raw.substring(0, boundary)));
         return label.isEmpty() ? "default" : label;
+    }
+
+    private int defaultLabelBoundary(String raw) {
+        int colon = raw.indexOf(':');
+        int arrow = raw.indexOf("->");
+        if (colon < 0) {
+            return arrow;
+        }
+        if (arrow < 0) {
+            return colon;
+        }
+        return Math.min(colon, arrow);
     }
 
     /**

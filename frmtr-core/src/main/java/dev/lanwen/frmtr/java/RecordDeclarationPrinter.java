@@ -157,12 +157,27 @@ final class RecordDeclarationPrinter {
     private Doc recordParameterSeparator(Parameter previous, Parameter current, boolean forceBreak) {
         boolean blankLineBetween = previous.getRange()
                 .flatMap(previousRange -> current.getRange()
-                        .map(currentRange -> currentRange.begin.line > previousRange.end.line + 1))
+                        .map(currentRange -> firstCurrentComponentLine(current, currentRange.begin.line)
+                                > previousRange.end.line + 1))
                 .orElse(false);
         if (blankLineBetween) {
             return Doc.concat(Doc.text(","), Doc.HARD_LINE, Doc.HARD_LINE);
         }
         return Doc.concat(Doc.text(","), forceBreak ? Doc.HARD_LINE : Doc.LINE);
+    }
+
+    private int firstCurrentComponentLine(Parameter current, int parameterBeginLine) {
+        return immediateLeadingLineCommentBeginLine(current, parameterBeginLine)
+                .or(() -> immediateLeadingLineCommentBeginLine(current.getType(), parameterBeginLine))
+                .orElse(parameterBeginLine);
+    }
+
+    private Optional<Integer> immediateLeadingLineCommentBeginLine(Node node, int nextLine) {
+        return node.getComment()
+                .filter(LineComment.class::isInstance)
+                .flatMap(comment -> comment.getRange()
+                        .filter(range -> range.end.line + 1 == nextLine)
+                        .map(range -> range.begin.line));
     }
 
     /**
@@ -171,6 +186,7 @@ final class RecordDeclarationPrinter {
      */
     private Doc recordComponent(Parameter parameter) {
         List<Doc> parts = new ArrayList<>();
+        Doc trailing = recordComponentTrailingLineComment(parameter);
         Doc leading = comments.leading(parameter);
         if (leading != Doc.EMPTY) {
             parts.add(leading);
@@ -197,7 +213,20 @@ final class RecordDeclarationPrinter {
             parts.add(Doc.HARD_LINE);
         }
         parts.add(recordComponentTailDoc(parameter));
+        if (trailing != Doc.EMPTY) {
+            parts.add(Doc.text(" "));
+            parts.add(trailing);
+        }
         return Doc.concat(parts);
+    }
+
+    private Doc recordComponentTrailingLineComment(Parameter parameter) {
+        Doc parameterTrailing = comments.trailingLineComment(parameter);
+        if (parameterTrailing != Doc.EMPTY) {
+            return parameterTrailing;
+        }
+        return comments.ownComment(parameter.getType(), comment -> comment instanceof LineComment
+                && CommentIndex.startsAfterNodeOnSameLine(parameter.getName(), comment));
     }
 
     /**

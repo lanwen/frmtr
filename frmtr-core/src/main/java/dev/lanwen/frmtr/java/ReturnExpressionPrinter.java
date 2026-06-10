@@ -33,7 +33,7 @@ final class ReturnExpressionPrinter {
     private final Function<MethodCallExpr, Optional<Doc>> compactRootWithBrokenFinalChainSegment;
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain;
     private final BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression;
-    private final Function<Expression, Doc> parenthesizedBreak;
+    private final BiFunction<Expression, Boolean, Doc> parenthesizedBreak;
 
     ReturnExpressionPrinter(
             FormatterOptions options,
@@ -43,7 +43,7 @@ final class ReturnExpressionPrinter {
             Function<MethodCallExpr, Optional<Doc>> compactRootWithBrokenFinalChainSegment,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain,
             BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression,
-            Function<Expression, Doc> parenthesizedBreak) {
+            BiFunction<Expression, Boolean, Doc> parenthesizedBreak) {
         this.options = options;
         this.expression = expression;
         this.compact = compact;
@@ -62,10 +62,21 @@ final class ReturnExpressionPrinter {
      * shape; only overflowing return lines enter the return-specific break tree.
      */
     Doc returnExpression(Expression expression) {
+        if (sourceMultilineEnclosedBinary(expression)) {
+            return parenthesizedBreak.apply(((EnclosedExpr) expression).getInner(), true);
+        }
         if (returnLineFits(expression)) {
             return this.expression.apply(expression);
         }
         return brokenReturnExpression(expression).orElseGet(() -> this.expression.apply(expression));
+    }
+
+    private boolean sourceMultilineEnclosedBinary(Expression expression) {
+        return expression instanceof EnclosedExpr enclosedExpr
+                && enclosedExpr.getInner() instanceof BinaryExpr
+                && expression.getRange()
+                        .map(range -> range.begin.line < range.end.line)
+                        .orElse(false);
     }
 
     private boolean returnLineFits(Expression expression) {
@@ -121,7 +132,7 @@ final class ReturnExpressionPrinter {
                 || !(unaryExpr.getExpression() instanceof EnclosedExpr enclosedExpr)) {
             return Optional.empty();
         }
-        return Optional.of(Doc.concat(Doc.text("!"), parenthesizedBreak.apply(enclosedExpr.getInner())));
+        return Optional.of(Doc.concat(Doc.text("!"), parenthesizedBreak.apply(enclosedExpr.getInner(), false)));
     }
 
     /**
@@ -133,10 +144,10 @@ final class ReturnExpressionPrinter {
      */
     private Optional<Doc> returnWithParenthesizedValueBreak(Expression expression) {
         if (expression instanceof EnclosedExpr enclosedExpr) {
-            return Optional.of(parenthesizedBreak.apply(enclosedExpr.getInner()));
+            return Optional.of(parenthesizedBreak.apply(enclosedExpr.getInner(), false));
         }
         if (expression instanceof BinaryExpr binaryExpr) {
-            return Optional.of(parenthesizedBreak.apply(binaryExpr));
+            return Optional.of(parenthesizedBreak.apply(binaryExpr, false));
         }
         return Optional.empty();
     }

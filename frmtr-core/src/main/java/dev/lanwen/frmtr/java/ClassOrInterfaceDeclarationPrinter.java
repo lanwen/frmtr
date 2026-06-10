@@ -2,6 +2,7 @@ package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
@@ -37,6 +38,7 @@ import java.util.function.ToIntFunction;
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/generic_class/frmtr.output.java}.
  */
 final class ClassOrInterfaceDeclarationPrinter {
+    private final CommentTracker comments;
     private final RawSource rawSource;
     private final RawPreservedSource rawPreservedSource;
     private final FormatterOptions options;
@@ -54,6 +56,7 @@ final class ClassOrInterfaceDeclarationPrinter {
     private final Function<ClassOrInterfaceDeclaration, Doc> memberBlock;
 
     ClassOrInterfaceDeclarationPrinter(
+            CommentTracker comments,
             RawSource rawSource,
             RawPreservedSource rawPreservedSource,
             FormatterOptions options,
@@ -69,6 +72,7 @@ final class ClassOrInterfaceDeclarationPrinter {
             BiFunction<String, NodeList<ClassOrInterfaceType>, String> flatTypeClause,
             ToIntFunction<String> currentIndentedWidth,
             Function<ClassOrInterfaceDeclaration, Doc> memberBlock) {
+        this.comments = comments;
         this.rawSource = rawSource;
         this.rawPreservedSource = rawPreservedSource;
         this.options = options;
@@ -106,6 +110,7 @@ final class ClassOrInterfaceDeclarationPrinter {
         }
         List<Doc> header = new ArrayList<>();
         header.add(annotations.apply(declaration));
+        header.add(nameLeadingLineComment(declaration));
         header.add(Doc.text(modifiers.apply(declaration)));
         header.add(Doc.text(declaration.isInterface() ? "interface " : "class "));
         header.add(Doc.text(declaration.getNameAsString()));
@@ -154,6 +159,7 @@ final class ClassOrInterfaceDeclarationPrinter {
     private Doc brokenClassOrInterface(ClassOrInterfaceDeclaration declaration) {
         List<Doc> header = new ArrayList<>();
         header.add(annotations.apply(declaration));
+        header.add(nameLeadingLineComment(declaration));
         header.add(Doc.text(modifiers.apply(declaration)));
         header.add(Doc.text(declaration.isInterface() ? "interface " : "class "));
         header.add(Doc.text(declaration.getNameAsString()));
@@ -197,6 +203,12 @@ final class ClassOrInterfaceDeclarationPrinter {
         }
         return classOrInterfaceHeaderClauses(declaration) == 1
                 && declaration.getExtendedTypes().stream().anyMatch(this::hasTypeArguments);
+    }
+
+    private Doc nameLeadingLineComment(ClassOrInterfaceDeclaration declaration) {
+        Doc comment = comments.ownComment(declaration.getName(), candidate -> candidate instanceof LineComment
+                && CommentIndex.startsBeforeBeginLine(candidate, declaration.getName()));
+        return comment == Doc.EMPTY ? Doc.EMPTY : Doc.concat(comment, Doc.HARD_LINE);
     }
 
     /**

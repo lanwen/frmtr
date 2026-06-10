@@ -870,7 +870,7 @@ final class MethodCallPrinter {
         return trailingComment == Doc.EMPTY ? segment : Doc.concat(segment, Doc.text(" "), trailingComment);
     }
 
-    private Doc trailingLineCommentBeforeNextSegment(MethodCallExpr expression, Optional<MethodCallExpr> nextCall) {
+    private Doc trailingLineCommentBeforeNextSegment(Node expression, Optional<MethodCallExpr> nextCall) {
         if (nextCall.isEmpty()) {
             return Doc.EMPTY;
         }
@@ -883,19 +883,25 @@ final class MethodCallPrinter {
     }
 
     private Doc rootTrailingLineCommentBeforeFirstSegment(Expression root, List<MethodCallExpr> calls) {
-        if (!(root instanceof MethodCallExpr methodRoot) || calls.isEmpty()) {
+        if (calls.isEmpty()) {
             return Doc.EMPTY;
         }
-        return trailingLineCommentBeforeNextSegment(methodRoot, Optional.of(calls.getFirst()));
+        return trailingLineCommentBeforeNextSegment(root, Optional.of(calls.getFirst()));
     }
 
-    private List<JavaCommentTrivia> trailingLineCommentsBeforeNextSegment(MethodCallExpr previous, MethodCallExpr next) {
-        if (next.getArguments().isEmpty()) {
-            return List.of();
-        }
-        return commentPlacement.lineCommentsBeforeFirst(next, next.getArguments().get(0)).stream()
+    private List<JavaCommentTrivia> trailingLineCommentsBeforeNextSegment(Node previous, MethodCallExpr next) {
+        return lineCommentCandidatesBeforeNextSegment(next).stream()
                 .filter(comment -> comment.startsAfterNodeOnSameLine(previous))
                 .filter(comment -> comment.startsBeforeBeginLine(next.getName()))
+                .toList();
+    }
+
+    private List<JavaCommentTrivia> lineCommentCandidatesBeforeNextSegment(MethodCallExpr next) {
+        if (!next.getArguments().isEmpty()) {
+            return commentPlacement.lineCommentsBeforeFirst(next, next.getArguments().get(0));
+        }
+        return commentPlacement.containedComments(next).stream()
+                .filter(JavaCommentTrivia::isLine)
                 .toList();
     }
 

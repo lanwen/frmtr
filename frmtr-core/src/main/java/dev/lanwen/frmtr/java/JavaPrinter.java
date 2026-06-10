@@ -85,6 +85,7 @@ final class JavaPrinter {
                 binaries::nestedLines,
                 compactSource::compact,
                 this::currentIndentedWidth);
+        compactSource.useAnnotationFlatText(annotationExpressions::annotationFlatText);
         this.declarationPrefixes = new DeclarationPrefixPrinter(
                 annotationExpressions::annotation,
                 annotationExpressions::annotationFlatText);
@@ -332,6 +333,7 @@ final class JavaPrinter {
                 compactSource::compactJoin,
                 this::currentIndentedWidth);
         this.classOrInterfaces = new ClassOrInterfaceDeclarationPrinter(
+                comments,
                 rawSource,
                 rawPreservedSource,
                 options,

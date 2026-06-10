@@ -2,10 +2,14 @@ package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.expr.CharLiteralExpr;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.ast.type.Type;
 import java.util.List;
+import java.util.function.Function;
 
 /**
  * Builds compact source-equivalent text for syntax nodes.
@@ -19,9 +23,20 @@ import java.util.List;
  */
 final class CompactSourceText {
     private final RawSource rawSource;
+    private Function<AnnotationExpr, String> annotationFlatText;
 
     CompactSourceText(RawSource rawSource) {
         this.rawSource = rawSource;
+    }
+
+    /**
+     * Installs the annotation-expression compacting policy used when type text contains type-use annotations.
+     *
+     * <p>Annotation layout and compact annotation values belong to {@link AnnotationExpressionPrinter}; this callback
+     * lets type compaction reuse that single policy without making this source-text helper reconstruct annotations.
+     */
+    void useAnnotationFlatText(Function<AnnotationExpr, String> annotationFlatText) {
+        this.annotationFlatText = annotationFlatText;
     }
 
     /**
@@ -41,6 +56,9 @@ final class CompactSourceText {
      * silently discard comment content.
      */
     String compact(Node node) {
+        if (!isFullyParsed(node)) {
+            return compactTokenText(node);
+        }
         if (node instanceof StringLiteralExpr || node instanceof CharLiteralExpr) {
             return rawSource.raw(node);
         }
@@ -50,10 +68,7 @@ final class CompactSourceText {
         if (node instanceof MethodCallExpr methodCallExpr && methodCallExpr.getAllContainedComments().isEmpty()) {
             return compactMethodCall(methodCallExpr);
         }
-        return node.getTokenRange()
-                .map(Object::toString)
-                .map(rawSource::normalizeWhitespace)
-                .orElseGet(() -> rawSource.normalizeWhitespace(node.toString()));
+        return compactTokenText(node);
     }
 
     /**
@@ -80,9 +95,50 @@ final class CompactSourceText {
      * generic delimiters and leaves the rest of the compact token spelling to {@link #compact(Node)}.
      */
     String compactTypeLike(Node node) {
-        return compact(node)
+        return compactTypeLikeRaw(node)
                 .replaceAll("<\\s+", "<")
                 .replaceAll("\\s+>", ">");
+    }
+
+    private String compactTypeLikeRaw(Node node) {
+        if (!isFullyParsed(node)) {
+            return compactTokenText(node);
+        }
+        if (node instanceof ClassOrInterfaceType type) {
+            return compactClassOrInterfaceType(type);
+        }
+        if (node instanceof Type type && !type.getAnnotations().isEmpty()) {
+            return compactTypeAnnotations(type) + compact(node);
+        }
+        return compact(node);
+    }
+
+    private String compactClassOrInterfaceType(ClassOrInterfaceType type) {
+        String scope = type.getScope()
+                .map(scopedType -> compactClassOrInterfaceType(scopedType) + ".")
+                .orElse("");
+        String typeArguments = type.getTypeArguments()
+                .map(arguments -> "<" + compactJoinTypeLike(arguments) + ">")
+                .orElse("");
+        return scope + compactTypeAnnotations(type) + type.getNameAsString() + typeArguments;
+    }
+
+    private String compactTypeAnnotations(Type type) {
+        if (type.getAnnotations().isEmpty()) {
+            return "";
+        }
+        return type.getAnnotations().stream()
+                .map(this::annotationFlatText)
+                .reduce((left, right) -> left + " " + right)
+                .orElse("")
+                + " ";
+    }
+
+    private String annotationFlatText(AnnotationExpr annotation) {
+        if (annotationFlatText == null) {
+            throw new IllegalStateException("Annotation flat-text policy has not been installed");
+        }
+        return annotationFlatText.apply(annotation);
     }
 
     /**
@@ -114,5 +170,16 @@ final class CompactSourceText {
      */
     private String compactJoinTypeLike(List<? extends Node> nodes) {
         return nodes.stream().map(this::compactTypeLike).reduce((left, right) -> left + ", " + right).orElse("");
+    }
+
+    private String compactTokenText(Node node) {
+        return node.getTokenRange()
+                .map(Object::toString)
+                .map(rawSource::normalizeWhitespace)
+                .orElseGet(() -> rawSource.normalizeWhitespace(node.toString()));
+    }
+
+    private boolean isFullyParsed(Node node) {
+        return node.stream().allMatch(descendant -> descendant.getParsed() == Node.Parsedness.PARSED);
     }
 }

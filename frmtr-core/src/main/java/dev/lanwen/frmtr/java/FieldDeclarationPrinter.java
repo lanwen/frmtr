@@ -326,7 +326,18 @@ final class FieldDeclarationPrinter {
                 Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
                         name,
                         declarationPrefix + variable.getNameAsString(),
-                        methodCall);
+                        methodCall,
+                        false);
+                if (directCall.isPresent()) {
+                    return directCall.orElseThrow();
+                }
+            }
+            if (methodCallHasSimpleScope(methodCall)) {
+                Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
+                        name,
+                        declarationPrefix + variable.getNameAsString(),
+                        methodCall,
+                        true);
                 if (directCall.isPresent()) {
                     return directCall.orElseThrow();
                 }
@@ -346,7 +357,8 @@ final class FieldDeclarationPrinter {
             Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
                     name,
                     declarationPrefix + variable.getNameAsString(),
-                    methodCall);
+                    methodCall,
+                    false);
             if (directCall.isPresent()) {
                 return directCall.orElseThrow();
             }
@@ -599,9 +611,11 @@ final class FieldDeclarationPrinter {
     private Optional<Doc> variableWithBrokenMethodCallArguments(
             String name,
             String flatName,
-            MethodCallExpr methodCall) {
+            MethodCallExpr methodCall,
+            boolean allowNestedComments) {
         if (methodCall.getArguments().isEmpty()
-                || !methodCall.getAllContainedComments().isEmpty()
+                || (!allowNestedComments && !methodCall.getAllContainedComments().isEmpty())
+                || methodCallHasOwnComment(methodCall)
                 || methodCall.getScope().filter(shouldPrintScopeAsDoc).isPresent()) {
             return Optional.empty();
         }
@@ -623,6 +637,21 @@ final class FieldDeclarationPrinter {
                                 .toList()))),
                 Doc.HARD_LINE,
                 Doc.text(")")));
+    }
+
+    /**
+     * Identifies single receiver-call initializers where the assignment opener should be tried before chain fallback.
+     */
+    private boolean methodCallHasSimpleScope(MethodCallExpr methodCall) {
+        return methodCall.getScope()
+                .filter(scope -> scope.isNameExpr() || scope.isThisExpr() || scope.isSuperExpr())
+                .isPresent();
+    }
+
+    private boolean methodCallHasOwnComment(MethodCallExpr methodCall) {
+        return methodCall.getComment().isPresent()
+                || methodCall.getName().getComment().isPresent()
+                || methodCall.getScope().flatMap(Expression::getComment).isPresent();
     }
 
     /**

@@ -220,6 +220,7 @@ final class FrmtrTest {
             "member-blank-lines, 120",
             "member-comment-spacing, 120",
             "method-call-binary-argument, 120",
+            "method-call-initializer-opener, 120",
             "comment-preservation-annotation-array, 120",
             "comment-preservation-leading-statements, 120",
             "comment-preservation-method-chain-segments, 120",

@@ -579,6 +579,14 @@ final class MethodCallPrinter {
         return methodCallChainAnalysis(expression).hasComments();
     }
 
+    /**
+     * Exposes the planner's source-line decision to statement routing so field-root fluent chains that were already
+     * multiline are not compacted into an ordinary broken final call.
+     */
+    boolean methodCallChainIsSourceMultiline(MethodCallExpr expression) {
+        return methodCallChainAnalysis(expression).sourceMultilineChain();
+    }
+
     private MethodCallChainSourcePlanner.MethodCallChainAnalysis methodCallChainAnalysis(MethodCallExpr expression) {
         return methodChainPlanner.analyze(
                 expression,

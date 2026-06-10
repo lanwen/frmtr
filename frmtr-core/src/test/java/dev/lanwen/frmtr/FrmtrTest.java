@@ -147,9 +147,9 @@ final class FrmtrTest {
     }
 
     @Test
-    void formatsFieldRootMethodChainCurrentOutputFixtureAndIsIdempotent() throws Exception {
-        String source = readResource("format/field-root-method-chain-current-output/input.java");
-        String expected = readResource("format/field-root-method-chain-current-output/frmtr.output.java");
+    void formatsFieldRootSourceMultilineChainFixtureAndIsIdempotent() throws Exception {
+        String source = readResource("format/field-root-source-multiline-chain/input.java");
+        String expected = readResource("format/field-root-source-multiline-chain/frmtr.output.java");
         FormatterOptions options = FormatterOptions.forLayout(
                 120,
                 FormatterOptions.IndentStyle.SPACE,

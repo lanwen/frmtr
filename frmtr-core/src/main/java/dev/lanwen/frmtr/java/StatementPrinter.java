@@ -92,6 +92,7 @@ final class StatementPrinter {
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer;
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
     private final Predicate<MethodCallExpr> methodCallChainHasComments;
+    private final Predicate<MethodCallExpr> methodCallChainIsSourceMultiline;
     private final Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation;
     private final Predicate<MethodCallExpr> methodCallChainRootIsFieldAccess;
     private final Function<Expression, Doc> ifConditionRenderer;
@@ -123,6 +124,7 @@ final class StatementPrinter {
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
             Predicate<MethodCallExpr> methodCallChainHasComments,
+            Predicate<MethodCallExpr> methodCallChainIsSourceMultiline,
             Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation,
             Predicate<MethodCallExpr> methodCallChainRootIsFieldAccess,
             Function<Expression, Doc> ifConditionRenderer,
@@ -152,6 +154,7 @@ final class StatementPrinter {
         this.forcedMethodCallChainRenderer = forcedMethodCallChainRenderer;
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
         this.methodCallChainHasComments = methodCallChainHasComments;
+        this.methodCallChainIsSourceMultiline = methodCallChainIsSourceMultiline;
         this.methodCallChainRootIsObjectCreation = methodCallChainRootIsObjectCreation;
         this.methodCallChainRootIsFieldAccess = methodCallChainRootIsFieldAccess;
         this.ifConditionRenderer = ifConditionRenderer;
@@ -360,6 +363,7 @@ final class StatementPrinter {
         if (expression instanceof MethodCallExpr methodCall
                 && blockStatementWidth(compact.apply(expression) + ";") > options.lineWidth()) {
             boolean chainBreak = methodCallChainHasComments.test(methodCall)
+                    || methodCallChainIsSourceMultiline.test(methodCall)
                     || methodCallChainRootIsObjectCreation.test(methodCall)
                     || !methodCallChainRootIsFieldAccess.test(methodCall);
             return Doc.concat(

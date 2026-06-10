@@ -429,6 +429,7 @@ final class JavaPrinter {
                 methodCalls::forcedMethodCallChain,
                 methodCalls::brokenMethodCall,
                 methodCalls::methodCallChainHasComments,
+                methodCalls::methodCallChainIsSourceMultiline,
                 methodCalls::methodCallChainRootIsObjectCreation,
                 methodCalls::methodCallChainRootIsFieldAccess,
                 controlConditions::ifCondition,

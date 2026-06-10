@@ -109,8 +109,8 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
   creation.
 - `MethodCallPrinter`: method calls and call chains, chain comments including same-line comments between chained calls,
   empty argument comments, commented argument-gap fallback lists, text-block arguments, single binary arguments,
-  source-multiline single-object-creation call statements, compact-root plus broken-final-segment calls, and suffixes on
-  enclosed scopes.
+  source-multiline single-object-creation call statements, field-root fluent-chain preservation for already-multiline
+  statement chains, compact-root plus broken-final-segment calls, and suffixes on enclosed scopes.
 - `MethodReferencePrinter`: method references, type-argument suffix text, and parenthesized-scope suffixes.
 - `EnclosedSuffixDispatcher`: the bridge used when a broken enclosed expression may need a method-call or
   method-reference suffix preserved.
@@ -185,9 +185,9 @@ compact when a surrounding method-call chain is forced to break. It does not ren
 printing, return expressions, and method-call chain planning keep their surrounding grammar decisions.
 
 `MethodCallChainSourcePlanner` owns method-call chain source-shape planning before `MethodCallPrinter` assembles docs:
-structural root collection, selector-line preservation, type-like and builder-root promotion, and delegation to
-`ObjectCreationLayoutPolicy` for constructor-root compactness before broken chains. `MethodCallPrinter` keeps comment
-accounting, argument rendering, lambda handling, and final doc assembly.
+structural root collection, selector-line preservation, source-multiline chain signals for statement routing, type-like
+and builder-root promotion, and delegation to `ObjectCreationLayoutPolicy` for constructor-root compactness before broken
+chains. `MethodCallPrinter` keeps comment accounting, argument rendering, lambda handling, and final doc assembly.
 
 `CommentedModulePrinter`, `CommentedMethodSignaturePrinter`, and `CommentedInterfacePrinter` own raw-source escape
 hatches for module declarations, method signatures, interface headers, and abstract method signatures whose inline

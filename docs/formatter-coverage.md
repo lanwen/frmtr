@@ -83,7 +83,7 @@ switch-entry layout to `SwitchPrinter`.
 | `ThrowStmt` | `StatementPrinter` | Throws expressions delegate through expression rendering. |
 | `YieldStmt` | `StatementPrinter` | Used by switch entries and ordinary statement dispatch. |
 | `ExplicitConstructorInvocationStmt` | `StatementPrinter` | Owns `this(...)` and `super(...)` calls, type arguments, and huggable lambda arguments. |
-| `ExpressionStmt` | `StatementPrinter` | Local `VariableDeclarationExpr` routes to `VariableDeclarationPrinter`; wide method-call statements and preserved multiline single-object-creation calls can route through `MethodCallPrinter`; other expressions delegate through `ExpressionRuleEnvelope` and `ExpressionDispatcher`. |
+| `ExpressionStmt` | `StatementPrinter` | Local `VariableDeclarationExpr` routes to `VariableDeclarationPrinter`; wide method-call statements, source-multiline field-root fluent chains, and preserved multiline single-object-creation calls can route through `MethodCallPrinter`; other expressions delegate through `ExpressionRuleEnvelope` and `ExpressionDispatcher`. |
 | `EmptyStmt` | `StatementPrinter` | Emits `;`. |
 | `AssertStmt` | `StatementPrinter` | Uses compact source text for check/message shape. |
 | `BreakStmt` | `StatementPrinter` | Owns label and inline block-comment handling. |
@@ -134,7 +134,7 @@ expression kinds. Specialized expression printers own the layout decision tree f
 | `FieldAccessExpr` | `FieldAccessPrinter` | Owns dotted field access and comment-sensitive name splitting. Compact field-access text is also reconstructed by `CompactSourceText`. |
 | `InstanceOfExpr` | `InstanceOfExpressionPrinter` | Owns `instanceof` continuations and binary-operator-position-aware placement. |
 | `LambdaExpr` | `LambdaExpressionPrinter` | Owns parameter parentheses policy, commented parameter reconstruction, expression/block bodies, and huggable lambda argument shapes. |
-| `MethodCallExpr` | `MethodCallPrinter` | Owns calls, call chains, chain comments, same-line chained-call comment ownership, method-call suffixes, text-block arguments, lambda arguments, source-shaped chain planning/root promotion via `MethodCallChainSourcePlanner`, source-multiline single-object-creation call statements, return compact-root/final-argument breaks, and broken chain roots. |
+| `MethodCallExpr` | `MethodCallPrinter` | Owns calls, call chains, chain comments, same-line chained-call comment ownership, method-call suffixes, text-block arguments, lambda arguments, source-shaped chain planning/root promotion via `MethodCallChainSourcePlanner`, source-multiline field-root fluent-chain statements, source-multiline single-object-creation call statements, return compact-root/final-argument breaks, and broken chain roots. |
 | `MethodReferenceExpr` | `MethodReferencePrinter` | Owns method references, type-argument suffix text, and parenthesized-scope suffixes. |
 | `ObjectCreationExpr` | `ObjectCreationPrinter` | Owns constructor calls, argument breaks selected by `ObjectCreationLayoutPolicy`, lambda arguments, generic type-body breaks, and anonymous class member sequencing. |
 | `SwitchExpr` | `SwitchPrinter.switchExpression(...)` | Uses the same reusable switch label, guard, entry, and block layout as `SwitchStmt` without owning statement dispatch. |

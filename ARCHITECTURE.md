@@ -204,6 +204,10 @@ The CLI is an adapter over the public formatter API:
   the nearest neighboring hunk rows, including blank rows, so guide continuity stays on existing diff lines. Diff
   prefixes are metadata and do not count toward the guide column. Lines that cross the guide preserve their full text and
   receive a marker-prefixed overflow count.
+- `--color`: controls ANSI presentation for status markers and CLI-printed diffs. The default `auto` uses Picocli's
+  terminal detection, `always` forces color for captured or redirected runs, and `never` keeps output plain for logs,
+  scripts, or patch consumers. Colorization happens after adapter diff rendering, so formatted source stdout and
+  `:frmtr-tooling` diff strings remain uncolored.
 - `--write`: rewrite files in place, group file-run failures on stderr by display path, and print a concise stdout
   processed summary counting formatted, failed, ignored, and unchanged files. Ignored files are `.java` files excluded by
   `.gitignore` during selector discovery.

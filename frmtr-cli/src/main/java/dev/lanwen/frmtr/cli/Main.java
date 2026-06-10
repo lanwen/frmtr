@@ -21,6 +21,9 @@ import java.util.List;
 import java.util.concurrent.Callable;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Help.Ansi;
+import picocli.CommandLine.Help.Ansi.IStyle;
+import picocli.CommandLine.Help.Ansi.Style;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
@@ -49,6 +52,14 @@ public final class Main implements Callable<Integer> {
 
     @Option(names = "--stacktrace", description = "Print stack traces for formatter and I/O failures.")
     boolean stacktrace;
+
+    @Option(
+            names = "--color",
+            paramLabel = "auto|always|never",
+            description = "Color status markers and diff output. Defaults to ${DEFAULT-VALUE}.",
+            defaultValue = "auto",
+            converter = ColorModeConverter.class)
+    ColorMode colorMode;
 
     @Option(names = "--line-width", description = "Target line width.", defaultValue = "140")
     int lineWidth;
@@ -195,7 +206,8 @@ public final class Main implements Callable<Integer> {
             }
             out.println(statusLine(statusMarker(FormatFileStatus.CHANGED), displayPath));
             if (diff || renderLineWidth) {
-                out.print(UnifiedDiffRenderer.render(displayPath, original, formatted, options.lineWidth(), diffMode()));
+                out.print(colorizeDiff(
+                        UnifiedDiffRenderer.render(displayPath, original, formatted, options.lineWidth(), diffMode())));
             }
             out.flush();
             return 1;
@@ -212,7 +224,7 @@ public final class Main implements Callable<Integer> {
             if (result.failed() && !stacktrace) {
                 out.println(FormatterRunFailureRenderer.render(result));
             } else {
-                result.unifiedDiff().ifPresent(out::print);
+                result.unifiedDiff().map(this::colorizeDiff).ifPresent(out::print);
             }
         }
         if (stacktrace) {
@@ -352,12 +364,59 @@ public final class Main implements Callable<Integer> {
 
     private String statusMarker(FormatFileStatus status) {
         return switch (status) {
-            case UNCHANGED -> "✓";
-            case CHANGED -> "✗";
-            case WRITTEN -> "✗";
-            case WRITTEN_PARTIALLY -> "!";
-            case FAILED -> "!";
+            case UNCHANGED -> styled("✓", Style.fg_green);
+            case CHANGED -> styled("✗", Style.fg_yellow);
+            case WRITTEN -> styled("✗", Style.fg_yellow);
+            case WRITTEN_PARTIALLY -> styled("!", Style.fg_red);
+            case FAILED -> styled("!", Style.fg_red);
         };
+    }
+
+    private String colorizeDiff(String diff) {
+        if (!ansi().enabled()) {
+            return diff;
+        }
+        StringBuilder colored = new StringBuilder(diff.length());
+        int lineStart = 0;
+        while (lineStart < diff.length()) {
+            int lineEnd = diff.indexOf('\n', lineStart);
+            boolean hasLineEnding = lineEnd >= 0;
+            String line = hasLineEnding ? diff.substring(lineStart, lineEnd) : diff.substring(lineStart);
+            colored.append(colorizeDiffLine(line));
+            if (hasLineEnding) {
+                colored.append('\n');
+            }
+            lineStart = hasLineEnding ? lineEnd + 1 : diff.length();
+        }
+        return colored.toString();
+    }
+
+    private String colorizeDiffLine(String line) {
+        if (line.startsWith("@@ ")) {
+            return styled(line, Style.fg_cyan, Style.bold);
+        }
+        if (line.startsWith("diff --git ") || line.startsWith("--- ") || line.startsWith("+++ ")) {
+            return styled(line, Style.faint);
+        }
+        if (line.startsWith("-")) {
+            return styled(line, Style.fg_red);
+        }
+        if (line.startsWith("+")) {
+            return styled(line, Style.fg_green);
+        }
+        return line;
+    }
+
+    private String styled(String value, IStyle... styles) {
+        Ansi ansi = ansi();
+        if (!ansi.enabled()) {
+            return value;
+        }
+        return Style.on(styles) + value + Style.off(styles);
+    }
+
+    private Ansi ansi() {
+        return colorMode.ansi();
     }
 
     private void printFailure(String target, Exception exception) {
@@ -415,6 +474,41 @@ public final class Main implements Callable<Integer> {
         public FormatterOptions.ParseErrorBehavior convert(String value) {
             String normalized = value.trim().toUpperCase().replace('-', '_');
             return FormatterOptions.ParseErrorBehavior.valueOf(normalized);
+        }
+    }
+
+    enum ColorMode {
+        /**
+         * Enables ANSI colors only when Picocli detects terminal support, keeping redirected output plain by default.
+         */
+        AUTO(Ansi.AUTO),
+
+        /**
+         * Forces ANSI colors for status and diff presentation even when output is redirected or captured.
+         */
+        ALWAYS(Ansi.ON),
+
+        /**
+         * Disables ANSI colors so status and diff output remain exact plain text for logs, scripts, or patch consumers.
+         */
+        NEVER(Ansi.OFF);
+
+        private final Ansi ansi;
+
+        ColorMode(Ansi ansi) {
+            this.ansi = ansi;
+        }
+
+        Ansi ansi() {
+            return ansi;
+        }
+    }
+
+    static final class ColorModeConverter implements CommandLine.ITypeConverter<ColorMode> {
+        @Override
+        public ColorMode convert(String value) {
+            String normalized = value.trim().toUpperCase().replace('-', '_');
+            return ColorMode.valueOf(normalized);
         }
     }
 

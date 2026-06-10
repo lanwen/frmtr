@@ -9,10 +9,13 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 final class MainTest {
+    private static final Pattern ANSI_ESCAPE = Pattern.compile("\\u001B\\[[;\\d]*m");
+
     @Test
     void formatsStdinToStdoutWithStdinOption() {
         StringWriter out = new StringWriter();
@@ -32,6 +35,21 @@ final class MainTest {
                 }
                 """);
         assertThat(err.toString()).isEmpty();
+    }
+
+    @Test
+    void colorAlwaysDoesNotColorFormattedSourceOutput() {
+        Result result = run(Path.of("."), "class Demo{int value;}", "--stdin", "--color", "always");
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.out()).isEqualTo("""
+                class Demo {
+
+                    int value;
+                }
+                """);
+        assertThat(result.out()).doesNotContain("\u001B[");
+        assertThat(result.err()).isEmpty();
     }
 
     @Test
@@ -95,6 +113,30 @@ final class MainTest {
                         +    int value;
                         +}
                         """);
+        assertThat(result.err()).isEmpty();
+    }
+
+    @Test
+    void colorAlwaysColorsStatusAndDiffOutput() {
+        Result result = run(Path.of("."), "class Demo{int value;}", "--stdin", "--diff", "--color", "always");
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.out())
+                .contains("\u001B[")
+                .contains("✗")
+                .contains("-class Demo{int value;}")
+                .contains("+class Demo {");
+        assertThat(stripAnsi(result.out())).isEqualTo(plainChangedStdinDiff());
+        assertThat(result.err()).isEmpty();
+    }
+
+    @Test
+    void colorNeverPreservesPlainStatusAndDiffOutput() {
+        Result result = run(Path.of("."), "class Demo{int value;}", "--stdin", "--diff", "--color", "never");
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.out()).isEqualTo(plainChangedStdinDiff());
+        assertThat(result.out()).doesNotContain("\u001B[");
         assertThat(result.err()).isEmpty();
     }
 
@@ -601,6 +643,26 @@ final class MainTest {
                         };
                     }
                 }""";
+    }
+
+    private static String plainChangedStdinDiff() {
+        return """
+                ✗ stdin
+                diff --git origin frmtr
+                --- origin
+                +++ frmtr
+                @@ -1 +1,4 @@
+                -class Demo{int value;}
+                \\ No newline at end of file
+                +class Demo {
+                +
+                +    int value;
+                +}
+                """;
+    }
+
+    private static String stripAnsi(String value) {
+        return ANSI_ESCAPE.matcher(value).replaceAll("");
     }
 
     private record Result(int exitCode, String out, String err) {}

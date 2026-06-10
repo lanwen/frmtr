@@ -201,9 +201,9 @@ The CLI is an adapter over the public formatter API:
   before the same check summary.
 - `--render-line-width`: print terminal-only diff output for sources marked `✗` with a numbered width guide on each hunk
   header, vertical-ellipsis markers on hunk lines that approach or cross the configured source line width, and markers on
-  the nearest nonblank neighboring hunk rows so guide continuity stays on existing diff lines. Diff prefixes are metadata
-  and do not count toward the guide column. Lines that cross the guide preserve their full text and receive a
-  marker-prefixed overflow count.
+  the nearest neighboring hunk rows, including blank rows, so guide continuity stays on existing diff lines. Diff
+  prefixes are metadata and do not count toward the guide column. Lines that cross the guide preserve their full text and
+  receive a marker-prefixed overflow count.
 - `--write`: rewrite files in place, group file-run failures on stderr by display path, and print a concise stdout
   processed summary counting formatted, failed, ignored, and unchanged files. Ignored files are `.java` files excluded by
   `.gitignore` during selector discovery.

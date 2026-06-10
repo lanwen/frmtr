@@ -133,7 +133,7 @@ public final class UnifiedDiffRenderer {
             if (line.startsWith("@@ ")) {
                 return;
             }
-            if (isNonBlankHunkSourceLine(line)) {
+            if (isHunkSourceLine(line)) {
                 markers[i] = true;
                 return;
             }
@@ -147,10 +147,6 @@ public final class UnifiedDiffRenderer {
         int sourceWidth = line.length() - 1;
         int proximityStart = Math.max(0, lineWidth - LINE_WIDTH_RULER_PROXIMITY);
         return sourceWidth >= proximityStart;
-    }
-
-    private static boolean isNonBlankHunkSourceLine(String line) {
-        return isHunkSourceLine(line) && !line.substring(1).isBlank();
     }
 
     private static boolean isHunkSourceLine(String line) {

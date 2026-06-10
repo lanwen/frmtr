@@ -25,13 +25,14 @@ Single-file formatting flows through these ownership boundaries:
    whole-file layout to `CompilationUnitPrinter`, then asks `CommentTracker` to run the debug-only missed comment
    guardrail.
 5. `CompilationUnitPrinter` sequences file-leading comments, package declarations, imports, optional module
-   declarations, top-level declarations, compact unnamed-class members, and trailing orphan comments.
+   declarations, pragma-sensitive top-level declaration separators, compact unnamed-class members, and trailing orphan
+   comments.
 
 Top-level AST ownership:
 
 | JavaParser AST kind | Primary owner | Notes |
 | --- | --- | --- |
-| `CompilationUnit` | `CompilationUnitPrinter` | Owns package/import/module/type ordering and orphan comment placement around the first and last type. |
+| `CompilationUnit` | `CompilationUnitPrinter` | Owns package/import/module/type ordering, pragma-sensitive top-level declaration separation, and orphan comment placement around the first and last type. |
 | `PackageDeclaration` | `PackageDeclarationPrinter` | Owns package line text and source-leading package comments. |
 | `ImportDeclaration` | `ImportDeclarationPrinter` | Owns one import line. Import ordering is owned by `ImportSortTransform`; import block separation is owned by `CompilationUnitPrinter`. |
 | `ModuleDeclaration` | `ModuleDeclarationPrinter` and `ModuleBlockPrinter` | `ModuleDeclarationPrinter` owns header and raw commented-module fallback selection; `ModuleBlockPrinter` owns structured directives. |
@@ -133,7 +134,7 @@ expression kinds. Specialized expression printers own the layout decision tree f
 | `FieldAccessExpr` | `FieldAccessPrinter` | Owns dotted field access and comment-sensitive name splitting. Compact field-access text is also reconstructed by `CompactSourceText`. |
 | `InstanceOfExpr` | `InstanceOfExpressionPrinter` | Owns `instanceof` continuations and binary-operator-position-aware placement. |
 | `LambdaExpr` | `LambdaExpressionPrinter` | Owns parameter parentheses policy, commented parameter reconstruction, expression/block bodies, and huggable lambda argument shapes. |
-| `MethodCallExpr` | `MethodCallPrinter` | Owns calls, call chains, chain comments, same-line chained-call comment ownership, method-call suffixes, text-block arguments, lambda arguments, static first-call root promotion, source-multiline single-object-creation call statements, return compact-root/final-argument breaks, and broken chain roots. |
+| `MethodCallExpr` | `MethodCallPrinter` | Owns calls, call chains, chain comments, same-line chained-call comment ownership, method-call suffixes, text-block arguments, lambda arguments, source-shaped chain planning/root promotion via `MethodCallChainSourcePlanner`, source-multiline single-object-creation call statements, return compact-root/final-argument breaks, and broken chain roots. |
 | `MethodReferenceExpr` | `MethodReferencePrinter` | Owns method references, type-argument suffix text, and parenthesized-scope suffixes. |
 | `ObjectCreationExpr` | `ObjectCreationPrinter` | Owns constructor calls, argument breaks, lambda arguments, generic type-body breaks, and anonymous class member sequencing. |
 | `SwitchExpr` | `SwitchPrinter.switchExpression(...)` | Uses the same reusable switch label, guard, entry, and block layout as `SwitchStmt` without owning statement dispatch. |
@@ -168,6 +169,8 @@ These helpers define the fallback and comment-accounting boundaries used by the 
 | `RawSource` | Token-range recovery, raw-without-own-comment text, line-by-line trailing whitespace stripping, and single-line whitespace normalization. |
 | `RawPreservedSource` | The canonical raw-output boundary. It wraps raw or source-derived text in `Doc.Text` and records contained comments as deliberately raw-preserved. |
 | `CompactSourceText` | Source-equivalent compact text for width gates and compact fallbacks, including raw string-literal spelling, reconstructed comment-free method calls, field accesses, type-like generic spacing cleanup, and clone-before-comment-removal variants. |
+| `SourceShape` | Source-line-shape predicates that let printers preserve existing multiline forms without scanning whole declarations or owning the resulting doc layout. |
+| `MethodCallChainSourcePlanner` | Source-shaped method-call chain planning, including root collection, selector-line preservation, builder/type-like root promotion, and compact constructor-root policy before `MethodCallPrinter` assembles docs. |
 | `CommentedTokenText` | Comment-aware tokenization and token-line helpers used by raw fallback printers. |
 | `CommentedModulePrinter` | Raw-source reconstruction for commented `module-info.java` headers and directives selected by `ModuleDeclarationPrinter`. |
 | `CommentedInterfacePrinter` | Raw-source reconstruction for interface headers and abstract method signatures with comments inside declaration syntax. |

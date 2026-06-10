@@ -138,8 +138,8 @@ Declaration and type printers own Java declaration grammar after `BodyDeclaratio
 `CompilationUnitPrinter` selects the declaration context:
 
 - `CompilationUnitPrinter`: whole-file layout for source-leading package comments, orphan comments, package
-  declarations, import sections, optional module declarations, top-level declarations, compact unnamed-class member
-  expansion, and trailing orphan comments.
+  declarations, import sections, optional module declarations, formatter-pragma adjacency and separator rules between
+  top-level declarations, compact unnamed-class member expansion, and trailing orphan comments.
 - `PackageDeclarationPrinter` and `ImportDeclarationPrinter`: package and import line rendering while compilation-unit
   ordering stays with `CompilationUnitPrinter` and import ordering stays with `ImportSortTransform`.
 - `ModuleDeclarationPrinter` and `ModuleBlockPrinter`: module headers, raw commented-module fallback selection,

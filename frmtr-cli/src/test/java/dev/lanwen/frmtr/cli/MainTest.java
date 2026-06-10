@@ -131,6 +131,54 @@ final class MainTest {
     }
 
     @Test
+    void colorAlwaysColorsLineWidthBorderGray() {
+        Result result = run(
+                Path.of("."),
+                "class Demo{int value;}",
+                "--stdin",
+                "--render-line-width",
+                "--line-width",
+                "20",
+                "--color",
+                "always");
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.out())
+                .contains("\u001B[38;5;8m⋮ 20\u001B[0m")
+                .contains("\u001B[38;5;8m⋮\u001B[0m\u001B[31m;}\u001B[0m")
+                .contains("\u001B[38;5;8m⋮+2\u001B[0m");
+        assertThat(stripAnsi(result.out()))
+                .contains("@@ -1 +1,4 @@        ⋮ 20\n")
+                .contains("-class Demo{int value⋮;}\n                     ⋮+2\n")
+                .contains("+class Demo {        ⋮\n");
+        assertThat(result.err()).isEmpty();
+    }
+
+    @Test
+    void colorAlwaysColorsCheckSummaryStats(@TempDir Path dir) throws IOException {
+        write(
+                dir.resolve("src/AFormatted.java"),
+                """
+                class AFormatted {
+
+                    int value;
+                }
+                """);
+        write(dir.resolve("src/BChanged.java"), "class BChanged{int value;}");
+        write(dir.resolve("src/ZBroken.java"), "class {");
+
+        Result result = run(dir, null, "--check", "--color", "always", "src");
+
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.out())
+                .contains("\u001B[32m1 unchanged\u001B[0m")
+                .contains("\u001B[33m1 would change\u001B[0m")
+                .contains("\u001B[31m1 failed\u001B[0m");
+        assertThat(stripAnsi(result.out())).endsWith("Checked 3 files: 1 unchanged, 1 would change, 1 failed.\n");
+        assertThat(result.err()).isEmpty();
+    }
+
+    @Test
     void colorNeverPreservesPlainStatusAndDiffOutput() {
         Result result = run(Path.of("."), "class Demo{int value;}", "--stdin", "--diff", "--color", "never");
 

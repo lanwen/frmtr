@@ -34,6 +34,8 @@ import picocli.CommandLine.Parameters;
         description = "Formats Java source.")
 public final class Main implements Callable<Integer> {
     private static final List<String> DEFAULT_SELECTORS = List.of("./**/*.java");
+    private static final char LINE_WIDTH_MARKER = '⋮';
+    private static final IStyle LINE_BORDER_STYLE = Style.fg("8");
 
     @Option(names = "--stdin", description = "Read Java source from stdin and print formatted source to stdout.")
     boolean stdinMode;
@@ -308,26 +310,26 @@ public final class Main implements Callable<Integer> {
 
     private void printCheckSummary(FormatRunResult run) {
         List<String> parts = new ArrayList<>();
-        addCount(parts, statusCount(run, FormatFileStatus.UNCHANGED), "unchanged");
-        addCount(parts, statusCount(run, FormatFileStatus.CHANGED), "would change");
-        addCount(parts, run.failureCount(), "failed");
+        addCount(parts, statusCount(run, FormatFileStatus.UNCHANGED), "unchanged", Style.fg_green);
+        addCount(parts, statusCount(run, FormatFileStatus.CHANGED), "would change", Style.fg_yellow);
+        addCount(parts, run.failureCount(), "failed", Style.fg_red);
         out.println(summaryLine("Checked", run.results().size(), parts));
     }
 
     private void printWriteSummary(FormatRunResult run, long ignored) {
         List<String> parts = new ArrayList<>();
-        addRequiredCount(parts, statusCount(run, FormatFileStatus.WRITTEN), "formatted");
-        addCount(parts, run.failureCount(), "failed");
-        addCount(parts, ignored, "ignored");
-        addCount(parts, statusCount(run, FormatFileStatus.UNCHANGED), "unchanged");
+        addRequiredCount(parts, statusCount(run, FormatFileStatus.WRITTEN), "formatted", Style.fg_green);
+        addCount(parts, run.failureCount(), "failed", Style.fg_red);
+        addCount(parts, ignored, "ignored", LINE_BORDER_STYLE);
+        addCount(parts, statusCount(run, FormatFileStatus.UNCHANGED), "unchanged", Style.fg_green);
         out.println(summaryLine("Processed", run.results().size() + ignored, parts));
     }
 
     private void printPrintSummary(long total, long printed, long failed, long ignored) {
         List<String> parts = new ArrayList<>();
-        addRequiredCount(parts, printed, "printed");
-        addCount(parts, failed, "failed");
-        addCount(parts, ignored, "ignored");
+        addRequiredCount(parts, printed, "printed", Style.fg_green);
+        addCount(parts, failed, "failed", Style.fg_red);
+        addCount(parts, ignored, "ignored", LINE_BORDER_STYLE);
         err.println(summaryLine("Processed", total + ignored, parts));
         err.flush();
     }
@@ -336,14 +338,14 @@ public final class Main implements Callable<Integer> {
         return run.results().stream().filter(result -> result.status() == status).count();
     }
 
-    private void addCount(List<String> parts, long count, String label) {
+    private void addCount(List<String> parts, long count, String label, IStyle... styles) {
         if (count > 0) {
-            parts.add(count + " " + label);
+            parts.add(styled(count + " " + label, styles));
         }
     }
 
-    private void addRequiredCount(List<String> parts, long count, String label) {
-        parts.add(count + " " + label);
+    private void addRequiredCount(List<String> parts, long count, String label, IStyle... styles) {
+        parts.add(styled(count + " " + label, styles));
     }
 
     private String summaryLine(String action, long count, List<String> parts) {
@@ -393,26 +395,79 @@ public final class Main implements Callable<Integer> {
 
     private String colorizeDiffLine(String line) {
         if (line.startsWith("@@ ")) {
-            return styled(line, Style.fg_cyan, Style.bold);
+            return styledLineWithGrayBorder(line, Style.fg_cyan, Style.bold);
         }
         if (line.startsWith("diff --git ") || line.startsWith("--- ") || line.startsWith("+++ ")) {
             return styled(line, Style.faint);
         }
         if (line.startsWith("-")) {
-            return styled(line, Style.fg_red);
+            return styledLineWithGrayBorder(line, Style.fg_red);
         }
         if (line.startsWith("+")) {
-            return styled(line, Style.fg_green);
+            return styledLineWithGrayBorder(line, Style.fg_green);
+        }
+        if (line.indexOf(LINE_WIDTH_MARKER) >= 0) {
+            return styledLineWithGrayBorder(line);
         }
         return line;
     }
 
+    private String styledLineWithGrayBorder(String line, IStyle... styles) {
+        if (line.indexOf(LINE_WIDTH_MARKER) < 0) {
+            return styled(line, styles);
+        }
+        StringBuilder colored = new StringBuilder(line.length());
+        int cursor = 0;
+        while (cursor < line.length()) {
+            int marker = line.indexOf(LINE_WIDTH_MARKER, cursor);
+            if (marker < 0) {
+                colored.append(styled(line.substring(cursor), styles));
+                break;
+            }
+            colored.append(styled(line.substring(cursor, marker), styles));
+            int markerEnd = lineWidthMarkerEnd(line, marker);
+            colored.append(styled(line.substring(marker, markerEnd), LINE_BORDER_STYLE));
+            cursor = markerEnd;
+        }
+        return colored.toString();
+    }
+
+    private int lineWidthMarkerEnd(String line, int marker) {
+        int cursor = marker + 1;
+        if (line.startsWith("@@ ")) {
+            while (cursor < line.length() && line.charAt(cursor) == ' ') {
+                cursor++;
+            }
+            while (cursor < line.length() && Character.isDigit(line.charAt(cursor))) {
+                cursor++;
+            }
+            return cursor;
+        }
+        if (marker > 0 && !line.substring(0, marker).isBlank()) {
+            return cursor;
+        }
+        if (cursor < line.length() && line.charAt(cursor) == '+') {
+            cursor++;
+            while (cursor < line.length() && Character.isDigit(line.charAt(cursor))) {
+                cursor++;
+            }
+            return cursor;
+        }
+        while (cursor < line.length() && line.charAt(cursor) == ' ') {
+            cursor++;
+        }
+        while (cursor < line.length() && Character.isDigit(line.charAt(cursor))) {
+            cursor++;
+        }
+        return cursor;
+    }
+
     private String styled(String value, IStyle... styles) {
         Ansi ansi = ansi();
-        if (!ansi.enabled()) {
+        if (!ansi.enabled() || styles.length == 0) {
             return value;
         }
-        return Style.on(styles) + value + Style.off(styles);
+        return Style.on(styles) + value + Style.reset.off();
     }
 
     private Ansi ansi() {

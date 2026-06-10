@@ -41,6 +41,18 @@ final class CommentTracker {
                 .orElse(Doc.EMPTY);
     }
 
+    Doc adjacentLeadingLineComments(Node node) {
+        return Doc.concat(commentPlacement.adjacentLeadingLineComments(node).stream()
+                .filter(this::claim)
+                .map(JavaFormatter::commentDoc)
+                .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
+                .toList());
+    }
+
+    Doc leadingCluster(Node node) {
+        return Doc.concat(adjacentLeadingLineComments(node), leading(node));
+    }
+
     Doc trailingLineComment(Node node) {
         return commentPlacement.trailingLineComment(node)
                 .filter(this::claim)

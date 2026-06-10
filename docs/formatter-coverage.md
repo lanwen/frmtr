@@ -126,7 +126,7 @@ expression kinds. Specialized expression printers own the layout decision tree f
 | `ArrayAccessExpr` | `ArrayExpressionPrinter` | Owns array access and suffix behavior for broken enclosed scopes. |
 | `ArrayCreationExpr` | `ArrayExpressionPrinter` | Owns array creation prefixes, type breaks, and initializer delegation. |
 | `ArrayInitializerExpr` | `ArrayExpressionPrinter` | Owns initializer braces, compact initializer acceptance, and initializer comments. |
-| `AnnotationExpr` and subclasses | `AnnotationExpressionPrinter` | Covers marker, normal, and single-member annotations plus annotation member values. |
+| `AnnotationExpr` and subclasses | `AnnotationExpressionPrinter` | Covers marker, normal, and single-member annotations plus annotation member values, including line comments inside annotation array values. |
 | `BinaryExpr` | `BinaryExpressionPrinter` | Owns binary flattening, operator position, line comments between operands, precedence parentheses, and cast-division continuation policy. |
 | `CastExpr` | `CastExpressionPrinter` | Owns cast type layout, including breakable generic and intersection cast types, and nested cast depth checks. |
 | `ConditionalExpr` | `ConditionalExpressionPrinter` | Owns ternary layout for assignments, initializers, comments around `?` and `:`, nested branches, and binary condition wrapping. |
@@ -134,7 +134,7 @@ expression kinds. Specialized expression printers own the layout decision tree f
 | `FieldAccessExpr` | `FieldAccessPrinter` | Owns dotted field access and comment-sensitive name splitting. Compact field-access text is also reconstructed by `CompactSourceText`. |
 | `InstanceOfExpr` | `InstanceOfExpressionPrinter` | Owns `instanceof` continuations and binary-operator-position-aware placement. |
 | `LambdaExpr` | `LambdaExpressionPrinter` | Owns parameter parentheses policy, commented parameter reconstruction, expression/block bodies, and huggable lambda argument shapes. |
-| `MethodCallExpr` | `MethodCallPrinter` | Owns calls, call chains, chain comments, same-line chained-call comment ownership, method-call suffixes, text-block arguments, lambda arguments, source-shaped chain planning/root promotion via `MethodCallChainSourcePlanner`, source-multiline field-root fluent-chain statements, source-multiline single-object-creation call statements, return compact-root/final-argument breaks, and broken chain roots. |
+| `MethodCallExpr` | `MethodCallPrinter` | Owns calls, call chains, chain comments, same-line chained-call comment ownership, leading line-comment clusters before chained segments, method-call suffixes, text-block arguments, lambda arguments, source-shaped chain planning/root promotion via `MethodCallChainSourcePlanner`, source-multiline field-root fluent-chain statements, source-multiline single-object-creation call statements, return compact-root/final-argument breaks, and broken chain roots. |
 | `MethodReferenceExpr` | `MethodReferencePrinter` | Owns method references, type-argument suffix text, and parenthesized-scope suffixes. |
 | `ObjectCreationExpr` | `ObjectCreationPrinter` | Owns constructor calls, argument breaks selected by `ObjectCreationLayoutPolicy`, lambda arguments, generic type-body breaks, and anonymous class member sequencing. |
 | `SwitchExpr` | `SwitchPrinter.switchExpression(...)` | Uses the same reusable switch label, guard, entry, and block layout as `SwitchStmt` without owning statement dispatch; declaration printers preserve switch-expression initializer bodies on the equals line. |
@@ -159,8 +159,8 @@ These helpers define the fallback and comment-accounting boundaries used by the 
 | Helper | Boundary owned |
 | --- | --- |
 | `JavaCommentMap` | Per-run snapshot of JavaParser own, orphan, and contained comment associations. It preserves lookup identity and does not classify placement. |
-| `JavaCommentPlacementPolicy` | Read-only placement queries over `JavaCommentMap`, including leading, trailing-line, orphan, contained, between-neighbor, and same-line comment decisions. It does not render or claim comments. |
-| `CommentTracker` | Stateful comment consumption for policy-selected leading, trailing, orphan, and raw-preserved comments in one formatting run. |
+| `JavaCommentPlacementPolicy` | Read-only placement queries over `JavaCommentMap`, including leading, adjacent-leading clusters, trailing-line, orphan, contained, between-neighbor, and same-line comment decisions. It does not render or claim comments. |
+| `CommentTracker` | Stateful comment consumption for policy-selected leading, adjacent-leading, trailing, orphan, and raw-preserved comments in one formatting run. |
 | `CommentIndex` | Read-only source-position predicates and ordering for comments and nodes. It does not render or mark comments consumed. |
 | `CommentPlacement` | Source-position-sensitive attached and unattached block-comment docs for callers that need more than ordinary leading/trailing slots, backed by `JavaCommentPlacementPolicy`. |
 | `JavaCommentTrivia` and `JavaCommentKind` | Comment classification and reusable range checks for comment accounting and layout rules. |

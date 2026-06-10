@@ -363,6 +363,10 @@ final class MethodCallPrinter {
         }
         Doc rootTrailingComment = rootTrailingLineCommentBeforeFirstSegment(root, calls);
         if (rootTrailingComment != Doc.EMPTY) {
+            if (root instanceof ObjectCreationExpr objectCreation
+                    && chainPlan.rootRendering() == MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER) {
+                rootDoc = brokenObjectCreationRenderer.apply(objectCreation);
+            }
             rootDoc = Doc.concat(rootDoc, Doc.text(" "), rootTrailingComment);
             if (calls.size() == 1) {
                 return Optional.of(Doc.concat(
@@ -619,7 +623,12 @@ final class MethodCallPrinter {
 
     private boolean methodCallSegmentHasComment(MethodCallExpr expression) {
         return methodCallSegmentHasNameComment(expression)
+                || methodCallSegmentHasLeadingLineComment(expression)
                 || methodCallSegmentHasArgumentGapComment(expression);
+    }
+
+    private boolean methodCallSegmentHasLeadingLineComment(MethodCallExpr expression) {
+        return !leadingLineCommentsBeforeSegment(expression).isEmpty();
     }
 
     private boolean methodCallSegmentHasArgumentGapComment(MethodCallExpr expression) {
@@ -657,20 +666,11 @@ final class MethodCallPrinter {
     }
 
     private Doc methodCallChainSegment(MethodCallExpr expression) {
-        Optional<Comment> rawNameComment = expression.getName().getComment()
-                .filter(comment -> comment instanceof LineComment || comment instanceof BlockComment)
-                .filter(comment -> CommentIndex.startsBefore(comment, expression.getName()));
-        Doc nameComment = rawNameComment.map(comments::comment).orElse(Doc.EMPTY);
         String typeArguments = expression.getTypeArguments()
                 .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
                 .orElse("");
         String prefix = "." + typeArguments + expression.getNameAsString();
-        Doc segmentPrefix = nameComment == Doc.EMPTY
-                ? Doc.EMPTY
-                : rawNameComment.filter(comment -> comment instanceof BlockComment
-                                && CommentIndex.startsOnSameLine(comment, expression.getName()))
-                        .map(ignored -> Doc.concat(nameComment, Doc.text(" ")))
-                        .orElseGet(() -> Doc.concat(nameComment, Doc.HARD_LINE));
+        Doc segmentPrefix = methodCallSegmentPrefix(expression);
         if (expression.getArguments().isEmpty()) {
             Optional<Doc> commentedArguments = emptyMethodCallArguments(prefix, expression);
             if (commentedArguments.isPresent()) {
@@ -697,6 +697,41 @@ final class MethodCallPrinter {
                         .toList()))),
                 Doc.SOFT_LINE,
                 Doc.text(")"))));
+    }
+
+    private Doc methodCallSegmentPrefix(MethodCallExpr expression) {
+        Doc leading = Doc.concat(leadingLineCommentsBeforeSegment(expression).stream()
+                .map(comments::comment)
+                .filter(comment -> comment != Doc.EMPTY)
+                .map(comment -> Doc.concat(comment, Doc.HARD_LINE))
+                .toList());
+        Optional<Comment> rawNameComment = expression.getName().getComment()
+                .filter(comment -> comment instanceof LineComment || comment instanceof BlockComment)
+                .filter(comment -> CommentIndex.startsBefore(comment, expression.getName()));
+        Doc nameComment = rawNameComment.map(comments::comment).orElse(Doc.EMPTY);
+        if (nameComment == Doc.EMPTY) {
+            return leading;
+        }
+        Doc namePrefix = rawNameComment.filter(comment -> comment instanceof BlockComment
+                        && CommentIndex.startsOnSameLine(comment, expression.getName()))
+                .map(ignored -> Doc.concat(nameComment, Doc.text(" ")))
+                .orElseGet(() -> Doc.concat(nameComment, Doc.HARD_LINE));
+        return Doc.concat(leading, namePrefix);
+    }
+
+    private List<JavaCommentTrivia> leadingLineCommentsBeforeSegment(MethodCallExpr expression) {
+        Optional<Expression> scope = expression.getScope();
+        if (scope.isEmpty()) {
+            return List.of();
+        }
+        int scopeEndLine = CommentIndex.endLine(scope.orElseThrow(), Integer.MIN_VALUE);
+        int nameBeginLine = CommentIndex.beginLine(expression.getName(), Integer.MAX_VALUE);
+        return commentPlacement.containedComments(expression).stream()
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.beginLine(Integer.MIN_VALUE) > scopeEndLine)
+                .filter(comment -> comment.beginLine(Integer.MAX_VALUE) < nameBeginLine)
+                .sorted((left, right) -> CommentIndex.sourceOrderComparator().compare(left.comment(), right.comment()))
+                .toList();
     }
 
     private List<Doc> methodCallChainSegments(List<MethodCallExpr> calls) {

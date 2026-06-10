@@ -80,6 +80,7 @@ final class JavaPrinter {
                 this::blockStatementWidth);
         this.annotationExpressions = new AnnotationExpressionPrinter(
                 comments,
+                commentPlacementPolicy,
                 options,
                 this::expression,
                 binaries::nestedLines,
@@ -408,6 +409,7 @@ final class JavaPrinter {
                 declaration -> memberBlocks.memberBlock(declaration.getMembers(), declaration, this::body));
         this.statements = new StatementPrinter(
                 comments,
+                commentPlacementPolicy,
                 rawSource,
                 context.sourceShape,
                 options,

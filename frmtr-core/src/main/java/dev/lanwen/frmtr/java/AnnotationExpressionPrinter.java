@@ -11,6 +11,7 @@ import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -32,6 +33,7 @@ import java.util.function.ToIntFunction;
  */
 final class AnnotationExpressionPrinter {
     private final CommentTracker comments;
+    private final JavaCommentPlacementPolicy commentPlacement;
     private final FormatterOptions options;
     private final JavaFormatRule<Expression> expressionRenderer;
     private final BiFunction<Expression, Boolean, Doc> nestedBinaryLines;
@@ -40,12 +42,14 @@ final class AnnotationExpressionPrinter {
 
     AnnotationExpressionPrinter(
             CommentTracker comments,
+            JavaCommentPlacementPolicy commentPlacement,
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
             BiFunction<Expression, Boolean, Doc> nestedBinaryLines,
             Function<Node, String> compact,
             ToIntFunction<String> currentIndentedWidth) {
         this.comments = comments;
+        this.commentPlacement = commentPlacement;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.nestedBinaryLines = nestedBinaryLines;
@@ -88,9 +92,11 @@ final class AnnotationExpressionPrinter {
         if (annotation.getPairs().isEmpty()) {
             return Doc.text(prefix + "()");
         }
-        String flat = prefix + "(" + compactJoinAnnotationPairs(annotation.getPairs()) + ")";
-        if (currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
-            return Doc.text(flat);
+        if (!annotation.getPairs().stream().map(MemberValuePair::getValue).anyMatch(this::annotationValueHasLineComments)) {
+            String flat = prefix + "(" + compactJoinAnnotationPairs(annotation.getPairs()) + ")";
+            if (currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
+                return Doc.text(flat);
+            }
         }
         return Doc.concat(
                 Doc.text(prefix + "("),
@@ -111,6 +117,9 @@ final class AnnotationExpressionPrinter {
     private Doc singleMemberAnnotation(SingleMemberAnnotationExpr annotation) {
         String prefix = "@" + compact.apply(annotation.getName());
         Expression memberValue = annotation.getMemberValue();
+        if (annotationValueHasLineComments(memberValue)) {
+            return brokenSingleMemberAnnotation(prefix, annotationValue(memberValue));
+        }
         String flatValue = compactAnnotationValue(memberValue);
         String flat = prefix + "(" + flatValue + ")";
         if (currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
@@ -166,6 +175,9 @@ final class AnnotationExpressionPrinter {
      */
     private Doc annotationValue(Expression value) {
         if (value instanceof ArrayInitializerExpr arrayInitializerExpr) {
+            if (annotationValueHasLineComments(arrayInitializerExpr)) {
+                return annotationArrayInitializer(arrayInitializerExpr);
+            }
             String flat = compactAnnotationArrayInitializer(arrayInitializerExpr);
             if (currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
                 return Doc.text(flat);
@@ -188,12 +200,53 @@ final class AnnotationExpressionPrinter {
         if (expression.getValues().isEmpty()) {
             return Doc.text("{}");
         }
+        List<Doc> lines = new ArrayList<>();
+        addCommentDocs(lines, commentPlacement.lineCommentsBeforeFirst(expression, expression.getValues().get(0)));
+        for (int index = 0; index < expression.getValues().size(); index++) {
+            Expression value = expression.getValues().get(index);
+            List<JavaCommentTrivia> trailingComments = index + 1 < expression.getValues().size()
+                    ? commentPlacement.lineCommentsBetween(expression, value, expression.getValues().get(index + 1))
+                    : commentPlacement.lineCommentsAfterLast(expression, value);
+            lines.add(annotationArrayValueLine(value, trailingComments));
+        }
         return Doc.concat(
                 Doc.text("{"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                        expression.getValues().stream().map(expressionRenderer::format).toList()), Doc.text(","))),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, lines))),
                 Doc.HARD_LINE,
                 Doc.text("}"));
+    }
+
+    private Doc annotationArrayValueLine(Expression value, List<JavaCommentTrivia> trailingComments) {
+        Doc valueLine = expressionRenderer.format(value);
+        boolean commaAppended = false;
+        List<Doc> followingLines = new ArrayList<>();
+        for (JavaCommentTrivia comment : trailingComments) {
+            Doc commentDoc = comments.comment(comment);
+            if (commentDoc == Doc.EMPTY) {
+                continue;
+            }
+            if (comment.startsOnEndLine(value)) {
+                if (!commaAppended) {
+                    valueLine = Doc.concat(valueLine, Doc.text(","));
+                    commaAppended = true;
+                }
+                valueLine = Doc.concat(valueLine, Doc.text(" "), commentDoc);
+            } else {
+                followingLines.add(commentDoc);
+            }
+        }
+        if (!commaAppended) {
+            valueLine = Doc.concat(valueLine, Doc.text(","));
+        }
+        followingLines.addFirst(valueLine);
+        return Doc.join(Doc.HARD_LINE, followingLines);
+    }
+
+    private void addCommentDocs(List<Doc> lines, List<JavaCommentTrivia> sourceComments) {
+        sourceComments.stream()
+                .map(comments::comment)
+                .filter(doc -> doc != Doc.EMPTY)
+                .forEach(lines::add);
     }
 
     private String compactJoinAnnotationPairs(List<MemberValuePair> pairs) {
@@ -228,5 +281,12 @@ final class AnnotationExpressionPrinter {
             return "{}";
         }
         return "{ " + values + " }";
+    }
+
+    private boolean annotationValueHasLineComments(Expression value) {
+        return commentPlacement.hasContainedLineComments(value)
+                || commentPlacement.leadingComment(value)
+                        .filter(JavaCommentTrivia::isLine)
+                        .isPresent();
     }
 }

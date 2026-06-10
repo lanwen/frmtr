@@ -168,6 +168,10 @@ boundaries, and specialized declaration, statement, expression, type, comment, r
 [docs/java-formatter-internals.md](docs/java-formatter-internals.md) for those collaborator boundaries and
 [docs/formatter-coverage.md](docs/formatter-coverage.md) for the AST ownership map.
 
+Comment preservation is centralized through a per-run `JavaCommentMap`, read-only `JavaCommentPlacementPolicy` queries,
+and stateful `CommentTracker` claims so adjacent leading clusters, line comments inside annotation arrays, and line
+comments before fluent-chain segments are printed once while syntax-specific printers keep the surrounding layout.
+
 Variable initializer wrapping is owned by the declaration printers that know the full declaration prefix. Method-call
 initializers preserve huggable block-lambda call shapes before falling back to hard-broken argument lists, and switch
 expression initializers keep their multiline body on the equals line. Source-shape helpers and shared constructor layout

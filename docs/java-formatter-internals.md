@@ -107,8 +107,9 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
 - `LambdaExpressionPrinter`: lambda parameter parentheses, commented parameter reconstruction, expression versus block
   bodies, parenthesized lambdas, broken logical bodies, and lambda arguments that can be hugged by method calls or object
   creation.
-- `MethodCallPrinter`: method calls and call chains, chain comments including same-line comments between chained calls,
-  empty argument comments, commented argument-gap fallback lists, text-block arguments, single binary arguments,
+- `MethodCallPrinter`: method calls and call chains, chain comments including same-line comments between chained calls
+  and leading line-comment clusters before chained segments, empty argument comments, commented argument-gap fallback
+  lists, text-block arguments, single binary arguments,
   source-multiline single-object-creation call statements, field-root fluent-chain preservation for already-multiline
   statement chains, compact-root plus broken-final-segment calls, and suffixes on enclosed scopes.
 - `MethodReferencePrinter`: method references, type-argument suffix text, and parenthesized-scope suffixes.
@@ -122,8 +123,8 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
 - `ArrayExpressionPrinter`: array access, array creation, array initializer braces, compact literal initializer
   acceptance, array-creation type breaks, forced initializer breaks, and initializer comments.
 - `AnnotationExpressionPrinter`: marker, normal, and single-member annotation shapes, annotation member pairs, compact
-  annotation text, raw string-literal tokens inside compact annotation values, annotation array member values, trailing
-  line comments, and binary annotation-value continuations.
+  annotation text, raw string-literal tokens inside compact annotation values, annotation array member values including
+  line comments between values, trailing line comments, and binary annotation-value continuations.
 - `BinaryExpressionPrinter`: binary flattening, operator position, line comments between operands, precedence
   parentheses, end-position method-call operand breaks, and cast-division continuation decisions.
 - `CastExpressionPrinter`: cast type layout, line-width-aware intersection and generic type-body breaks, operand rendering,
@@ -200,12 +201,12 @@ small comment-aware tokenization and token-line text helpers used by raw-source 
 
 `JavaCommentMap` captures JavaParser's own, orphan, and contained comment associations once at the
 `JavaPrinter.print(CompilationUnit)` boundary. `JavaCommentPlacementPolicy` reads that map to answer leading,
-trailing-line, orphan, contained, before-first-child, between-neighbor, after-last-child, and same-line placement queries
-without rendering docs or mutating claim state.
+adjacent-leading line-cluster, trailing-line, orphan, contained, before-first-child, between-neighbor, after-last-child,
+and same-line placement queries without rendering docs or mutating claim state.
 
 `CommentTracker` is the package-private per-run comment accounting helper for comments selected by
-`JavaCommentPlacementPolicy` as leading, trailing, or orphan comments. It renders comments through `JavaCommentTrivia`,
-stores raw-preserved comment marks supplied by `RawPreservedSource`, and exposes the debug-only
+`JavaCommentPlacementPolicy` as leading, adjacent-leading, trailing, or orphan comments. It renders comments through
+`JavaCommentTrivia`, stores raw-preserved comment marks supplied by `RawPreservedSource`, and exposes the debug-only
 end-of-compilation-unit assertion that all JavaParser-visible comments were either printed or raw-accounted.
 
 `JavaCommentKind` and `JavaCommentTrivia` classify JavaParser comments as line, block, Javadoc, or unknown trivia, expose

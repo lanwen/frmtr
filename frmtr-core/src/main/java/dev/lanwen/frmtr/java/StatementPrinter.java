@@ -71,6 +71,7 @@ import java.util.function.ToIntFunction;
  */
 final class StatementPrinter {
     private final CommentTracker comments;
+    private final JavaCommentPlacementPolicy commentPlacement;
     private final RawSource rawSource;
     private final SourceShape sourceShape;
     private final FormatterOptions options;
@@ -103,6 +104,7 @@ final class StatementPrinter {
 
     StatementPrinter(
             CommentTracker comments,
+            JavaCommentPlacementPolicy commentPlacement,
             RawSource rawSource,
             SourceShape sourceShape,
             FormatterOptions options,
@@ -133,6 +135,7 @@ final class StatementPrinter {
             Function<Node, Doc> sameLineBlockCommentBeforeNode,
             ToIntFunction<String> currentIndentedWidth) {
         this.comments = comments;
+        this.commentPlacement = commentPlacement;
         this.rawSource = rawSource;
         this.sourceShape = sourceShape;
         this.options = options;
@@ -477,6 +480,7 @@ final class StatementPrinter {
         String flat = "try (" + flatResources + ")";
         if (!resourceShape.spansMultipleLines()
                 && statement.getResources().size() == 1
+                && !tryResourcesHaveLeadingComments(statement)
                 && currentIndentedWidth.applyAsInt(flat + " {}") <= options.lineWidth()) {
             return Doc.text(" (" + flatResources + ")");
         }
@@ -493,10 +497,23 @@ final class StatementPrinter {
     }
 
     private Doc tryResource(Expression resource) {
+        Doc leading = Doc.concat(comments.adjacentLeadingLineComments(resource), comments.leading(resource));
+        Doc body;
         if (sourceShape.spansMultipleLines(resource) && resource instanceof VariableDeclarationExpr declaration) {
-            return variableDeclarationRenderer.format(declaration);
+            body = variableDeclarationRenderer.format(declaration);
+        } else {
+            body = Doc.text(compact.apply(resource));
         }
-        return Doc.text(compact.apply(resource));
+        return Doc.concat(leading, body);
+    }
+
+    private boolean tryResourcesHaveLeadingComments(TryStmt statement) {
+        return statement.getResources().stream()
+                .anyMatch(resource -> !commentPlacement.adjacentLeadingLineComments(resource).isEmpty()
+                        || commentPlacement.leadingComment(resource)
+                                .filter(JavaCommentTrivia::isLine)
+                                .filter(comment -> comment.startsBeforeBeginLine(resource))
+                                .isPresent());
     }
 
     private Doc trailingCommentAfterClause(CatchClause clause) {

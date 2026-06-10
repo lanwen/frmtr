@@ -74,20 +74,24 @@ final class StatementRuleEnvelope {
     /**
      * Recovers raw statement source while preserving leading comments for statements whose raw span excludes them.
      *
-     * <p>Try statements keep their leading/trailing comment handling inside the structured try renderer because
-     * JavaParser exposes comments around try/catch/finally in source-sensitive positions that are not equivalent to the
-     * ordinary leading statement slot.
+     * <p>Try statements still keep clause-adjacent trailing comment handling inside the structured try renderer because
+     * JavaParser exposes comments around try/catch/finally in source-sensitive positions. Adjacent line comments before
+     * the {@code try} keyword use the ordinary leading cluster so multi-line statement notes stay together.
      */
     private Doc rawStatement(Statement statement) {
-        Doc leading = statement instanceof TryStmt ? Doc.EMPTY : comments.leading(statement);
+        Doc leading = comments.leadingCluster(statement);
         return Doc.concat(leading, rawPreservedSource.rawWithoutOwnComment(statement));
     }
 
     private Doc leadingComment(Statement statement, Doc trailing) {
-        if (statement instanceof TryStmt || hasInlineBreakBlockComment(statement) || hasInlineSwitchBlockComment(statement)) {
+        if (hasInlineBreakBlockComment(statement) || hasInlineSwitchBlockComment(statement)) {
             return Doc.EMPTY;
         }
-        return trailing == Doc.EMPTY ? comments.leading(statement) : Doc.EMPTY;
+        if (statement instanceof TryStmt) {
+            return comments.leadingCluster(statement);
+        }
+        Doc adjacentLeading = comments.adjacentLeadingLineComments(statement);
+        return trailing == Doc.EMPTY ? Doc.concat(adjacentLeading, comments.leading(statement)) : adjacentLeading;
     }
 
     private static void requireFullyParsed(Statement statement) {

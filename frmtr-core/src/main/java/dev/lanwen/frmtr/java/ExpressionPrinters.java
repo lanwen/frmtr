@@ -228,6 +228,7 @@ final class ExpressionPrinters {
                 options,
                 context.objectCreationLayoutPolicy,
                 this::expression,
+                lambdas::brokenExpressionLambda,
                 compactSource::compact,
                 this::currentIndentedWidth,
                 methodCalls::sourceMultilineExpressionLambda,

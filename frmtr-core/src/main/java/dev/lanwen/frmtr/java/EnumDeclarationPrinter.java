@@ -7,7 +7,6 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
-import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
@@ -204,7 +203,11 @@ final class EnumDeclarationPrinter {
         if (recoveryPlan.isPresent() && hasRawGap(recoveryPlan.orElseThrow())) {
             return Optional.of(recoveredEnumEntryList(declaration, recoveryPlan.orElseThrow()));
         }
-        return Optional.of(new EnumEntryList(enumEntryList(declaration, enumEntries(declaration)), false));
+        boolean lastOwnsTrailingComma = enumConstantHasTrailingComment(
+                declaration,
+                declaration.getEntries().get(declaration.getEntries().size() - 1),
+                null);
+        return Optional.of(new EnumEntryList(enumEntryList(declaration, enumEntries(declaration)), lastOwnsTrailingComma));
     }
 
     /**
@@ -215,7 +218,7 @@ final class EnumDeclarationPrinter {
         for (int i = 0; i < declaration.getEntries().size(); i++) {
             EnumConstantDeclaration entry = declaration.getEntries().get(i);
             EnumConstantDeclaration next = i + 1 < declaration.getEntries().size() ? declaration.getEntries().get(i + 1) : null;
-            entries.add(enumConstant(declaration, entry, next, i == declaration.getEntries().size() - 1));
+            entries.add(enumConstant(declaration, entry, next));
         }
         return entries;
     }
@@ -227,7 +230,12 @@ final class EnumDeclarationPrinter {
         List<Doc> docs = new ArrayList<>();
         for (int i = 0; i < entries.size(); i++) {
             if (i > 0) {
-                docs.add(enumEntrySeparator(declaration.getEntries().get(i - 1), declaration.getEntries().get(i)));
+                EnumConstantDeclaration previous = declaration.getEntries().get(i - 1);
+                EnumConstantDeclaration current = declaration.getEntries().get(i);
+                docs.add(enumEntrySeparator(
+                        previous,
+                        current,
+                        enumConstantHasTrailingComment(declaration, previous, current)));
             }
             docs.add(entries.get(i));
         }
@@ -261,8 +269,7 @@ final class EnumDeclarationPrinter {
                     docs.add(enumConstant(
                             declaration,
                             currentEntry,
-                            nextValidEnumConstant(plan, i).orElse(null),
-                            lastPlanEntry(plan, i)));
+                            nextValidEnumConstant(plan, i).orElse(null)));
                     previousValid = currentEntry;
                     previousEntry = EntryKind.VALID_ENTRY;
                 }
@@ -294,19 +301,13 @@ final class EnumDeclarationPrinter {
         };
     }
 
-    private boolean lastPlanEntry(
-            RecoveredListPlanner.Plan<EnumConstantDeclaration> plan,
-            int entryIndex) {
-        return entryIndex == plan.entries().size() - 1;
-    }
-
     private void appendSeparatorBeforeRecoveredEnumConstant(
             List<Doc> docs,
             EnumConstantDeclaration previousValid,
             EnumConstantDeclaration currentEntry,
             EntryKind previousEntry) {
         if (previousValid != null) {
-            docs.add(enumEntrySeparator(previousValid, currentEntry));
+            docs.add(enumEntrySeparator(previousValid, currentEntry, false));
             return;
         }
         if (previousEntry == EntryKind.RAW_GAP_WITH_TRAILING_BREAK) {
@@ -335,15 +336,19 @@ final class EnumDeclarationPrinter {
      * <p>Leading comments attached to the current constant count as the current entry's source start so a commented
      * constant does not accidentally erase a blank separator that belongs before the comment.
      */
-    private Doc enumEntrySeparator(EnumConstantDeclaration previous, EnumConstantDeclaration current) {
+    private Doc enumEntrySeparator(
+            EnumConstantDeclaration previous,
+            EnumConstantDeclaration current,
+            boolean previousOwnsTrailingComma) {
         boolean hasBlankLineBetween = previous.getRange()
                 .flatMap(previousRange -> current.getRange()
                         .map(currentRange -> enumEntryBeginLine(current, currentRange.begin.line)
                                 > previousRange.end.line + 1))
                 .orElse(false);
+        Doc separator = previousOwnsTrailingComma ? Doc.EMPTY : Doc.text(",");
         return hasBlankLineBetween
-                ? Doc.concat(Doc.text(","), Doc.HARD_LINE, Doc.HARD_LINE)
-                : Doc.concat(Doc.text(","), Doc.HARD_LINE);
+                ? Doc.concat(separator, Doc.HARD_LINE, Doc.HARD_LINE)
+                : Doc.concat(separator, Doc.HARD_LINE);
     }
 
     /**
@@ -510,15 +515,14 @@ final class EnumDeclarationPrinter {
     private Doc enumConstant(
             EnumDeclaration owner,
             EnumConstantDeclaration declaration,
-            EnumConstantDeclaration next,
-            boolean last) {
-        Doc trailing = enumConstantTrailingComment(owner, declaration, next, last);
+            EnumConstantDeclaration next) {
+        Doc trailing = enumConstantTrailingComment(owner, declaration, next);
         return Doc.concat(
                 comments.leading(declaration),
                 enumConstantAnnotations(declaration),
                 Doc.text(declaration.getNameAsString()),
                 enumConstantArguments(declaration),
-                trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing));
+                trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(", "), trailing));
     }
 
     private Doc enumConstantAnnotations(EnumConstantDeclaration declaration) {
@@ -573,20 +577,60 @@ final class EnumDeclarationPrinter {
     private Doc enumConstantTrailingComment(
             EnumDeclaration owner,
             EnumConstantDeclaration declaration,
-            EnumConstantDeclaration next,
-            boolean last) {
+            EnumConstantDeclaration next) {
+        Doc ownTrailing = declaration.getComment()
+                .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(declaration, comment))
+                .map(comments::comment)
+                .orElse(Doc.EMPTY);
+        if (ownTrailing != Doc.EMPTY) {
+            return ownTrailing;
+        }
+        Doc containedTrailing = Doc.concat(declaration.getAllContainedComments().stream()
+                .filter(comment -> CommentIndex.startsOnEndLine(declaration, comment))
+                .map(comments::comment)
+                .filter(comment -> comment != Doc.EMPTY)
+                .toList());
+        if (containedTrailing != Doc.EMPTY) {
+            return containedTrailing;
+        }
         if (next != null) {
-            return next.getComment()
-                    .filter(BlockComment.class::isInstance)
+            Doc nextTrailing = next.getComment()
                     .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(declaration, comment))
                     .map(comments::comment)
                     .orElse(Doc.EMPTY);
+            if (nextTrailing != Doc.EMPTY) {
+                return nextTrailing;
+            }
         }
-        if (owner == null || !last) {
+        if (owner == null) {
             return Doc.EMPTY;
         }
         return Doc.concat(
                 comments.orphanCommentStatements(owner, comment -> CommentIndex.startsOnEndLine(declaration, comment)));
+    }
+
+    private boolean enumConstantHasTrailingComment(
+            EnumDeclaration owner,
+            EnumConstantDeclaration declaration,
+            EnumConstantDeclaration next) {
+        if (declaration.getComment()
+                .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(declaration, comment))
+                .isPresent()) {
+            return true;
+        }
+        if (next != null
+                && next.getComment()
+                        .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(declaration, comment))
+                        .isPresent()) {
+            return true;
+        }
+        if (declaration.getAllContainedComments().stream()
+                .anyMatch(comment -> CommentIndex.startsOnEndLine(declaration, comment))) {
+            return true;
+        }
+        return owner != null
+                && owner.getOrphanComments().stream()
+                        .anyMatch(comment -> CommentIndex.startsOnEndLine(declaration, comment));
     }
 
     static boolean hasRecoverableEnumConstantListProblem(EnumDeclaration declaration) {

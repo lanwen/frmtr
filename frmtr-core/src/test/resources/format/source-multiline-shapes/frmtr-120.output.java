@@ -103,6 +103,11 @@ class MultilineShapes {
         return map;
     }
 
+    SignalEmitter eventEmitter(RoutingConfig routingConfig, EventPublisher eventPublisher) {
+        return event ->
+            eventPublisher.send(routingConfig.topics().get(WorkspaceLifecycleProjectionEventMessage.class).name(), event).then();
+    }
+
     void resources() {
         try (
             Resource handle = new Resource(

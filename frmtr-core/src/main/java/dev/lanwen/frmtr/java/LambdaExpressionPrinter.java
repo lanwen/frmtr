@@ -124,6 +124,14 @@ final class LambdaExpressionPrinter {
                 .orElseGet(() -> statementRenderer.format(expression.getBody()));
     }
 
+    Doc brokenExpressionLambda(LambdaExpr expression) {
+        String parameters = lambdaParameters(expression);
+        return Doc.concat(
+                lambdaParametersForHeader(expression, parameters),
+                Doc.text(" ->"),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, brokenLambdaExpressionBody(expression))));
+    }
+
     Doc lambdaExpression(LambdaExpr expression) {
         String parameters = lambdaParameters(expression);
         if (expression.getBody().isBlockStmt()) {

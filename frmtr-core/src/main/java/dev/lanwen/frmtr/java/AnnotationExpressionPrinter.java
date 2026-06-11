@@ -173,6 +173,11 @@ final class AnnotationExpressionPrinter {
     }
 
     private Doc annotationPair(MemberValuePair pair) {
+        if (pair.getValue() instanceof ArrayInitializerExpr arrayInitializerExpr
+                && currentIndentedWidth.applyAsInt(pair.getNameAsString() + " = "
+                        + compactAnnotationArrayInitializer(arrayInitializerExpr)) > options.lineWidth()) {
+            return Doc.concat(Doc.text(pair.getNameAsString() + " = "), annotationArrayInitializer(arrayInitializerExpr));
+        }
         return Doc.concat(Doc.text(pair.getNameAsString() + " = "), annotationValue(pair.getValue()));
     }
 

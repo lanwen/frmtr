@@ -11,6 +11,16 @@ class DataLossCases {
         KNOWN("known"),
     }
 
+    enum Plan {
+        TRIAL, // Default plan for new accounts
+
+        @Fallback
+        FREE, // Allows extended feature access without billing setup
+        PAID, // Requires a configured payment method
+        PARTNER, // Paid plan with externally managed billing
+        ANNUAL, // Annual paid plan below enterprise tier
+    }
+
     record Payload(
         @NotNull Map<@Sized(min = 2) String, @Sized(max = 10) String> values,
         // keep this comment with the type

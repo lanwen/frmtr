@@ -4,6 +4,7 @@ import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
@@ -31,6 +32,7 @@ final class ReturnExpressionPrinter {
     private final FormatterOptions options;
     private final ObjectCreationLayoutPolicy objectCreationLayoutPolicy;
     private final Function<Expression, Doc> expression;
+    private final Function<LambdaExpr, Doc> brokenLambdaExpression;
     private final Function<Expression, String> compact;
     private final ToIntFunction<String> currentIndentedWidth;
     private final Function<MethodCallExpr, Optional<Doc>> sourceMultilineExpressionLambda;
@@ -47,6 +49,7 @@ final class ReturnExpressionPrinter {
             FormatterOptions options,
             ObjectCreationLayoutPolicy objectCreationLayoutPolicy,
             Function<Expression, Doc> expression,
+            Function<LambdaExpr, Doc> brokenLambdaExpression,
             Function<Expression, String> compact,
             ToIntFunction<String> currentIndentedWidth,
             Function<MethodCallExpr, Optional<Doc>> sourceMultilineExpressionLambda,
@@ -61,6 +64,7 @@ final class ReturnExpressionPrinter {
         this.options = options;
         this.objectCreationLayoutPolicy = objectCreationLayoutPolicy;
         this.expression = expression;
+        this.brokenLambdaExpression = brokenLambdaExpression;
         this.compact = compact;
         this.currentIndentedWidth = currentIndentedWidth;
         this.sourceMultilineExpressionLambda = sourceMultilineExpressionLambda;
@@ -141,6 +145,10 @@ final class ReturnExpressionPrinter {
         if (conditionalBreak.isPresent()) {
             return conditionalBreak;
         }
+        Optional<Doc> lambdaBreak = returnWithForcedLambdaBreak(expression);
+        if (lambdaBreak.isPresent()) {
+            return lambdaBreak;
+        }
         Optional<Doc> logicalComplementBreak = returnWithLogicalComplementBreak(expression);
         if (logicalComplementBreak.isPresent()) {
             return logicalComplementBreak;
@@ -170,6 +178,13 @@ final class ReturnExpressionPrinter {
             return Optional.empty();
         }
         return Optional.of(conditionalExpression.apply(conditionalExpr, true));
+    }
+
+    private Optional<Doc> returnWithForcedLambdaBreak(Expression expression) {
+        if (!(expression instanceof LambdaExpr lambdaExpr) || lambdaExpr.getExpressionBody().isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(brokenLambdaExpression.apply(lambdaExpr));
     }
 
     /**

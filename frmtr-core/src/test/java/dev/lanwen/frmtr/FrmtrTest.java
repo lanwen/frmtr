@@ -803,7 +803,7 @@ final class FrmtrTest {
 
         assertThat(formatted)
                 .contains("value ->\n"
-                        + "        firstVeryLongConditionName &&\n"
+                        + "      firstVeryLongConditionName &&\n"
                         + "        secondVeryLongConditionName");
     }
 

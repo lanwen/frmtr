@@ -7,6 +7,7 @@ import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
+import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
@@ -53,7 +54,7 @@ final class LambdaExpressionPrinter {
     private final JavaFormatRule<Expression> expressionRenderer;
     private final JavaFormatRule<Statement> statementRenderer;
     private final JavaFormatRule<BlockStmt> blockRenderer;
-    private final BiFunction<Expression, Boolean, Doc> binaryExpressionLinesRenderer;
+    private final BiFunction<Expression, Boolean, Doc> binaryExpressionNestedLinesRenderer;
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
     private final BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList;
     private final Function<Node, String> compact;
@@ -72,7 +73,7 @@ final class LambdaExpressionPrinter {
             JavaFormatRule<Expression> expressionRenderer,
             JavaFormatRule<Statement> statementRenderer,
             JavaFormatRule<BlockStmt> blockRenderer,
-            BiFunction<Expression, Boolean, Doc> binaryExpressionLinesRenderer,
+            BiFunction<Expression, Boolean, Doc> binaryExpressionNestedLinesRenderer,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
             BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList,
             Function<Node, String> compact,
@@ -89,7 +90,7 @@ final class LambdaExpressionPrinter {
         this.expressionRenderer = expressionRenderer;
         this.statementRenderer = statementRenderer;
         this.blockRenderer = blockRenderer;
-        this.binaryExpressionLinesRenderer = binaryExpressionLinesRenderer;
+        this.binaryExpressionNestedLinesRenderer = binaryExpressionNestedLinesRenderer;
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
         this.methodCallArgumentList = methodCallArgumentList;
         this.compact = compact;
@@ -127,10 +128,13 @@ final class LambdaExpressionPrinter {
                 return Doc.text(inlineCommentedLambda.orElseThrow());
             }
         }
-        String flat = parameters + " -> " + expression.getExpressionBody()
+        Optional<Expression> expressionBody = expression.getExpressionBody();
+        String flat = parameters + " -> " + expressionBody
                 .map(compact)
                 .orElseGet(() -> compact.apply(expression.getBody()));
-        if (!parametersHaveComments && currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
+        if (!parametersHaveComments
+                && expressionBody.filter(this::sourceMultilineLogicalBody).isEmpty()
+                && currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
             return Doc.text(flat);
         }
         if (parametersHaveComments && expression.getExpressionBody().isPresent()) {
@@ -194,15 +198,43 @@ final class LambdaExpressionPrinter {
      */
     private Doc brokenLambdaExpressionBody(LambdaExpr expression) {
         return expression.getExpressionBody()
-                .map(body -> body instanceof BinaryExpr binaryExpr && isLogicalBinaryOperator(binaryExpr)
-                        ? binaryExpressionLinesRenderer.apply(body, true)
-                        : expressionRenderer.format(body))
+                .map(body -> logicalBinaryBodyDoc(body).orElseGet(() -> expressionRenderer.format(body)))
                 .orElseGet(() -> statementRenderer.format(expression.getBody()));
     }
 
     private boolean isLogicalBinaryOperator(BinaryExpr expression) {
         return expression.getOperator() == BinaryExpr.Operator.AND
                 || expression.getOperator() == BinaryExpr.Operator.OR;
+    }
+
+    private Optional<Doc> logicalBinaryBodyDoc(Expression body) {
+        return logicalBinaryBody(body).map(binary -> {
+            Doc lines = binaryExpressionNestedLinesRenderer.apply(binary, true);
+            for (int i = 0; i < enclosedDepth(body); i++) {
+                lines = Doc.concat(Doc.text("("), lines, Doc.text(")"));
+            }
+            return lines;
+        });
+    }
+
+    private Optional<BinaryExpr> logicalBinaryBody(Expression body) {
+        if (body instanceof BinaryExpr binaryExpr && isLogicalBinaryOperator(binaryExpr)) {
+            return Optional.of(binaryExpr);
+        }
+        if (body instanceof EnclosedExpr enclosedExpr) {
+            return logicalBinaryBody(enclosedExpr.getInner());
+        }
+        return Optional.empty();
+    }
+
+    private int enclosedDepth(Expression body) {
+        int depth = 0;
+        Expression current = body;
+        while (current instanceof EnclosedExpr enclosedExpr) {
+            depth++;
+            current = enclosedExpr.getInner();
+        }
+        return depth;
     }
 
     private Doc lambdaParametersForHeader(LambdaExpr expression, String flatParameters) {
@@ -619,7 +651,8 @@ final class LambdaExpressionPrinter {
                 + (leadingArguments.isEmpty() ? "" : leadingArguments + ", ")
                 + huggableExpressionLambdaFirstLine(lambdaExpr, parameters);
         String flat = prefix + "(" + compactJoin.apply(arguments) + ")";
-        if (blockStatementWidth.applyAsInt(flat) < options.lineWidth()
+        boolean sourceMultilineLogicalBody = body.filter(this::sourceMultilineLogicalBody).isPresent();
+        if ((!sourceMultilineLogicalBody && blockStatementWidth.applyAsInt(flat) < options.lineWidth())
                 || blockStatementWidth.applyAsInt(firstLine) > options.lineWidth()) {
             return Optional.empty();
         }
@@ -656,8 +689,15 @@ final class LambdaExpressionPrinter {
                     Doc.text(")")));
         }
         Doc bodyDoc = huggableExpressionLambdaBody(firstLine, bodyExpression);
+        if (logicalBinaryBody(bodyExpression).isPresent()) {
+            return Optional.of(Doc.concat(
+                    Doc.text(firstLine),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, bodyDoc)),
+                    Doc.HARD_LINE,
+                    Doc.text(")")));
+        }
         if (bodyFirstSourceLineFits(firstLine, bodyExpression)) {
-            Optional<Doc> packedBodyCall = packedBodyCallWithoutClosingLine(bodyExpression);
+            Optional<Doc> packedBodyCall = packedBodyCallWithoutClosingLine(firstLine, bodyExpression);
             if (packedBodyCall.isPresent()) {
                 return Optional.of(Doc.concat(
                         Doc.text(firstLine + " "),
@@ -665,6 +705,16 @@ final class LambdaExpressionPrinter {
                         Doc.HARD_LINE,
                         Doc.text("))")));
             }
+        }
+        Optional<Doc> packedBodyCallScope = packedBodyCallScopeWithoutClosingLine(firstLine, bodyExpression);
+        if (packedBodyCallScope.isPresent()) {
+            return Optional.of(Doc.concat(
+                    Doc.text(firstLine + " "),
+                    Doc.indent(packedBodyCallScope.orElseThrow()),
+                    Doc.HARD_LINE,
+                    Doc.text("))")));
+        }
+        if (bodyFirstSourceLineFits(firstLine, bodyExpression)) {
             return Optional.of(Doc.concat(
                     Doc.text(firstLine + " "),
                     Doc.indent(bodyDoc),
@@ -679,6 +729,10 @@ final class LambdaExpressionPrinter {
     }
 
     private Doc huggableExpressionLambdaBody(String firstLine, Expression bodyExpression) {
+        Optional<Doc> logicalBody = logicalBinaryBodyDoc(bodyExpression);
+        if (logicalBody.isPresent()) {
+            return logicalBody.orElseThrow();
+        }
         if (bodyExpression instanceof MethodCallExpr methodCall
                 && methodCall.getScope().filter(MethodCallExpr.class::isInstance).isPresent()
                 && bodyFirstSourceLineOverflows(firstLine, methodCall)) {
@@ -687,12 +741,40 @@ final class LambdaExpressionPrinter {
         return expressionRenderer.format(bodyExpression);
     }
 
-    private Optional<Doc> packedBodyCallWithoutClosingLine(Expression bodyExpression) {
-        if (!(bodyExpression instanceof MethodCallExpr methodCall) || !bodyFirstSourceLine(bodyExpression).endsWith("(")) {
+    private Optional<Doc> packedBodyCallWithoutClosingLine(String firstLine, Expression bodyExpression) {
+        if (!(bodyExpression instanceof MethodCallExpr methodCall)
+                || methodCall.getScope().filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n")).isPresent()) {
+            return Optional.empty();
+        }
+        String opener = methodCallPrefix(methodCall) + "(";
+        if (!bodyFirstSourceLine(bodyExpression).endsWith("(")
+                && blockStatementWidth.applyAsInt(firstLine + " " + opener) > options.lineWidth()) {
             return Optional.empty();
         }
         return Optional.of(Doc.concat(
-                Doc.text(methodCallPrefix(methodCall) + "("),
+                Doc.text(opener),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        methodCallArgumentList.apply(methodCall.getArguments(), Doc.HARD_LINE)))));
+    }
+
+    private Optional<Doc> packedBodyCallScopeWithoutClosingLine(String firstLine, Expression bodyExpression) {
+        if (!(bodyExpression instanceof MethodCallExpr methodCall)
+                || methodCall.getScope().isEmpty()) {
+            return Optional.empty();
+        }
+        String scope = compact.apply(methodCall.getScope().orElseThrow());
+        String bodyFirstLine = bodyFirstSourceLine(bodyExpression);
+        if (!bodyFirstLine.endsWith("(") && !bodyFirstLine.equals(scope)) {
+            return Optional.empty();
+        }
+        if (blockStatementWidth.applyAsInt(firstLine + " " + scope) > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+                Doc.text(scope),
+                Doc.HARD_LINE,
+                Doc.text("." + methodCallSelector(methodCall) + "("),
                 Doc.indent(Doc.concat(
                         Doc.HARD_LINE,
                         methodCallArgumentList.apply(methodCall.getArguments(), Doc.HARD_LINE)))));
@@ -701,6 +783,13 @@ final class LambdaExpressionPrinter {
     private String methodCallPrefix(MethodCallExpr expression) {
         return expression.getScope().map(scope -> compact.apply(scope) + ".").orElse("")
                 + expression.getTypeArguments()
+                        .map(typeArguments -> "<" + compactJoin.apply(typeArguments) + ">")
+                        .orElse("")
+                + expression.getNameAsString();
+    }
+
+    private String methodCallSelector(MethodCallExpr expression) {
+        return expression.getTypeArguments()
                         .map(typeArguments -> "<" + compactJoin.apply(typeArguments) + ">")
                         .orElse("")
                 + expression.getNameAsString();
@@ -723,11 +812,18 @@ final class LambdaExpressionPrinter {
                 .orElse("");
     }
 
+    private boolean sourceMultilineLogicalBody(Expression body) {
+        return logicalBinaryBody(body).isPresent() && rawSource.rawWithoutOwnComment(body).contains("\n");
+    }
+
     private boolean huggableExpressionLambdaBody(Expression body) {
         if (body instanceof MethodCallExpr) {
             return !((MethodCallExpr) body).getArguments().isEmpty();
         }
         if (body instanceof ConditionalExpr) {
+            return true;
+        }
+        if (logicalBinaryBody(body).isPresent()) {
             return true;
         }
         if (body instanceof LambdaExpr lambdaExpr && lambdaExpr.getExpressionBody().isPresent()) {
@@ -753,6 +849,9 @@ final class LambdaExpressionPrinter {
     private Optional<Expression> huggableExpressionLambdaBodyExpression(LambdaExpr lambdaExpr) {
         return lambdaExpr.getExpressionBody().flatMap(body -> {
             if (body instanceof MethodCallExpr || body instanceof ConditionalExpr) {
+                return Optional.of(body);
+            }
+            if (logicalBinaryBody(body).isPresent()) {
                 return Optional.of(body);
             }
             if (body instanceof LambdaExpr nested) {

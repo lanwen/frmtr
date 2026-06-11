@@ -153,7 +153,7 @@ final class JavaPrinter {
                 this::expression,
                 this::statement,
                 this::block,
-                binaries::lines,
+                binaries::nestedLines,
                 this::brokenMethodCall,
                 this::methodCallArgumentList,
                 compactSource::compact,

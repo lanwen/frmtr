@@ -7,6 +7,7 @@ import com.github.javaparser.ast.expr.ArrayCreationExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.CastExpr;
+import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.LambdaExpr;
@@ -365,6 +366,7 @@ final class MethodCallPrinter {
     Optional<Doc> sourceMultilineArguments(MethodCallExpr expression) {
         if (expression.getArguments().isEmpty()
                 || !expression.getAllContainedComments().isEmpty()
+                || hasHuggableExpressionLambdaArgument(expression)
                 || !sourceShape.methodCallArgumentsSpanMultipleLines(expression)) {
             return Optional.empty();
         }
@@ -409,6 +411,40 @@ final class MethodCallPrinter {
                 .filter(lambda -> lambda.getExpressionBody().isPresent())
                 .flatMap(lambda -> lambda.getRange().stream())
                 .anyMatch(range -> range.begin.line == selectorLine.orElseThrow());
+    }
+
+    private boolean hasHuggableExpressionLambdaArgument(MethodCallExpr expression) {
+        return expression.getArguments().stream()
+                .anyMatch(argument -> argument instanceof LambdaExpr lambdaExpr
+                        && lambdaExpr.getExpressionBody().filter(this::huggableExpressionLambdaBody).isPresent());
+    }
+
+    private boolean huggableExpressionLambdaBody(Expression body) {
+        if (body instanceof MethodCallExpr || body instanceof ConditionalExpr) {
+            return true;
+        }
+        if (logicalBinaryBody(body).isPresent()) {
+            return true;
+        }
+        if (body instanceof LambdaExpr lambdaExpr) {
+            return lambdaExpr.getExpressionBody().filter(this::huggableExpressionLambdaBody).isPresent();
+        }
+        return false;
+    }
+
+    private boolean isLogicalBinaryOperator(BinaryExpr expression) {
+        return expression.getOperator() == BinaryExpr.Operator.AND
+                || expression.getOperator() == BinaryExpr.Operator.OR;
+    }
+
+    private Optional<BinaryExpr> logicalBinaryBody(Expression body) {
+        if (body instanceof BinaryExpr binaryExpr && isLogicalBinaryOperator(binaryExpr)) {
+            return Optional.of(binaryExpr);
+        }
+        if (body instanceof EnclosedExpr enclosedExpr) {
+            return logicalBinaryBody(enclosedExpr.getInner());
+        }
+        return Optional.empty();
     }
 
     private boolean expressionLambdaSpansMultipleLines(MethodCallExpr expression) {
@@ -458,10 +494,14 @@ final class MethodCallPrinter {
             boolean last = index == arguments.size() - 1;
             docs.add(methodCallArgumentDoc(argument, last ? "" : ","));
             if (!last) {
-                docs.add(argument instanceof ObjectCreationExpr ? line : Doc.concat(Doc.text(","), line));
+                docs.add(argumentConsumesSuffix(argument) ? line : Doc.concat(Doc.text(","), line));
             }
         }
         return Doc.concat(docs);
+    }
+
+    private boolean argumentConsumesSuffix(Expression argument) {
+        return argument instanceof ObjectCreationExpr || argument instanceof MethodCallExpr;
     }
 
     /**
@@ -476,6 +516,17 @@ final class MethodCallPrinter {
     }
 
     private Doc methodCallArgumentDoc(Expression argument, String suffix) {
+        if (argument instanceof MethodCallExpr methodCall && !suffix.isEmpty()) {
+            Optional<Doc> compact = compactMethodCallArgumentWithSuffix(methodCall, suffix);
+            if (compact.isPresent()) {
+                return compact.orElseThrow();
+            }
+            Optional<Doc> chain = methodCallChain(methodCall, MethodCallBreakMode.FORCED, suffix);
+            if (chain.isPresent()) {
+                return chain.orElseThrow();
+            }
+            return Doc.concat(expressionRenderer.apply(methodCall), Doc.text(suffix));
+        }
         if (argument instanceof ObjectCreationExpr objectCreation && !suffix.isEmpty()) {
             return objectCreationWithSuffix.apply(objectCreation, suffix);
         }
@@ -487,6 +538,56 @@ final class MethodCallPrinter {
         return Doc.ifBreak(
                 brokenBinaryExpressionLinesRenderer.apply(binaryExpr),
                 expressionRenderer.apply(argument));
+    }
+
+    private Optional<Doc> compactMethodCallArgumentWithSuffix(MethodCallExpr expression, String suffix) {
+        List<JavaCommentTrivia> trailingComments = methodCallArgumentTrailingLineComments(expression);
+        if (trailingComments.isEmpty() && sourceShape.spansMultipleLines(expression)) {
+            return Optional.empty();
+        }
+        if (!trailingComments.isEmpty() && hasNonTrailingContainedComments(expression, trailingComments)) {
+            return Optional.empty();
+        }
+        String code = (trailingComments.isEmpty() ? compactSource.compact(expression) : compactSource.commentFree(expression)) + suffix;
+        if (continuationStatementWidth.applyAsInt(code) > options.lineWidth()) {
+            return Optional.empty();
+        }
+        List<Doc> renderedTrailing = trailingComments.stream()
+                .map(comments::comment)
+                .filter(comment -> comment != Doc.EMPTY)
+                .toList();
+        if (renderedTrailing.isEmpty()) {
+            return Optional.of(Doc.text(code));
+        }
+        return Optional.of(Doc.concat(Doc.text(code), Doc.text(" "), Doc.join(Doc.text(" "), renderedTrailing)));
+    }
+
+    private boolean hasNonTrailingContainedComments(
+            MethodCallExpr expression,
+            List<JavaCommentTrivia> trailingComments) {
+        return expression.getAllContainedComments().stream()
+                .anyMatch(comment -> trailingComments.stream()
+                        .noneMatch(trailing -> trailing.comment() == comment));
+    }
+
+    private List<JavaCommentTrivia> methodCallArgumentTrailingLineComments(MethodCallExpr expression) {
+        List<JavaCommentTrivia> sourceComments = new ArrayList<>();
+        commentPlacement.trailingLineComment(expression).ifPresent(sourceComments::add);
+        commentPlacement.containedComments(expression).stream()
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.startsOnEndLine(expression) || comment.startsAfterNodeOnSameLine(expression))
+                .filter(comment -> sourceComments.stream()
+                        .noneMatch(existing -> existing.comment() == comment.comment()))
+                .forEach(sourceComments::add);
+        int endLine = CommentIndex.endLine(expression, Integer.MIN_VALUE);
+        expression.getAllContainedComments().stream()
+                .filter(LineComment.class::isInstance)
+                .map(JavaCommentTrivia::from)
+                .filter(comment -> comment.beginLine(Integer.MAX_VALUE) == endLine)
+                .filter(comment -> sourceComments.stream()
+                        .noneMatch(existing -> existing.comment() == comment.comment()))
+                .forEach(sourceComments::add);
+        return sourceComments;
     }
 
     private Doc textBlockSameLineTrailingComment(TextBlockLiteralExpr textBlockLiteralExpr, MethodCallExpr expression) {

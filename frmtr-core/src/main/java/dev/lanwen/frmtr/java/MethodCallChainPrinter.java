@@ -399,6 +399,10 @@ final class MethodCallChainPrinter {
         if (sourceMultilineArguments.isPresent()) {
             return sourceMultilineArguments.orElseThrow();
         }
+        Optional<Doc> huggableExpressionLambda = groupedPromotedExpressionLambda(expression);
+        if (huggableExpressionLambda.isPresent()) {
+            return huggableExpressionLambda.orElseThrow();
+        }
         if (methodCallSegmentHasBlockLambdaArgument(expression)) {
             return blockLambdaSegmentFirstLine(compactSource.compact(expression.getScope().orElseThrow()), expression)
                     .filter(firstLine -> blockStatementWidth.applyAsInt(firstLine) <= options.lineWidth())
@@ -412,6 +416,20 @@ final class MethodCallChainPrinter {
                         expressionRenderer.apply(scope),
                         Doc.indent(Doc.concat(Doc.SOFT_LINE, methodCallChainSegment(expression))))))
                 .orElseGet(() -> expressionRenderer.apply(expression));
+    }
+
+    private Optional<Doc> groupedPromotedExpressionLambda(MethodCallExpr expression) {
+        if (!expressionLambdaStartsOnSelectorLine(expression) || !expressionLambdaSpansMultipleLines(expression)) {
+            return Optional.empty();
+        }
+        return expression.getScope()
+                .map(scope -> compactSource.compact(scope)
+                        + "."
+                        + expression.getTypeArguments()
+                                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
+                                .orElse("")
+                        + expression.getNameAsString())
+                .flatMap(prefix -> huggableExpressionLambdaArguments.apply(prefix, expression.getArguments()));
     }
 
     private Doc groupedPromotedRootWithSingleSegment(

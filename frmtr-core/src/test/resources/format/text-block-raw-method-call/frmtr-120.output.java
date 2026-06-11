@@ -26,4 +26,12 @@ final class TextBlockRawMethodCall {
             );
         sink(payload);
     }
+
+    void compare(String csv) {
+        assertThat(csv)
+            .isNotNull()
+            .isEqualTo("""
+                "day","version","total"
+                """);
+    }
 }

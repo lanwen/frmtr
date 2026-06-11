@@ -24,6 +24,7 @@ import java.util.function.Function;
 final class CommentedExpressionListPrinter {
     private final CommentTracker comments;
     private final JavaCommentPlacementPolicy commentPlacement;
+    private final CompactSourceText compactSource;
     private final Function<Expression, Doc> expressionRenderer;
 
     CommentedExpressionListPrinter(
@@ -31,6 +32,7 @@ final class CommentedExpressionListPrinter {
             Function<Expression, Doc> expressionRenderer) {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
+        this.compactSource = context.compactSource;
         this.expressionRenderer = expressionRenderer;
     }
 
@@ -51,16 +53,18 @@ final class CommentedExpressionListPrinter {
         for (int index = 0; index < arguments.size(); index++) {
             Expression argument = arguments.get(index);
             boolean hasNext = index + 1 < arguments.size();
-            Doc argumentLine = expressionRenderer.apply(argument);
             boolean commaAppended = false;
             List<JavaCommentTrivia> trailingComments = commentGaps.get(index + 1);
+            Doc argumentLine = argumentLine(argument, trailingComments);
             List<Doc> trailingCommentLines = new ArrayList<>();
             for (JavaCommentTrivia comment : trailingComments) {
                 Doc commentDoc = comments.comment(comment);
                 if (commentDoc == Doc.EMPTY) {
                     continue;
                 }
-                if (comment.startsOnEndLine(argument)) {
+                if (comment.startsOnEndLine(argument)
+                        || comment.startsAfterNodeOnSameLine(argument)
+                        || argumentContainsComment(argument, comment)) {
                     if (hasNext && !commaAppended) {
                         argumentLine = Doc.concat(argumentLine, Doc.text(","));
                         commaAppended = true;
@@ -85,6 +89,18 @@ final class CommentedExpressionListPrinter {
                 Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, lines))),
                 Doc.HARD_LINE,
                 Doc.text(")")));
+    }
+
+    private Doc argumentLine(Expression argument, List<JavaCommentTrivia> trailingComments) {
+        if (argument instanceof MethodCallExpr methodCall && !trailingComments.isEmpty()) {
+            return Doc.text(compactSource.commentFree(methodCall));
+        }
+        return expressionRenderer.apply(argument);
+    }
+
+    private boolean argumentContainsComment(Expression argument, JavaCommentTrivia comment) {
+        return argument.getAllContainedComments().stream()
+                .anyMatch(contained -> contained == comment.comment());
     }
 
     /**

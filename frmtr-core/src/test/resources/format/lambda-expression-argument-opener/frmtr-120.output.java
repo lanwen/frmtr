@@ -90,6 +90,18 @@ final class LambdaExpressionArgumentOpener {
             .exchange();
     }
 
+    RouteSpec keepsFluentLambdaBodyWithinLimit(RouteSpec route, LocalServices services, Set<String> hosts) {
+        return route
+            .header(HeaderNames.HOST, hostPattern(hosts))
+            .and()
+            .path(ServicePaths.ACCOUNTS)
+            .filters(spec -> spec
+                    .setRequestHeader(GatewayForwardedRequestHeaderFilter.HEADER_NAME, services.forwardedHost())
+                    .filter(routeToEndpoint(route))
+            )
+            .uri(audienceUri(route));
+    }
+
     StubFlow answerWithRepositoryCall(StubSource stubSource, BundleGateway regionalWindowBundleReadGateway) {
         return when(
             stubSource.fetchPreparedEnvelope(

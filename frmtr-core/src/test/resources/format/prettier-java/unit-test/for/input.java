@@ -44,4 +44,10 @@ public class For {
   void noUpdate() {
     for (var e = jp.candies.keys(); e.hasMoreElements();) {}
   }
+
+  void compoundUpdate(String[] pairs) {
+    for (int i = 0; i < pairs.length - 1; i += 2) {
+      use(pairs[i], pairs[i + 1]);
+    }
+  }
 }

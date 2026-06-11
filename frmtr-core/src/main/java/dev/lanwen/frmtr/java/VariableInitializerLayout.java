@@ -290,6 +290,14 @@ final class VariableInitializerLayout {
         if (layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
                 && initializer instanceof MethodCallExpr methodCall
                 && !initializerHasOwnBreak(initializer)) {
+            Optional<Doc> sourceMultilineCall = variableWithSourceMultilineMethodCallInitializer(
+                    variable,
+                    name,
+                    declarationPrefix + variable.getNameAsString(),
+                    methodCall);
+            if (sourceMultilineCall.isPresent()) {
+                return sourceMultilineCall.orElseThrow();
+            }
             if (methodCallChainRootIsObjectCreation.test(methodCall)) {
                 Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
                         name,
@@ -644,6 +652,31 @@ final class VariableInitializerLayout {
                                 .toList()))),
                 Doc.HARD_LINE,
                 Doc.text(")")));
+    }
+
+    /**
+     * Keeps a source-multiline direct call opener attached to {@code =} when that opener still fits.
+     */
+    private Optional<Doc> variableWithSourceMultilineMethodCallInitializer(
+            VariableDeclarator variable,
+            String name,
+            String flatName,
+            MethodCallExpr methodCall) {
+        if (methodCall.getArguments().isEmpty()
+                || !rawSource.rawWithoutOwnComment(methodCall).contains("\n")
+                || methodCall.getArguments()
+                        .stream()
+                        .anyMatch(argument -> rawSource.rawWithoutOwnComment(argument).contains("\n"))
+                || methodCall.getScope()
+                        .filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n"))
+                        .isPresent()) {
+            return Optional.empty();
+        }
+        String callPrefix = methodCallPrefix.apply(methodCall);
+        if (layoutWidth.variableInitializer(variable, flatName + " = " + callPrefix + "(") > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(Doc.text(name + " = "), this.methodCall.apply(methodCall)));
     }
 
     /**

@@ -22,6 +22,10 @@ class MethodCallInitializerOpenerSample {
             new FixtureRequest(DEFAULT_GROUP, owner),
             FixtureSupport.KEY
         ).handle();
+        SampleHealthIndicator indicator = indicator(
+            cluster("cluster-alpha", primaryStub),
+            cluster("cluster-beta", secondaryStub)
+        );
         var sampleNameWithEnoughLengthToForceTheReceiverCallOpenerOntoAContinuationLineWhenTheInitializerBreaks =
             receiver.call(
                 Builders.<Result<AlphaBetaGammaDelta>>wrap(item -> {

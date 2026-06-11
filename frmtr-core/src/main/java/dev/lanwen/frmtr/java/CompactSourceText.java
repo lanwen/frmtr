@@ -1,8 +1,9 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.expr.CharLiteralExpr;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.AssignExpr;
+import com.github.javaparser.ast.expr.CharLiteralExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.ClassExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
@@ -90,6 +91,13 @@ final class CompactSourceText {
                     + compact(conditionalExpr.getThenExpr())
                     + " : "
                     + compact(conditionalExpr.getElseExpr());
+        }
+        if (node instanceof AssignExpr assignExpr && assignExpr.getAllContainedComments().isEmpty()) {
+            return compact(assignExpr.getTarget())
+                    + " "
+                    + assignExpr.getOperator().asString()
+                    + " "
+                    + compact(assignExpr.getValue());
         }
         if (node instanceof MethodCallExpr methodCallExpr && methodCallExpr.getAllContainedComments().isEmpty()) {
             return compactMethodCall(methodCallExpr);

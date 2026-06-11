@@ -187,7 +187,9 @@ policy preserve existing multiline call, field-root fluent-chain, ternary, calla
 builder-root, and try-resource forms using JavaParser ranges and bounded source slices before printers assemble
 equivalent docs. Method-call chain doc assembly is split from ordinary method-call argument dispatch so source-chain
 planning, root promotion, final-segment tails, and chain comments stay in the chain helper. Record headers try the full
-header first, then open component lists before moving implemented types to their own continuation.
+header first, then open component lists before moving implemented types to their own continuation. Expression-lambda
+argument planning is split into `ExpressionLambdaArgumentLayout` so call and chain printers share one typed width plan
+instead of rebuilding partial lambda text independently.
 
 ## CLI
 

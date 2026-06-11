@@ -106,7 +106,8 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
   `:`, nested conditional branches, and binary condition wrapping.
 - `LambdaExpressionPrinter`: lambda parameter parentheses, commented parameter reconstruction, expression versus block
   bodies, parenthesized lambdas, broken logical bodies, and lambda arguments that can be hugged by method calls or object
-  creation.
+  creation. `ExpressionLambdaArgumentLayout` owns the call-argument side of expression lambdas: shared eligibility,
+  first-line/body-opener planning, and packed method-call or constructor bodies for call and chain printers.
 - `MethodCallPrinter`: ordinary method-call argument dispatch, empty argument comments, commented argument-gap fallback
   lists, text-block arguments, over-wide binary arguments, and suffixes on enclosed scopes. `MethodCallChainPrinter`
   owns chain doc assembly: chain comments including same-line comments between chained calls and leading line-comment

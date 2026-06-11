@@ -56,7 +56,7 @@ final class MethodCallPrinter {
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments;
     private final BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument;
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments;
-    private final BiFunction<String, NodeList<Expression>, Optional<String>> huggableExpressionLambdaFirstLine;
+    private final BiFunction<String, NodeList<Expression>, Optional<ExpressionLambdaArgumentLayout.Plan>> expressionLambdaArgumentPlan;
     private final Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer;
     private final ToIntFunction<String> currentIndentedWidth;
     private final ToIntFunction<String> continuationStatementWidth;
@@ -74,7 +74,7 @@ final class MethodCallPrinter {
             BiFunction<String, NodeList<Expression>, Optional<String>> huggableBlockLambdaFirstLine,
             BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments,
-            BiFunction<String, NodeList<Expression>, Optional<String>> huggableExpressionLambdaFirstLine,
+            BiFunction<String, NodeList<Expression>, Optional<ExpressionLambdaArgumentLayout.Plan>> expressionLambdaArgumentPlan,
             Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer,
             Function<BinaryExpr, Doc> brokenBinaryExpressionLinesRenderer,
             ToIntFunction<String> currentIndentedWidth,
@@ -98,7 +98,7 @@ final class MethodCallPrinter {
                 huggableBlockLambdaFirstLine,
                 commentedExpressionLambdaArgument,
                 huggableExpressionLambdaArguments,
-                huggableExpressionLambdaFirstLine,
+                expressionLambdaArgumentPlan,
                 currentIndentedWidth,
                 continuationStatementWidth,
                 blockStatementWidth);
@@ -109,7 +109,7 @@ final class MethodCallPrinter {
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.commentedExpressionLambdaArgument = commentedExpressionLambdaArgument;
         this.huggableExpressionLambdaArguments = huggableExpressionLambdaArguments;
-        this.huggableExpressionLambdaFirstLine = huggableExpressionLambdaFirstLine;
+        this.expressionLambdaArgumentPlan = expressionLambdaArgumentPlan;
         this.unformattedTextBlockRenderer = unformattedTextBlockRenderer;
         this.currentIndentedWidth = currentIndentedWidth;
         this.continuationStatementWidth = continuationStatementWidth;
@@ -217,7 +217,10 @@ final class MethodCallPrinter {
     }
 
     private Optional<Doc> brokenExpressionLambdaArgumentsForOverflow(String prefix, MethodCallExpr expression) {
-        if (!expressionLambdaBodyOpenerOverflows(expression, prefix)) {
+        Optional<ExpressionLambdaArgumentLayout.Plan> plan =
+                expressionLambdaArgumentPlan.apply(prefix, expression.getArguments());
+        if (plan.filter(argument -> expressionLambdaBodyOpenerOverflows(expression, argument))
+                .isEmpty()) {
             return Optional.empty();
         }
         return Optional.of(Doc.concat(
@@ -227,54 +230,6 @@ final class MethodCallPrinter {
                         methodCallArgumentList(expression.getArguments(), Doc.HARD_LINE))),
                 Doc.HARD_LINE,
                 Doc.text(")")));
-    }
-
-    private boolean expressionLambdaBodyOpenerOverflows(MethodCallExpr expression, String prefix) {
-        int lambdaIndex = expressionLambdaArgumentIndex(expression.getArguments());
-        if (lambdaIndex < 0 || lambdaIndex < expression.getArguments().size() - 1) {
-            return false;
-        }
-        LambdaExpr lambda = (LambdaExpr) expression.getArgument(lambdaIndex);
-        Optional<Expression> body = lambda.getExpressionBody();
-        if (body.isEmpty() || !(body.orElseThrow() instanceof MethodCallExpr methodCall) || methodCall.getArguments().isEmpty()) {
-            return false;
-        }
-        String bodyOpener = methodCallPrefix(methodCall) + "(";
-        String lambdaLine = lambdaParameters(lambda) + " -> " + bodyOpener;
-        if (continuationStatementWidth.applyAsInt(lambdaLine) > options.lineWidth()) {
-            return false;
-        }
-        String leadingArguments = compactSource.compactJoin(expression.getArguments().subList(0, lambdaIndex));
-        String firstLine = prefix + "("
-                + (leadingArguments.isEmpty() ? "" : leadingArguments + ", ")
-                + lambdaLine;
-        return methodCallRootLineWidth(expression, firstLine) > options.lineWidth();
-    }
-
-    private int expressionLambdaArgumentIndex(NodeList<Expression> arguments) {
-        for (int index = 0; index < arguments.size(); index++) {
-            if (arguments.get(index) instanceof LambdaExpr lambda && lambda.getExpressionBody().isPresent()) {
-                return index;
-            }
-        }
-        return -1;
-    }
-
-    private String lambdaParameters(LambdaExpr expression) {
-        if (expression.getParameters().size() != 1) {
-            return "(" + compactSource.compactJoin(expression.getParameters()) + ")";
-        }
-        String parameter = compactSource.compact(expression.getParameter(0));
-        if (options.lambdaArrowParens() == FormatterOptions.LambdaArrowParens.ALWAYS) {
-            return "(" + parameter + ")";
-        }
-        if (options.lambdaArrowParens() == FormatterOptions.LambdaArrowParens.AVOID
-                && expression.getParameter(0).getAnnotations().isEmpty()
-                && expression.getParameter(0).getModifiers().isEmpty()
-                && expression.getParameter(0).getType().isUnknownType()) {
-            return parameter;
-        }
-        return expression.isEnclosingParameters() ? "(" + parameter + ")" : parameter;
     }
 
     String methodCallPrefix(MethodCallExpr expression) {
@@ -472,19 +427,26 @@ final class MethodCallPrinter {
             return Optional.empty();
         }
         String prefix = methodCallPrefix(expression);
-        if (!huggableExpressionLambdaFirstLineFits(expression, prefix)) {
-            return Optional.empty();
-        }
-        if (expressionLambdaBodyOpenerOverflows(expression, prefix)) {
+        Optional<ExpressionLambdaArgumentLayout.Plan> plan =
+                expressionLambdaArgumentPlan.apply(prefix, expression.getArguments());
+        if (plan.filter(argument -> argument.firstLineFits(
+                                line -> methodCallRootLineWidth(expression, line),
+                                options.lineWidth()))
+                        .isEmpty()
+                || plan.filter(argument -> expressionLambdaBodyOpenerOverflows(expression, argument))
+                        .isPresent()) {
             return Optional.empty();
         }
         return huggableExpressionLambdaArguments.apply(prefix, expression.getArguments());
     }
 
-    private boolean huggableExpressionLambdaFirstLineFits(MethodCallExpr expression, String prefix) {
-        return huggableExpressionLambdaFirstLine.apply(prefix, expression.getArguments())
-                .map(firstLine -> methodCallRootLineWidth(expression, firstLine) <= options.lineWidth())
-                .orElse(true);
+    private boolean expressionLambdaBodyOpenerOverflows(
+            MethodCallExpr expression,
+            ExpressionLambdaArgumentLayout.Plan argument) {
+        return argument.bodyOpenerFitsOnContinuation(continuationStatementWidth, options.lineWidth())
+                && argument.bodyOpenerOverflows(
+                        line -> methodCallRootLineWidth(expression, line),
+                        options.lineWidth());
     }
 
     private int methodCallRootLineWidth(MethodCallExpr expression, String firstLine) {

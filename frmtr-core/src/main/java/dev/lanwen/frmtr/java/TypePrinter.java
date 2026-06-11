@@ -192,7 +192,7 @@ final class TypePrinter {
                 Doc.text(nameWithoutArguments + "<"),
                 Doc.indent(Doc.concat(
                         Doc.SOFT_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), type.getTypeArguments().stream()
+                        Doc.joinComma(type.getTypeArguments().stream()
                                 .flatMap(NodeList::stream)
                                 .map(this::genericArgumentBody)
                                 .toList()))),

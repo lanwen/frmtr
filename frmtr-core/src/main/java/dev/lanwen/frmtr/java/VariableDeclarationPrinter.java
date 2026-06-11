@@ -94,7 +94,7 @@ final class VariableDeclarationPrinter {
             String flatType = compactTypeLike.apply(type) + " ";
             declarationPrefix += flatType;
             if (localVariableTypeShouldBreak(type, declaration.getVariables(), declarationPrefix)) {
-                Doc variables = Doc.join(Doc.concat(Doc.text(","), Doc.LINE), declaration.getVariables().stream()
+                Doc variables = Doc.joinComma(declaration.getVariables().stream()
                         .map(variable -> variableDoc(
                                 variable,
                                 localVariableDeclarationPrefix(variable, ""),
@@ -115,7 +115,7 @@ final class VariableDeclarationPrinter {
                     .toList())));
             return Doc.concat(docs);
         }
-        docs.add(Doc.group(Doc.join(Doc.concat(Doc.text(","), Doc.LINE), declaration.getVariables().stream()
+        docs.add(Doc.group(Doc.joinComma(declaration.getVariables().stream()
                 .map(variable -> variableDoc(
                         variable,
                         localVariableDeclarationPrefix(variable, variableDeclarationPrefix),

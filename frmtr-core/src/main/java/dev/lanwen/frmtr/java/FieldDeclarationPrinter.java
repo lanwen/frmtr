@@ -172,7 +172,7 @@ final class FieldDeclarationPrinter {
             String flatType = inlineAnnotations.apply(declaration) + compactTypeLike.apply(type) + " ";
             declarationPrefix += flatType;
             if (fieldTypeShouldBreak(type, declaration.getVariables(), declarationPrefix)) {
-                Doc variables = Doc.join(Doc.concat(Doc.text(","), Doc.LINE), declaration.getVariables().stream()
+                Doc variables = Doc.joinComma(declaration.getVariables().stream()
                         .map(variable -> variable(variable, ""))
                         .toList());
                 docs.add(Doc.group(Doc.concat(
@@ -186,7 +186,7 @@ final class FieldDeclarationPrinter {
             docs.add(Doc.text(flatType));
         }
         String variableDeclarationPrefix = declarationPrefix;
-        docs.add(Doc.group(Doc.join(Doc.concat(Doc.text(","), Doc.LINE), declaration.getVariables().stream()
+        docs.add(Doc.group(Doc.joinComma(declaration.getVariables().stream()
                 .map(variable -> variable(variable, variableDeclarationPrefix))
                 .toList())));
         docs.add(Doc.text(";"));

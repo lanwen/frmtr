@@ -49,12 +49,21 @@ inside those safe chunks without cloning nodes, leaving comments and node identi
 
 ## Printer Graph
 
-`JavaPrinter` wires the current Java formatting collaborators for common type declarations, fields, methods,
-constructors, statements, and outer expression callbacks. It creates one per-run `JavaFormatContext` for formatter-wide
-options, comment tracking, comment placement policy, formatter pragmas, raw source recovery, compact source text, and
-source-position comment placement, plus shared source-shape layout policy for constructor calls, then passes that context
-only where it is clearer than threading those shared dependencies separately. It keeps the v1 style deliberately
-opinionated and sparse on options.
+`JavaPrinter` is the composition root for one Java printing run. It creates one per-run `JavaFormatContext` for
+formatter-wide options, comment tracking, comment placement policy, formatter pragmas, raw source recovery, compact
+source text, and source-position comment placement, plus shared source-shape layout policy for constructor calls. It then
+constructs shared `TypePrinter` support and three composer helpers:
+
+- `ExpressionPrinters`: wires the expression rule envelope, expression dispatcher, and expression-specific helpers for
+  assignments, calls, lambdas, arrays, binaries, object creation, casts, conditionals, text blocks, and returns.
+- `DeclarationPrinters`: wires declaration prefixes, module/type/member/callable/field/local-variable printers,
+  compilation-unit layout, and the body-declaration envelope.
+- `StatementPrinters`: wires block sequencing, switch formatting, control conditions, statement dispatch, and the
+  statement envelope.
+
+The composer helpers own construction order and local cycles only. The formatter behavior still narrows through the same
+envelope gates, dispatchers, and specialized printers described below; `JavaPrinter` stays deliberately opinionated and
+sparse on public options.
 
 `JavaFormatRule` is the package-private node-rule contract used at dispatcher boundaries. After `JavaPrinter` and a
 dispatcher or printer have selected a declaration, statement, or expression category, a typed rule formats exactly that

@@ -101,6 +101,10 @@ instead of building strings directly:
 - `IfBreak` selects different output for flat versus broken groups.
 - `Label` attaches debug-only provenance to a subtree.
 
+Small factory helpers such as `Doc.delimited(...)`, `Doc.joinComma(...)`, `Doc.breakOnly(...)`, and
+`Doc.flatOnly(...)` capture recurring document shapes so list-like Java printers share one spelling for common
+break/flat envelopes while the renderer remains language-agnostic.
+
 `DocRenderer` is language-agnostic. Java-specific choices belong in `JavaPrinter`, not in the renderer. Label nodes are
 transparent to rendering, fitting, and width calculations.
 
@@ -167,11 +171,11 @@ assertions, as `FormatterException.internal(...)` so adapters can report concise
 VM-level crashes. `Frmtr.debugDoc(...)` shares that wrapping and the same parser, transform, and Java printing path as
 formatting, but returns `DocDebugRenderer` output instead of rendered source.
 
-`JavaPrinter` creates one per-run `JavaFormatContext`, wires formatter collaborators, and keeps the v1 style
-deliberately opinionated and sparse on options. Formatter ownership then narrows through envelope gates, dispatcher
-boundaries, and specialized declaration, statement, expression, type, comment, raw-source, and recovery helpers. See
-[docs/java-formatter-internals.md](docs/java-formatter-internals.md) for those collaborator boundaries and
-[docs/formatter-coverage.md](docs/formatter-coverage.md) for the AST ownership map.
+`JavaPrinter` creates one per-run `JavaFormatContext`, constructs shared type rendering, and coordinates the three
+printer composer groups: `ExpressionPrinters`, `DeclarationPrinters`, and `StatementPrinters`. Formatter ownership then
+narrows through envelope gates, dispatcher boundaries, and specialized declaration, statement, expression, type,
+comment, raw-source, and recovery helpers. See [docs/java-formatter-internals.md](docs/java-formatter-internals.md) for
+those collaborator boundaries and [docs/formatter-coverage.md](docs/formatter-coverage.md) for the AST ownership map.
 
 Comment preservation is centralized through a per-run `JavaCommentMap`, read-only `JavaCommentPlacementPolicy` queries,
 and stateful `CommentTracker` claims so adjacent leading clusters, line comments inside annotation arrays, and line

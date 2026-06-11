@@ -45,6 +45,13 @@ public sealed interface Doc
         return concat(joined);
     }
 
+    /**
+     * Joins documents with the formatter's standard comma-plus-line separator.
+     */
+    static Doc joinComma(List<Doc> docs) {
+        return join(concat(text(","), LINE), docs);
+    }
+
     static Doc group(Doc doc) {
         return new Group(doc);
     }
@@ -55,6 +62,27 @@ public sealed interface Doc
 
     static Doc ifBreak(Doc breakDoc, Doc flatDoc) {
         return new IfBreak(breakDoc, flatDoc);
+    }
+
+    /**
+     * Emits {@code doc} only when the surrounding group renders in break mode.
+     */
+    static Doc breakOnly(Doc doc) {
+        return ifBreak(doc, EMPTY);
+    }
+
+    /**
+     * Emits {@code doc} only when the surrounding group renders flat.
+     */
+    static Doc flatOnly(Doc doc) {
+        return ifBreak(EMPTY, doc);
+    }
+
+    /**
+     * Builds the grouped soft-line delimiter envelope used by list-like documents.
+     */
+    static Doc delimited(String open, String close, Doc content) {
+        return group(concat(text(open), group(indent(concat(SOFT_LINE, content))), SOFT_LINE, text(close)));
     }
 
     static Doc label(String label, Doc doc) {

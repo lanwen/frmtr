@@ -590,9 +590,7 @@ final class MethodCallPrinter {
                 || continuationStatementWidth.applyAsInt(compactSource.compact(binaryExpr)) <= options.lineWidth()) {
             return expressionRenderer.apply(argument);
         }
-        return Doc.ifBreak(
-                brokenBinaryExpressionLinesRenderer.apply(binaryExpr),
-                expressionRenderer.apply(argument));
+        return Doc.ifBreak(brokenBinaryExpressionLinesRenderer.apply(binaryExpr), expressionRenderer.apply(argument));
     }
 
     private Optional<Doc> compactMethodCallArgumentWithSuffix(MethodCallExpr expression, String suffix) {

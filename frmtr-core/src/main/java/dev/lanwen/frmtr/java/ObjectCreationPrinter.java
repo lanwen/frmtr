@@ -120,7 +120,7 @@ final class ObjectCreationPrinter {
                 Doc.text(prefix + "("),
                 Doc.indent(Doc.concat(
                         objectCreationLine(forceBreak),
-                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), expression.getArguments().stream()
+                        Doc.joinComma(expression.getArguments().stream()
                                 .map(expressionRenderer::format)
                                 .toList()))),
                 objectCreationLine(forceBreak),
@@ -222,7 +222,7 @@ final class ObjectCreationPrinter {
                 Doc.text(prefix + "("),
                 Doc.indent(Doc.concat(
                         Doc.SOFT_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), anonymousArgumentDocs(expression)))),
+                        Doc.joinComma(anonymousArgumentDocs(expression)))),
                 Doc.SOFT_LINE,
                 Doc.text(") ")));
     }

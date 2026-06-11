@@ -20,10 +20,10 @@ Single-file formatting flows through these ownership boundaries:
    `FormatterGuardrails` to assert that transforms keep the same `CompilationUnit` root and preserve existing
    JavaParser child-node identities across the tree, preserve JavaParser-visible comment identities, and reorder
    existing import declarations without replacing nodes or moving attached comments.
-4. `JavaPrinter` creates the per-run `JavaFormatContext` while wiring all printers and dispatchers.
-   `JavaPrinter.print(CompilationUnit)` builds the `JavaCommentMap` through `JavaCommentPlacementPolicy`, delegates
-   whole-file layout to `CompilationUnitPrinter`, then asks `CommentTracker` to run the debug-only missed comment
-   guardrail.
+4. `JavaPrinter` creates the per-run `JavaFormatContext`, shared type rendering, and the `ExpressionPrinters`,
+   `DeclarationPrinters`, and `StatementPrinters` composer groups. `JavaPrinter.print(CompilationUnit)` builds the
+   `JavaCommentMap` through `JavaCommentPlacementPolicy`, delegates whole-file layout through `DeclarationPrinters` to
+   `CompilationUnitPrinter`, then asks `CommentTracker` to run the debug-only missed comment guardrail.
 5. `CompilationUnitPrinter` sequences file-leading comments, package declarations, imports, optional module
    declarations, pragma-sensitive top-level declaration separators, compact unnamed-class members, and trailing orphan
    comments.

@@ -78,7 +78,7 @@ final class CallableSignaturePrinter {
                 Doc.text("("),
                 Doc.indent(Doc.concat(
                         Doc.SOFT_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), parameters.stream().map(this::parameter).toList()))),
+                        Doc.joinComma(parameters.stream().map(this::parameter).toList()))),
                 Doc.SOFT_LINE,
                 Doc.text(")")));
     }
@@ -107,7 +107,7 @@ final class CallableSignaturePrinter {
                 Doc.text("("),
                 Doc.indent(Doc.concat(
                         forceBreak ? Doc.HARD_LINE : Doc.SOFT_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), parameters))),
+                        Doc.joinComma(parameters))),
                 forceBreak ? Doc.HARD_LINE : Doc.SOFT_LINE,
                 Doc.text(")"));
         return forceBreak ? doc : Doc.group(doc);
@@ -169,7 +169,7 @@ final class CallableSignaturePrinter {
                 Doc.text("<"),
                 Doc.indent(Doc.concat(
                         Doc.SOFT_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), typeParameters.stream()
+                        Doc.joinComma(typeParameters.stream()
                                 .map(this::typeParameter)
                                 .toList()))),
                 Doc.SOFT_LINE,

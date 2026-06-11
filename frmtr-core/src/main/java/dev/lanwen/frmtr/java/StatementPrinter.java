@@ -373,7 +373,7 @@ final class StatementPrinter {
                 Doc.text(prefix + "("),
                 Doc.indent(Doc.concat(
                         Doc.SOFT_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.LINE), statement.getArguments().stream()
+                        Doc.joinComma(statement.getArguments().stream()
                                 .map(expressionRenderer::format)
                                 .toList()))),
                 Doc.SOFT_LINE,

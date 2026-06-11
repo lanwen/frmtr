@@ -108,21 +108,18 @@ final class MethodCallChainPrinter {
     }
 
     /**
-     * Preserves an already-multiline call statement when the only argument is an object creation.
+     * Preserves an already-multiline call statement when the argument list itself spans source lines.
      *
      * <p>Statement rendering still owns the trailing semicolon, but the call printer owns the call-shape decision because
-     * it already owns argument breaks and object-creation argument layout.
+     * it already owns argument breaks and source-multiline argument layout.
      */
-    Optional<Doc> sourceMultilineSingleObjectCreationArgumentStatement(
+    Optional<Doc> sourceMultilineMethodCallStatement(
             MethodCallExpr expression,
             ExpressionStmt statement) {
-        if (expression.getArguments().size() != 1
-                || !(expression.getArguments().get(0) instanceof ObjectCreationExpr)
-                || !expression.getAllContainedComments().isEmpty()
-                || !rawSource.rawWithoutOwnComment(statement).contains("\n")) {
+        if (!rawSource.rawWithoutOwnComment(statement).contains("\n")) {
             return Optional.empty();
         }
-        return Optional.of(calls.brokenMethodCall(expression));
+        return calls.sourceMultilineArguments(expression);
     }
 
     /**

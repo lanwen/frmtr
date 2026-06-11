@@ -257,10 +257,10 @@ final class MethodCallPrinter {
         return methodChains.compactRootWithBrokenFinalChainSegment(expression);
     }
 
-    Optional<Doc> sourceMultilineSingleObjectCreationArgumentStatement(
+    Optional<Doc> sourceMultilineMethodCallStatement(
             MethodCallExpr expression,
             ExpressionStmt statement) {
-        return methodChains.sourceMultilineSingleObjectCreationArgumentStatement(expression, statement);
+        return methodChains.sourceMultilineMethodCallStatement(expression, statement);
     }
 
     Optional<Doc> methodCallChain(MethodCallExpr expression, boolean force) {

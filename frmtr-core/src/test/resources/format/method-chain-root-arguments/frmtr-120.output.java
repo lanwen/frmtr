@@ -23,10 +23,33 @@ class MethodChainRootArgumentsSample {
             .withLabel("beta")
             .withPorts(2001, 2002)
             .complete();
+        await().until(
+            () -> {
+                var entry = receive(next);
+                if (entry instanceof Routed routed) {
+                    return routed.command();
+                }
+                return null;
+            },
+            Result::ready
+        );
         RequestGateway.<Message.Command, Message.Response>ask(
             sink,
             replyTo -> new Message.Command.Open(replyTo, request),
             timeouts.next()
         ).onErrorMap(TimeoutException.class, err -> new RoutingTimeoutFailure(err, request.owner(), request.target()));
+    }
+
+    Result awaitRoutedResult(Receiver next) {
+        return await().until(
+            () -> {
+                var entry = receive(next);
+                if (entry instanceof Routed routed) {
+                    return routed.command();
+                }
+                return null;
+            },
+            Result::ready
+        );
     }
 }

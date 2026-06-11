@@ -385,29 +385,30 @@ final class StatementPrinter {
         if (expression instanceof VariableDeclarationExpr variableDeclaration) {
             return variableDeclarationStatementRenderer.format(variableDeclaration);
         }
-        if (expression instanceof MethodCallExpr methodCall
-                && methodCallStatementWidth(methodCall) > options.lineWidth()) {
-            boolean chainBreak = methodCallChainHasComments.test(methodCall)
-                    || methodCallChainIsSourceMultiline.test(methodCall)
-                    || methodCallChainRootIsObjectCreation.test(methodCall)
-                    || !methodCallChainRootIsFieldAccess.test(methodCall);
-            if (chainBreak) {
-                Optional<Doc> chainWithSemicolon = forcedMethodCallChainWithSemicolonRenderer.apply(methodCall);
-                if (chainWithSemicolon.isPresent()) {
-                    return chainWithSemicolon.orElseThrow();
+        if (expression instanceof MethodCallExpr methodCall) {
+            if (!methodCallChainIsSourceMultiline.test(methodCall)) {
+                Optional<Doc> sourceMultilineCall = sourceMultilineMethodCallStatementRenderer.apply(methodCall, statement);
+                if (sourceMultilineCall.isPresent()) {
+                    return Doc.concat(sourceMultilineCall.orElseThrow(), Doc.text(";"));
                 }
             }
-            return Doc.concat(
-                    chainBreak
-                            ? forcedMethodCallChainRenderer.apply(methodCall)
-                                    .orElseGet(() -> brokenMethodCallRenderer.apply(methodCall))
-                            : brokenMethodCallRenderer.apply(methodCall),
-                    Doc.text(";"));
-        }
-        if (expression instanceof MethodCallExpr methodCall) {
-            Optional<Doc> sourceMultilineCall = sourceMultilineMethodCallStatementRenderer.apply(methodCall, statement);
-            if (sourceMultilineCall.isPresent()) {
-                return Doc.concat(sourceMultilineCall.orElseThrow(), Doc.text(";"));
+            if (methodCallStatementWidth(methodCall) > options.lineWidth()) {
+                boolean chainBreak = methodCallChainHasComments.test(methodCall)
+                        || methodCallChainIsSourceMultiline.test(methodCall)
+                        || methodCallChainRootIsObjectCreation.test(methodCall)
+                        || !methodCallChainRootIsFieldAccess.test(methodCall);
+                if (chainBreak) {
+                    Optional<Doc> chainWithSemicolon = forcedMethodCallChainWithSemicolonRenderer.apply(methodCall);
+                    if (chainWithSemicolon.isPresent()) {
+                        return chainWithSemicolon.orElseThrow();
+                    }
+                }
+                return Doc.concat(
+                        chainBreak
+                                ? forcedMethodCallChainRenderer.apply(methodCall)
+                                        .orElseGet(() -> brokenMethodCallRenderer.apply(methodCall))
+                                : brokenMethodCallRenderer.apply(methodCall),
+                        Doc.text(";"));
             }
         }
         Optional<Comment> trailingConditionalComment = conditionalElseStatementTrailingComment(statement);

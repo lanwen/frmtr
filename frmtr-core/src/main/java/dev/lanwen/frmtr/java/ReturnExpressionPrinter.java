@@ -12,6 +12,7 @@ import dev.lanwen.frmtr.doc.Doc;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
 
 /**
@@ -32,8 +33,10 @@ final class ReturnExpressionPrinter {
     private final Function<Expression, Doc> expression;
     private final Function<Expression, String> compact;
     private final ToIntFunction<String> currentIndentedWidth;
+    private final Function<MethodCallExpr, Optional<Doc>> sourceMultilineMethodCall;
     private final Function<MethodCallExpr, Optional<Doc>> compactRootWithBrokenFinalChainSegment;
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain;
+    private final Predicate<MethodCallExpr> methodCallChainIsSourceMultiline;
     private final Function<ObjectCreationExpr, Doc> brokenObjectCreation;
     private final BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix;
     private final BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression;
@@ -45,8 +48,10 @@ final class ReturnExpressionPrinter {
             Function<Expression, Doc> expression,
             Function<Expression, String> compact,
             ToIntFunction<String> currentIndentedWidth,
+            Function<MethodCallExpr, Optional<Doc>> sourceMultilineMethodCall,
             Function<MethodCallExpr, Optional<Doc>> compactRootWithBrokenFinalChainSegment,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain,
+            Predicate<MethodCallExpr> methodCallChainIsSourceMultiline,
             Function<ObjectCreationExpr, Doc> brokenObjectCreation,
             BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
             BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression,
@@ -56,8 +61,10 @@ final class ReturnExpressionPrinter {
         this.expression = expression;
         this.compact = compact;
         this.currentIndentedWidth = currentIndentedWidth;
+        this.sourceMultilineMethodCall = sourceMultilineMethodCall;
         this.compactRootWithBrokenFinalChainSegment = compactRootWithBrokenFinalChainSegment;
         this.forcedMethodCallChain = forcedMethodCallChain;
+        this.methodCallChainIsSourceMultiline = methodCallChainIsSourceMultiline;
         this.brokenObjectCreation = brokenObjectCreation;
         this.objectCreationWithSuffix = objectCreationWithSuffix;
         this.conditionalExpression = conditionalExpression;
@@ -134,6 +141,12 @@ final class ReturnExpressionPrinter {
     private Optional<Doc> returnWithForcedMethodCallChain(Expression expression) {
         if (!(expression instanceof MethodCallExpr methodCall)) {
             return Optional.empty();
+        }
+        if (!methodCallChainIsSourceMultiline.test(methodCall)) {
+            Optional<Doc> sourceMultilineCall = sourceMultilineMethodCall.apply(methodCall);
+            if (sourceMultilineCall.isPresent()) {
+                return sourceMultilineCall;
+            }
         }
         return compactRootWithBrokenFinalChainSegment.apply(methodCall).or(() -> forcedMethodCallChain.apply(methodCall));
     }

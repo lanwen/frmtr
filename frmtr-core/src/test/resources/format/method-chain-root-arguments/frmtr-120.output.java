@@ -44,9 +44,7 @@ class MethodChainRootArgumentsSample {
                     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnop"
                 )
             )
-        ).isEqualTo(
-            "public-key-public-key-public-key-public-key-public-key-public-key-public-key-public-key"
-        );
+        ).isEqualTo("public-key-public-key-public-key-public-key-public-key-public-key-public-key-public-key");
     }
 
     Result awaitRoutedResult(Receiver next) {

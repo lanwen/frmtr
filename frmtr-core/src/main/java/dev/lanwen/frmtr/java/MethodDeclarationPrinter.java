@@ -4,6 +4,7 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.stmt.BlockStmt;
@@ -35,6 +36,8 @@ import java.util.function.Predicate;
  * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/throws/frmtr.output.java}.
  */
 final class MethodDeclarationPrinter {
+    private final CommentTracker comments;
+    private final JavaCommentPlacementPolicy commentPlacement;
     private final RawSource rawSource;
     private final SourceShape sourceShape;
     private final RawPreservedSource rawPreservedSource;
@@ -44,6 +47,7 @@ final class MethodDeclarationPrinter {
     private final Function<NodeWithModifiers<?>, String> modifiers;
     private final Function<NodeList<TypeParameter>, String> flatTypeParameters;
     private final Function<NodeWithAnnotations<?>, String> inlineAnnotations;
+    private final Function<AnnotationExpr, String> annotationFlatText;
     private final Function<Node, String> compact;
     private final Function<Type, Doc> typeBody;
     private final Function<ClassOrInterfaceType, Doc> brokenClassOrInterfaceType;
@@ -52,6 +56,8 @@ final class MethodDeclarationPrinter {
     private final Function<BlockStmt, Doc> block;
 
     MethodDeclarationPrinter(
+            CommentTracker comments,
+            JavaCommentPlacementPolicy commentPlacement,
             RawSource rawSource,
             SourceShape sourceShape,
             RawPreservedSource rawPreservedSource,
@@ -61,12 +67,15 @@ final class MethodDeclarationPrinter {
             Function<NodeWithModifiers<?>, String> modifiers,
             Function<NodeList<TypeParameter>, String> flatTypeParameters,
             Function<NodeWithAnnotations<?>, String> inlineAnnotations,
+            Function<AnnotationExpr, String> annotationFlatText,
             Function<Node, String> compact,
             Function<Type, Doc> typeBody,
             Function<ClassOrInterfaceType, Doc> brokenClassOrInterfaceType,
             Predicate<Type> typeCanBreak,
             ThrowsClauseRenderer throwsClause,
             Function<BlockStmt, Doc> block) {
+        this.comments = comments;
+        this.commentPlacement = commentPlacement;
         this.rawSource = rawSource;
         this.sourceShape = sourceShape;
         this.rawPreservedSource = rawPreservedSource;
@@ -76,6 +85,7 @@ final class MethodDeclarationPrinter {
         this.modifiers = modifiers;
         this.flatTypeParameters = flatTypeParameters;
         this.inlineAnnotations = inlineAnnotations;
+        this.annotationFlatText = annotationFlatText;
         this.compact = compact;
         this.typeBody = typeBody;
         this.brokenClassOrInterfaceType = brokenClassOrInterfaceType;
@@ -95,7 +105,8 @@ final class MethodDeclarationPrinter {
             return rawPreservedSource.rawWithoutOwnComment(declaration, commentedMethod.orElseThrow());
         }
         List<Doc> docs = new ArrayList<>();
-        docs.add(declarationAnnotations.apply(declaration));
+        docs.add(methodDeclarationAnnotations(declaration));
+        docs.add(annotationMethodGapComments(declaration));
         String prefix = modifiers.apply(declaration);
         docs.add(Doc.text(prefix));
         if (!declaration.getTypeParameters().isEmpty()) {
@@ -125,6 +136,51 @@ final class MethodDeclarationPrinter {
         }
         docs.add(declaration.getBody().map(body -> Doc.concat(Doc.text(" "), block.apply(body))).orElse(Doc.text(";")));
         return Doc.concat(docs);
+    }
+
+    private Doc methodDeclarationAnnotations(MethodDeclaration declaration) {
+        if (!hasAnnotationMethodGapComments(declaration)) {
+            return declarationAnnotations.apply(declaration);
+        }
+        return Doc.concat(declaration.getAnnotations().stream()
+                .map(annotation -> Doc.concat(Doc.text(annotationFlatText.apply(annotation)), Doc.HARD_LINE))
+                .toList());
+    }
+
+    private boolean hasAnnotationMethodGapComments(MethodDeclaration declaration) {
+        return annotationMethodGapCommentTrivia(declaration).findAny().isPresent();
+    }
+
+    private Doc annotationMethodGapComments(MethodDeclaration declaration) {
+        return Doc.concat(annotationMethodGapCommentTrivia(declaration)
+                .map(comments::comment)
+                .filter(comment -> comment != Doc.EMPTY)
+                .map(comment -> Doc.concat(comment, Doc.HARD_LINE))
+                .toList());
+    }
+
+    private java.util.stream.Stream<JavaCommentTrivia> annotationMethodGapCommentTrivia(MethodDeclaration declaration) {
+        if (declaration.getAnnotations().isEmpty()) {
+            return java.util.stream.Stream.empty();
+        }
+        Optional<Integer> lastAnnotationLine = declaration.getAnnotations().stream()
+                .flatMap(annotation -> annotationVisibleEndLine(annotation).stream())
+                .max(Integer::compareTo);
+        Optional<Integer> nameLine = declaration.getName().getRange().map(range -> range.begin.line);
+        if (lastAnnotationLine.isEmpty() || nameLine.isEmpty()) {
+            return java.util.stream.Stream.empty();
+        }
+        return commentPlacement.containedComments(declaration).stream()
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.beginLine(Integer.MIN_VALUE) > lastAnnotationLine.orElseThrow())
+                .filter(comment -> comment.endLine(Integer.MAX_VALUE) < nameLine.orElseThrow());
+    }
+
+    private Optional<Integer> annotationVisibleEndLine(AnnotationExpr annotation) {
+        return annotation.getRange().map(range -> {
+            long lineCount = rawSource.rawWithoutOwnComment(annotation).lines().count();
+            return range.begin.line + Math.toIntExact(lineCount) - 1;
+        });
     }
 
     /**

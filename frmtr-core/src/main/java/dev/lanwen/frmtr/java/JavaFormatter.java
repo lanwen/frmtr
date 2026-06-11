@@ -449,8 +449,7 @@ public final class JavaFormatter {
             if (text.contains("\n")) {
                 return lineDoc(text);
             }
-            text = splitAdjacentLineComments("//" + lineComment.getContent().stripTrailing());
-            return text.contains("\n") ? lineDoc(text) : Doc.text(text);
+            return Doc.text("//" + lineComment.getContent().stripTrailing());
         }
         if (trivia.isJavadoc()) {
             JavadocComment javadocComment = (JavadocComment) comment;
@@ -472,11 +471,6 @@ public final class JavaFormatter {
     private static Doc lineDoc(String value) {
         List<Doc> lines = value.lines().map(Doc::text).toList();
         return Doc.join(Doc.HARD_LINE, lines);
-    }
-
-    private static String splitAdjacentLineComments(String value) {
-        String split = value.replaceAll("(?<!:)//", System.lineSeparator() + "//");
-        return split.startsWith(System.lineSeparator()) ? split.substring(System.lineSeparator().length()) : split;
     }
 
     private static String normalizeBlockComment(String value) {

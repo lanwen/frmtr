@@ -5,6 +5,8 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.comments.BlockComment;
+import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
@@ -241,6 +243,11 @@ final class RecordDeclarationPrinter {
             parts.add(Doc.HARD_LINE);
         }
         parts.add(recordComponentTailDoc(parameter));
+        Doc trailingBlock = recordComponentTrailingBlockComment(parameter);
+        if (trailingBlock != Doc.EMPTY) {
+            parts.add(Doc.text(" "));
+            parts.add(trailingBlock);
+        }
         if (trailing != Doc.EMPTY) {
             if (hasNext) {
                 parts.add(Doc.text(","));
@@ -249,6 +256,34 @@ final class RecordDeclarationPrinter {
             parts.add(trailing);
         }
         return Doc.concat(parts);
+    }
+
+    private Doc recordComponentTrailingBlockComment(Parameter parameter) {
+        return parameter.getParentNode().stream()
+                .flatMap(parent -> parent.getAllContainedComments().stream())
+                .filter(BlockComment.class::isInstance)
+                .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(parameter.getName(), comment))
+                .filter(comment -> commentEndsBeforeNextRecordComponent(parameter, comment))
+                .findFirst()
+                .map(comments::comment)
+                .orElse(Doc.EMPTY);
+    }
+
+    private boolean commentEndsBeforeNextRecordComponent(Parameter parameter, Comment comment) {
+        return parameter.getParentNode()
+                .filter(RecordDeclaration.class::isInstance)
+                .map(RecordDeclaration.class::cast)
+                .flatMap(record -> {
+                    int index = record.getParameters().indexOf(parameter);
+                    return index >= 0 && index + 1 < record.getParameters().size()
+                            ? Optional.of(record.getParameters().get(index + 1))
+                            : Optional.<Parameter>empty();
+                })
+                .map(next -> comment.getRange()
+                        .flatMap(commentRange -> next.getRange()
+                                .map(nextRange -> CommentIndex.startsBefore(commentRange, nextRange)))
+                        .orElse(false))
+                .orElse(true);
     }
 
     private boolean recordComponentAnnotationsShouldBreak(Parameter parameter) {

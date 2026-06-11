@@ -74,7 +74,9 @@ final class AnnotationExpressionPrinter {
         } else {
             formatted = Doc.text("@" + compact.apply(annotation.getName()));
         }
-        Doc trailing = comments.trailingLineComment(annotation);
+        Doc trailing = comments.ownTriviaComment(annotation, comment -> comment.isLine()
+                && comment.startsOnBeginLine(annotation.getName())
+                && comment.startsAfterNodeOnSameLine(annotation.getName()));
         if (trailing != Doc.EMPTY) {
             return Doc.concat(formatted, Doc.text(" "), trailing);
         }

@@ -382,6 +382,7 @@ final class StatementPrinter {
 
     private Doc expressionStatement(ExpressionStmt statement) {
         Expression expression = statement.getExpression();
+        Doc trailing = expressionStatementTrailingComment(statement);
         if (expression instanceof VariableDeclarationExpr variableDeclaration) {
             return variableDeclarationStatementRenderer.format(variableDeclaration);
         }
@@ -389,7 +390,7 @@ final class StatementPrinter {
             if (!methodCallChainIsSourceMultiline.test(methodCall)) {
                 Optional<Doc> sourceMultilineCall = sourceMultilineMethodCallStatementRenderer.apply(methodCall, statement);
                 if (sourceMultilineCall.isPresent()) {
-                    return Doc.concat(sourceMultilineCall.orElseThrow(), Doc.text(";"));
+                    return Doc.concat(sourceMultilineCall.orElseThrow(), Doc.text(";"), trailing);
                 }
             }
             if (methodCallStatementWidth(methodCall) > options.lineWidth()) {
@@ -400,7 +401,7 @@ final class StatementPrinter {
                 if (chainBreak) {
                     Optional<Doc> chainWithSemicolon = forcedMethodCallChainWithSemicolonRenderer.apply(methodCall);
                     if (chainWithSemicolon.isPresent()) {
-                        return chainWithSemicolon.orElseThrow();
+                        return Doc.concat(chainWithSemicolon.orElseThrow(), trailing);
                     }
                 }
                 return Doc.concat(
@@ -408,17 +409,24 @@ final class StatementPrinter {
                                 ? forcedMethodCallChainRenderer.apply(methodCall)
                                         .orElseGet(() -> brokenMethodCallRenderer.apply(methodCall))
                                 : brokenMethodCallRenderer.apply(methodCall),
-                        Doc.text(";"));
+                        Doc.text(";"),
+                        trailing);
             }
         }
-        Optional<Comment> trailingConditionalComment = conditionalElseStatementTrailingComment(statement);
-        Doc trailing = trailingConditionalComment
-                .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
-                .orElse(Doc.EMPTY);
         if (expression instanceof AssignExpr assignExpr) {
             return Doc.concat(assignmentStatementRenderer.apply(assignExpr), trailing);
         }
         return Doc.concat(expressionRenderer.format(expression), Doc.text(";"), trailing);
+    }
+
+    private Doc expressionStatementTrailingComment(ExpressionStmt statement) {
+        Doc statementTrailing = trailingLineComment(statement);
+        if (statementTrailing != Doc.EMPTY) {
+            return Doc.concat(Doc.text(" "), statementTrailing);
+        }
+        return conditionalElseStatementTrailingComment(statement)
+                .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
+                .orElse(Doc.EMPTY);
     }
 
     private int blockStatementWidth(String text) {
@@ -882,7 +890,7 @@ final class StatementPrinter {
         String variable = forEachVariable(statement);
         Expression iterable = statement.getIterable();
         String header = "for (" + variable + " : " + compact.apply(iterable) + ")";
-        if (currentIndentedWidth.applyAsInt(header + " {}") <= options.lineWidth()
+        if (blockStatementWidth(header + " {}") <= options.lineWidth()
                 || !(iterable instanceof MethodCallExpr methodCall)) {
             return Doc.text(header);
         }

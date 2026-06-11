@@ -914,8 +914,7 @@ final class FrmtrTest {
         String formatted = Frmtr.format(source, options);
 
         assertThat(formatted)
-                .contains("a.b(c ->\n"
-                        + "      d && eeeeeeeeee.ffffffffff()\n"
+                .contains("a.b(c -> d && eeeeeeeeee.ffffffffff()\n"
                         + "        ? g && hhhhhhhhhh.iiiiiiiiii()\n"
                         + "        : j && kkkkkkkkkk.llllllllll()\n"
                         + "    );");

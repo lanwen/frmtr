@@ -189,6 +189,8 @@ final class DeclarationPrinters {
                 throwsClauses::throwsClause,
                 blockRenderer);
         this.methods = new MethodDeclarationPrinter(
+                comments,
+                context.commentPlacementPolicy,
                 rawSource,
                 context.sourceShape,
                 rawPreservedSource,
@@ -198,6 +200,7 @@ final class DeclarationPrinters {
                 declarationPrefixes::modifiers,
                 types::flatTypeParameters,
                 declarationPrefixes::inlineAnnotations,
+                expressions::annotationFlatText,
                 compactSource::compact,
                 types::typeBody,
                 types::brokenClassOrInterfaceType,
@@ -238,6 +241,7 @@ final class DeclarationPrinters {
                 declarationPrefixes::annotations,
                 declarationPrefixes::modifiers,
                 compactSource::compactTypeLike,
+                types::typeBody,
                 expressions::expression,
                 this::body);
         BodyDeclarationDispatcher bodyDeclarationDispatcher = new BodyDeclarationDispatcher(

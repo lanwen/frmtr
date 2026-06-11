@@ -9,8 +9,10 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.stmt.Statement;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
@@ -35,6 +37,8 @@ final class ExpressionLambdaArgumentLayout {
     private final FormatterOptions options;
     private final JavaFormatRule<Expression> expressionRenderer;
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
+    private final Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer;
+    private final JavaFormatRule<Statement> statementRenderer;
     private final BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList;
     private final Function<Node, String> compact;
     private final Function<List<? extends Node>, String> compactJoin;
@@ -48,6 +52,8 @@ final class ExpressionLambdaArgumentLayout {
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
+            Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer,
+            JavaFormatRule<Statement> statementRenderer,
             BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList,
             Function<Node, String> compact,
             Function<List<? extends Node>, String> compactJoin,
@@ -59,6 +65,8 @@ final class ExpressionLambdaArgumentLayout {
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
+        this.brokenObjectCreationRenderer = brokenObjectCreationRenderer;
+        this.statementRenderer = statementRenderer;
         this.methodCallArgumentList = methodCallArgumentList;
         this.compact = compact;
         this.compactJoin = compactJoin;
@@ -78,7 +86,8 @@ final class ExpressionLambdaArgumentLayout {
         }
         String opener = methodCallPrefix(methodCall) + "(";
         String firstLine = parameters + " -> " + opener;
-        if (expressionFirstLineWidth(firstLine) > options.lineWidth()) {
+        if (expressionFirstLineWidth(firstLine) > options.lineWidth()
+                || brokenArgumentListLambdaBodyWidth(firstLine) > options.lineWidth()) {
             return Optional.empty();
         }
         return Optional.of(Doc.concat(
@@ -142,6 +151,21 @@ final class ExpressionLambdaArgumentLayout {
                     Doc.HARD_LINE,
                     Doc.text("))")));
         }
+        Optional<Doc> packedBlockLambdaBodyCall = packedBodyCallWithBlockLambda(firstLine, bodyExpression);
+        if (packedBlockLambdaBodyCall.isPresent()) {
+            return Optional.of(Doc.concat(
+                    Doc.text(firstLine + " "),
+                    packedBlockLambdaBodyCall.orElseThrow(),
+                    Doc.text("))")));
+        }
+        Optional<Doc> packedConditional = packedConditionalBody(firstLine, bodyExpression);
+        if (packedConditional.isPresent()) {
+            return Optional.of(Doc.concat(
+                    Doc.text(firstLine + " "),
+                    Doc.indent(packedConditional.orElseThrow()),
+                    Doc.HARD_LINE,
+                    Doc.text(")")));
+        }
         Optional<Doc> packedBodyCall = packedBodyCallWithoutClosingLine(firstLine, bodyExpression);
         if (packedBodyCall.isPresent()) {
             return Optional.of(Doc.concat(
@@ -149,6 +173,14 @@ final class ExpressionLambdaArgumentLayout {
                     Doc.indent(packedBodyCall.orElseThrow()),
                     Doc.HARD_LINE,
                     Doc.text("))")));
+        }
+        Optional<Doc> packedBodyChain = packedBodyChainWithoutClosingLine(firstLine, bodyExpression);
+        if (packedBodyChain.isPresent()) {
+            return Optional.of(Doc.concat(
+                    Doc.text(firstLine + " "),
+                    Doc.indent(packedBodyChain.orElseThrow()),
+                    Doc.HARD_LINE,
+                    Doc.text(")")));
         }
         Optional<Doc> packedBodyCallScope = packedBodyCallScopeWithoutClosingLine(firstLine, bodyExpression);
         if (packedBodyCallScope.isPresent()) {
@@ -211,7 +243,8 @@ final class ExpressionLambdaArgumentLayout {
                 + lambdaFirstLine;
         String flat = prefix + "(" + compactJoin.apply(arguments) + ")";
         boolean sourceMultilineBody = body.filter(this::sourceMultilineLogicalBody).isPresent()
-                || body.filter(this::sourceMultilineMethodCallBody).isPresent();
+                || body.filter(this::sourceMultilineMethodCallBody).isPresent()
+                || body.filter(bodyExpression -> bodyStartsAfterLambdaHeader(lambdaExpr, bodyExpression)).isPresent();
         if ((!sourceMultilineBody
                         && expressionFirstLineWidth(flat) < options.lineWidth())
                 || expressionLineWidth(firstLine, lambdaExpr, lambdaFirstLine) > options.lineWidth()) {
@@ -250,7 +283,18 @@ final class ExpressionLambdaArgumentLayout {
     }
 
     boolean sourceMultilineMethodCallBody(Expression body) {
-        return body instanceof MethodCallExpr && rawSource.rawWithoutOwnComment(body).contains("\n");
+        return body instanceof MethodCallExpr methodCall
+                && (rawSource.rawWithoutOwnComment(methodCall).contains("\n")
+                        || methodCall.getScope()
+                                .filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n"))
+                                .isPresent());
+    }
+
+    private boolean bodyStartsAfterLambdaHeader(LambdaExpr lambdaExpr, Expression bodyExpression) {
+        return lambdaExpr.getRange()
+                .flatMap(lambdaRange -> bodyExpression.getRange()
+                        .map(bodyRange -> bodyRange.begin.line > lambdaRange.begin.line))
+                .orElse(false);
     }
 
     private Doc huggableExpressionLambdaBody(String firstLine, Expression bodyExpression) {
@@ -260,11 +304,119 @@ final class ExpressionLambdaArgumentLayout {
         }
         if (bodyExpression instanceof MethodCallExpr methodCall
                 && methodCall.getScope().filter(MethodCallExpr.class::isInstance).isPresent()
-                && (bodyFirstSourceLineOverflows(firstLine, methodCall)
+                && (sourceMultilineMethodCallBody(methodCall)
+                        || bodyFirstSourceLineOverflows(firstLine, methodCall)
                         || bodyCompactLineOverflows(firstLine, methodCall))) {
             return brokenMethodCallRenderer.apply(methodCall);
         }
+        if (bodyExpression instanceof ObjectCreationExpr objectCreation
+                && expressionFirstLineWidth(firstLine + " " + compact.apply(objectCreation)) > options.lineWidth()) {
+            return brokenObjectCreationRenderer.apply(objectCreation);
+        }
         return expressionRenderer.format(bodyExpression);
+    }
+
+    private int brokenArgumentListLambdaBodyWidth(String bodyLine) {
+        return blockStatementWidth.applyAsInt(options.indentUnit().repeat(3) + bodyLine);
+    }
+
+    private Optional<Doc> packedConditionalBody(String firstLine, Expression bodyExpression) {
+        if (!(bodyExpression instanceof ConditionalExpr conditionalExpr)
+                || !conditionalExpr.getAllContainedComments().isEmpty()) {
+            return Optional.empty();
+        }
+        String condition = compact.apply(conditionalExpr.getCondition());
+        if (expressionFirstLineWidth(firstLine + " " + condition) > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+                Doc.text(condition),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.text("? "),
+                        expressionRenderer.format(conditionalExpr.getThenExpr()),
+                        Doc.HARD_LINE,
+                        Doc.text(": "),
+                        expressionRenderer.format(conditionalExpr.getElseExpr())))));
+    }
+
+    private Optional<Doc> packedBodyChainWithoutClosingLine(String firstLine, Expression bodyExpression) {
+        if (!(bodyExpression instanceof MethodCallExpr methodCall)
+                || !methodCall.getAllContainedComments().isEmpty()) {
+            return Optional.empty();
+        }
+        List<String> segments = new ArrayList<>();
+        Optional<String> root = compactMethodCallChainRoot(methodCall, segments);
+        if (root.isEmpty() || segments.isEmpty()) {
+            return Optional.empty();
+        }
+        String fullChain = root.orElseThrow() + String.join("", segments);
+        if (expressionFirstLineWidth(firstLine + " " + fullChain) <= options.lineWidth()) {
+            return Optional.empty();
+        }
+        String firstBodyLine = root.orElseThrow();
+        int splitIndex = 0;
+        for (int index = 0; index < segments.size(); index++) {
+            String candidate = firstBodyLine + segments.get(index);
+            if (expressionFirstLineWidth(firstLine + " " + candidate) > options.lineWidth()) {
+                break;
+            }
+            firstBodyLine = candidate;
+            splitIndex = index + 1;
+        }
+        if (expressionFirstLineWidth(firstLine + " " + firstBodyLine) > options.lineWidth()
+                || splitIndex >= segments.size()) {
+            return Optional.empty();
+        }
+        if (segments.subList(splitIndex, segments.size()).stream()
+                .anyMatch(segment -> brokenArgumentListLambdaBodyWidth(segment) > options.lineWidth())) {
+            return Optional.empty();
+        }
+        List<Doc> remainingSegments = segments.subList(splitIndex, segments.size()).stream()
+                .map(Doc::text)
+                .toList();
+        return Optional.of(Doc.concat(
+                Doc.text(firstBodyLine),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, remainingSegments)))));
+    }
+
+    private Optional<String> compactMethodCallChainRoot(MethodCallExpr expression, List<String> segments) {
+        if (!compactMethodCallChainSegmentCanStayFlat(expression)) {
+            return Optional.empty();
+        }
+        Optional<Expression> scope = expression.getScope();
+        if (scope.isEmpty()) {
+            return Optional.empty();
+        }
+        Expression scoped = scope.orElseThrow();
+        if (scoped instanceof MethodCallExpr methodCallScope) {
+            Optional<String> root = compactMethodCallChainRoot(methodCallScope, segments);
+            root.ifPresent(ignored -> segments.add(compactMethodCallChainSegment(expression)));
+            return root;
+        }
+        if (!scoped.getAllContainedComments().isEmpty() || rawSource.rawWithoutOwnComment(scoped).contains("\n")) {
+            return Optional.empty();
+        }
+        segments.add(compactMethodCallChainSegment(expression));
+        return Optional.of(compact.apply(scoped));
+    }
+
+    private boolean compactMethodCallChainSegmentCanStayFlat(MethodCallExpr expression) {
+        return expression.getArguments().stream()
+                .noneMatch(argument -> argument instanceof LambdaExpr
+                        || !argument.getAllContainedComments().isEmpty()
+                        || rawSource.rawWithoutOwnComment(argument).contains("\n"));
+    }
+
+    private String compactMethodCallChainSegment(MethodCallExpr expression) {
+        return "."
+                + expression.getTypeArguments()
+                        .map(typeArguments -> "<" + compactJoin.apply(typeArguments) + ">")
+                        .orElse("")
+                + expression.getNameAsString()
+                + "("
+                + compactJoin.apply(expression.getArguments())
+                + ")";
     }
 
     private Optional<Doc> packedBodyCallWithoutClosingLine(String firstLine, Expression bodyExpression) {
@@ -274,10 +426,6 @@ final class ExpressionLambdaArgumentLayout {
             return Optional.empty();
         }
         String opener = methodCallPrefix(methodCall) + "(";
-        Optional<Doc> blockLambdaCall = packedBodyCallWithBlockLambda(firstLine, methodCall, opener);
-        if (blockLambdaCall.isPresent()) {
-            return blockLambdaCall;
-        }
         if (expressionFirstLineWidth(firstLine + " " + opener) > options.lineWidth()) {
             return Optional.empty();
         }
@@ -290,11 +438,16 @@ final class ExpressionLambdaArgumentLayout {
 
     private Optional<Doc> packedBodyCallWithBlockLambda(
             String firstLine,
-            MethodCallExpr methodCall,
-            String opener) {
+            Expression bodyExpression) {
+        if (!(bodyExpression instanceof MethodCallExpr methodCall)
+                || methodCall.getScope().filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n")).isPresent()) {
+            return Optional.empty();
+        }
+        String opener = methodCallPrefix(methodCall) + "(";
         if (methodCall.getArguments().size() != 1
                 || !(methodCall.getArguments().getFirst().orElseThrow() instanceof LambdaExpr lambdaExpr)
-                || !lambdaExpr.getBody().isBlockStmt()) {
+                || !lambdaExpr.getBody().isBlockStmt()
+                || !lambdaExpr.getAllContainedComments().isEmpty()) {
             return Optional.empty();
         }
         String parameters = lambdaParameters.apply(lambdaExpr);
@@ -302,7 +455,15 @@ final class ExpressionLambdaArgumentLayout {
                 || expressionFirstLineWidth(firstLine + " " + opener + parameters + " -> {") > options.lineWidth()) {
             return Optional.empty();
         }
-        return Optional.of(Doc.concat(Doc.text(opener), expressionRenderer.format(lambdaExpr)));
+        return Optional.of(Doc.concat(
+                Doc.text(opener + parameters + " -> {"),
+                Doc.indent(Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(Doc.HARD_LINE, lambdaExpr.getBody().asBlockStmt().getStatements().stream()
+                                .map(statementRenderer::format)
+                                .toList())))),
+                Doc.HARD_LINE,
+                Doc.text("}")));
     }
 
     private Optional<Doc> packedObjectCreationWithoutClosingLine(String firstLine, Expression bodyExpression) {
@@ -415,7 +576,7 @@ final class ExpressionLambdaArgumentLayout {
 
     private boolean huggableBody(Expression body) {
         if (body instanceof MethodCallExpr methodCall) {
-            return !methodCall.getArguments().isEmpty();
+            return !methodCall.getArguments().isEmpty() || sourceMultilineMethodCallBody(methodCall);
         }
         if (body instanceof ObjectCreationExpr objectCreation) {
             return !objectCreation.getArguments().isEmpty();

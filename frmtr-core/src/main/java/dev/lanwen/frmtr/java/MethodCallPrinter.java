@@ -422,6 +422,8 @@ final class MethodCallPrinter {
     Optional<Doc> sourceMultilineExpressionLambda(MethodCallExpr expression) {
         if (expression.getArguments().isEmpty()
                 || !expression.getAllContainedComments().isEmpty()
+                || sourceMultilineChainWithConditionalLambda(expression)
+                || sourceMultilineMethodCallScope(expression)
                 || !expressionLambdaStartsOnSelectorLine(expression)
                 || !expressionLambdaSpansMultipleLines(expression)) {
             return Optional.empty();
@@ -438,6 +440,20 @@ final class MethodCallPrinter {
             return Optional.empty();
         }
         return huggableExpressionLambdaArguments.apply(prefix, expression.getArguments());
+    }
+
+    private boolean sourceMultilineMethodCallScope(MethodCallExpr expression) {
+        return methodCallChainIsSourceMultiline(expression)
+                && expression.getScope().filter(MethodCallExpr.class::isInstance).isPresent();
+    }
+
+    private boolean sourceMultilineChainWithConditionalLambda(MethodCallExpr expression) {
+        return methodCallChainIsSourceMultiline(expression)
+                && expression.getArguments().stream()
+                        .filter(LambdaExpr.class::isInstance)
+                        .map(LambdaExpr.class::cast)
+                        .flatMap(lambda -> lambda.getExpressionBody().stream())
+                        .anyMatch(ConditionalExpr.class::isInstance);
     }
 
     private boolean expressionLambdaBodyOpenerOverflows(

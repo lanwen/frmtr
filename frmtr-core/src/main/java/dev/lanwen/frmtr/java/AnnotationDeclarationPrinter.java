@@ -11,6 +11,7 @@ import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.type.Type;
 import dev.lanwen.frmtr.FormatterException;
+import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,6 +35,8 @@ final class AnnotationDeclarationPrinter {
     private static final String ANNOTATION_MEMBER_LIST_RECOVERY_FAILURE =
             "Unable to recover Java parse error inside annotation declaration member list: ";
 
+    private final FormatterOptions options;
+    private final LayoutWidth layoutWidth;
     private final SourceText sourceText;
     private final RecoveredListPlanner recoveredListPlanner;
     private final RecoveredRawGapPrinter rawGaps;
@@ -41,6 +44,7 @@ final class AnnotationDeclarationPrinter {
     private final Function<NodeWithAnnotations<?>, Doc> annotations;
     private final Function<NodeWithModifiers<?>, String> modifiers;
     private final Function<Type, String> compactTypeLike;
+    private final Function<Type, Doc> typeBody;
     private final Function<Expression, Doc> expression;
     private final Function<BodyDeclaration<?>, Doc> memberRenderer;
 
@@ -66,8 +70,11 @@ final class AnnotationDeclarationPrinter {
             Function<NodeWithAnnotations<?>, Doc> annotations,
             Function<NodeWithModifiers<?>, String> modifiers,
             Function<Type, String> compactTypeLike,
+            Function<Type, Doc> typeBody,
             Function<Expression, Doc> expression,
             Function<BodyDeclaration<?>, Doc> memberRenderer) {
+        this.options = context.options;
+        this.layoutWidth = context.layoutWidth;
         this.sourceText = context.sourceText;
         this.recoveredListPlanner = context.recoveredListPlanner;
         this.rawGaps = new RecoveredRawGapPrinter(context, AnnotationDeclarationPrinter::annotationMemberListRecoveryFailure);
@@ -75,6 +82,7 @@ final class AnnotationDeclarationPrinter {
         this.annotations = annotations;
         this.modifiers = modifiers;
         this.compactTypeLike = compactTypeLike;
+        this.typeBody = typeBody;
         this.expression = expression;
         this.memberRenderer = memberRenderer;
     }
@@ -246,12 +254,27 @@ final class AnnotationDeclarationPrinter {
     Doc annotationMember(AnnotationMemberDeclaration declaration) {
         List<Doc> docs = new ArrayList<>();
         docs.add(annotations.apply(declaration));
-        docs.add(Doc.text(modifiers.apply(declaration)));
-        docs.add(Doc.text(compactTypeLike.apply(declaration.getType()) + " " + declaration.getNameAsString() + "()"));
-        declaration.getDefaultValue()
-                .ifPresent(defaultValue -> docs.add(Doc.concat(Doc.text(" default "), expression.apply(defaultValue))));
-        docs.add(Doc.text(";"));
+        String modifierText = modifiers.apply(declaration);
+        docs.add(Doc.text(modifierText));
+        Doc defaultValue = declaration.getDefaultValue()
+                .map(value -> Doc.indent(Doc.concat(Doc.LINE, Doc.text("default "), expression.apply(value))))
+                .orElse(Doc.EMPTY);
+        docs.add(Doc.group(Doc.concat(
+                annotationMemberSignature(declaration, modifierText),
+                defaultValue,
+                Doc.text(";"))));
         return Doc.concat(docs);
+    }
+
+    /**
+     * Keeps the annotation member type and method name together when only the default-value clause forces a break.
+     */
+    private Doc annotationMemberSignature(AnnotationMemberDeclaration declaration, String modifierText) {
+        String flatSignature = compactTypeLike.apply(declaration.getType()) + " " + declaration.getNameAsString() + "()";
+        if (layoutWidth.currentIndented(modifierText + flatSignature) <= options.lineWidth()) {
+            return Doc.text(flatSignature);
+        }
+        return Doc.concat(typeBody.apply(declaration.getType()), Doc.text(" " + declaration.getNameAsString() + "()"));
     }
 
     static boolean hasRecoverableAnnotationMemberListProblem(AnnotationDeclaration declaration) {

@@ -18,9 +18,7 @@ final class LambdaExpressionArgumentOpener {
                     requestedMarks,
                     frame.toTransitEnvelope()
             ))
-            .doOnNext(outcome -> journalWriter
-                    .atInfo()
-                    .addValue("frame", frame.toMap())
+            .doOnNext(outcome -> journalWriter.atInfo().addValue("frame", frame.toMap())
                     .addValue("packet", packet.sender())
                     .addValue("matched", outcome.getOrDefault("route", false))
                     .log("Recorded transit decision")
@@ -58,9 +56,11 @@ final class LambdaExpressionArgumentOpener {
         Clock clock,
         String requestId
     ) {
-        return dispatchRepository.findByIdWithOwner(requestId).flatMap(record -> imageCounter.count(record).map(
-                counts -> DispatchDetails.from(clock, record, counts)
-        ));
+        return dispatchRepository
+            .findByIdWithOwner(requestId)
+            .flatMap(record -> imageCounter.count(record).map(
+                    counts -> DispatchDetails.from(clock, record, counts)
+            ));
     }
 
     FlowResult imageCounts(CacheTemplate cacheTemplate, String imagesKey) {
@@ -74,8 +74,8 @@ final class LambdaExpressionArgumentOpener {
 
     GatewayPlan route(GatewayPlan plan, Resolver resolver) {
         return defaults(plan)
-            .routeRules(rules ->
-                rules.pathMatchers("/ready", "/ready/**", "/about").allow().pathMatchers("/**").guarded()
+            .routeRules(rules -> rules.pathMatchers("/ready", "/ready/**", "/about").allow().pathMatchers("/**")
+                    .guarded()
             )
             .tokenRelay(relay -> relay.managerResolver(resolver))
             .build();
@@ -84,9 +84,7 @@ final class LambdaExpressionArgumentOpener {
     ResponseSpec keepsSourceMultilineChainLambda(WebClient client, Map<String, String> query, String account) {
         return client
             .get()
-            .uri(spec -> spec
-                    .path("/metrics/{account}/summary")
-                    .queryParams(MultiValueMap.fromSingleValue(query))
+            .uri(spec -> spec.path("/metrics/{account}/summary").queryParams(MultiValueMap.fromSingleValue(query))
                     .build(account)
             )
             .exchange();
@@ -111,8 +109,26 @@ final class LambdaExpressionArgumentOpener {
             .save(new Member(org.getId(), user.getId(), Member.Role.ADMIN))
             .onErrorResume(
                 DuplicateKeyException.class,
-                ex -> memberRepository.findByUserIdAndOrganizationIdWithSnapshot(user.getId(), org.getId())
+                ex -> memberRepository.findByUserIdAndOrganizationIdWithSnapshot(
+                    user.getId(),
+                    org.getId()
+                )
             );
+    }
+
+    StubFlow fallsThroughManagers(AuthToken authentication, List<ReactiveAuthenticationManager> managers, int index) {
+        return managers
+            .get(index)
+            .authenticate(authentication)
+            .onErrorResume(ex -> index + 1 < managers.size()
+                    ? authenticate(authentication, managers, index + 1)
+                    : Mono.error(ex)
+            );
+    }
+
+    void rejectsInvalidEncodedKey() {
+        assertThatThrownBy(() -> Keys.decode().es256(Base64.getEncoder().encodeToString("something hidden".getBytes())))
+            .isInstanceOf(ParseException.class);
     }
 
     StubFlow repeatsUntilEvent(StubFlow source, EventConsumer consumer, Predicate<Event> filter) {
@@ -127,9 +143,27 @@ final class LambdaExpressionArgumentOpener {
                         return;
                     }
                     sink.next(last);
-                }
-            ))
+            }))
             .doFinally(signal -> consumer.close());
+    }
+
+    ClientSpec keepsLastLambdaArgumentAttached(ClientSpec builder) {
+        return builder
+            .defaultStatusHandler(StatusCode.NOT_FOUND::isSameCodeAs, resp -> resp.releaseBody().ofType(
+                    Exception.class
+            ))
+            .filter(new FilterStep("alpha"));
+    }
+
+    StubFlow keepsLoggingBodyUnderLimit(StubFlow source, Logger log, String itemId) {
+        return source
+            .prepare()
+            .then(source.expire(itemId, DEFAULT_TTL))
+            .doOnError(error -> log.atError().addValue("item.id", itemId).log(
+                    "Failed to persist buffered event for item",
+                    error
+            ))
+            .then();
     }
 
     StubFlow answerWithLongBodySelector(StubSource stubSource, BundleGateway regionalWindowBundleReadGateway) {
@@ -198,7 +232,12 @@ final class LambdaExpressionArgumentOpener {
 
     StepProbe keepsMethodCallLambdaBodyPacked(StepProbe probe, SessionReader sessionReader, Principal principal) {
         return probe
-            .withVirtualTime(() -> sessionReader.findSessions(principal.groupId(), Source.LOCAL, principal, null))
+            .withVirtualTime(() -> sessionReader.findSessions(
+                    principal.groupId(),
+                    Source.LOCAL,
+                    principal,
+                    null
+            ))
             .expectSubscription();
     }
 
@@ -207,24 +246,25 @@ final class LambdaExpressionArgumentOpener {
         String tenantId,
         List<LocalDate> windows
     ) {
-        return usageRepository.fetchRows(tenantId).collectList().map(knownRows -> windows
-                .stream()
-                .map(window -> {
-                    return knownRows
-                        .stream()
-                        .filter(row -> row.window().equals(window))
-                        .findFirst()
-                        .orElseGet(
-                            () ->
-                                WindowUsage.builder()
+        return usageRepository
+            .fetchRows(tenantId)
+            .collectList()
+            .map(knownRows -> windows
+                    .stream()
+                    .map(window -> {
+                        return knownRows
+                            .stream()
+                            .filter(row -> row.window().equals(window))
+                            .findFirst()
+                            .orElseGet(() -> WindowUsage.builder()
                                     .tenantId(tenantId)
                                     .window(window)
                                     .usage(UsageCount.EMPTY)
                                     .build()
-                        );
-                })
-                .collect(Collectors.toList())
-        );
+                            );
+                    })
+                    .collect(Collectors.toList())
+            );
     }
 
     FlowResult fillsProjectedRows(
@@ -232,34 +272,39 @@ final class LambdaExpressionArgumentOpener {
         String tenantId,
         List<LocalDate> accountingWindows
     ) {
-        return projectionRepository.fetchRows(tenantId).collectList().map(projectedRows -> accountingWindows
-                .stream()
-                .map(accountingWindow -> {
-                    return projectedRows
-                        .stream()
-                        .filter(
-                            projectedWindowUsage -> projectedWindowUsage.accountingWindow().equals(accountingWindow)
-                        )
-                        .findFirst()
-                        .orElseGet(() -> ProjectedWindowUsageSnapshot.builder()
-                                .tenantId(tenantId)
-                                .accountingWindow(accountingWindow)
-                                .usage(UsageCount.EMPTY)
-                                .build()
-                        );
-                })
-                .collect(Collectors.toList())
-        );
+        return projectionRepository
+            .fetchRows(tenantId)
+            .collectList()
+            .map(projectedRows -> accountingWindows
+                    .stream()
+                    .map(accountingWindow -> {
+                        return projectedRows
+                            .stream()
+                            .filter(
+                                projectedWindowUsage -> projectedWindowUsage.accountingWindow().equals(accountingWindow)
+                            )
+                            .findFirst()
+                            .orElseGet(() -> ProjectedWindowUsageSnapshot.builder().tenantId(tenantId)
+                                    .accountingWindow(accountingWindow)
+                                    .usage(UsageCount.EMPTY)
+                                    .build()
+                            );
+                    })
+                    .collect(Collectors.toList())
+            );
     }
 
     FlowResult combinesCounters(CounterStream counterStream) {
-        return counterStream.grouped().flatMapIterable(Map::values).map(counters -> counters
-                .stream()
-                .reduce((left, right) -> new ImageCounter(
-                        left.projectedImageReference(),
-                        left.projectedContainerCount() + right.projectedContainerCount()
-                ))
-                .orElseThrow()
-        );
+        return counterStream
+            .grouped()
+            .flatMapIterable(Map::values)
+            .map(counters -> counters
+                    .stream()
+                    .reduce((left, right) -> new ImageCounter(
+                            left.projectedImageReference(),
+                            left.projectedContainerCount() + right.projectedContainerCount()
+                    ))
+                    .orElseThrow()
+            );
     }
 }

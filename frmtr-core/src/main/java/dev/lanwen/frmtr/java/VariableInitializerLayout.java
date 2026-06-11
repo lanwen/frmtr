@@ -354,6 +354,11 @@ final class VariableInitializerLayout {
         if (layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
                 && initializer instanceof LambdaExpr lambdaExpr
                 && !initializerHasOwnBreak(initializer)) {
+            Optional<Doc> expressionLambdaInitializer =
+                    variableWithExpressionLambdaInitializer(name, declarationPrefix + variable.getNameAsString(), lambdaExpr);
+            if (expressionLambdaInitializer.isPresent()) {
+                return expressionLambdaInitializer.orElseThrow();
+            }
             Optional<Doc> blockLambdaInitializer = variableWithBlockLambdaInitializer(
                     name,
                     declarationPrefix + variable.getNameAsString(),
@@ -731,6 +736,35 @@ final class VariableInitializerLayout {
     private boolean parenthesizedConditionalConditionOpenerFits(String flatName, ConditionalExpr initializer) {
         return initializer.getCondition() instanceof EnclosedExpr
                 && layoutWidth.currentIndented(flatName + " = (") <= options.lineWidth();
+    }
+
+    /**
+     * Keeps expression-lambda initializers attached to {@code =} and {@code ->} while the opener fits.
+     */
+    private Optional<Doc> variableWithExpressionLambdaInitializer(
+            String name,
+            String flatName,
+            LambdaExpr lambdaExpr) {
+        if (lambdaExpr.getBody().isBlockStmt() || lambdaExpr.getExpressionBody().isEmpty()) {
+            return Optional.empty();
+        }
+        String parameters = lambdaParameters.apply(lambdaExpr);
+        if (lambdaParametersShouldBreak.test(lambdaExpr, parameters)
+                || !(lambdaExpr.getExpressionBody().orElseThrow() instanceof MethodCallExpr methodCall)) {
+            return Optional.empty();
+        }
+        Doc body = forcedMethodCallChain.apply(methodCall).orElseGet(() -> expression.apply(methodCall));
+        String bodyFirstLine = methodCallChainFirstLine.apply(methodCall);
+        String lambdaPrefix = parameters + " ->";
+        if (layoutWidth.currentIndented(flatName + " = " + lambdaPrefix + " " + bodyFirstLine) <= options.lineWidth()) {
+            return Optional.of(Doc.concat(Doc.text(name + " = " + lambdaPrefix + " "), body));
+        }
+        if (layoutWidth.currentIndented(flatName + " = " + lambdaPrefix) <= options.lineWidth()) {
+            return Optional.of(Doc.concat(
+                    Doc.text(name + " = " + lambdaPrefix),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, body))));
+        }
+        return Optional.empty();
     }
 
     /**

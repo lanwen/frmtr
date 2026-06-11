@@ -131,4 +131,36 @@ class MultilineShapes {
             use(annotated);
         }
     }
+
+    void registry(Scanner scanner) {
+        for (CandidateDescriptor candidate : scanner.findCandidateComponents(
+            ComponentNames.packageName(DefaultBillingClient.class)
+        )) {
+            register(candidate);
+        }
+    }
+
+    void registryNearLimit(Scanner scanner) {
+        for (UnitDefinition candidate : scanner.findCandidateComponents(ClassNames.getPackageName(DefaultClient.class))) {
+            register(candidate);
+        }
+    }
+
+    void combine(Environment environment, List<PropertySource> sources) {
+        Iterable<ConfigurationPropertySource> combinedSources = () ->
+            Stream.concat(
+                StreamSupport.stream(environment.sources().spliterator(), false),
+                StreamSupport.stream(ConfigurationPropertySources.from(sources).spliterator(), false)
+            ).iterator();
+    }
+}
+
+record VisibleRoute(String id, String name /* visible route label */, RouteSource source /*, List<RouteResource> resources */) {
+    record RouteSource(String id, String name) {}
+}
+
+@interface ClientBinding {
+    Class<
+        ? extends BindingRegistrar.BindingCustomizer
+    > customizer() default BindingRegistrar.BindingCustomizer.NoopCustomizer.class;
 }

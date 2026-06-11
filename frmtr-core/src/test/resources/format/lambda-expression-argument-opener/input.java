@@ -120,6 +120,21 @@ final class LambdaExpressionArgumentOpener {
             );
     }
 
+    StubFlow fallsThroughManagers(AuthToken authentication, List<ReactiveAuthenticationManager> managers, int index) {
+        return managers
+            .get(index)
+            .authenticate(authentication)
+            .onErrorResume(ex ->
+                index + 1 < managers.size() ? authenticate(authentication, managers, index + 1) : Mono.error(ex)
+            );
+    }
+
+    void rejectsInvalidEncodedKey() {
+        assertThatThrownBy(() ->
+            Keys.decode().es256(Base64.getEncoder().encodeToString("something hidden".getBytes()))
+        ).isInstanceOf(ParseException.class);
+    }
+
     StubFlow repeatsUntilEvent(StubFlow source, EventConsumer consumer, Predicate<Event> filter) {
         return source
             .records()
@@ -136,6 +151,24 @@ final class LambdaExpressionArgumentOpener {
                 })
             )
             .doFinally(signal -> consumer.close());
+    }
+
+    ClientSpec keepsLastLambdaArgumentAttached(ClientSpec builder) {
+        return builder
+            .defaultStatusHandler(StatusCode.NOT_FOUND::isSameCodeAs, resp ->
+                resp.releaseBody().ofType(Exception.class)
+            )
+            .filter(new FilterStep("alpha"));
+    }
+
+    StubFlow keepsLoggingBodyUnderLimit(StubFlow source, Logger log, String itemId) {
+        return source
+            .prepare()
+            .then(source.expire(itemId, DEFAULT_TTL))
+            .doOnError(error ->
+                log.atError().addValue("item.id", itemId).log("Failed to persist buffered event for item", error)
+            )
+            .then();
     }
 
     StubFlow answerWithLongBodySelector(StubSource stubSource, BundleGateway regionalWindowBundleReadGateway) {

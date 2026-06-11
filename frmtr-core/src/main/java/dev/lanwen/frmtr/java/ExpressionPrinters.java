@@ -108,6 +108,7 @@ final class ExpressionPrinters {
                 context.objectCreationLayoutPolicy,
                 options,
                 this::expression,
+                this::brokenObjectCreation,
                 statementRenderer,
                 blockRenderer,
                 binaries::nestedLines,
@@ -272,6 +273,10 @@ final class ExpressionPrinters {
 
     Doc objectCreationWithSuffix(ObjectCreationExpr expression, String suffix) {
         return objectCreations.objectCreationWithSuffix(expression, suffix);
+    }
+
+    Doc brokenObjectCreation(ObjectCreationExpr expression) {
+        return objectCreations.brokenObjectCreation(expression);
     }
 
     String objectCreationPrefix(ObjectCreationExpr expression) {

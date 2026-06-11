@@ -70,7 +70,15 @@ final class CommentedMethodSignaturePrinter {
         }
         List<String> lines = signature.lines().toList();
         int linesToDrop = Math.min(lines.size(), lastLeadingAnnotationLine - declarationBeginLine + 1);
-        return String.join("\n", lines.subList(linesToDrop, lines.size()));
+        int firstSignatureLine = linesToDrop;
+        int sourceLine = declarationBeginLine + firstSignatureLine;
+        while (firstSignatureLine < lines.size()
+                && sourceLine < nameBeginLine
+                && isCommentOnlyLine(lines.get(firstSignatureLine).strip())) {
+            firstSignatureLine++;
+            sourceLine++;
+        }
+        return String.join("\n", lines.subList(firstSignatureLine, lines.size()));
     }
 
     private boolean canFormatCommentedMethodSignatureFromRaw(MethodDeclaration declaration) {

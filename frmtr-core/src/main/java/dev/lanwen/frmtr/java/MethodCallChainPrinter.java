@@ -910,6 +910,7 @@ final class MethodCallChainPrinter {
             String prefix,
             ToIntFunction<String> compactSegmentWidth) {
         return expressionLambdaArgumentPlan.apply(prefix, expression.getArguments())
+                .filter(plan -> !plan.bodyFirstSourceLineFits())
                 .filter(plan -> plan.bodyOpenerFitsOnContinuation(continuationStatementWidth, options.lineWidth()))
                 .filter(plan -> plan.bodyOpenerOverflows(
                         line -> methodCallSegmentWidth(expression, line, compactSegmentWidth),

@@ -255,7 +255,7 @@ final class AnnotationExpressionPrinter {
     }
 
     private Doc annotationArrayValueLine(Expression value, List<JavaCommentTrivia> trailingComments) {
-        Doc valueLine = expressionRenderer.format(value);
+        Doc valueLine = annotationArrayValueLine(value);
         boolean commaAppended = false;
         List<Doc> followingLines = new ArrayList<>();
         for (JavaCommentTrivia comment : trailingComments) {
@@ -278,6 +278,21 @@ final class AnnotationExpressionPrinter {
         }
         followingLines.addFirst(valueLine);
         return Doc.join(Doc.HARD_LINE, followingLines);
+    }
+
+    private Doc annotationArrayValueLine(Expression value) {
+        if (value instanceof BinaryExpr binaryExpr
+                && (sourceSpansMultipleLines(value)
+                        || currentIndentedWidth.applyAsInt(compactAnnotationValue(value)) > options.lineWidth())) {
+            return nestedBinaryLines.apply(binaryExpr, true);
+        }
+        return expressionRenderer.format(value);
+    }
+
+    private boolean sourceSpansMultipleLines(Node node) {
+        return node.getRange()
+                .map(range -> range.begin.line < range.end.line)
+                .orElse(false);
     }
 
     private void addCommentDocs(List<Doc> lines, List<JavaCommentTrivia> sourceComments) {

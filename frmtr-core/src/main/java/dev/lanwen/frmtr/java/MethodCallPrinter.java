@@ -443,7 +443,8 @@ final class MethodCallPrinter {
     private boolean expressionLambdaBodyOpenerOverflows(
             MethodCallExpr expression,
             ExpressionLambdaArgumentLayout.Plan argument) {
-        return argument.bodyOpenerFitsOnContinuation(continuationStatementWidth, options.lineWidth())
+        return !argument.bodyFirstSourceLineFits()
+                && argument.bodyOpenerFitsOnContinuation(continuationStatementWidth, options.lineWidth())
                 && argument.bodyOpenerOverflows(
                         line -> methodCallRootLineWidth(expression, line),
                         options.lineWidth());

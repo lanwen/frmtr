@@ -23,13 +23,12 @@ class MultilineShapes {
         var routed = keys.isEmpty()
             ? trimmedValues(source.entries())
             : List.<String>of();
-        int calendarShift =
-            (
-                CalendarWindow.from(clock.instant(), ZoneOffset.UTC).dayIndex() ==
-                CalendarWindow.from(clock.instant(), tenantOffset).dayIndex()
-            )
-                ? 1
-                : 2;
+        int calendarShift = (
+            CalendarWindow.from(clock.instant(), ZoneOffset.UTC).dayIndex() ==
+            CalendarWindow.from(clock.instant(), tenantOffset).dayIndex()
+        )
+            ? 1
+            : 2;
         return pkg.sample.Widget.builder()
             .name("demo")
             .build();

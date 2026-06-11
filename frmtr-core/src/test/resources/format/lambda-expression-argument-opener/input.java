@@ -84,6 +84,18 @@ final class LambdaExpressionArgumentOpener {
             .build();
     }
 
+    ResponseSpec keepsSourceMultilineChainLambda(WebClient client, Map<String, String> query, String account) {
+        return client
+            .get()
+            .uri(spec ->
+                spec
+                    .path("/metrics/{account}/summary")
+                    .queryParams(MultiValueMap.fromSingleValue(query))
+                    .build(account)
+            )
+            .exchange();
+    }
+
     StubFlow answerWithRepositoryCall(StubSource stubSource, BundleGateway regionalWindowBundleReadGateway) {
         return when(
             stubSource.fetchPreparedEnvelope(
@@ -106,6 +118,24 @@ final class LambdaExpressionArgumentOpener {
             .onErrorResume(DuplicateKeyException.class, ex ->
                 memberRepository.findByUserIdAndOrganizationIdWithSnapshot(user.getId(), org.getId())
             );
+    }
+
+    StubFlow repeatsUntilEvent(StubFlow source, EventConsumer consumer, Predicate<Event> filter) {
+        return source
+            .records()
+            .filter(filter)
+            .map(EventRecord::value)
+            .doFinally(signal -> consumer.unsubscribe())
+            .repeatWhen(emitted ->
+                emitted.handle((last, sink) -> {
+                    if (last > 0) {
+                        sink.complete();
+                        return;
+                    }
+                    sink.next(last);
+                })
+            )
+            .doFinally(signal -> consumer.close());
     }
 
     StubFlow answerWithLongBodySelector(StubSource stubSource, BundleGateway regionalWindowBundleReadGateway) {

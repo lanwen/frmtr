@@ -12,6 +12,7 @@ import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.CastExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
+import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
@@ -719,9 +720,17 @@ final class VariableInitializerLayout {
         if (layoutWidth.blockStatement(conditionLine + ";") <= options.lineWidth()) {
             return Doc.concat(Doc.text(name + " = "), brokenConditionalExpression.apply(initializer));
         }
+        if (parenthesizedConditionalConditionOpenerFits(flatName, initializer)) {
+            return Doc.concat(Doc.text(name + " = "), brokenConditionalExpression.apply(initializer));
+        }
         return Doc.concat(
                 Doc.text(name + " ="),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, brokenConditionalExpression.apply(initializer))));
+    }
+
+    private boolean parenthesizedConditionalConditionOpenerFits(String flatName, ConditionalExpr initializer) {
+        return initializer.getCondition() instanceof EnclosedExpr
+                && layoutWidth.currentIndented(flatName + " = (") <= options.lineWidth();
     }
 
     /**

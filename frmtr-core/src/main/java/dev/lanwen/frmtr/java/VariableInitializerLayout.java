@@ -273,6 +273,11 @@ final class VariableInitializerLayout {
                 }
             }
             if (initializer instanceof BinaryExpr binaryExpr) {
+                if (binaryInitializerCanKeepTextBlockOpenerWithEquals(variable, declarationPrefix, binaryExpr)) {
+                    return Doc.concat(
+                            Doc.text(name + " = "),
+                            Doc.indent(binaryExpressionLines.apply(initializer, true)));
+                }
                 if (shouldKeepCastDivisionContinuationFlat.test(binaryExpr)) {
                     return Doc.concat(
                             Doc.text(name + " ="),
@@ -413,6 +418,27 @@ final class VariableInitializerLayout {
                     Doc.indent(Doc.concat(Doc.HARD_LINE, brokenInitializer(initializer))));
         }
         return Doc.concat(Doc.text(name + " = "), expression.apply(initializer));
+    }
+
+    /**
+     * Keeps a text-block-led binary initializer from stranding {@code =} when the first literal opener fits.
+     */
+    private boolean binaryInitializerCanKeepTextBlockOpenerWithEquals(
+            VariableDeclarator variable,
+            String declarationPrefix,
+            BinaryExpr binaryExpr) {
+        return binaryStartsWithTextBlock(binaryExpr)
+                && layoutWidth.variableInitializer(
+                                variable, declarationPrefix + variable.getNameAsString() + " = \"\"\"")
+                        <= options.lineWidth();
+    }
+
+    private boolean binaryStartsWithTextBlock(BinaryExpr binaryExpr) {
+        Expression left = binaryExpr.getLeft();
+        while (left instanceof BinaryExpr leftBinary && leftBinary.getOperator() == binaryExpr.getOperator()) {
+            left = leftBinary.getLeft();
+        }
+        return left instanceof TextBlockLiteralExpr;
     }
 
     /**

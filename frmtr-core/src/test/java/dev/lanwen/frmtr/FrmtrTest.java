@@ -265,6 +265,7 @@ final class FrmtrTest {
             "switch-expression-initializer, 120",
             "switch-empty-rules, 120",
             "switch-multiple-unnamed-patterns, 120",
+            "text-block-concat-initializer-opener, 120",
             "text-block-raw-method-call, 120",
             "throw-object-creation-width, 120",
             "try-resource-layout, 120",

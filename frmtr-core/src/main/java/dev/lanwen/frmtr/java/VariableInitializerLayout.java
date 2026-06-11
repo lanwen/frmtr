@@ -180,6 +180,7 @@ final class VariableInitializerLayout {
                         variableName(variable),
                         declarationPrefix + variable.getNameAsString(),
                         methodCall,
+                        methodCallChainFirstLine.apply(methodCall),
                         chain.orElseThrow());
             }
         }
@@ -313,13 +314,23 @@ final class VariableInitializerLayout {
             if (compactObjectCreationChain.isPresent()) {
                 return compactObjectCreationChain.orElseThrow();
             }
-            Optional<Doc> chain = forcedMethodCallChain.apply(methodCall).or(() -> mixedFieldMethodCallChain.apply(methodCall));
-            if (chain.isPresent()) {
+            Optional<Doc> forcedChain = forcedMethodCallChain.apply(methodCall);
+            if (forcedChain.isPresent()) {
                 return variableWithMethodCallChain(
                         name,
                         declarationPrefix + variable.getNameAsString(),
                         methodCall,
-                        chain.orElseThrow());
+                        methodCallChainFirstLine.apply(methodCall),
+                        forcedChain.orElseThrow());
+            }
+            Optional<Doc> mixedChain = mixedFieldMethodCallChain.apply(methodCall);
+            if (mixedChain.isPresent()) {
+                return variableWithMethodCallChain(
+                        name,
+                        declarationPrefix + variable.getNameAsString(),
+                        methodCall,
+                        mixedFieldMethodCallFirstLine(methodCall),
+                        mixedChain.orElseThrow());
             }
             Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
                     name,
@@ -686,11 +697,8 @@ final class VariableInitializerLayout {
             String name,
             String flatName,
             MethodCallExpr methodCall,
+            String firstLine,
             Doc chain) {
-        String firstLine = mixedFieldMethodCallRoot.apply(methodCall)
-                .filter(root -> !(root instanceof ObjectCreationExpr))
-                .map(compact)
-                .orElseGet(() -> methodCallChainFirstLine.apply(methodCall));
         if (methodCallChainRootIsObjectCreation.test(methodCall)
                 && layoutWidth.blockStatement(flatName + " = " + firstLine + ";") > options.lineWidth()) {
             return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
@@ -699,6 +707,13 @@ final class VariableInitializerLayout {
             return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
         }
         return Doc.concat(Doc.text(name + " = "), chain);
+    }
+
+    private String mixedFieldMethodCallFirstLine(MethodCallExpr methodCall) {
+        return mixedFieldMethodCallRoot.apply(methodCall)
+                .filter(root -> !(root instanceof ObjectCreationExpr))
+                .map(compact)
+                .orElseGet(() -> methodCallChainFirstLine.apply(methodCall));
     }
 
     /**

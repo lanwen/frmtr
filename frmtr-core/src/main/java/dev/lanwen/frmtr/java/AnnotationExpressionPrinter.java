@@ -283,12 +283,32 @@ final class AnnotationExpressionPrinter {
     }
 
     private Doc annotationArrayValueLine(Expression value) {
+        if (value instanceof AnnotationExpr annotation && annotationArrayAnnotationLineOverflows(annotation)) {
+            return brokenAnnotationArrayValue(annotation);
+        }
         if (value instanceof BinaryExpr binaryExpr
                 && (sourceSpansMultipleLines(value)
                         || currentIndentedWidth.applyAsInt(compactAnnotationValue(value)) > options.lineWidth())) {
             return nestedBinaryLines.apply(binaryExpr, true);
         }
         return expressionRenderer.format(value);
+    }
+
+    private boolean annotationArrayAnnotationLineOverflows(AnnotationExpr annotation) {
+        return currentIndentedWidth.applyAsInt(options.indentUnit() + compactAnnotationValue(annotation) + ",")
+                > options.lineWidth();
+    }
+
+    private Doc brokenAnnotationArrayValue(AnnotationExpr annotation) {
+        if (annotation instanceof NormalAnnotationExpr normalAnnotation) {
+            return brokenNormalAnnotation(normalAnnotation);
+        }
+        if (annotation instanceof SingleMemberAnnotationExpr singleMemberAnnotation) {
+            return brokenSingleMemberAnnotation(
+                    "@" + compact.apply(singleMemberAnnotation.getName()),
+                    annotationValue(singleMemberAnnotation.getMemberValue()));
+        }
+        return expressionRenderer.format(annotation);
     }
 
     private boolean sourceSpansMultipleLines(Node node) {
@@ -323,6 +343,9 @@ final class AnnotationExpressionPrinter {
         }
         if (value instanceof ArrayInitializerExpr arrayInitializerExpr) {
             return compactAnnotationArrayInitializer(arrayInitializerExpr);
+        }
+        if (value instanceof AnnotationExpr annotationExpr) {
+            return annotationFlatText(annotationExpr);
         }
         return compact.apply(value);
     }

@@ -33,6 +33,7 @@ final class ReturnExpressionPrinter {
     private final Function<Expression, Doc> expression;
     private final Function<Expression, String> compact;
     private final ToIntFunction<String> currentIndentedWidth;
+    private final Function<MethodCallExpr, Optional<Doc>> sourceMultilineExpressionLambda;
     private final Function<MethodCallExpr, Optional<Doc>> sourceMultilineMethodCall;
     private final Function<MethodCallExpr, Optional<Doc>> compactRootWithBrokenFinalChainSegment;
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain;
@@ -48,6 +49,7 @@ final class ReturnExpressionPrinter {
             Function<Expression, Doc> expression,
             Function<Expression, String> compact,
             ToIntFunction<String> currentIndentedWidth,
+            Function<MethodCallExpr, Optional<Doc>> sourceMultilineExpressionLambda,
             Function<MethodCallExpr, Optional<Doc>> sourceMultilineMethodCall,
             Function<MethodCallExpr, Optional<Doc>> compactRootWithBrokenFinalChainSegment,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain,
@@ -61,6 +63,7 @@ final class ReturnExpressionPrinter {
         this.expression = expression;
         this.compact = compact;
         this.currentIndentedWidth = currentIndentedWidth;
+        this.sourceMultilineExpressionLambda = sourceMultilineExpressionLambda;
         this.sourceMultilineMethodCall = sourceMultilineMethodCall;
         this.compactRootWithBrokenFinalChainSegment = compactRootWithBrokenFinalChainSegment;
         this.forcedMethodCallChain = forcedMethodCallChain;
@@ -141,6 +144,10 @@ final class ReturnExpressionPrinter {
     private Optional<Doc> returnWithForcedMethodCallChain(Expression expression) {
         if (!(expression instanceof MethodCallExpr methodCall)) {
             return Optional.empty();
+        }
+        Optional<Doc> expressionLambda = sourceMultilineExpressionLambda.apply(methodCall);
+        if (expressionLambda.isPresent()) {
+            return expressionLambda;
         }
         if (!methodCallChainIsSourceMultiline.test(methodCall)) {
             Optional<Doc> sourceMultilineCall = sourceMultilineMethodCall.apply(methodCall);

@@ -3,7 +3,10 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.expr.CharLiteralExpr;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.ClassExpr;
+import com.github.javaparser.ast.expr.ConditionalExpr;
+import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
@@ -71,10 +74,32 @@ final class CompactSourceText {
         if (node instanceof FieldAccessExpr fieldAccessExpr) {
             return compact(fieldAccessExpr.getScope()) + "." + fieldAccessExpr.getNameAsString();
         }
+        if (node instanceof EnclosedExpr enclosedExpr && containsRawLiteral(enclosedExpr)) {
+            return "(" + compact(enclosedExpr.getInner()) + ")";
+        }
+        if (node instanceof BinaryExpr binaryExpr && containsRawLiteral(binaryExpr)) {
+            return compact(binaryExpr.getLeft())
+                    + " "
+                    + binaryExpr.getOperator().asString()
+                    + " "
+                    + compact(binaryExpr.getRight());
+        }
+        if (node instanceof ConditionalExpr conditionalExpr && containsRawLiteral(conditionalExpr)) {
+            return compact(conditionalExpr.getCondition())
+                    + " ? "
+                    + compact(conditionalExpr.getThenExpr())
+                    + " : "
+                    + compact(conditionalExpr.getElseExpr());
+        }
         if (node instanceof MethodCallExpr methodCallExpr && methodCallExpr.getAllContainedComments().isEmpty()) {
             return compactMethodCall(methodCallExpr);
         }
         return compactTokenText(node);
+    }
+
+    private boolean containsRawLiteral(Node node) {
+        return node.findFirst(StringLiteralExpr.class).isPresent()
+                || node.findFirst(CharLiteralExpr.class).isPresent();
     }
 
     /**

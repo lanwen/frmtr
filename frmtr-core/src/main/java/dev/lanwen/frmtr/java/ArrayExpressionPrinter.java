@@ -93,8 +93,15 @@ final class ArrayExpressionPrinter {
                 .map(initializer -> compactArrayCreation(expression, initializer)
                         .filter(flat -> currentIndentedWidth.applyAsInt(flat) <= options.lineWidth())
                         .map(Doc::text)
-                        .orElseGet(() -> Doc.concat(prefix, Doc.text(" "), arrayInitializer(initializer))))
+                        .orElseGet(() -> Doc.concat(
+                                prefix,
+                                Doc.text(" "),
+                                arrayInitializer(initializer, arrayCreationInitializerRequiresStructuredBreak(initializer)))))
                 .orElse(prefix);
+    }
+
+    private boolean arrayCreationInitializerRequiresStructuredBreak(ArrayInitializerExpr initializer) {
+        return initializer.getValues().stream().anyMatch(value -> !value.isLiteralExpr());
     }
 
     /**
@@ -108,7 +115,7 @@ final class ArrayExpressionPrinter {
         if (arrayCreationTypeBreaks(expression) || !initializer.getAllContainedComments().isEmpty()) {
             return Optional.empty();
         }
-        if (initializer.getValues().stream().anyMatch(value -> !compactArrayInitializerValue(value))) {
+        if (initializer.getValues().stream().anyMatch(value -> !value.isLiteralExpr())) {
             return Optional.empty();
         }
         return compactArrayInitializer(initializer).map(initializerText -> arrayCreationPrefix(expression) + " " + initializerText);
@@ -122,6 +129,7 @@ final class ArrayExpressionPrinter {
 
     private Optional<String> compactArrayInitializer(ArrayInitializerExpr initializer) {
         if (!initializer.getAllContainedComments().isEmpty()
+                || sourceSpansMultipleLines(initializer)
                 || initializer.getValues().stream().anyMatch(value -> !compactArrayInitializerValue(value))) {
             return Optional.empty();
         }
@@ -157,7 +165,16 @@ final class ArrayExpressionPrinter {
     }
 
     private boolean compactArrayInitializerValue(Expression value) {
-        return value.isLiteralExpr();
+        return value.isLiteralExpr()
+                || (value.getAllContainedComments().isEmpty()
+                        && !sourceSpansMultipleLines(value)
+                        && !compact.apply(value).contains("\n"));
+    }
+
+    private boolean sourceSpansMultipleLines(Node node) {
+        return node.getRange()
+                .map(range -> range.begin.line < range.end.line)
+                .orElse(false);
     }
 
     /**
@@ -212,11 +229,12 @@ final class ArrayExpressionPrinter {
         if (!forceBreak && compact.isPresent() && currentIndentedWidth.applyAsInt(compact.orElseThrow()) <= options.lineWidth()) {
             return Doc.text(compact.orElseThrow());
         }
+        boolean forceNestedArrayRows = nestedArrayRowsShouldBreak(expression);
         List<Doc> values = new ArrayList<>(comments);
         for (int i = 0; i < expression.getValues().size(); i++) {
             Expression value = expression.getValues().get(i);
             Expression next = i + 1 < expression.getValues().size() ? expression.getValues().get(i + 1) : null;
-            values.add(Doc.concat(arrayInitializerValue(value, next), Doc.text(",")));
+            values.add(Doc.concat(arrayInitializerValue(value, next, forceNestedArrayRows), Doc.text(",")));
         }
         return Doc.concat(
                 Doc.text("{"),
@@ -232,7 +250,7 @@ final class ArrayExpressionPrinter {
      * value but physically placed after the current value stays on the current line. That source-position check
      * preserves trailing block comments between comma-separated values.
      */
-    private Doc arrayInitializerValue(Expression value, Expression next) {
+    private Doc arrayInitializerValue(Expression value, Expression next, boolean forceNestedArrayRows) {
         List<Doc> parts = new ArrayList<>();
         Doc leadingComment = comments.ownComment(value, comment -> comment instanceof BlockComment
                 && CommentIndex.startsBefore(comment, value));
@@ -240,7 +258,11 @@ final class ArrayExpressionPrinter {
             parts.add(leadingComment);
             parts.add(Doc.text(" "));
         }
-        parts.add(expressionRenderer.format(value));
+        if (forceNestedArrayRows && value instanceof ArrayInitializerExpr nestedArrayInitializer) {
+            parts.add(arrayInitializer(nestedArrayInitializer, true));
+        } else {
+            parts.add(expressionRenderer.format(value));
+        }
         if (next != null) {
             Doc trailingComment = next.getComment()
                     .filter(BlockComment.class::isInstance)
@@ -254,6 +276,18 @@ final class ArrayExpressionPrinter {
             }
         }
         return Doc.concat(parts);
+    }
+
+    private boolean nestedArrayRowsShouldBreak(ArrayInitializerExpr expression) {
+        if (expression.getValues().isEmpty()
+                || expression.getValues().stream().anyMatch(value -> !(value instanceof ArrayInitializerExpr))) {
+            return false;
+        }
+        return expression.getValues().stream()
+                .map(ArrayInitializerExpr.class::cast)
+                .anyMatch(row -> compactArrayInitializer(row)
+                        .map(compact -> currentIndentedWidth.applyAsInt(compact) > options.lineWidth())
+                        .orElse(true));
     }
 
     private String compactJoinArrayLevels(NodeList<ArrayCreationLevel> levels) {

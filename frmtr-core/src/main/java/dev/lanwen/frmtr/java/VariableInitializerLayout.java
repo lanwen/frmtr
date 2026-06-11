@@ -375,6 +375,11 @@ final class VariableInitializerLayout {
                     Doc.indent(Doc.concat(Doc.HARD_LINE, expression.apply(initializer))));
         }
         if (layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+                && initializer instanceof ArrayInitializerExpr arrayInitializerExpr
+                && sourceSpansMultipleLines(arrayInitializerExpr)) {
+            return Doc.concat(Doc.text(name + " = "), arrayInitializer.apply(arrayInitializerExpr, true));
+        }
+        if (layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
                 && !(initializer instanceof StringLiteralExpr)
                 && !(initializer instanceof TextBlockLiteralExpr)
                 && !initializerHasOwnBreak(initializer)) {
@@ -868,6 +873,12 @@ final class VariableInitializerLayout {
                     .orElse(false);
         }
         return false;
+    }
+
+    private boolean sourceSpansMultipleLines(Expression expression) {
+        return expression.getRange()
+                .map(range -> range.begin.line < range.end.line)
+                .orElse(false);
     }
 
     /**

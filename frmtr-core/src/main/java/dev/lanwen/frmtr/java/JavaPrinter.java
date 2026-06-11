@@ -1,6 +1,7 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
@@ -153,6 +154,8 @@ final class JavaPrinter {
                 this::statement,
                 this::block,
                 binaries::lines,
+                this::brokenMethodCall,
+                this::methodCallArgumentList,
                 compactSource::compact,
                 compactSource::compactWithoutOwnComment,
                 compactSource::compactJoin,
@@ -270,6 +273,7 @@ final class JavaPrinter {
                 this::expression,
                 compactSource::compact,
                 this::currentIndentedWidth,
+                methodCalls::sourceMultilineExpressionLambda,
                 methodCalls::sourceMultilineArguments,
                 methodCalls::compactRootWithBrokenFinalChainSegment,
                 methodCalls::forcedMethodCallChain,
@@ -534,6 +538,10 @@ final class JavaPrinter {
 
     private Doc brokenMethodCall(MethodCallExpr expression) {
         return methodCalls.brokenMethodCall(expression);
+    }
+
+    private Doc methodCallArgumentList(NodeList<Expression> arguments, Doc line) {
+        return methodCalls.methodCallArgumentList(arguments, line);
     }
 
     private Doc expression(Expression expression) {

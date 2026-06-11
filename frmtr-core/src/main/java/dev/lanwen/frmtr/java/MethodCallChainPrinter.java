@@ -44,6 +44,7 @@ final class MethodCallChainPrinter {
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments;
     private final BiFunction<String, NodeList<Expression>, Optional<String>> huggableBlockLambdaFirstLine;
     private final BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument;
+    private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments;
     private final ToIntFunction<String> currentIndentedWidth;
     private final ToIntFunction<String> continuationStatementWidth;
     private final ToIntFunction<String> blockStatementWidth;
@@ -59,6 +60,7 @@ final class MethodCallChainPrinter {
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,
             BiFunction<String, NodeList<Expression>, Optional<String>> huggableBlockLambdaFirstLine,
             BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument,
+            BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments,
             ToIntFunction<String> currentIndentedWidth,
             ToIntFunction<String> continuationStatementWidth,
             ToIntFunction<String> blockStatementWidth) {
@@ -78,6 +80,7 @@ final class MethodCallChainPrinter {
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.huggableBlockLambdaFirstLine = huggableBlockLambdaFirstLine;
         this.commentedExpressionLambdaArgument = commentedExpressionLambdaArgument;
+        this.huggableExpressionLambdaArguments = huggableExpressionLambdaArguments;
         this.currentIndentedWidth = currentIndentedWidth;
         this.continuationStatementWidth = continuationStatementWidth;
         this.blockStatementWidth = blockStatementWidth;
@@ -465,6 +468,12 @@ final class MethodCallChainPrinter {
         if (huggableLambda.isPresent()) {
             return Optional.of(Doc.concat(huggableLambda.orElseThrow(), finalSegmentSuffix.doc()));
         }
+        if (expressionLambdaStartsOnSelectorLine(call) && expressionLambdaSpansMultipleLines(call)) {
+            Optional<Doc> huggableExpressionLambda = huggableExpressionLambdaArguments.apply(callPrefix, call.getArguments());
+            if (huggableExpressionLambda.isPresent()) {
+                return Optional.of(Doc.concat(huggableExpressionLambda.orElseThrow(), finalSegmentSuffix.doc()));
+            }
+        }
         String prefix = callPrefix + "(";
         if (currentIndentedWidth.applyAsInt(prefix + ")") > options.lineWidth()) {
             return Optional.empty();
@@ -743,6 +752,12 @@ final class MethodCallChainPrinter {
         if (commentedExpressionLambda.isPresent()) {
             return Doc.concat(segmentPrefix, commentedExpressionLambda.orElseThrow(), finalSegmentSuffix.doc());
         }
+        if (expressionLambdaStartsOnSelectorLine(expression) && expressionLambdaSpansMultipleLines(expression)) {
+            Optional<Doc> huggableExpressionLambda = huggableExpressionLambdaArguments.apply(prefix, expression.getArguments());
+            if (huggableExpressionLambda.isPresent()) {
+                return Doc.concat(segmentPrefix, huggableExpressionLambda.orElseThrow(), finalSegmentSuffix.doc());
+            }
+        }
         Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments());
         if (commentedArguments.isPresent()) {
             return Doc.concat(segmentPrefix, commentedArguments.orElseThrow(), finalSegmentSuffix.doc());
@@ -786,6 +801,28 @@ final class MethodCallChainPrinter {
                         calls.methodCallArgumentList(expression.getArguments(), Doc.HARD_LINE))),
                 Doc.HARD_LINE,
                 Doc.text(")" + finalSegmentSuffix)));
+    }
+
+    private boolean expressionLambdaStartsOnSelectorLine(MethodCallExpr expression) {
+        Optional<Integer> selectorLine = expression.getName().getRange().map(range -> range.begin.line);
+        if (selectorLine.isEmpty()) {
+            return false;
+        }
+        return expression.getArguments().stream()
+                .filter(LambdaExpr.class::isInstance)
+                .map(LambdaExpr.class::cast)
+                .filter(lambda -> lambda.getExpressionBody().isPresent())
+                .flatMap(lambda -> lambda.getRange().stream())
+                .anyMatch(range -> range.begin.line == selectorLine.orElseThrow());
+    }
+
+    private boolean expressionLambdaSpansMultipleLines(MethodCallExpr expression) {
+        return expression.getArguments().stream()
+                .filter(LambdaExpr.class::isInstance)
+                .map(LambdaExpr.class::cast)
+                .filter(lambda -> lambda.getExpressionBody().isPresent())
+                .flatMap(lambda -> lambda.getRange().stream())
+                .anyMatch(range -> range.begin.line < range.end.line);
     }
 
     private String methodCallSegmentArgumentsWidthText(NodeList<Expression> arguments) {

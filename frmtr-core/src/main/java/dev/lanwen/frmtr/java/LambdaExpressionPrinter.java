@@ -54,6 +54,8 @@ final class LambdaExpressionPrinter {
     private final JavaFormatRule<Statement> statementRenderer;
     private final JavaFormatRule<BlockStmt> blockRenderer;
     private final BiFunction<Expression, Boolean, Doc> binaryExpressionLinesRenderer;
+    private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
+    private final BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList;
     private final Function<Node, String> compact;
     private final Function<Node, String> compactWithoutOwnComment;
     private final Function<List<? extends Node>, String> compactJoin;
@@ -71,6 +73,8 @@ final class LambdaExpressionPrinter {
             JavaFormatRule<Statement> statementRenderer,
             JavaFormatRule<BlockStmt> blockRenderer,
             BiFunction<Expression, Boolean, Doc> binaryExpressionLinesRenderer,
+            Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
+            BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList,
             Function<Node, String> compact,
             Function<Node, String> compactWithoutOwnComment,
             Function<List<? extends Node>, String> compactJoin,
@@ -86,6 +90,8 @@ final class LambdaExpressionPrinter {
         this.statementRenderer = statementRenderer;
         this.blockRenderer = blockRenderer;
         this.binaryExpressionLinesRenderer = binaryExpressionLinesRenderer;
+        this.brokenMethodCallRenderer = brokenMethodCallRenderer;
+        this.methodCallArgumentList = methodCallArgumentList;
         this.compact = compact;
         this.compactWithoutOwnComment = compactWithoutOwnComment;
         this.compactJoin = compactJoin;
@@ -594,7 +600,6 @@ final class LambdaExpressionPrinter {
                 .filter(LambdaExpr.class::isInstance)
                 .map(LambdaExpr.class::cast);
         if (body.isEmpty()
-                || !huggableExpressionLambdaBody(body.orElseThrow())
                 || !lambdaExpr.getAllContainedComments().isEmpty()) {
             return Optional.empty();
         }
@@ -618,27 +623,109 @@ final class LambdaExpressionPrinter {
                 || blockStatementWidth.applyAsInt(firstLine) > options.lineWidth()) {
             return Optional.empty();
         }
-        Expression bodyExpression = huggableExpressionLambdaBodyExpression(lambdaExpr).orElseThrow();
+        Optional<Expression> bodyExpressionCandidate = huggableExpressionLambdaBodyExpression(lambdaExpr);
+        if (bodyExpressionCandidate.isEmpty()) {
+            return Optional.empty();
+        }
+        Expression bodyExpression = bodyExpressionCandidate.orElseThrow();
+        if (!huggableExpressionLambdaBody(bodyExpression)
+                && !huggableOverflowingMethodCallBody(firstLine, bodyExpression)) {
+            return Optional.empty();
+        }
         if (nestedLambda.isPresent()) {
+            Doc bodyDoc = huggableExpressionLambdaBody(firstLine, bodyExpression);
+            if (bodyFirstSourceLineFits(firstLine, bodyExpression)) {
+                return Optional.of(Doc.concat(
+                        Doc.text(prefix + "("),
+                        Doc.indent(Doc.concat(
+                                Doc.HARD_LINE,
+                                Doc.text(huggableExpressionLambdaFirstLine(lambdaExpr, parameters) + " "),
+                                Doc.indent(bodyDoc))),
+                        Doc.HARD_LINE,
+                        Doc.text(")")));
+            }
             return Optional.of(Doc.concat(
                     Doc.text(prefix + "("),
                     Doc.indent(Doc.concat(
                             Doc.HARD_LINE,
                             Doc.text(huggableExpressionLambdaFirstLine(lambdaExpr, parameters)),
-                            Doc.indent(Doc.concat(Doc.HARD_LINE, expressionRenderer.format(bodyExpression))))),
+                            Doc.indent(Doc.concat(
+                                    Doc.HARD_LINE,
+                                    bodyDoc)))),
+                    Doc.HARD_LINE,
+                    Doc.text(")")));
+        }
+        Doc bodyDoc = huggableExpressionLambdaBody(firstLine, bodyExpression);
+        if (bodyFirstSourceLineFits(firstLine, bodyExpression)) {
+            Optional<Doc> packedBodyCall = packedBodyCallWithoutClosingLine(bodyExpression);
+            if (packedBodyCall.isPresent()) {
+                return Optional.of(Doc.concat(
+                        Doc.text(firstLine + " "),
+                        Doc.indent(packedBodyCall.orElseThrow()),
+                        Doc.HARD_LINE,
+                        Doc.text("))")));
+            }
+            return Optional.of(Doc.concat(
+                    Doc.text(firstLine + " "),
+                    Doc.indent(bodyDoc),
                     Doc.HARD_LINE,
                     Doc.text(")")));
         }
         return Optional.of(Doc.concat(
                 Doc.text(firstLine),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, expressionRenderer.format(bodyExpression))),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, bodyDoc)),
                 Doc.HARD_LINE,
                 Doc.text(")")));
     }
 
+    private Doc huggableExpressionLambdaBody(String firstLine, Expression bodyExpression) {
+        if (bodyExpression instanceof MethodCallExpr methodCall
+                && methodCall.getScope().filter(MethodCallExpr.class::isInstance).isPresent()
+                && bodyFirstSourceLineOverflows(firstLine, methodCall)) {
+            return brokenMethodCallRenderer.apply(methodCall);
+        }
+        return expressionRenderer.format(bodyExpression);
+    }
+
+    private Optional<Doc> packedBodyCallWithoutClosingLine(Expression bodyExpression) {
+        if (!(bodyExpression instanceof MethodCallExpr methodCall) || !bodyFirstSourceLine(bodyExpression).endsWith("(")) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+                Doc.text(methodCallPrefix(methodCall) + "("),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        methodCallArgumentList.apply(methodCall.getArguments(), Doc.HARD_LINE)))));
+    }
+
+    private String methodCallPrefix(MethodCallExpr expression) {
+        return expression.getScope().map(scope -> compact.apply(scope) + ".").orElse("")
+                + expression.getTypeArguments()
+                        .map(typeArguments -> "<" + compactJoin.apply(typeArguments) + ">")
+                        .orElse("")
+                + expression.getNameAsString();
+    }
+
+    private boolean bodyFirstSourceLineFits(String firstLine, Expression bodyExpression) {
+        return rawSource.rawWithoutOwnComment(bodyExpression).contains("\n")
+                && blockStatementWidth.applyAsInt(firstLine + " " + bodyFirstSourceLine(bodyExpression)) <= options.lineWidth();
+    }
+
+    private boolean bodyFirstSourceLineOverflows(String firstLine, MethodCallExpr methodCall) {
+        return blockStatementWidth.applyAsInt(firstLine + " " + bodyFirstSourceLine(methodCall)) > options.lineWidth();
+    }
+
+    private String bodyFirstSourceLine(Node node) {
+        return rawSource.rawWithoutOwnComment(node)
+                .strip()
+                .lines()
+                .findFirst()
+                .orElse("");
+    }
+
     private boolean huggableExpressionLambdaBody(Expression body) {
-        if (body instanceof MethodCallExpr methodCall) {
-            return !methodCall.getArguments().isEmpty();
+        if (body instanceof MethodCallExpr) {
+            return !((MethodCallExpr) body).getArguments().isEmpty();
         }
         if (body instanceof ConditionalExpr) {
             return true;
@@ -647,6 +734,12 @@ final class LambdaExpressionPrinter {
             return huggableExpressionLambdaBody(lambdaExpr.getExpressionBody().orElseThrow());
         }
         return false;
+    }
+
+    private boolean huggableOverflowingMethodCallBody(String firstLine, Expression body) {
+        return body instanceof MethodCallExpr methodCall
+                && methodCall.getScope().filter(MethodCallExpr.class::isInstance).isPresent()
+                && bodyFirstSourceLineOverflows(firstLine, methodCall);
     }
 
     private String huggableExpressionLambdaFirstLine(LambdaExpr lambdaExpr, String parameters) {

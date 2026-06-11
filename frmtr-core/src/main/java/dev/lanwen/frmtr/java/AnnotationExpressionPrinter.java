@@ -9,6 +9,7 @@ import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
+import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
@@ -107,7 +108,9 @@ final class AnnotationExpressionPrinter {
         if (annotation.getPairs().isEmpty()) {
             return Doc.text(prefix + "()");
         }
-        if (!annotation.getPairs().stream().map(MemberValuePair::getValue).anyMatch(this::annotationValueHasLineComments)) {
+        if (!annotation.getPairs().stream()
+                .map(MemberValuePair::getValue)
+                .anyMatch(value -> annotationValueHasLineComments(value) || annotationValueMustBreak(value))) {
             String flat = prefix + "(" + compactJoinAnnotationPairs(annotation.getPairs()) + ")";
             if (currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
                 return Doc.text(flat);
@@ -143,7 +146,7 @@ final class AnnotationExpressionPrinter {
     private Doc singleMemberAnnotation(SingleMemberAnnotationExpr annotation) {
         String prefix = "@" + compact.apply(annotation.getName());
         Expression memberValue = annotation.getMemberValue();
-        if (annotationValueHasLineComments(memberValue)) {
+        if (annotationValueHasLineComments(memberValue) || annotationValueMustBreak(memberValue)) {
             return brokenSingleMemberAnnotation(prefix, annotationValue(memberValue));
         }
         String flatValue = compactAnnotationValue(memberValue);
@@ -214,6 +217,10 @@ final class AnnotationExpressionPrinter {
             return nestedBinaryLines.apply(value, true);
         }
         return expressionRenderer.format(value);
+    }
+
+    private boolean annotationValueMustBreak(Expression value) {
+        return value instanceof TextBlockLiteralExpr;
     }
 
     /**
@@ -289,7 +296,7 @@ final class AnnotationExpressionPrinter {
      * compact source text.
      */
     private String compactAnnotationValue(Expression value) {
-        if (value instanceof StringLiteralExpr) {
+        if (value instanceof StringLiteralExpr || value instanceof TextBlockLiteralExpr) {
             return value.getTokenRange().map(Object::toString).orElseGet(value::toString);
         }
         if (value instanceof ArrayInitializerExpr arrayInitializerExpr) {

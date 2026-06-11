@@ -9,6 +9,7 @@ import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.CastExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
@@ -93,6 +94,7 @@ final class MethodCallPrinter {
                 huggableBlockLambdaArguments,
                 huggableBlockLambdaFirstLine,
                 commentedExpressionLambdaArgument,
+                huggableExpressionLambdaArguments,
                 currentIndentedWidth,
                 continuationStatementWidth,
                 blockStatementWidth);
@@ -139,6 +141,10 @@ final class MethodCallPrinter {
                     expressionRenderer.apply(scope),
                     Doc.text("."),
                     call);
+        }
+        Optional<Doc> sourceMultilineExpressionLambda = sourceMultilineExpressionLambda(expression);
+        if (sourceMultilineExpressionLambda.isPresent()) {
+            return sourceMultilineExpressionLambda.orElseThrow();
         }
         if (!breakMode.isForced()) {
             Optional<Doc> chain = methodCallChain(expression);
@@ -380,6 +386,38 @@ final class MethodCallPrinter {
                         methodCallArgumentList(expression.getArguments(), Doc.HARD_LINE))),
                 Doc.HARD_LINE,
                 Doc.text(")")));
+    }
+
+    Optional<Doc> sourceMultilineExpressionLambda(MethodCallExpr expression) {
+        if (expression.getArguments().isEmpty()
+                || !expression.getAllContainedComments().isEmpty()
+                || !expressionLambdaStartsOnSelectorLine(expression)
+                || !expressionLambdaSpansMultipleLines(expression)) {
+            return Optional.empty();
+        }
+        return huggableExpressionLambdaArguments.apply(methodCallPrefix(expression), expression.getArguments());
+    }
+
+    private boolean expressionLambdaStartsOnSelectorLine(MethodCallExpr expression) {
+        Optional<Integer> selectorLine = expression.getName().getRange().map(range -> range.begin.line);
+        if (selectorLine.isEmpty()) {
+            return false;
+        }
+        return expression.getArguments().stream()
+                .filter(LambdaExpr.class::isInstance)
+                .map(LambdaExpr.class::cast)
+                .filter(lambda -> lambda.getExpressionBody().isPresent())
+                .flatMap(lambda -> lambda.getRange().stream())
+                .anyMatch(range -> range.begin.line == selectorLine.orElseThrow());
+    }
+
+    private boolean expressionLambdaSpansMultipleLines(MethodCallExpr expression) {
+        return expression.getArguments().stream()
+                .filter(LambdaExpr.class::isInstance)
+                .map(LambdaExpr.class::cast)
+                .filter(lambda -> lambda.getExpressionBody().isPresent())
+                .flatMap(lambda -> lambda.getRange().stream())
+                .anyMatch(range -> range.begin.line < range.end.line);
     }
 
     /**

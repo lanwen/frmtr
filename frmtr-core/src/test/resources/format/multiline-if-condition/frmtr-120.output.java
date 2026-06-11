@@ -31,4 +31,22 @@ class MultilineIfConditionSample {
             complete(transitionToComplete);
         }
     }
+
+    void publishFinishedMarker(Queue queue) {
+        runner.attach(event -> {
+            switch (event.kind()) {
+                case DONE -> {
+                    if (
+                        event.markers().contains(Marker.PRIMARY_DONE) ||
+                        event.markers().contains(Marker.SECONDARY_CONFIRMED)
+                    ) {
+                        queue.publish(event);
+                    }
+                }
+                default -> {
+                    queue.skip(event);
+                }
+            }
+        });
+    }
 }

@@ -6,7 +6,6 @@ import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.Expression;
-import com.github.javaparser.ast.expr.InstanceOfExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import dev.lanwen.frmtr.FormatterOptions;
@@ -89,15 +88,15 @@ final class ControlConditionPrinter {
      * grammar.
      *
      * <p>The width gate includes the {@code if} keyword and an empty block because if conditions have a slightly wider
-     * surrounding line than loop tails. Source-multiline {@code instanceof && ...} conditions intentionally keep a broken
-     * operand layout even when the compact condition would fit.
+     * surrounding line than loop tails. Source-multiline logical conditions intentionally keep a broken operand layout
+     * even when the compact condition would fit the formatter's local width estimate.
      */
     Doc ifCondition(Expression expression) {
         Optional<Doc> commented = commentedIfCondition(expression);
         if (commented.isPresent()) {
             return commented.orElseThrow();
         }
-        if (sourceMultilineInstanceofAndCondition(expression)) {
+        if (sourceMultilineLogicalCondition(expression)) {
             return brokenCondition(expression);
         }
         String flat = compact.apply(expression);
@@ -181,10 +180,10 @@ final class ControlConditionPrinter {
         return Optional.empty();
     }
 
-    private boolean sourceMultilineInstanceofAndCondition(Expression condition) {
+    private boolean sourceMultilineLogicalCondition(Expression condition) {
         return condition instanceof BinaryExpr binaryExpr
-                && binaryExpr.getOperator() == BinaryExpr.Operator.AND
-                && binaryExpr.getLeft() instanceof InstanceOfExpr
+                && (binaryExpr.getOperator() == BinaryExpr.Operator.AND
+                        || binaryExpr.getOperator() == BinaryExpr.Operator.OR)
                 && rawSource.rawWithoutOwnComment(condition).contains("\n");
     }
 

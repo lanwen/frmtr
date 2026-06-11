@@ -423,11 +423,7 @@ final class SwitchPrinter {
      * local to switch rendering and delegates any nested statement or expression body to the existing renderers.
      */
     private Doc switchEntry(SwitchEntry entry) {
-        Doc leadingComment = comments.ownTriviaComment(entry, commentNode -> commentNode.isLine()
-                && commentNode.startsBeforeBeginLine(entry));
-        if (leadingComment != Doc.EMPTY) {
-            leadingComment = Doc.concat(leadingComment, Doc.HARD_LINE);
-        }
+        Doc leadingComment = switchEntryLeadingComments(entry);
         Doc trailingComment = comments.ownTriviaComment(entry, commentNode -> commentNode.isLine()
                 && commentNode.startsOnBeginLine(entry));
         if (trailingComment == Doc.EMPTY) {
@@ -457,6 +453,23 @@ final class SwitchPrinter {
         };
         entryDoc = trailingComment == Doc.EMPTY ? entryDoc : Doc.concat(entryDoc, Doc.text(" "), trailingComment);
         return Doc.concat(leadingComment, entryDoc);
+    }
+
+    /**
+     * Recovers a contiguous line-comment cluster before a {@code case} label even when JavaParser splits the cluster
+     * between switch-level orphan comments and the entry's own leading comment.
+     */
+    private Doc switchEntryLeadingComments(SwitchEntry entry) {
+        Doc leadingComments = comments.adjacentLeadingLineComments(entry);
+        if (leadingComments != Doc.EMPTY) {
+            return leadingComments;
+        }
+        Doc leadingComment = comments.ownTriviaComment(entry, commentNode -> commentNode.isLine()
+                && commentNode.startsBeforeBeginLine(entry));
+        if (leadingComment == Doc.EMPTY) {
+            return Doc.EMPTY;
+        }
+        return Doc.concat(leadingComment, Doc.HARD_LINE);
     }
 
     private SwitchEntryLayout switchEntryLayout(SwitchEntry entry) {

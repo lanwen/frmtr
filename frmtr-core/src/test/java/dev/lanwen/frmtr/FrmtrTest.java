@@ -253,6 +253,7 @@ final class FrmtrTest {
             "single-member-annotation-array-width, 120",
             "source-multiline-shapes, 120",
             "string-literal-initializer-width, 120",
+            "switch-entry-leading-comments, 120",
             "switch-expression-initializer, 120",
             "switch-empty-rules, 120",
             "switch-multiple-unnamed-patterns, 120",

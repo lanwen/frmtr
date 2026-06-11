@@ -1,6 +1,6 @@
 [versions]
 assertj = "3.27.7"
-javaparser = "3.28.1"
+javaparser = "3.28.2"
 jgit = "7.6.0.202603022253-r"
 junit-jupiter = "6.0.3"
 graalvm-native-buildtools = "0.11.5"

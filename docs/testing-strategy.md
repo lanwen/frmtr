@@ -37,9 +37,10 @@ The adopted upstream `prettier-java` fixture set lives under
 `frmtr-core/src/test/resources/format/prettier-java`.
 
 The adopted tree preserves verbatim upstream `input.java` and `prettier.output.java` files. `frmtr.output.java` snapshots
-are checked in for fixtures whose upstream syntax JavaParser can parse. An explicit upstream-compatibility subset is
-compared directly against `prettier.output.java` using an 80-column, two-space, raw-trailing-whitespace-preserving
-compatibility baseline.
+are checked in for fixtures whose upstream syntax JavaParser can parse. These formatter snapshots use frmtr's normal
+style while taking the line-width matrix from the Prettier compatibility fixture options, so public default-width changes
+do not rebaseline the adopted corpus. An explicit upstream-compatibility subset is compared directly against
+`prettier.output.java` using an 80-column, two-space, raw-trailing-whitespace-preserving compatibility baseline.
 
 Fixture-local `frmtr.options.properties` metadata, inherited from parent fixture directories, records option-matrix
 overrides such as pragma-gated mode, lambda arrow-parens mode, binary-operator position, or wider line width without

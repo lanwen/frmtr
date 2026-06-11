@@ -40,7 +40,9 @@ public class BreakLongFunctionCall {
         .Object.something()
             .more();
 
-        java.averyveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylong.Object.something().more();
+        java.averyveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryveryverylong.Object
+            .something()
+            .more();
 
         Object.something()
             // comment
@@ -105,29 +107,60 @@ public class BreakLongFunctionCall {
     }
 
     public void doSomethingLongNew() {
-        return something().more().and().that().as().well().but().not().something().something();
+        return something()
+            .more()
+            .and()
+            .that()
+            .as()
+            .well()
+            .but()
+            .not()
+            .something()
+            .something();
     }
 
     public void doSomethingLongWithArgument() {
-        return something().more(firstArgument, secondArgument).and(
-            firstArgument,
-            secondArgument,
-            thirdArgument,
-            fourthArgument,
-            fifthArgument
-        );
+        return something()
+            .more(firstArgument, secondArgument)
+            .and(
+                firstArgument,
+                secondArgument,
+                thirdArgument,
+                fourthArgument,
+                fifthArgument
+            );
     }
 
     public void doSomethingLongNew2() {
-        return new Object().something().more().and().that().as().well().but().not().something();
+        return new Object()
+            .something()
+            .more()
+            .and()
+            .that()
+            .as()
+            .well()
+            .but()
+            .not()
+            .something();
     }
 
     public void doSomethingLongStatic() {
-        return Object.something().more().and().that().as().well().but().not().something();
+        return Object.something()
+            .more()
+            .and()
+            .that()
+            .as()
+            .well()
+            .but()
+            .not()
+            .something();
     }
 
     public void singleInvocationOnNewExpression() {
-        new Instance(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa).invocation(
+        new Instance(
+            aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,
+            aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        ).invocation(
             aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,
             aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
         );
@@ -138,7 +171,10 @@ public class BreakLongFunctionCall {
             aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,
             aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
         )
-            .invocation(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
+            .invocation(
+                aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,
+                aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+            )
             .andAnother();
     }
 

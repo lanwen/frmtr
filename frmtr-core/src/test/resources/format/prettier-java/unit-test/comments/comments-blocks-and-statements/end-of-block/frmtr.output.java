@@ -79,7 +79,9 @@ class J {
     void nine() /* alpha */
     {}
 
-    void one(String one) {}
+    void one(
+        String one
+    ) {}
 
     void two(String one) // alpha
     {}

@@ -2,7 +2,12 @@ class T {
 
     static String formatter(Object o) {
         String formatted = "unknown";
-        if (o instanceof Integer i || p instanceof Point || q instanceof Circle c || r instanceof Square) {
+        if (
+            o instanceof Integer i ||
+            p instanceof Point ||
+            q instanceof Circle c ||
+            r instanceof Square
+        ) {
             formatted = String.format("int %d", i);
         } else if (o instanceof Long l) {
             formatted = String.format("long %d", l);
@@ -15,7 +20,10 @@ class T {
     }
 
     public boolean test(final Object obj) {
-        return obj instanceof final Integer x && (x == 5 || x == 6 || x == 7 || x == 8 || x == 9 || x == 10 || x == 11);
+        return (
+            obj instanceof final Integer x &&
+            (x == 5 || x == 6 || x == 7 || x == 8 || x == 9 || x == 10 || x == 11)
+        );
     }
 
     void test(Buyer other) {
@@ -25,18 +33,31 @@ class T {
             case Buyer b when this.bestPrice > b.bestPrice -> {
                 return true;
             }
-            case Buyer titi when this.bestPriceaaaaaaaazzzzzaaaaaaaaaq > b.bestPrice -> true;
-            case Buyer titi when this.bestPriceaaaaaazzzaaaaaaaaaq > b.bestPrice -> true;
-            case Buyer b when (
-                this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice
+            case Buyer titi when (
+                this.bestPriceaaaaaaaazzzzzaaaaaaaaaq > b.bestPrice
+            ) -> true;
+            case Buyer titi when (
+                this.bestPriceaaaaaazzzaaaaaaaaaq > b.bestPrice
             ) -> true;
             case Buyer b when (
-                this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice
+                this.bestPrice > b.bestPrice &&
+                this.bestPrice > b.bestPrice &&
+                this.bestPrice > b.bestPrice &&
+                this.bestPrice > b.bestPrice
+            ) -> true;
+            case Buyer b when (
+                this.bestPrice > b.bestPrice &&
+                this.bestPrice > b.bestPrice &&
+                this.bestPrice > b.bestPrice &&
+                this.bestPrice > b.bestPrice
             ) -> {
                 return true;
             }
             case Buyer b when (
-                this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice && this.bestPrice > b.bestPrice
+                this.bestPrice > b.bestPrice &&
+                this.bestPrice > b.bestPrice &&
+                this.bestPrice > b.bestPrice &&
+                this.bestPrice > b.bestPrice
             ) -> {
                 return true;
             }
@@ -57,16 +78,38 @@ class T {
             case MyRecord(A a, B b) -> 0;
             case MyRecord(MyRecord(A a), B b) -> 0;
             case MyRecord(
-                MyLongRecordTypeName(LongTypeName longVariableName, LongTypeName longVariableName),
-                MyLongRecordTypeName(LongTypeName longVariableName, LongTypeName longVariableName)
+                MyLongRecordTypeName(
+                    LongTypeName longVariableName,
+                    LongTypeName longVariableName
+                ),
+                MyLongRecordTypeName(
+                    LongTypeName longVariableName,
+                    LongTypeName longVariableName
+                )
             ) -> 0;
-            case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) -> 0;
-            case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when (
-                this.longVariableName > longVariableName && this.longVariableName > longVariableName
+            case MyRecord(
+                LongTypeName longVariableName,
+                LongTypeName longVariableName
             ) -> 0;
-            case MyRecord(LongTypeName longVariableName, LongTypeName longVariableName) when (
-                this.longVariableName > longVariableName && this.longVariableName > longVariableName
-            ) -> longMethodName(longVariableName, longVariableName, longVariableName, longVariableName);
+            case MyRecord(
+                LongTypeName longVariableName,
+                LongTypeName longVariableName
+            ) when (
+                this.longVariableName > longVariableName &&
+                this.longVariableName > longVariableName
+            ) -> 0;
+            case MyRecord(
+                LongTypeName longVariableName,
+                LongTypeName longVariableName
+            ) when (
+                this.longVariableName > longVariableName &&
+                this.longVariableName > longVariableName
+            ) -> longMethodName(
+                longVariableName,
+                longVariableName,
+                longVariableName,
+                longVariableName
+            );
             case Outer.Inner(String s) -> {}
             case final String s -> s;
         };

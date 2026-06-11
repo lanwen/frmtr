@@ -10,11 +10,19 @@ public class Instantiation {
             "quantity",
             "of",
             "arguments",
-            new Nested("that", "have", "nested", new Nested("instantiation"), "everywhere", "!"),
+            new Nested(
+                "that",
+                "have",
+                "nested",
+                new Nested("instantiation"),
+                "everywhere",
+                "!"
+            ),
             "should",
             "wrap"
         );
 
-        new MethodFollowingConstructor().aLongEnoughMethodNameToExtendPastPrintWidth();
+        new MethodFollowingConstructor()
+            .aLongEnoughMethodNameToExtendPastPrintWidth();
     }
 }

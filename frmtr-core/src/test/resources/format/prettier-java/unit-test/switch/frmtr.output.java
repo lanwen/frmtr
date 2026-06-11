@@ -155,9 +155,27 @@ class Switch {
         switch (testEnum) {
             case FOO -> System.out.println("Foo!");
             case BAR, BAZ -> System.out.println("Not Foo!");
-            case BAR, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ, BAZ -> System.out.println(
-                "Not Foo!"
-            );
+            case
+                BAR,
+                BAZ,
+                BAZ,
+                BAZ,
+                BAZ,
+                BAZ,
+                BAZ,
+                BAZ,
+                BAZ,
+                BAZ,
+                BAZ,
+                BAZ,
+                BAZ,
+                BAZ,
+                BAZ,
+                BAZ,
+                BAZ,
+                BAZ,
+                BAZ,
+                BAZ -> System.out.println("Not Foo!");
         }
     }
 

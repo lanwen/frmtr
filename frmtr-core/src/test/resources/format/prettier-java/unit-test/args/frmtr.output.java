@@ -8,7 +8,14 @@ public class Args {
 
     public void three(String one, Integer two, String three) {}
 
-    public void longListOfParametersThatShouldBreak(String one, Integer two, String three, Integer four, String five, Integer six) {}
+    public void longListOfParametersThatShouldBreak(
+        String one,
+        Integer two,
+        String three,
+        Integer four,
+        String five,
+        Integer six
+    ) {}
 
     void lastParameterDotDotDot(String str1, String... str2) {}
 

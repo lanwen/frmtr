@@ -46,9 +46,16 @@ public class Lambda {
     }
 
     public void lambdaWithoutBracesWhichBreak() {
-        call(x -> foo.isVeryVeryVeryLongConditionTrue() && foo.isAnotherVeryVeryLongConditionTrue());
-        aaaaaaaaaa(bbbbbbbbbb -> "123456789012345678901234567890123456789012345678");
-        aaaaaaaaaa(bbbbbbbbbb -> cccccccccc("123456789012345678901234567890123456"));
+        call(x ->
+            foo.isVeryVeryVeryLongConditionTrue() &&
+                foo.isAnotherVeryVeryLongConditionTrue()
+        );
+        aaaaaaaaaa(
+            bbbbbbbbbb -> "123456789012345678901234567890123456789012345678"
+        );
+        aaaaaaaaaa(bbbbbbbbbb -> cccccccccc(
+                "123456789012345678901234567890123456"
+        ));
     }
 
     public void chainCallWithLambda() {
@@ -78,10 +85,12 @@ public class Lambda {
             .collect(Collectors.toList());
 
         final List<Integer> values = Stream.of(1, 2)
-            .map((aVeryLongListOfParameter, aVeryLongListOfParameter, aParameterTha) -> {
-                // testing method
-                return n * 2;
-            })
+            .map(
+                (aVeryLongListOfParameter, aVeryLongListOfParameter, aParameterTha) -> {
+                    // testing method
+                    return n * 2;
+                }
+            )
             .collect(Collectors.toList());
     }
 
@@ -90,11 +99,16 @@ public class Lambda {
     }
 
     public void longLambdaAssignation() {
-        V t =
-            (aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParameter, aVeryLongListOfParaa) -> {
-                // testing method
-                return n * 2;
-            };
+        V t = (
+            aVeryLongListOfParameter,
+            aVeryLongListOfParameter,
+            aVeryLongListOfParameter,
+            aVeryLongListOfParameter,
+            aVeryLongListOfParaa
+        ) -> {
+            // testing method
+            return n * 2;
+        };
     }
 
     public void callWithLambdaAndExtraParameter() {
@@ -130,11 +144,17 @@ public class Lambda {
         );
     }
 
-    private static <T extends Group> Function<Constructor<?>, T> createInstance(Group entity) {
+    private static <T extends Group> Function<Constructor<?>, T> createInstance(
+        Group entity
+    ) {
         return ctor ->
             Try.of(a, () -> {
                 @SuppressWarnings("unchecked")
-                var ng = (T) ctor.newInstance(entity.getId(), entity.getSystemGenerated(), entity.getVersionKey());
+                var ng = (T) ctor.newInstance(
+                    entity.getId(),
+                    entity.getSystemGenerated(),
+                    entity.getVersionKey()
+                );
                 return ng;
             }).getOrElseThrow(ex -> new RuntimeException(ex));
     }
@@ -146,25 +166,49 @@ public class Lambda {
     }
 
     void singleLambdaWithBlockLastArgumentAndLongArguments() {
-        a.of(aaaaaaaaaaaaaaaaaaaaaaaaaa, bbbbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccccccccc, dddddddddddddddddddddddddd, e -> {
-            return f;
-        });
+        a.of(
+            aaaaaaaaaaaaaaaaaaaaaaaaaa,
+            bbbbbbbbbbbbbbbbbbbbbbbbbb,
+            cccccccccccccccccccccccccc,
+            dddddddddddddddddddddddddd,
+            e -> {
+                return f;
+            }
+        );
 
-        this.a(aaaaaaaaaaaaaaaaaaaaaaaaaa, bbbbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccccccccc, dddddddddddddddddddddddddd, e -> {
-            return f;
-        });
+        this.a(
+            aaaaaaaaaaaaaaaaaaaaaaaaaa,
+            bbbbbbbbbbbbbbbbbbbbbbbbbb,
+            cccccccccccccccccccccccccc,
+            dddddddddddddddddddddddddd,
+            e -> {
+                return f;
+            }
+        );
     }
 
     void singleLambdaWithBlockLastArgumentAndLongLambdaArgument() {
-        a.of(b, c, d, eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee -> {
-            return f;
-        });
+        a.of(
+            b,
+            c,
+            d,
+            eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee -> {
+                return f;
+            }
+        );
     }
 
     void singleLambdaWithBlockLastArgumentAndLongLambdaArguments() {
-        a.of(b, (cccccccccccccccccccccccccc, dddddddddddddddddddddddddd, eeeeeeeeeeeeeeeeeeeeeeeeee) -> {
-            return f;
-        });
+        a.of(
+            b,
+            (
+                cccccccccccccccccccccccccc,
+                dddddddddddddddddddddddddd,
+                eeeeeeeeeeeeeeeeeeeeeeeeee
+            ) -> {
+                return f;
+            }
+        );
     }
 
     void multipleLambdaArguments() {
@@ -195,34 +239,129 @@ public class Lambda {
         });
 
         aaaaaaaaaaaaaaaaaaaaaaaa(
-            (bbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccccccc, dddddddddddddddddddddddd) -> eeeeeeeeeeeeeeeeeeeeeeee.ffffffffffffffffffffffff()
+            (
+                bbbbbbbbbbbbbbbbbbbbbbbb,
+                cccccccccccccccccccccccc,
+                dddddddddddddddddddddddd
+            ) -> eeeeeeeeeeeeeeeeeeeeeeee.ffffffffffffffffffffffff()
         );
 
-        a.b(c -> d -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
+        a.b(
+            c -> d ->
+                eeeeeeeeee.ffffffffff(
+                    gggggggggg,
+                    hhhhhhhhhh,
+                    iiiiiiiiii,
+                    jjjjjjjjjj,
+                    kkkkkkkkkk
+                )
+        );
 
-        a.b(c -> d && eeeeeeeeee.ffffffffff() ? g && hhhhhhhhhh.iiiiiiiiii() : j && kkkkkkkkkk.llllllllll());
+        a.b(c -> d && eeeeeeeeee.ffffffffff()
+                ? g && hhhhhhhhhh.iiiiiiiiii()
+                : j && kkkkkkkkkk.llllllllll()
+        );
 
-        a.b(c -> d && eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk) > 0);
+        a.b(c ->
+            d &&
+                eeeeeeeeee.ffffffffff(
+                    gggggggggg,
+                    hhhhhhhhhh,
+                    iiiiiiiiii,
+                    jjjjjjjjjj,
+                    kkkkkkkkkk
+                ) > 0
+        );
 
-        a.b(c, (c0, c1) -> d && eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk) > 0);
+        a.b(c, (c0, c1) ->
+            d &&
+                eeeeeeeeee.ffffffffff(
+                    gggggggggg,
+                    hhhhhhhhhh,
+                    iiiiiiiiii,
+                    jjjjjjjjjj,
+                    kkkkkkkkkk
+                ) > 0
+        );
 
-        a.b(c -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk) > 0);
+        a.b(
+            c ->
+                eeeeeeeeee.ffffffffff(
+                    gggggggggg,
+                    hhhhhhhhhh,
+                    iiiiiiiiii,
+                    jjjjjjjjjj,
+                    kkkkkkkkkk
+                ) > 0
+        );
 
-        a.b(c, (c0, c1) -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk) > 0);
+        a.b(
+            c,
+            (c0, c1) ->
+                eeeeeeeeee.ffffffffff(
+                    gggggggggg,
+                    hhhhhhhhhh,
+                    iiiiiiiiii,
+                    jjjjjjjjjj,
+                    kkkkkkkkkk
+                ) > 0
+        );
 
-        a.b(c -> d && eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
+        a.b(c ->
+            d &&
+                eeeeeeeeee.ffffffffff(
+                    gggggggggg,
+                    hhhhhhhhhh,
+                    iiiiiiiiii,
+                    jjjjjjjjjj,
+                    kkkkkkkkkk
+                )
+        );
 
-        a.b(c, (c0, c1) -> d && eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
+        a.b(c, (c0, c1) ->
+            d &&
+                eeeeeeeeee.ffffffffff(
+                    gggggggggg,
+                    hhhhhhhhhh,
+                    iiiiiiiiii,
+                    jjjjjjjjjj,
+                    kkkkkkkkkk
+                )
+        );
 
-        a.b(c -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
+        a.b(c -> eeeeeeeeee.ffffffffff(
+                gggggggggg,
+                hhhhhhhhhh,
+                iiiiiiiiii,
+                jjjjjjjjjj,
+                kkkkkkkkkk
+        ));
 
         a.b(c -> {
-            eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk);
+            eeeeeeeeee.ffffffffff(
+                gggggggggg,
+                hhhhhhhhhh,
+                iiiiiiiiii,
+                jjjjjjjjjj,
+                kkkkkkkkkk
+            );
         });
 
-        a.b((c0, c1) -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
+        a.b((c0, c1) -> eeeeeeeeee.ffffffffff(
+                gggggggggg,
+                hhhhhhhhhh,
+                iiiiiiiiii,
+                jjjjjjjjjj,
+                kkkkkkkkkk
+        ));
 
-        a.b(c, (c0, c1) -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk));
+        a.b(c, (c0, c1) -> eeeeeeeeee.ffffffffff(
+                gggggggggg,
+                hhhhhhhhhh,
+                iiiiiiiiii,
+                jjjjjjjjjj,
+                kkkkkkkkkk
+        ));
 
         a(
             // comment
@@ -291,11 +430,19 @@ public class Lambda {
 
         aaaaaaaaaaaaaaaaaaaaaaaa(
             /* comment */
-            (bbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccccccc, dddddddddddddddddddddddd) -> eeeeeeeeeeeeeeeeeeeeeeee.ffffffffffffffffffffffff()
+            (
+                bbbbbbbbbbbbbbbbbbbbbbbb,
+                cccccccccccccccccccccccc,
+                dddddddddddddddddddddddd
+            ) -> eeeeeeeeeeeeeeeeeeeeeeee.ffffffffffffffffffffffff()
         );
 
         aaaaaaaaaaaaaaaaaaaaaaaa(
-            /* comment */ (bbbbbbbbbbbbbbbbbbbbbbbb, cccccccccccccccccccccccc, dddddddddddddddddddddddd) -> eeeeeeeeeeeeeeeeeeeeeeee.ffffffffffffffffffffffff()
+            /* comment */ (
+                bbbbbbbbbbbbbbbbbbbbbbbb,
+                cccccccccccccccccccccccc,
+                dddddddddddddddddddddddd
+            ) -> eeeeeeeeeeeeeeeeeeeeeeee.ffffffffffffffffffffffff()
         );
 
         a.b(
@@ -304,7 +451,15 @@ public class Lambda {
                 c0,
                 c1
                 // comment
-            ) -> d && eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk) > 0
+            ) ->
+                d &&
+                    eeeeeeeeee.ffffffffff(
+                        gggggggggg,
+                        hhhhhhhhhh,
+                        iiiiiiiiii,
+                        jjjjjjjjjj,
+                        kkkkkkkkkk
+                    ) > 0
         );
 
         a.b(
@@ -313,7 +468,14 @@ public class Lambda {
                 c0,
                 c1
                 // comment
-            ) -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk) > 0
+            ) ->
+                eeeeeeeeee.ffffffffff(
+                    gggggggggg,
+                    hhhhhhhhhh,
+                    iiiiiiiiii,
+                    jjjjjjjjjj,
+                    kkkkkkkkkk
+                ) > 0
         );
 
         a.b(
@@ -322,24 +484,36 @@ public class Lambda {
                 c0,
                 c1
                 // comment
-            ) -> d && eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk)
+            ) ->
+                d &&
+                    eeeeeeeeee.ffffffffff(
+                        gggggggggg,
+                        hhhhhhhhhh,
+                        iiiiiiiiii,
+                        jjjjjjjjjj,
+                        kkkkkkkkkk
+                    )
         );
 
         a.b(
-            (
-                c0,
-                c1
-                // comment
-            ) -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk)
+            (c0, c1) -> eeeeeeeeee.ffffffffff(
+                gggggggggg,
+                hhhhhhhhhh,
+                iiiiiiiiii,
+                jjjjjjjjjj,
+                kkkkkkkkkk
+            )
         );
 
         a.b(
             c,
-            (
-                c0,
-                c1
-                // comment
-            ) -> eeeeeeeeee.ffffffffff(gggggggggg, hhhhhhhhhh, iiiiiiiiii, jjjjjjjjjj, kkkkkkkkkk)
+            (c0, c1) -> eeeeeeeeee.ffffffffff(
+                gggggggggg,
+                hhhhhhhhhh,
+                iiiiiiiiii,
+                jjjjjjjjjj,
+                kkkkkkkkkk
+            )
         );
     }
 
@@ -408,10 +582,12 @@ class T {
     }
 
     T() {
-        super((aVeryLongListOfParameter, aVeryLongListOfParameter, aParameterThatS) -> {
-            // testing method
-            return n * 2;
-        });
+        super(
+            (aVeryLongListOfParameter, aVeryLongListOfParameter, aParameterThatS) -> {
+                // testing method
+                return n * 2;
+            }
+        );
     }
 
     T() {
@@ -443,10 +619,12 @@ enum Enum {
             return n * 2;
         }
     ),
-    VALUE((aVeryLongListOfParameter, aVeryLongListOfParameter, aParameterThatS) -> {
-        // testing method
-        return n * 2;
-    }),
+    VALUE(
+        (aVeryLongListOfParameter, aVeryLongListOfParameter, aParameterThatS) -> {
+            // testing method
+            return n * 2;
+        }
+    ),
     VALUE(x -> {
         // testing method
         return n * 2;

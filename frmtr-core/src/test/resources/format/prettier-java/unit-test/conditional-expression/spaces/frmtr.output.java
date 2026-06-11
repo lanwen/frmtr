@@ -1,17 +1,22 @@
 class ConditionalExpression {
 
     int ternaryOperationThatShouldBreak() {
-        int shortInteger = thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne
-            ? thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne
-            : thisIsAShortInteger;
+        int shortInteger =
+            thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne
+                ? thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne
+                : thisIsAShortInteger;
         return thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne
             ? thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne
             : thisIsAShortInteger;
     }
 
     int ternaryOperationThatShouldBreak2() {
-        int shortInteger = thisIsAVeryLongInteger ? thisIsAnotherVeryLongOne : thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne;
-        return thisIsAVeryLongInteger ? thisIsAnotherVeryLongOne : thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne;
+        int shortInteger = thisIsAVeryLongInteger
+            ? thisIsAnotherVeryLongOne
+            : thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne;
+        return thisIsAVeryLongInteger
+            ? thisIsAnotherVeryLongOne
+            : thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne;
     }
 
     void ternaryOperationThatShouldBreak3() {
@@ -52,20 +57,50 @@ class ConditionalExpression {
     }
 
     void ternaryInParentheses() {
-        (aaaaaaaaaa ? bbbbbbbbbb : cccccccccc.dddddddddd().eeeeeeeeee().ffffffffff());
+        (aaaaaaaaaa
+            ? bbbbbbbbbb
+            : cccccccccc.dddddddddd().eeeeeeeeee().ffffffffff());
     }
 
     void assignment() {
-        Aaaaaaaaaa aaaaaaaaaa = bbbbbbbbbb(cccccccccc, dddddddddd, eeeeeeeeee) != ffffffffff ? gggggggggg : hhhhhhhhhh;
+        Aaaaaaaaaa aaaaaaaaaa =
+            bbbbbbbbbb(cccccccccc, dddddddddd, eeeeeeeeee) != ffffffffff
+                ? gggggggggg
+                : hhhhhhhhhh;
 
-        Aaaaaaaaaa aaaaaaaaaa = bbbbbbbbbb(cccccccccccccccccccc, dddddddddd, eeeeeeeeee) != ffffffffff ? gggggggggg : hhhhhhhhhh;
+        Aaaaaaaaaa aaaaaaaaaa =
+            bbbbbbbbbb(cccccccccccccccccccc, dddddddddd, eeeeeeeeee) !=
+            ffffffffff
+                ? gggggggggg
+                : hhhhhhhhhh;
 
-        Aaaaaaaaaa aaaaaaaaaa = bbbbbbbbbb(cccccccccccccccccccc, dddddddddddddddddddd, eeeeeeeeee) != ffffffffff ? gggggggggg : hhhhhhhhhh;
+        Aaaaaaaaaa aaaaaaaaaa =
+            bbbbbbbbbb(
+                cccccccccccccccccccc,
+                dddddddddddddddddddd,
+                eeeeeeeeee
+            ) != ffffffffff
+                ? gggggggggg
+                : hhhhhhhhhh;
 
-        aaaaaaaaaa = bbbbbbbbbb(cccccccccc, dddddddddd, eeeeeeeeee) != ffffffffff ? gggggggggg : hhhhhhhhhh;
+        aaaaaaaaaa =
+            bbbbbbbbbb(cccccccccc, dddddddddd, eeeeeeeeee) != ffffffffff
+                ? gggggggggg
+                : hhhhhhhhhh;
 
-        aaaaaaaaaa = bbbbbbbbbb(cccccccccccccccccccc, dddddddddd, eeeeeeeeee) != ffffffffff ? gggggggggg : hhhhhhhhhh;
+        aaaaaaaaaa =
+            bbbbbbbbbb(cccccccccccccccccccc, dddddddddd, eeeeeeeeee) !=
+            ffffffffff
+                ? gggggggggg
+                : hhhhhhhhhh;
 
-        aaaaaaaaaa = bbbbbbbbbb(cccccccccccccccccccc, dddddddddddddddddddd, eeeeeeeeee) != ffffffffff ? gggggggggg : hhhhhhhhhh;
+        aaaaaaaaaa =
+            bbbbbbbbbb(
+                cccccccccccccccccccc,
+                dddddddddddddddddddd,
+                eeeeeeeeee
+            ) != ffffffffff
+                ? gggggggggg
+                : hhhhhhhhhh;
     }
 }

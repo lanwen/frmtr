@@ -4,7 +4,6 @@ public class PrettierIgnoreClass {
 
   }
 }
-
 // @formatter:on
 public class PrettierIgnoreClass {
 

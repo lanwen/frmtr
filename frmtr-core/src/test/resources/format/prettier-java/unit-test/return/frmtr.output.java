@@ -21,19 +21,43 @@ public abstract class Return {
     }
 
     Object returnSomethingWhichBreak() {
-        return oneVariable + secondVariable + thirdVariable + fourthVariable + fifthVariable + sixthVariable + seventhVariable;
+        return (
+            oneVariable +
+            secondVariable +
+            thirdVariable +
+            fourthVariable +
+            fifthVariable +
+            sixthVariable +
+            seventhVariable
+        );
     }
 
     Object returnSomethingWhichBreakAndAlreadyInParenthesis() {
-        return ( oneVariable + secondVariable + thirdVariable + fourthVariable + fifthVariable + sixthVariable + seventhVariable );
+        return (
+            oneVariable +
+            secondVariable +
+            thirdVariable +
+            fourthVariable +
+            fifthVariable +
+            sixthVariable +
+            seventhVariable
+        );
     }
 
     boolean unaryParenthesized() {
-        return !(r.getLeft() > getRight() || r.getRight() < getLeft() || r.getTop() > getBottom() || r.getBottom() < getTop());
+        return !(
+            r.getLeft() > getRight() ||
+            r.getRight() < getLeft() ||
+            r.getTop() > getBottom() ||
+            r.getBottom() < getTop()
+        );
     }
 
     // Bug fix #290
     public boolean shouldBreakInOneLine(Example that) {
-        return oneVeryLongPrimaryExpression && andYetAnotherVeryVeryLongPrimaryExpression;
+        return (
+            oneVeryLongPrimaryExpression &&
+            andYetAnotherVeryVeryLongPrimaryExpression
+        );
     }
 }

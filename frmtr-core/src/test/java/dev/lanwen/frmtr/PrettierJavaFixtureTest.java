@@ -133,7 +133,7 @@ final class PrettierJavaFixtureTest {
     void currentFormatterOutputMatchesCheckedInSnapshot(Fixture fixture) throws IOException {
         String input = read(fixture.input());
 
-        String formatted = Frmtr.format(input);
+        String formatted = Frmtr.format(input, formatterSnapshotOptions(fixture));
 
         assertThat(formatted).isEqualTo(read(fixture.frmtrOutput()));
     }
@@ -241,6 +241,16 @@ final class PrettierJavaFixtureTest {
 
     private static FormatterOptions prettierCompatibilityOptions(Fixture fixture) {
         return PrettierJavaFixtureOptions.resolve(fixture.fixtureRoot(), fixture.directory());
+    }
+
+    private static FormatterOptions formatterSnapshotOptions(Fixture fixture) {
+        return FormatterOptions.withJavaLanguageLevel(
+                prettierCompatibilityOptions(fixture).lineWidth(),
+                FormatterOptions.IndentStyle.SPACE,
+                FormatterOptions.DEFAULT_INDENT_WIDTH,
+                FormatterOptions.LineEnding.LF,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
     }
 
     private static Fixture fixture(Path root, Path input) {

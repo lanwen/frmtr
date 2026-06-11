@@ -9,10 +9,11 @@ import java.util.Objects;
  * decisions that must stay stable across all Java constructs. Node-specific layout rules, such as how method chains or
  * switch entries break, remain internal formatter policy rather than public options.
  *
- * <p>The default configuration is returned by {@link #defaults()}: 140 columns, four-space indentation, LF line
- * endings, a trailing newline, no raw-trailing-whitespace preservation, no require-pragma gate, source-preserving
- * single-parameter lambda parentheses, binary operators at the end of broken continuation lines, parse-error recovery,
- * and the latest Java language level exposed by the bundled JavaParser dependency's bleeding-edge parser mode.
+ * <p>The default configuration is returned by {@link #defaults()}: the default target line width, four-space
+ * indentation, LF line endings, a trailing newline, no raw-trailing-whitespace preservation, no require-pragma gate,
+ * source-preserving single-parameter lambda parentheses, binary operators at the end of broken continuation lines,
+ * parse-error recovery, and the latest Java language level exposed by the bundled JavaParser dependency's bleeding-edge
+ * parser mode.
  *
  * <p>Use the canonical record constructor when every option is intentionally selected. Use the static factory methods
  * for common partial configurations where the remaining formatter policy should stay at defaults, then use focused
@@ -71,7 +72,7 @@ public record FormatterOptions(
      * <p>This width is intentionally wider than the compatibility fixture mode used in tests. Adapters may expose this
      * as a user setting when projects prefer narrower or wider Java output.
      */
-    public static final int DEFAULT_LINE_WIDTH = 140;
+    public static final int DEFAULT_LINE_WIDTH = 120;
 
     /**
      * Default number of spaces per indentation level used by {@link #defaults()}.

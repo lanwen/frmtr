@@ -150,6 +150,8 @@ for common partial configurations that keep the remaining formatter policy at de
 
 Current public formatter policy includes:
 
+- `FormatterOptions.lineWidth`: the public target maximum rendered column width. The default is 120 columns, and the CLI
+  and Gradle adapters use the same core default unless users override it.
 - `FormatterOptions.JavaLanguageLevel`: the public parser-level setting. `LATEST_AVAILABLE` maps to JavaParser's
   bleeding-edge parser mode, while `UNSET` deliberately selects JavaParser raw mode.
 - `FormatterOptions.ParseErrorBehavior`: the public parse-problem policy. The default is `RECOVER`; `FAIL` preserves
@@ -310,4 +312,5 @@ The test suite is module-scoped:
 - `:frmtr-cli:nativeTest`: explicit native-image compatibility coverage outside the default JVM `check` lifecycle.
 
 Golden fixture strategy, the adopted upstream `prettier-java` corpus, and new-rule coverage expectations are documented
-in [docs/testing-strategy.md](docs/testing-strategy.md).
+in [docs/testing-strategy.md](docs/testing-strategy.md). Adopted `prettier-java` snapshots use fixture-owned line-width
+options rather than public formatter defaults.

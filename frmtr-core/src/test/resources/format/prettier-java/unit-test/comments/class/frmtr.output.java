@@ -79,7 +79,9 @@ import org.checkerframework.checker.nullness.qual.Nullable;
  */
 @Beta
 @GwtCompatible(emulated = true)
-public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements Serializable {
+public final class ArrayTable<R, C, V>
+    extends AbstractTable<R, C, V>
+    implements Serializable {
 
     /**
      * Returns the square of a given number
@@ -99,7 +101,10 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
      * @throws IllegalArgumentException if {@code rowKeys} or {@code columnKeys} contains duplicates
      *     or if exactly one of {@code rowKeys} or {@code columnKeys} is empty.
      */
-    public static <R, C, V> ArrayTable<R, C, V> create(Iterable<? extends R> rowKeys, Iterable<? extends C> columnKeys) {
+    public static <R, C, V> ArrayTable<R, C, V> create(
+        Iterable<? extends R> rowKeys,
+        Iterable<? extends C> columnKeys
+    ) {
         return new ArrayTable<>(rowKeys, columnKeys);
     }
 
@@ -128,7 +133,9 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
      * @throws NullPointerException if {@code table} has a null key
      */
     public static <R, C, V> ArrayTable<R, C, V> create(Table<R, C, V> table) {
-        return (table instanceof ArrayTable<?, ?, ?>) ? new ArrayTable<R, C, V>((ArrayTable<R, C, V>) table) : new ArrayTable<R, C, V>(table);
+        return (table instanceof ArrayTable<?, ?, ?>)
+            ? new ArrayTable<R, C, V>((ArrayTable<R, C, V>) table)
+            : new ArrayTable<R, C, V>(table);
     }
 
     private final ImmutableList<R> rowList;
@@ -142,7 +149,10 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
 
     private final V[][] array;
 
-    private ArrayTable(Iterable<? extends R> rowKeys, Iterable<? extends C> columnKeys) {
+    private ArrayTable(
+        Iterable<? extends R> rowKeys,
+        Iterable<? extends C> columnKeys
+    ) {
         this.rowList = ImmutableList.copyOf(rowKeys);
         this.columnList = ImmutableList.copyOf(columnKeys);
         checkArgument(rowList.isEmpty() == columnList.isEmpty());
@@ -156,7 +166,15 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
         rowKeyToIndex = Maps.indexMap(rowList);
         columnKeyToIndex = Maps.indexMap(columnList);
 
-        @SuppressWarnings({ "all", "deprecation", "unchecked", "fallthrough", "path", "serial", "finally" })
+        @SuppressWarnings({
+            "all",
+            "deprecation",
+            "unchecked",
+            "fallthrough",
+            "path",
+            "serial",
+            "finally",
+        })
         V[][] tmpArray = (V[][]) new Object[rowList.size()][columnList.size()];
         array = tmpArray;
         // Necessary because in GWT the arrays are initialized with "undefined" instead of null.
@@ -177,11 +195,18 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
         V[][] copy = (V[][]) new Object[rowList.size()][columnList.size()];
         array = copy;
         for (int i = 0; i < rowList.size(); i++) {
-            System.arraycopy(table.array[i], 0, copy[i], 0, table.array[i].length);
+            System.arraycopy(
+                table.array[i],
+                0,
+                copy[i],
+                0,
+                table.array[i].length
+            );
         }
     }
 
-    private abstract static class ArrayMap<K, V> extends IteratorBasedAbstractMap<K, V> {
+    private abstract static class ArrayMap<K, V>
+        extends IteratorBasedAbstractMap<K, V> {
 
         private final ImmutableMap<K, Integer> keyIndex;
 
@@ -246,7 +271,11 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
 
         @Override
         Spliterator<Entry<K, V>> entrySpliterator() {
-            return CollectSpliterators.indexed(size(), Spliterator.ORDERED, this::getEntry);
+            return CollectSpliterators.indexed(
+                size(),
+                Spliterator.ORDERED,
+                this::getEntry
+            );
         }
 
         // TODO(lowasser): consider an optimized values() implementation
@@ -270,7 +299,9 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
         public V put(K key, V value) {
             Integer index = keyIndex.get(key);
             if (index == null) {
-                throw new IllegalArgumentException(getKeyRole() + " " + key + " not in " + keyIndex.keySet());
+                throw new IllegalArgumentException(
+                    getKeyRole() + " " + key + " not in " + keyIndex.keySet()
+                );
             }
             return setValue(index, value);
         }
@@ -356,7 +387,11 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
     @GwtIncompatible // reflection
     public V[][] toArray(Class<V> valueClass) {
         @SuppressWarnings("unchecked") // TODO: safe?
-        V[][] copy = (V[][]) Array.newInstance(valueClass, rowList.size(), columnList.size());
+        V[][] copy = (V[][]) Array.newInstance(
+            valueClass,
+            rowList.size(),
+            columnList.size()
+        );
         for (int i = 0; i < rowList.size(); i++) {
             System.arraycopy(array[i], 0, copy[i], 0, array[i].length);
         }
@@ -387,7 +422,10 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
      * constructed.
      */
     @Override
-    public boolean contains(@Nullable Object rowKey, @Nullable Object columnKey) {
+    public boolean contains(
+        @Nullable Object rowKey,
+        @Nullable Object columnKey
+    ) {
         return containsRow(rowKey) && containsColumn(columnKey);
     }
 
@@ -425,7 +463,9 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
     public V get(@Nullable Object rowKey, @Nullable Object columnKey) {
         Integer rowIndex = rowKeyToIndex.get(rowKey);
         Integer columnIndex = columnKeyToIndex.get(columnKey);
-        return (rowIndex == null || columnIndex == null) ? null : at(rowIndex, columnIndex);
+        return (rowIndex == null || columnIndex == null)
+            ? null
+            : at(rowIndex, columnIndex);
     }
 
     /**
@@ -450,7 +490,12 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
         Integer rowIndex = rowKeyToIndex.get(rowKey);
         checkArgument(rowIndex != null, "Row %s not in %s", rowKey, rowList);
         Integer columnIndex = columnKeyToIndex.get(columnKey);
-        checkArgument(columnIndex != null, "Column %s not in %s", columnKey, columnList);
+        checkArgument(
+            columnIndex != null,
+            "Column %s not in %s",
+            columnKey,
+            columnList
+        );
         return set(rowIndex, columnIndex, value);
     }
 
@@ -545,7 +590,11 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
 
     @Override
     Spliterator<Cell<R, C, V>> cellSpliterator() {
-        return CollectSpliterators.indexed(size(), Spliterator.ORDERED | Spliterator.NONNULL | Spliterator.DISTINCT, this::getCell);
+        return CollectSpliterators.indexed(
+            size(),
+            Spliterator.ORDERED | Spliterator.NONNULL | Spliterator.DISTINCT,
+            this::getCell
+        );
     }
 
     private Cell<R, C, V> getCell(final int index) {
@@ -591,7 +640,9 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
     public Map<R, V> column(C columnKey) {
         checkNotNull(columnKey);
         Integer columnIndex = columnKeyToIndex.get(columnKey);
-        return (columnIndex == null) ? ImmutableMap.<R, V>of() : new Column(columnIndex);
+        return (columnIndex == null)
+            ? ImmutableMap.<R, V>of()
+            : new Column(columnIndex);
     }
 
     private class Column extends ArrayMap<R, V> {
@@ -782,7 +833,11 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
 
     @Override
     Spliterator<V> valuesSpliterator() {
-        return CollectSpliterators.indexed(size(), Spliterator.ORDERED, this::getValue);
+        return CollectSpliterators.indexed(
+            size(),
+            Spliterator.ORDERED,
+            this::getValue
+        );
     }
 
     private static final long serialVersionUID = 0;
@@ -804,14 +859,31 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
         countryRepository.saveAndFlush(country);
 
         // Get all the countryList
-        restCountryMockMvc
-            .perform(get("/api/countries?sort=id,desc"))
+        restCountryMockMvc.perform(get("/api/countries?sort=id,desc"))
             .andExpect(status().isOk())
-            .andExpect(content().contentType(MediaType.APPLICATION_JSON_UTF8_VALUE))
-            .andExpect(jsonPath("$.[*].id").value(hasItem(country.getId().intValue())))
-            .andExpect(jsonPath("$.[*].isoCode").value(hasItem(DEFAULT_ISO_CODE.toString())))
-            .andExpect(jsonPath("$.[*].label").value(hasItem(DEFAULT_LABEL.toString())))
-            .andExpect(jsonPath("$.[*].display").value(hasItem(DEFAULT_DISPLAY.booleanValue())))
-            .andExpect(jsonPath("$.[*].internationalDialingCode").value(hasItem(DEFAULT_INTERNATIONAL_DIALING_CODE.toString())));
+            .andExpect(
+                content().contentType(MediaType.APPLICATION_JSON_UTF8_VALUE)
+            )
+            .andExpect(
+                jsonPath("$.[*].id").value(hasItem(country.getId().intValue()))
+            )
+            .andExpect(
+                jsonPath("$.[*].isoCode").value(
+                    hasItem(DEFAULT_ISO_CODE.toString())
+                )
+            )
+            .andExpect(
+                jsonPath("$.[*].label").value(hasItem(DEFAULT_LABEL.toString()))
+            )
+            .andExpect(
+                jsonPath("$.[*].display").value(
+                    hasItem(DEFAULT_DISPLAY.booleanValue())
+                )
+            )
+            .andExpect(
+                jsonPath("$.[*].internationalDialingCode").value(
+                    hasItem(DEFAULT_INTERNATIONAL_DIALING_CODE.toString())
+                )
+            );
     }
 }

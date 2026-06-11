@@ -4,15 +4,26 @@ public class Cast {
         var myElem = (int) othrElement;
         var myElem = (A) othrElement;
         var myElem = (A) (othrElement, value) -> othrElement + value;
-        var myElem = (Aaeaozeaonzeoazneaozenazonelkadndpndpazdpazdpazdpazdpazeazpeaazdpazdpazpdazdpa) othrElement;
+        var myElem =
+            (Aaeaozeaonzeoazneaozenazonelkadndpndpazdpazdpazdpazdpazeazpeaazdpazdpazpdazdpa) othrElement;
     }
 
     void should_cast_with_additional_bounds() {
         foo((A & B) obj);
         foo((A & B & C) obj);
-        foo((Aaeaozeaonzeoazneaozenazone & Bazoieoainzeonaozenoazne & Cjneazeanezoanezoanzeoaneonazeono) obj);
         foo(
-            (Aaeaozeaonzeoazneaozenazone & Bazoieoainzeonaozenoazne & Cjneazeanezoanezoanzeoaneonazeono) (othrElement, value) -> othrElement + value
+            (
+                Aaeaozeaonzeoazneaozenazone
+                & Bazoieoainzeonaozenoazne
+                & Cjneazeanezoanezoanzeoaneonazeono
+            ) obj
+        );
+        foo(
+            (
+                Aaeaozeaonzeoazneaozenazone
+                & Bazoieoainzeonaozenoazne
+                & Cjneazeanezoanezoanzeoaneonazeono
+            ) (othrElement, value) -> othrElement + value
         );
     }
 
@@ -31,7 +42,9 @@ public class Cast {
                                                     (Map) (
                                                         (Map) (
                                                             (Map) (
-                                                                (Map) ((Map) ((Map) map).get(1)).get(1)
+                                                                (Map) ((Map) ((Map) map).get(
+                                                                    1
+                                                                )).get(1)
                                                             ).get(1)
                                                         ).get(1)
                                                     ).get(1)

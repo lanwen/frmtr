@@ -58,17 +58,35 @@ public sealed interface Shape permits Circle, Rectangle, Triangle, Unicorn {
 
 public non-sealed interface Triangle extends Shape {}
 
-public sealed interface Shape permits ALongVeryLongCircle, ALongVeryLongRectangle, ALongVeryLongTriangle, ALongVeryLongUnicorn {}
+public sealed interface Shape
+    permits
+        ALongVeryLongCircle,
+        ALongVeryLongRectangle,
+        ALongVeryLongTriangle,
+        ALongVeryLongUnicorn {}
 
 public sealed interface Shape
     extends AbstractShape
-    permits ALongVeryLongCircle, ALongVeryLongRectangle, ALongVeryLongTriangle, ALongVeryLongUnicorn {}
+    permits
+        ALongVeryLongCircle,
+        ALongVeryLongRectangle,
+        ALongVeryLongTriangle,
+        ALongVeryLongUnicorn {}
 
-public sealed class Shape permits ALongVeryLongCircle, ALongVeryLongRectangle, ALongVeryLongTriangle, ALongVeryLongUnicorn {}
+public sealed class Shape
+    permits
+        ALongVeryLongCircle,
+        ALongVeryLongRectangle,
+        ALongVeryLongTriangle,
+        ALongVeryLongUnicorn {}
 
 public sealed class Shape
     extends AbstractShape
-    permits ALongVeryLongCircle, ALongVeryLongRectangle, ALongVeryLongTriangle, ALongVeryLongUnicorn {}
+    permits
+        ALongVeryLongCircle,
+        ALongVeryLongRectangle,
+        ALongVeryLongTriangle,
+        ALongVeryLongUnicorn {}
 
 public class NestedSealedClasses {
 

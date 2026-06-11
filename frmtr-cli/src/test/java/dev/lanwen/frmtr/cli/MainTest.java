@@ -2,6 +2,7 @@ package dev.lanwen.frmtr.cli;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.lanwen.frmtr.FormatterOptions;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -227,6 +228,19 @@ final class MainTest {
                 .doesNotContain("frmtr: line width")
                 .doesNotContain("source columns:");
         assertThat(result.err()).isEmpty();
+    }
+
+    @Test
+    void lineWidthOptionDefaultsToCoreFormatterDefault() {
+        Main main = new Main(
+                new PrintWriter(new StringWriter(), true),
+                new PrintWriter(new StringWriter(), true),
+                "class Demo{int value;}");
+
+        int exitCode = Main.commandLine(main).execute("--stdin");
+
+        assertThat(exitCode).isZero();
+        assertThat(main.lineWidth).isEqualTo(FormatterOptions.DEFAULT_LINE_WIDTH);
     }
 
     @Test

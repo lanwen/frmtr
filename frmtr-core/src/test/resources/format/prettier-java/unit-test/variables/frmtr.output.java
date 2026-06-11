@@ -2,7 +2,9 @@ public class Variables {
 
     public static int STATIC_VARIABLE = 123;
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ComplexFilterTest.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(
+        ComplexFilterTest.class
+    );
 
     int packageVariable = 234;
 
@@ -18,19 +20,30 @@ public class Variables {
 
     private Bean<String> genericVariable2 = new Bean<String>("abc");
 
-    private Bean<String> genericVariable2 = new Bean<String>("abc", "def", "ghi", "jkl");
+    private Bean<String> genericVariable2 = new Bean<String>(
+        "abc",
+        "def",
+        "ghi",
+        "jkl"
+    );
 
-    private Map<Integer, String> genericVariable4 = new HashMap<Integer, String>();
+    private Map<Integer, String> genericVariable4 = new HashMap<
+        Integer,
+        String
+    >();
 
-    private Map<Integer, String, Integer, String> genericVariable5 = new HashMap<Integer, String, Integer>();
+    private Map<Integer, String, Integer, String> genericVariable5 =
+        new HashMap<Integer, String, Integer>();
 
     private Object variableWithComment1 /* comment */ = new Object();
 
     private Object variableWithComment2 = /* comment */ new Object();
 
-    private Object variableWithComment3 /* very very very long comment */ = new Object();
+    private Object variableWithComment3 /* very very very long comment */ =
+        new Object();
 
-    private Object variableWithComment4 = /* very very very long comment */ new Object();
+    private Object variableWithComment4 =
+        /* very very very long comment */ new Object();
 
     private Object[] arrayVariable1 = new Object[3];
 
@@ -38,17 +51,26 @@ public class Variables {
 
     private Object[] arrayVariable3 = new Object[] {};
 
-    private Object[] arrayVariable4 = new Object[] {"abc", "def", "ghi"};
+    private Object[] arrayVariable4 = new Object[] { "abc", "def", "ghi" };
 
-    private Object[] arrayVariable5 = new Object[] {"abc", "def", "ghi", "jkl", "mno"};
+    private Object[] arrayVariable5 = new Object[] {
+        "abc",
+        "def",
+        "ghi",
+        "jkl",
+        "mno",
+    };
 
-    private Object[] arrayVariable6 = {"abc", "def", "ghi"};
+    private Object[] arrayVariable6 = { "abc", "def", "ghi" };
 
     private Range creator1 = this.dateRangeField.new Range(from, to);
 
     private Range creator2 = this.dateRangeField.new <Integer>Range(from, to);
 
-    private Range<Date> creator3 = this.dateRangeField.new <Integer>Range<>(from, to);
+    private Range<Date> creator3 = this.dateRangeField.new <Integer>Range<>(
+        from,
+        to
+    );
 
     private Range<Date> creator3 = new <Integer>Range<>(from, to);
 
@@ -117,14 +139,22 @@ public class Variables {
 
     public boolean localVariableDeclarationWhichBreak() {
         @Nullable
-        final BackupStatus lastStatus = BackupStatus.fromDbValue(backupRepository.getLastStatus());
+        final BackupStatus lastStatus = BackupStatus.fromDbValue(
+            backupRepository.getLastStatus()
+        );
 
-        final BackupStatus lastStatus = BackupStatus.fromDbValue(backupRepository.getLastStatus());
+        final BackupStatus lastStatus = BackupStatus.fromDbValue(
+            backupRepository.getLastStatus()
+        );
 
         @Nullable
-        BackupStatus lastStatus = BackupStatus.fromDbValue(backupRepository.getLastStatus());
+        BackupStatus lastStatus = BackupStatus.fromDbValue(
+            backupRepository.getLastStatus()
+        );
 
-        BackupStatus lastStatus = BackupStatus.fromDbValue(backupRepository.getLastStatus());
+        BackupStatus lastStatus = BackupStatus.fromDbValue(
+            backupRepository.getLastStatus()
+        );
     }
 
     public boolean localVariableDeclarationWhichDoNotBreak() {
@@ -140,20 +170,52 @@ public class Variables {
     }
 
     public void breakVariables() {
-        Obj newObject = new Object().something().more().and().that().as().well().but().not().something();
+        Obj newObject = new Object()
+            .something()
+            .more()
+            .and()
+            .that()
+            .as()
+            .well()
+            .but()
+            .not()
+            .something();
 
-        Object.test.creation thisObject = classWithName.invocationOne().invocationTwo();
+        Object.test.creation thisObject = classWithName
+            .invocationOne()
+            .invocationTwo();
 
-        Object.test.creation thisObject1 = classWithName.invocationOne(argument1, argument2, argument3);
+        Object.test.creation thisObject1 = classWithName.invocationOne(
+            argument1,
+            argument2,
+            argument3
+        );
 
-        Object.test.creation thisObject2 = classWithName.invocationOne(argument1, argument2, argument3).invocationTwo();
+        Object.test.creation thisObject2 = classWithName
+            .invocationOne(argument1, argument2, argument3)
+            .invocationTwo();
 
-        Object.test.creation thisObject3 = classWithName.invocationOne().invocationTwo(argument1, argument2, argument3);
+        Object.test.creation thisObject3 = classWithName
+            .invocationOne()
+            .invocationTwo(
+                argument1,
+                argument2,
+                argument3
+            );
 
-        Object.test.creation thisObject4 = classWithName.invocationOne(argument1, argument2, argument3).invocationTwo(argument1, argument2);
+        Object.test.creation thisObject4 = classWithName
+            .invocationOne(argument1, argument2, argument3)
+            .invocationTwo(
+                argument1,
+                argument2
+            );
 
         Object.test.creation thisObject5 = classWithName
-            .invocationOne(argument1WithAVeryVeryVeryVeryLongName, argument2, argument3)
+            .invocationOne(
+                argument1WithAVeryVeryVeryVeryLongName,
+                argument2,
+                argument3
+            )
             .attributeOne.attributeTwo.invocationTwo(argument1, argument2)
             .attributeThree.invocationThree();
 
@@ -164,94 +226,161 @@ public class Variables {
     }
 
     public void breakMultipleMethods() {
-        boolean willDrop = predictDropResponse.getSendResult().isIgnorableFailure() || predictDropResponse.getSendResult().isFatalError();
-        boolean willDrop = predictDropResponse.getSendResult().isIgnorableFailure || predictDropResponse.getSendResult().isFatalError;
-        boolean willDrop = predictDropResponsegetSendResultisIgnorableFailure || predictDropResponsegetSendResultisFatalError;
-        boolean willDrop = predictDropResponse.getSendResult().isIgnorableFailure() || predictDropResponsegetSendResultisFatalError;
+        boolean willDrop =
+            predictDropResponse.getSendResult().isIgnorableFailure() ||
+            predictDropResponse.getSendResult().isFatalError();
+        boolean willDrop =
+            predictDropResponse.getSendResult().isIgnorableFailure ||
+            predictDropResponse.getSendResult().isFatalError;
+        boolean willDrop =
+            predictDropResponsegetSendResultisIgnorableFailure ||
+            predictDropResponsegetSendResultisFatalError;
+        boolean willDrop =
+            predictDropResponse.getSendResult().isIgnorableFailure() ||
+            predictDropResponsegetSendResultisFatalError;
     }
 
     public void breakAfterEquals() {
-        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object();
-
-        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object().other().methods();
+        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
+            new Object();
 
         Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
-            new Object().a().number().of().other().methods().that().should().cause().a().wrap();
-
-        Object[] aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object[10];
-
-        Object[] aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object[] {
-            new Object(),
-            new Object(),
-        };
-
-        Object[] aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new Object[] {
-            new Object(),
-            new Object(),
-            new Object(),
-            new Object(),
-            new Object(),
-        };
-
-        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = SomeClass.someStaticMethod();
-
-        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = someMethod();
-
-        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = someMethod().anotherMethod();
-
-        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes = someBooleanVariable ? new Object() : null;
+            new Object()
+                .other()
+                .methods();
 
         Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
-            anotherVeryLongNameForIllustrativePurposes != null ? anotherVeryLongNameForIllustrativePurposes : new Object();
+            new Object()
+                .a()
+                .number()
+                .of()
+                .other()
+                .methods()
+                .that()
+                .should()
+                .cause()
+                .a()
+                .wrap();
+
+        Object[] aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
+            new Object[10];
+
+        Object[] aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
+            new Object[] {new Object(), new Object()};
+
+        Object[] aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
+            new Object[] {
+                new Object(),
+                new Object(),
+                new Object(),
+                new Object(),
+                new Object(),
+            };
+
+        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
+            SomeClass.someStaticMethod();
+
+        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
+            someMethod();
+
+        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
+            someMethod().anotherMethod();
+
+        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
+            someBooleanVariable ? new Object() : null;
+
+        Object aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
+            anotherVeryLongNameForIllustrativePurposes != null
+                ? anotherVeryLongNameForIllustrativePurposes
+                : new Object();
     }
 
     public <
-        A extends ShortClassName & ShortClassName & ShortClassName & ShortClassName,
-        B extends ShortClassName & ShortClassName & ShortClassName & ShortClassName & ShortClassName,
+        A extends ShortClassName
+            & ShortClassName
+            & ShortClassName
+            & ShortClassName,
+        B extends ShortClassName
+            & ShortClassName
+            & ShortClassName
+            & ShortClassName
+            & ShortClassName,
         C extends ExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
+            ExtremelyLongAndObnoxiousClassName<
+                ExtremelyLongAndObnoxiousClassName,
+                ExtremelyLongAndObnoxiousClassName
+            >,
             ExtremelyLongAndObnoxiousClassName
         >
             & ExtremelyLongAndObnoxiousInterfaceName
             & ExtremelyLongAndObnoxiousInterfaceName
             & ExtremelyLongAndObnoxiousInterfaceName
     > void breakOnTypeArguments(
-        ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName> parameter,
         ExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
+            ExtremelyLongAndObnoxiousClassName
+        > parameter,
+        ExtremelyLongAndObnoxiousClassName<
+            ExtremelyLongAndObnoxiousClassName<
+                ExtremelyLongAndObnoxiousClassName,
+                ExtremelyLongAndObnoxiousClassName
+            >,
             ExtremelyLongAndObnoxiousClassName
         > parameter
     ) {
-        ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName> variable;
-
         ExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
             ExtremelyLongAndObnoxiousClassName
         > variable;
 
         ExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
+            ExtremelyLongAndObnoxiousClassName<
+                ExtremelyLongAndObnoxiousClassName,
+                ExtremelyLongAndObnoxiousClassName
+            >,
+            ExtremelyLongAndObnoxiousClassName
+        > variable;
+
+        ExtremelyLongAndObnoxiousClassName<
+            ExtremelyLongAndObnoxiousClassName<
+                ExtremelyLongAndObnoxiousClassName,
+                ExtremelyLongAndObnoxiousClassName
+            >,
             ExtremelyLongAndObnoxiousClassName
         > variable = new MyExtremelyLongAndObnoxiousClassName<>();
 
         ExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
+            ExtremelyLongAndObnoxiousClassName<
+                ExtremelyLongAndObnoxiousClassName,
+                ExtremelyLongAndObnoxiousClassName
+            >,
             ExtremelyLongAndObnoxiousClassName
         > variable = new MyExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
+            ExtremelyLongAndObnoxiousClassName<
+                ExtremelyLongAndObnoxiousClassName,
+                ExtremelyLongAndObnoxiousClassName
+            >,
             ExtremelyLongAndObnoxiousClassName
         >();
 
         ExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
+            ExtremelyLongAndObnoxiousClassName<
+                ExtremelyLongAndObnoxiousClassName,
+                ExtremelyLongAndObnoxiousClassName
+            >,
             ExtremelyLongAndObnoxiousClassName
-        > aParticularlyLongAndObnoxiousNameForIllustrativePurposes = new MyExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
-            ExtremelyLongAndObnoxiousClassName
-        >();
+        > aParticularlyLongAndObnoxiousNameForIllustrativePurposes =
+            new MyExtremelyLongAndObnoxiousClassName<
+                ExtremelyLongAndObnoxiousClassName<
+                    ExtremelyLongAndObnoxiousClassName,
+                    ExtremelyLongAndObnoxiousClassName
+                >,
+                ExtremelyLongAndObnoxiousClassName
+            >();
 
         new MyExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
+            ExtremelyLongAndObnoxiousClassName<
+                ExtremelyLongAndObnoxiousClassName,
+                ExtremelyLongAndObnoxiousClassName
+            >,
             ExtremelyLongAndObnoxiousClassName
         >().method();
     }
@@ -260,18 +389,27 @@ public class Variables {
         Map<String, String> map =
             // there is a random comment on this line up here
             // and then there is a separate comment on this line down here
-            new HashMap<>(someRandomMethodThatReturnsTheInitialMapThatWeWantToMutate());
+            new HashMap<>(
+                someRandomMethodThatReturnsTheInitialMapThatWeWantToMutate()
+            );
     }
 
     void assignment() {
         fileSystemDetails = FileHandlerDetails.builder().fileSystemType(
-            EntityUtils.update(entity.getFileSystemDetails().getFileSystemType(), update.getFileSystemDetails().getFileSystemType())
+            EntityUtils.update(
+                entity.getFileSystemDetails().getFileSystemType(),
+                update.getFileSystemDetails().getFileSystemType()
+            )
         );
 
-        aaaaaaaaaaaaaaaaa = bbbbbbbbbbbbbbbbb ? ccccccccccccccccc : ddddddddddddddddd;
+        aaaaaaaaaaaaaaaaa = bbbbbbbbbbbbbbbbb
+            ? ccccccccccccccccc
+            : ddddddddddddddddd;
 
         aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa =
-            bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb = ccccccccccccccccccccccccccccccccccccccc + ddddddddddddddddddddddddddddddddd;
+            bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb =
+                ccccccccccccccccccccccccccccccccccccccc +
+                ddddddddddddddddddddddddddddddddd;
 
         foo = new Foo(
             "aaaaaaaaaaaaaaaaaaaa",

@@ -23,15 +23,15 @@ public enum EnumWithExtraCommaAndExtraSemicolon {
 }
 
 public enum EnumWithExtraCommaAndComment {
-    SOME_ENUM,
-    ANOTHER_ENUM,
-    LAST_ENUM /* comment */,
+    SOME_ENUM, /* comment */
+    ANOTHER_ENUM
+    LAST_ENUM
 }
 
 public enum EnumWithExtraSemicolonAndComment {
-    SOME_ENUM,
-    ANOTHER_ENUM,
-    LAST_ENUM /* comment */,
+    SOME_ENUM, /* comment */
+    ANOTHER_ENUM
+    LAST_ENUM
 }
 
 public enum EnumWithManyValues {
@@ -174,14 +174,32 @@ enum Aaaaaaaaaa implements Bbbbbbbbbb {
     A,
 }
 
-enum Aaaaaaaaaa implements Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff {
+enum Aaaaaaaaaa
+    implements Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff
+{
     A,
 }
 
-enum Aaaaaaaaaa implements Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff {}
+enum Aaaaaaaaaa
+    implements Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff {}
 
-enum Aaaaaaaaaa implements Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg {
+enum Aaaaaaaaaa
+    implements
+        Bbbbbbbbbb,
+        Cccccccccc,
+        Dddddddddd,
+        Eeeeeeeeee,
+        Ffffffffff,
+        Gggggggggg
+{
     A,
 }
 
-enum Aaaaaaaaaa implements Bbbbbbbbbb, Cccccccccc, Dddddddddd, Eeeeeeeeee, Ffffffffff, Gggggggggg {}
+enum Aaaaaaaaaa
+    implements
+        Bbbbbbbbbb,
+        Cccccccccc,
+        Dddddddddd,
+        Eeeeeeeeee,
+        Ffffffffff,
+        Gggggggggg {}

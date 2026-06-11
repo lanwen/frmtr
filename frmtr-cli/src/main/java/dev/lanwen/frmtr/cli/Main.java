@@ -66,7 +66,10 @@ public final class Main implements Callable<Integer> {
             converter = ColorModeConverter.class)
     ColorMode colorMode;
 
-    @Option(names = "--line-width", description = "Target line width.", defaultValue = "140")
+    @Option(
+            names = "--line-width",
+            description = "Target line width.",
+            defaultValue = "" + FormatterOptions.DEFAULT_LINE_WIDTH)
     int lineWidth;
 
     @Option(

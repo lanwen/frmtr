@@ -711,6 +711,7 @@ final class FrmtrTest {
 
     @Test
     void defaultsToLatestAvailableJavaLanguageLevel() {
+        assertThat(FormatterOptions.defaults().lineWidth()).isEqualTo(FormatterOptions.DEFAULT_LINE_WIDTH);
         assertThat(FormatterOptions.defaults().javaLanguageLevel())
                 .isEqualTo(FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
         assertThat(FormatterOptions.defaults().preserveRawTrailingWhitespace()).isFalse();

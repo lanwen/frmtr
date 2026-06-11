@@ -82,12 +82,25 @@ public class Expressions {
     }
 
     public void printIf() {
-        Object myObject = new PrettierObject().getSingleton().getAuthentication().getCredentials().getRights().getName();
+        Object myObject = new PrettierObject()
+            .getSingleton()
+            .getAuthentication()
+            .getCredentials()
+            .getRights()
+            .getName();
 
-        if (myValue == 42 || myValue == 42 && myValue == 42 && myValue == 42 || myValue == 42 && myValue == 42) {
+        if (
+            myValue == 42 ||
+            (myValue == 42 && myValue == 42 && myValue == 42) ||
+            (myValue == 42 && myValue == 42)
+        ) {
         }
 
-        if (myValue != 42 && 42/42 || myValue & 42 && myValue > 42 || myValue < 42 && myValue == 42) {
+        if (
+            (myValue != 42 && 42 / 42) ||
+            (myValue & 42 && myValue > 42) ||
+            (myValue < 42 && myValue == 42)
+        ) {
         }
 
         if (myValue != 42 && myValue == 42) {
@@ -95,10 +108,18 @@ public class Expressions {
     }
 
     public void printSwitch() {
-        switch (myValue == 42 || myValue == 42 && myValue == 42 && myValue == 42 || myValue == 42 && myValue == 42) {
+        switch (
+            myValue == 42 ||
+            (myValue == 42 && myValue == 42 && myValue == 42) ||
+            (myValue == 42 && myValue == 42)
+        ) {
         }
 
-        switch (myValue != 42 && 42/42 || myValue & 42 && myValue > 42 || myValue < 42 && myValue == 42) {
+        switch (
+            (myValue != 42 && 42 / 42) ||
+            (myValue & 42 && myValue > 42) ||
+            (myValue < 42 && myValue == 42)
+        ) {
         }
 
         switch (myValue != 42) {
@@ -111,9 +132,17 @@ public class Expressions {
     public void printWhile() {
         while (true) throw new RuntimeException();
 
-        while (myValue == 42 || myValue == 42 && myValue == 42 && myValue == 42 || myValue == 42 && myValue == 42) {}
+        while (
+            myValue == 42 ||
+            (myValue == 42 && myValue == 42 && myValue == 42) ||
+            (myValue == 42 && myValue == 42)
+        ) {}
 
-        while (myValue != 42 && 42/42 || myValue & 42 && myValue > 42 || myValue < 42 && myValue == 42) {}
+        while (
+            (myValue != 42 && 42 / 42) ||
+            (myValue & 42 && myValue > 42) ||
+            (myValue < 42 && myValue == 42)
+        ) {}
 
         while (myValue != 42) {}
 
@@ -123,11 +152,19 @@ public class Expressions {
     public void printDoWhile() {
         do {
             System.out.println("Prettier-java is cool !");
-        } while (myValue == 42 || myValue == 42 && myValue == 42 && myValue == 42 || myValue == 42 && myValue == 42);
+        } while (
+            myValue == 42 ||
+            (myValue == 42 && myValue == 42 && myValue == 42) ||
+            (myValue == 42 && myValue == 42)
+        );
 
         do {
             System.out.println("Prettier-java is cool !");
-        } while (myValue != 42 && 42/42 || myValue & 42 && myValue > 42 || myValue < 42 && myValue == 42);
+        } while (
+            (myValue != 42 && 42 / 42) ||
+            (myValue & 42 && myValue > 42) ||
+            (myValue < 42 && myValue == 42)
+        );
 
         do {
             System.out.println("Prettier-java is cool !");
@@ -139,11 +176,19 @@ public class Expressions {
     }
 
     public void printSynchronized() {
-        synchronized (myValue == 42 || myValue == 42 && myValue == 42 && myValue == 42 || myValue == 42 && myValue == 42) {
+        synchronized (
+            myValue == 42 ||
+            (myValue == 42 && myValue == 42 && myValue == 42) ||
+            (myValue == 42 && myValue == 42)
+        ) {
             System.out.println("Prettier-java is cool !");
         }
 
-        synchronized (myValue != 42 && 42/42 || myValue & 42 && myValue > 42 || myValue < 42 && myValue == 42) {
+        synchronized (
+            (myValue != 42 && 42 / 42) ||
+            (myValue & 42 && myValue > 42) ||
+            (myValue < 42 && myValue == 42)
+        ) {
             System.out.println("Prettier-java is cool !");
         }
 
@@ -164,29 +209,46 @@ public class Expressions {
 
     public void unannTypePrimitiveWithMethodReferenceSuffix(String[] args) {
         List.of(
-            new double[][] {1, 2, 3, 4.1, 5.6846465},
-            new double[][] {1, 2, 3, 4.1, 5.6846465},
-            new double[][] {1, 2, 3, 4.1, 5.6846465}
-        ).toArray(double[][]::new);
+            new double[][] { 1, 2, 3, 4.1, 5.6846465 },
+            new double[][] { 1, 2, 3, 4.1, 5.6846465 },
+            new double[][] { 1, 2, 3, 4.1, 5.6846465 }
+        ).toArray(
+            double[][]::new
+        );
     }
 
     public void staticMethodInvocationWithSingleChainedMethodInvocation() {
-        List.of(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa).chained(
+        List.of(
+            aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,
+            aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        ).chained(
             aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,
             aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
         );
     }
 
     public void staticMethodInvocationWithMultipleChainedMethodInvocation() {
-        List.of(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
-            .chained(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
+        List.of(
+            aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,
+            aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        )
+            .chained(
+                aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,
+                aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+            )
             .another();
     }
 
     public void nonStaticMultipleChainedMethodInvocations() {
         something
-            .of(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
-            .chained(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa);
+            .of(
+                aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,
+                aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+            )
+            .chained(
+                aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,
+                aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+            );
     }
 
     public void typeExpressionsInFqnParts() {
@@ -194,16 +256,34 @@ public class Expressions {
     }
 
     void parenthesesWithLeadingAndTrailingBreak() {
-        (aaaaaaaaaa + bbbbbbbbbb + cccccccccc + dddddddddd + eeeeeeeeee).ffffffffff();
+        (
+            aaaaaaaaaa +
+            bbbbbbbbbb +
+            cccccccccc +
+            dddddddddd +
+            eeeeeeeeee
+        ).ffffffffff();
     (aaaaaaaaaa + bbbbbbbbbb + cccccccccc + dddddddddd + eeeeeeeeee)::ffffffffff;
 
-        aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
-        aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
-        aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
+        aaaaaaaaaa = (
+            bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee
+        ).ffffffffff();
+        aaaaaaaaaa = (
+            bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee
+        )::ffffffffff;
+        aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[
+            ffffffffff
+        ];
 
-        Aaaaaaaaaa aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
-        Aaaaaaaaaa aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
-        Aaaaaaaaaa aaaaaaaaaa = (bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
+        Aaaaaaaaaa aaaaaaaaaa = (
+            bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee
+        ).ffffffffff();
+        Aaaaaaaaaa aaaaaaaaaa = (
+            bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee
+        )::ffffffffff;
+        Aaaaaaaaaa aaaaaaaaaa = (
+            bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee
+        )[ffffffffff];
 
         switch (a) {
             case Bbbbbbbbbb bbbbbbbbbb when (
@@ -211,27 +291,49 @@ public class Expressions {
             ) -> ffffffffff;
         }
 
-        return (aaaaaaaaaa && bbbbbbbbbb && cccccccccc && dddddddddd && eeeeeeeeee && ffffffffff);
+        return (
+            aaaaaaaaaa &&
+            bbbbbbbbbb &&
+            cccccccccc &&
+            dddddddddd &&
+            eeeeeeeeee &&
+            ffffffffff
+        );
     }
 
     void parenthesesWithTrailingBreak() {
-        (aaaaaaaaaa && bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
+        (aaaaaaaaaa && bbbbbbbbbb && cccccccccc
+            ? dddddddddd
+            : eeeeeeeeee
+        ).ffffffffff();
     (aaaaaaaaaa && bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
-        (aaaaaaaaaa && bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
+        (aaaaaaaaaa && bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[
+            ffffffffff
+        ];
     }
 
     void parenthesesWithoutBreak() {
-        (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
+        (aaaaaaaaaa ->
+            bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
     (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
-        (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
+        (aaaaaaaaaa -> bbbbbbbbbb && cccccccccc ? dddddddddd : eeeeeeeeee)[
+            ffffffffff
+        ];
 
-        aaaaaaaaaa = (bbbbbbbbbb -> cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
-        aaaaaaaaaa = (bbbbbbbbbb -> cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
-        aaaaaaaaaa = (bbbbbbbbbb -> cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
+        aaaaaaaaaa = (bbbbbbbbbb ->
+            cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
+        aaaaaaaaaa = (bbbbbbbbbb ->
+            cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
+        aaaaaaaaaa = (bbbbbbbbbb -> cccccccccc ? dddddddddd : eeeeeeeeee)[
+            ffffffffff
+        ];
 
-        Aaaaaaaaaa aaaaaaaaaa = (bbbbbbbbbb -> cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
-        Aaaaaaaaaa aaaaaaaaaa = (bbbbbbbbbb -> cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
-        Aaaaaaaaaa aaaaaaaaaa = (bbbbbbbbbb -> cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
+        Aaaaaaaaaa aaaaaaaaaa = (bbbbbbbbbb ->
+            cccccccccc ? dddddddddd : eeeeeeeeee).ffffffffff();
+        Aaaaaaaaaa aaaaaaaaaa = (bbbbbbbbbb ->
+            cccccccccc ? dddddddddd : eeeeeeeeee)::ffffffffff;
+        Aaaaaaaaaa aaaaaaaaaa = (bbbbbbbbbb ->
+            cccccccccc ? dddddddddd : eeeeeeeeee)[ffffffffff];
     }
 
     void unaryExpression() {

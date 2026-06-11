@@ -43,7 +43,7 @@ frmtr {
     java {
         include("**/*.java")
         exclude("**/generated/**")
-        lineWidth.set(140)
+        lineWidth.set(120)
         languageLevel.set(FrmtrJavaLanguageLevel.LATEST_AVAILABLE)
     }
     check {
@@ -84,7 +84,7 @@ With no selectors, the CLI uses `./**/*.java` and checks formatting by default. 
 
 Use `--java-level` to choose the parser language level. The default is `LATEST_AVAILABLE`, which uses JavaParser's bleeding-edge parser mode. Use `UNSET` for JavaParser raw mode, or a release value such as `17`, `JAVA_21`, or `JAVA_25` when you need a strict release gate.
 
-The formatter-wide default line width is 140 columns. Use `--line-width` in the CLI or `frmtr { java { lineWidth.set(...) } }` in Gradle to override it.
+The formatter-wide default line width is 120 columns. Use `--line-width` in the CLI or `frmtr { java { lineWidth.set(...) } }` in Gradle to override it.
 
 ## Native Binary
 

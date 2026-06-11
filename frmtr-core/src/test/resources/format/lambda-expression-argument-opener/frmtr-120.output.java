@@ -95,6 +95,15 @@ final class LambdaExpressionArgumentOpener {
         ));
     }
 
+    StubFlow recoversDuplicateMember(MemberRepository memberRepository, Member member, User user, Org org) {
+        return memberRepository
+            .save(new Member(org.getId(), user.getId(), Member.Role.ADMIN))
+            .onErrorResume(
+                DuplicateKeyException.class,
+                ex -> memberRepository.findByUserIdAndOrganizationIdWithSnapshot(user.getId(), org.getId())
+            );
+    }
+
     StubFlow answerWithLongBodySelector(StubSource stubSource, BundleGateway regionalWindowBundleReadGateway) {
         return when(
             stubSource.fetchPreparedEnvelope(

@@ -864,6 +864,9 @@ final class MethodCallChainPrinter {
         if (expressionLambdaStartsOnSelectorLine(expression) && expressionLambdaSpansMultipleLines(expression)) {
             Optional<Doc> huggableExpressionLambda = huggableExpressionLambdaArguments.apply(prefix, expression.getArguments());
             if (huggableExpressionLambda.isPresent()) {
+                if (expressionLambdaSegmentBodyOpenerOverflows(expression, prefix, compactSegmentWidth)) {
+                    return brokenMethodCallSegment(expression, prefix, segmentPrefix, finalSegmentSuffix);
+                }
                 return Doc.concat(segmentPrefix, huggableExpressionLambda.orElseThrow(), finalSegmentSuffix.doc());
             }
         }
@@ -876,14 +879,7 @@ final class MethodCallChainPrinter {
         if (reserveStatementTerminator
                 && methodCallSegmentWidth(expression, compactSegment, compactSegmentWidth)
                         > options.lineWidth()) {
-            return Doc.concat(
-                    segmentPrefix,
-                    Doc.text(prefix + "("),
-                    Doc.indent(Doc.concat(
-                            Doc.HARD_LINE,
-                            calls.methodCallArgumentList(expression.getArguments(), Doc.HARD_LINE))),
-                    Doc.HARD_LINE,
-                    Doc.text(")" + finalSegmentSuffix));
+            return brokenMethodCallSegment(expression, prefix, segmentPrefix, finalSegmentSuffix);
         }
         return Doc.concat(segmentPrefix, Doc.group(Doc.concat(
                 Doc.text(prefix + "("),
@@ -892,6 +888,33 @@ final class MethodCallChainPrinter {
                         calls.methodCallArgumentList(expression.getArguments(), Doc.LINE))),
                 Doc.SOFT_LINE,
                 Doc.text(")" + finalSegmentSuffix))));
+    }
+
+    private Doc brokenMethodCallSegment(
+            MethodCallExpr expression,
+            String prefix,
+            Doc segmentPrefix,
+            MethodCallChainTail finalSegmentSuffix) {
+        return Doc.concat(
+                segmentPrefix,
+                Doc.text(prefix + "("),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        calls.methodCallArgumentList(expression.getArguments(), Doc.HARD_LINE))),
+                Doc.HARD_LINE,
+                Doc.text(")" + finalSegmentSuffix));
+    }
+
+    private boolean expressionLambdaSegmentBodyOpenerOverflows(
+            MethodCallExpr expression,
+            String prefix,
+            ToIntFunction<String> compactSegmentWidth) {
+        return expressionLambdaArgumentPlan.apply(prefix, expression.getArguments())
+                .filter(plan -> plan.bodyOpenerFitsOnContinuation(continuationStatementWidth, options.lineWidth()))
+                .filter(plan -> plan.bodyOpenerOverflows(
+                        line -> methodCallSegmentWidth(expression, line, compactSegmentWidth),
+                        options.lineWidth()))
+                .isPresent();
     }
 
     private Optional<Doc> sourceMultilineMethodCallSegmentArguments(

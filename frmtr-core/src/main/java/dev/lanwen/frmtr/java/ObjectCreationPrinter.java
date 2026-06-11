@@ -40,7 +40,6 @@ final class ObjectCreationPrinter {
     private final Function<List<? extends Node>, String> compactJoin;
     private final Function<Node, String> compactTypeLike;
     private final Function<Node, String> compactTypeLikeWithoutOwnComment;
-    private final Function<Expression, String> commentFreeExpression;
     private final Function<Doc, String> commentText;
 
     ObjectCreationPrinter(
@@ -53,7 +52,6 @@ final class ObjectCreationPrinter {
             Function<List<? extends Node>, String> compactJoin,
             Function<Node, String> compactTypeLike,
             Function<Node, String> compactTypeLikeWithoutOwnComment,
-            Function<Expression, String> commentFreeExpression,
             Function<Doc, String> commentText) {
         this.comments = context.comments;
         this.layoutPolicy = context.objectCreationLayoutPolicy;
@@ -66,7 +64,6 @@ final class ObjectCreationPrinter {
         this.compactJoin = compactJoin;
         this.compactTypeLike = compactTypeLike;
         this.compactTypeLikeWithoutOwnComment = compactTypeLikeWithoutOwnComment;
-        this.commentFreeExpression = commentFreeExpression;
         this.commentText = commentText;
     }
 
@@ -242,8 +239,7 @@ final class ObjectCreationPrinter {
 
     private List<Doc> anonymousArgumentDocs(ObjectCreationExpr expression) {
         return expression.getArguments().stream()
-                .map(commentFreeExpression)
-                .map(Doc::text)
+                .map(expressionRenderer::format)
                 .toList();
     }
 

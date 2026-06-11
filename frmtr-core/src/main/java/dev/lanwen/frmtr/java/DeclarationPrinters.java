@@ -200,6 +200,7 @@ final class DeclarationPrinters {
                 declarationPrefixes::inlineAnnotations,
                 compactSource::compact,
                 types::typeBody,
+                types::brokenClassOrInterfaceType,
                 types::typeCanBreak,
                 throwsClauses::throwsClause,
                 blockRenderer);

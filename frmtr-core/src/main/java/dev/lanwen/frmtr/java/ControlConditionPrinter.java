@@ -5,6 +5,7 @@ import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.BinaryExpr;
+import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
@@ -100,7 +101,7 @@ final class ControlConditionPrinter {
             return brokenCondition(expression);
         }
         String flat = compact.apply(expression);
-        if (blockStatementWidth.applyAsInt("if (" + flat + ") {}") <= options.lineWidth()) {
+        if (ifConditionLineWidth(expression, "if (" + flat + ") {}") <= options.lineWidth()) {
             if (expressionHasParenthesizedNestedBinary.test(expression)) {
                 return Doc.concat(Doc.text("("), expressionRenderer.apply(expression), Doc.text(")"));
             }
@@ -113,6 +114,12 @@ final class ControlConditionPrinter {
             }
         }
         return brokenCondition(expression);
+    }
+
+    private int ifConditionLineWidth(Expression expression, String line) {
+        return expression.getRange()
+                .map(range -> Math.max(0, range.begin.column - "if (".length() + 1) + line.length())
+                .orElseGet(() -> blockStatementWidth.applyAsInt(line));
     }
 
     private Optional<Doc> brokenMethodCallCondition(MethodCallExpr expression) {
@@ -181,7 +188,11 @@ final class ControlConditionPrinter {
     }
 
     private boolean sourceMultilineLogicalCondition(Expression condition) {
-        return condition instanceof BinaryExpr binaryExpr
+        Expression expression = condition;
+        while (expression instanceof EnclosedExpr enclosedExpr) {
+            expression = enclosedExpr.getInner();
+        }
+        return expression instanceof BinaryExpr binaryExpr
                 && (binaryExpr.getOperator() == BinaryExpr.Operator.AND
                         || binaryExpr.getOperator() == BinaryExpr.Operator.OR)
                 && rawSource.rawWithoutOwnComment(condition).contains("\n");

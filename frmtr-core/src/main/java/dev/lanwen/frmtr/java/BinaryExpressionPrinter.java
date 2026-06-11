@@ -164,7 +164,8 @@ final class BinaryExpressionPrinter {
         if (operator == BinaryExpr.Operator.OR
                 && operand instanceof EnclosedExpr enclosedOperand
                 && enclosedOperand.getInner() instanceof BinaryExpr binaryOperand
-                && binaryOperand.getOperator() == BinaryExpr.Operator.AND
+                && (binaryOperand.getOperator() == BinaryExpr.Operator.AND
+                        || binaryOperand.getOperator() == BinaryExpr.Operator.OR)
                 && sourceShape.spansMultipleLines(enclosedOperand)) {
             return Doc.concat(Doc.text("("), nestedLines(binaryOperand, true), Doc.text(")"));
         }

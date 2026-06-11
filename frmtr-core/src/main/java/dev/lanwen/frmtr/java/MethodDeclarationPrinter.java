@@ -7,6 +7,7 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
 import dev.lanwen.frmtr.doc.Doc;
@@ -45,6 +46,7 @@ final class MethodDeclarationPrinter {
     private final Function<NodeWithAnnotations<?>, String> inlineAnnotations;
     private final Function<Node, String> compact;
     private final Function<Type, Doc> typeBody;
+    private final Function<ClassOrInterfaceType, Doc> brokenClassOrInterfaceType;
     private final Predicate<Type> typeCanBreak;
     private final ThrowsClauseRenderer throwsClause;
     private final Function<BlockStmt, Doc> block;
@@ -61,6 +63,7 @@ final class MethodDeclarationPrinter {
             Function<NodeWithAnnotations<?>, String> inlineAnnotations,
             Function<Node, String> compact,
             Function<Type, Doc> typeBody,
+            Function<ClassOrInterfaceType, Doc> brokenClassOrInterfaceType,
             Predicate<Type> typeCanBreak,
             ThrowsClauseRenderer throwsClause,
             Function<BlockStmt, Doc> block) {
@@ -75,6 +78,7 @@ final class MethodDeclarationPrinter {
         this.inlineAnnotations = inlineAnnotations;
         this.compact = compact;
         this.typeBody = typeBody;
+        this.brokenClassOrInterfaceType = brokenClassOrInterfaceType;
         this.typeCanBreak = typeCanBreak;
         this.throwsClause = throwsClause;
         this.block = block;
@@ -136,9 +140,9 @@ final class MethodDeclarationPrinter {
     }
 
     private boolean shouldBreakReturnType(MethodDeclaration declaration, String prefix) {
-        return declaration.getParameters().isEmpty()
-                && declaration.getReceiverParameter().isEmpty()
+        return declaration.getReceiverParameter().isEmpty()
                 && typeCanBreak.test(declaration.getType())
+                && sourceShape.spansMultipleLines(declaration.getType())
                 && callableSignatures.parametersBreak(prefix, declaration, methodParameterSuffix(declaration));
     }
 
@@ -146,10 +150,16 @@ final class MethodDeclarationPrinter {
         if (!breakReturnType) {
             return Doc.text(returnType + " " + declaration.getNameAsString());
         }
-        return Doc.group(Doc.concat(
+        if (declaration.getType() instanceof ClassOrInterfaceType classOrInterfaceType) {
+            return Doc.concat(
+                    Doc.text(inlineAnnotations.apply(declaration)),
+                    brokenClassOrInterfaceType.apply(classOrInterfaceType),
+                    Doc.text(" " + declaration.getNameAsString()));
+        }
+        return Doc.concat(
                 Doc.text(inlineAnnotations.apply(declaration)),
                 typeBody.apply(declaration.getType()),
-                Doc.text(" " + declaration.getNameAsString())));
+                Doc.text(" " + declaration.getNameAsString()));
     }
 
     /**

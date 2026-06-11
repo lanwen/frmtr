@@ -32,6 +32,26 @@ class MultilineIfConditionSample {
         }
     }
 
+    void flagPressure(EnvelopeMeta meta, List<Frame> frames) {
+        if (
+            ((meta.totalBudget() != null && Objects.equals(meta.usedBudget(), meta.totalBudget())) ||
+                (meta.minimumRemaining() != null && meta.minimumRemaining() < MINIMUM_REMAINING)) ||
+            frames.stream().anyMatch(frame -> frame.interruptedAt() != null)
+        ) {
+            sink.record();
+        }
+    }
+
+    void guardActor(Object actor) {
+        if (
+            !(actor instanceof sample.security.identity.ServicePrincipal.AuthorizedActor.ProjectScopedDirectoryUserActor user)
+        ) {
+            return;
+        }
+
+        sink.record(user.id());
+    }
+
     void publishFinishedMarker(Queue queue) {
         runner.attach(event -> {
             switch (event.kind()) {

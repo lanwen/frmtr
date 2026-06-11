@@ -65,6 +65,44 @@ class MultilineShapes {
         return mapper.map(value);
     }
 
+    private Function<
+        Collection<StoredBundleSignalProjection>,
+        Publisher<? extends BundleSignal.SignalEnvelopeWithRoutingState>
+    > decodeSignalEnvelope() {
+        return value;
+    }
+
+    private Mono<
+        sample.platform.identity.DirectoryLookup.ProxyRoute.RouteKey
+    > resolveRoute(sample.security.ActorRef actor, String handle) {
+        return routes.resolve(actor, handle);
+    }
+
+    Object anonymousMap(PortalProps props, RecordEnvelope record, List<String> entries) {
+        var map = new HashMap<String, Object>(
+            Map.of(
+                "short",
+                "%s/card#code=%s".formatted(
+                    props.baseUrl(),
+                    record.shortCode()
+                ),
+                "long",
+                "%s/card#code=%s".formatted(
+                    props.baseUrl(),
+                    TokenCodec.HASH.encode(Long.parseLong(record.id()))
+                )
+            )
+        ) {
+            {
+                if (!entries.isEmpty()) {
+                    put("entries", entries);
+                }
+            }
+        };
+
+        return map;
+    }
+
     void resources() {
         try (
             Resource handle = new Resource(

@@ -730,6 +730,11 @@ final class MethodCallChainPrinter {
             }
             return Doc.concat(segmentPrefix, Doc.text(prefix + "()" + finalSegmentSuffix));
         }
+        Optional<Doc> sourceMultilineArguments =
+                sourceMultilineMethodCallSegmentArguments(prefix, expression, finalSegmentSuffix);
+        if (sourceMultilineArguments.isPresent()) {
+            return Doc.concat(segmentPrefix, sourceMultilineArguments.orElseThrow());
+        }
         Optional<Doc> huggableLambda = huggableBlockLambdaArguments.apply(prefix, expression.getArguments());
         if (huggableLambda.isPresent()) {
             return Doc.concat(segmentPrefix, huggableLambda.orElseThrow(), finalSegmentSuffix.doc());
@@ -763,6 +768,24 @@ final class MethodCallChainPrinter {
                         calls.methodCallArgumentList(expression.getArguments(), Doc.LINE))),
                 Doc.SOFT_LINE,
                 Doc.text(")" + finalSegmentSuffix))));
+    }
+
+    private Optional<Doc> sourceMultilineMethodCallSegmentArguments(
+            String prefix,
+            MethodCallExpr expression,
+            MethodCallChainTail finalSegmentSuffix) {
+        if (!expression.getAllContainedComments().isEmpty()
+                || !methodCallSegmentHasBlockLambdaArgument(expression)
+                || !sourceShape.methodCallArgumentsSpanMultipleLines(expression)) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+                Doc.text(prefix + "("),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        calls.methodCallArgumentList(expression.getArguments(), Doc.HARD_LINE))),
+                Doc.HARD_LINE,
+                Doc.text(")" + finalSegmentSuffix)));
     }
 
     private String methodCallSegmentArgumentsWidthText(NodeList<Expression> arguments) {

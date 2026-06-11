@@ -228,6 +228,7 @@ final class FrmtrTest {
             "method-call-binary-argument, 120",
             "method-call-initializer-opener, 120",
             "method-chain-root-arguments, 120",
+            "method-chain-segment-arguments, 120",
             "comment-preservation-annotation-array, 120",
             "comment-preservation-leading-statements, 120",
             "comment-preservation-method-arguments, 120",

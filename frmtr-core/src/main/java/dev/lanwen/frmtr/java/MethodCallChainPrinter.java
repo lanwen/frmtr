@@ -253,7 +253,7 @@ final class MethodCallChainPrinter {
                 && calls.size() == 1
                 && !firstSegmentAttachedToRoot
                 && methodRootCanKeepSingleSuffixAttached(methodRoot)
-                && calls.getFirst().getAllContainedComments().isEmpty()
+                && methodCallSegmentHasNoOwnContainedComments(calls.getFirst())
                 && !methodCallSegmentHasComment(calls.getFirst())) {
             if (methodCallSegmentHasBlockLambdaArgument(calls.getFirst())
                     && blockLambdaSegmentFirstLine(compactSource.compact(methodRoot), calls.getFirst())
@@ -294,9 +294,27 @@ final class MethodCallChainPrinter {
         if (methodRoot.getAllContainedComments().isEmpty()) {
             return true;
         }
+        if (methodCallSegmentHasLineComments(methodRoot)
+                && !methodCallSegmentHasLeadingLineComment(methodRoot)
+                && !methodCallSegmentHasNameComment(methodRoot)) {
+            return true;
+        }
         return methodCallSegmentHasBlockLambdaArgument(methodRoot)
                 && !methodCallSegmentHasLeadingLineComment(methodRoot)
                 && !methodCallSegmentHasNameComment(methodRoot);
+    }
+
+    private boolean methodCallSegmentHasNoOwnContainedComments(MethodCallExpr expression) {
+        List<Comment> containedComments = expression.getAllContainedComments();
+        if (containedComments.isEmpty()) {
+            return true;
+        }
+        return expression.getScope()
+                .map(scope -> {
+                    List<Comment> scopeComments = scope.getAllContainedComments();
+                    return containedComments.stream().allMatch(scopeComments::contains);
+                })
+                .orElse(false);
     }
 
     private boolean canKeepSuffixAttachedToPromotedBlockLambdaRoot(
@@ -674,6 +692,10 @@ final class MethodCallChainPrinter {
 
     private boolean methodCallSegmentHasArgumentGapComment(MethodCallExpr expression) {
         return commentedExpressionLists.hasUnprintedLineComments(expression, expression.getArguments());
+    }
+
+    private boolean methodCallSegmentHasLineComments(MethodCallExpr expression) {
+        return commentedExpressionLists.hasLineComments(expression, expression.getArguments());
     }
 
     private boolean methodCallSegmentHasNameComment(MethodCallExpr expression) {

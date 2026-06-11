@@ -92,10 +92,17 @@ final class CommentedExpressionListPrinter {
     }
 
     private Doc argumentLine(Expression argument, List<JavaCommentTrivia> trailingComments) {
-        if (argument instanceof MethodCallExpr methodCall && !trailingComments.isEmpty()) {
+        if (argument instanceof MethodCallExpr methodCall && hasInlineTrailingComment(argument, trailingComments)) {
             return Doc.text(compactSource.commentFree(methodCall));
         }
         return expressionRenderer.apply(argument);
+    }
+
+    private boolean hasInlineTrailingComment(Expression argument, List<JavaCommentTrivia> trailingComments) {
+        return trailingComments.stream()
+                .anyMatch(comment -> comment.startsOnEndLine(argument)
+                        || comment.startsAfterNodeOnSameLine(argument)
+                        || argumentContainsComment(argument, comment));
     }
 
     private boolean argumentContainsComment(Expression argument, JavaCommentTrivia comment) {
@@ -108,6 +115,17 @@ final class CommentedExpressionListPrinter {
      */
     boolean hasUnprintedLineComments(Node container, NodeList<Expression> arguments) {
         return !arguments.isEmpty() && hasUnprintedComments(argumentCommentGaps(container, arguments));
+    }
+
+    /**
+     * Reports source-line comments in argument gaps without consulting printed-comment state.
+     */
+    boolean hasLineComments(Node container, NodeList<Expression> arguments) {
+        return !arguments.isEmpty()
+                && argumentCommentGaps(container, arguments).stream()
+                        .flatMap(List::stream)
+                        .findAny()
+                        .isPresent();
     }
 
     private List<List<JavaCommentTrivia>> argumentCommentGaps(Node container, NodeList<Expression> arguments) {

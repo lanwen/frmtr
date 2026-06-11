@@ -144,7 +144,11 @@ final class MethodCallChainSourcePlanner {
         ChainRootRendering rootRendering = ChainRootRendering.EXPRESSION_RENDERER;
         List<MethodCallExpr> remainingCalls = calls;
         if (analysis.hasComments()) {
-            if (shouldPromoteFirstCallForArgumentComments(root, calls, analysis)) {
+            if (shouldPromoteFirstCallWithOwnArgumentComments(root, calls, analysis)) {
+                root = calls.getFirst();
+                remainingCalls = new ArrayList<>(calls.subList(1, calls.size()));
+                rootRendering = promotedStaticFirstCallRendering(calls);
+            } else if (shouldPromoteFirstCallForArgumentComments(root, calls, analysis)) {
                 root = calls.getFirst();
                 remainingCalls = new ArrayList<>(calls.subList(1, calls.size()));
                 rootRendering = promotedStaticFirstCallRendering(calls);
@@ -275,6 +279,15 @@ final class MethodCallChainSourcePlanner {
 
     private boolean shouldPromoteFirstCall(Expression root, List<MethodCallExpr> calls) {
         return promotesFirstCall(root) && !calls.isEmpty();
+    }
+
+    private boolean shouldPromoteFirstCallWithOwnArgumentComments(
+            Expression root,
+            List<MethodCallExpr> calls,
+            MethodCallChainAnalysis analysis) {
+        return promotesFirstCall(root)
+                && calls.size() > 1
+                && analysis.firstCallHasArgumentGapComment();
     }
 
     private boolean shouldPromoteBuilderRoot(Expression root, List<MethodCallExpr> calls) {

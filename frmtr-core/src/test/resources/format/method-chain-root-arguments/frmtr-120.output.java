@@ -38,6 +38,15 @@ class MethodChainRootArgumentsSample {
             replyTo -> new Message.Command.Open(replyTo, request),
             timeouts.next()
         ).onErrorMap(TimeoutException.class, err -> new RoutingTimeoutFailure(err, request.owner(), request.target()));
+        assertThat(
+            Codec.derive(
+                Codec.parse(
+                    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789abcdefghijklmnop"
+                )
+            )
+        ).isEqualTo(
+            "public-key-public-key-public-key-public-key-public-key-public-key-public-key-public-key"
+        );
     }
 
     Result awaitRoutedResult(Receiver next) {

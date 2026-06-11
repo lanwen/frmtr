@@ -362,6 +362,16 @@ final class MethodCallPrinter {
                 || !sourceShape.methodCallArgumentsSpanMultipleLines(expression)) {
             return Optional.empty();
         }
+        Optional<Doc> scopedPrefix = sourceMultilineArgumentScopedPrefix(expression);
+        if (scopedPrefix.isPresent()) {
+            return Optional.of(Doc.concat(
+                    scopedPrefix.orElseThrow(),
+                    Doc.indent(Doc.concat(
+                            Doc.HARD_LINE,
+                            methodCallArgumentList(expression.getArguments(), Doc.HARD_LINE))),
+                    Doc.HARD_LINE,
+                    Doc.text(")")));
+        }
         String prefix = methodCallPrefix(expression);
         return Optional.of(Doc.concat(
                 Doc.text(prefix + "("),
@@ -370,6 +380,27 @@ final class MethodCallPrinter {
                         methodCallArgumentList(expression.getArguments(), Doc.HARD_LINE))),
                 Doc.HARD_LINE,
                 Doc.text(")")));
+    }
+
+    /**
+     * Keeps a source-multiline method-call scope structured when a later call's arguments force their own multiline
+     * layout, instead of compacting that scope into the later call prefix.
+     */
+    private Optional<Doc> sourceMultilineArgumentScopedPrefix(MethodCallExpr expression) {
+        return expression.getScope()
+                .filter(MethodCallExpr.class::isInstance)
+                .map(MethodCallExpr.class::cast)
+                .filter(sourceShape::spansMultipleLines)
+                .map(scope -> Doc.concat(
+                        expressionRenderer.apply(scope),
+                        Doc.text("." + methodCallSelector(expression) + "(")));
+    }
+
+    private String methodCallSelector(MethodCallExpr expression) {
+        return expression.getTypeArguments()
+                        .map(typeArguments -> "<" + compactSource.compactJoin(typeArguments) + ">")
+                        .orElse("")
+                + expression.getNameAsString();
     }
 
     private Doc textBlockArgument(TextBlockLiteralExpr textBlockLiteralExpr, MethodCallExpr expression) {

@@ -36,10 +36,46 @@ final class LambdaExpressionArgumentOpener {
         ));
     }
 
+    FlowResult zippedDispatch(DispatchSource dispatchSource, String tenantKey, Packet packet) {
+        return FlowResult.zip(
+            dispatchSource.resolveTenant(tenantKey),
+            dispatchSource.resolvePacket(packet.reference()),
+            (tenant, packetName) -> buildDispatchEnvelope(
+                tenant.routeName(),
+                tenant.routeId(),
+                packetName,
+                packet.reference(),
+                packet.window(),
+                packet.startedAt(),
+                DispatchSignal.START
+            )
+        );
+    }
+
+    FlowResult details(
+        DispatchRepository dispatchRepository,
+        ImageCounter imageCounter,
+        Clock clock,
+        String requestId
+    ) {
+        return dispatchRepository.findByIdWithOwner(requestId).flatMap(record -> imageCounter.count(record).map(
+                counts -> DispatchDetails.from(clock, record, counts)
+        ));
+    }
+
+    FlowResult imageCounts(CacheTemplate cacheTemplate, String imagesKey) {
+        return cacheTemplate
+            .<String, byte[]>opsForHash()
+            .entries(imagesKey)
+            .collectMap(Map.Entry::getKey, entry -> Long.parseLong(
+                    new String(entry.getValue(), StandardCharsets.UTF_8)
+            ));
+    }
+
     GatewayPlan route(GatewayPlan plan, Resolver resolver) {
         return defaults(plan)
-            .routeRules(
-                rules -> rules.pathMatchers("/ready", "/ready/**", "/about").allow().pathMatchers("/**").guarded()
+            .routeRules(rules ->
+                rules.pathMatchers("/ready", "/ready/**", "/about").allow().pathMatchers("/**").guarded()
             )
             .tokenRelay(relay -> relay.managerResolver(resolver))
             .build();
@@ -127,5 +163,66 @@ final class LambdaExpressionArgumentOpener {
         return probe
             .withVirtualTime(() -> sessionReader.findSessions(principal.groupId(), Source.LOCAL, principal, null))
             .expectSubscription();
+    }
+
+    FlowResult fillsMissingRows(
+        UsageRepository usageRepository,
+        String tenantId,
+        List<LocalDate> windows
+    ) {
+        return usageRepository.fetchRows(tenantId).collectList().map(knownRows -> windows
+                .stream()
+                .map(window -> {
+                    return knownRows
+                        .stream()
+                        .filter(row -> row.window().equals(window))
+                        .findFirst()
+                        .orElseGet(
+                            () ->
+                                WindowUsage.builder()
+                                    .tenantId(tenantId)
+                                    .window(window)
+                                    .usage(UsageCount.EMPTY)
+                                    .build()
+                        );
+                })
+                .collect(Collectors.toList())
+        );
+    }
+
+    FlowResult fillsProjectedRows(
+        ProjectionRepository projectionRepository,
+        String tenantId,
+        List<LocalDate> accountingWindows
+    ) {
+        return projectionRepository.fetchRows(tenantId).collectList().map(projectedRows -> accountingWindows
+                .stream()
+                .map(accountingWindow -> {
+                    return projectedRows
+                        .stream()
+                        .filter(
+                            projectedWindowUsage -> projectedWindowUsage.accountingWindow().equals(accountingWindow)
+                        )
+                        .findFirst()
+                        .orElseGet(() -> ProjectedWindowUsageSnapshot.builder()
+                                .tenantId(tenantId)
+                                .accountingWindow(accountingWindow)
+                                .usage(UsageCount.EMPTY)
+                                .build()
+                        );
+                })
+                .collect(Collectors.toList())
+        );
+    }
+
+    FlowResult combinesCounters(CounterStream counterStream) {
+        return counterStream.grouped().flatMapIterable(Map::values).map(counters -> counters
+                .stream()
+                .reduce((left, right) -> new ImageCounter(
+                        left.projectedImageReference(),
+                        left.projectedContainerCount() + right.projectedContainerCount()
+                ))
+                .orElseThrow()
+        );
     }
 }

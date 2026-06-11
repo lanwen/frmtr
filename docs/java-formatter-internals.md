@@ -159,7 +159,7 @@ Declaration and type printers own Java declaration grammar after `BodyDeclaratio
   block-lambda method-call initializers, comments around `=`, and initializer-specific width fallbacks.
 - `ConstructorDeclarationPrinter`, `MethodDeclarationPrinter`, `InitializerDeclarationPrinter`,
   `CallableSignaturePrinter`, and `ThrowsClausePrinter`: callable headers, signatures, throws-clause placement,
-  body-versus-semicolon suffixes, and initializer bodies.
+  callable parameter annotation prefixes, body-versus-semicolon suffixes, and initializer bodies.
 - `DeclarationPrefixPrinter`: leading annotation docs, inline annotation text after modifiers, declaration-annotation
   classification for member spacing, and canonical modifier ordering.
 - `MemberBlockPrinter`: already-rendered type member sequencing with orphan comments, opening-brace line comments, and

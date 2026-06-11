@@ -115,7 +115,14 @@ final class ReturnExpressionPrinter {
     }
 
     private boolean returnLineFits(Expression expression) {
-        return currentIndentedWidth.applyAsInt("return " + compact.apply(expression) + ";") <= options.lineWidth();
+        String line = "return " + compact.apply(expression) + ";";
+        return returnLineWidth(expression, line) <= options.lineWidth();
+    }
+
+    private int returnLineWidth(Expression expression, String line) {
+        return expression.getRange()
+                .map(range -> Math.max(0, range.begin.column - "return ".length() + 1) + line.length())
+                .orElseGet(() -> currentIndentedWidth.applyAsInt(line));
     }
 
     /**

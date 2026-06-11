@@ -31,7 +31,7 @@ final class CommentedMethodSignaturePrinter {
         if (declaration.getBody().isEmpty()) {
             return Optional.empty();
         }
-        if (!hasCommentedMethodSignature(rawMethod)) {
+        if (!hasCommentedMethodSignature(declaration, rawMethod)) {
             return Optional.empty();
         }
         if (!canFormatCommentedMethodSignatureFromRaw(declaration)) {
@@ -40,13 +40,37 @@ final class CommentedMethodSignaturePrinter {
         return Optional.of(indentEmbeddedLines(formatCommentedMethod(rawMethod)));
     }
 
-    private boolean hasCommentedMethodSignature(String rawMethod) {
+    private boolean hasCommentedMethodSignature(MethodDeclaration declaration, String rawMethod) {
         int bodyStart = rawMethod.indexOf('{');
         if (bodyStart < 0) {
             return false;
         }
-        String signature = rawMethod.substring(0, bodyStart);
+        String signature = signatureWithoutLeadingDeclarationAnnotations(declaration, rawMethod.substring(0, bodyStart));
         return signature.contains("//") || signature.contains("/*");
+    }
+
+    /**
+     * Removes declaration-annotation lines before deciding whether the method signature needs the raw comment fallback.
+     *
+     * <p>Annotation expressions own their trailing comments. If this raw fallback sees those comments as method-signature
+     * comments, it flattens annotations, method header, and body text together instead of letting the structured
+     * declaration printers keep each boundary.
+     */
+    private String signatureWithoutLeadingDeclarationAnnotations(MethodDeclaration declaration, String signature) {
+        int declarationBeginLine = declaration.getRange().map(range -> range.begin.line).orElse(Integer.MIN_VALUE);
+        int nameBeginLine = declaration.getName().getRange().map(range -> range.begin.line).orElse(Integer.MIN_VALUE);
+        int lastLeadingAnnotationLine = declaration.getAnnotations().stream()
+                .flatMap(annotation -> annotation.getRange().stream())
+                .filter(range -> range.end.line < nameBeginLine)
+                .mapToInt(range -> range.end.line)
+                .max()
+                .orElse(Integer.MIN_VALUE);
+        if (lastLeadingAnnotationLine < declarationBeginLine) {
+            return signature;
+        }
+        List<String> lines = signature.lines().toList();
+        int linesToDrop = Math.min(lines.size(), lastLeadingAnnotationLine - declarationBeginLine + 1);
+        return String.join("\n", lines.subList(linesToDrop, lines.size()));
     }
 
     private boolean canFormatCommentedMethodSignatureFromRaw(MethodDeclaration declaration) {

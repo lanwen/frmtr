@@ -1,5 +1,15 @@
 class MultilineShapes {
 
+    MultilineShapes(
+        @Lookup(
+            sample.platform.transport.ConfigurationKeys.PRIMARY_STREAM_PROCESSING_CHANNEL
+        ) StreamProcessingDefinition definition,
+        Clock clock
+    ) {
+        this.definition = definition;
+        this.clock = clock;
+    }
+
     Object chain() {
         await()
             .atMost(Duration.ofSeconds(5))
@@ -13,6 +23,13 @@ class MultilineShapes {
         var routed = keys.isEmpty()
             ? trimmedValues(source.entries())
             : List.<String>of();
+        int calendarShift =
+            (
+                CalendarWindow.from(clock.instant(), ZoneOffset.UTC).dayIndex() ==
+                CalendarWindow.from(clock.instant(), tenantOffset).dayIndex()
+            )
+                ? 1
+                : 2;
         return pkg.sample.Widget.builder()
             .name("demo")
             .build();

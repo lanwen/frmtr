@@ -227,6 +227,7 @@ final class FrmtrTest {
             "field-trailing-comments, 120",
             "member-blank-lines, 120",
             "member-comment-spacing, 120",
+            "method-annotation-line-comment, 120",
             "method-call-binary-argument, 120",
             "method-call-initializer-opener, 120",
             "method-chain-root-arguments, 120",
@@ -827,15 +828,13 @@ final class FrmtrTest {
         String formatted = Frmtr.format(source, options);
 
         assertThat(formatted)
-                .contains("a.b(c ->\n"
-                        + "      eeeeeeeeee.ffffffffff(\n"
+                .contains("a.b(c -> eeeeeeeeee.ffffffffff(\n"
                         + "        gggggggggg,\n"
                         + "        hhhhhhhhhh,\n"
                         + "        iiiiiiiiii,\n"
                         + "        jjjjjjjjjj,\n"
                         + "        kkkkkkkkkk\n"
-                        + "      )\n"
-                        + "    );");
+                        + "    ));");
     }
 
     @Test
@@ -858,9 +857,9 @@ final class FrmtrTest {
         String formatted = Frmtr.format(source, options);
 
         assertThat(formatted)
-                .contains("aaaaaaaaaa(bbbbbbbbbb ->\n"
-                        + "      cccccccccc(\"123456789012345678901234567890123456\")\n"
-                        + "    );");
+                .contains("aaaaaaaaaa(bbbbbbbbbb -> cccccccccc(\n"
+                        + "        \"123456789012345678901234567890123456\"\n"
+                        + "    ));");
     }
 
     @Test

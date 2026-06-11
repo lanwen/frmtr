@@ -7,6 +7,7 @@ import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
+import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
@@ -372,15 +373,15 @@ final class ConditionalExpressionPrinter {
         Expression condition = expression.getCondition();
         return switch (conditionalConditionLayout(expression, condition)) {
             case EXPRESSION -> expressionRenderer.apply(condition);
-            case ASSIGNMENT_CONTINUATION_BINARY -> binaryExpressionLinesRenderer.apply(condition, true);
-            case NESTED_BINARY -> nestedBinaryExpressionLinesRenderer.apply(condition, true);
+            case ASSIGNMENT_CONTINUATION_BINARY -> enclosedBinaryCondition(condition, binaryExpressionLinesRenderer);
+            case NESTED_BINARY -> enclosedBinaryCondition(condition, nestedBinaryExpressionLinesRenderer);
         };
     }
 
     private ConditionalConditionLayout conditionalConditionLayout(
             ConditionalExpr expression,
             Expression condition) {
-        if (!(condition instanceof BinaryExpr)
+        if (binaryCondition(condition).isEmpty()
                 || continuationStatementWidth.applyAsInt(compactSource.compact(condition)) <= options.lineWidth()) {
             return ConditionalConditionLayout.EXPRESSION;
         }
@@ -388,6 +389,41 @@ final class ConditionalExpressionPrinter {
             return ConditionalConditionLayout.ASSIGNMENT_CONTINUATION_BINARY;
         }
         return ConditionalConditionLayout.NESTED_BINARY;
+    }
+
+    private Doc enclosedBinaryCondition(
+            Expression condition,
+            BiFunction<Expression, Boolean, Doc> binaryRenderer) {
+        BinaryExpr binary = binaryCondition(condition).orElseThrow();
+        Doc lines = binaryRenderer.apply(binary, true);
+        for (int i = 0; i < enclosedDepth(condition); i++) {
+            lines = Doc.concat(
+                    Doc.text("("),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, lines)),
+                    Doc.HARD_LINE,
+                    Doc.text(")"));
+        }
+        return lines;
+    }
+
+    private Optional<BinaryExpr> binaryCondition(Expression condition) {
+        if (condition instanceof BinaryExpr binaryExpr) {
+            return Optional.of(binaryExpr);
+        }
+        if (condition instanceof EnclosedExpr enclosedExpr) {
+            return binaryCondition(enclosedExpr.getInner());
+        }
+        return Optional.empty();
+    }
+
+    private int enclosedDepth(Expression condition) {
+        int depth = 0;
+        Expression current = condition;
+        while (current instanceof EnclosedExpr enclosedExpr) {
+            depth++;
+            current = enclosedExpr.getInner();
+        }
+        return depth;
     }
 
     private boolean conditionalIsAssignmentValue(ConditionalExpr expression) {

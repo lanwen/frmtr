@@ -7,12 +7,14 @@ import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.ReceiverParameter;
 import com.github.javaparser.ast.comments.BlockComment;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -31,6 +33,8 @@ final class CallableSignaturePrinter {
     private final Function<Node, String> compact;
     private final Function<Node, String> compactTypeLike;
     private final Function<Type, Doc> typeBody;
+    private final JavaFormatRule<AnnotationExpr> annotation;
+    private final Function<AnnotationExpr, String> annotationFlatText;
     private final Function<Modifier, String> modifier;
     private final Predicate<Type> typeCanBreak;
     private final Function<Node, Doc> unattachedTrailingBlockComment;
@@ -43,6 +47,8 @@ final class CallableSignaturePrinter {
             Function<Node, String> compact,
             Function<Node, String> compactTypeLike,
             Function<Type, Doc> typeBody,
+            JavaFormatRule<AnnotationExpr> annotation,
+            Function<AnnotationExpr, String> annotationFlatText,
             Function<Modifier, String> modifier,
             Predicate<Type> typeCanBreak,
             Function<Node, Doc> unattachedTrailingBlockComment,
@@ -53,6 +59,8 @@ final class CallableSignaturePrinter {
         this.compact = compact;
         this.compactTypeLike = compactTypeLike;
         this.typeBody = typeBody;
+        this.annotation = annotation;
+        this.annotationFlatText = annotationFlatText;
         this.modifier = modifier;
         this.typeCanBreak = typeCanBreak;
         this.unattachedTrailingBlockComment = unattachedTrailingBlockComment;
@@ -117,7 +125,7 @@ final class CallableSignaturePrinter {
      */
     String compactReceiverParameter(ReceiverParameter parameter) {
         List<String> parts = new ArrayList<>();
-        parameter.getAnnotations().stream().map(compact).forEach(parts::add);
+        parameter.getAnnotations().stream().map(annotationFlatText).forEach(parts::add);
         parts.add(compactTypeLike.apply(parameter.getType()));
         parts.add(receiverName(parameter));
         return String.join(" ", parts);
@@ -149,7 +157,7 @@ final class CallableSignaturePrinter {
     String callableParameterText(CallableDeclaration<?> declaration) {
         List<String> parameters = new ArrayList<>();
         declaration.getReceiverParameter().map(this::compactReceiverParameter).ifPresent(parameters::add);
-        declaration.getParameters().stream().map(compact).forEach(parameters::add);
+        declaration.getParameters().stream().map(this::parameterFlat).forEach(parameters::add);
         return String.join(", ", parameters);
     }
 
@@ -217,17 +225,67 @@ final class CallableSignaturePrinter {
      */
     Doc parameter(Parameter parameter) {
         if (!parameter.isVarArgs() && typeCanBreak.test(parameter.getType())) {
-            List<String> prefixes = new ArrayList<>();
-            parameter.getAnnotations().stream().map(compact).forEach(prefixes::add);
-            parameter.getModifiers().stream().map(modifier).forEach(prefixes::add);
-            String prefix = prefixes.isEmpty() ? "" : String.join(" ", prefixes) + " ";
+            List<Doc> parts = new ArrayList<>();
+            parameterLeadingBlockComment(parameter).ifPresent(parts::add);
+            parts.add(parameterAnnotationPrefix(parameter));
+            parameter.getModifiers().stream()
+                    .map(modifier)
+                    .map(text -> Doc.text(text + " "))
+                    .forEach(parts::add);
+            parts.add(typeBody.apply(parameter.getType()));
+            parts.add(Doc.text(" " + parameter.getNameAsString() + parameterTrailingBlockCommentText(parameter)));
             return Doc.group(Doc.concat(
-                    Doc.text(prefix),
-                    typeBody.apply(parameter.getType()),
-                    Doc.text(" " + parameter.getNameAsString())));
+                    parts));
         }
+        List<Doc> prefix = new ArrayList<>();
+        parameterLeadingBlockComment(parameter).ifPresent(prefix::add);
+        prefix.add(parameterAnnotationPrefix(parameter));
+        prefix.add(Doc.text(parameterTailText(parameter) + parameterTrailingBlockCommentText(parameter)));
+        return Doc.concat(prefix);
+    }
+
+    private Optional<Doc> parameterLeadingBlockComment(Parameter parameter) {
+        Doc leadingBlockComment = comments.ownComment(parameter, BlockComment.class::isInstance);
+        if (leadingBlockComment == Doc.EMPTY) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.text(commentText.apply(leadingBlockComment) + " "));
+    }
+
+    private Doc parameterAnnotationPrefix(Parameter parameter) {
+        if (parameter.getAnnotations().isEmpty()) {
+            return Doc.EMPTY;
+        }
+        if (!parameterAnnotationSourceBreaks(parameter)) {
+            return Doc.text(parameter.getAnnotations().stream()
+                            .map(annotationFlatText)
+                            .reduce((left, right) -> left + " " + right)
+                            .orElse("")
+                    + " ");
+        }
+        return Doc.concat(
+                Doc.join(Doc.text(" "), parameter.getAnnotations().stream()
+                        .map(annotation::format)
+                        .toList()),
+                Doc.text(" "));
+    }
+
+    private boolean parameterAnnotationSourceBreaks(Parameter parameter) {
+        return parameter.getAnnotations().stream()
+                .flatMap(annotation -> annotation.getRange().stream())
+                .anyMatch(range -> range.begin.line < range.end.line)
+                && currentIndentedWidth(parameterFlat(parameter)) > options.lineWidth();
+    }
+
+    private String parameterFlat(Parameter parameter) {
         List<String> parts = new ArrayList<>();
-        parameter.getAnnotations().stream().map(compact).forEach(parts::add);
+        parameter.getAnnotations().stream().map(annotationFlatText).forEach(parts::add);
+        parts.add(parameterTailText(parameter));
+        return String.join(" ", parts);
+    }
+
+    private String parameterTailText(Parameter parameter) {
+        List<String> parts = new ArrayList<>();
         parameter.getModifiers().stream().map(modifier).forEach(parts::add);
         String type = compact.apply(parameter.getType());
         if (parameter.isVarArgs()) {
@@ -236,19 +294,18 @@ final class CallableSignaturePrinter {
         }
         parts.add(type);
         parts.add(parameter.getNameAsString());
-        String text = String.join(" ", parts);
-        Doc leadingBlockComment = comments.ownComment(parameter, BlockComment.class::isInstance);
-        if (leadingBlockComment != Doc.EMPTY) {
-            text = commentText.apply(leadingBlockComment) + " " + text;
-        }
+        return String.join(" ", parts);
+    }
+
+    private String parameterTrailingBlockCommentText(Parameter parameter) {
         Doc trailingBlockComment = unattachedTrailingBlockComment.apply(parameter);
         if (trailingBlockComment == Doc.EMPTY) {
             trailingBlockComment = parameterTrailingBlockComment(parameter);
         }
         if (trailingBlockComment != Doc.EMPTY) {
-            text += " " + commentText.apply(trailingBlockComment);
+            return " " + commentText.apply(trailingBlockComment);
         }
-        return Doc.text(text);
+        return "";
     }
 
     /**

@@ -281,16 +281,16 @@ final class MainTest {
     }
 
     @Test
-    void rejectsStdinWithWriteOrSelectors() {
+    void rejectsStdinWithWriteSelectorsOrExcludes() {
         StringWriter out = new StringWriter();
         StringWriter err = new StringWriter();
         Main main = new Main(new PrintWriter(out, true), new PrintWriter(err, true), "class Demo{}");
 
-        int exitCode = Main.commandLine(main).execute("--stdin", "--write", "src");
+        int exitCode = Main.commandLine(main).execute("--stdin", "--exclude", "generated", "src");
 
         assertThat(exitCode).isEqualTo(2);
         assertThat(out.toString()).isEmpty();
-        assertThat(err.toString()).isEqualTo("--stdin cannot be combined with --write or selectors\n");
+        assertThat(err.toString()).isEqualTo("--stdin cannot be combined with --write, selectors, or --exclude\n");
     }
 
     @Test
@@ -651,6 +651,41 @@ final class MainTest {
                 Checked 1 file: 1 would change.
                 """);
         assertThat(result.err()).isEmpty();
+    }
+
+    @Test
+    void excludesPathsAndGlobsDuringDiscovery(@TempDir Path dir) throws IOException {
+        write(dir.resolve("src/Kept.java"), "class Kept{int value;}");
+        write(dir.resolve("src/generated/Generated.java"), "class Generated{int value;}");
+        write(dir.resolve("fixtures/Fixture.java"), "class Fixture{int value;}");
+
+        Result result = run(dir, null, "--check", "--exclude", "src/generated, fixtures/**/*.java", ".");
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.out()).isEqualTo("""
+                ✗ src/Kept.java
+                Checked 1 file: 1 would change, 2 excluded.
+                """);
+        assertThat(result.err()).isEmpty();
+    }
+
+    @Test
+    void writeSummaryCountsExcludedJavaFiles(@TempDir Path dir) throws IOException {
+        write(dir.resolve("src/Kept.java"), "class Kept{int value;}");
+        write(dir.resolve("src/generated/Generated.java"), "class Generated{int value;}");
+
+        Result result = run(dir, null, "--write", "--exclude", "src/generated", ".");
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.out()).isEqualTo("Processed 2 files: 1 formatted, 1 excluded.\n");
+        assertThat(result.err()).isEmpty();
+        assertThat(Files.readString(dir.resolve("src/Kept.java"))).isEqualTo("""
+                class Kept {
+
+                    int value;
+                }
+                """);
+        assertThat(Files.readString(dir.resolve("src/generated/Generated.java"))).isEqualTo("class Generated{int value;}");
     }
 
     @Test

@@ -225,8 +225,8 @@ The CLI is an adapter over the public formatter API:
   stdout and `:frmtr-tooling` diff and diagnostic strings remain uncolored. Diagnostic semantic spans come from
   `:frmtr-tooling`; the CLI only maps those roles to terminal colors.
 - `--write`: rewrite files in place, group file-run failures on stderr by display path, and print a concise stdout
-  processed summary counting formatted, failed, ignored, and unchanged files. Ignored files are `.java` files excluded by
-  `.gitignore` during selector discovery.
+  processed summary counting formatted, failed, ignored, excluded, and unchanged files. Ignored files are `.java` files
+  excluded by `.gitignore` during selector discovery; excluded files are `.java` files matched by `--exclude`.
 - `--version`: print the project version, Git commit SHA, and build timestamp.
 - `--java-level`: select the core Java parser language level; accepts enum names such as `LATEST_AVAILABLE` and `UNSET`,
   plus release shorthands such as `21` or `JAVA_21`.
@@ -234,8 +234,10 @@ The CLI is an adapter over the public formatter API:
   failures.
 - `--stacktrace`: include formatter or I/O stack traces in failure output; default CLI failures stay concise. Internal
   formatter failures are reported as internal bugs with the original failure summary and a stacktrace hint.
-- Selectors may be repeated, comma-separated, files, directories, or glob patterns.
-- Directory and glob traversal formats `.java` files, skips unknown extensions silently, and respects `.gitignore`.
+- Selectors and `--exclude` patterns may be repeated, comma-separated, files, directories, or glob patterns. Directory
+  excludes apply recursively.
+- Directory and glob traversal formats `.java` files, skips unknown extensions silently, respects `.gitignore`, and
+  removes files matched by `--exclude`.
 - Missing explicit `.java` file selectors are tool errors reported on stderr with exit code 2. Empty glob or directory
   matches are not tool errors, but the CLI reports `No Java files matched.` on stderr instead of exiting silently.
 - Multiple matched files without `--write` or `--check` are printed to stdout with filename headers. Because stdout is
@@ -248,6 +250,13 @@ first.
 The CLI module owns application packaging and Gradle `run` wiring. Local execution uses
 `./gradlew :frmtr-cli:run --args='...'`; the `run` task uses the root project as its working directory and forwards
 `System.in` so selectors, default discovery, and `--stdin` behave like the native binary during local development.
+
+The root build exposes `frmtrSelfCheck` and `frmtrSelfFormat` as shared `JavaExec` wrappers over the current
+`:frmtr-cli` runtime classpath. They provide a one-invocation dogfood path for the formatter engine, tooling runner, and
+CLI over this checkout while excluding `frmtr-core/src/test/resources/format`, whose fixture corpus
+contains intentionally unsupported or formatter-sensitive Java samples. `frmtrSelfCheck` enables CLI unified diffs so
+reviewers can inspect drift directly from the check output. Gradle plugin behavior remains covered by
+`:frmtr-gradle-plugin` functional tests.
 
 ## Gradle Plugin
 

@@ -56,6 +56,17 @@ frmtr {
 
 Java source files under the Gradle build directory are excluded by default. The Gradle parser language level defaults to `AUTO`, which uses the Java toolchain first, then `sourceCompatibility`, and otherwise falls back to `LATEST_AVAILABLE`. Set `LATEST_AVAILABLE` to ignore the Gradle project target and use JavaParser's bleeding-edge parser mode, or `UNDEFINED` for JavaParser raw mode. Check output prints changed and failed files; unified diffs for changed files are enabled by default and label sides as `origin` and `frmtr`. When files fail, Gradle renders outlined failure blocks with JavaParser source context when available before failing the task.
 
+To format this checkout with the current formatter implementation, use the root CLI wrapper tasks:
+
+```bash
+./gradlew frmtrSelfCheck
+./gradlew frmtrSelfFormat
+```
+
+These tasks run `:frmtr-cli` from the current checkout in a single Gradle invocation. They dogfood the formatter engine, tooling runner, and CLI over this checkout while excluding `frmtr-core/src/test/resources/format`; `frmtrSelfCheck` prints unified diffs for changed files. Gradle plugin behavior stays covered by `:frmtr-gradle-plugin` functional tests.
+
+Review the produced Java diff and run tests before committing it; the formatter source contains embedded Java fixtures, so self-formatting can expose formatter bugs rather than producing a purely mechanical style diff.
+
 ## CLI
 
 Check all Java files under the current directory:
@@ -76,11 +87,17 @@ Format selectors in place:
 ./gradlew :frmtr-cli:run --args='--write "src/**/*.java,examples/*.java"'
 ```
 
-Selectors can be repeated, comma-separated, files, directories, or glob patterns. The CLI formats `.java` files, skips unknown extensions silently, and respects `.gitignore`. Missing explicit `.java` file selectors are reported as tool errors; empty glob or directory matches report that no Java files matched without failing the run.
+Exclude generated or fixture sources from a broad selector:
+
+```bash
+./gradlew :frmtr-cli:run --args='--check --exclude "src/generated,fixtures/**/*.java" .'
+```
+
+Selectors and `--exclude` patterns can be repeated, comma-separated, files, directories, or glob patterns. Directory excludes apply recursively. The CLI formats `.java` files, skips unknown extensions silently, and respects `.gitignore`. Missing explicit `.java` file selectors are reported as tool errors; empty glob or directory matches report that no Java files matched without failing the run.
 
 With no selectors, the CLI uses `./**/*.java` and checks formatting by default. Pass `--stdin` to read Java source from stdin and write formatted source to stdout, or combine `--stdin` with `--check` or `--diff` to compare piped source against formatter output.
 
-`--check` prints `✓` for files that are already formatted, `✗` for files that need formatting, and `!` for files that failed to parse or could not be read, followed by a concise summary. Check-mode failure diagnostics are printed immediately after the failed file's `!` status line, so they stay grouped with that file when `--diff` output is present. `--write` ends with a processed summary that counts files formatted, failed, and ignored by `.gitignore`. For multi-file runs, `--check` and `--write` continue after formatter failures and render outlined diagnostics with line-numbered JavaParser source context when available. Add `--diff` to render unified diffs with `origin` and `frmtr` side labels for files marked `✗`, or `--render-line-width` to print terminal-only diff output with a dotted width guide near the configured line width. Use `--color=auto|always|never` to control ANSI coloring for status markers and diff output; formatted source output stays plain. Use `--stacktrace` when debugging formatter or I/O failures.
+`--check` prints `✓` for files that are already formatted, `✗` for files that need formatting, and `!` for files that failed to parse or could not be read, followed by a concise summary. Check-mode failure diagnostics are printed immediately after the failed file's `!` status line, so they stay grouped with that file when `--diff` output is present. `--write` ends with a processed summary that counts files formatted, failed, ignored by `.gitignore`, and excluded by `--exclude`. For multi-file runs, `--check` and `--write` continue after formatter failures and render outlined diagnostics with line-numbered JavaParser source context when available. Add `--diff` to render unified diffs with `origin` and `frmtr` side labels for files marked `✗`, or `--render-line-width` to print terminal-only diff output with a dotted width guide near the configured line width. Use `--color=auto|always|never` to control ANSI coloring for status markers and diff output; formatted source output stays plain. Use `--stacktrace` when debugging formatter or I/O failures.
 
 Use `--java-level` to choose the parser language level. The default is `LATEST_AVAILABLE`, which uses JavaParser's bleeding-edge parser mode. Use `UNSET` for JavaParser raw mode, or a release value such as `17`, `JAVA_21`, or `JAVA_25` when you need a strict release gate.
 

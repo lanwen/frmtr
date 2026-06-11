@@ -21,59 +21,66 @@ final class FileDiscovery {
         this.root = root.toAbsolutePath().normalize();
     }
 
-    Result discover(List<String> selectorArgs) throws IOException {
+    Result discover(List<String> selectorArgs, List<String> excludeArgs) throws IOException {
         Set<Path> files = new LinkedHashSet<>();
         Set<Path> ignoredFiles = new LinkedHashSet<>();
+        Set<Path> excludedFiles = new LinkedHashSet<>();
         List<String> missingFileSelectors = new ArrayList<>();
         GitIgnoreMatcher ignores = new GitIgnoreMatcher(root);
+        ExcludeMatcher excludes = new ExcludeMatcher(root, selectors(excludeArgs));
         for (String selector : selectors(selectorArgs)) {
             if (missingExplicitJavaFileSelector(selector)) {
                 missingFileSelectors.add(selector);
                 continue;
             }
-            Selection selection = discoverSelector(selector, ignores);
+            Selection selection = discoverSelector(selector, ignores, excludes);
             files.addAll(selection.files());
             ignoredFiles.addAll(selection.ignoredFiles());
+            excludedFiles.addAll(selection.excludedFiles());
         }
         return new Result(
                 files.stream().sorted(Comparator.naturalOrder()).toList(),
                 ignoredFiles.stream().sorted(Comparator.naturalOrder()).toList(),
+                excludedFiles.stream().sorted(Comparator.naturalOrder()).toList(),
                 missingFileSelectors);
     }
 
-    private Selection discoverSelector(String selector, GitIgnoreMatcher ignores) throws IOException {
+    private Selection discoverSelector(String selector, GitIgnoreMatcher ignores, ExcludeMatcher excludes) throws IOException {
         if (hasGlobSyntax(selector)) {
-            return discoverGlob(selector, ignores);
+            return discoverGlob(selector, ignores, excludes);
         }
 
         Path path = root.resolve(selector).normalize();
         if (Files.isDirectory(path)) {
-            return discoverDirectory(path, ignores);
+            return discoverDirectory(path, ignores, excludes);
         }
         if (Files.isRegularFile(path) && isJavaFile(path)) {
             Path normalized = path.toAbsolutePath().normalize();
-            if (ignores.isIgnored(path, false)) {
-                return new Selection(List.of(), List.of(normalized));
+            if (excludes.matches(normalized)) {
+                return new Selection(List.of(), List.of(), List.of(normalized));
             }
-            return new Selection(List.of(normalized), List.of());
+            if (ignores.isIgnored(path, false)) {
+                return new Selection(List.of(), List.of(normalized), List.of());
+            }
+            return new Selection(List.of(normalized), List.of(), List.of());
         }
-        return new Selection(List.of(), List.of());
+        return new Selection(List.of(), List.of(), List.of());
     }
 
-    private Selection discoverDirectory(Path directory, GitIgnoreMatcher ignores) throws IOException {
+    private Selection discoverDirectory(Path directory, GitIgnoreMatcher ignores, ExcludeMatcher excludes) throws IOException {
         try (var stream = Files.walk(directory)) {
             List<Path> candidates = stream.filter(Files::isRegularFile)
                     .filter(FileDiscovery::isJavaFile)
                     .map(path -> path.toAbsolutePath().normalize())
                     .toList();
-            return selectCandidates(candidates, ignores);
+            return selectCandidates(candidates, ignores, excludes);
         }
     }
 
-    private Selection discoverGlob(String selector, GitIgnoreMatcher ignores) throws IOException {
+    private Selection discoverGlob(String selector, GitIgnoreMatcher ignores, ExcludeMatcher excludes) throws IOException {
         Path base = globBase(selector);
         if (!Files.exists(base)) {
-            return new Selection(List.of(), List.of());
+            return new Selection(List.of(), List.of(), List.of());
         }
         List<PathMatcher> matchers = globMatchers(selector);
         try (var stream = Files.walk(base)) {
@@ -82,21 +89,24 @@ final class FileDiscovery {
                     .filter(path -> matches(matchers, path))
                     .map(path -> path.toAbsolutePath().normalize())
                     .toList();
-            return selectCandidates(candidates, ignores);
+            return selectCandidates(candidates, ignores, excludes);
         }
     }
 
-    private static Selection selectCandidates(List<Path> candidates, GitIgnoreMatcher ignores) {
+    private static Selection selectCandidates(List<Path> candidates, GitIgnoreMatcher ignores, ExcludeMatcher excludes) {
         List<Path> files = new ArrayList<>();
         List<Path> ignoredFiles = new ArrayList<>();
+        List<Path> excludedFiles = new ArrayList<>();
         for (Path candidate : candidates) {
-            if (ignores.isIgnored(candidate, false)) {
+            if (excludes.matches(candidate)) {
+                excludedFiles.add(candidate);
+            } else if (ignores.isIgnored(candidate, false)) {
                 ignoredFiles.add(candidate);
             } else {
                 files.add(candidate);
             }
         }
-        return new Selection(files, ignoredFiles);
+        return new Selection(files, ignoredFiles, excludedFiles);
     }
 
     private boolean matches(List<PathMatcher> matchers, Path path) {
@@ -173,10 +183,11 @@ final class FileDiscovery {
                 && Files.notExists(root.resolve(selector).normalize());
     }
 
-    record Result(List<Path> files, List<Path> ignoredFiles, List<String> missingFileSelectors) {
+    record Result(List<Path> files, List<Path> ignoredFiles, List<Path> excludedFiles, List<String> missingFileSelectors) {
         Result {
             files = List.copyOf(files);
             ignoredFiles = List.copyOf(ignoredFiles);
+            excludedFiles = List.copyOf(excludedFiles);
             missingFileSelectors = List.copyOf(missingFileSelectors);
         }
 
@@ -187,12 +198,67 @@ final class FileDiscovery {
         long ignoredCount() {
             return ignoredFiles.size();
         }
+
+        long excludedCount() {
+            return excludedFiles.size();
+        }
+
+        long skippedCount() {
+            return ignoredFiles.size() + excludedFiles.size();
+        }
     }
 
-    private record Selection(List<Path> files, List<Path> ignoredFiles) {
+    private record Selection(List<Path> files, List<Path> ignoredFiles, List<Path> excludedFiles) {
         private Selection {
             files = List.copyOf(files);
             ignoredFiles = List.copyOf(ignoredFiles);
+            excludedFiles = List.copyOf(excludedFiles);
+        }
+    }
+
+    private static final class ExcludeMatcher {
+        private final Path root;
+        private final List<ExcludeRule> rules;
+
+        ExcludeMatcher(Path root, List<String> patterns) {
+            this.root = root.toAbsolutePath().normalize();
+            this.rules = patterns.stream().map(pattern -> ExcludeRule.create(this.root, pattern)).toList();
+        }
+
+        boolean matches(Path path) {
+            Path absolute = path.toAbsolutePath().normalize();
+            Path relative = absolute.startsWith(root) ? root.relativize(absolute) : absolute;
+            return rules.stream().anyMatch(rule -> rule.matches(absolute, relative));
+        }
+    }
+
+    private sealed interface ExcludeRule permits PathExcludeRule, GlobExcludeRule {
+        static ExcludeRule create(Path root, String pattern) {
+            if (hasGlobSyntax(pattern)) {
+                return new GlobExcludeRule(globMatchers(pattern));
+            }
+            return new PathExcludeRule(root.resolve(pattern).toAbsolutePath().normalize());
+        }
+
+        boolean matches(Path absolute, Path relative);
+    }
+
+    private record PathExcludeRule(Path path) implements ExcludeRule {
+        @Override
+        public boolean matches(Path absolute, Path relative) {
+            return absolute.equals(path) || absolute.startsWith(path);
+        }
+    }
+
+    private record GlobExcludeRule(List<PathMatcher> matchers) implements ExcludeRule {
+        private GlobExcludeRule {
+            matchers = List.copyOf(matchers);
+        }
+
+        @Override
+        public boolean matches(Path absolute, Path relative) {
+            return matchers.stream()
+                    .anyMatch(matcher -> matcher.matches(relative) || matcher.matches(Path.of(".").resolve(relative)));
         }
     }
 

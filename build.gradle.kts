@@ -5,6 +5,35 @@ plugins {
 group = "dev.lanwen.frmtr"
 version = "0.1.0-SNAPSHOT"
 
+val frmtrCli = project(":frmtr-cli")
+val frmtrCliRuntimeClasspath = frmtrCli.provider {
+    frmtrCli.extensions
+        .getByType<SourceSetContainer>()
+        .named("main")
+        .get()
+        .runtimeClasspath
+}
+
+val frmtrSelfFixtureCorpus = "frmtr-core/src/test/resources/format"
+
+fun TaskContainer.registerFrmtrCliTask(name: String, configure: JavaExec.() -> Unit) = register<JavaExec>(name) {
+    group = "formatting"
+    mainClass.set("dev.lanwen.frmtr.cli.Main")
+    workingDir = rootProject.projectDir
+    classpath(frmtrCliRuntimeClasspath)
+    configure()
+}
+
+tasks.registerFrmtrCliTask("frmtrSelfCheck") {
+    description = "Verifies formatting with frmtr CLI."
+    args("--check", "--diff", "--exclude", frmtrSelfFixtureCorpus, ".")
+}
+
+tasks.registerFrmtrCliTask("frmtrSelfFormat") {
+    description = "Formats code with frmtr CLI."
+    args("--write", "--exclude", frmtrSelfFixtureCorpus, ".")
+}
+
 subprojects {
     group = rootProject.group
     version = rootProject.version

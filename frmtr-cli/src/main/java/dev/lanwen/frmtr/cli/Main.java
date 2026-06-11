@@ -55,6 +55,12 @@ public final class Main implements Callable<Integer> {
     @Option(names = "--write", description = "Rewrite files in place.")
     boolean write;
 
+    @Option(
+            names = "--exclude",
+            paramLabel = "PATTERN",
+            description = "Exclude files, directories, globs, or comma-separated patterns from selector discovery.")
+    List<String> excludes = List.of();
+
     @Option(names = "--stacktrace", description = "Print stack traces for formatter and I/O failures.")
     boolean stacktrace;
 
@@ -132,8 +138,8 @@ public final class Main implements Callable<Integer> {
     @Override
     public Integer call() throws Exception {
         if (stdinMode) {
-            if (write || !selectors.isEmpty()) {
-                err.println("--stdin cannot be combined with --write or selectors");
+            if (write || !selectors.isEmpty() || !excludes.isEmpty()) {
+                err.println("--stdin cannot be combined with --write, selectors, or --exclude");
                 return 2;
             }
             FormatterOptions options = formatterOptions();
@@ -155,29 +161,33 @@ public final class Main implements Callable<Integer> {
         }
         FormatterOptions options = formatterOptions();
         FileDiscovery.Result discovery = new FileDiscovery(workingDirectory)
-                .discover(usingDefaultSelectors ? DEFAULT_SELECTORS : selectors);
+                .discover(usingDefaultSelectors ? DEFAULT_SELECTORS : selectors, excludes);
         if (discovery.hasMissingFileSelectors()) {
             return printMissingFileSelectors(discovery.missingFileSelectors());
         }
         List<Path> files = discovery.files();
         if (files.isEmpty()) {
-            if (write && discovery.ignoredCount() > 0) {
-                printWriteSummary(new FormatRunResult(List.of()), discovery.ignoredCount());
+            if (write && discovery.skippedCount() > 0) {
+                printWriteSummary(new FormatRunResult(List.of()), discovery.ignoredCount(), discovery.excludedCount());
                 return 0;
             }
-            if (!effectiveCheck && discovery.ignoredCount() > 0) {
-                printPrintSummary(0, 0, 0, discovery.ignoredCount());
+            if (effectiveCheck && discovery.excludedCount() > 0) {
+                printCheckSummary(new FormatRunResult(List.of()), discovery.excludedCount());
+                return 0;
+            }
+            if (!effectiveCheck && discovery.skippedCount() > 0) {
+                printPrintSummary(0, 0, 0, discovery.ignoredCount(), discovery.excludedCount());
                 return 0;
             }
             return noFilesMatched();
         }
         if (effectiveCheck) {
-            return checkFiles(files, options);
+            return checkFiles(files, options, discovery.excludedCount());
         }
         if (write) {
-            return writeFiles(files, options, discovery.ignoredCount());
+            return writeFiles(files, options, discovery.ignoredCount(), discovery.excludedCount());
         }
-        return printFiles(files, options, discovery.ignoredCount());
+        return printFiles(files, options, discovery.ignoredCount(), discovery.excludedCount());
     }
 
     private FormatterOptions formatterOptions() {
@@ -225,7 +235,7 @@ public final class Main implements Callable<Integer> {
         }
     }
 
-    private int checkFiles(List<Path> files, FormatterOptions options) {
+    private int checkFiles(List<Path> files, FormatterOptions options, long excluded) {
         FormatRunResult run = FormatterRunner.check(workingDirectory, files, options, diff || renderLineWidth, diffMode());
         for (FormatFileResult result : run.results()) {
             out.println(statusLine(statusMarker(result.status()), result.displayPath()));
@@ -238,7 +248,7 @@ public final class Main implements Callable<Integer> {
         if (stacktrace) {
             printRunFailures(run);
         }
-        printCheckSummary(run);
+        printCheckSummary(run, excluded);
         out.flush();
         if (run.hasFailures()) {
             return 2;
@@ -250,15 +260,15 @@ public final class Main implements Callable<Integer> {
         return renderLineWidth ? RenderMode.LINE_WIDTH_RULER : RenderMode.PATCH;
     }
 
-    private int writeFiles(List<Path> files, FormatterOptions options, long ignored) {
+    private int writeFiles(List<Path> files, FormatterOptions options, long ignored, long excluded) {
         FormatRunResult run = FormatterRunner.write(workingDirectory, files, options);
         printRunFailures(run);
-        printWriteSummary(run, ignored);
+        printWriteSummary(run, ignored, excluded);
         out.flush();
         return run.hasFailures() ? 2 : 0;
     }
 
-    private int printFiles(List<Path> files, FormatterOptions options, long ignored) {
+    private int printFiles(List<Path> files, FormatterOptions options, long ignored, long excluded) {
         List<FormatFileResult> failures = new ArrayList<>();
         long printed = 0;
         for (int i = 0; i < files.size(); i++) {
@@ -278,7 +288,7 @@ public final class Main implements Callable<Integer> {
         }
         FormatRunResult failureRun = new FormatRunResult(failures);
         printRunFailures(failureRun);
-        printPrintSummary(files.size(), printed, failureRun.failureCount(), ignored);
+        printPrintSummary(files.size(), printed, failureRun.failureCount(), ignored, excluded);
         return failureRun.hasFailures() ? 2 : 0;
     }
 
@@ -314,29 +324,32 @@ public final class Main implements Callable<Integer> {
         return 0;
     }
 
-    private void printCheckSummary(FormatRunResult run) {
+    private void printCheckSummary(FormatRunResult run, long excluded) {
         List<String> parts = new ArrayList<>();
         addCount(parts, statusCount(run, FormatFileStatus.UNCHANGED), "unchanged", Style.fg_green);
         addCount(parts, statusCount(run, FormatFileStatus.CHANGED), "would change", Style.fg_yellow);
         addCount(parts, run.failureCount(), "failed", Style.fg_red);
+        addCount(parts, excluded, "excluded", LINE_BORDER_STYLE);
         out.println(summaryLine("Checked", run.results().size(), parts));
     }
 
-    private void printWriteSummary(FormatRunResult run, long ignored) {
+    private void printWriteSummary(FormatRunResult run, long ignored, long excluded) {
         List<String> parts = new ArrayList<>();
         addRequiredCount(parts, statusCount(run, FormatFileStatus.WRITTEN), "formatted", Style.fg_green);
         addCount(parts, run.failureCount(), "failed", Style.fg_red);
         addCount(parts, ignored, "ignored", LINE_BORDER_STYLE);
+        addCount(parts, excluded, "excluded", LINE_BORDER_STYLE);
         addCount(parts, statusCount(run, FormatFileStatus.UNCHANGED), "unchanged", Style.fg_green);
-        out.println(summaryLine("Processed", run.results().size() + ignored, parts));
+        out.println(summaryLine("Processed", run.results().size() + ignored + excluded, parts));
     }
 
-    private void printPrintSummary(long total, long printed, long failed, long ignored) {
+    private void printPrintSummary(long total, long printed, long failed, long ignored, long excluded) {
         List<String> parts = new ArrayList<>();
         addRequiredCount(parts, printed, "printed", Style.fg_green);
         addCount(parts, failed, "failed", Style.fg_red);
         addCount(parts, ignored, "ignored", LINE_BORDER_STYLE);
-        err.println(summaryLine("Processed", total + ignored, parts));
+        addCount(parts, excluded, "excluded", LINE_BORDER_STYLE);
+        err.println(summaryLine("Processed", total + ignored + excluded, parts));
         err.flush();
     }
 

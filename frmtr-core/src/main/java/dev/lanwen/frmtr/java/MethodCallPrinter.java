@@ -124,6 +124,10 @@ final class MethodCallPrinter {
         return methodCall(expression, MethodCallBreakMode.FORCED);
     }
 
+    Optional<Doc> packedExpressionLambdaMethodCallChainBody(String firstLine, MethodCallExpr expression) {
+        return methodChains.packedExpressionLambdaBodyChain(firstLine, expression);
+    }
+
     /**
      * Chooses the method-call shape once callers know this expression really is a method call.
      *

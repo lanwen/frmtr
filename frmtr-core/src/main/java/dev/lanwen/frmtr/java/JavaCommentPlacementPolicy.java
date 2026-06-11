@@ -275,6 +275,36 @@ final class JavaCommentPlacementPolicy {
         return Optional.empty();
     }
 
+    /**
+     * Finds the nearest block comment that source placed after {@code node} on the same line.
+     *
+     * <p>Unlike {@link #unattachedTrailingBlockComment(Node)}, this includes comments JavaParser attached to another
+     * nearby node. Record components use this when a same-line block comment visually belongs to the component name even
+     * if the parser associated it with the following component.
+     */
+    Optional<JavaCommentTrivia> trailingBlockCommentAfterNode(Node node) {
+        return trailingBlockCommentsAfterNode(node).stream().findFirst();
+    }
+
+    /**
+     * Finds source-ordered block comments that source placed after {@code node} on the same line.
+     */
+    List<JavaCommentTrivia> trailingBlockCommentsAfterNode(Node node) {
+        Optional<Node> parent = node.getParentNode();
+        while (parent.isPresent()) {
+            List<JavaCommentTrivia> trailing = containedComments(parent.orElseThrow()).stream()
+                    .filter(JavaCommentTrivia::isBlock)
+                    .filter(comment -> comment.startsAfterNodeOnSameLine(node))
+                    .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
+                    .toList();
+            if (!trailing.isEmpty()) {
+                return trailing;
+            }
+            parent = parent.orElseThrow().getParentNode();
+        }
+        return List.of();
+    }
+
     private JavaCommentMap map() {
         if (commentMap == null) {
             throw new IllegalStateException("Java comment placement policy has not been initialized for a print run");

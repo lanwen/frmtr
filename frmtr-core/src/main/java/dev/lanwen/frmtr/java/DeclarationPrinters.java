@@ -200,7 +200,6 @@ final class DeclarationPrinters {
                 declarationPrefixes::modifiers,
                 types::flatTypeParameters,
                 declarationPrefixes::inlineAnnotations,
-                expressions::annotationFlatText,
                 compactSource::compact,
                 types::typeBody,
                 types::brokenClassOrInterfaceType,

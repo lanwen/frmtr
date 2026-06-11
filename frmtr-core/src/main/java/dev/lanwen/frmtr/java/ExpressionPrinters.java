@@ -113,6 +113,7 @@ final class ExpressionPrinters {
                 blockRenderer,
                 binaries::nestedLines,
                 this::brokenMethodCall,
+                this::packedExpressionLambdaMethodCallChainBody,
                 this::methodCallArgumentList,
                 compactSource::compact,
                 compactSource::compactWithoutOwnComment,
@@ -285,6 +286,10 @@ final class ExpressionPrinters {
 
     Doc brokenMethodCall(MethodCallExpr expression) {
         return methodCalls.brokenMethodCall(expression);
+    }
+
+    Optional<Doc> packedExpressionLambdaMethodCallChainBody(String firstLine, MethodCallExpr expression) {
+        return methodCalls.packedExpressionLambdaMethodCallChainBody(firstLine, expression);
     }
 
     Doc methodCall(MethodCallExpr expression) {

@@ -47,7 +47,6 @@ final class MethodDeclarationPrinter {
     private final Function<NodeWithModifiers<?>, String> modifiers;
     private final Function<NodeList<TypeParameter>, String> flatTypeParameters;
     private final Function<NodeWithAnnotations<?>, String> inlineAnnotations;
-    private final Function<AnnotationExpr, String> annotationFlatText;
     private final Function<Node, String> compact;
     private final Function<Type, Doc> typeBody;
     private final Function<ClassOrInterfaceType, Doc> brokenClassOrInterfaceType;
@@ -67,7 +66,6 @@ final class MethodDeclarationPrinter {
             Function<NodeWithModifiers<?>, String> modifiers,
             Function<NodeList<TypeParameter>, String> flatTypeParameters,
             Function<NodeWithAnnotations<?>, String> inlineAnnotations,
-            Function<AnnotationExpr, String> annotationFlatText,
             Function<Node, String> compact,
             Function<Type, Doc> typeBody,
             Function<ClassOrInterfaceType, Doc> brokenClassOrInterfaceType,
@@ -85,7 +83,6 @@ final class MethodDeclarationPrinter {
         this.modifiers = modifiers;
         this.flatTypeParameters = flatTypeParameters;
         this.inlineAnnotations = inlineAnnotations;
-        this.annotationFlatText = annotationFlatText;
         this.compact = compact;
         this.typeBody = typeBody;
         this.brokenClassOrInterfaceType = brokenClassOrInterfaceType;
@@ -105,7 +102,7 @@ final class MethodDeclarationPrinter {
             return rawPreservedSource.rawWithoutOwnComment(declaration, commentedMethod.orElseThrow());
         }
         List<Doc> docs = new ArrayList<>();
-        docs.add(methodDeclarationAnnotations(declaration));
+        docs.add(declarationAnnotations.apply(declaration));
         docs.add(annotationMethodGapComments(declaration));
         String prefix = modifiers.apply(declaration);
         docs.add(Doc.text(prefix));
@@ -136,19 +133,6 @@ final class MethodDeclarationPrinter {
         }
         docs.add(declaration.getBody().map(body -> Doc.concat(Doc.text(" "), block.apply(body))).orElse(Doc.text(";")));
         return Doc.concat(docs);
-    }
-
-    private Doc methodDeclarationAnnotations(MethodDeclaration declaration) {
-        if (!hasAnnotationMethodGapComments(declaration)) {
-            return declarationAnnotations.apply(declaration);
-        }
-        return Doc.concat(declaration.getAnnotations().stream()
-                .map(annotation -> Doc.concat(Doc.text(annotationFlatText.apply(annotation)), Doc.HARD_LINE))
-                .toList());
-    }
-
-    private boolean hasAnnotationMethodGapComments(MethodDeclaration declaration) {
-        return annotationMethodGapCommentTrivia(declaration).findAny().isPresent();
     }
 
     private Doc annotationMethodGapComments(MethodDeclaration declaration) {

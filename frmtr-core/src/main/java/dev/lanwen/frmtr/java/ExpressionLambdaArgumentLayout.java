@@ -12,7 +12,6 @@ import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.stmt.Statement;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
@@ -38,6 +37,7 @@ final class ExpressionLambdaArgumentLayout {
     private final JavaFormatRule<Expression> expressionRenderer;
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
     private final Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer;
+    private final BiFunction<String, MethodCallExpr, Optional<Doc>> packedMethodCallChainBodyRenderer;
     private final JavaFormatRule<Statement> statementRenderer;
     private final BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList;
     private final Function<Node, String> compact;
@@ -53,6 +53,7 @@ final class ExpressionLambdaArgumentLayout {
             JavaFormatRule<Expression> expressionRenderer,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
             Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer,
+            BiFunction<String, MethodCallExpr, Optional<Doc>> packedMethodCallChainBodyRenderer,
             JavaFormatRule<Statement> statementRenderer,
             BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList,
             Function<Node, String> compact,
@@ -66,6 +67,7 @@ final class ExpressionLambdaArgumentLayout {
         this.expressionRenderer = expressionRenderer;
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
         this.brokenObjectCreationRenderer = brokenObjectCreationRenderer;
+        this.packedMethodCallChainBodyRenderer = packedMethodCallChainBodyRenderer;
         this.statementRenderer = statementRenderer;
         this.methodCallArgumentList = methodCallArgumentList;
         this.compact = compact;
@@ -143,52 +145,9 @@ final class ExpressionLambdaArgumentLayout {
                     Doc.HARD_LINE,
                     Doc.text(")")));
         }
-        Optional<Doc> packedObjectCreation = packedObjectCreationWithoutClosingLine(firstLine, bodyExpression);
-        if (packedObjectCreation.isPresent()) {
-            return Optional.of(Doc.concat(
-                    Doc.text(firstLine + " "),
-                    Doc.indent(packedObjectCreation.orElseThrow()),
-                    Doc.HARD_LINE,
-                    Doc.text("))")));
-        }
-        Optional<Doc> packedBlockLambdaBodyCall = packedBodyCallWithBlockLambda(firstLine, bodyExpression);
-        if (packedBlockLambdaBodyCall.isPresent()) {
-            return Optional.of(Doc.concat(
-                    Doc.text(firstLine + " "),
-                    packedBlockLambdaBodyCall.orElseThrow(),
-                    Doc.text("))")));
-        }
-        Optional<Doc> packedConditional = packedConditionalBody(firstLine, bodyExpression);
-        if (packedConditional.isPresent()) {
-            return Optional.of(Doc.concat(
-                    Doc.text(firstLine + " "),
-                    Doc.indent(packedConditional.orElseThrow()),
-                    Doc.HARD_LINE,
-                    Doc.text(")")));
-        }
-        Optional<Doc> packedBodyCall = packedBodyCallWithoutClosingLine(firstLine, bodyExpression);
-        if (packedBodyCall.isPresent()) {
-            return Optional.of(Doc.concat(
-                    Doc.text(firstLine + " "),
-                    Doc.indent(packedBodyCall.orElseThrow()),
-                    Doc.HARD_LINE,
-                    Doc.text("))")));
-        }
-        Optional<Doc> packedBodyChain = packedBodyChainWithoutClosingLine(firstLine, bodyExpression);
-        if (packedBodyChain.isPresent()) {
-            return Optional.of(Doc.concat(
-                    Doc.text(firstLine + " "),
-                    Doc.indent(packedBodyChain.orElseThrow()),
-                    Doc.HARD_LINE,
-                    Doc.text(")")));
-        }
-        Optional<Doc> packedBodyCallScope = packedBodyCallScopeWithoutClosingLine(firstLine, bodyExpression);
-        if (packedBodyCallScope.isPresent()) {
-            return Optional.of(Doc.concat(
-                    Doc.text(firstLine + " "),
-                    Doc.indent(packedBodyCallScope.orElseThrow()),
-                    Doc.HARD_LINE,
-                    Doc.text("))")));
+        Optional<PackedLambdaBody> packedBody = packedLambdaBody(firstLine, bodyExpression);
+        if (packedBody.isPresent()) {
+            return Optional.of(packedBody.orElseThrow().render(firstLine));
         }
         if (bodyFirstSourceLineFits(firstLine, bodyExpression)) {
             return Optional.of(Doc.concat(
@@ -320,6 +279,31 @@ final class ExpressionLambdaArgumentLayout {
         return blockStatementWidth.applyAsInt(options.indentUnit().repeat(3) + bodyLine);
     }
 
+    /**
+     * Picks the first body shape that can share the lambda opener and records who owns the closing call suffix.
+     */
+    private Optional<PackedLambdaBody> packedLambdaBody(String firstLine, Expression bodyExpression) {
+        return packedObjectCreationWithoutClosingLine(firstLine, bodyExpression)
+                .map(doc -> PackedLambdaBody.closingOnOwnLine(doc, "))"))
+                .or(() -> packedBodyCallWithBlockLambda(firstLine, bodyExpression)
+                        .map(doc -> PackedLambdaBody.attachedClosing(doc, "))")))
+                .or(() -> packedConditionalBody(firstLine, bodyExpression)
+                        .map(doc -> PackedLambdaBody.closingOnOwnLine(doc, ")")))
+                .or(() -> packedBodyCallWithoutClosingLine(firstLine, bodyExpression)
+                        .map(doc -> PackedLambdaBody.closingOnOwnLine(doc, "))")))
+                .or(() -> packedMethodCallChainBody(firstLine, bodyExpression)
+                        .map(doc -> PackedLambdaBody.closingOnOwnLine(doc, ")")))
+                .or(() -> packedBodyCallScopeWithoutClosingLine(firstLine, bodyExpression)
+                        .map(doc -> PackedLambdaBody.closingOnOwnLine(doc, "))")));
+    }
+
+    private Optional<Doc> packedMethodCallChainBody(String firstLine, Expression bodyExpression) {
+        if (!(bodyExpression instanceof MethodCallExpr methodCall)) {
+            return Optional.empty();
+        }
+        return packedMethodCallChainBodyRenderer.apply(firstLine, methodCall);
+    }
+
     private Optional<Doc> packedConditionalBody(String firstLine, Expression bodyExpression) {
         if (!(bodyExpression instanceof ConditionalExpr conditionalExpr)
                 || !conditionalExpr.getAllContainedComments().isEmpty()) {
@@ -338,85 +322,6 @@ final class ExpressionLambdaArgumentLayout {
                         Doc.HARD_LINE,
                         Doc.text(": "),
                         expressionRenderer.format(conditionalExpr.getElseExpr())))));
-    }
-
-    private Optional<Doc> packedBodyChainWithoutClosingLine(String firstLine, Expression bodyExpression) {
-        if (!(bodyExpression instanceof MethodCallExpr methodCall)
-                || !methodCall.getAllContainedComments().isEmpty()) {
-            return Optional.empty();
-        }
-        List<String> segments = new ArrayList<>();
-        Optional<String> root = compactMethodCallChainRoot(methodCall, segments);
-        if (root.isEmpty() || segments.isEmpty()) {
-            return Optional.empty();
-        }
-        String fullChain = root.orElseThrow() + String.join("", segments);
-        if (expressionFirstLineWidth(firstLine + " " + fullChain) <= options.lineWidth()) {
-            return Optional.empty();
-        }
-        String firstBodyLine = root.orElseThrow();
-        int splitIndex = 0;
-        for (int index = 0; index < segments.size(); index++) {
-            String candidate = firstBodyLine + segments.get(index);
-            if (expressionFirstLineWidth(firstLine + " " + candidate) > options.lineWidth()) {
-                break;
-            }
-            firstBodyLine = candidate;
-            splitIndex = index + 1;
-        }
-        if (expressionFirstLineWidth(firstLine + " " + firstBodyLine) > options.lineWidth()
-                || splitIndex >= segments.size()) {
-            return Optional.empty();
-        }
-        if (segments.subList(splitIndex, segments.size()).stream()
-                .anyMatch(segment -> brokenArgumentListLambdaBodyWidth(segment) > options.lineWidth())) {
-            return Optional.empty();
-        }
-        List<Doc> remainingSegments = segments.subList(splitIndex, segments.size()).stream()
-                .map(Doc::text)
-                .toList();
-        return Optional.of(Doc.concat(
-                Doc.text(firstBodyLine),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, remainingSegments)))));
-    }
-
-    private Optional<String> compactMethodCallChainRoot(MethodCallExpr expression, List<String> segments) {
-        if (!compactMethodCallChainSegmentCanStayFlat(expression)) {
-            return Optional.empty();
-        }
-        Optional<Expression> scope = expression.getScope();
-        if (scope.isEmpty()) {
-            return Optional.empty();
-        }
-        Expression scoped = scope.orElseThrow();
-        if (scoped instanceof MethodCallExpr methodCallScope) {
-            Optional<String> root = compactMethodCallChainRoot(methodCallScope, segments);
-            root.ifPresent(ignored -> segments.add(compactMethodCallChainSegment(expression)));
-            return root;
-        }
-        if (!scoped.getAllContainedComments().isEmpty() || rawSource.rawWithoutOwnComment(scoped).contains("\n")) {
-            return Optional.empty();
-        }
-        segments.add(compactMethodCallChainSegment(expression));
-        return Optional.of(compact.apply(scoped));
-    }
-
-    private boolean compactMethodCallChainSegmentCanStayFlat(MethodCallExpr expression) {
-        return expression.getArguments().stream()
-                .noneMatch(argument -> argument instanceof LambdaExpr
-                        || !argument.getAllContainedComments().isEmpty()
-                        || rawSource.rawWithoutOwnComment(argument).contains("\n"));
-    }
-
-    private String compactMethodCallChainSegment(MethodCallExpr expression) {
-        return "."
-                + expression.getTypeArguments()
-                        .map(typeArguments -> "<" + compactJoin.apply(typeArguments) + ">")
-                        .orElse("")
-                + expression.getNameAsString()
-                + "("
-                + compactJoin.apply(expression.getArguments())
-                + ")";
     }
 
     private Optional<Doc> packedBodyCallWithoutClosingLine(String firstLine, Expression bodyExpression) {
@@ -711,5 +616,42 @@ final class ExpressionLambdaArgumentLayout {
             return !callBodyOpenerLine.isEmpty()
                     && bodyOpenerWidth.applyAsInt(callBodyOpenerLine) > lineWidth;
         }
+    }
+
+    /**
+     * Carries a packed lambda body with its call-closing policy so body selection does not hide suffix ownership in
+     * repeated ad hoc render branches.
+     */
+    private record PackedLambdaBody(
+            Doc doc,
+            String closingSuffix,
+            Placement placement) {
+
+        static PackedLambdaBody closingOnOwnLine(Doc doc, String closingSuffix) {
+            return new PackedLambdaBody(doc, closingSuffix, Placement.CLOSING_ON_OWN_LINE);
+        }
+
+        static PackedLambdaBody attachedClosing(Doc doc, String closingSuffix) {
+            return new PackedLambdaBody(doc, closingSuffix, Placement.ATTACHED_CLOSING);
+        }
+
+        Doc render(String firstLine) {
+            return switch (placement) {
+                case CLOSING_ON_OWN_LINE -> Doc.concat(
+                        Doc.text(firstLine + " "),
+                        Doc.indent(doc),
+                        Doc.HARD_LINE,
+                        Doc.text(closingSuffix));
+                case ATTACHED_CLOSING -> Doc.concat(
+                        Doc.text(firstLine + " "),
+                        doc,
+                        Doc.text(closingSuffix));
+            };
+        }
+    }
+
+    private enum Placement {
+        CLOSING_ON_OWN_LINE,
+        ATTACHED_CLOSING
     }
 }

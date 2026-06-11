@@ -119,6 +119,98 @@ final class MethodCallChainPrinter {
     }
 
     /**
+     * Builds the chain fragment used when an expression-lambda body is packed after {@code ->}.
+     *
+     * <p>The lambda helper still owns the enclosing call suffix, but chain root collection, compact segment text, and
+     * split-point selection stay with the method-call chain printer.
+     */
+    Optional<Doc> packedExpressionLambdaBodyChain(String firstLine, MethodCallExpr expression) {
+        if (!expression.getAllContainedComments().isEmpty()) {
+            return Optional.empty();
+        }
+        List<String> segments = new ArrayList<>();
+        Optional<String> root = compactMethodCallChainRoot(expression, segments);
+        if (root.isEmpty() || segments.isEmpty()) {
+            return Optional.empty();
+        }
+        String fullChain = root.orElseThrow() + String.join("", segments);
+        if (expressionLambdaBodyLineWidth(firstLine + " " + fullChain) <= options.lineWidth()) {
+            return Optional.empty();
+        }
+        String firstBodyLine = root.orElseThrow();
+        int splitIndex = 0;
+        for (int index = 0; index < segments.size(); index++) {
+            String candidate = firstBodyLine + segments.get(index);
+            if (expressionLambdaBodyLineWidth(firstLine + " " + candidate) > options.lineWidth()) {
+                break;
+            }
+            firstBodyLine = candidate;
+            splitIndex = index + 1;
+        }
+        if (expressionLambdaBodyLineWidth(firstLine + " " + firstBodyLine) > options.lineWidth()
+                || splitIndex >= segments.size()) {
+            return Optional.empty();
+        }
+        if (segments.subList(splitIndex, segments.size()).stream()
+                .anyMatch(segment -> packedExpressionLambdaBodyLineWidth(segment) > options.lineWidth())) {
+            return Optional.empty();
+        }
+        List<Doc> remainingSegments = segments.subList(splitIndex, segments.size()).stream()
+                .map(Doc::text)
+                .toList();
+        return Optional.of(Doc.concat(
+                Doc.text(firstBodyLine),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, remainingSegments)))));
+    }
+
+    private Optional<String> compactMethodCallChainRoot(MethodCallExpr expression, List<String> segments) {
+        if (!compactMethodCallChainSegmentCanStayFlat(expression)) {
+            return Optional.empty();
+        }
+        Optional<Expression> scope = expression.getScope();
+        if (scope.isEmpty()) {
+            return Optional.empty();
+        }
+        Expression scoped = scope.orElseThrow();
+        if (scoped instanceof MethodCallExpr methodCallScope) {
+            Optional<String> root = compactMethodCallChainRoot(methodCallScope, segments);
+            root.ifPresent(ignored -> segments.add(compactMethodCallChainSegment(expression)));
+            return root;
+        }
+        if (!scoped.getAllContainedComments().isEmpty() || rawSource.rawWithoutOwnComment(scoped).contains("\n")) {
+            return Optional.empty();
+        }
+        segments.add(compactMethodCallChainSegment(expression));
+        return Optional.of(compactSource.compact(scoped));
+    }
+
+    private boolean compactMethodCallChainSegmentCanStayFlat(MethodCallExpr expression) {
+        return expression.getArguments().stream()
+                .noneMatch(argument -> argument instanceof LambdaExpr
+                        || !argument.getAllContainedComments().isEmpty()
+                        || rawSource.rawWithoutOwnComment(argument).contains("\n"));
+    }
+
+    private String compactMethodCallChainSegment(MethodCallExpr expression) {
+        return "."
+                + expression.getTypeArguments()
+                        .map(typeArguments -> "<" + compactSource.compactJoin(typeArguments) + ">")
+                        .orElse("")
+                + expression.getNameAsString()
+                + "("
+                + compactSource.compactJoin(expression.getArguments())
+                + ")";
+    }
+
+    private int expressionLambdaBodyLineWidth(String line) {
+        return blockStatementWidth.applyAsInt(options.indentUnit() + line);
+    }
+
+    private int packedExpressionLambdaBodyLineWidth(String line) {
+        return blockStatementWidth.applyAsInt(options.indentUnit().repeat(3) + line);
+    }
+
+    /**
      * Preserves an already-multiline call statement when the argument list itself spans source lines.
      *
      * <p>Statement rendering still owns the trailing semicolon, but the call printer owns the call-shape decision because

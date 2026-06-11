@@ -5,7 +5,6 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
-import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.AnnotationExpr;
@@ -259,11 +258,8 @@ final class RecordDeclarationPrinter {
     }
 
     private Doc recordComponentTrailingBlockComment(Parameter parameter) {
-        return parameter.getParentNode().stream()
-                .flatMap(parent -> parent.getAllContainedComments().stream())
-                .filter(BlockComment.class::isInstance)
-                .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(parameter.getName(), comment))
-                .filter(comment -> commentEndsBeforeNextRecordComponent(parameter, comment))
+        return commentPlacement.trailingBlockCommentsAfterNode(parameter.getName()).stream()
+                .filter(comment -> commentEndsBeforeNextRecordComponent(parameter, comment.comment()))
                 .findFirst()
                 .map(comments::comment)
                 .orElse(Doc.EMPTY);

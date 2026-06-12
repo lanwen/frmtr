@@ -144,9 +144,10 @@ from Java source sets and Gradle-style source filters, then uses that same colle
 between parsing and printing. It enables token storage and comment attribution because formatter rules need
 syntax-adjacent trivia.
 
-`FormatterOptions` exposes one canonical record constructor for fully specified configuration, named static factories
-for common partial configurations that keep the remaining formatter policy at defaults, and focused withers such as
-`withParseErrorBehavior(...)` for changing one policy from a factory result.
+`FormatterOptions` exposes one canonical record constructor for fully specified configuration, `defaults()` for the
+standard formatter policy, `withJavaLanguageLevel(...)` for adapters that expose parser level alongside layout options,
+and instance withers such as `withLineWidth(...)` and `withParseErrorBehavior(...)` for changing one policy from an
+existing options value.
 
 Current public formatter policy includes:
 
@@ -324,4 +325,4 @@ The test suite is module-scoped:
 
 Golden fixture strategy, frmtr-owned fixture conventions, glob-discovered JUnit fixture sources, and new-rule coverage
 expectations are documented in [docs/testing-strategy.md](docs/testing-strategy.md). Option-specific snapshots use
-fixture-owned line-width expectations rather than public formatter defaults.
+fixture-owned output variants with sidecar option properties rather than Java test lists.

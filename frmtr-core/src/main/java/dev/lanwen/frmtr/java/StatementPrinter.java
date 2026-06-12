@@ -60,16 +60,16 @@ import java.util.function.ToIntFunction;
  * <p>Expression, type, local-variable, declaration-body, and block formatting stay with their existing owners and are
  * called through callbacks. Representative coverage pairs for this boundary include
  * {@code frmtr-core/src/test/resources/format/if-else-chain/input.java} with
- * {@code frmtr-core/src/test/resources/format/if-else-chain/frmtr-120.output.java},
+ * {@code frmtr-core/src/test/resources/format/if-else-chain/frmtr-default.output.java},
  * {@code frmtr-core/src/test/resources/format/for-loop/input.java} with
- * {@code frmtr-core/src/test/resources/format/for-loop/frmtr-120.output.java},
+ * {@code frmtr-core/src/test/resources/format/for-loop/frmtr-default.output.java},
  * {@code frmtr-core/src/test/resources/format/while-do/input.java} with
- * {@code frmtr-core/src/test/resources/format/while-do/frmtr-120.output.java},
+ * {@code frmtr-core/src/test/resources/format/while-do/frmtr-default.output.java},
  * {@code frmtr-core/src/test/resources/format/empty-statement/input.java} with
- * {@code frmtr-core/src/test/resources/format/empty-statement/frmtr-120.output.java}, and
+ * {@code frmtr-core/src/test/resources/format/empty-statement/frmtr-default.output.java}, and
  * {@code frmtr-core/src/test/resources/format/comment-preservation-if-statement/input.java}
  * with
- * {@code frmtr-core/src/test/resources/format/comment-preservation-if-statement/frmtr-120.output.java}.
+ * {@code frmtr-core/src/test/resources/format/comment-preservation-if-statement/frmtr-default.output.java}.
  */
 final class StatementPrinter {
     private final CommentTracker comments;
@@ -454,7 +454,7 @@ final class StatementPrinter {
      * read it as the first line inside the following catch or finally. The handoff keeps those adjacent block comments
      * in source order for fixtures such as
      * {@code frmtr-core/src/test/resources/format/comment-complex-block-statements/input.java}
-     * and its {@code frmtr-120.output.java} pair.
+     * and its {@code frmtr-default.output.java} pair.
      */
     private Doc tryStatement(TryStmt statement) {
         List<Doc> docs = new ArrayList<>();

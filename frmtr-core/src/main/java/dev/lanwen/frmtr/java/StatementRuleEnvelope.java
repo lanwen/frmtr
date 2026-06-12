@@ -20,10 +20,10 @@ import dev.lanwen.frmtr.doc.Doc;
  * Expression formatting, block formatting, declaration-body formatting, switch-entry rendering, and statement rendering
  * stay with their existing owners. Representative pragma coverage includes
  * {@code frmtr-core/src/test/resources/format/formatter-pragma-inside-block/input.java} with
- * {@code frmtr-core/src/test/resources/format/formatter-pragma-inside-block/frmtr-120.output.java}
+ * {@code frmtr-core/src/test/resources/format/formatter-pragma-inside-block/frmtr-default.output.java}
  * and {@code frmtr-core/src/test/resources/format/require-pragma-format/input.java}
  * with
- * {@code frmtr-core/src/test/resources/format/require-pragma-format/frmtr-120.output.java}.
+ * {@code frmtr-core/src/test/resources/format/require-pragma-format/frmtr-default.output.java}.
  */
 final class StatementRuleEnvelope {
     private final CommentTracker comments;

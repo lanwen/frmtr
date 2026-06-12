@@ -28,13 +28,13 @@ import java.util.function.Predicate;
  *
  * <p>Representative fixture pairs live at
  * {@code frmtr-core/src/test/resources/format/package-imports-mixed-imports/input.java} and
- * {@code frmtr-core/src/test/resources/format/package-imports-mixed-imports/frmtr-120.output.java}.
+ * {@code frmtr-core/src/test/resources/format/package-imports-mixed-imports/frmtr-default.output.java}.
  * Module placement with comments is covered by
  * {@code frmtr-core/src/test/resources/format/comment-preservation-module-declaration/input.java} and
- * {@code frmtr-core/src/test/resources/format/comment-preservation-module-declaration/frmtr-120.output.java}; compact
+ * {@code frmtr-core/src/test/resources/format/comment-preservation-module-declaration/frmtr-default.output.java}; compact
  * unnamed-class expansion is covered by
  * {@code frmtr-core/src/test/resources/format/unnamed-class-compilation-unit/input.java} and
- * {@code frmtr-core/src/test/resources/format/unnamed-class-compilation-unit/frmtr-120.output.java}.
+ * {@code frmtr-core/src/test/resources/format/unnamed-class-compilation-unit/frmtr-default.output.java}.
  */
 final class CompilationUnitPrinter {
     private static final String IMPORT_DECLARATION_LIST_RECOVERY_FAILURE =

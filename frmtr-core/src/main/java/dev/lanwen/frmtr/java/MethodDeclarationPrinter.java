@@ -30,10 +30,10 @@ import java.util.function.Predicate;
  *
  * <p>Representative fixture pairs live at
  * {@code frmtr-core/src/test/resources/format/generic-type-body-breaks/input.java} and
- * {@code frmtr-core/src/test/resources/format/generic-type-body-breaks/frmtr.output.java}; method throws
+ * {@code frmtr-core/src/test/resources/format/generic-type-body-breaks/frmtr-default.output.java}; method throws
  * wrapping and abstract-method semicolons are covered by
  * {@code frmtr-core/src/test/resources/format/throws-clause-layout/input.java} and
- * {@code frmtr-core/src/test/resources/format/throws-clause-layout/frmtr-120.output.java}.
+ * {@code frmtr-core/src/test/resources/format/throws-clause-layout/frmtr-default.output.java}.
  */
 final class MethodDeclarationPrinter {
     private final CommentTracker comments;

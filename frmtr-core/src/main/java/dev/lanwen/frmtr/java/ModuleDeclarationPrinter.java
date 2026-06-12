@@ -22,10 +22,10 @@ import java.util.function.Predicate;
  *
  * <p>Representative fixture pairs live at
  * {@code frmtr-core/src/test/resources/format/module-declarations-directives/input.java} and
- * {@code frmtr-core/src/test/resources/format/module-declarations-directives/frmtr-120.output.java}. The raw commented
+ * {@code frmtr-core/src/test/resources/format/module-declarations-directives/frmtr-default.output.java}. The raw commented
  * module fallback is covered by {@code
  * frmtr-core/src/test/resources/format/comment-preservation-module-declaration/input.java} and {@code
- * frmtr-core/src/test/resources/format/comment-preservation-module-declaration/frmtr-120.output.java}.
+ * frmtr-core/src/test/resources/format/comment-preservation-module-declaration/frmtr-default.output.java}.
  */
 final class ModuleDeclarationPrinter {
     private final CommentTracker comments;

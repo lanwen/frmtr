@@ -32,7 +32,7 @@ import java.util.function.ToIntFunction;
  *
  * <p>Representative fixture pairs live at
  * {@code frmtr-core/src/test/resources/format/record-component-spacing/input.java} and
- * {@code frmtr-core/src/test/resources/format/record-component-spacing/frmtr-120.output.java}; smaller record cases
+ * {@code frmtr-core/src/test/resources/format/record-component-spacing/frmtr-default.output.java}; smaller record cases
  * also appear at {@code frmtr-core/src/test/resources/format/interface-and-sealed-type-headers/input.java} and
  * {@code frmtr-core/src/test/resources/format/annotation-interface-declaration/input.java}.
  */

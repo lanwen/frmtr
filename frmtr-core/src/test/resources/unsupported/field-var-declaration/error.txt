@@ -1,0 +1,2 @@
+Unable to parse Java source
+(line 4,col 5) "var" is not allowed here.

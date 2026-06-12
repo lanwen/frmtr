@@ -32,7 +32,7 @@ import java.util.function.ToIntFunction;
  *
  * <p>Representative fixture pairs live at
  * {@code frmtr-core/src/test/resources/format/enum-declaration-layout/input.java} and
- * {@code frmtr-core/src/test/resources/format/enum-declaration-layout/frmtr-120.output.java}; enum constants with
+ * {@code frmtr-core/src/test/resources/format/enum-declaration-layout/frmtr-default.output.java}; enum constants with
  * lambda arguments are also covered by
  * {@code frmtr-core/src/test/resources/format/block-lambda-arrow-parens-avoid/input.java}.
  */

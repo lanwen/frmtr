@@ -34,7 +34,7 @@ import java.util.function.Function;
  * visually attached to the package or service name.
  *
  * <p>The fixture pair {@code format/module-declarations-directives/input.java} and {@code
- * format/module-declarations-directives/frmtr-120.output.java} shows the expected structured module behavior.
+ * format/module-declarations-directives/frmtr-default.output.java} shows the expected structured module behavior.
  */
 final class ModuleBlockPrinter {
     private static final String MODULE_DIRECTIVE_LIST_RECOVERY_FAILURE =

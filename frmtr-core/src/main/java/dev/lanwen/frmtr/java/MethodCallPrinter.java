@@ -36,9 +36,9 @@ import java.util.function.ToIntFunction;
  *
  * <p>Representative fixture pairs live at
  * {@code frmtr-core/src/test/resources/format/method-chain-member-access/input.java} with
- * {@code frmtr-core/src/test/resources/format/method-chain-member-access/frmtr-120.output.java} and
+ * {@code frmtr-core/src/test/resources/format/method-chain-member-access/frmtr-default.output.java} and
  * {@code frmtr-core/src/test/resources/format/text-block-raw-method-call/input.java} with
- * {@code frmtr-core/src/test/resources/format/text-block-raw-method-call/frmtr-120.output.java}; lambda call
+ * {@code frmtr-core/src/test/resources/format/text-block-raw-method-call/frmtr-default.output.java}; lambda call
  * cases are covered by the two {@code lambda/arrow-parens-*} fixture directories.
  */
 final class MethodCallPrinter {

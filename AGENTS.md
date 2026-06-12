@@ -8,6 +8,8 @@
 ## Tests
 
 - Use AssertJ for assertions.
+- Do not add tests that only prove properties can be assigned or copied. Tests should exercise behavior with meaningful
+  logic behind it.
 
 ## Formatter helper comments
 

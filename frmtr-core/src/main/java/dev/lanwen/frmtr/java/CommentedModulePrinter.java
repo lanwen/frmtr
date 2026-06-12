@@ -11,7 +11,7 @@ import java.util.List;
  * declaration comments are attached, or how normal structured module blocks and directives are printed.
  *
  * <p>The fixture pair {@code format/comment-preservation-module-declaration/input.java} and {@code
- * format/comment-preservation-module-declaration/frmtr-120.output.java} shows the expected output for this raw commented
+ * format/comment-preservation-module-declaration/frmtr-default.output.java} shows the expected output for this raw commented
  * module path.
  */
 final class CommentedModulePrinter {

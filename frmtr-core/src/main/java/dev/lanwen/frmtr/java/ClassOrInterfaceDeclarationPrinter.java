@@ -30,14 +30,14 @@ import java.util.function.ToIntFunction;
  *
  * <p>Representative fixture pairs live at
  * {@code frmtr-core/src/test/resources/format/comment-preservation-interface-declaration/input.java} and
- * {@code frmtr-core/src/test/resources/format/comment-preservation-interface-declaration/frmtr-120.output.java};
+ * {@code frmtr-core/src/test/resources/format/comment-preservation-interface-declaration/frmtr-default.output.java};
  * {@code frmtr-core/src/test/resources/format/interface-and-sealed-type-headers/input.java} and
- * {@code frmtr-core/src/test/resources/format/interface-and-sealed-type-headers/frmtr-120.output.java};
+ * {@code frmtr-core/src/test/resources/format/interface-and-sealed-type-headers/frmtr-default.output.java};
  * {@code frmtr-core/src/test/resources/format/interface-and-sealed-type-headers/input.java}
  * and
- * {@code frmtr-core/src/test/resources/format/interface-and-sealed-type-headers/frmtr-120.output.java};
+ * {@code frmtr-core/src/test/resources/format/interface-and-sealed-type-headers/frmtr-default.output.java};
  * and {@code frmtr-core/src/test/resources/format/generic-type-body-breaks/input.java} plus
- * {@code frmtr-core/src/test/resources/format/generic-type-body-breaks/frmtr.output.java}.
+ * {@code frmtr-core/src/test/resources/format/generic-type-body-breaks/frmtr-default.output.java}.
  */
 final class ClassOrInterfaceDeclarationPrinter {
     private final CommentTracker comments;

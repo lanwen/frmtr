@@ -15,7 +15,7 @@ import java.util.function.Function;
  *
  * <p>There is no dedicated static-or-instance initializer fixture yet. The closest block/comment behavior examples live
  * at {@code frmtr-core/src/test/resources/format/comment-preservation-block-end-comments/input.java}
- * and {@code frmtr-core/src/test/resources/format/comment-preservation-block-end-comments/frmtr-120.output.java}.
+ * and {@code frmtr-core/src/test/resources/format/comment-preservation-block-end-comments/frmtr-default.output.java}.
  */
 final class InitializerDeclarationPrinter {
     private final Function<BlockStmt, Doc> block;

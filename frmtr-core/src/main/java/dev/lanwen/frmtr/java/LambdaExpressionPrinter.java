@@ -37,13 +37,13 @@ import java.util.function.ToIntFunction;
  * only chooses the lambda-specific structure.
  * Representative fixture pairs for this boundary include
  * {@code frmtr-core/src/test/resources/format/block-lambda-arrow-parens-always/input.java} with
- * {@code frmtr-core/src/test/resources/format/block-lambda-arrow-parens-always/frmtr-120.output.java},
+ * {@code frmtr-core/src/test/resources/format/block-lambda-arrow-parens-always/frmtr-default.output.java},
  * {@code frmtr-core/src/test/resources/format/block-lambda-arrow-parens-avoid/input.java} with
- * {@code frmtr-core/src/test/resources/format/block-lambda-arrow-parens-avoid/frmtr-120.output.java},
+ * {@code frmtr-core/src/test/resources/format/block-lambda-arrow-parens-avoid/frmtr-default.output.java},
  * {@code frmtr-core/src/test/resources/format/method-chain-member-access/input.java} with
- * {@code frmtr-core/src/test/resources/format/method-chain-member-access/frmtr-120.output.java}, and
+ * {@code frmtr-core/src/test/resources/format/method-chain-member-access/frmtr-default.output.java}, and
  * {@code frmtr-core/src/test/resources/format/variable-declarations/input.java} with
- * {@code frmtr-core/src/test/resources/format/variable-declarations/frmtr-120.output.java}.
+ * {@code frmtr-core/src/test/resources/format/variable-declarations/frmtr-default.output.java}.
  */
 final class LambdaExpressionPrinter {
     private final CommentTracker comments;

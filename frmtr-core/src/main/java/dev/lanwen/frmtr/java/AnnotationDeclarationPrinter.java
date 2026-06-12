@@ -29,7 +29,7 @@ import java.util.function.Function;
  *
  * <p>Representative fixture pairs live at
  * {@code frmtr-core/src/test/resources/format/annotation-interface-declaration/input.java} and
- * {@code frmtr-core/src/test/resources/format/annotation-interface-declaration/frmtr-120.output.java}.
+ * {@code frmtr-core/src/test/resources/format/annotation-interface-declaration/frmtr-default.output.java}.
  */
 final class AnnotationDeclarationPrinter {
     private static final String ANNOTATION_MEMBER_LIST_RECOVERY_FAILURE =

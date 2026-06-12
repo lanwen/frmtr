@@ -35,11 +35,11 @@ import java.util.function.ToIntFunction;
  *
  * <p>Representative fixture pairs for this boundary include
  * {@code frmtr-core/src/test/resources/format/switch-statement-rules/input.java} with
- * {@code frmtr-core/src/test/resources/format/switch-statement-rules/frmtr-120.output.java},
+ * {@code frmtr-core/src/test/resources/format/switch-statement-rules/frmtr-default.output.java},
  * {@code frmtr-core/src/test/resources/format/pattern-matching/input.java} with
- * {@code frmtr-core/src/test/resources/format/pattern-matching/frmtr-120.output.java},
+ * {@code frmtr-core/src/test/resources/format/pattern-matching/frmtr-default.output.java},
  * {@code frmtr-core/src/test/resources/format/switch-expression-initializer/input.java} with
- * {@code frmtr-core/src/test/resources/format/switch-expression-initializer/frmtr-120.output.java}, and
+ * {@code frmtr-core/src/test/resources/format/switch-expression-initializer/frmtr-default.output.java}, and
  * {@code frmtr-core/src/test/resources/format/unnamed-variables-patterns/input.java}.
  */
 final class SwitchPrinter {

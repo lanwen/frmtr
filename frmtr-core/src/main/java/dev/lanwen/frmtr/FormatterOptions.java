@@ -15,9 +15,11 @@ import java.util.Objects;
  * parse-error recovery, and the latest Java language level exposed by the bundled JavaParser dependency's bleeding-edge
  * parser mode.
  *
- * <p>Use the canonical record constructor when every option is intentionally selected. Use the static factory methods
- * for common partial configurations where the remaining formatter policy should stay at defaults, then use focused
- * withers such as {@link #withParseErrorBehavior(ParseErrorBehavior)} for one-policy changes from those presets.
+ * <p>Use the canonical record constructor when every option is intentionally selected. Use {@link #defaults()} when the
+ * remaining formatter policy should stay at defaults, then use focused instance withers such as {@link
+ * #withLineWidth(int)} and {@link #withParseErrorBehavior(ParseErrorBehavior)} for one-policy changes from that preset.
+ * Adapters that expose parser language level alongside layout options can use {@link #withJavaLanguageLevel(int,
+ * IndentStyle, int, LineEnding, boolean, JavaLanguageLevel)}.
  *
  * @param lineWidth target maximum rendered line width. The renderer and Java-specific width gates use this value to
  *     decide whether grouped docs can stay flat or should break across lines. The value is a formatting target rather
@@ -54,18 +56,18 @@ import java.util.Objects;
  *     Java syntax the parser accepts; it does not otherwise select a different formatter style.
  */
 public record FormatterOptions(
-        int lineWidth,
-        IndentStyle indentStyle,
-        int indentWidth,
-        LineEnding lineEnding,
-        boolean trailingNewline,
-        boolean preserveRawTrailingWhitespace,
-        boolean requirePragma,
-        LambdaArrowParens lambdaArrowParens,
-        BinaryOperatorPosition binaryOperatorPosition,
-        ParseErrorBehavior parseErrorBehavior,
-        JavaLanguageLevel javaLanguageLevel) {
-
+    int lineWidth,
+    IndentStyle indentStyle,
+    int indentWidth,
+    LineEnding lineEnding,
+    boolean trailingNewline,
+    boolean preserveRawTrailingWhitespace,
+    boolean requirePragma,
+    LambdaArrowParens lambdaArrowParens,
+    BinaryOperatorPosition binaryOperatorPosition,
+    ParseErrorBehavior parseErrorBehavior,
+    JavaLanguageLevel javaLanguageLevel
+) {
     /**
      * Default target line width used by {@link #defaults()}.
      *
@@ -106,35 +108,18 @@ public record FormatterOptions(
      */
     public static FormatterOptions defaults() {
         return new FormatterOptions(
-                DEFAULT_LINE_WIDTH,
-                IndentStyle.SPACE,
-                DEFAULT_INDENT_WIDTH,
-                LineEnding.LF,
-                true,
-                false,
-                false,
-                LambdaArrowParens.PRESERVE,
-                BinaryOperatorPosition.END,
-                ParseErrorBehavior.RECOVER,
-                JavaLanguageLevel.LATEST_AVAILABLE);
-    }
-
-    /**
-     * Creates options for callers that only configure document-rendering shape.
-     *
-     * <p>Raw trailing whitespace is not preserved, require-pragma is disabled, lambda parentheses preserve source
-     * spelling, broken binary operators stay at the end of continuation lines, parse-error behavior defaults to
-     * {@link ParseErrorBehavior#RECOVER}, and the Java language level defaults to {@link
-     * JavaLanguageLevel#LATEST_AVAILABLE}.
-     */
-    public static FormatterOptions forLayout(
-            int lineWidth,
-            IndentStyle indentStyle,
-            int indentWidth,
-            LineEnding lineEnding,
-            boolean trailingNewline) {
-        return withJavaLanguageLevel(
-                lineWidth, indentStyle, indentWidth, lineEnding, trailingNewline, JavaLanguageLevel.LATEST_AVAILABLE);
+            DEFAULT_LINE_WIDTH,
+            IndentStyle.SPACE,
+            DEFAULT_INDENT_WIDTH,
+            LineEnding.LF,
+            true,
+            false,
+            false,
+            LambdaArrowParens.PRESERVE,
+            BinaryOperatorPosition.END,
+            ParseErrorBehavior.RECOVER,
+            JavaLanguageLevel.LATEST_AVAILABLE
+        );
     }
 
     /**
@@ -145,115 +130,238 @@ public record FormatterOptions(
      * {@link ParseErrorBehavior#RECOVER}.
      */
     public static FormatterOptions withJavaLanguageLevel(
-            int lineWidth,
-            IndentStyle indentStyle,
-            int indentWidth,
-            LineEnding lineEnding,
-            boolean trailingNewline,
-            JavaLanguageLevel javaLanguageLevel) {
-        return withRawTrailingWhitespace(
-                lineWidth, indentStyle, indentWidth, lineEnding, trailingNewline, false, javaLanguageLevel);
-    }
-
-    /**
-     * Creates options for callers that need raw trailing-whitespace preservation in formatter-ignore paths.
-     *
-     * <p>Require-pragma is disabled, lambda parentheses preserve source spelling, broken binary operators stay at
-     * the end of continuation lines, and parse-error behavior defaults to {@link ParseErrorBehavior#RECOVER}.
-     */
-    public static FormatterOptions withRawTrailingWhitespace(
-            int lineWidth,
-            IndentStyle indentStyle,
-            int indentWidth,
-            LineEnding lineEnding,
-            boolean trailingNewline,
-            boolean preserveRawTrailingWhitespace,
-            JavaLanguageLevel javaLanguageLevel) {
-        return withPragmaRequirement(
-                lineWidth,
-                indentStyle,
-                indentWidth,
-                lineEnding,
-                trailingNewline,
-                preserveRawTrailingWhitespace,
-                false,
-                javaLanguageLevel);
-    }
-
-    /**
-     * Creates options for callers that configure raw preservation and require-pragma behavior.
-     *
-     * <p>Lambda parentheses preserve source spelling, broken binary operators stay at the end of continuation lines,
-     * and parse-error behavior defaults to {@link ParseErrorBehavior#RECOVER}.
-     */
-    public static FormatterOptions withPragmaRequirement(
-            int lineWidth,
-            IndentStyle indentStyle,
-            int indentWidth,
-            LineEnding lineEnding,
-            boolean trailingNewline,
-            boolean preserveRawTrailingWhitespace,
-            boolean requirePragma,
-            JavaLanguageLevel javaLanguageLevel) {
-        return withLambdaArrowParens(
-                lineWidth,
-                indentStyle,
-                indentWidth,
-                lineEnding,
-                trailingNewline,
-                preserveRawTrailingWhitespace,
-                requirePragma,
-                LambdaArrowParens.PRESERVE,
-                javaLanguageLevel);
-    }
-
-    /**
-     * Creates options for callers that configure lambda parentheses but use the default binary-operator continuation
-     * style.
-     */
-    public static FormatterOptions withLambdaArrowParens(
-            int lineWidth,
-            IndentStyle indentStyle,
-            int indentWidth,
-            LineEnding lineEnding,
-            boolean trailingNewline,
-            boolean preserveRawTrailingWhitespace,
-            boolean requirePragma,
-            LambdaArrowParens lambdaArrowParens,
-            JavaLanguageLevel javaLanguageLevel) {
+        int lineWidth,
+        IndentStyle indentStyle,
+        int indentWidth,
+        LineEnding lineEnding,
+        boolean trailingNewline,
+        JavaLanguageLevel javaLanguageLevel
+    ) {
         return new FormatterOptions(
-                lineWidth,
-                indentStyle,
-                indentWidth,
-                lineEnding,
-                trailingNewline,
-                preserveRawTrailingWhitespace,
-                requirePragma,
-                lambdaArrowParens,
-                BinaryOperatorPosition.END,
-                ParseErrorBehavior.RECOVER,
-                javaLanguageLevel);
+            lineWidth,
+            indentStyle,
+            indentWidth,
+            lineEnding,
+            trailingNewline,
+            false,
+            false,
+            LambdaArrowParens.PRESERVE,
+            BinaryOperatorPosition.END,
+            ParseErrorBehavior.RECOVER,
+            javaLanguageLevel
+        );
+    }
+
+    /**
+     * Returns options that keep this instance's existing formatter policy while changing the target line width.
+     */
+    public FormatterOptions withLineWidth(int lineWidth) {
+        return new FormatterOptions(
+            lineWidth,
+            indentStyle,
+            indentWidth,
+            lineEnding,
+            trailingNewline,
+            preserveRawTrailingWhitespace,
+            requirePragma,
+            lambdaArrowParens,
+            binaryOperatorPosition,
+            parseErrorBehavior,
+            javaLanguageLevel
+        );
+    }
+
+    /**
+     * Returns options that keep this instance's existing formatter policy while changing indentation style.
+     */
+    public FormatterOptions withIndentStyle(IndentStyle indentStyle) {
+        return new FormatterOptions(
+            lineWidth,
+            indentStyle,
+            indentWidth,
+            lineEnding,
+            trailingNewline,
+            preserveRawTrailingWhitespace,
+            requirePragma,
+            lambdaArrowParens,
+            binaryOperatorPosition,
+            parseErrorBehavior,
+            javaLanguageLevel
+        );
+    }
+
+    /**
+     * Returns options that keep this instance's existing formatter policy while changing space indentation width.
+     */
+    public FormatterOptions withIndentWidth(int indentWidth) {
+        return new FormatterOptions(
+            lineWidth,
+            indentStyle,
+            indentWidth,
+            lineEnding,
+            trailingNewline,
+            preserveRawTrailingWhitespace,
+            requirePragma,
+            lambdaArrowParens,
+            binaryOperatorPosition,
+            parseErrorBehavior,
+            javaLanguageLevel
+        );
+    }
+
+    /**
+     * Returns options that keep this instance's existing formatter policy while changing emitted line endings.
+     */
+    public FormatterOptions withLineEnding(LineEnding lineEnding) {
+        return new FormatterOptions(
+            lineWidth,
+            indentStyle,
+            indentWidth,
+            lineEnding,
+            trailingNewline,
+            preserveRawTrailingWhitespace,
+            requirePragma,
+            lambdaArrowParens,
+            binaryOperatorPosition,
+            parseErrorBehavior,
+            javaLanguageLevel
+        );
+    }
+
+    /**
+     * Returns options that keep this instance's existing formatter policy while changing final newline behavior.
+     */
+    public FormatterOptions withTrailingNewline(boolean trailingNewline) {
+        return new FormatterOptions(
+            lineWidth,
+            indentStyle,
+            indentWidth,
+            lineEnding,
+            trailingNewline,
+            preserveRawTrailingWhitespace,
+            requirePragma,
+            lambdaArrowParens,
+            binaryOperatorPosition,
+            parseErrorBehavior,
+            javaLanguageLevel
+        );
+    }
+
+    /**
+     * Returns options that keep this instance's existing formatter policy while changing raw whitespace preservation.
+     */
+    public FormatterOptions withPreserveRawTrailingWhitespace(boolean preserveRawTrailingWhitespace) {
+        return new FormatterOptions(
+            lineWidth,
+            indentStyle,
+            indentWidth,
+            lineEnding,
+            trailingNewline,
+            preserveRawTrailingWhitespace,
+            requirePragma,
+            lambdaArrowParens,
+            binaryOperatorPosition,
+            parseErrorBehavior,
+            javaLanguageLevel
+        );
+    }
+
+    /**
+     * Returns options that keep this instance's existing formatter policy while changing pragma-gated formatting.
+     */
+    public FormatterOptions withRequirePragma(boolean requirePragma) {
+        return new FormatterOptions(
+            lineWidth,
+            indentStyle,
+            indentWidth,
+            lineEnding,
+            trailingNewline,
+            preserveRawTrailingWhitespace,
+            requirePragma,
+            lambdaArrowParens,
+            binaryOperatorPosition,
+            parseErrorBehavior,
+            javaLanguageLevel
+        );
+    }
+
+    /**
+     * Returns options that keep this instance's existing formatter policy while changing lambda-parentheses style.
+     */
+    public FormatterOptions withLambdaArrowParens(LambdaArrowParens lambdaArrowParens) {
+        return new FormatterOptions(
+            lineWidth,
+            indentStyle,
+            indentWidth,
+            lineEnding,
+            trailingNewline,
+            preserveRawTrailingWhitespace,
+            requirePragma,
+            lambdaArrowParens,
+            binaryOperatorPosition,
+            parseErrorBehavior,
+            javaLanguageLevel
+        );
+    }
+
+    /**
+     * Returns options that keep this instance's existing formatter policy while changing binary-operator placement.
+     */
+    public FormatterOptions withBinaryOperatorPosition(BinaryOperatorPosition binaryOperatorPosition) {
+        return new FormatterOptions(
+            lineWidth,
+            indentStyle,
+            indentWidth,
+            lineEnding,
+            trailingNewline,
+            preserveRawTrailingWhitespace,
+            requirePragma,
+            lambdaArrowParens,
+            binaryOperatorPosition,
+            parseErrorBehavior,
+            javaLanguageLevel
+        );
     }
 
     /**
      * Returns options that keep this instance's existing formatter policy while changing parse-error behavior.
      *
-     * <p>Use this after a named factory method when only parse-problem handling should differ from that factory's
-     * defaults.
+     * <p>Use this after {@link #defaults()} or {@link #withJavaLanguageLevel(int, IndentStyle, int, LineEnding,
+     * boolean, JavaLanguageLevel)} when only parse-problem handling should differ from that preset.
      */
     public FormatterOptions withParseErrorBehavior(ParseErrorBehavior parseErrorBehavior) {
         return new FormatterOptions(
-                lineWidth,
-                indentStyle,
-                indentWidth,
-                lineEnding,
-                trailingNewline,
-                preserveRawTrailingWhitespace,
-                requirePragma,
-                lambdaArrowParens,
-                binaryOperatorPosition,
-                parseErrorBehavior,
-                javaLanguageLevel);
+            lineWidth,
+            indentStyle,
+            indentWidth,
+            lineEnding,
+            trailingNewline,
+            preserveRawTrailingWhitespace,
+            requirePragma,
+            lambdaArrowParens,
+            binaryOperatorPosition,
+            parseErrorBehavior,
+            javaLanguageLevel
+        );
+    }
+
+    /**
+     * Returns options that keep this instance's existing formatter policy while changing parser language level.
+     */
+    public FormatterOptions withJavaLanguageLevel(JavaLanguageLevel javaLanguageLevel) {
+        return new FormatterOptions(
+            lineWidth,
+            indentStyle,
+            indentWidth,
+            lineEnding,
+            trailingNewline,
+            preserveRawTrailingWhitespace,
+            requirePragma,
+            lambdaArrowParens,
+            binaryOperatorPosition,
+            parseErrorBehavior,
+            javaLanguageLevel
+        );
     }
 
     /**
@@ -291,7 +399,7 @@ public record FormatterOptions(
          * <p>Each indentation level is one {@code \t}. The configured {@code indentWidth} remains validated for API
          * consistency but does not change the rendered tab indentation unit.
          */
-        TAB
+        TAB,
     }
 
     /**
@@ -354,7 +462,7 @@ public record FormatterOptions(
          * <p>For example, {@code value -> value} is rendered as {@code (value) -> value}. Multi-parameter lambdas are
          * already parenthesized by Java syntax, so this option mainly affects single untyped parameters.
          */
-        ALWAYS
+        ALWAYS,
     }
 
     /**
@@ -382,7 +490,7 @@ public record FormatterOptions(
          * && secondCondition
          * }</pre>
          */
-        START
+        START,
     }
 
     /**
@@ -406,7 +514,7 @@ public record FormatterOptions(
          * <p>Use this for strict automation and compatibility flows that require the previous all-or-nothing parse
          * behavior. No recovered compilation unit is passed to the printer in this mode.
          */
-        FAIL
+        FAIL,
     }
 
     /**
@@ -467,6 +575,6 @@ public record FormatterOptions(
 
         JAVA_24,
 
-        JAVA_25
+        JAVA_25,
     }
 }

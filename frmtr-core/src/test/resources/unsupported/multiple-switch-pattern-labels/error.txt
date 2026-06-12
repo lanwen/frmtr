@@ -1,0 +1,2 @@
+Unable to parse Java source
+(line 99,col 12) Multiple patterns in case labels may not declare any pattern variables.

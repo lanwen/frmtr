@@ -24,11 +24,11 @@ import java.util.function.Function;
  *
  * <p>Representative fixture pairs live at
  * {@code frmtr-core/src/test/resources/format/constructor-chain-roots/input.java} and
- * {@code frmtr-core/src/test/resources/format/constructor-chain-roots/frmtr-120.output.java}; constructor
+ * {@code frmtr-core/src/test/resources/format/constructor-chain-roots/frmtr-default.output.java}; constructor
  * throws wrapping is covered by {@code frmtr-core/src/test/resources/format/throws-clause-layout/input.java}
- * and {@code frmtr-core/src/test/resources/format/throws-clause-layout/frmtr-120.output.java}; compact
+ * and {@code frmtr-core/src/test/resources/format/throws-clause-layout/frmtr-default.output.java}; compact
  * constructors are covered by {@code frmtr-core/src/test/resources/format/record-component-spacing/input.java}
- * and {@code frmtr-core/src/test/resources/format/record-component-spacing/frmtr-120.output.java}.
+ * and {@code frmtr-core/src/test/resources/format/record-component-spacing/frmtr-default.output.java}.
  */
 final class ConstructorDeclarationPrinter {
     private final CallableSignaturePrinter callableSignatures;

@@ -33,13 +33,13 @@ import java.util.function.ToIntFunction;
  * declaration layout, and binary-expression policy. This helper receives those decisions as callbacks and only chooses
  * the shape of the conditional expression itself. Representative fixture pairs for this boundary include
  * {@code frmtr-core/src/test/resources/format/conditional-expression-space-indentation/input.java} with
- * {@code frmtr-core/src/test/resources/format/conditional-expression-space-indentation/frmtr-120.output.java},
+ * {@code frmtr-core/src/test/resources/format/conditional-expression-space-indentation/frmtr-default.output.java},
  * {@code frmtr-core/src/test/resources/format/conditional-expression-tab-indentation/input.java} with
- * {@code frmtr-core/src/test/resources/format/conditional-expression-tab-indentation/frmtr-120.output.java},
+ * {@code frmtr-core/src/test/resources/format/conditional-expression-tab-indentation/frmtr-default.output.java},
  * {@code frmtr-core/src/test/resources/format/variable-declarations/input.java} with
- * {@code frmtr-core/src/test/resources/format/variable-declarations/frmtr-120.output.java}, and
+ * {@code frmtr-core/src/test/resources/format/variable-declarations/frmtr-default.output.java}, and
  * {@code frmtr-core/src/test/resources/format/expression-operators-layout/input.java} with
- * {@code frmtr-core/src/test/resources/format/expression-operators-layout/frmtr-120.output.java}.
+ * {@code frmtr-core/src/test/resources/format/expression-operators-layout/frmtr-default.output.java}.
  */
 final class ConditionalExpressionPrinter {
     private final CommentTracker comments;

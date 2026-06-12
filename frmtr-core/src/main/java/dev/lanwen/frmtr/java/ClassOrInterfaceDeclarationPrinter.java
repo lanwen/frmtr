@@ -29,15 +29,15 @@ import java.util.function.ToIntFunction;
  * flows continue to share one implementation.
  *
  * <p>Representative fixture pairs live at
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/comments/interface/input.java} and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/comments/interface/frmtr.output.java};
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/sealed/input.java} and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/sealed/frmtr.output.java};
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/extends_abstract_class_and_implements_interfaces/input.java}
+ * {@code frmtr-core/src/test/resources/format/comment-preservation-interface-declaration/input.java} and
+ * {@code frmtr-core/src/test/resources/format/comment-preservation-interface-declaration/frmtr-120.output.java};
+ * {@code frmtr-core/src/test/resources/format/interface-and-sealed-type-headers/input.java} and
+ * {@code frmtr-core/src/test/resources/format/interface-and-sealed-type-headers/frmtr-120.output.java};
+ * {@code frmtr-core/src/test/resources/format/interface-and-sealed-type-headers/input.java}
  * and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/extends_abstract_class_and_implements_interfaces/frmtr.output.java};
- * and {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/generic_class/input.java} plus
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/generic_class/frmtr.output.java}.
+ * {@code frmtr-core/src/test/resources/format/interface-and-sealed-type-headers/frmtr-120.output.java};
+ * and {@code frmtr-core/src/test/resources/format/generic-type-body-breaks/input.java} plus
+ * {@code frmtr-core/src/test/resources/format/generic-type-body-breaks/frmtr.output.java}.
  */
 final class ClassOrInterfaceDeclarationPrinter {
     private final CommentTracker comments;

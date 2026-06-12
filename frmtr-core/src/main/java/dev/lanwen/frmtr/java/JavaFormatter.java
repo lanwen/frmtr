@@ -94,7 +94,7 @@ public final class JavaFormatter {
             return false;
         }
         String leadingDocComment = stripped.substring(0, end + 2);
-        return leadingDocComment.contains("@format") || leadingDocComment.contains("@prettier");
+        return leadingDocComment.contains("@format");
     }
 
     private JavaParseResult parse(String source) {

@@ -1,99 +1,105 @@
 public class EmptyStatementCases {
 
-  class EmptyStatementBlock {
-    ;
-  }
+    class EmptyStatementBlock {}
 
-  public void emptyStatementWithoutComment() {
-    ;;;
-  }
+    public void emptyStatementWithoutComment() {}
 
-  public void emptyStatementWithComment() {
-    ;;// Empty statement marker
-  }
-
-  public void simpleForWithEmptyStatement() {
-    for (;;);
-
-    for (;;)/* empty body marker */;
-
-    for (;;);/* empty body marker */
-
-    for (;;)/* empty body marker */;/* empty body marker */
-  }
-
-  public void simpleForWithEmptyStatement() {
-    for (;;);
-
-    for (;;)/* empty body marker */;
-
-    for (;;);/* empty body marker */
-
-    for (;;)/* empty body marker */;/* empty body marker */
-  }
-
-  public void forEachWithEmptyStatement(List<String> list) {
-    for (String str : list);
-
-    for (String str : list)/* empty body marker */;
-
-    for (String str : list);/* empty body marker */
-  }
-
-  public void ifElseWithEmptyStatements() {
-    if (condition); else {
-      System.out.println("one");
+    public void emptyStatementWithComment() {
+        // Empty statement marker
     }
 
-    if (condition) {
-      System.out.println("two");
-    } else;
+    public void simpleForWithEmptyStatement() {
+        for (;;);
 
-    if (condition); else;
-  }
+        /* empty body marker */
+        for (;;);
 
-  public void ifElseWithEmptyStatementsWithComments() {
-    if (condition)/* empty body marker */; else {
-      System.out.println("one");
+        for (;;); /* empty body marker */
+
+        /* empty body marker */
+        for (;;); /* empty body marker */
     }
 
-    if (condition);/* empty body marker */ else {
-      System.out.println("one");
+    public void simpleForWithEmptyStatement() {
+        for (;;);
+
+        /* empty body marker */
+        for (;;);
+
+        for (;;); /* empty body marker */
+
+        /* empty body marker */
+        for (;;); /* empty body marker */
     }
 
-    if (condition) {
-      System.out.println("two");
-    } else/* empty body marker */;
+    public void forEachWithEmptyStatement(List<String> list) {
+        for (String str : list);
 
-    if (condition) {
-      System.out.println("two");
-    } else;/* empty body marker */
+        for (String str : list /* empty body marker */);
 
-    if (condition);/* empty body marker */ else;/* empty body marker */
+        for (String str : list); /* empty body marker */
+    }
 
-    if (condition)/* empty body marker */; else/* empty body marker */;
-  }
+    public void ifElseWithEmptyStatements() {
+        if (condition);
+        else {
+            System.out.println("one");
+        }
 
-  public void simpleWhileWithEmptyStatement(boolean keepRunning) {
-    while (keepRunning);
+        if (condition) {
+            System.out.println("two");
+        } else;
 
-    while (keepRunning)/* empty body marker */;
+        if (condition);
+        else;
+    }
 
-    while (keepRunning);/* empty body marker */
-  }
+    public void ifElseWithEmptyStatementsWithComments() {
+        if (condition /* empty body marker */);
+        else {
+            System.out.println("one");
+        }
 
-  public void doWhileWithEmptyStatement(boolean keepRunning) {
-    do;while (keepRunning);
-    do/* empty body marker */;while (keepRunning);
-    do;/* empty body marker */ while (keepRunning);
-  }
+        if (condition /* empty body marker */);
+        else {
+            System.out.println("one");
+        }
 
+        if (condition) {
+            System.out.println("two");
+        } else;
+
+        if (condition) {
+            System.out.println("two");
+        } else; /* empty body marker */
+
+        if (condition /* empty body marker */);
+        else; /* empty body marker */
+
+        if (condition /* empty body marker */);
+        else;
+    }
+
+    public void simpleWhileWithEmptyStatement(boolean keepRunning) {
+        while (keepRunning);
+
+        while (keepRunning /* empty body marker */);
+
+        while (keepRunning); /* empty body marker */
+    }
+
+    public void doWhileWithEmptyStatement(boolean keepRunning) {
+        do; while (keepRunning);
+        do; while (/* empty body marker */ keepRunning);
+        do; while (/* empty body marker */ keepRunning);
+    }
 }
 
 // Bug Fix: #356
 public class EmptyStatementFieldRegression {
-  public StatementField statementField;;
 
-  @Override
-  public void someMethod() {}
+    public StatementField statementField;
+
+    @Override
+    public void someMethod() {}
 }

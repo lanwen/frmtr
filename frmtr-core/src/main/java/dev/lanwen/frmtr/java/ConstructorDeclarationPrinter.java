@@ -23,12 +23,12 @@ import java.util.function.Function;
  * source.
  *
  * <p>Representative fixture pairs live at
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/constructors/input.java} and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/constructors/frmtr.output.java}; constructor
- * throws wrapping is covered by {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/throws/input.java}
- * and {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/throws/frmtr.output.java}; compact
- * constructors are covered by {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/records/input.java}
- * and {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/records/frmtr.output.java}.
+ * {@code frmtr-core/src/test/resources/format/constructor-chain-roots/input.java} and
+ * {@code frmtr-core/src/test/resources/format/constructor-chain-roots/frmtr-120.output.java}; constructor
+ * throws wrapping is covered by {@code frmtr-core/src/test/resources/format/throws-clause-layout/input.java}
+ * and {@code frmtr-core/src/test/resources/format/throws-clause-layout/frmtr-120.output.java}; compact
+ * constructors are covered by {@code frmtr-core/src/test/resources/format/record-component-spacing/input.java}
+ * and {@code frmtr-core/src/test/resources/format/record-component-spacing/frmtr-120.output.java}.
  */
 final class ConstructorDeclarationPrinter {
     private final CallableSignaturePrinter callableSignatures;

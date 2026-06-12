@@ -32,7 +32,7 @@ class IfStatements {
         if (/* test */ isEnabled) {
         }
 
-        if (isEnabled /* test */) {
+        if (isEnabled) /* test */ {
         }
 
         if (isEnabled) /* test */ {

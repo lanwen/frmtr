@@ -1,11 +1,11 @@
-// prettier-ignore-start
-public class FormatterControlPrettierIgnored {
+// frmtr-ignore-start
+public class FormatterControlFrmtrIgnored {
   public void processBatch(int accountId, int regionId, int retryLimit, int timeoutSeconds, int batchSize, int pageNumber, int shardId, int workerCount, int priority, int auditLevel) {
 
   }
 }
-/* prettier-ignore-end */
-public class FormatterControlPrettierRestored {
+/* frmtr-ignore-end */
+public class FormatterControlFrmtrRestored {
 
     public void processBatch(
         int accountId,

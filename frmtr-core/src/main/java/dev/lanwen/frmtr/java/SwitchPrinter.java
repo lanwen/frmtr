@@ -34,13 +34,13 @@ import java.util.function.ToIntFunction;
  * {@link SwitchStmt} out of ordinary statement dispatch.
  *
  * <p>Representative fixture pairs for this boundary include
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/switch/input.java} with
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/switch/frmtr.output.java},
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/pattern-matching/input.java} with
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/pattern-matching/frmtr.output.java},
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/yield-statement/input.java} with
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/yield-statement/frmtr.output.java}, and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/unnamed-variables-and-patterns/input.java}.
+ * {@code frmtr-core/src/test/resources/format/switch-statement-rules/input.java} with
+ * {@code frmtr-core/src/test/resources/format/switch-statement-rules/frmtr-120.output.java},
+ * {@code frmtr-core/src/test/resources/format/pattern-matching/input.java} with
+ * {@code frmtr-core/src/test/resources/format/pattern-matching/frmtr-120.output.java},
+ * {@code frmtr-core/src/test/resources/format/switch-expression-initializer/input.java} with
+ * {@code frmtr-core/src/test/resources/format/switch-expression-initializer/frmtr-120.output.java}, and
+ * {@code frmtr-core/src/test/resources/format/unnamed-variables-patterns/input.java}.
  */
 final class SwitchPrinter {
     private static final String SWITCH_ENTRY_LIST_RECOVERY_FAILURE =

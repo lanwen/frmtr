@@ -48,54 +48,39 @@ class ParameterCommentCases {
 
     void one() {}
 
-    void two() // alpha
-    {}
+    void two() {}
 
-    void three() // alpha
-    // beta
-    {}
+    void three() {}
 
-    void four() // alpha
-    // beta
-    /* gamma */
-    {}
+    void four() {}
 
     void five() {} // alpha
 
-    void fiveBis() { // alpha
-      int sequenceNumber;
+    void fiveBis() {
+        // alpha
+        int sequenceNumber;
     }
 
     void six /* alpha */() {}
 
-    void seven() /* alpha */
-    /* beta */
-    {}
+    void seven() {}
 
-    void eight() /* alpha */
-    // beta
-    {}
+    void eight() {}
 
-    void nine() /* alpha */
-    {}
+    void nine() {}
 
     void one(
         String accountName
     ) {}
 
-    void two(String accountName) // alpha
-    {}
+    void two(String accountName) {}
 
-    void three(String accountName) // alpha
-    // beta
-    {}
+    void three(String accountName) {}
 
     void four(
       // alpha
       String accountName
-    ) // beta
-    /* gamma */
-    {}
+    ) {}
 
     void five(
       String accountName // alpha
@@ -106,15 +91,12 @@ class ParameterCommentCases {
     void seven(
       /* alpha */
       String accountName
-    ) /* beta */
-    {}
+    ) {}
 
     void eight(
       /* alpha */
       String accountName
-    ) // beta
-    {}
+    ) {}
 
-    void nine(String accountName) /* alpha */
-    {}
+    void nine(String accountName) {}
 }

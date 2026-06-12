@@ -31,10 +31,10 @@ import java.util.function.ToIntFunction;
  * {@link CallableSignaturePrinter}, and {@link MemberBlockPrinter}.
  *
  * <p>Representative fixture pairs live at
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/records/input.java} and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/records/frmtr.output.java}; smaller record cases
- * also appear at {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/sealed/input.java} and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/annotation_interface_declaration/input.java}.
+ * {@code frmtr-core/src/test/resources/format/record-component-spacing/input.java} and
+ * {@code frmtr-core/src/test/resources/format/record-component-spacing/frmtr-120.output.java}; smaller record cases
+ * also appear at {@code frmtr-core/src/test/resources/format/interface-and-sealed-type-headers/input.java} and
+ * {@code frmtr-core/src/test/resources/format/annotation-interface-declaration/input.java}.
  */
 final class RecordDeclarationPrinter {
     private final CommentTracker comments;

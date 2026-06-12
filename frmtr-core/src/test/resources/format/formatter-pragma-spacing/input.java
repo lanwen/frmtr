@@ -7,7 +7,7 @@ class FormatterPragmaSpacing {
 
     Object buildPipeline(Object pipeline, Object first, Object second) {
         // @formatter:off
-        // prettier-ignore
+        // frmtr-ignore
         return pipeline
             .alpha(step -> {
                 step.call(first);

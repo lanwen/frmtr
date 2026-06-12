@@ -59,17 +59,17 @@ import java.util.function.ToIntFunction;
  *
  * <p>Expression, type, local-variable, declaration-body, and block formatting stay with their existing owners and are
  * called through callbacks. Representative coverage pairs for this boundary include
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/if/input.java} with
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/if/frmtr.output.java},
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/for/input.java} with
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/for/frmtr.output.java},
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/while/input.java} with
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/while/frmtr.output.java},
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/empty_statement/input.java} with
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/empty_statement/frmtr.output.java}, and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/comments/comments-blocks-and-statements/if-statement/input.java}
+ * {@code frmtr-core/src/test/resources/format/if-else-chain/input.java} with
+ * {@code frmtr-core/src/test/resources/format/if-else-chain/frmtr-120.output.java},
+ * {@code frmtr-core/src/test/resources/format/for-loop/input.java} with
+ * {@code frmtr-core/src/test/resources/format/for-loop/frmtr-120.output.java},
+ * {@code frmtr-core/src/test/resources/format/while-do/input.java} with
+ * {@code frmtr-core/src/test/resources/format/while-do/frmtr-120.output.java},
+ * {@code frmtr-core/src/test/resources/format/empty-statement/input.java} with
+ * {@code frmtr-core/src/test/resources/format/empty-statement/frmtr-120.output.java}, and
+ * {@code frmtr-core/src/test/resources/format/comment-preservation-if-statement/input.java}
  * with
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/comments/comments-blocks-and-statements/if-statement/frmtr.output.java}.
+ * {@code frmtr-core/src/test/resources/format/comment-preservation-if-statement/frmtr-120.output.java}.
  */
 final class StatementPrinter {
     private final CommentTracker comments;
@@ -453,8 +453,8 @@ final class StatementPrinter {
      * <p>JavaParser can attach a line comment after a try block to the block that just ended even when users visually
      * read it as the first line inside the following catch or finally. The handoff keeps those adjacent block comments
      * in source order for fixtures such as
-     * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/comments/comments-blocks-and-statements/complex/input.java}
-     * and its {@code frmtr.output.java} pair.
+     * {@code frmtr-core/src/test/resources/format/comment-complex-block-statements/input.java}
+     * and its {@code frmtr-120.output.java} pair.
      */
     private Doc tryStatement(TryStmt statement) {
         List<Doc> docs = new ArrayList<>();

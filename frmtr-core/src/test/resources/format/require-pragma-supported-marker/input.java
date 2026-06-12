@@ -1,5 +1,5 @@
 /**
- * @prettier
+ * @format
  */
  public enum WorkflowState {
 

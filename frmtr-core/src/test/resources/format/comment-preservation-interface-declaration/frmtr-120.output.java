@@ -6,7 +6,7 @@ import com.example.spi.RequiredContract;
  */
 public /*a*/ interface /*b*/ CatalogGateway
   /*a*/ extends /*b*/ /*a*/ PublishedContract /*b*/ /*a*/, /*b*/ /*a*/ RequiredContract
-/*b*/ {
+  /*b*/ {
   // comment
   /**
    * Javadoc
@@ -16,8 +16,8 @@ public /*a*/ interface /*b*/ CatalogGateway
    * @throws RuntimeException RuntimeException comment
    */
   public void syncCatalog(
-    RequestContext /*a*/ context /*b*/ /*a*/,
-    /*b*/ /*a*/ SyncOptions /*b*/ /*a*/ options /*b*/,
-    AuditTrail auditTrail
+  RequestContext /*a*/ context /*b*/ /*a*/,
+  /*b*/ /*a*/ SyncOptions /*b*/ /*a*/ options /*b*/,
+  AuditTrail auditTrail
   ) /*a*/ throws /*b*/ Exception /*a*/, /*b*/ RuntimeException /*a*/; /*b*/
 }

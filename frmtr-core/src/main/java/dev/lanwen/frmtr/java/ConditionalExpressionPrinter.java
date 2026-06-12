@@ -32,14 +32,14 @@ import java.util.function.ToIntFunction;
  * <p>{@link JavaPrinter} still owns general expression dispatch, assignment dispatch, raw source and pragma gates, field
  * declaration layout, and binary-expression policy. This helper receives those decisions as callbacks and only chooses
  * the shape of the conditional expression itself. Representative fixture pairs for this boundary include
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/conditional-expression/spaces/input.java} with
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/conditional-expression/spaces/prettier.output.java},
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/conditional-expression/tabs/input.java} with
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/conditional-expression/tabs/prettier.output.java},
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/variables/input.java} with
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/variables/frmtr.output.java}, and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/expressions/input.java} with
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/expressions/prettier.output.java}.
+ * {@code frmtr-core/src/test/resources/format/conditional-expression-space-indentation/input.java} with
+ * {@code frmtr-core/src/test/resources/format/conditional-expression-space-indentation/frmtr-120.output.java},
+ * {@code frmtr-core/src/test/resources/format/conditional-expression-tab-indentation/input.java} with
+ * {@code frmtr-core/src/test/resources/format/conditional-expression-tab-indentation/frmtr-120.output.java},
+ * {@code frmtr-core/src/test/resources/format/variable-declarations/input.java} with
+ * {@code frmtr-core/src/test/resources/format/variable-declarations/frmtr-120.output.java}, and
+ * {@code frmtr-core/src/test/resources/format/expression-operators-layout/input.java} with
+ * {@code frmtr-core/src/test/resources/format/expression-operators-layout/frmtr-120.output.java}.
  */
 final class ConditionalExpressionPrinter {
     private final CommentTracker comments;

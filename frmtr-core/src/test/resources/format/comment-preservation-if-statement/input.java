@@ -1,61 +1,66 @@
 class IfStatements {
 
-  void commentsIfLineComment() {
-    if ( // test
-    isEnabled) {
+    void commentsIfLineComment() {
+        if (
+            // test
+            isEnabled
+        ) {
+        }
+
+        if (
+            isEnabled // test
+        ) {
+        }
+
+        if (isEnabled) {
+        } // test
+
+        if (
+            // test
+            isEnabled
+        ) {
+        }
+
+        if (
+            true // comment
+        ) {
+            System.out.println("enabled");
+        }
     }
 
-    if (isEnabled // test
-    ) {
+    void commentsIfBlockComment() {
+        if (/* test */ isEnabled) {
+        }
+
+        if (isEnabled) /* test */ {
+        }
+
+        if (isEnabled) /* test */ {
+        }
+
+        if (/* test */ isEnabled) {
+        }
     }
 
-    if (isEnabled) {
-    } // test
+    void commentsElseLineComment() {
+        if (isEnabled) {
+        }
+        // test
+        else {
+        }
 
-    if ( // test
-    isEnabled) {
+        if (isEnabled) {
+        } else {
+        } // test
     }
 
-    if (true) // comment
-    {
-      System.out.println("enabled");
-    }
-  }
+    void commentsElseBlockComment() {
+        if (isEnabled) {
+        } /* test */ else {
+        }
 
-  void commentsIfBlockComment() {
-    if (/* test */
-    isEnabled) {
+        if (isEnabled) {
+        } else /* test */ {
+        }
     }
-
-    if (isEnabled/* test */
-    ) {
-    }
-
-    if (isEnabled)/* test */ {
-    }
-
-    if/* test */ (isEnabled) {
-    }
-  }
-
-  void commentsElseLineComment() {
-    if (isEnabled) {
-    } // test
-    else {
-    }
-
-    if (isEnabled) {
-    } else {
-    } // test
-  }
-
-  void commentsElseBlockComment() {
-    if (isEnabled) {
-    } /* test */ else {
-    }
-
-    if (isEnabled) {
-    } else/* test */ {
-    }
-  }
 }

@@ -21,11 +21,11 @@ import java.util.function.Predicate;
  * Compilation-unit sequencing stays in {@link CompilationUnitPrinter}.
  *
  * <p>Representative fixture pairs live at
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/modules/input.java} and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/modules/frmtr.output.java}. The raw commented
+ * {@code frmtr-core/src/test/resources/format/module-declarations-directives/input.java} and
+ * {@code frmtr-core/src/test/resources/format/module-declarations-directives/frmtr-120.output.java}. The raw commented
  * module fallback is covered by {@code
- * frmtr-core/src/test/resources/format/prettier-java/unit-test/comments/package/input.java} and {@code
- * frmtr-core/src/test/resources/format/prettier-java/unit-test/comments/package/frmtr.output.java}.
+ * frmtr-core/src/test/resources/format/comment-preservation-module-declaration/input.java} and {@code
+ * frmtr-core/src/test/resources/format/comment-preservation-module-declaration/frmtr-120.output.java}.
  */
 final class ModuleDeclarationPrinter {
     private final CommentTracker comments;

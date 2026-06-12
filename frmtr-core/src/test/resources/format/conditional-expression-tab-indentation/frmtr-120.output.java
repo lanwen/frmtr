@@ -13,7 +13,9 @@ class ConditionalExpression {
         int shortInteger = thisIsAVeryLongInteger
             ? thisIsAnotherVeryLongOne
             : thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne;
-        return thisIsAVeryLongInteger ? thisIsAnotherVeryLongOne : thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne;
+        return thisIsAVeryLongInteger
+            ? thisIsAnotherVeryLongOne
+            : thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne;
     }
 
     void ternaryOperationThatShouldBreak3() {

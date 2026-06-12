@@ -33,8 +33,8 @@ import java.util.function.Function;
  * one indented line; otherwise each target is placed on its own deeper continuation line so the target keyword remains
  * visually attached to the package or service name.
  *
- * <p>The fixture pair {@code format/prettier-java/unit-test/modules/input.java} and {@code
- * format/prettier-java/unit-test/modules/frmtr.output.java} shows the expected structured module behavior.
+ * <p>The fixture pair {@code format/module-declarations-directives/input.java} and {@code
+ * format/module-declarations-directives/frmtr-120.output.java} shows the expected structured module behavior.
  */
 final class ModuleBlockPrinter {
     private static final String MODULE_DIRECTIVE_LIST_RECOVERY_FAILURE =

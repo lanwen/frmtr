@@ -13,9 +13,8 @@ import dev.lanwen.frmtr.doc.Doc;
  * formatting decisions.
  *
  * <p>Representative fixture pairs live under
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/package_and_imports}, especially
- * {@code classWithMixedImports/input.java} and {@code classWithMixedImports/frmtr.output.java}; the static-only and
- * non-static-only fixtures cover the import-section cases that remain in {@link CompilationUnitPrinter}.
+ * {@code frmtr-core/src/test/resources/format/package-imports-mixed-imports}; the static-only and non-static-only
+ * fixtures cover the import-section cases that remain in {@link CompilationUnitPrinter}.
  */
 final class ImportDeclarationPrinter {
     private final CommentTracker comments;

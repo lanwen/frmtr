@@ -274,7 +274,7 @@ final class FormatterGuardrailsTest {
         withGuardrails("true", () -> {
             String formatted = new JavaFormatter(FormatterOptions.defaults()).format("""
                     class Demo {
-                        // prettier-ignore
+                        // frmtr-ignore
                         void messy( ) { int value=1; /* preserved */ }
                     }
                     """);

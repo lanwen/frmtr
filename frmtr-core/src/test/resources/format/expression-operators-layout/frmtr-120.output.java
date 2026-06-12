@@ -188,9 +188,7 @@ public class ExpressionOperatorSamples {
             new double[][] { 1, 2, 3, 4.1, 5.6846465 },
             new double[][] { 1, 2, 3, 4.1, 5.6846465 },
             new double[][] { 1, 2, 3, 4.1, 5.6846465 }
-        ).toArray(
-            double[][]::new
-        );
+        ).toArray(double[][]::new);
     }
 
     public void staticMethodInvocationWithSingleChainedMethodInvocation() {

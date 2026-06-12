@@ -7,9 +7,11 @@ public class MethodChainSamples {
     public void doSomethingNewWithComment() {
         new RequestBuilder()
             // comment
-            .something().more();
+            .something()
+            .more();
 
-        new RequestBuilder().something()
+        new RequestBuilder()
+            .something()
             // comment
             .more();
     }
@@ -17,29 +19,24 @@ public class MethodChainSamples {
     public void doSomethingWithComment() {
         Object
             // comment
-            .something().more();
+            .something()
+            .more();
 
         java.Object
             // comment
-            .something().more();
+            .something()
+            .more();
 
         java.enterpriseCustomerProvisioningServiceNamespace.Object
             // comment
-            .something().more();
+            .something()
+            .more();
 
-        java
-            // comment
-            .enterpriseCustomerProvisioningServiceNamespace.Object
-            .something().more();
+        java.enterpriseCustomerProvisioningServiceNamespace.Object.something().more();
 
-        java
-            .enterpriseCustomerProvisioningServiceNamespace
-            // comment
-            .Object
-            .something().more();
+        java.enterpriseCustomerProvisioningServiceNamespace.Object.something().more();
 
-        java.enterpriseCustomerProvisioningServiceNamespace.Object
-            .something().more();
+        java.enterpriseCustomerProvisioningServiceNamespace.Object.something().more();
 
         Object.something()
             // comment
@@ -50,9 +47,10 @@ public class MethodChainSamples {
             .util()
             .java.java();
 
-        enterpriseCustomerProvisioningServiceNamespace
-            // comment
-            .java
+        enterpriseCustomerProvisioningServiceNamespace.java.util().java.java();
+
+        enterpriseCustomerProvisioningServiceNamespace.java
+            /* comment */
             .util()
             .java.java();
 
@@ -61,21 +59,19 @@ public class MethodChainSamples {
             .util()
             .java.java();
 
-        enterpriseCustomerProvisioningServiceNamespace.java/* comment */
-            .util()
-            .java.java();
-
         enterpriseCustomerProvisioningServiceNamespace.java
-            /* comment */.util()
+            /* comment */ .util()
             .java.java();
     }
 
     public void doSomethingWithComment() {
         requestBuilder
             // comment
-            .something().more();
+            .something()
+            .more();
 
-        requestBuilder.something()
+        requestBuilder
+            .something()
             // comment
             .more();
     }
@@ -83,19 +79,22 @@ public class MethodChainSamples {
     public void doSomethingNewWithComment() {
         return new RequestBuilder()
             /* comment */
-            .something().more();
+            .something()
+            .more();
     }
 
     public void doSomethingWithComment() {
         return RequestBuilder
             /* comment */
-            .something().more();
+            .something()
+            .more();
     }
 
     public void doSomethingWithComment() {
         return requestBuilder
             /* comment */
-            .something().more();
+            .something()
+            .more();
     }
 
     public void doSomethingLongNew() {
@@ -103,7 +102,9 @@ public class MethodChainSamples {
     }
 
     public void doSomethingLongWithArgument() {
-        return something().more(firstArgument, secondArgument).and(firstArgument, secondArgument, thirdArgument, fourthArgument, fifthArgument);
+        return something()
+            .more(firstArgument, secondArgument)
+            .and(firstArgument, secondArgument, thirdArgument, fourthArgument, fifthArgument);
     }
 
     public void doSomethingLongNew2() {
@@ -115,15 +116,19 @@ public class MethodChainSamples {
     }
 
     public void singleInvocationOnNewExpression() {
-        new SessionInvocation(requestIdentifierValue, requestIdentifierValue).invocation(requestIdentifierValue, requestIdentifierValue);
+        new SessionInvocation(requestIdentifierValue, requestIdentifierValue).invocation(
+            requestIdentifierValue,
+            requestIdentifierValue
+        );
     }
 
     public void multipleInvocationsOnNewExpression() {
-        new SessionInvocation(requestIdentifierValue, requestIdentifierValue).invocation(requestIdentifierValue, requestIdentifierValue).andAnother();
+        new SessionInvocation(requestIdentifierValue, requestIdentifierValue)
+            .invocation(requestIdentifierValue, requestIdentifierValue)
+            .andAnother();
     }
 
     void methodReferences() {
         userRecords.stream().map(UserRecord::toString).forEach(auditLog::info);
     }
-
 }

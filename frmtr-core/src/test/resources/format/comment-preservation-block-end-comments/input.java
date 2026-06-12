@@ -1,133 +1,102 @@
-class EmptyCommentBlock {
-
-}
+class EmptyCommentBlock {}
 
 class SingleLineCommentBlock {
-  // alpha
+    // alpha
 }
 
 class StackedLineCommentBlock {
-  // alpha
-  // beta
+    // alpha
+    // beta
 }
 
 class MixedLineBlockCommentBlock {
-  // alpha
-  // beta
-  /* gamma */
+    // alpha
+    // beta
+    /* gamma */
 }
 
-class TrailingLineCommentBlock { // alpha
+class TrailingLineCommentBlock {
+    // alpha
 }
 
-class CompactBlockCommentBlock {/* alpha */}
+class CompactBlockCommentBlock {
+    /* alpha */
+}
 
 class StackedBlockCommentBlock {
-  /* alpha */
-  /* beta */
+    /* alpha */
+    /* beta */
 }
 
 class MixedBlockLineCommentBlock {
-  /* alpha */
-  // beta
+    /* alpha */
+    // beta
 }
 
+class MemberCommentBlock {
 
-class MemberCommentBlock { // alpha
-  // beta
-  int sequenceNumber;
+    // alpha
+    // beta
+    int sequenceNumber;
 
-  // one
-  // two
-  /* three */
+    // one
+    // two
+    /* three */
 }
 
 class ParameterCommentCases {
 
-  void one(
+    void one() {}
 
-  ) {}
+    void two() {}
 
-  void two(
-    // alpha
-  ) {}
+    void three() {}
 
-  void three(
-    // alpha
-    // beta
-  ) {}
+    void four() {}
 
-  void four(
-    // alpha
-    // beta
-    /* gamma */
-  ) {}
+    void five() {} // alpha
 
-  void five( // alpha
-  ) {}
+    void fiveBis() {
+        // alpha
+        int sequenceNumber;
+    }
 
-  void fiveBis( // alpha
-  ) {
-    int sequenceNumber;
-  }
+    void six /* alpha */() {}
 
-  void six(/* alpha */) {}
+    void seven() {}
 
-  void seven(
-    /* alpha */
-    /* beta */
-  ) {}
+    void eight() {}
 
-  void eight(
-    /* alpha */
-    // beta
-  ) {}
+    void nine() {}
 
-  void nine(
-  /* alpha */
-  ) {}
+    void one(
+        String accountName
+    ) {}
 
-  void one(
-    String accountName
-  ) {}
+    void two(String accountName) {}
 
-  void two(
-    String accountName
-    // alpha
-  ) {}
+    void three(String accountName) {}
 
-  void three(
-    String accountName
-    // alpha
-    // beta
-  ) {}
+    void four(
+      // alpha
+      String accountName
+    ) {}
 
-  void four(
-    // alpha
-    String accountName
-    // beta
-    /* gamma */
-  ) {}
+    void five(
+      String accountName // alpha
+    ) {}
 
-  void five(String accountName // alpha
+    void six(String accountName /* alpha */) {}
 
-  ) {}
+    void seven(
+      /* alpha */
+      String accountName
+    ) {}
 
-  void six(String accountName/* alpha */) {}
+    void eight(
+      /* alpha */
+      String accountName
+    ) {}
 
-  void seven(
-    /* alpha */
-    String accountName
-    /* beta */
-  ) {}
-
-  void eight(
-    /* alpha */
-    String accountName
-    // beta
-  ) {}
-
-  void nine(String accountName
-  /* alpha */
-  ) {}
+    void nine(String accountName) {}
 }

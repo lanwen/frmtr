@@ -28,8 +28,8 @@ import java.util.function.Function;
  * declaration formatting decisions as the rest of {@link JavaPrinter}.
  *
  * <p>Representative fixture pairs live at
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/annotation_interface_declaration/input.java} and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/annotation_interface_declaration/frmtr.output.java}.
+ * {@code frmtr-core/src/test/resources/format/annotation-interface-declaration/input.java} and
+ * {@code frmtr-core/src/test/resources/format/annotation-interface-declaration/frmtr-120.output.java}.
  */
 final class AnnotationDeclarationPrinter {
     private static final String ANNOTATION_MEMBER_LIST_RECOVERY_FAILURE =

@@ -67,7 +67,7 @@ public class EmptyStatementCases {
 
         if (condition) {
             System.out.println("two");
-        } /* empty body marker */ else;
+        } else;
 
         if (condition) {
             System.out.println("two");
@@ -76,7 +76,7 @@ public class EmptyStatementCases {
         if (condition /* empty body marker */);
         else; /* empty body marker */
 
-        if (condition /* empty body marker */ /* empty body marker */);
+        if (condition /* empty body marker */);
         else;
     }
 

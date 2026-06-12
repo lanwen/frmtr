@@ -24,14 +24,14 @@ public enum EnumWithExtraCommaAndExtraSemicolon {
 
 public enum EnumWithExtraCommaAndComment {
     SOME_ENUM, /* comment */
-    ANOTHER_ENUM
-    LAST_ENUM
+    ANOTHER_ENUM,
+    LAST_ENUM,
 }
 
 public enum EnumWithExtraSemicolonAndComment {
     SOME_ENUM, /* comment */
-    ANOTHER_ENUM
-    LAST_ENUM
+    ANOTHER_ENUM,
+    LAST_ENUM,
 }
 
 public enum EnumWithManyValues {
@@ -144,6 +144,7 @@ enum FormatterNotes {
     // And I can't believe
     // it is free
     // why are people
+
     // so damn generous
     void printTest() {
         System.out.println("Hey there");

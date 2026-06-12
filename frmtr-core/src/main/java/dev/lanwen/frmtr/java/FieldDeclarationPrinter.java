@@ -42,8 +42,8 @@ import java.util.function.ToIntFunction;
  * shared printers keep one behavior source.
  *
  * <p>Representative fixture pairs live at
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/variables/input.java} and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/variables/frmtr.output.java}; the comment cases
+ * {@code frmtr-core/src/test/resources/format/variable-declarations/input.java} and
+ * {@code frmtr-core/src/test/resources/format/variable-declarations/frmtr-120.output.java}; the comment cases
  * near {@code variableWithComment1} through {@code variableWithComment4} cover the before/after {@code =} branches.
  */
 final class FieldDeclarationPrinter {

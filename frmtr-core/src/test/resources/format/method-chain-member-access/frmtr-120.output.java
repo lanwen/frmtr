@@ -32,13 +32,9 @@ public class MethodChainSamples {
             .something()
             .more();
 
-        java// comment
-        .enterpriseCustomerProvisioningServiceNamespace.Object.something()
-            .more();
+        java.enterpriseCustomerProvisioningServiceNamespace.Object.something().more();
 
-        java.enterpriseCustomerProvisioningServiceNamespace// comment
-        .Object.something()
-            .more();
+        java.enterpriseCustomerProvisioningServiceNamespace.Object.something().more();
 
         java.enterpriseCustomerProvisioningServiceNamespace.Object.something().more();
 
@@ -51,10 +47,7 @@ public class MethodChainSamples {
             .util()
             .java.java();
 
-        enterpriseCustomerProvisioningServiceNamespace// comment
-        .java
-            .util()
-            .java.java();
+        enterpriseCustomerProvisioningServiceNamespace.java.util().java.java();
 
         enterpriseCustomerProvisioningServiceNamespace.java
             /* comment */
@@ -111,13 +104,7 @@ public class MethodChainSamples {
     public void doSomethingLongWithArgument() {
         return something()
             .more(firstArgument, secondArgument)
-            .and(
-                firstArgument,
-                secondArgument,
-                thirdArgument,
-                fourthArgument,
-                fifthArgument
-            );
+            .and(firstArgument, secondArgument, thirdArgument, fourthArgument, fifthArgument);
     }
 
     public void doSomethingLongNew2() {

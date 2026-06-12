@@ -10,7 +10,7 @@ public class IgnoredFormatterMethod {
 
   }
 
-  // prettier-ignore
+  // frmtr-ignore
   public void rebuildIgnoredSearchIndex(int accountId, int regionId, int retryLimit, int timeoutSeconds, int batchSize, int pageNumber, int shardId, int workerCount, int priority, int auditLevel) {
 
 

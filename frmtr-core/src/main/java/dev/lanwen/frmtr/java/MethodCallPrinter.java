@@ -35,10 +35,10 @@ import java.util.function.ToIntFunction;
  * argument lists stay in {@link CommentedExpressionListPrinter}, and method-call layout reads as one state machine.
  *
  * <p>Representative fixture pairs live at
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/member_chain/input.java} with
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/member_chain/frmtr.output.java} and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/text-blocks/input.java} with
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/text-blocks/frmtr.output.java}; lambda call
+ * {@code frmtr-core/src/test/resources/format/method-chain-member-access/input.java} with
+ * {@code frmtr-core/src/test/resources/format/method-chain-member-access/frmtr-120.output.java} and
+ * {@code frmtr-core/src/test/resources/format/text-block-raw-method-call/input.java} with
+ * {@code frmtr-core/src/test/resources/format/text-block-raw-method-call/frmtr-120.output.java}; lambda call
  * cases are covered by the two {@code lambda/arrow-parens-*} fixture directories.
  */
 final class MethodCallPrinter {

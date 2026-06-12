@@ -19,11 +19,11 @@ import dev.lanwen.frmtr.doc.Doc;
  * <p>Callers still choose when a statement context is needed and provide the already-wired content dispatcher.
  * Expression formatting, block formatting, declaration-body formatting, switch-entry rendering, and statement rendering
  * stay with their existing owners. Representative pragma coverage includes
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/formatter-on-off/inside_block/input.java} with
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/formatter-on-off/inside_block/frmtr.output.java}
- * and {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/require-pragma/format-pragma/input.java}
+ * {@code frmtr-core/src/test/resources/format/formatter-pragma-inside-block/input.java} with
+ * {@code frmtr-core/src/test/resources/format/formatter-pragma-inside-block/frmtr-120.output.java}
+ * and {@code frmtr-core/src/test/resources/format/require-pragma-format/input.java}
  * with
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/require-pragma/format-pragma/frmtr.output.java}.
+ * {@code frmtr-core/src/test/resources/format/require-pragma-format/frmtr-120.output.java}.
  */
 final class StatementRuleEnvelope {
     private final CommentTracker comments;

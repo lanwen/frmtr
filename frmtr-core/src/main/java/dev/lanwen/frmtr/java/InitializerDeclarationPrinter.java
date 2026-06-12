@@ -14,8 +14,8 @@ import java.util.function.Function;
  * constructor bodies.
  *
  * <p>There is no dedicated static-or-instance initializer fixture yet. The closest block/comment behavior examples live
- * at {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/comments/comments-blocks-and-statements/end-of-block/input.java}
- * and {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/comments/comments-blocks-and-statements/end-of-block/frmtr.output.java}.
+ * at {@code frmtr-core/src/test/resources/format/comment-preservation-block-end-comments/input.java}
+ * and {@code frmtr-core/src/test/resources/format/comment-preservation-block-end-comments/frmtr-120.output.java}.
  */
 final class InitializerDeclarationPrinter {
     private final Function<BlockStmt, Doc> block;

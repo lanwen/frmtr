@@ -7,7 +7,7 @@ public class BeverageMenuPrinter {
   private BeverageMenuPrinter() {}
 
   public static void printBeverageMenu() {
-    // prettier-ignore
+    // frmtr-ignore
     Map<String, String> beverages = Map.of(
       "draft", "Gulden Draak",
       "reserve", "Piraat",

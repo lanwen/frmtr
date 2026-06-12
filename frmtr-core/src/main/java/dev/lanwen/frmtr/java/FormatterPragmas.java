@@ -92,13 +92,13 @@ final class FormatterPragmas {
         if (content.contains("@formatter:on")) {
             return Pragma.ON;
         }
-        if (content.contains("prettier-ignore-start")) {
+        if (content.contains("frmtr-ignore-start")) {
             return Pragma.START;
         }
-        if (content.contains("prettier-ignore-end")) {
+        if (content.contains("frmtr-ignore-end")) {
             return Pragma.END;
         }
-        if (content.contains("prettier-ignore")) {
+        if (content.contains("frmtr-ignore")) {
             return Pragma.IGNORE;
         }
         return Pragma.NONE;

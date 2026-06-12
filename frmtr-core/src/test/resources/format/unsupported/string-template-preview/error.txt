@@ -1,0 +1,2 @@
+Unable to parse Java source
+Lexical error at line 3, column 34.

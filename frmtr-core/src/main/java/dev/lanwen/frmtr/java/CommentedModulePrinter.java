@@ -10,8 +10,8 @@ import java.util.List;
  * from JavaParser's module directive AST. It deliberately does not decide when raw source should be used, how leading
  * declaration comments are attached, or how normal structured module blocks and directives are printed.
  *
- * <p>The fixture pair {@code format/prettier-java/unit-test/comments/package/input.java} and {@code
- * format/prettier-java/unit-test/comments/package/frmtr.output.java} shows the expected output for this raw commented
+ * <p>The fixture pair {@code format/comment-preservation-module-declaration/input.java} and {@code
+ * format/comment-preservation-module-declaration/frmtr-120.output.java} shows the expected output for this raw commented
  * module path.
  */
 final class CommentedModulePrinter {

@@ -26,15 +26,15 @@ import java.util.function.ToIntFunction;
  * are not type-clause policy.
  *
  * <p>Representative fixture pairs live at
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/sealed/input.java} and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/sealed/frmtr.output.java};
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/extends_abstract_class_and_implements_interfaces/input.java}
+ * {@code frmtr-core/src/test/resources/format/interface-and-sealed-type-headers/input.java} and
+ * {@code frmtr-core/src/test/resources/format/interface-and-sealed-type-headers/frmtr-120.output.java};
+ * {@code frmtr-core/src/test/resources/format/interface-and-sealed-type-headers/input.java}
  * and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/extends_abstract_class_and_implements_interfaces/frmtr.output.java};
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/generic_class/input.java} and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/generic_class/frmtr.output.java}; and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/types/input.java} plus
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/types/frmtr.output.java}.
+ * {@code frmtr-core/src/test/resources/format/interface-and-sealed-type-headers/frmtr-120.output.java};
+ * {@code frmtr-core/src/test/resources/format/generic-type-body-breaks/input.java} and
+ * {@code frmtr-core/src/test/resources/format/generic-type-body-breaks/frmtr.output.java}; and
+ * {@code frmtr-core/src/test/resources/format/annotated-qualified-types/input.java} plus
+ * {@code frmtr-core/src/test/resources/format/annotated-qualified-types/frmtr-120.output.java}.
  */
 final class TypePrinter {
     private final FormatterOptions options;

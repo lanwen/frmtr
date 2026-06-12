@@ -31,10 +31,10 @@ import java.util.function.ToIntFunction;
  * member blocks.
  *
  * <p>Representative fixture pairs live at
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/enum/input.java} and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/enum/frmtr.output.java}; enum constants with
+ * {@code frmtr-core/src/test/resources/format/enum-declaration-layout/input.java} and
+ * {@code frmtr-core/src/test/resources/format/enum-declaration-layout/frmtr-120.output.java}; enum constants with
  * lambda arguments are also covered by
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/lambda/arrow-parens-avoid/input.java}.
+ * {@code frmtr-core/src/test/resources/format/block-lambda-arrow-parens-avoid/input.java}.
  */
 final class EnumDeclarationPrinter {
     private static final String ENUM_CONSTANT_LIST_RECOVERY_FAILURE =

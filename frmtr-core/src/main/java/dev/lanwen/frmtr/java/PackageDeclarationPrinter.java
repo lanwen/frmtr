@@ -14,9 +14,8 @@ import dev.lanwen.frmtr.doc.Doc;
  * those are whole-compilation-unit layout decisions rather than package declaration formatting.
  *
  * <p>Representative fixture pairs live under
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/package_and_imports}, especially
- * {@code classWithMixedImports/input.java} and {@code classWithMixedImports/frmtr.output.java}. Source-leading package
- * comments are covered near {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/comments/class}.
+ * {@code frmtr-core/src/test/resources/format/package-imports-mixed-imports}. Source-leading package comments are
+ * covered near {@code frmtr-core/src/test/resources/format/comment-preservation-class-members}.
  */
 final class PackageDeclarationPrinter {
     private final CommentTracker comments;

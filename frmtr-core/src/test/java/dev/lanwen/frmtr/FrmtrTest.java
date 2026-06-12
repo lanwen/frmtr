@@ -16,12 +16,18 @@ import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 
 final class FrmtrTest {
+    private static final Pattern WIDTH_OUTPUT_FILE = Pattern.compile("frmtr-(\\d+)\\.output\\.java");
+
     @Test
     void formatsBasicGoldenFixtureAndIsIdempotent() throws Exception {
         String source = readResource("format/basic/input.java");
@@ -61,8 +67,8 @@ final class FrmtrTest {
     @Test
     void formatsStaticChainLaterBlockLambdaFixtureAtPreferredAndTightWidths() throws Exception {
         String source = readResource("format/static-chain-later-block-lambda/input.java");
-        String preferredExpected = readResource("format/static-chain-later-block-lambda/frmtr.output.java");
-        String tightExpected = readResource("format/static-chain-later-block-lambda/frmtr-tight.output.java");
+        String preferredExpected = readResource("format/static-chain-later-block-lambda/frmtr-90.output.java");
+        String tightExpected = readResource("format/static-chain-later-block-lambda/frmtr-50.output.java");
         FormatterOptions preferredRootWidth = FormatterOptions.forLayout(
                 90,
                 FormatterOptions.IndentStyle.SPACE,
@@ -102,8 +108,8 @@ final class FrmtrTest {
     @Test
     void formatsObjectCreationAssignmentPrefixFixtureAtPreferredAndTightWidths() throws Exception {
         String source = readResource("format/object-creation-assignment-prefix/input.java");
-        String preferredExpected = readResource("format/object-creation-assignment-prefix/frmtr.output.java");
-        String tightExpected = readResource("format/object-creation-assignment-prefix/frmtr-tight.output.java");
+        String preferredExpected = readResource("format/object-creation-assignment-prefix/frmtr-120.output.java");
+        String tightExpected = readResource("format/object-creation-assignment-prefix/frmtr-38.output.java");
         FormatterOptions preferredWidth = FormatterOptions.forLayout(
                 120,
                 FormatterOptions.IndentStyle.SPACE,
@@ -206,142 +212,38 @@ final class FrmtrTest {
         assertThatCode(() -> assertLatestJavaParses(formatted)).doesNotThrowAnyException();
     }
 
-    @ParameterizedTest(name = "{0} @ {1}")
-    @CsvSource({
-            "annotated-generic-type-width, 120",
-            "annotation-array-subtype-list, 120",
-            "annotation-text-block-argument, 120",
-            "anonymous-object-creation-class-argument, 120",
-            "assignment-method-chain, 120",
-            "binary-method-call-operand, 120",
-            "binary-operator-position-end, 120",
-            "binary-operator-position-start, 120",
-            "binary-parenthesized-or-condition, 120",
-            "binary-return-comments, 120",
-            "block-lambda-call-initializers, 40",
-            "block-lambda-call-initializers, 120",
-            "block-lambda-setup-initializer, 120",
-            "chain-comment-ownership, 120",
-            "class-literal-qualified-name, 120",
-            "constructor-chain-roots, 120",
-            "direct-constructor-source-multiline, 120",
-            "field-chain-initializer, 120",
-            "field-trailing-comments, 120",
-            "member-blank-lines, 120",
-            "member-comment-spacing, 120",
-            "method-annotation-line-comment, 120",
-            "method-call-binary-argument, 120",
-            "method-call-initializer-opener, 120",
-            "method-chain-root-arguments, 120",
-            "method-chain-segment-arguments, 120",
-            "comment-complex-block-statements, 120",
-            "comment-preservation-annotation-array, 120",
-            "comment-preservation-leading-statements, 120",
-            "comment-preservation-method-arguments, 120",
-            "comment-preservation-method-chain-segments, 120",
-            "comment-preservation-try-resources, 120",
-            "conditional-chain-branch, 120",
-            "method-chain-trailing-empty-call-comment, 120",
-            "method-chain-trailing-lambda-comment, 120",
-            "multiline-if-condition, 120",
-            "nested-generic-type-breaks, 120",
-            "object-creation-diamond-break, 120",
-            "object-creation-statement-argument, 120",
-            "array-initializer-spacing, 120",
-            "annotated-qualified-types, 120",
-            "annotation-interface-declaration, 120",
-            "assert-statement-expressions, 120",
-            "block-lambda-arrow-parens-always, 120",
-            "block-lambda-arrow-parens-avoid, 120",
-            "cast-expression-layout, 120",
-            "comment-preservation-class-members, 120",
-            "for-loop, 120",
-            "formatter-pragma-spacing, 120",
-            "formatter-ignore-block, 120",
-            "formatter-ignore-class-declaration, 120",
-            "formatter-ignore-method, 120",
-            "formatter-ignore-multiple, 120",
-            "formatter-pragma-begin-with-on, 120",
-            "formatter-pragma-class, 120",
-            "formatter-pragma-end-with-off, 120",
-            "formatter-pragma-inside-block, 120",
-            "formatter-pragma-method, 120",
-            "formatter-pragma-multiple, 120",
-            "if-else-chain, 120",
-            "initializer-equals-grouping, 120",
-            "intellij-idea, 120",
-            "interface-and-sealed-type-headers, 120",
-            "lambda-expression-argument-opener, 120",
-            "marker-annotation-stacks, 120",
-            "method-parameter-list-layout, 120",
-            "method-reference-expressions, 120",
-            "modifier-annotation-placement, 120",
-            "module-declarations-directives, 120",
-            "module-declarations-mixed-imports, 120",
-            "module-declarations-no-imports, 120",
-            "module-declarations-non-static-imports, 120",
-            "module-declarations-static-imports, 120",
-            "object-creation-instantiation-layout, 120",
-            "package-imports-mixed-case-type-imports, 120",
-            "package-imports-mixed-imports, 120",
-            "package-imports-no-imports, 120",
-            "package-imports-non-static-imports, 120",
-            "package-imports-static-imports, 120",
-            "qualified-type-receiver-annotations, 120",
-            "record-component-inline-annotations, 120",
-            "record-component-line-comment, 120",
-            "record-component-spacing, 120",
-            "record-implements, 120",
-            "require-pragma-format, 120",
-            "require-pragma-invalid, 120",
-            "require-pragma-supported-marker, 120",
-            "return-statement-expressions, 120",
-            "multiline-array-initializer-after-equals, 120",
-            "nested-object-array-rows, 120",
-            "qualified-static-chain-root, 120",
-            "return-object-creation-width, 120",
-            "return-chain-final-argument, 120",
-            "single-member-annotation-array-width, 120",
-            "source-multiline-shapes, 120",
-            "string-concat-ternary-literal, 120",
-            "string-literal-initializer-width, 120",
-            "switch-entry-leading-comments, 120",
-            "switch-expression-initializer, 120",
-            "switch-empty-rules, 120",
-            "switch-multiple-unnamed-patterns, 120",
-            "switch-statement-rules, 120",
-            "synchronized-block, 120",
-            "template-expression-string-literals, 120",
-            "text-block-concat-initializer-opener, 120",
-            "text-block-language-and-escapes, 120",
-            "text-block-raw-method-call, 120",
-            "throw-object-creation-width, 120",
-            "throws-clause-layout, 120",
-            "try-resource-layout, 120",
-            "type-header-brace-placement, 120",
-            "unnamed-class-compilation-unit, 120",
-            "unnamed-variables-patterns, 120",
-            "variable-declarations, 120",
-            "while-do, 120",
-            "variable-chain-initializer, 120"
-    })
-    void formatsLineWidthFixtureAndIsIdempotent(String fixtureName, int lineWidth) throws Exception {
-        String fixtureRoot = "format/" + fixtureName + "/";
-        String source = readResource(fixtureRoot + "input.java");
-        String expected = readResource(fixtureRoot + "frmtr-" + lineWidth + ".output.java");
-        FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
-                lineWidth,
-                FormatterOptions.IndentStyle.SPACE,
-                4,
-                FormatterOptions.LineEnding.LF,
-                true,
-                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("supportedFormatFixtures")
+    void formatsDiscoveredFixtureAndIsIdempotent(FormatFixture fixture) throws Exception {
+        String source = Files.readString(fixture.input(), StandardCharsets.UTF_8);
+        String expected = Files.readString(fixture.expected(), StandardCharsets.UTF_8);
 
-        String formatted = Frmtr.format(source, options);
+        String formatted = Frmtr.format(source, fixture.options());
 
         assertThat(formatted).isEqualTo(expected);
-        assertThat(Frmtr.format(formatted, options)).isEqualTo(formatted);
-        assertThatCode(() -> assertLatestJavaParses(formatted)).doesNotThrowAnyException();
+        assertThat(Frmtr.format(formatted, fixture.options())).isEqualTo(formatted);
+        if (latestJavaParses(expected)) {
+            assertThatCode(() -> assertLatestJavaParses(formatted)).doesNotThrowAnyException();
+        }
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("unsupportedFormatFixtures")
+    void unsupportedFixturesFailWithExpectedFormatterError(UnsupportedFixture fixture) throws Exception {
+        String source = Files.readString(fixture.input(), StandardCharsets.UTF_8);
+        List<String> expected = Files.readAllLines(fixture.error(), StandardCharsets.UTF_8);
+
+        FormatterException exception = formatterException(source);
+
+        assertThat(expected).isNotEmpty();
+        assertThat(exception).hasMessage(expected.getFirst());
+        assertThat(exception.sourceProblems()).isNotEmpty();
+        expected.stream()
+                .skip(1)
+                .filter(line -> !line.isBlank())
+                .forEach(expectedProblem -> assertThat(exception.sourceProblems())
+                        .extracting(FormatterException.SourceProblem::message)
+                        .anySatisfy(message -> assertThat(message).contains(expectedProblem)));
     }
 
     @Test
@@ -1931,6 +1833,29 @@ final class FrmtrTest {
     }
 
     @Test
+    void requirePragmaLeavesSourceWithFormerPrettierPragmaUnchanged() {
+        String source = """
+                /**
+                 * @prettier
+                 */
+                 public class Demo{int value;}\
+                """;
+        FormatterOptions options = FormatterOptions.withPragmaRequirement(
+                FormatterOptions.DEFAULT_LINE_WIDTH,
+                FormatterOptions.IndentStyle.SPACE,
+                FormatterOptions.DEFAULT_INDENT_WIDTH,
+                FormatterOptions.LineEnding.LF,
+                true,
+                false,
+                true,
+                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+
+        String formatted = Frmtr.format(source, options);
+
+        assertThat(formatted).isEqualTo(source);
+    }
+
+    @Test
     void requirePragmaFormatsSourceWithLeadingFormatPragma() {
         String source = """
                 /**
@@ -1981,7 +1906,7 @@ final class FrmtrTest {
 
     @Test
     void lexicalParseErrorsIncludeSourceContextFromMessagePosition() throws Exception {
-        String source = readResource("format/prettier-java/unit-test/template-expression/prettier.output.java");
+        String source = readResource("format/unsupported/string-template-preview/input.java");
 
         FormatterException exception = formatterException(source, failOnParseErrorsOptions());
 
@@ -2123,6 +2048,11 @@ final class FrmtrTest {
                 .isTrue();
     }
 
+    private static boolean latestJavaParses(String source) {
+        var parser = new JavaParser(new ParserConfiguration().setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_25));
+        return parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source)).isSuccessful();
+    }
+
     private static FormatterOptions failOnParseErrorsOptions() {
         return failOnParseErrorsOptions(FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
     }
@@ -2138,9 +2068,100 @@ final class FrmtrTest {
                 .withParseErrorBehavior(FormatterOptions.ParseErrorBehavior.FAIL);
     }
 
+    private static Stream<FormatFixture> supportedFormatFixtures() throws Exception {
+        Path root = resourceRoot("format");
+        try (var stream = Files.walk(root)) {
+            return stream.filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().equals("input.java"))
+                    .filter(input -> !root.relativize(input).startsWith("unsupported"))
+                    .flatMap(input -> formatFixtures(root, input))
+                    .sorted(Comparator.comparing(FormatFixture::name))
+                    .toList()
+                    .stream();
+        }
+    }
+
+    private static Stream<FormatFixture> formatFixtures(Path root, Path input) {
+        Path directory = input.getParent();
+        try (var stream = Files.list(directory)) {
+            List<FormatFixture> fixtures = stream.filter(Files::isRegularFile)
+                    .flatMap(output -> formatFixture(root, input, output))
+                    .toList();
+            if (fixtures.isEmpty()) {
+                throw new IllegalStateException(
+                        "Missing formatter output for fixture `%s`. Expected `frmtr.output.java` or `frmtr-<width>.output.java` next to %s."
+                                .formatted(root.relativize(directory), input));
+            }
+            return fixtures.stream();
+        } catch (IOException exception) {
+            throw new IllegalStateException("Unable to discover formatter outputs in " + directory, exception);
+        }
+    }
+
+    private static Stream<FormatFixture> formatFixture(Path root, Path input, Path output) {
+        String fileName = output.getFileName().toString();
+        String fixtureName = root.relativize(input.getParent()).toString();
+        if (fileName.equals("frmtr.output.java")) {
+            return Stream.of(new FormatFixture(fixtureName + " @ default", input, output, FormatterOptions.defaults()));
+        }
+        var widthOutput = WIDTH_OUTPUT_FILE.matcher(fileName);
+        if (widthOutput.matches()) {
+            int lineWidth = Integer.parseInt(widthOutput.group(1));
+            FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
+                    lineWidth,
+                    FormatterOptions.IndentStyle.SPACE,
+                    4,
+                    FormatterOptions.LineEnding.LF,
+                    true,
+                    FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+            return Stream.of(new FormatFixture(fixtureName + " @ " + lineWidth, input, output, options));
+        }
+        return Stream.empty();
+    }
+
+    private static Stream<UnsupportedFixture> unsupportedFormatFixtures() throws Exception {
+        Path root = resourceRoot("format/unsupported");
+        try (var stream = Files.walk(root)) {
+            return stream.filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().equals("input.java"))
+                    .map(input -> unsupportedFixture(root, input))
+                    .sorted(Comparator.comparing(UnsupportedFixture::name))
+                    .toList()
+                    .stream();
+        }
+    }
+
+    private static UnsupportedFixture unsupportedFixture(Path root, Path input) {
+        Path error = input.getParent().resolve("error.txt");
+        if (!Files.isRegularFile(error)) {
+            throw new IllegalStateException(
+                    "Missing unsupported fixture error companion for `%s`. Expected `error.txt` next to %s."
+                            .formatted(root.relativize(input.getParent()), input));
+        }
+        return new UnsupportedFixture(root.relativize(input.getParent()).toString(), input, error);
+    }
+
+    private static Path resourceRoot(String name) throws URISyntaxException {
+        return Path.of(Objects.requireNonNull(FrmtrTest.class.getClassLoader().getResource(name), name).toURI())
+                .toAbsolutePath()
+                .normalize();
+    }
+
     private static String readResource(String name) throws IOException, URISyntaxException {
-        return Files.readString(
-                Path.of(Objects.requireNonNull(FrmtrTest.class.getClassLoader().getResource(name), name).toURI()),
-                StandardCharsets.UTF_8);
+        return Files.readString(resourceRoot(name), StandardCharsets.UTF_8);
+    }
+
+    private record FormatFixture(String name, Path input, Path expected, FormatterOptions options) {
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
+
+    private record UnsupportedFixture(String name, Path input, Path error) {
+        @Override
+        public String toString() {
+            return name;
+        }
     }
 }

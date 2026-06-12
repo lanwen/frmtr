@@ -27,15 +27,14 @@ import java.util.function.Predicate;
  * expressions, raw body preservation, deterministic import ordering, or any single-node package/import behavior itself.
  *
  * <p>Representative fixture pairs live at
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/package_and_imports/classWithMixedImports/input.java}
- * and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/package_and_imports/classWithMixedImports/frmtr.output.java}.
+ * {@code frmtr-core/src/test/resources/format/package-imports-mixed-imports/input.java} and
+ * {@code frmtr-core/src/test/resources/format/package-imports-mixed-imports/frmtr-120.output.java}.
  * Module placement with comments is covered by
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/comments/package/input.java} and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/comments/package/frmtr.output.java}; compact
+ * {@code frmtr-core/src/test/resources/format/comment-preservation-module-declaration/input.java} and
+ * {@code frmtr-core/src/test/resources/format/comment-preservation-module-declaration/frmtr-120.output.java}; compact
  * unnamed-class expansion is covered by
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/unnamed-class-compilation-unit/input.java} and
- * {@code frmtr-core/src/test/resources/format/prettier-java/unit-test/unnamed-class-compilation-unit/frmtr.output.java}.
+ * {@code frmtr-core/src/test/resources/format/unnamed-class-compilation-unit/input.java} and
+ * {@code frmtr-core/src/test/resources/format/unnamed-class-compilation-unit/frmtr-120.output.java}.
  */
 final class CompilationUnitPrinter {
     private static final String IMPORT_DECLARATION_LIST_RECOVERY_FAILURE =

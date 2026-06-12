@@ -13,8 +13,8 @@ This file is the architecture overview. Detailed formatter ownership, recovery b
   and records intentional raw or compact fallback paths.
 - [docs/error-recovery-behavior.md](docs/error-recovery-behavior.md) documents the implemented JavaParser parse-error
   recovery behavior and historical design decisions.
-- [docs/testing-strategy.md](docs/testing-strategy.md) explains module-level coverage, golden fixtures, adopted
-  `prettier-java` fixtures, and native-image compatibility checks.
+- [docs/testing-strategy.md](docs/testing-strategy.md) explains module-level coverage, golden fixtures, frmtr-owned
+  fixture conventions, and native-image compatibility checks.
 
 ## Build
 
@@ -158,6 +158,7 @@ Current public formatter policy includes:
   strict fail-on-any-problem behavior.
 - `FormatterOptions.requirePragma`: an opt-in setting that formats only files whose leading Javadoc comment contains the
   public `@format` marker.
+- Active formatter ignore pragmas are `frmtr-ignore`, `frmtr-ignore-start`, and `frmtr-ignore-end`.
 - `FormatterOptions.LambdaArrowParens`: controls whether single-parameter lambdas preserve, avoid, or always emit
   parentheses.
 - `FormatterOptions.BinaryOperatorPosition`: controls whether broken binary continuation lines keep operators at the end
@@ -320,6 +321,6 @@ The test suite is module-scoped:
 - `:frmtr-native-image-support`: JavaParser metamodel coverage for native-image reflection registration.
 - `:frmtr-cli:nativeTest`: explicit native-image compatibility coverage outside the default JVM `check` lifecycle.
 
-Golden fixture strategy, the adopted upstream `prettier-java` corpus, and new-rule coverage expectations are documented
-in [docs/testing-strategy.md](docs/testing-strategy.md). Adopted `prettier-java` snapshots use fixture-owned line-width
-options rather than public formatter defaults.
+Golden fixture strategy, frmtr-owned fixture conventions, and new-rule coverage expectations are documented in
+[docs/testing-strategy.md](docs/testing-strategy.md). Option-specific snapshots use fixture-owned line-width expectations
+rather than public formatter defaults.

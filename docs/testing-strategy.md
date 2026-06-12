@@ -31,24 +31,23 @@ New formatter rules should include golden coverage plus idempotence and reparse 
 rules should prefer fixture coverage that exercises representative source shape, comments, source spacing, and relevant
 formatter options instead of asserting only a narrow printer helper result.
 
-## Adopted Prettier-Java Corpus
+Normal fixtures are discovered by convention under `format/**/input.java`, excluding `format/unsupported/**`. Each normal
+fixture must include at least one recognized expected output next to the input: `frmtr.output.java` for the default
+configuration or `frmtr-<width>.output.java` for a line-width-specific expectation. Adding a normal fixture should only
+require adding the directory-local `input.java` and matching `frmtr*.output.java` files, not registering the fixture in a
+Java list.
 
-The adopted upstream `prettier-java` fixture set lives under
-`frmtr-core/src/test/resources/format/prettier-java`.
+Unsupported syntax fixtures live under `format/unsupported/**` and must include `input.java` plus `error.txt`. These
+fixtures assert the expected formatter error for inputs the bundled JavaParser dependency cannot parse.
 
-The adopted tree preserves verbatim upstream `input.java` and `prettier.output.java` files. `frmtr.output.java` snapshots
-are checked in for fixtures whose upstream syntax JavaParser can parse. These formatter snapshots use frmtr's normal
-style while taking the line-width matrix from the Prettier compatibility fixture options, so public default-width changes
-do not rebaseline the adopted corpus. An explicit upstream-compatibility subset is compared directly against
-`prettier.output.java` using an 80-column, two-space, raw-trailing-whitespace-preserving compatibility baseline.
+Option-changing behavior should be covered by independent frmtr fixtures with behavior-oriented names and expected output
+files, not by compatibility metadata from another formatter. `@format` remains the public require-pragma opt-in marker.
+Active formatter ignore pragmas are `frmtr-ignore`, `frmtr-ignore-start`, and `frmtr-ignore-end`.
 
-Fixture-local `frmtr.options.properties` metadata, inherited from parent fixture directories, records option-matrix
-overrides such as pragma-gated mode, lambda arrow-parens mode, binary-operator position, or wider line width without
-changing Java fixture inputs or expected outputs.
+## Absorbed Prettier-Derived Cases
 
-Fixtures using upstream syntax unsupported by the bundled JavaParser dependency stay in the adopted tree, are explicitly
-enumerated in tests, and are skipped by formatter assertions until parser support exists. `frmtr-output-examples`
-preserves formatter snapshots from earlier parseable adaptations of unsupported fixtures as examples only.
+frmtr absorbed useful cases from the earlier prettier-derived corpus into behavior-named frmtr fixtures. This preserves
+the coverage signal without keeping a dedicated prettier harness, prettier fixture tree, or prettier output snapshots.
 
 ## Recovery Fixtures
 

@@ -14,7 +14,8 @@ val frmtrCliRuntimeClasspath = frmtrCli.provider {
         .runtimeClasspath
 }
 
-val frmtrSelfFixtureCorpus = "frmtr-core/src/test/resources/format"
+val frmtrSelfFixtureCorpora =
+    listOf("frmtr-core/src/test/resources/format", "frmtr-core/src/test/resources/unsupported")
 
 fun TaskContainer.registerFrmtrCliTask(name: String, configure: JavaExec.() -> Unit) = register<JavaExec>(name) {
     group = "formatting"
@@ -26,12 +27,16 @@ fun TaskContainer.registerFrmtrCliTask(name: String, configure: JavaExec.() -> U
 
 tasks.registerFrmtrCliTask("frmtrSelfCheck") {
     description = "Verifies formatting with frmtr CLI."
-    args("--check", "--diff", "--exclude", frmtrSelfFixtureCorpus, ".")
+    args("--check", "--diff")
+    frmtrSelfFixtureCorpora.forEach { args("--exclude", it) }
+    args(".")
 }
 
 tasks.registerFrmtrCliTask("frmtrSelfFormat") {
     description = "Formats code with frmtr CLI."
-    args("--write", "--exclude", frmtrSelfFixtureCorpus, ".")
+    args("--write")
+    frmtrSelfFixtureCorpora.forEach { args("--exclude", it) }
+    args(".")
 }
 
 subprojects {

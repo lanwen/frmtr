@@ -31,14 +31,15 @@ New formatter rules should include golden coverage plus idempotence and reparse 
 rules should prefer fixture coverage that exercises representative source shape, comments, source spacing, and relevant
 formatter options instead of asserting only a narrow printer helper result.
 
-Normal fixtures are discovered by convention under `format/**/input.java`, excluding `format/unsupported/**`. Each normal
-fixture must include at least one recognized expected output next to the input: `frmtr.output.java` for the default
-configuration or `frmtr-<width>.output.java` for a line-width-specific expectation. Adding a normal fixture should only
-require adding the directory-local `input.java` and matching `frmtr*.output.java` files, not registering the fixture in a
-Java list.
+Normal fixtures are discovered by the `@ResourceFixtureSource(glob = "format/**/input.java")` JUnit source extension.
+Each normal fixture must include at least one recognized expected output next to the input: `frmtr.output.java` for the
+default configuration or `frmtr-<width>.output.java` for a line-width-specific expectation. Adding a normal fixture should
+only require adding the directory-local `input.java` and matching `frmtr*.output.java` files, not registering the fixture
+in a Java list.
 
-Unsupported syntax fixtures live under `format/unsupported/**` and must include `input.java` plus `error.txt`. These
-fixtures assert the expected formatter error for inputs the bundled JavaParser dependency cannot parse.
+Unsupported syntax fixtures live under top-level `unsupported/**` and are discovered by
+`@ResourceFixtureSource(glob = "unsupported/**/input.java")`. They must include `input.java` plus `error.txt`, and assert
+the expected formatter error for inputs the bundled JavaParser dependency cannot parse.
 
 Option-changing behavior should be covered by independent frmtr fixtures with behavior-oriented names and expected output
 files, not by compatibility metadata from another formatter. `@format` remains the public require-pragma opt-in marker.

@@ -1,4 +1,0 @@
-Unable to parse Java source
-(line 1,col 3) 'static' is not allowed here.
-(line 23,col 3) Cannot be 'abstract' and also 'synchronized'.
-(line 31,col 1) 'static' is not allowed here.

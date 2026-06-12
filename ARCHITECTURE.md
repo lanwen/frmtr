@@ -254,9 +254,10 @@ The CLI module owns application packaging and Gradle `run` wiring. Local executi
 
 The root build exposes `frmtrSelfCheck` and `frmtrSelfFormat` as shared `JavaExec` wrappers over the current
 `:frmtr-cli` runtime classpath. They provide a one-invocation dogfood path for the formatter engine, tooling runner, and
-CLI over this checkout while excluding `frmtr-core/src/test/resources/format`, whose fixture corpus
-contains intentionally unsupported or formatter-sensitive Java samples. `frmtrSelfCheck` enables CLI unified diffs so
-reviewers can inspect drift directly from the check output. Gradle plugin behavior remains covered by
+CLI over this checkout while excluding `frmtr-core/src/test/resources/format` and
+`frmtr-core/src/test/resources/unsupported`, whose fixture corpora contain formatter-sensitive or intentionally invalid
+Java samples. `frmtrSelfCheck` enables CLI unified diffs so reviewers can inspect drift directly from the check output.
+Gradle plugin behavior remains covered by
 `:frmtr-gradle-plugin` functional tests.
 
 ## Gradle Plugin
@@ -321,6 +322,6 @@ The test suite is module-scoped:
 - `:frmtr-native-image-support`: JavaParser metamodel coverage for native-image reflection registration.
 - `:frmtr-cli:nativeTest`: explicit native-image compatibility coverage outside the default JVM `check` lifecycle.
 
-Golden fixture strategy, frmtr-owned fixture conventions, and new-rule coverage expectations are documented in
-[docs/testing-strategy.md](docs/testing-strategy.md). Option-specific snapshots use fixture-owned line-width expectations
-rather than public formatter defaults.
+Golden fixture strategy, frmtr-owned fixture conventions, glob-discovered JUnit fixture sources, and new-rule coverage
+expectations are documented in [docs/testing-strategy.md](docs/testing-strategy.md). Option-specific snapshots use
+fixture-owned line-width expectations rather than public formatter defaults.

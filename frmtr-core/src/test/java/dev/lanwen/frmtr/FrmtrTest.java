@@ -16,18 +16,12 @@ import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
-import java.util.regex.Pattern;
-import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
 
 final class FrmtrTest {
-    private static final Pattern WIDTH_OUTPUT_FILE = Pattern.compile("frmtr-(\\d+)\\.output\\.java");
-
     @Test
     void formatsBasicGoldenFixtureAndIsIdempotent() throws Exception {
         String source = readResource("format/basic/input.java");
@@ -213,7 +207,7 @@ final class FrmtrTest {
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("supportedFormatFixtures")
+    @ResourceFixtureSource(glob = "format/**/input.java")
     void formatsDiscoveredFixtureAndIsIdempotent(FormatFixture fixture) throws Exception {
         String source = Files.readString(fixture.input(), StandardCharsets.UTF_8);
         String expected = Files.readString(fixture.expected(), StandardCharsets.UTF_8);
@@ -228,7 +222,7 @@ final class FrmtrTest {
     }
 
     @ParameterizedTest(name = "{0}")
-    @MethodSource("unsupportedFormatFixtures")
+    @ResourceFixtureSource(glob = "unsupported/**/input.java")
     void unsupportedFixturesFailWithExpectedFormatterError(UnsupportedFixture fixture) throws Exception {
         String source = Files.readString(fixture.input(), StandardCharsets.UTF_8);
         List<String> expected = Files.readAllLines(fixture.error(), StandardCharsets.UTF_8);
@@ -1906,7 +1900,7 @@ final class FrmtrTest {
 
     @Test
     void lexicalParseErrorsIncludeSourceContextFromMessagePosition() throws Exception {
-        String source = readResource("format/unsupported/string-template-preview/input.java");
+        String source = readResource("unsupported/string-template-preview/input.java");
 
         FormatterException exception = formatterException(source, failOnParseErrorsOptions());
 
@@ -2068,79 +2062,6 @@ final class FrmtrTest {
                 .withParseErrorBehavior(FormatterOptions.ParseErrorBehavior.FAIL);
     }
 
-    private static Stream<FormatFixture> supportedFormatFixtures() throws Exception {
-        Path root = resourceRoot("format");
-        try (var stream = Files.walk(root)) {
-            return stream.filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().equals("input.java"))
-                    .filter(input -> !root.relativize(input).startsWith("unsupported"))
-                    .flatMap(input -> formatFixtures(root, input))
-                    .sorted(Comparator.comparing(FormatFixture::name))
-                    .toList()
-                    .stream();
-        }
-    }
-
-    private static Stream<FormatFixture> formatFixtures(Path root, Path input) {
-        Path directory = input.getParent();
-        try (var stream = Files.list(directory)) {
-            List<FormatFixture> fixtures = stream.filter(Files::isRegularFile)
-                    .flatMap(output -> formatFixture(root, input, output))
-                    .toList();
-            if (fixtures.isEmpty()) {
-                throw new IllegalStateException(
-                        "Missing formatter output for fixture `%s`. Expected `frmtr.output.java` or `frmtr-<width>.output.java` next to %s."
-                                .formatted(root.relativize(directory), input));
-            }
-            return fixtures.stream();
-        } catch (IOException exception) {
-            throw new IllegalStateException("Unable to discover formatter outputs in " + directory, exception);
-        }
-    }
-
-    private static Stream<FormatFixture> formatFixture(Path root, Path input, Path output) {
-        String fileName = output.getFileName().toString();
-        String fixtureName = root.relativize(input.getParent()).toString();
-        if (fileName.equals("frmtr.output.java")) {
-            return Stream.of(new FormatFixture(fixtureName + " @ default", input, output, FormatterOptions.defaults()));
-        }
-        var widthOutput = WIDTH_OUTPUT_FILE.matcher(fileName);
-        if (widthOutput.matches()) {
-            int lineWidth = Integer.parseInt(widthOutput.group(1));
-            FormatterOptions options = FormatterOptions.withJavaLanguageLevel(
-                    lineWidth,
-                    FormatterOptions.IndentStyle.SPACE,
-                    4,
-                    FormatterOptions.LineEnding.LF,
-                    true,
-                    FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
-            return Stream.of(new FormatFixture(fixtureName + " @ " + lineWidth, input, output, options));
-        }
-        return Stream.empty();
-    }
-
-    private static Stream<UnsupportedFixture> unsupportedFormatFixtures() throws Exception {
-        Path root = resourceRoot("format/unsupported");
-        try (var stream = Files.walk(root)) {
-            return stream.filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().equals("input.java"))
-                    .map(input -> unsupportedFixture(root, input))
-                    .sorted(Comparator.comparing(UnsupportedFixture::name))
-                    .toList()
-                    .stream();
-        }
-    }
-
-    private static UnsupportedFixture unsupportedFixture(Path root, Path input) {
-        Path error = input.getParent().resolve("error.txt");
-        if (!Files.isRegularFile(error)) {
-            throw new IllegalStateException(
-                    "Missing unsupported fixture error companion for `%s`. Expected `error.txt` next to %s."
-                            .formatted(root.relativize(input.getParent()), input));
-        }
-        return new UnsupportedFixture(root.relativize(input.getParent()).toString(), input, error);
-    }
-
     private static Path resourceRoot(String name) throws URISyntaxException {
         return Path.of(Objects.requireNonNull(FrmtrTest.class.getClassLoader().getResource(name), name).toURI())
                 .toAbsolutePath()
@@ -2149,19 +2070,5 @@ final class FrmtrTest {
 
     private static String readResource(String name) throws IOException, URISyntaxException {
         return Files.readString(resourceRoot(name), StandardCharsets.UTF_8);
-    }
-
-    private record FormatFixture(String name, Path input, Path expected, FormatterOptions options) {
-        @Override
-        public String toString() {
-            return name;
-        }
-    }
-
-    private record UnsupportedFixture(String name, Path input, Path error) {
-        @Override
-        public String toString() {
-            return name;
-        }
     }
 }

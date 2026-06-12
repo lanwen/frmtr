@@ -1,2 +1,0 @@
-Unable to parse Java source
-(line 25,col 1) 'private' is not allowed here.

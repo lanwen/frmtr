@@ -9,7 +9,6 @@ import org.junit.jupiter.api.Test;
 
 final class PrettierJavaCorpusTest {
     private static final String ADOPTED_ROOT = "format/prettier-java";
-    private static final String EXAMPLES_ROOT = ADOPTED_ROOT + "/frmtr-output-examples";
 
     @Test
     void prettierJavaCorpusAndAdoptedFixturesArePresentWithLicenseAndNotice() throws Exception {
@@ -17,12 +16,10 @@ final class PrettierJavaCorpusTest {
         assertThat(resource(ADOPTED_ROOT + "/NOTICE")).isNotNull();
 
         Path adoptedUnitTests = Path.of(resource(ADOPTED_ROOT + "/unit-test").toURI());
-        Path exampleUnitTests = Path.of(resource(EXAMPLES_ROOT + "/unit-test").toURI());
 
         assertThat(count(adoptedUnitTests, "input.java")).isEqualTo(84);
         assertThat(count(adoptedUnitTests, "prettier.output.java")).isEqualTo(84);
         assertThat(count(adoptedUnitTests, "frmtr.output.java")).isEqualTo(77);
-        assertThat(count(exampleUnitTests, "frmtr.output.java")).isEqualTo(7);
     }
 
     private static java.net.URL resource(String name) {

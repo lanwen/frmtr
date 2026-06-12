@@ -10,3 +10,44 @@ class SwitchExpressionInitializer {
         publish(result);
     }
 }
+
+class YieldStatementCases {
+
+    enum Day {
+        MONDAY,
+        TUESDAY,
+        WEDNESDAY,
+        THURSDAY,
+        FRIDAY,
+        SATURDAY,
+        SUNDAY,
+    }
+
+    public int calculate(Day day) {
+        switch (day) {
+            case SATURDAY, SUNDAY -> day.ordinal();
+            default -> {
+                int nameLength = day.toString().length();
+                yield nameLength * nameLength;
+            }
+        }
+
+        return;
+    }
+
+    public int calculate(Day day) {
+        return switch (day) {
+            case SATURDAY, SUNDAY -> day.ordinal();
+            default -> {
+                int nameLength = day.toString().length();
+                yield nameLength * nameLength;
+            }
+        };
+    }
+
+    void shouldKeepYieldStaticImportCalls() {
+        Thread.yield();
+        yield();
+        yield (signal);
+    }
+}

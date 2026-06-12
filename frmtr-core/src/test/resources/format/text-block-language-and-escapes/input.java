@@ -1,0 +1,128 @@
+public class TextBlockSamples {
+
+  void method() {
+      String messageTemplate = """
+         my text
+
+
+    sentence\"""
+
+    """;
+
+
+    String source = """
+                public void print(%s object) {
+                    System.out.println(Objects.toString(object));
+                }
+                """.formatted(type);
+
+
+                String html = """
+              <html>\r
+                  <body>\r
+                      <p>Hello, world</p>\r
+                  </body>\r
+              </html>\r
+              """;
+
+    html = """
+        <html>\r
+            <body>\r
+                <p>Hello, world</p>\r
+            </body>\r
+        </html>\r
+        """;
+
+    System.out.println(
+      // leading comment
+        """
+               alpha
+                 beta
+              gamma
+
+               delta
+                    abc""" // trailing comment
+    );
+
+    System.out.println(
+        """
+ alpha
+   beta
+gamma
+
+ delta
+      abc"""
+    );
+  }
+
+  String escapes = """
+    1+1 equals \
+    2 maybe
+    """;
+
+  String escapes = """
+    \"""var msg = hello stream!\""";
+    """;
+
+  String escapes = """
+    \n\t\r\f\b\s\\
+    \077
+    \u0041""";
+
+  void json() {
+    // language = json
+    String glossaryJson = """
+    {"glossary":{"title": "example \'glossary\'"}}
+    """;
+
+    // language=json
+    String config = """
+          { \t "name":"example",
+      "enabled"   :true,
+            "timeout":30}
+    """;
+
+    /* language = JSON */
+    String query = """
+         {
+       "sql":"SELECT * FROM users \
+    WHERE active=1 \
+    AND deleted=0",
+       "limit":10}
+    """;
+  }
+
+  void java() {
+    // language=Java
+    String java = """
+    class Demo{void render() {
+    // comment
+    }}
+    """;
+  }
+
+  void html() {
+    // language=html
+    String html = """
+      <!DOCTYPE html><html><head><title>Page Title</title></head><body><h1>My First Heading</h1><p>My first paragraph.</p></body></html>
+    """;
+  }
+
+  void typescript() {
+    // language=typescript
+    String typescript = """
+      const s = `\"""`;
+    """;
+
+    // language=typescript
+    String typescript = """
+      const s = ""; // \"""";
+  }
+
+  void unsupported() {
+    // language=unsupported
+    String unsupported = """
+    function refresh(){let attempt=0;}
+    """;
+  }
+}

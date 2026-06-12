@@ -180,7 +180,6 @@ final class PrettierJavaFixtureTest {
                         assertThat(fixture.frmtrOutput()).isRegularFile();
                     } else {
                         assertThat(fixture.frmtrOutput()).doesNotExist();
-                        assertThat(fixture.frmtrExampleOutput()).isRegularFile();
                     }
                 });
 
@@ -262,12 +261,7 @@ final class PrettierJavaFixtureTest {
                 directory,
                 input,
                 directory.resolve("prettier.output.java"),
-                directory.resolve("frmtr.output.java"),
-                root.getParent()
-                        .resolve("frmtr-output-examples")
-                        .resolve("unit-test")
-                        .resolve(name)
-                        .resolve("frmtr.output.java"));
+                directory.resolve("frmtr.output.java"));
     }
 
     private static Path fixtureRoot() throws URISyntaxException {
@@ -315,8 +309,7 @@ final class PrettierJavaFixtureTest {
             Path directory,
             Path input,
             Path prettierOutput,
-            Path frmtrOutput,
-            Path frmtrExampleOutput) {
+            Path frmtrOutput) {
         @Override
         public String toString() {
             return name;

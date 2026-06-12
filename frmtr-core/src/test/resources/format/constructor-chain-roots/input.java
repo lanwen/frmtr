@@ -35,3 +35,67 @@ class ConstructorChainRoots {
         }
     }
 }
+
+
+public class ConstructorSamples {
+
+  public ConstructorSamples() {
+    this(true);
+    System.out.println("empty constructor");
+  }
+
+  ConstructorSamples(boolean enabled) {
+    super();
+    System.out.println("constructor with boolean " + enabled);
+  }
+
+  ConstructorSamples(boolean enabled, boolean visible) {
+    this();
+    System.out.println("constructor with boolean " + enabled + " and " + visible);
+  }
+
+  ConstructorSamples(
+    boolean enabled,
+    boolean visible,
+    boolean archived,
+    boolean locked,
+    boolean verified,
+    boolean replicated
+  ) {
+    this();
+    System.out.println("constructor with six parameters that should wrap");
+  }
+
+  ConstructorSamples() {
+    super("primary", "secondary", "archival", "when capacity is constrained", "should wrap well");
+    System.out.println("constructor with super that wraps");
+  }
+
+  ConstructorSamples() {
+    super("compact parameter", "fits");
+    System.out.println("constructor with super that does not wrap");
+  }
+
+  ConstructorSamples() {
+    this("primary", "secondary", "archival", "when capacity is constrained", "should wrap well");
+    System.out.println("constructor with this that wraps");
+  }
+
+  ConstructorSamples() {
+    this("compact parameter", "fits");
+    System.out.println("constructor with this that does not wrap");
+  }
+
+  public <T> GenericConstructor(T genericParameter) {}
+  public <T>GenericConstructor(T genericParameter) {}
+
+  FlexibleConstructorBody(int coordinate) {
+    this.x = coordinate;
+    super(coordinate);
+  }
+
+  FlexibleConstructorBody() {
+    var defaultCoordinate = 42;
+    this(defaultCoordinate);
+  }
+}

@@ -80,10 +80,8 @@ Single-source formatting starts at `Frmtr.format(...)`.
 5. The declared transform pipeline applies source-equivalent AST normalization before printing only when parsing
    completed without parse problems. Recovered parse trees skip transforms so partially recovered syntax is not reordered
    or mutated before raw-region printing.
-6. The printable tree is adapted into `SyntaxNodeView` to keep formatter-owned syntax metadata separate from JavaParser
-   APIs.
-7. `JavaPrinter` walks JavaParser declarations and statements and emits `Doc` values.
-8. `DocRenderer` renders the document IR using line width, indentation, line ending, and trailing-newline options.
+6. `JavaPrinter` walks JavaParser declarations and statements and emits `Doc` values.
+7. `DocRenderer` renders the document IR using line width, indentation, line ending, and trailing-newline options.
 
 JavaParser printers are not the formatter engine. They may be useful as references, but final formatting is owned by the
 `Doc` pipeline.

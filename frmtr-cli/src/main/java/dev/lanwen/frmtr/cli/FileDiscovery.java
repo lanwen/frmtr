@@ -1,16 +1,22 @@
 package dev.lanwen.frmtr.cli;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.FileSystems;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import org.eclipse.jgit.ignore.IgnoreNode;
 import org.eclipse.jgit.ignore.IgnoreNode.MatchResult;
 
@@ -59,7 +65,7 @@ final class FileDiscovery {
             if (excludes.matches(normalized)) {
                 return new Selection(List.of(), List.of(), List.of(normalized));
             }
-            if (ignores.isIgnored(path, false)) {
+            if (ignores.isIgnored(path, EntryKind.FILE)) {
                 return new Selection(List.of(), List.of(normalized), List.of());
             }
             return new Selection(List.of(normalized), List.of(), List.of());
@@ -68,13 +74,7 @@ final class FileDiscovery {
     }
 
     private Selection discoverDirectory(Path directory, GitIgnoreMatcher ignores, ExcludeMatcher excludes) throws IOException {
-        try (var stream = Files.walk(directory)) {
-            List<Path> candidates = stream.filter(Files::isRegularFile)
-                    .filter(FileDiscovery::isJavaFile)
-                    .map(path -> path.toAbsolutePath().normalize())
-                    .toList();
-            return selectCandidates(candidates, ignores, excludes);
-        }
+        return discoverCandidates(directory, path -> true, ignores, excludes);
     }
 
     private Selection discoverGlob(String selector, GitIgnoreMatcher ignores, ExcludeMatcher excludes) throws IOException {
@@ -83,30 +83,66 @@ final class FileDiscovery {
             return new Selection(List.of(), List.of(), List.of());
         }
         List<PathMatcher> matchers = globMatchers(selector);
-        try (var stream = Files.walk(base)) {
-            List<Path> candidates = stream.filter(Files::isRegularFile)
-                    .filter(FileDiscovery::isJavaFile)
-                    .filter(path -> matches(matchers, path))
-                    .map(path -> path.toAbsolutePath().normalize())
-                    .toList();
-            return selectCandidates(candidates, ignores, excludes);
+        return discoverCandidates(base, path -> matches(matchers, path), ignores, excludes);
+    }
+
+    private Selection discoverCandidates(
+            Path base, Predicate<Path> candidateMatches, GitIgnoreMatcher ignores, ExcludeMatcher excludes)
+            throws IOException {
+        SelectionBuilder selection = new SelectionBuilder();
+        Files.walkFileTree(
+                base,
+                new SimpleFileVisitor<>() {
+                    @Override
+                    public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attrs)
+                            throws IOException {
+                        ignores.loadRulesForDirectoryContents(directory);
+                        return FileVisitResult.CONTINUE;
+                    }
+
+                    @Override
+                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                        if (Files.isRegularFile(file) && isJavaFile(file) && candidateMatches.test(file)) {
+                            selectCandidate(file.toAbsolutePath().normalize(), ignores, excludes, selection);
+                        }
+                        return FileVisitResult.CONTINUE;
+                    }
+                });
+        return selection.toSelection();
+    }
+
+    private static void selectCandidate(
+            Path candidate, GitIgnoreMatcher ignores, ExcludeMatcher excludes, SelectionBuilder selection)
+            throws IOException {
+        if (excludes.matches(candidate)) {
+            selection.addExcluded(candidate);
+        } else if (ignores.isIgnored(candidate, EntryKind.FILE)) {
+            selection.addIgnored(candidate);
+        } else {
+            selection.add(candidate);
         }
     }
 
-    private static Selection selectCandidates(List<Path> candidates, GitIgnoreMatcher ignores, ExcludeMatcher excludes) {
-        List<Path> files = new ArrayList<>();
-        List<Path> ignoredFiles = new ArrayList<>();
-        List<Path> excludedFiles = new ArrayList<>();
-        for (Path candidate : candidates) {
-            if (excludes.matches(candidate)) {
-                excludedFiles.add(candidate);
-            } else if (ignores.isIgnored(candidate, false)) {
-                ignoredFiles.add(candidate);
-            } else {
-                files.add(candidate);
-            }
+    private static final class SelectionBuilder {
+        private final List<Path> files = new ArrayList<>();
+        private final List<Path> ignoredFiles = new ArrayList<>();
+        private final List<Path> excludedFiles = new ArrayList<>();
+
+        void add(Path path) {
+            files.add(path);
         }
-        return new Selection(files, ignoredFiles, excludedFiles);
+
+        void addIgnored(Path path) {
+            ignoredFiles.add(path);
+        }
+
+        void addExcluded(Path path) {
+            excludedFiles.add(path);
+        }
+
+        Selection toSelection() {
+            return new Selection(files, ignoredFiles, excludedFiles);
+        }
     }
 
     private boolean matches(List<PathMatcher> matchers, Path path) {
@@ -216,6 +252,14 @@ final class FileDiscovery {
         }
     }
 
+    private enum EntryKind {
+        /** A regular file whose own name and parent directory ignore rules decide whether it is selected. */
+        FILE,
+
+        /** A directory entry whose own `.gitignore` affects descendants, not the directory entry itself. */
+        DIRECTORY
+    }
+
     private static final class ExcludeMatcher {
         private final Path root;
         private final List<ExcludeRule> rules;
@@ -264,39 +308,44 @@ final class FileDiscovery {
 
     private static final class GitIgnoreMatcher {
         private final Path root;
-        private final List<IgnoreRules> rules;
+        private final Map<Path, IgnoreRules> rulesByDirectory = new HashMap<>();
+        private final Set<Path> loadedDirectories = new HashSet<>();
 
-        GitIgnoreMatcher(Path root) throws IOException {
-            this.root = root;
-            this.rules = loadRules(root);
+        GitIgnoreMatcher(Path root) {
+            this.root = root.toAbsolutePath().normalize();
         }
 
-        boolean isIgnored(Path path, boolean directory) {
+        void loadRulesForDirectoryContents(Path directory) throws IOException {
+            Path absolute = directory.toAbsolutePath().normalize();
+            loadRulesThrough(absolute);
+        }
+
+        boolean isIgnored(Path path, EntryKind kind) throws IOException {
             Path absolute = path.toAbsolutePath().normalize();
+            if (!absolute.startsWith(root)) {
+                return false;
+            }
             MatchResult result = MatchResult.CHECK_PARENT;
             Path relativePath = root.relativize(absolute);
             Path current = root;
             for (Path part : relativePath) {
                 current = current.resolve(part);
-                if (current.equals(absolute) && !directory) {
+                if (current.equals(absolute) && kind == EntryKind.FILE) {
                     break;
                 }
-                result = update(result, current, true);
+                result = update(result, current, EntryKind.DIRECTORY);
             }
-            result = update(result, absolute, directory);
+            result = update(result, absolute, kind);
             return result == MatchResult.IGNORED;
         }
 
-        private MatchResult update(MatchResult result, Path absolute, boolean directory) {
-            for (IgnoreRules rule : rules) {
-                if (!absolute.startsWith(rule.directory())) {
-                    continue;
-                }
+        private MatchResult update(MatchResult result, Path absolute, EntryKind kind) throws IOException {
+            for (IgnoreRules rule : rulesFor(absolute, kind)) {
                 String relative = slash(rule.directory().relativize(absolute));
                 if (relative.isEmpty()) {
                     continue;
                 }
-                MatchResult match = rule.ignoreNode().isIgnored(relative, directory);
+                MatchResult match = rule.ignoreNode().isIgnored(relative, kind == EntryKind.DIRECTORY);
                 if (match != MatchResult.CHECK_PARENT) {
                     result = match;
                 }
@@ -304,26 +353,59 @@ final class FileDiscovery {
             return result;
         }
 
-        private static List<IgnoreRules> loadRules(Path root) throws IOException {
-            List<IgnoreRules> loaded = new ArrayList<>();
-            try (var stream = Files.walk(root)) {
-                stream.filter(Files::isRegularFile)
-                        .filter(path -> path.getFileName().toString().equals(".gitignore"))
-                        .sorted()
-                        .forEach(path -> {
-                            IgnoreNode node = new IgnoreNode();
-                            try (var input = Files.newInputStream(path)) {
-                                node.parse(input);
-                                loaded.add(new IgnoreRules(path.getParent().toAbsolutePath().normalize(), node));
-                            } catch (IOException exception) {
-                                throw new UncheckedIOException(exception);
-                            }
-                        });
-            } catch (UncheckedIOException exception) {
-                throw exception.getCause();
+        private List<IgnoreRules> rulesFor(Path absolute, EntryKind kind) throws IOException {
+            Path lastRuleDirectory = switch (kind) {
+                case FILE -> absolute.getParent();
+                case DIRECTORY -> absolute.getParent();
+            };
+            if (lastRuleDirectory == null || !lastRuleDirectory.startsWith(root)) {
+                return List.of();
             }
-            loaded.sort(Comparator.comparing(rule -> root.relativize(rule.directory()).getNameCount()));
-            return loaded;
+            List<Path> directories = directoriesThrough(lastRuleDirectory);
+            for (Path directory : directories) {
+                loadRules(directory);
+            }
+            return directories.stream()
+                    .map(rulesByDirectory::get)
+                    .filter(rule -> rule != null)
+                    .toList();
+        }
+
+        private void loadRulesThrough(Path directory) throws IOException {
+            if (!directory.startsWith(root)) {
+                return;
+            }
+            for (Path current : directoriesThrough(directory)) {
+                loadRules(current);
+            }
+        }
+
+        private List<Path> directoriesThrough(Path directory) {
+            List<Path> directories = new ArrayList<>();
+            directories.add(root);
+            Path current = root;
+            Path relative = root.relativize(directory);
+            for (Path part : relative) {
+                current = current.resolve(part);
+                directories.add(current);
+            }
+            return directories;
+        }
+
+        private void loadRules(Path directory) throws IOException {
+            Path absolute = directory.toAbsolutePath().normalize();
+            if (!loadedDirectories.add(absolute)) {
+                return;
+            }
+            Path ignoreFile = absolute.resolve(".gitignore");
+            if (!Files.isRegularFile(ignoreFile)) {
+                return;
+            }
+            IgnoreNode node = new IgnoreNode();
+            try (var input = Files.newInputStream(ignoreFile)) {
+                node.parse(input);
+            }
+            rulesByDirectory.put(absolute, new IgnoreRules(absolute, node));
         }
 
         private static String slash(Path path) {

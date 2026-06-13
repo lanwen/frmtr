@@ -79,7 +79,6 @@ public final class JavaFormatter {
         CompilationUnit printableUnit = parseResult.hasParseProblems()
                 ? parseResult.compilationUnit()
                 : TRANSFORMS.transform(parseResult.compilationUnit());
-        SyntaxNodeView.from(printableUnit);
         JavaPrinter printer = new JavaPrinter(options, sourceText, parseResult.hasParseProblems());
         return printer.print(printableUnit);
     }

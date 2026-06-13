@@ -734,6 +734,113 @@ final class MainTest {
                 """);
     }
 
+    @Test
+    void explicitFileSelectorLoadsSameDirectoryGitignore(@TempDir Path dir) throws IOException {
+        write(dir.resolve("src/.gitignore"), "Ignored.java\n");
+        write(dir.resolve("src/Ignored.java"), "class Ignored{int value;}");
+
+        Result result = run(dir, null, "--write", "src/Ignored.java");
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.out()).isEqualTo("Processed 1 file: 0 formatted, 1 ignored.\n");
+        assertThat(result.err()).isEmpty();
+        assertThat(Files.readString(dir.resolve("src/Ignored.java"))).isEqualTo("class Ignored{int value;}");
+    }
+
+    @Test
+    void directorySelectorLoadsParentGitignoreRules(@TempDir Path dir) throws IOException {
+        write(dir.resolve(".gitignore"), "/selected/Ignored.java\n");
+        write(dir.resolve("selected/Kept.java"), "class Kept{int value;}");
+        write(dir.resolve("selected/Ignored.java"), "class Ignored{int value;}");
+
+        Result result = run(dir, null, "--write", "selected");
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.out()).isEqualTo("Processed 2 files: 1 formatted, 1 ignored.\n");
+        assertThat(result.err()).isEmpty();
+        assertThat(Files.readString(dir.resolve("selected/Kept.java"))).isEqualTo("""
+                class Kept {
+
+                    int value;
+                }
+                """);
+        assertThat(Files.readString(dir.resolve("selected/Ignored.java"))).isEqualTo("class Ignored{int value;}");
+    }
+
+    @Test
+    void directorySelectorLoadsNestedGitignoreRulesWithDirectoryLocalScope(@TempDir Path dir) throws IOException {
+        write(dir.resolve("selected/nested/.gitignore"), """
+                /*.java
+                !/Keep.java
+                """);
+        write(dir.resolve("selected/nested/Drop.java"), "class Drop{int value;}");
+        write(dir.resolve("selected/nested/Keep.java"), "class Keep{int value;}");
+        write(dir.resolve("selected/nested/deep/Drop.java"), "class DeepDrop{int value;}");
+
+        Result result = run(dir, null, "--write", "selected");
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.out()).isEqualTo("Processed 3 files: 2 formatted, 1 ignored.\n");
+        assertThat(result.err()).isEmpty();
+        assertThat(Files.readString(dir.resolve("selected/nested/Drop.java"))).isEqualTo("class Drop{int value;}");
+        assertThat(Files.readString(dir.resolve("selected/nested/Keep.java"))).isEqualTo("""
+                class Keep {
+
+                    int value;
+                }
+                """);
+        assertThat(Files.readString(dir.resolve("selected/nested/deep/Drop.java"))).isEqualTo("""
+                class DeepDrop {
+
+                    int value;
+                }
+                """);
+    }
+
+    @Test
+    void globSelectorLoadsParentAndNestedGitignoreRules(@TempDir Path dir) throws IOException {
+        write(dir.resolve(".gitignore"), "src/rootIgnored/\n");
+        write(dir.resolve("src/nested/.gitignore"), "/Drop.java\n");
+        write(dir.resolve("src/rootIgnored/Ignored.java"), "class Ignored{int value;}");
+        write(dir.resolve("src/nested/Drop.java"), "class Drop{int value;}");
+        write(dir.resolve("src/nested/Keep.java"), "class Keep{int value;}");
+        write(dir.resolve("src/Other.java"), "class Other{int value;}");
+
+        Result result = run(dir, null, "--write", "src/**/*.java");
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.out()).isEqualTo("Processed 4 files: 2 formatted, 2 ignored.\n");
+        assertThat(result.err()).isEmpty();
+        assertThat(Files.readString(dir.resolve("src/rootIgnored/Ignored.java"))).isEqualTo("class Ignored{int value;}");
+        assertThat(Files.readString(dir.resolve("src/nested/Drop.java"))).isEqualTo("class Drop{int value;}");
+        assertThat(Files.readString(dir.resolve("src/nested/Keep.java"))).isEqualTo("""
+                class Keep {
+
+                    int value;
+                }
+                """);
+        assertThat(Files.readString(dir.resolve("src/Other.java"))).isEqualTo("""
+                class Other {
+
+                    int value;
+                }
+                """);
+    }
+
+    @Test
+    void excludeTakesPrecedenceOverGitignore(@TempDir Path dir) throws IOException {
+        write(dir.resolve(".gitignore"), "src/generated/\n");
+        write(dir.resolve("src/Kept.java"), "class Kept{int value;}");
+        write(dir.resolve("src/generated/Generated.java"), "class Generated{int value;}");
+
+        Result result = run(dir, null, "--write", "--exclude", "src/generated", ".");
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.out()).isEqualTo("Processed 2 files: 1 formatted, 1 excluded.\n");
+        assertThat(result.err()).isEmpty();
+        assertThat(Files.readString(dir.resolve("src/generated/Generated.java"))).isEqualTo("class Generated{int value;}");
+    }
+
     private static Result run(Path workingDirectory, String stdin, String... args) {
         StringWriter out = new StringWriter();
         StringWriter err = new StringWriter();

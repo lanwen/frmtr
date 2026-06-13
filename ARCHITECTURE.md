@@ -104,13 +104,36 @@ Small factory helpers such as `Doc.delimited(...)`, `Doc.joinComma(...)`, `Doc.b
 break/flat envelopes while the renderer remains language-agnostic.
 
 `DocRenderer` is language-agnostic. Java-specific choices belong in `JavaPrinter`, not in the renderer. Label nodes are
-transparent to rendering, fitting, and width calculations.
+transparent to rendering, fitting, and width calculations. `DocWidths` is the single flat-width authority: it owns the
+flat-width measurement and the fit test, so `DocRenderer` and any observer of its decisions compute fit identically and a
+fit decision can never diverge from the width number reported for it.
 
 `DocDebugRenderer` provides a stable structural dump of the document tree so formatter maintainers can inspect break
 opportunities, indentation scopes, groups, flat-vs-broken alternatives, and high-level formatter rule labels. Label names
 are diagnostic formatter-internal names and may evolve when rule boundaries move. `Frmtr.debugDoc(...)` exposes that view
-for one Java source string after parsing, transforms, and Java printing, without invoking width-based rendering. It is a
-core debug API only, not a formatting policy surface or CLI hook.
+for one Java source string after parsing, transforms, and Java printing, without invoking width-based rendering.
+
+`DocExplainRenderer` re-walks a document with the same `DocWidths` fit logic and column accounting as `DocRenderer` to
+trace why each line laid out as it did, producing the presentation-free `DocExplanation` model. It records the
+renderer's own width-driven `Group` breaks (with flat width, columns available, and start column) and the forced hard
+line breaks a Java printer emitted as policy, attributing each forced break to the nearest enclosing rule label.
+
+The renderer trace alone, however, cannot honestly explain the wraps developers debug most. Method chains, argument
+lists, ternaries, and control conditions are pre-measured by their Java printers and emitted as `Doc.HardLine`s, so the
+renderer never width-fits them — by the time `DocExplainRenderer` walks the document, the deciding flat width and budget
+are gone and only a forced break remains. To surface the real reason, those printers record their own decision into a
+per-run `LayoutDecisionLog` on `JavaFormatContext` at the point they choose a broken layout because a measured flat
+candidate exceeded a `LayoutWidth` budget, capturing the construct kind, rule label, flat width, available width, and
+segment count as a `PrinterWrap`. This is a side channel only: it does not change the `Doc` IR or the rendered text
+(`format(...)` never reads the log), so the full fixture suite proves output stays byte-for-byte identical, and explain
+remains a pure observer. `JavaFormatter.explain(...)` reads the log after printing and merges it into `DocExplanation`
+alongside the renderer trace, so "why it wrapped" can report true width arithmetic and a human construct name for the
+constructs the renderer only sees as forced breaks.
+
+`Frmtr.explain(...)` exposes this through an `ExplainResult` that pairs the explanation with formatted output identical
+to `Frmtr.format(...)` for the same input, and the CLI surfaces it through `--explain`. `Frmtr.debugDoc(...)` and
+`Frmtr.explain(...)` are diagnostic observation surfaces, not formatting policy: surfacing them through the CLI exposes
+the existing document view and its layout decisions without letting the CLI own or change formatting policy.
 
 ## File-Oriented Runs
 
@@ -227,6 +250,21 @@ The CLI is an adapter over the public formatter API:
 - `--write`: rewrite files in place, group file-run failures on stderr by display path, and print a concise stdout
   processed summary counting formatted, failed, ignored, excluded, and unchanged files. Ignored files are `.java` files
   excluded by `.gitignore` during selector discovery; excluded files are `.java` files matched by `--exclude`.
+- `--explain`: its own diagnostic mode, mutually exclusive with `--check`, `--write`, `--diff`, and `--render-line-width`.
+  It reads one source — `--stdin`, or exactly one file selector — and prints the formatted result followed by a structured
+  explanation of the layout: a "why it wrapped" list, a pruned decision tree of rule labels and break/flat decisions, and
+  a legend. The "why it wrapped" list leads with the printer-recorded width wraps (`PrinterWrap`): each names the
+  construct the way a developer reads it (method chain, argument list, ternary, if condition), shows a short preview, and
+  reports the real `flat width N > W available` arithmetic the printer measured, plus segment count where it applies. It
+  then shows any width breaks the renderer itself decided. Structural body declarations and the statements that merely
+  host a wrapped expression are filtered out so only causal wraps appear, each reported once; a forced break with no
+  width measurement behind it is shown under a muted note, and "Nothing wrapped" is reachable for real, non-overflowing
+  code. The formatted result is identical to a normal format run, because explain only observes the render. `--verbose`/
+  `-v` keeps every group in the tree (pruning only decision-less leaf labels) and also surfaces the raw `java.*:` rule
+  labels next to each friendly construct name. Output respects `--color` and is plain when piped, so the report is
+  copy-pasteable into a bug report. Combining `--explain` with the check/write/diff flags, or giving more than one file
+  selector, is a tool error reported on stderr with exit code 2. The CLI maps `DocExplanation`'s decisions to terminal
+  presentation in `ExplainView`; it does not own any formatting policy.
 - `--version`: print the project version, Git commit SHA, and build timestamp.
 - `--java-level`: select the core Java parser language level; accepts enum names such as `LATEST_AVAILABLE` and `UNSET`,
   plus release shorthands such as `21` or `JAVA_21`.

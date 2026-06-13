@@ -23,6 +23,28 @@ public final class Frmtr {
         return debugDoc(source, FormatterOptions.defaults());
     }
 
+    public static ExplainResult explain(String source) {
+        return explain(source, FormatterOptions.defaults());
+    }
+
+    /**
+     * Formats the source and explains the renderer's per-group break/flat decisions in one pass.
+     *
+     * <p>This is the developer-facing diagnostic entry point behind the CLI {@code --explain} mode. The returned
+     * {@link ExplainResult#formatted()} is identical to {@link #format(String, FormatterOptions)} for the same input, so
+     * explaining never changes formatting policy or output; the explanation only observes the same render. Like {@link
+     * #debugDoc(String, FormatterOptions)}, this always builds the document even under a require-pragma gate.
+     */
+    public static ExplainResult explain(String source, FormatterOptions options) {
+        try {
+            return new JavaFormatter(options).explain(source);
+        } catch (FormatterException exception) {
+            throw exception;
+        } catch (RuntimeException | LinkageError | AssertionError exception) {
+            throw FormatterException.internal(exception);
+        }
+    }
+
     /**
      * Returns the structural document tree produced by the Java formatter before width-based rendering.
      *

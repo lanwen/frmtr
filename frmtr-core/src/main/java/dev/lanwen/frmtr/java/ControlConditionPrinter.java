@@ -42,6 +42,7 @@ final class ControlConditionPrinter {
     private final Function<Expression, Doc> brokenExpressionLines;
     private final ToIntFunction<String> currentIndentedWidth;
     private final ToIntFunction<String> blockStatementWidth;
+    private final LayoutDecisionLog layoutDecisions;
 
     ControlConditionPrinter(
             CommentTracker comments,
@@ -54,7 +55,8 @@ final class ControlConditionPrinter {
             Predicate<Expression> expressionHasParenthesizedNestedBinary,
             Function<Expression, Doc> brokenExpressionLines,
             ToIntFunction<String> currentIndentedWidth,
-            ToIntFunction<String> blockStatementWidth) {
+            ToIntFunction<String> blockStatementWidth,
+            LayoutDecisionLog layoutDecisions) {
         this.comments = comments;
         this.rawSource = rawSource;
         this.options = options;
@@ -66,6 +68,7 @@ final class ControlConditionPrinter {
         this.brokenExpressionLines = brokenExpressionLines;
         this.currentIndentedWidth = currentIndentedWidth;
         this.blockStatementWidth = blockStatementWidth;
+        this.layoutDecisions = layoutDecisions;
     }
 
     /**
@@ -101,12 +104,14 @@ final class ControlConditionPrinter {
             return brokenCondition(expression);
         }
         String flat = compact.apply(expression);
-        if (ifConditionLineWidth(expression, "if (" + flat + ") {}") <= options.lineWidth()) {
+        int flatWidth = ifConditionLineWidth(expression, "if (" + flat + ") {}");
+        if (flatWidth <= options.lineWidth()) {
             if (expressionHasParenthesizedNestedBinary.test(expression)) {
                 return Doc.concat(Doc.text("("), expressionRenderer.apply(expression), Doc.text(")"));
             }
             return Doc.text("(" + flat + ")");
         }
+        recordIfConditionWidthBreak(flat, flatWidth);
         if (expression instanceof MethodCallExpr methodCall) {
             Optional<Doc> brokenMethodCall = brokenMethodCallCondition(methodCall);
             if (brokenMethodCall.isPresent()) {
@@ -114,6 +119,35 @@ final class ControlConditionPrinter {
             }
         }
         return brokenCondition(expression);
+    }
+
+    /**
+     * Records the if condition's flat-width decision when the condition breaks because its single-line form (with the
+     * {@code if (...) {}} surround) overflowed the budget, so explain can attribute the wrap to width.
+     *
+     * <p>The recorded label is the enclosing {@code IfStmt} so explain merges this with the statement's forced break and
+     * reports the wrap once with real arithmetic. Recording runs after the printer chose the broken shape and does not
+     * change it. Like the chain, argument-list, and ternary recorders it guards on the flat form genuinely overflowing
+     * the budget, so a future second caller that breaks for a non-width reason cannot misattribute the break to width.
+     */
+    private void recordIfConditionWidthBreak(String flat, int flatWidth) {
+        if (flatWidth <= options.lineWidth()) {
+            return;
+        }
+        layoutDecisions.recordWidthBreak(
+                "if condition",
+                "java.statement:IfStmt",
+                "if (" + ifConditionPreview(flat) + ")",
+                flatWidth,
+                options.lineWidth(),
+                0);
+    }
+
+    private String ifConditionPreview(String flat) {
+        int firstAnd = flat.indexOf("&&");
+        int firstOr = flat.indexOf("||");
+        int split = firstAnd < 0 ? firstOr : firstOr < 0 ? firstAnd : Math.min(firstAnd, firstOr);
+        return split < 0 ? flat : flat.substring(0, split).strip() + " …";
     }
 
     private int ifConditionLineWidth(Expression expression, String line) {

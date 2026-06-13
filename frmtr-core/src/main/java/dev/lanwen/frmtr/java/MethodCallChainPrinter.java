@@ -49,6 +49,7 @@ final class MethodCallChainPrinter {
     private final ToIntFunction<String> currentIndentedWidth;
     private final ToIntFunction<String> continuationStatementWidth;
     private final ToIntFunction<String> blockStatementWidth;
+    private final LayoutDecisionLog layoutDecisions;
 
     MethodCallChainPrinter(
             JavaFormatContext context,
@@ -87,6 +88,7 @@ final class MethodCallChainPrinter {
         this.currentIndentedWidth = currentIndentedWidth;
         this.continuationStatementWidth = continuationStatementWidth;
         this.blockStatementWidth = blockStatementWidth;
+        this.layoutDecisions = context.layoutDecisions;
     }
 
     Optional<Doc> methodCallChain(MethodCallExpr expression) {
@@ -395,6 +397,11 @@ final class MethodCallChainPrinter {
             }
             return Optional.of(Doc.concat(rootDoc, methodCallChainSegment(calls.getFirst(), finalSegmentSuffix)));
         }
+        // Record the width break only here, where the printer has committed to the broken one-segment-per-line chain
+        // this method's PrinterWrap describes. The earlier deferral branches hand rendering to a different printer that
+        // does not lay the chain out one per line, so recording before them could attribute a "N segments, one per line"
+        // layout to a path that never produced it.
+        recordChainWidthBreak(expression, analysis);
         return Optional.of(Doc.concat(
                 rootDoc,
                 Doc.indent(Doc.concat(
@@ -1195,6 +1202,78 @@ final class MethodCallChainPrinter {
                     return leadingColumns + segment.length();
                 })
                 .orElseGet(() -> fallbackWidth.applyAsInt(segment));
+    }
+
+    /**
+     * Records the chain's flat-width decision when width is the actual cause of the break, so explain can report real
+     * arithmetic instead of an opaque forced break.
+     *
+     * <p>Only a chain whose compact single-line form overflows the line budget is recorded as a width break: chains
+     * forced apart purely by comments or by already-multiline source are not width decisions, so attributing them to
+     * width would mislead. This is called after the printer has already committed to breaking, so it never changes the
+     * layout that is produced.
+     */
+    private void recordChainWidthBreak(
+            MethodCallExpr expression,
+            MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis) {
+        String compact = compactSource.compact(expression);
+        int flatWidth = currentIndentedWidth.applyAsInt(compact);
+        if (flatWidth <= options.lineWidth()) {
+            return;
+        }
+        int segments = analysis.calls().size() + 1;
+        layoutDecisions.recordWidthBreak(
+                "method chain",
+                "java.expression:" + expression.getClass().getSimpleName(),
+                chainPreview(compact),
+                flatWidth,
+                options.lineWidth(),
+                segments);
+    }
+
+    /**
+     * Builds a short headline snippet of the chain: the first two call selectors followed by an ellipsis when the chain
+     * is longer, so the reader recognizes the construct without seeing the whole line.
+     */
+    private String chainPreview(String compact) {
+        int firstCall = compact.indexOf('(');
+        if (firstCall < 0) {
+            return compact;
+        }
+        int firstClose = matchingClose(compact, firstCall);
+        if (firstClose < 0) {
+            return compact;
+        }
+        int secondDot = compact.indexOf('.', firstClose);
+        if (secondDot < 0) {
+            return compact.substring(0, firstClose + 1);
+        }
+        int secondCall = compact.indexOf('(', secondDot);
+        if (secondCall < 0) {
+            return compact.substring(0, firstClose + 1) + "…";
+        }
+        int secondClose = matchingClose(compact, secondCall);
+        if (secondClose < 0) {
+            return compact.substring(0, firstClose + 1) + "…";
+        }
+        String head = compact.substring(0, secondClose + 1);
+        return secondClose + 1 < compact.length() ? head + "…" : head;
+    }
+
+    private int matchingClose(String text, int open) {
+        int depth = 0;
+        for (int index = open; index < text.length(); index++) {
+            char character = text.charAt(index);
+            if (character == '(') {
+                depth++;
+            } else if (character == ')') {
+                depth--;
+                if (depth == 0) {
+                    return index;
+                }
+            }
+        }
+        return -1;
     }
 
     private Doc methodCallSegmentPrefix(MethodCallExpr expression) {

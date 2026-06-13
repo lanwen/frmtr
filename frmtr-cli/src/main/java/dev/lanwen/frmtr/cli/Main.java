@@ -1,5 +1,6 @@
 package dev.lanwen.frmtr.cli;
 
+import dev.lanwen.frmtr.ExplainResult;
 import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.Frmtr;
@@ -56,6 +57,18 @@ public final class Main implements Callable<Integer> {
     boolean write;
 
     @Option(
+            names = "--explain",
+            description =
+                    "Explain why the formatter wrapped (or kept flat) each group. Reads --stdin or a single file. "
+                            + "Prints the formatted result, why each group broke, a rule-label decision tree, and a legend.")
+    boolean explain;
+
+    @Option(
+            names = {"-v", "--verbose"},
+            description = "With --explain, show every group in the decision tree, not only the paths that wrapped.")
+    boolean verbose;
+
+    @Option(
             names = "--exclude",
             paramLabel = "PATTERN",
             description = "Exclude files, directories, globs, or comma-separated patterns from selector discovery.")
@@ -102,7 +115,11 @@ public final class Main implements Callable<Integer> {
     private String stdin;
 
     public Main() {
-        this(new PrintWriter(System.out, true), new PrintWriter(System.err, true), Path.of("."), null);
+        this(
+                new PrintWriter(new java.io.OutputStreamWriter(System.out, StandardCharsets.UTF_8), true),
+                new PrintWriter(new java.io.OutputStreamWriter(System.err, StandardCharsets.UTF_8), true),
+                Path.of("."),
+                null);
     }
 
     Main(PrintWriter out, PrintWriter err, String stdin) {
@@ -137,6 +154,9 @@ public final class Main implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
+        if (explain) {
+            return runExplain();
+        }
         if (stdinMode) {
             if (write || !selectors.isEmpty() || !excludes.isEmpty()) {
                 err.println("--stdin cannot be combined with --write, selectors, or --exclude");
@@ -199,6 +219,59 @@ public final class Main implements Callable<Integer> {
                         true,
                         javaLanguageLevel)
                 .withParseErrorBehavior(parseErrorBehavior);
+    }
+
+    private int runExplain() {
+        if (check || write || diff || renderLineWidth) {
+            err.println("--explain is its own mode and cannot be combined with --check, --write, --diff, or --render-line-width");
+            return 2;
+        }
+        FormatterOptions options = formatterOptions();
+        if (stdinMode) {
+            if (!selectors.isEmpty() || !excludes.isEmpty()) {
+                err.println("--explain --stdin cannot be combined with selectors or --exclude");
+                return 2;
+            }
+            return explainSource("stdin", () -> readStdin(), options);
+        }
+        if (selectors.size() != 1) {
+            err.println("--explain expects exactly one file, or --stdin");
+            return 2;
+        }
+        Path file = workingDirectory.resolve(selectors.getFirst()).normalize();
+        if (!Files.isRegularFile(file)) {
+            err.println("File selector does not exist: " + selectors.getFirst());
+            return 2;
+        }
+        return explainSource(displayPath(file).toString(), () -> Files.readString(file, StandardCharsets.UTF_8), options);
+    }
+
+    private int explainSource(String target, SourceSupplier source, FormatterOptions options) {
+        try {
+            ExplainResult result = Frmtr.explain(source.get(), options);
+            out.print(new ExplainView(this::styleExplain, verbose).render(result));
+            out.flush();
+            return 0;
+        } catch (FormatterException | IOException exception) {
+            printFailure(target, exception);
+            return 2;
+        }
+    }
+
+    @FunctionalInterface
+    private interface SourceSupplier {
+        String get() throws IOException;
+    }
+
+    private String styleExplain(ExplainView.Role role, String text) {
+        return switch (role) {
+            case HEADING -> styled(text, Style.bold);
+            case BREAK -> styled(text, Style.fg_yellow, Style.bold);
+            case FLAT -> styled(text, Style.fg_green);
+            case LABEL -> styled(text, Style.fg_cyan);
+            case NUMBER -> styled(text, Style.bold);
+            case TREE, FADE -> styled(text, LINE_BORDER_STYLE);
+        };
     }
 
     private int formatStdin(FormatterOptions options) {

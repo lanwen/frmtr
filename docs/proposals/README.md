@@ -18,9 +18,9 @@ investigation link out to a focused proposal in this directory.
 | ✅ Done | Landed on `main`. |
 | ⚪ Deferred | Intentionally parked. |
 
-**Overall status:** 🔵 Proposed — this roadmap is a starting point for discussion. One item has
-landed (**S5**, ✅); the rest is unscheduled. Focused investigation docs (linked below) have been
-drafted to de-risk the highest-leverage items before any implementation.
+**Overall status:** 🔵 Proposed — this roadmap is a starting point for discussion. Two items have
+landed (**S5** and **S3**, ✅); the rest is unscheduled. Focused investigation docs (linked below)
+have been drafted to de-risk the highest-leverage items before any implementation.
 
 ### Relationship to existing proposals in this directory
 
@@ -217,13 +217,18 @@ repos.
 - **Serves:** user-friendly.
 
 ### S3. `--explain` / surfaced `debugDoc`
-**Status:** 🔵 Proposed
+**Status:** ✅ Done — shipped as the `--explain` CLI mode.
 
-`debugDoc` exists but is core-only. Expose a CLI surface that shows which rule (via existing `Label`
-nodes) decided a given break — "why did this line wrap?" Makes bug reports and contributions much
-easier.
+`debugDoc` was core-only; the `--explain` CLI mode now shows which rule decided a given break and
+the width arithmetic behind it — "why did this line wrap?". Width-driven wraps are captured by the
+printers into a per-run side channel (`PrinterWrap`/`LayoutDecisionLog`) and surfaced with humanized
+construct names; structural breaks are filtered so only causal wraps appear; `-v` exposes raw rule
+labels and the full decision tree. Explain is a pure observer — formatted output is byte-identical to
+a normal run. The `explain-diff` agent skill wraps this for "explain the formatting of this file".
 
 - **Serves:** maintainer-friendly, user-friendly. Cheap (Label already carries provenance).
+- **Follow-ups:** widen width-recording to object-creation argument lists, extend structural
+  filtering to `try`/`switch`/loops, and collapse repeated rule-driven notes (see [B2](#b2-enrich-the-doc-ir-with-the-combinators-printers-are-faking-today) for richer labels).
 
 ### S4. One-line adoption: pre-commit hook + GitHub Action + changed-hunks mode
 **Status:** 🔵 Proposed

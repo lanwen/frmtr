@@ -61,6 +61,7 @@ final class MethodCallPrinter {
     private final ToIntFunction<String> currentIndentedWidth;
     private final ToIntFunction<String> continuationStatementWidth;
     private final ToIntFunction<String> blockStatementWidth;
+    private final LayoutDecisionLog layoutDecisions;
 
     MethodCallPrinter(
             JavaFormatContext context,
@@ -114,6 +115,7 @@ final class MethodCallPrinter {
         this.currentIndentedWidth = currentIndentedWidth;
         this.continuationStatementWidth = continuationStatementWidth;
         this.blockStatementWidth = blockStatementWidth;
+        this.layoutDecisions = context.layoutDecisions;
     }
 
     Doc methodCall(MethodCallExpr expression) {
@@ -217,7 +219,37 @@ final class MethodCallPrinter {
                         methodCallArgumentList(expression.getArguments(), Doc.LINE))),
                 methodCallLine(breakMode),
                 Doc.text(")"));
-        return breakMode.isForced() ? call : Doc.group(call);
+        if (breakMode.isForced()) {
+            recordArgumentListWidthBreak(expression, prefix);
+            return call;
+        }
+        return Doc.group(call);
+    }
+
+    /**
+     * Records the argument list's flat-width decision when a forced call breaks because its single-line form overflowed
+     * the budget, so explain can report the real arithmetic instead of an opaque forced break.
+     *
+     * <p>The auto path is left to the renderer, which width-fits its {@link Doc.Group} and is already explained by the
+     * renderer trace. Only the forced path, where the caller already measured an overflow and the printer emits hard
+     * breaks, needs the printer to record its own measurement. Recording an argument list whose compact form would
+     * still fit is skipped, since such a forced break is not a width decision. This runs after the broken shape is
+     * built and does not change it.
+     */
+    private void recordArgumentListWidthBreak(MethodCallExpr expression, String prefix) {
+        String compactArguments = compactSource.compactJoin(expression.getArguments());
+        String compactCall = prefix + "(" + compactArguments + ")";
+        int flatWidth = currentIndentedWidth.applyAsInt(compactCall);
+        if (flatWidth <= options.lineWidth()) {
+            return;
+        }
+        layoutDecisions.recordWidthBreak(
+                "argument list",
+                "java.expression:" + expression.getClass().getSimpleName(),
+                prefix + "(…)",
+                flatWidth,
+                options.lineWidth(),
+                expression.getArguments().size());
     }
 
     private Optional<Doc> brokenExpressionLambdaArgumentsForOverflow(String prefix, MethodCallExpr expression) {

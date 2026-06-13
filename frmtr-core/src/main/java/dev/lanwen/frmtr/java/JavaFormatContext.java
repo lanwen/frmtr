@@ -8,8 +8,13 @@ import dev.lanwen.frmtr.FormatterOptions;
  *
  * <p>The context owns dependencies whose identity matters across helper boundaries: options, printed-comment tracking,
  * formatter pragma state, raw source recovery, raw-preserved source output, compact source text, the per-run comment
- * placement policy, and source-position comment placement. The boundary exists so {@link JavaPrinter} can remain the
- * composition root without threading the same shared collaborators through every helper constructor separately.
+ * placement policy, source-position comment placement, and the per-run layout-decision log. The boundary exists so
+ * {@link JavaPrinter} can remain the composition root without threading the same shared collaborators through every
+ * helper constructor separately.
+ *
+ * <p>The {@link LayoutDecisionLog} is an observational side channel: width-deciding printers append to it when they
+ * choose a broken layout for width, so explain can recover the real width arithmetic the renderer never sees. It is
+ * never read during formatting and so does not affect rendered output.
  *
  * <p>Helpers should still keep syntax-specific callbacks and layout decisions in their own constructors. This context
  * is not a service locator for printers, dispatchers, or renderer policy; it only provides the common stateful
@@ -29,6 +34,7 @@ final class JavaFormatContext {
     final RecoveredSourceRegions recoveredSourceRegions;
     final CompactSourceText compactSource;
     final LayoutWidth layoutWidth;
+    final LayoutDecisionLog layoutDecisions;
     final CommentPlacement commentPlacement;
     final boolean recoverParseProblems;
 
@@ -47,6 +53,7 @@ final class JavaFormatContext {
         this.recoveredSourceRegions = new RecoveredSourceRegions(sourceText, options, comments);
         this.compactSource = new CompactSourceText(rawSource);
         this.layoutWidth = new LayoutWidth(options);
+        this.layoutDecisions = new LayoutDecisionLog();
         this.commentPlacement = new CommentPlacement(comments, commentPlacementPolicy);
     }
 

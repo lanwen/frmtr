@@ -23,10 +23,13 @@ import com.github.javaparser.ast.modules.ModuleDeclaration;
 import com.github.javaparser.ast.modules.ModuleDirective;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.Statement;
+import dev.lanwen.frmtr.ExplainResult;
 import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import dev.lanwen.frmtr.doc.DocDebugRenderer;
+import dev.lanwen.frmtr.doc.DocExplainRenderer;
+import dev.lanwen.frmtr.doc.DocExplanation;
 import dev.lanwen.frmtr.doc.DocRenderer;
 import java.util.List;
 import java.util.Optional;
@@ -62,7 +65,33 @@ public final class JavaFormatter {
         return DocDebugRenderer.render(printDoc(source));
     }
 
+    /**
+     * Formats {@code source} and, from the same document, traces the renderer's break/flat decisions.
+     *
+     * <p>The formatted string is produced by the same {@link DocRenderer} path as {@link #format(String)} so explain
+     * output can never disagree with formatting. The explanation is an independent observing pass over the same
+     * document, so producing it does not perturb the rendered result. Unlike {@link #format(String)}, this always
+     * builds and renders the document even under a require-pragma gate, because explaining an unformatted file would be
+     * meaningless; pragma gating only controls whether {@link #format(String)} rewrites source.
+     */
+    public ExplainResult explain(String source) {
+        PrintedDoc printed = printDocWithPrinter(source);
+        String formatted = new DocRenderer(options).render(printed.doc());
+        DocExplanation explanation =
+                new DocExplainRenderer(options).explain(printed.doc(), printed.printer().layoutDecisions());
+        return new ExplainResult(formatted, explanation);
+    }
+
     private Doc printDoc(String source) {
+        return printDocWithPrinter(source).doc();
+    }
+
+    /**
+     * Builds the document and returns it together with the printer that built it, so explain can read the printer's
+     * recorded width decisions. {@link #format(String)} discards the printer and only renders the document, so the
+     * recording stays a pure observer with no effect on formatted output.
+     */
+    private PrintedDoc printDocWithPrinter(String source) {
         JavaParseResult parseResult = parse(source);
         // TODO: Expose parseResult.problems() through a future diagnostics/debug result API.
         SourceText sourceText = new SourceText(source);
@@ -80,8 +109,10 @@ public final class JavaFormatter {
                 ? parseResult.compilationUnit()
                 : TRANSFORMS.transform(parseResult.compilationUnit());
         JavaPrinter printer = new JavaPrinter(options, sourceText, parseResult.hasParseProblems());
-        return printer.print(printableUnit);
+        return new PrintedDoc(printer.print(printableUnit), printer);
     }
+
+    private record PrintedDoc(Doc doc, JavaPrinter printer) {}
 
     private boolean hasFormatPragma(String source) {
         String stripped = source.stripLeading();

@@ -41,6 +41,16 @@ final class JavaPrinter {
         return doc;
     }
 
+    /**
+     * Returns the width decisions the printers recorded while building the document for this run.
+     *
+     * <p>Valid only after {@link #print(CompilationUnit)}; it lets explain recover the printer-side width arithmetic
+     * the renderer never sees, without rebuilding the document.
+     */
+    java.util.List<dev.lanwen.frmtr.doc.PrinterWrap> layoutDecisions() {
+        return context.layoutDecisions.wraps();
+    }
+
     private Doc body(BodyDeclaration<?> declaration) {
         return declarations.body(declaration);
     }

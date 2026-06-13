@@ -55,6 +55,7 @@ final class ConditionalExpressionPrinter {
     private final BiFunction<Expression, Boolean, Doc> binaryExpressionLinesRenderer;
     private final BiFunction<Expression, Boolean, Doc> nestedBinaryExpressionLinesRenderer;
     private final Predicate<Expression> expressionHasParenthesizedNestedBinary;
+    private final LayoutDecisionLog layoutDecisions;
 
     /**
      * Names whether conditional-expression layout is caller-forced or selected by local width and comment checks.
@@ -118,6 +119,7 @@ final class ConditionalExpressionPrinter {
         this.binaryExpressionLinesRenderer = binaryExpressionLinesRenderer;
         this.nestedBinaryExpressionLinesRenderer = nestedBinaryExpressionLinesRenderer;
         this.expressionHasParenthesizedNestedBinary = expressionHasParenthesizedNestedBinary;
+        this.layoutDecisions = context.layoutDecisions;
     }
 
     /**
@@ -196,7 +198,8 @@ final class ConditionalExpressionPrinter {
         if (!breakMode.isForced() && sourceShape.spansMultipleLines(expression)) {
             return brokenConditionalExpression(expression);
         }
-        if (!breakMode.isForced() && currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
+        int flatWidth = currentIndentedWidth.applyAsInt(flat);
+        if (!breakMode.isForced() && flatWidth <= options.lineWidth()) {
             if (expressionHasParenthesizedNestedBinary.test(expression)) {
                 return Doc.concat(
                         conditionalCondition(expression),
@@ -207,7 +210,39 @@ final class ConditionalExpressionPrinter {
             }
             return Doc.text(flat);
         }
+        recordTernaryWidthBreak(expression, flat, flatWidth);
         return brokenConditionalExpression(expression);
+    }
+
+    /**
+     * Records the ternary's flat-width decision when the conditional breaks because its single-line form overflowed the
+     * line budget, so explain can attribute the wrap to width rather than to an opaque forced break.
+     *
+     * <p>This fires on both the auto path and the caller-forced path, but only when the ternary's own flat form is
+     * genuinely too wide for its budget: a conditional forced apart for nesting or comments while its flat form would
+     * still fit is not a width decision and is left unrecorded. Recording runs after the broken shape is chosen, so it
+     * does not change the produced layout.
+     */
+    private void recordTernaryWidthBreak(Expression expression, String flat, int flatWidth) {
+        if (flatWidth <= options.lineWidth()) {
+            return;
+        }
+        layoutDecisions.recordWidthBreak(
+                "ternary",
+                "java.expression:" + expression.getClass().getSimpleName(),
+                ternaryPreview(flat),
+                flatWidth,
+                options.lineWidth(),
+                0);
+    }
+
+    /**
+     * Builds a short headline snippet of the ternary up to and including the {@code ?}, so the reader recognizes the
+     * conditional without seeing both branches.
+     */
+    private String ternaryPreview(String flat) {
+        int question = flat.indexOf('?');
+        return question < 0 ? flat : flat.substring(0, question + 1) + " …";
     }
 
     private Doc brokenConditionalExpression(ConditionalExpr expression) {

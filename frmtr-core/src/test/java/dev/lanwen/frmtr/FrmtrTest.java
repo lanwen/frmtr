@@ -136,6 +136,109 @@ final class FrmtrTest {
     }
 
     @Test
+    void explainFormattedOutputMatchesFormat() {
+        String source = "class Demo{void method(){call(value);}}";
+
+        ExplainResult result = Frmtr.explain(source);
+
+        assertThat(result.formatted()).isEqualTo(Frmtr.format(source));
+    }
+
+    @Test
+    void explainReportsRealWidthArithmeticForWrappingMethodChain() {
+        String source = "class A{void m(){foo().bar().baz().qux().quux().corge().grault().garply().waldo().fred();}}";
+        FormatterOptions narrow = FormatterOptions.defaults().withLineWidth(40);
+
+        ExplainResult result = Frmtr.explain(source, narrow);
+
+        // The chain wraps onto one segment per line, so the formatted output spans many lines.
+        assertThat(result.formatted().lines().filter(line -> line.contains(".")).count()).isGreaterThan(5);
+        // The printer that broke the chain recorded its own width decision: the measured flat width, the budget it blew,
+        // and how many segments the broken chain produced. This is the real "why it wrapped", not an opaque forced break.
+        assertThat(result.explanation().printerWraps())
+            .anySatisfy(wrap -> {
+                assertThat(wrap.construct()).isEqualTo("method chain");
+                assertThat(wrap.label()).isEqualTo("java.expression:MethodCallExpr");
+                assertThat(wrap.available()).isEqualTo(40);
+                assertThat(wrap.flatWidth()).isGreaterThan(40);
+                assertThat(wrap.segments()).isGreaterThanOrEqualTo(5);
+                assertThat(wrap.preview()).startsWith("foo().bar()");
+            });
+    }
+
+    @Test
+    void explainDoesNotAttributeACommentDrivenChainBreakToWidth() {
+        // A trailing line comment after the receiver forces the chain across lines even though its flat form
+        // (foo().bar().baz()) is far narrower than the budget. The recorder must refuse to call this a width wrap:
+        // the chain still breaks (a forced break is present) but no PrinterWrap is recorded, so explain reports it as
+        // "laid out across lines by rule" rather than inventing width arithmetic for a break width did not cause.
+        FormatterOptions wide = FormatterOptions.defaults().withLineWidth(120);
+        String source = "class A{\n void m(){\n  foo() // note\n   .bar()\n   .baz();\n }\n}\n";
+
+        ExplainResult result = Frmtr.explain(source, wide);
+
+        // The chain genuinely wrapped: the formatted output spans the selectors across lines.
+        assertThat(result.formatted().lines().filter(line -> line.contains(".")).count()).isGreaterThanOrEqualTo(2);
+        // The receiver method call carries the forced break, so something visibly wrapped here.
+        assertThat(result.explanation().forcedBreaks())
+            .anySatisfy(forced -> assertThat(forced.label()).contains("java.expression:MethodCallExpr"));
+        // But the printer refused to attribute it to width: no width wrap was recorded for the chain.
+        assertThat(result.explanation().printerWraps()).isEmpty();
+    }
+
+    @Test
+    void explainDoesNotAttributeASourceMultilineChainBreakToWidth() {
+        // A chain the developer already split across source lines stays split even at a wide budget, so width is not
+        // the cause of the break. The recorder must not manufacture a width wrap for it.
+        FormatterOptions wide = FormatterOptions.defaults().withLineWidth(120);
+        String source = "class A{\n void m(){\n  foo()\n   .bar()\n   .baz();\n }\n}\n";
+
+        ExplainResult result = Frmtr.explain(source, wide);
+
+        assertThat(result.formatted().lines().filter(line -> line.contains(".")).count()).isGreaterThanOrEqualTo(2);
+        assertThat(result.explanation().printerWraps()).isEmpty();
+    }
+
+    @Test
+    void explainKeepsFormattedOutputIdenticalWhetherOrNotItIsExplained() {
+        // Recording printer width decisions must be a pure observer: explain's formatted output must byte-for-byte match
+        // plain format for a wrapping chain, an overflowing argument list, and a wide ternary alike.
+        FormatterOptions narrow = FormatterOptions.defaults().withLineWidth(40);
+        String chain = "class A{void m(){foo().bar().baz().qux().quux().corge().grault().garply().waldo().fred();}}";
+        String arguments = "class A{void m(){process(alphaValue,betaValue,gammaValue,deltaValue,epsilonValue,zeta);}}";
+        String ternary = "class A{int m(boolean c){int r=c?computeTheFirstValue():computeTheSecondAlternativeValue();return r;}}";
+        for (String source : new String[] {chain, arguments, ternary}) {
+            assertThat(Frmtr.explain(source, narrow).formatted()).isEqualTo(Frmtr.format(source, narrow));
+        }
+    }
+
+    @Test
+    void explainReportsNoWrapWhenEverythingFits() {
+        ExplainResult result = Frmtr.explain("class Demo{int value;}");
+
+        assertThat(result.explanation().brokenGroups()).isEmpty();
+    }
+
+    @Test
+    void explainBuildsExplanationWhenFormatWouldSkipForMissingPragma() {
+        FormatterOptions requirePragma = TestFormatterOptions.withPragmaRequirement(
+            80,
+            FormatterOptions.IndentStyle.SPACE,
+            2,
+            FormatterOptions.LineEnding.LF,
+            true,
+            false,
+            true,
+            FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE
+        );
+        String source = "class Demo{void method(){call(value);}}";
+
+        ExplainResult result = Frmtr.explain(source, requirePragma);
+
+        assertThat(result.explanation().decisions()).isNotEmpty();
+    }
+
+    @Test
     void debugDocRejectsInvalidJavaLikeFormat() {
         assertThatThrownBy(() -> Frmtr.debugDoc("class {")).isInstanceOf(FormatterException.class);
     }

@@ -53,7 +53,8 @@ final class StatementPrinters {
                 expressions::expressionHasParenthesizedNestedBinary,
                 expression -> expressions.binaryLines(expression, true),
                 this::currentIndentedWidth,
-                this::blockStatementWidth);
+                this::blockStatementWidth,
+                context.layoutDecisions);
         this.switches = new SwitchPrinter(
                 context,
                 this::statement,

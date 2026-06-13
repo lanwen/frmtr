@@ -67,6 +67,17 @@ These tasks run `:frmtr-cli` from the current checkout in a single Gradle invoca
 
 Review the produced Java diff and run tests before committing it; the formatter source contains embedded Java fixtures, so self-formatting can expose formatter bugs rather than producing a purely mechanical style diff.
 
+## Site
+
+The onboarding site is a JBake static site under `site/src/jbake`.
+
+```bash
+./gradlew :site:bake
+```
+
+The generated GitHub Pages artifact is written to `site/build/jbake`. The root `siteBuild` task is a convenience alias
+for the same bake task.
+
 ## CLI
 
 Check all Java files under the current directory:

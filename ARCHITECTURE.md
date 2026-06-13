@@ -31,10 +31,12 @@ The project is a Gradle multi-module build:
   `:frmtr-tooling`.
 - `:frmtr-native-image-support`: GraalVM native-image build-time companion module for JavaParser reflection metadata. It
   is wired only through native-image configurations, not normal JVM runtime classpaths.
+- `:site`: JBake-backed static onboarding site. Source lives under `site/src/jbake` and the generated GitHub Pages
+  artifact is `site/build/jbake`.
 
 Shared subproject conventions configure Java 25, UTF-8 compilation, `-Xlint:all`, JUnit Platform, and JaCoCo. External
-dependency versions and the GraalVM Native Build Tools plugin are managed through the Gradle version catalog in
-`gradle/libs.versions.toml`.
+dependency versions, the JBake runtime, and the GraalVM Native Build Tools plugin are managed through the Gradle version
+catalog in `gradle/libs.versions.toml`.
 
 `:frmtr-cli` generates a small `BuildInfo` source file during compilation. It embeds the project version, current Git
 commit SHA, and build timestamp so JVM and native CLI binaries report the same build identity through `--version`.
@@ -62,6 +64,14 @@ frmtr-gradle-plugin/src/main/java/dev/lanwen/frmtr/gradle
 
 frmtr-native-image-support/src/main/java/dev/lanwen/frmtr/nativeimage
 `-- native-image feature code that registers JavaParser AST node fields for hosted reflection
+
+site/src/jbake
+|-- assets
+|   `-- static CSS and copied site assets
+|-- content
+|   `-- JBake content entries and metadata
+`-- templates
+    `-- Freemarker page shell and reusable landing-page components
 ```
 
 ## Formatting Pipeline

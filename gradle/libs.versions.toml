@@ -5,6 +5,7 @@ jgit = "7.6.0.202603022253-r"
 junit-jupiter = "6.0.3"
 graalvm-native-buildtools = "0.11.5"
 graalvm-nativeimage = "25.0.3"
+jbake = "2.7.0"
 picocli = "4.7.7"
 slf4j = "2.0.17"
 
@@ -12,6 +13,7 @@ slf4j = "2.0.17"
 assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertj" }
 javaparser-core = { module = "com.github.javaparser:javaparser-core", version.ref = "javaparser" }
 graalvm-nativeimage = { module = "org.graalvm.sdk:nativeimage", version.ref = "graalvm-nativeimage" }
+jbake-core = { module = "org.jbake:jbake-core", version.ref = "jbake" }
 jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit-jupiter" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }

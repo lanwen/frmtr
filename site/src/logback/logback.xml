@@ -1,0 +1,18 @@
+<configuration>
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%level %logger{36} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <logger name="com.orientechnologies" level="ERROR" />
+  <logger name="org.apache.commons.beanutils" level="WARN" />
+  <logger name="org.thymeleaf" level="WARN" />
+  <logger name="org.jbake.app.Asset" level="INFO" />
+  <logger name="org.jbake.app.Oven" level="INFO" />
+  <logger name="org.jbake.app.Renderer" level="INFO" />
+
+  <root level="ERROR">
+    <appender-ref ref="CONSOLE" />
+  </root>
+</configuration>

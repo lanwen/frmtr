@@ -39,6 +39,12 @@ tasks.registerFrmtrCliTask("frmtrSelfFormat") {
     args(".")
 }
 
+tasks.register("siteBuild") {
+    group = "documentation"
+    description = "Builds the static onboarding site with JBake."
+    dependsOn(":site:bake")
+}
+
 subprojects {
     group = rootProject.group
     version = rootProject.version

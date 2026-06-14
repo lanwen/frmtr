@@ -221,7 +221,8 @@ public class Lambda {
         });
 
         largeCustomerBatch(
-            (billingAccountRecord, customerSegmentRecord, deliveryWindowRecord) -> eligibilityRuleSet.calculateDiscounts()
+            (billingAccountRecord, customerSegmentRecord, deliveryWindowRecord) ->
+                eligibilityRuleSet.calculateDiscounts()
         );
 
         a.b(
@@ -241,11 +242,25 @@ public class Lambda {
                 eligibility.compute(regionalInventory, shipmentWindows, accountStatus, pricingRules, taxRules) > 0
         );
 
-        a.b(c -> eligibility.compute(regionalInventory, shipmentWindows, accountStatus, pricingRules, taxRules) > 0);
+        a.b(
+            c -> eligibility.compute(
+                regionalInventory,
+                shipmentWindows,
+                accountStatus,
+                pricingRules,
+                taxRules
+            ) > 0
+        );
 
         a.b(
             c,
-            (c0, c1) -> eligibility.compute(regionalInventory, shipmentWindows, accountStatus, pricingRules, taxRules) > 0
+            (c0, c1) -> eligibility.compute(
+                regionalInventory,
+                shipmentWindows,
+                accountStatus,
+                pricingRules,
+                taxRules
+            ) > 0
         );
 
         a.b(c ->
@@ -347,11 +362,13 @@ public class Lambda {
 
         largeCustomerBatch(
             /* comment */
-            (billingAccountRecord, customerSegmentRecord, deliveryWindowRecord) -> eligibilityRuleSet.calculateDiscounts()
+            (billingAccountRecord, customerSegmentRecord, deliveryWindowRecord) ->
+                eligibilityRuleSet.calculateDiscounts()
         );
 
         largeCustomerBatch(
-            /* comment */ (billingAccountRecord, customerSegmentRecord, deliveryWindowRecord) -> eligibilityRuleSet.calculateDiscounts()
+            /* comment */ (billingAccountRecord, customerSegmentRecord, deliveryWindowRecord) ->
+                eligibilityRuleSet.calculateDiscounts()
         );
 
         a.b(

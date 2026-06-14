@@ -161,6 +161,7 @@ final class LambdaExpressionPrinter {
                 && expressionBody.filter(expressionLambdaArguments::sourceMultilineLogicalBody).isEmpty()
                 && expressionBody.filter(expressionLambdaArguments::sourceMultilineMethodCallBody).isEmpty()
                 && expressionBody.filter(body -> lambdaBodyStartsAfterHeader(expression, body)).isEmpty()
+                && !lambdaFlatOverflowsInBrokenArgumentList(flat)
                 && expressionBody.filter(this::methodCallBodyOverflowsInBrokenArgumentList).isEmpty()
                 && currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
             return Doc.text(flat);
@@ -184,6 +185,13 @@ final class LambdaExpressionPrinter {
                 .flatMap(methodCall -> expressionLambdaArguments.methodCallBodyWithOpener(parameters, methodCall));
         if (methodCallBodyWithOpener.isPresent()) {
             return methodCallBodyWithOpener.orElseThrow();
+        }
+        Optional<Doc> binaryMethodCallBodyWithOpener = expressionBody
+                .filter(BinaryExpr.class::isInstance)
+                .map(BinaryExpr.class::cast)
+                .flatMap(binary -> expressionLambdaArguments.binaryMethodCallBodyWithOpener(parameters, binary));
+        if (binaryMethodCallBodyWithOpener.isPresent()) {
+            return binaryMethodCallBodyWithOpener.orElseThrow();
         }
         Optional<Doc> objectCreationBodyWithOpener = expressionBody
                 .filter(ObjectCreationExpr.class::isInstance)
@@ -227,6 +235,10 @@ final class LambdaExpressionPrinter {
                         > options.lineWidth();
     }
 
+    private boolean lambdaFlatOverflowsInBrokenArgumentList(String flat) {
+        return blockStatementWidth.applyAsInt(options.indentUnit().repeat(3) + flat) > options.lineWidth();
+    }
+
     private boolean shouldHugBrokenLambdaBody(Expression body) {
         return body instanceof MethodCallExpr methodCall
                 && methodCall.getArguments().isEmpty()
@@ -261,14 +273,15 @@ final class LambdaExpressionPrinter {
     }
 
     /**
-     * Breaks expression bodies, forcing logical binary bodies into the binary-line renderer.
+     * Breaks expression bodies, forcing logical and over-wide binary bodies into the binary-line renderer.
      *
-     * <p>A logical body such as {@code a && b} reads as one condition tree. If the lambda body is already broken, the
-     * binary renderer keeps that tree aligned instead of letting the expression dispatcher choose a flat fallback.
+     * <p>A logical body such as {@code a && b} reads as one condition tree, and a wide relational body can hide an
+     * overflowing method-call operand behind the lambda arrow. If the lambda body is already broken, the binary renderer
+     * keeps that tree aligned instead of letting the expression dispatcher choose a flat fallback.
      */
     private Doc brokenLambdaExpressionBody(LambdaExpr expression) {
         return expression.getExpressionBody()
-                .map(body -> logicalBinaryBodyDoc(body).orElseGet(() -> brokenNonBinaryLambdaBody(body)))
+                .map(body -> binaryBodyDoc(body).orElseGet(() -> brokenNonBinaryLambdaBody(body)))
                 .orElseGet(() -> statementRenderer.format(expression.getBody()));
     }
 
@@ -289,8 +302,9 @@ final class LambdaExpressionPrinter {
                 || expression.getOperator() == BinaryExpr.Operator.OR;
     }
 
-    private Optional<Doc> logicalBinaryBodyDoc(Expression body) {
-        return logicalBinaryBody(body).map(binary -> {
+    private Optional<Doc> binaryBodyDoc(Expression body) {
+        return binaryBody(body).filter(binary -> isLogicalBinaryOperator(binary)
+                || lambdaBodyOverflowsInBrokenArgumentList(body)).map(binary -> {
             Doc lines = binaryExpressionNestedLinesRenderer.apply(binary, true);
             for (int i = 0; i < enclosedDepth(body); i++) {
                 lines = Doc.concat(Doc.text("("), lines, Doc.text(")"));
@@ -299,12 +313,18 @@ final class LambdaExpressionPrinter {
         });
     }
 
-    private Optional<BinaryExpr> logicalBinaryBody(Expression body) {
-        if (body instanceof BinaryExpr binaryExpr && isLogicalBinaryOperator(binaryExpr)) {
+    private boolean lambdaBodyOverflowsInBrokenArgumentList(Expression body) {
+        String flat = compact.apply(body);
+        return currentIndentedWidth.applyAsInt(flat) > options.lineWidth()
+                || blockStatementWidth.applyAsInt(options.indentUnit().repeat(3) + flat) > options.lineWidth();
+    }
+
+    private Optional<BinaryExpr> binaryBody(Expression body) {
+        if (body instanceof BinaryExpr binaryExpr) {
             return Optional.of(binaryExpr);
         }
         if (body instanceof EnclosedExpr enclosedExpr) {
-            return logicalBinaryBody(enclosedExpr.getInner());
+            return binaryBody(enclosedExpr.getInner());
         }
         return Optional.empty();
     }

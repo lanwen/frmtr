@@ -102,6 +102,48 @@ final class ExpressionLambdaArgumentLayout {
     }
 
     /**
+     * Renders a binary lambda body as {@code parameters -> methodCall(} when splitting that call operand is enough.
+     */
+    Optional<Doc> binaryMethodCallBodyWithOpener(String parameters, BinaryExpr binaryExpr) {
+        if (!(binaryExpr.getLeft() instanceof MethodCallExpr methodCall)
+                || !binaryExpr.getAllContainedComments().isEmpty()
+                || methodCall.getArguments().isEmpty()
+                || methodCall.getScope().filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n")).isPresent()) {
+            return Optional.empty();
+        }
+        String opener = methodCallPrefix(methodCall) + "(";
+        String firstLine = parameters + " -> " + opener;
+        if (expressionFirstLineWidth(firstLine) > options.lineWidth()
+                || brokenArgumentListLambdaBodyWidth(firstLine) > options.lineWidth()) {
+            return Optional.empty();
+        }
+        String operator = binaryExpr.getOperator().asString();
+        Expression right = binaryExpr.getRight();
+        String closingLine = options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END
+                ? ") " + operator + " " + compact.apply(right)
+                : ")";
+        if (expressionFirstLineWidth(closingLine) > options.lineWidth()) {
+            return Optional.empty();
+        }
+        Doc closedCall = Doc.concat(
+                Doc.text(firstLine),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        methodCallArgumentList.apply(methodCall.getArguments(), Doc.HARD_LINE))),
+                Doc.HARD_LINE,
+                Doc.text(closingLine));
+        if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END) {
+            return Optional.of(closedCall);
+        }
+        return Optional.of(Doc.concat(
+                closedCall,
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.text(operator + " "),
+                        expressionRenderer.format(right)))));
+    }
+
+    /**
      * Renders a method-call argument list containing a single eligible expression lambda.
      */
     Optional<Doc> huggableMethodCallArguments(String prefix, NodeList<Expression> arguments) {

@@ -91,6 +91,14 @@ public class TryCatch {
         }
     }
 
+    void nestedQualifiedCatchType(RoutePlanner routePlanner) {
+        try {
+            routePlanner.loadProfile();
+        } catch (RoutePlanCatalog.DetachedRouteSegmentFailure segmentFailure) {
+            routePlanner.record(segmentFailure);
+        }
+    }
+
     void emptyBlocks() {
         try {
         } catch (Exception e) {}

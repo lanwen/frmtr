@@ -652,7 +652,7 @@ final class StatementPrinter {
         if (parameterHasComments(parameter) && compact.apply(parameter).contains("|")) {
             return commentedCatchParameter(parameter);
         }
-        String flat = compact.apply(parameter);
+        String flat = compactCatchParameter(parameter);
         if (!flat.contains("|") || currentIndentedWidth.applyAsInt("catch (" + flat + ") {}") <= options.lineWidth()) {
             return Doc.text(flat);
         }
@@ -665,6 +665,10 @@ final class StatementPrinter {
             lines.add(Doc.text(prefix + parts.get(i) + suffix));
         }
         return Doc.concat(Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, lines))), Doc.HARD_LINE);
+    }
+
+    private String compactCatchParameter(Parameter parameter) {
+        return compactTypeLike.apply(parameter.getType()) + " " + parameter.getNameAsString();
     }
 
     private boolean parameterHasComments(Parameter parameter) {

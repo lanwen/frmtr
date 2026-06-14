@@ -72,9 +72,16 @@ final class CommentedMethodSignaturePrinter {
         int linesToDrop = Math.min(lines.size(), lastLeadingAnnotationLine - declarationBeginLine + 1);
         int firstSignatureLine = linesToDrop;
         int sourceLine = declarationBeginLine + firstSignatureLine;
+        // Skip the comment-only and blank trivia lines that sit between the annotations and the method name. They are
+        // leading comments the structured path renders (annotationMethodGapComments), not signature content. Blank lines
+        // must be skipped too: when source whitespace is collapsed, blank lines can appear between stacked leading
+        // comments, and stopping at the first one would leave a leading `//` in the "signature", wrongly routing the
+        // method through the raw fallback — which re-indents the preserved blank lines deeper on every pass and never
+        // converges.
         while (firstSignatureLine < lines.size()
                 && sourceLine < nameBeginLine
-                && isCommentOnlyLine(lines.get(firstSignatureLine).strip())) {
+                && (lines.get(firstSignatureLine).isBlank()
+                        || isCommentOnlyLine(lines.get(firstSignatureLine).strip()))) {
             firstSignatureLine++;
             sourceLine++;
         }
@@ -107,10 +114,12 @@ final class CommentedMethodSignaturePrinter {
             return formatMethodWithBody(prefix + "()", List.of(), inlineOpeningLineComment, body);
         }
         // JavaParser can lose a single inline block comment before empty parentheses as header trivia, so keep it
-        // attached to the method prefix instead of treating it like a parameter comment line.
+        // attached to the method prefix instead of treating it like a parameter comment line. This only applies when the
+        // parentheses are otherwise empty: the line must be the block comment and nothing else. A leading block comment
+        // followed by a real parameter (e.g. `( /* alpha */ String name )`) is a commented parameter, not an empty list,
+        // and must keep its parentheses around the parameter rather than being hoisted to the prefix.
         if (parameterLines.size() == 1
-                && CommentedTokenText.isComment(parameterLines.getFirst())
-                && parameterLines.getFirst().startsWith("/*")
+                && isBlockCommentOnlyLine(parameterLines.getFirst())
                 && !parameters.contains("\n")) {
             return formatMethodWithBody(prefix + " " + parameterLines.getFirst() + "()", List.of(), "", body);
         }
@@ -216,6 +225,17 @@ final class CommentedMethodSignaturePrinter {
 
     private boolean isCommentOnlyLine(String line) {
         return line.startsWith("//") || line.startsWith("/*") && line.endsWith("*/");
+    }
+
+    /**
+     * Reports whether a parameter-list line is a single block comment with no parameter text after it.
+     *
+     * <p>{@code "/* c *}{@code /"} qualifies but {@code "/* c *}{@code / String name"} does not: the latter is a commented
+     * parameter, so the closing {@code *}{@code /} is not the end of the line.
+     */
+    private boolean isBlockCommentOnlyLine(String line) {
+        String stripped = line.strip();
+        return stripped.startsWith("/*") && stripped.endsWith("*/") && stripped.indexOf("*/") == stripped.length() - 2;
     }
 
     private boolean containsLineComment(String line) {

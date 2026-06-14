@@ -18,31 +18,204 @@ final class CommentedModulePrinter {
     /**
      * Rebuilds a raw commented module declaration after the caller has chosen this escape hatch.
      *
-     * <p>Blank runs inside the raw module body are compacted to a single blank line so comment-only directive sections
-     * keep separation without preserving accidental vertical whitespace.
+     * <p>The module body is split into directive units by their terminating {@code ;} rather than by physical source
+     * lines, so the reconstruction is independent of how the source distributed whitespace. A purely line-based split
+     * silently dropped every directive when whitespace was collapsed (the whole module on one line) and duplicated the
+     * {@code module} keyword when whitespace was expanded (each token on its own line). Standalone line comments between
+     * directives keep their own line; block comments stay attached to the directive unit that owns them. Blank runs are
+     * compacted to a single blank line so comment-only sections keep separation without preserving accidental vertical
+     * whitespace.
      */
     String formatCommentedModule(String rawModule) {
-        String[] lines = rawModule.strip().split("\\R");
-        if (lines.length == 0) {
-            return rawModule.strip();
+        String stripped = rawModule.strip();
+        int headerEnd = stripped.indexOf('{');
+        int bodyEnd = stripped.lastIndexOf('}');
+        if (headerEnd < 0 || bodyEnd < headerEnd) {
+            return stripped;
         }
         List<String> formatted = new ArrayList<>();
-        formatted.add(formatCommentedModuleHeader(lines[0]));
-        boolean previousBlank = false;
-        for (int i = 1; i < lines.length - 1; i++) {
-            String line = lines[i].strip();
-            if (line.isEmpty()) {
-                if (!previousBlank && !formatted.isEmpty()) {
+        formatted.add(formatCommentedModuleHeader(stripped.substring(0, headerEnd + 1)));
+        for (ModuleBodyUnit unit : moduleBodyUnits(stripped.substring(headerEnd + 1, bodyEnd))) {
+            if (unit.blank()) {
+                if (!formatted.isEmpty() && !formatted.getLast().isEmpty()) {
                     formatted.add("");
                 }
-                previousBlank = true;
-                continue;
+            } else {
+                formatted.add("  " + formatCommentedModuleDirective(unit.text()));
             }
-            formatted.add("  " + formatCommentedModuleDirective(line));
-            previousBlank = false;
+        }
+        while (formatted.size() > 1 && formatted.getLast().isEmpty()) {
+            formatted.removeLast();
         }
         formatted.add("}");
         return String.join("\n", formatted);
+    }
+
+    /**
+     * One reconstructed module-body item: either a directive/comment unit ({@link #text}) or a blank-line marker.
+     */
+    private record ModuleBodyUnit(String text, boolean blank) {
+        static ModuleBodyUnit directive(String text) {
+            return new ModuleBodyUnit(text, false);
+        }
+
+        static ModuleBodyUnit blankLine() {
+            return new ModuleBodyUnit("", true);
+        }
+    }
+
+    /**
+     * Splits a raw module body into directive and standalone-comment units independent of source whitespace.
+     *
+     * <p>Directives are delimited by their terminating {@code ;} (with any same-segment trailing comments kept on the
+     * directive). A standalone line comment (one not trailing a directive's {@code ;}) becomes its own unit so it keeps a
+     * dedicated line. A blank source line that separates units is recorded as a single blank marker. Splitting on {@code ;}
+     * rather than on newlines is what makes the reconstruction robust to collapsed (everything on one line) and expanded
+     * (one token per line) whitespace alike.
+     */
+    private List<ModuleBodyUnit> moduleBodyUnits(String body) {
+        List<ModuleBodyUnit> units = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean sawBlankRun = false;
+        int index = 0;
+        int length = body.length();
+        while (index < length) {
+            char ch = body.charAt(index);
+            if (ch == '\n' || ch == '\r') {
+                // Track blank source lines only while no directive text is pending, so they separate units rather than
+                // splitting a directive that the source happened to wrap across lines.
+                if (current.toString().isBlank()) {
+                    current.setLength(0);
+                    if (peekBlankLine(body, index)) {
+                        sawBlankRun = true;
+                    }
+                }
+                index++;
+                continue;
+            }
+            if (body.startsWith("/*", index)) {
+                int end = body.indexOf("*/", index + 2);
+                end = end < 0 ? length : end + 2;
+                current.append(body, index, end);
+                index = end;
+                continue;
+            }
+            if (body.startsWith("//", index)) {
+                int end = lineEnd(body, index);
+                String comment = body.substring(index, end).stripTrailing();
+                if (current.toString().isBlank()) {
+                    // A standalone line comment owns its own unit and line.
+                    flushBlank(units, sawBlankRun);
+                    sawBlankRun = false;
+                    units.add(ModuleBodyUnit.directive(comment));
+                    current.setLength(0);
+                } else {
+                    current.append(' ').append(comment);
+                }
+                index = end;
+                continue;
+            }
+            if (ch == ';') {
+                current.append(';');
+                index++;
+                // Attach trailing block/line comments that share the directive's segment before the next line break.
+                index = appendTrailingComments(body, index, current);
+                flushBlank(units, sawBlankRun);
+                sawBlankRun = false;
+                units.add(ModuleBodyUnit.directive(current.toString().strip()));
+                current.setLength(0);
+                continue;
+            }
+            if (current.toString().isBlank() && Character.isWhitespace(ch)) {
+                index++;
+                continue;
+            }
+            current.append(ch);
+            index++;
+        }
+        if (!current.toString().isBlank()) {
+            flushBlank(units, sawBlankRun);
+            units.add(ModuleBodyUnit.directive(current.toString().strip()));
+        }
+        return units;
+    }
+
+    private void flushBlank(List<ModuleBodyUnit> units, boolean sawBlankRun) {
+        if (sawBlankRun && !units.isEmpty()) {
+            units.add(ModuleBodyUnit.blankLine());
+        }
+    }
+
+    /**
+     * Appends comments that trail a directive's {@code ;} into {@code current}, but only when they truly belong to this
+     * directive rather than leading the next one.
+     *
+     * <p>A {@code //} line comment after the {@code ;} always trails this directive (it runs to the end of the line). A
+     * {@code /} block comment after the {@code ;} trails this directive only when nothing but whitespace, a line break,
+     * or the closing brace follows it: if a directive keyword or name follows, the block comment leads that next
+     * directive (e.g. {@code requires x; /* note *}{@code / uses y;} — the {@code /* note *}{@code /} leads {@code uses}).
+     * Consuming such a comment here would otherwise move it onto the wrong directive when the source was collapsed onto
+     * a single line.
+     */
+    private int appendTrailingComments(String body, int index, StringBuilder current) {
+        int length = body.length();
+        StringBuilder pendingBlockComments = new StringBuilder();
+        int cursor = index;
+        while (cursor < length) {
+            char ch = body.charAt(cursor);
+            if (ch == ' ' || ch == '\t') {
+                cursor++;
+                continue;
+            }
+            if (body.startsWith("/*", cursor)) {
+                int end = body.indexOf("*/", cursor + 2);
+                end = end < 0 ? length : end + 2;
+                pendingBlockComments.append(' ').append(body, cursor, end);
+                cursor = end;
+                continue;
+            }
+            if (body.startsWith("//", cursor)) {
+                // A line comment terminates the line, so block comments seen before it also trail this directive.
+                int end = lineEnd(body, cursor);
+                current.append(pendingBlockComments).append(' ').append(body, cursor, end);
+                return end;
+            }
+            if (ch == '\n' || ch == '\r' || ch == '}') {
+                // End of line (or body): pending block comments genuinely trail this directive.
+                current.append(pendingBlockComments);
+                return cursor;
+            }
+            // Directive content follows: the pending block comments lead the next directive, so leave them unconsumed.
+            return index;
+        }
+        current.append(pendingBlockComments);
+        return cursor;
+    }
+
+    private static boolean peekBlankLine(String body, int newlineIndex) {
+        for (int i = newlineIndex + 1; i < body.length(); i++) {
+            char ch = body.charAt(i);
+            if (ch == '\n') {
+                return true;
+            }
+            if (!Character.isWhitespace(ch) || ch == '\r') {
+                if (ch == '\r') {
+                    continue;
+                }
+                return false;
+            }
+        }
+        return false;
+    }
+
+    private static int lineEnd(String text, int from) {
+        for (int i = from; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (ch == '\n' || ch == '\r') {
+                return i;
+            }
+        }
+        return text.length();
     }
 
     /**

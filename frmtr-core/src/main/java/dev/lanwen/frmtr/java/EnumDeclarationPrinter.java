@@ -7,6 +7,7 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
+import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
@@ -172,6 +173,12 @@ final class EnumDeclarationPrinter {
             if (!entryList.rawOwnsTrailingComma() || !members.isEmpty() || !bodyComments.isEmpty()) {
                 contents.add(Doc.text(members.isEmpty() && bodyComments.isEmpty() ? "," : ";"));
             }
+            // The last constant's trailing comment was hoisted past the terminating separator so the separator is not
+            // commented out; re-emit it after the separator on the same line (`NAME; // comment`).
+            if (entryList.lastTrailingComment() != Doc.EMPTY) {
+                contents.add(Doc.text(" "));
+                contents.add(entryList.lastTrailingComment());
+            }
         } else if (!members.isEmpty() && enumHasExplicitSemicolon(declaration)) {
             contents.add(Doc.text(";"));
         }
@@ -203,43 +210,92 @@ final class EnumDeclarationPrinter {
         if (recoveryPlan.isPresent() && hasRawGap(recoveryPlan.orElseThrow())) {
             return Optional.of(recoveredEnumEntryList(declaration, recoveryPlan.orElseThrow()));
         }
-        boolean lastOwnsTrailingComma = enumConstantHasTrailingComment(
-                declaration,
-                declaration.getEntries().get(declaration.getEntries().size() - 1),
-                null);
-        return Optional.of(new EnumEntryList(enumEntryList(declaration, enumEntries(declaration)), lastOwnsTrailingComma));
+        return Optional.of(formattedEnumEntryList(declaration));
     }
 
     /**
-     * Prints each enum constant with enough owner context to find comments that JavaParser leaves as body trivia.
+     * Builds the formatter-owned enum entry list, hoisting the last constant's trailing comment out so it follows the
+     * list-terminating separator rather than swallowing it.
+     *
+     * <p>All but the last constant keep their inline {@code , // comment} shape, where the comma is the separator to the
+     * next constant. The last constant has no following constant, so its separator is the list terminator ({@code ;} when
+     * members or body comments follow, otherwise {@code ,}). That terminator is added by {@link #enumBlock}; emitting a
+     * trailing {@code //} comment before it would comment the terminator out and drop a required separator. The last
+     * constant is therefore rendered without its trailing comment, which is returned separately for the caller to place
+     * after the terminator.
      */
-    private List<Doc> enumEntries(EnumDeclaration declaration) {
-        List<Doc> entries = new ArrayList<>();
-        for (int i = 0; i < declaration.getEntries().size(); i++) {
-            EnumConstantDeclaration entry = declaration.getEntries().get(i);
-            EnumConstantDeclaration next = i + 1 < declaration.getEntries().size() ? declaration.getEntries().get(i + 1) : null;
-            entries.add(enumConstant(declaration, entry, next));
+    private EnumEntryList formattedEnumEntryList(EnumDeclaration declaration) {
+        List<EnumConstantDeclaration> entries = declaration.getEntries();
+        int lastIndex = entries.size() - 1;
+        EnumConstantDeclaration last = entries.get(lastIndex);
+        Doc lastTrailingComment = enumConstantTrailingComment(declaration, last, null);
+
+        List<Doc> entryDocs = new ArrayList<>();
+        for (int i = 0; i < entries.size(); i++) {
+            EnumConstantDeclaration entry = entries.get(i);
+            EnumConstantDeclaration next = i + 1 < entries.size() ? entries.get(i + 1) : null;
+            if (i == lastIndex && lastTrailingComment != Doc.EMPTY) {
+                entryDocs.add(enumConstantWithoutTrailingComment(entry));
+            } else {
+                entryDocs.add(enumConstant(declaration, entry, next));
+            }
         }
-        return entries;
+        boolean lastTrailingCommentHoisted = lastTrailingComment != Doc.EMPTY;
+        return new EnumEntryList(
+                enumEntryList(declaration, entryDocs, lastTrailingCommentHoisted), false, lastTrailingComment);
     }
 
     /**
      * Interleaves printed constants with source-sensitive separators.
+     *
+     * <p>The inter-constant separator is normally suppressed when the previous constant already carries an inline
+     * {@code , // comment} tail, because {@link #enumConstant} emits that comma itself. That assumption breaks for exactly
+     * one boundary: when the last constant's trailing comment is hoisted past the list terminator
+     * ({@code lastTrailingCommentHoisted}) and that hoisted comment is the same node javaparser also attached to the
+     * previous constant (see {@link #previousSharesHoistedComment}). The hoist consumes the shared comment for the last
+     * constant, so the previous constant renders bare — suppressing the separator there would drop the only comma before
+     * the last constant and emit non-reparseable output. That boundary therefore keeps its normal {@code ,} separator.
+     * When the previous constant owns a distinct trailing comment it still renders its own inline comma, so the
+     * suppression must stay to avoid emitting a doubled {@code ,}.
      */
-    private Doc enumEntryList(EnumDeclaration declaration, List<Doc> entries) {
+    private Doc enumEntryList(EnumDeclaration declaration, List<Doc> entries, boolean lastTrailingCommentHoisted) {
+        int lastIndex = entries.size() - 1;
         List<Doc> docs = new ArrayList<>();
         for (int i = 0; i < entries.size(); i++) {
             if (i > 0) {
                 EnumConstantDeclaration previous = declaration.getEntries().get(i - 1);
                 EnumConstantDeclaration current = declaration.getEntries().get(i);
-                docs.add(enumEntrySeparator(
-                        previous,
-                        current,
-                        enumConstantHasTrailingComment(declaration, previous, current)));
+                boolean intoHoistedSharedComment = i == lastIndex
+                        && lastTrailingCommentHoisted
+                        && previousSharesHoistedComment(previous, current);
+                boolean previousOwnsTrailingComma = !intoHoistedSharedComment
+                        && enumConstantHasTrailingComment(declaration, previous, current);
+                docs.add(enumEntrySeparator(previous, current, previousOwnsTrailingComma));
             }
             docs.add(entries.get(i));
         }
         return Doc.concat(docs);
+    }
+
+    /**
+     * Reports whether {@code previous} and the hoisted last constant {@code current} share the same trailing comment node.
+     *
+     * <p>When the last two constants end on one physical line with a single {@code //} comment, javaparser attaches that
+     * one comment object to both constants. The last constant's hoist consumes it, so {@code previous} renders bare and
+     * its inter-constant {@code ,} must be re-supplied. This is identity-based on purpose: when each constant carries its
+     * own distinct trailing comment — for example {@code HEART /*..*}{@code /, SPADE /*..*}{@code /} collapsed onto one
+     * line — {@code previous} still renders its own inline comma and must keep the suppressed separator to avoid a doubled
+     * {@code ,}.
+     */
+    private boolean previousSharesHoistedComment(
+            EnumConstantDeclaration previous, EnumConstantDeclaration current) {
+        Optional<Comment> previousOwnComment = previous.getComment()
+                .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(previous, comment));
+        Optional<Comment> currentOwnComment = current.getComment()
+                .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(previous, comment));
+        return previousOwnComment.isPresent()
+                && currentOwnComment.isPresent()
+                && previousOwnComment.orElseThrow() == currentOwnComment.orElseThrow();
     }
 
     /**
@@ -286,7 +342,7 @@ final class EnumDeclarationPrinter {
                 }
             }
         }
-        return new EnumEntryList(Doc.concat(docs), rawOwnsTrailingComma);
+        return new EnumEntryList(Doc.concat(docs), rawOwnsTrailingComma, Doc.EMPTY);
     }
 
     private Optional<EnumConstantDeclaration> nextValidEnumConstant(
@@ -525,6 +581,23 @@ final class EnumDeclarationPrinter {
                 trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(", "), trailing));
     }
 
+    /**
+     * Prints the body part of an enum constant — leading comments, annotations, name, and arguments — without the inline
+     * comma and trailing comment.
+     *
+     * <p>The final enum constant's trailing comment cannot be rendered inline before the list-terminating separator: when
+     * a {@code ;} (members follow) or a {@code ,} would be appended after a {@code //} line comment, that separator is
+     * swallowed by the comment and lost from the program. The caller therefore renders the last constant through this
+     * method and re-emits the separator and trailing comment in the correct order ({@code NAME; // comment}).
+     */
+    private Doc enumConstantWithoutTrailingComment(EnumConstantDeclaration declaration) {
+        return Doc.concat(
+                comments.leading(declaration),
+                enumConstantAnnotations(declaration),
+                Doc.text(declaration.getNameAsString()),
+                enumConstantArguments(declaration));
+    }
+
     private Doc enumConstantAnnotations(EnumConstantDeclaration declaration) {
         if (declaration.getAnnotations().isEmpty()) {
             return Doc.EMPTY;
@@ -688,7 +761,16 @@ final class EnumDeclarationPrinter {
         return new FormatterException(ENUM_CONSTANT_LIST_RECOVERY_FAILURE + reason, cause);
     }
 
-    private record EnumEntryList(Doc doc, boolean rawOwnsTrailingComma) {
+    /**
+     * The rendered enum constant list plus how its terminating separator is owned.
+     *
+     * @param doc the rendered constants and the separators between them
+     * @param rawOwnsTrailingComma whether a recovered raw island already ended with the list-terminating comma, so the
+     *     formatter must not add another separator
+     * @param lastTrailingComment the last constant's trailing comment, hoisted out so it can follow the terminating
+     *     separator instead of swallowing it; {@link Doc#EMPTY} when the last constant has no trailing comment
+     */
+    private record EnumEntryList(Doc doc, boolean rawOwnsTrailingComma, Doc lastTrailingComment) {
         private EnumEntryList {
             doc = Doc.concat(doc);
         }

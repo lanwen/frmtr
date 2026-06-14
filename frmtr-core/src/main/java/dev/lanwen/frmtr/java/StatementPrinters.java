@@ -93,6 +93,7 @@ final class StatementPrinters {
                 expressions::forcedMethodCallChainWithSemicolon,
                 expressions::brokenMethodCall,
                 expressions::methodCallChainHasComments,
+                expressions::methodCallChainHasFinalTrailingLineComment,
                 expressions::methodCallChainIsSourceMultiline,
                 expressions::methodCallChainRootIsObjectCreation,
                 expressions::methodCallChainRootIsFieldAccess,

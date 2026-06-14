@@ -379,7 +379,13 @@ final class MemberBlockPrinter {
         }
         String raw = sourceText.slice(interior);
         int lineEnd = firstLineEnd(raw);
-        int firstLineEndOffset = lineEnd < 0 ? interior.endOffset() : interior.beginOffset() + lineEnd;
+        int lineEndOffset = lineEnd < 0 ? interior.endOffset() : interior.beginOffset() + lineEnd;
+        // A comment only trails the opening brace when nothing else in the block precedes it. When whitespace is
+        // collapsed the opening brace and the first member can share a physical line, so the first line break is no
+        // longer a reliable boundary: a member's own trailing comment (e.g. an enum constant's `// note`) would sit on
+        // the same line as the brace and be mistaken for a brace comment, stealing it from the member that owns it.
+        // Cap the boundary at the first member's source start so only comments written before any member qualify.
+        int firstLineEndOffset = Math.min(lineEndOffset, firstMemberBeginOffset(owner, interior).orElse(lineEndOffset));
         return commentPlacement.containedComments(owner).stream()
                 .filter(JavaCommentTrivia::isLine)
                 .filter(comment -> comment.comment()
@@ -390,6 +396,24 @@ final class MemberBlockPrinter {
                         .filter(region -> region.beginOffset() < firstLineEndOffset)
                         .isPresent())
                 .findFirst();
+    }
+
+    /**
+     * Finds the source begin offset of the first content child written inside {@code owner}'s brace-delimited body.
+     *
+     * <p>Used to bound the opening-brace trailing-comment scan: a comment can only trail the opening brace if it is
+     * written before any member or enum constant. Only child nodes that begin inside {@code interior} (after the opening
+     * brace) count — the owner's own name, type parameters, and {@code extends}/{@code implements} clauses sit before the
+     * brace and must not pull the boundary back ahead of a legitimate brace-line comment. Comments are skipped because
+     * they are exactly what the scan is trying to classify; only non-comment members mark where body content starts.
+     */
+    private Optional<Integer> firstMemberBeginOffset(Node owner, SourceRegion interior) {
+        return owner.getChildNodes().stream()
+                .filter(child -> !(child instanceof com.github.javaparser.ast.comments.Comment))
+                .flatMap(child -> child.getRange().stream())
+                .map(range -> sourceText.region(range).beginOffset())
+                .filter(offset -> offset >= interior.beginOffset())
+                .min(Integer::compareTo);
     }
 
     private SourceRegion requireMemberBlockInteriorRegion(Node owner) {

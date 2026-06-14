@@ -99,6 +99,7 @@ final class StatementPrinter {
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainWithSemicolonRenderer;
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
     private final Predicate<MethodCallExpr> methodCallChainHasComments;
+    private final Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment;
     private final Predicate<MethodCallExpr> methodCallChainIsSourceMultiline;
     private final Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation;
     private final Predicate<MethodCallExpr> methodCallChainRootIsFieldAccess;
@@ -136,6 +137,7 @@ final class StatementPrinter {
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainWithSemicolonRenderer,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
             Predicate<MethodCallExpr> methodCallChainHasComments,
+            Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment,
             Predicate<MethodCallExpr> methodCallChainIsSourceMultiline,
             Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation,
             Predicate<MethodCallExpr> methodCallChainRootIsFieldAccess,
@@ -171,6 +173,7 @@ final class StatementPrinter {
         this.forcedMethodCallChainWithSemicolonRenderer = forcedMethodCallChainWithSemicolonRenderer;
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
         this.methodCallChainHasComments = methodCallChainHasComments;
+        this.methodCallChainHasFinalTrailingLineComment = methodCallChainHasFinalTrailingLineComment;
         this.methodCallChainIsSourceMultiline = methodCallChainIsSourceMultiline;
         this.methodCallChainRootIsObjectCreation = methodCallChainRootIsObjectCreation;
         this.methodCallChainRootIsFieldAccess = methodCallChainRootIsFieldAccess;
@@ -391,6 +394,15 @@ final class StatementPrinter {
                 Optional<Doc> sourceMultilineCall = sourceMultilineMethodCallStatementRenderer.apply(methodCall, statement);
                 if (sourceMultilineCall.isPresent()) {
                     return Doc.concat(sourceMultilineCall.orElseThrow(), Doc.text(";"), trailing);
+                }
+            } else if (methodCallChainHasFinalTrailingLineComment.test(methodCall)) {
+                // A source-multiline chain whose final segment carries a trailing line comment must keep the statement
+                // semicolon before that comment. Appending Doc.text(";") after the rendered chain would put the ; after
+                // a // comment (`.collect(x) // note;`), commenting the semicolon out and producing non-reparseable
+                // output. The with-semicolon renderer threads the ; into the final segment, before the comment.
+                Optional<Doc> chainWithSemicolon = forcedMethodCallChainWithSemicolonRenderer.apply(methodCall);
+                if (chainWithSemicolon.isPresent()) {
+                    return Doc.concat(chainWithSemicolon.orElseThrow(), trailing);
                 }
             }
             if (methodCallStatementWidth(methodCall) > options.lineWidth()) {

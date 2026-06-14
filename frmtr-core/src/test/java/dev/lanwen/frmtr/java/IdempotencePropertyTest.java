@@ -84,29 +84,33 @@ import org.junit.jupiter.params.provider.MethodSource;
  * <p>Generation is deterministic: the perturbations are mechanical token rewrites with no randomness, so the corpus is
  * identical on every run.
  *
- * <p><strong>Excluded perturbed inputs (genuine findings, not forced green).</strong> A handful of perturbed fixture
- * shapes are excluded because formatting them exposes a real formatter defect rather than a perturbation artifact, and
- * the offending output then makes a property ill-defined (it does not parse, dropped program elements, or never reaches
- * a fixed point). They are listed in {@link #EXCLUDED_AS_FINDINGS} and reported rather than masked:
+ * <p><strong>Findings this property surfaced — all fixed and regression-guarded.</strong> The first run of this
+ * property excluded a handful of perturbed fixture shapes because formatting them exposed a real formatter defect
+ * (non-reparseable output, dropped program elements, or failure to reach a fixed point) rather than a perturbation
+ * artifact. Each was a genuine bug; they have all since been fixed and {@link #EXCLUDED_AS_FINDINGS} is now empty —
+ * every perturbed input is in the asserted corpus. The fixes, each pinned by a dedicated golden fixture:
  *
  * <ul>
- *   <li><em>Non-reparseable output.</em> {@code correctness-data-loss}, {@code enum-declaration-layout},
- *       {@code comment-preservation-block-end-comments} (collapsed): {@code format(x)} produces output that does not
- *       re-parse — a comment or annotation between enum constants, or a trailing comment on a record component, is
- *       mis-placed and a required separator is dropped. This is the enum-separator data-loss class the whole B3 effort
- *       exists to catch, here reproduced on a re-whitespaced input.
- *   <li><em>Dropped program elements.</em> {@code comment-preservation-module-declaration} (collapsed and expanded):
- *       {@code format(x)} drops every {@code requires} / {@code uses} directive, formatting the module to an empty body
- *       — a catastrophic data loss the Layer 1 AST-equivalence check flags even though the empty module still parses.
- *   <li><em>Does not converge (non-terminating reformat loop).</em>
- *       {@code comment-preservation-method-chain-segments} (collapsed and expanded): repeated formatting never reaches a
- *       fixed point — every pass grows the output by ~12 (collapsed) / ~16 (expanded) characters, so the formatter
- *       reformats its own output indefinitely. The single formatting is semantics-preserving and re-parses, but the
- *       convergence assertion (fixed point within {@value #CONVERGENCE_PASSES} passes) fails.
- *   <li><em>Does not converge (later pass produces malformed output).</em> {@code block-lambda-arrow-parens-always} and
- *       {@code block-lambda-arrow-parens-avoid} (collapsed): the first formatting is fine, but formatting <em>its</em>
- *       output produces source that no longer re-parses, so the fixed-point search throws on the second pass — it
- *       oscillates into malformed output rather than settling.
+ *   <li><em>Enum-separator / parameter-comment data loss (non-reparseable).</em> {@code correctness-data-loss},
+ *       {@code enum-declaration-layout}, {@code comment-preservation-block-end-comments} (collapsed): a trailing line
+ *       comment on the last enum constant swallowed the list-terminating {@code ;}/{@code ,}; an enum constant comment
+ *       sharing the enclosing class's opening-brace line was mis-attributed to the brace (dropping the constant's
+ *       comma); and a parameter's leading block comment was misread as empty parentheses (dropping the parens). Guarded
+ *       by {@code enum-constant-trailing-comment-before-semicolon}, {@code enum-constant-comment-on-brace-line}, and
+ *       {@code parameter-leading-block-comment-collapsed}.
+ *   <li><em>Module directive data loss / malformed module.</em> {@code comment-preservation-module-declaration}
+ *       (collapsed and expanded): the commented-module reconstruction split the body by source line, dropping every
+ *       directive when collapsed onto one line and duplicating the {@code module} keyword when expanded. It now splits
+ *       by directive {@code ;}. Guarded by {@code comment-preservation-module-single-line}.
+ *   <li><em>Non-terminating reformat loop.</em> {@code comment-preservation-method-chain-segments} (collapsed and
+ *       expanded): blank-line-separated leading line comments wrongly routed a method through the raw signature
+ *       fallback, which re-indented preserved blank lines one level deeper on every pass. Guarded by
+ *       {@code method-leading-comments-blank-separated}.
+ *   <li><em>Oscillation into malformed output.</em> {@code block-lambda-arrow-parens-always} /
+ *       {@code block-lambda-arrow-parens-avoid} (collapsed): a source-multiline method-chain statement whose final
+ *       segment carried a trailing line comment had its {@code ;} appended after the {@code //} comment on a later pass,
+ *       commenting the semicolon out. The {@code ;} is now threaded before the comment. Guarded by
+ *       {@code method-chain-final-segment-trailing-comment}.
  * </ul>
  *
  * <p><strong>Not a finding (formerly mis-labeled): {@code formatter-pragma-spacing}.</strong> Earlier this was excluded
@@ -122,20 +126,15 @@ final class IdempotencePropertyTest {
 
     /**
      * Perturbed inputs whose formatting exposes a genuine formatter defect — non-reparseable output, dropped program
-     * elements, or failure to reach a fixed point within {@value #CONVERGENCE_PASSES} passes (a non-terminating reformat
-     * loop, or oscillation into malformed output) — kept out of the green corpus and reported as findings rather than
-     * masked. See the class Javadoc for the per-entry diagnosis. Each entry is a corpus display name.
+     * elements, or failure to reach a fixed point within {@value #CONVERGENCE_PASSES} passes — that should be kept out
+     * of the asserted corpus and reported rather than masked. Each entry is a corpus display name.
+     *
+     * <p>This set is currently <strong>empty</strong>: every finding the property originally surfaced has been fixed in
+     * the formatter and is now regression-guarded by a dedicated golden fixture (see the class Javadoc). The hook is
+     * kept so a future genuine non-termination/data-loss finding can be parked here with an honest diagnosis instead of
+     * silently breaking the suite.
      */
-    private static final Set<String> EXCLUDED_AS_FINDINGS = Set.of(
-            "correctness-data-loss @ collapsed-whitespace",
-            "enum-declaration-layout @ collapsed-whitespace",
-            "comment-preservation-block-end-comments @ collapsed-whitespace",
-            "comment-preservation-module-declaration @ collapsed-whitespace",
-            "comment-preservation-module-declaration @ expanded-whitespace",
-            "comment-preservation-method-chain-segments @ collapsed-whitespace",
-            "comment-preservation-method-chain-segments @ expanded-whitespace",
-            "block-lambda-arrow-parens-always @ collapsed-whitespace",
-            "block-lambda-arrow-parens-avoid @ collapsed-whitespace");
+    private static final Set<String> EXCLUDED_AS_FINDINGS = Set.of();
 
     /**
      * Over the inputs a developer actually feeds the formatter — every verbatim golden fixture input and every

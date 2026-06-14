@@ -230,19 +230,31 @@ on by default** in `Frmtr.format`. Intended usage:
 > preserves intentional source shape, so two differently-shaped equivalent inputs may format differently, and asserting
 > otherwise would be wrong.
 >
-> **Findings surfaced by the broadened corpus (excluded from the green corpus, not masked).** Eight perturbed shapes
-> exposed real formatter defects and are listed in the test's `EXCLUDED_AS_FINDINGS` with a per-entry diagnosis.
-> *Non-reparseable output:* `correctness-data-loss`, `enum-declaration-layout`, and
-> `comment-preservation-block-end-comments` (collapsed) format to output that does **not re-parse** — a comment/annotation
-> between enum constants or a trailing comment on a record component is mis-placed and a required separator dropped (the
-> enum-separator data-loss class this whole effort targets, reproduced on re-whitespaced input). *Dropped elements:*
-> `comment-preservation-module-declaration` (collapsed and expanded) drops **every `requires`/`uses` directive**,
-> formatting the module to an empty body (caught by Layer 1 even though the empty module parses). *Non-convergence:*
-> `comment-preservation-method-chain-segments` (collapsed and expanded) **never reaches a fixed point** — each pass grows
-> the output ~12-16 characters in a non-terminating reformat loop; `block-lambda-arrow-parens-always` and
-> `block-lambda-arrow-parens-avoid` (collapsed) format once cleanly but the *second* pass produces source that no longer
-> re-parses, so they oscillate into malformed output rather than settling. These are genuine bugs to fix, tracked here
-> rather than forced green.
+> **Findings surfaced by the broadened corpus — all fixed and regression-guarded.** The broadened corpus surfaced eight
+> perturbed shapes (≈5 root-cause clusters) that exposed real formatter defects, originally parked in the test's
+> `EXCLUDED_AS_FINDINGS` with a per-entry diagnosis. They were genuine bugs, not perturbation artifacts, and have **all
+> since been fixed**; `EXCLUDED_AS_FINDINGS` is now empty and every perturbed input is in the asserted corpus. Each fix
+> is pinned by a dedicated golden fixture:
+>
+> - *Enum-separator / parameter-comment data loss (non-reparseable):* `correctness-data-loss`, `enum-declaration-layout`,
+>   `comment-preservation-block-end-comments` (collapsed) dropped a required separator — a last enum constant's trailing
+>   line comment swallowed the terminating `;`/`,`; an enum constant comment sharing the enclosing class's opening-brace
+>   line was mis-attributed to the brace (dropping the constant's comma); and a parameter's leading block comment was
+>   misread as empty parentheses. Fixed in `EnumDeclarationPrinter`, `MemberBlockPrinter`, and
+>   `CommentedMethodSignaturePrinter`; guarded by `enum-constant-trailing-comment-before-semicolon`,
+>   `enum-constant-comment-on-brace-line`, and `parameter-leading-block-comment-collapsed`.
+> - *Module directive data loss / malformed module:* `comment-preservation-module-declaration` (collapsed and expanded)
+>   dropped **every `requires`/`uses` directive** (collapsed) or duplicated the `module` keyword (expanded) because the
+>   commented-module reconstruction split the body by source line. `CommentedModulePrinter` now splits by directive `;`;
+>   guarded by `comment-preservation-module-single-line`.
+> - *Non-terminating reformat loop:* `comment-preservation-method-chain-segments` (collapsed and expanded) grew the
+>   output ~12-16 characters every pass because blank-line-separated leading comments routed a method through the raw
+>   signature fallback, which re-indented preserved blank lines deeper each pass. Fixed in
+>   `CommentedMethodSignaturePrinter`; guarded by `method-leading-comments-blank-separated`.
+> - *Oscillation into malformed output:* `block-lambda-arrow-parens-always`/`block-lambda-arrow-parens-avoid` (collapsed)
+>   appended a method-chain statement's `;` after the final segment's `//` comment on a later pass, commenting it out.
+>   `StatementPrinter` now threads the `;` before the comment; guarded by
+>   `method-chain-final-segment-trailing-comment`.
 >
 > **Not a finding (corrected).** `formatter-pragma-spacing` (collapsed) was previously listed as a finding for moving a
 > line-based `// @formatter:on` onto a shared line. That is a **perturbation artifact**, not a formatter bug: a

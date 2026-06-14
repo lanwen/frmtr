@@ -120,29 +120,6 @@ final class FrmtrTest {
     }
 
     @Test
-    void expressionLambdaBreaksWideRelationalBinaryBody() {
-        FormatterOptions options = FormatterOptions.defaults().withLineWidth(120);
-        String source = """
-                class Demo {
-                    boolean any(List<Item> items) {
-                        return items.stream().anyMatch(item -> currentIndentedWidth.applyAsInt(declarationPrefix + item.getNameAsString()) > options.lineWidth());
-                    }
-                }
-                """;
-
-        String formatted = Frmtr.format(source, options);
-
-        assertThat(formatted).contains(
-            "                item -> currentIndentedWidth.applyAsInt(\n"
-                + "                    declarationPrefix + item.getNameAsString()\n"
-                + "                ) > options.lineWidth()\n"
-        );
-        assertThat(formatted.lines()).allSatisfy(
-            line -> assertThat(line.length()).isLessThanOrEqualTo(options.lineWidth())
-        );
-    }
-
-    @Test
     void debugDocBuildsTreeWhenFormatWouldSkipForMissingPragma() {
         FormatterOptions requirePragma = TestFormatterOptions.withPragmaRequirement(
             80,

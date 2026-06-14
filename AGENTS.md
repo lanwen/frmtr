@@ -10,6 +10,9 @@
 - Use AssertJ for assertions.
 - Do not add tests that only prove properties can be assigned or copied. Tests should exercise behavior with meaningful
   logic behind it.
+- Formatter output regressions should be covered as `frmtr-core/src/test/resources/format/**` fixtures, not inline
+  `Frmtr.format(...)` assertions. Keep inline tests for API/debug/error behavior or helper contracts that cannot be
+  represented as a full-file formatter fixture.
 
 ## Formatter helper comments
 

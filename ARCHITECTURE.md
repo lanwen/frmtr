@@ -236,10 +236,10 @@ equivalent docs. Method-call chain doc assembly is split from ordinary method-ca
 planning, root promotion, final-segment tails, and chain comments stay in the chain helper. Record headers try the full
 header first, then open component lists before moving implemented types to their own continuation. Expression-lambda
 argument planning is split into `ExpressionLambdaArgumentLayout` so call and chain printers share one typed width plan
-instead of rebuilding partial lambda text independently. Broken expression-lambda bodies keep an over-wide binary's
-method-call operand attached to the lambda opener when splitting that call is enough, keep a compact binary tail on the
-call's closing line when it fits, then fall back to the shared binary continuation renderer so the body cannot stay flat
-past the configured line width.
+instead of rebuilding partial lambda text independently. Broken expression-lambda bodies and source-multiline expression
+lambda arguments keep an over-wide binary's method-call operand attached to the lambda opener when splitting that call is
+enough, keep a compact binary tail on the call's closing line when it fits, then fall back to the shared binary
+continuation renderer so the body cannot stay flat past the configured line width.
 
 ## CLI
 

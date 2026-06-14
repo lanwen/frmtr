@@ -130,14 +130,11 @@ final class ExpressionLambdaArgumentLayout {
      * Renders a binary lambda body as {@code parameters -> methodCall(} when splitting that call operand is enough.
      */
     Optional<Doc> binaryMethodCallBodyWithOpener(String parameters, BinaryExpr binaryExpr) {
-        if (
-            !(binaryExpr.getLeft() instanceof MethodCallExpr methodCall)
-            || !binaryExpr.getAllContainedComments().isEmpty()
-            || methodCall.getArguments().isEmpty()
-            || methodCall.getScope().filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n")).isPresent()
-        ) {
+        Optional<MethodCallExpr> methodCallCandidate = binaryMethodCallLeftOperand(binaryExpr);
+        if (methodCallCandidate.isEmpty()) {
             return Optional.empty();
         }
+        MethodCallExpr methodCall = methodCallCandidate.orElseThrow();
         String opener = methodCallPrefix(methodCall) + "(";
         String firstLine = parameters + " -> " + opener;
         if (
@@ -686,6 +683,9 @@ final class ExpressionLambdaArgumentLayout {
         if (logicalBinaryBody(body).isPresent()) {
             return true;
         }
+        if (sourceMultilineBinaryMethodCallBody(body)) {
+            return true;
+        }
         if (body instanceof LambdaExpr lambdaExpr && lambdaExpr.getExpressionBody().isPresent()) {
             return huggableBody(lambdaExpr.getExpressionBody().orElseThrow());
         }
@@ -722,6 +722,9 @@ final class ExpressionLambdaArgumentLayout {
                 if (logicalBinaryBody(body).isPresent()) {
                     return Optional.of(body);
                 }
+                if (sourceMultilineBinaryMethodCallBody(body)) {
+                    return Optional.of(body);
+                }
                 if (body instanceof LambdaExpr nested) {
                     return huggableBodyExpression(nested);
                 }
@@ -753,6 +756,25 @@ final class ExpressionLambdaArgumentLayout {
             + expression.getTypeArguments().map(typeArguments -> "<" + compactJoin.apply(typeArguments) + ">").orElse("")
             + expression.getNameAsString()
         );
+    }
+
+    private boolean sourceMultilineBinaryMethodCallBody(Expression body) {
+        return binaryMethodCallLeftOperand(body)
+            .filter(methodCall -> rawSource.rawWithoutOwnComment(methodCall).contains("\n"))
+            .isPresent();
+    }
+
+    private Optional<MethodCallExpr> binaryMethodCallLeftOperand(Expression body) {
+        if (
+            !(body instanceof BinaryExpr binaryExpr)
+            || !(binaryExpr.getLeft() instanceof MethodCallExpr methodCall)
+            || !binaryExpr.getAllContainedComments().isEmpty()
+            || methodCall.getArguments().isEmpty()
+            || methodCall.getScope().filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n")).isPresent()
+        ) {
+            return Optional.empty();
+        }
+        return Optional.of(methodCall);
     }
 
     private String methodCallSelector(MethodCallExpr expression) {

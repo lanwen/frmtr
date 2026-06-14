@@ -31,6 +31,11 @@ New formatter rules should include golden coverage plus idempotence and reparse 
 rules should prefer fixture coverage that exercises representative source shape, comments, source spacing, and relevant
 formatter options instead of asserting only a narrow printer helper result.
 
+Formatter output regressions should normally be added as `format/**` fixtures instead of inline `Frmtr.format(...)`
+assertions. The fixture path keeps output expectations next to source shape and automatically exercises golden output,
+one-pass idempotence, and parse stability through `FrmtrTest`. Inline formatter tests are reserved for public API,
+debug/explain/error behavior, or narrow helper contracts that cannot be expressed as a full-file fixture.
+
 ## Semantic-Preservation Property Checks
 
 Beyond the curated golden fixtures, two layers of the semantic-preservation safety net

@@ -34,8 +34,8 @@ class DataLossCases {
             auth,
             "name"
         ) // restart note
-            .withProperty("retry", "60s")
-            .withMinimumRunningDuration(Duration.ZERO);
+                .withProperty("retry", "60s")
+                .withMinimumRunningDuration(Duration.ZERO);
     }
 
     String pick(String value) {

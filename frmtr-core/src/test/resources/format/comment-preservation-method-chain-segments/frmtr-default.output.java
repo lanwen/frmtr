@@ -16,22 +16,22 @@ class MethodChainSegmentCommentSample {
 
     void configure(Container container) {
         container
-            .withName("demo")
-            .withCommand("one", "two")
-            // keep segment note one
-            // keep segment note two
-            .waitingFor(new WaitStrategy())
-            .withLabel("k", "v");
+                .withName("demo")
+                .withCommand("one", "two")
+                // keep segment note one
+                // keep segment note two
+                .waitingFor(new WaitStrategy())
+                .withLabel("k", "v");
     }
 
     void waitForSignal() {
         StepRunner.begin()
-            .interval(tick)
-            // keep later segment note
-            .deadline(limit)
-            .verify(() -> {
-                assertReady();
-            });
+                .interval(tick)
+                // keep later segment note
+                .deadline(limit)
+                .verify(() -> {
+                    assertReady();
+                });
     }
 
     void returnsSorted(MockServer server, List<Member> members) {

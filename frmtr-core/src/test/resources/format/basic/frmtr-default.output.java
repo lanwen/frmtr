@@ -36,15 +36,15 @@ class IndentationFixture {
             customerAccountPreferenceMapperWithExternalAuditSnapshot,
             customerAccountPreferenceMapperWithExternalAuditSnapshot
         )
-            .isEqualTo()
-            .anotherInvocation(
-                customerAccountPreferenceMapperWithExternalAuditSnapshot,
-                customerAccountPreferenceMapperWithExternalAuditSnapshot,
-                customerAccountPreferenceMapperWithExternalAuditSnapshot
-            );
+                .isEqualTo()
+                .anotherInvocation(
+                    customerAccountPreferenceMapperWithExternalAuditSnapshot,
+                    customerAccountPreferenceMapperWithExternalAuditSnapshot,
+                    customerAccountPreferenceMapperWithExternalAuditSnapshot
+                );
 
         assertionCollector
-            .assertThat(customerAccountPreferenceMapperWithExternalAuditSnapshot)
-            .isEqualTo();
+                .assertThat(customerAccountPreferenceMapperWithExternalAuditSnapshot)
+                .isEqualTo();
     }
 }

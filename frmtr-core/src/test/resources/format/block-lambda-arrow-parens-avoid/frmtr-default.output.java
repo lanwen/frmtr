@@ -55,36 +55,36 @@ public class Lambda {
 
     public void chainCallWithLambda() {
         Stream.of(1, 2)
-            .map(n -> {
-                // testing method
-                return n * 2;
-            })
-            .collect(Collectors.toList());
+                .map(n -> {
+                    // testing method
+                    return n * 2;
+                })
+                .collect(Collectors.toList());
     }
 
     public void lambdaWithLongListOfParameters() {
         final List<Integer> values = Stream.of(1, 2)
-            .map(
-                (
-                    veryLongCustomerFilterParameter,
-                    veryLongCustomerFilterParameter,
-                    veryLongCustomerFilterParameter,
-                    veryLongCustomerFilterParameter,
-                    veryLongCustomerFilterParameter,
-                    veryLongCustomerFilterParameter
-                ) -> {
-                    // testing method
-                    return n * 2;
-                }
-            )
-            .collect(Collectors.toList());
+                .map(
+                    (
+                        veryLongCustomerFilterParameter,
+                        veryLongCustomerFilterParameter,
+                        veryLongCustomerFilterParameter,
+                        veryLongCustomerFilterParameter,
+                        veryLongCustomerFilterParameter,
+                        veryLongCustomerFilterParameter
+                    ) -> {
+                        // testing method
+                        return n * 2;
+                    }
+                )
+                .collect(Collectors.toList());
 
         final List<Integer> values = Stream.of(1, 2)
-            .map((veryLongCustomerFilterParameter, veryLongCustomerFilterParameter, truncatedCustomerFilterParam) -> {
-                // testing method
-                return n * 2;
-            })
-            .collect(Collectors.toList());
+                .map((veryLongCustomerFilterParameter, veryLongCustomerFilterParameter, truncatedCustomerFilterParam) -> {
+                    // testing method
+                    return n * 2;
+                })
+                .collect(Collectors.toList());
     }
 
     public void shortLambdaAssignation() {
@@ -138,7 +138,7 @@ public class Lambda {
     }
 
     private static <T extends Group> Function<Constructor<?>, T> createInstance(
-        Group entity
+            Group entity
     ) {
         return ctor ->
             Try.of(a, () -> {
@@ -414,26 +414,26 @@ public class Lambda {
     void lambdaWithLeadingComments() {
         System.out.println(
             List.of(1, 2, 3)
-                .stream()
-                .map(
-                    // a very long comment which explains the beatifullness of multiplication by 2
-                    // yes this is very important
-                    v -> v * 2
-                )
-                .collect(Collectors.summingInt(v -> v))
+                    .stream()
+                    .map(
+                        // a very long comment which explains the beatifullness of multiplication by 2
+                        // yes this is very important
+                        v -> v * 2
+                    )
+                    .collect(Collectors.summingInt(v -> v))
         );
     }
 
     void lambdaWithTrailingComments() {
         System.out.println(
             List.of(1, 2, 3)
-                .stream()
-                .map(
-                    v -> v * 2
-                    // a very long comment which explains the beatifullness of multiplication by 2
-                    // yes this is very important
-                )
-                .collect(Collectors.summingInt(v -> v))
+                    .stream()
+                    .map(
+                        v -> v * 2
+                        // a very long comment which explains the beatifullness of multiplication by 2
+                        // yes this is very important
+                    )
+                    .collect(Collectors.summingInt(v -> v))
         );
     }
 

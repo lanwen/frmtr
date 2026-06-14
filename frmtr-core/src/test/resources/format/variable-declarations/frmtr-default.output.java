@@ -156,14 +156,14 @@ public class Variables {
         );
 
         Object.test.creation thisObject5 = classWithName
-            .invocationOne(firstArgumentWithAVeryVeryVeryVeryLongName, secondArgument, thirdArgument)
-            .attributeOne.attributeTwo.invocationTwo(firstArgument, secondArgument)
-            .attributeThree.invocationThree();
+                .invocationOne(firstArgumentWithAVeryVeryVeryVeryLongName, secondArgument, thirdArgument)
+                .attributeOne.attributeTwo.invocationTwo(firstArgument, secondArgument)
+                .attributeThree.invocationThree();
 
         Object.test.creation thisObject6 = classWithName
-            .invocationOne(firstArgument, secondArgument, thirdArgument)
-            .attributeOne.attributeTwo.invocationTwo(firstArgument, secondArgument)
-            .attributeThree.invocationThree();
+                .invocationOne(firstArgument, secondArgument, thirdArgument)
+                .attributeOne.attributeTwo.invocationTwo(firstArgument, secondArgument)
+                .attributeThree.invocationThree();
     }
 
     public void breakMultipleMethods() {
@@ -185,20 +185,20 @@ public class Variables {
         Object longInvoiceProjectionForIllustrativePurposes = new Object();
 
         Object longInvoiceProjectionForIllustrativePurposes = new Object()
-            .other()
-            .methods();
+                .other()
+                .methods();
 
         Object longInvoiceProjectionForIllustrativePurposes = new Object()
-            .a()
-            .number()
-            .of()
-            .other()
-            .methods()
-            .that()
-            .should()
-            .cause()
-            .a()
-            .wrap();
+                .a()
+                .number()
+                .of()
+                .other()
+                .methods()
+                .that()
+                .should()
+                .cause()
+                .a()
+                .wrap();
 
         Object[] longInvoiceProjectionForIllustrativePurposes = new Object[10];
 
@@ -241,11 +241,14 @@ public class Variables {
             & ExtremelyLongAndObnoxiousInterfaceName
             & ExtremelyLongAndObnoxiousInterfaceName
     > void breakOnTypeArguments(
-        ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName> parameter,
-        ExtremelyLongAndObnoxiousClassName<
-            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName, ExtremelyLongAndObnoxiousClassName>,
-            ExtremelyLongAndObnoxiousClassName
-        > parameter
+            ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName> parameter,
+            ExtremelyLongAndObnoxiousClassName<
+                ExtremelyLongAndObnoxiousClassName<
+                    ExtremelyLongAndObnoxiousClassName,
+                    ExtremelyLongAndObnoxiousClassName
+                >,
+                ExtremelyLongAndObnoxiousClassName
+            > parameter
     ) {
         ExtremelyLongAndObnoxiousClassName<ExtremelyLongAndObnoxiousClassName> variable;
 

@@ -15,14 +15,16 @@ class MethodChainRootArgumentsSample {
             )
         );
         awaitMessage(broadcastProbe)
-            .replyTo()
-            .tell(
-                new EntryAvailabilityUpdate(new ManagedSubject("entry-0", ManagedSubject.routeTo("localhost", 2200)))
-            );
+                .replyTo()
+                .tell(
+                    new EntryAvailabilityUpdate(
+                        new ManagedSubject("entry-0", ManagedSubject.routeTo("localhost", 2200))
+                    )
+                );
         this.mark("alpha")
-            .withLabel("beta")
-            .withPorts(2001, 2002)
-            .complete();
+                .withLabel("beta")
+                .withPorts(2001, 2002)
+                .complete();
         await().until(
             () -> {
                 var entry = receive(next);

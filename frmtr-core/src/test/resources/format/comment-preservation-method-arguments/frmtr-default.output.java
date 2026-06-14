@@ -61,8 +61,8 @@ class MethodArgumentCommentSample {
             ),
             // Seed transient projection state
             cache.deleteByKey(ACTIVE_STAGE_KEY)
-                .then(cache.recordValue(ACTIVE_STAGE_KEY, "alpha:latest"))
-                .then(cache.recordValue(ACTIVE_STAGE_KEY, "beta:stable"))
+                    .then(cache.recordValue(ACTIVE_STAGE_KEY, "alpha:latest"))
+                    .then(cache.recordValue(ACTIVE_STAGE_KEY, "beta:stable"))
         ).await(MaxWait.seconds(10));
     }
 }

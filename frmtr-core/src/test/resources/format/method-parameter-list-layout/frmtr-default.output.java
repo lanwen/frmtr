@@ -9,12 +9,12 @@ public class MethodParameterLists {
     public void three(String accountId, Integer retryCount, String region) {}
 
     public void longListOfParametersThatShouldBreak(
-        String accountId,
-        Integer retryCount,
-        String region,
-        Integer batchSize,
-        String owner,
-        Integer shardCount
+            String accountId,
+            Integer retryCount,
+            String region,
+            Integer batchSize,
+            String owner,
+            Integer shardCount
     ) {}
 
     void lastParameterDotDotDot(String message, String... labels) {}

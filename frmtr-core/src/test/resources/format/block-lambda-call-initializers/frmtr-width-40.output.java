@@ -1,19 +1,19 @@
 class BlockLambdaCallInitializersSample {
 
     void selectEntries(
-        Request request,
-        EntryList entries,
-        Subject subject
+            Request request,
+            EntryList entries,
+            Subject subject
     ) {
         var partitioned =
             entries.partition(entry -> {
                 return (
                     request.mode() == SelectionMode.ANY
                     && entry
-                        .state()
-                        .shouldPrioritize(
-                            subject.owner()
-                        )
+                            .state()
+                            .shouldPrioritize(
+                                subject.owner()
+                            )
                 );
             });
         var selected =
@@ -27,9 +27,9 @@ class BlockLambdaCallInitializersSample {
     }
 
     void selectEntryPairs(
-        Request request,
-        EntryList entries,
-        Subject subject
+            Request request,
+            EntryList entries,
+            Subject subject
     ) {
         var partitioned =
             entries.partition(
@@ -37,10 +37,10 @@ class BlockLambdaCallInitializersSample {
                     return (
                         request.mode() == SelectionMode.ANY
                         && entry
-                            .state()
-                            .shouldPrioritize(
-                                subject.owner()
-                            )
+                                .state()
+                                .shouldPrioritize(
+                                    subject.owner()
+                                )
                     );
                 }
             );
@@ -53,9 +53,9 @@ class BlockLambdaCallInitializersSample {
     }
 
     void selectEntryTriples(
-        Request request,
-        EntryList entries,
-        Subject subject
+            Request request,
+            EntryList entries,
+            Subject subject
     ) {
         var partitioned =
             entries.partition(
@@ -63,12 +63,12 @@ class BlockLambdaCallInitializersSample {
                     return (
                         request.mode() == SelectionMode.ANY
                         && entry
-                            .state()
-                            .shouldPrioritize(
-                                subject.owner(
-                                    cursor
+                                .state()
+                                .shouldPrioritize(
+                                    subject.owner(
+                                        cursor
+                                    )
                                 )
-                            )
                     );
                 }
             );
@@ -81,22 +81,22 @@ class BlockLambdaCallInitializersSample {
     }
 
     void selectEntriesWithLongCallPrefix(
-        Request request,
-        EntryList entries,
-        Subject subject
+            Request request,
+            EntryList entries,
+            Subject subject
     ) {
         var partitioned =
             entryCollectionWithExtremelyLongFormatterFixturePrefixBeforeLambdaArgumentFallback
-                .partition(entry -> {
-                    return (
-                        request.mode() == SelectionMode.ANY
-                        && entry
-                            .state()
-                            .shouldPrioritize(
-                                subject.owner()
-                            )
-                    );
-                });
+                    .partition(entry -> {
+                        return (
+                            request.mode() == SelectionMode.ANY
+                            && entry
+                                    .state()
+                                    .shouldPrioritize(
+                                        subject.owner()
+                                    )
+                        );
+                    });
         publishSelection(
             subject,
             request.mode(),

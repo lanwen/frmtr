@@ -100,8 +100,8 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
      *     or if exactly one of {@code rowKeys} or {@code columnKeys} is empty.
      */
     public static <R, C, V> ArrayTable<R, C, V> create(
-        Iterable<? extends R> rowKeys,
-        Iterable<? extends C> columnKeys
+            Iterable<? extends R> rowKeys,
+            Iterable<? extends C> columnKeys
     ) {
         return new ArrayTable<>(rowKeys, columnKeys);
     }
@@ -814,14 +814,16 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
 
         // Get all the countryList
         restCountryMockMvc.perform(get("/api/countries?sort=id,desc"))
-            .andExpect(status().isOk())
-            .andExpect(content().contentType(MediaType.APPLICATION_JSON_UTF8_VALUE))
-            .andExpect(jsonPath("$.[*].id").value(hasItem(country.getId().intValue())))
-            .andExpect(jsonPath("$.[*].isoCode").value(hasItem(DEFAULT_ISO_CODE.toString())))
-            .andExpect(jsonPath("$.[*].label").value(hasItem(DEFAULT_LABEL.toString())))
-            .andExpect(jsonPath("$.[*].display").value(hasItem(DEFAULT_DISPLAY.booleanValue())))
-            .andExpect(
-                jsonPath("$.[*].internationalDialingCode").value(hasItem(DEFAULT_INTERNATIONAL_DIALING_CODE.toString()))
-            );
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON_UTF8_VALUE))
+                .andExpect(jsonPath("$.[*].id").value(hasItem(country.getId().intValue())))
+                .andExpect(jsonPath("$.[*].isoCode").value(hasItem(DEFAULT_ISO_CODE.toString())))
+                .andExpect(jsonPath("$.[*].label").value(hasItem(DEFAULT_LABEL.toString())))
+                .andExpect(jsonPath("$.[*].display").value(hasItem(DEFAULT_DISPLAY.booleanValue())))
+                .andExpect(
+                    jsonPath("$.[*].internationalDialingCode").value(
+                        hasItem(DEFAULT_INTERNATIONAL_DIALING_CODE.toString())
+                    )
+                );
     }
 }

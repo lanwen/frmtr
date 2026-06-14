@@ -37,12 +37,12 @@ class Demo {
             // after last constructor arg
         );
         var chained = receiver
-            .step(
-                // before first chain arg
-                alpha(),
-                beta()
-                // after last chain arg
-            )
-            .finish();
+                .step(
+                    // before first chain arg
+                    alpha(),
+                    beta()
+                    // after last chain arg
+                )
+                .finish();
     }
 }

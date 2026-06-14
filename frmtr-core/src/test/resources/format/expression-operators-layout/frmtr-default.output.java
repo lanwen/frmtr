@@ -200,14 +200,14 @@ public class ExpressionOperatorSamples {
 
     public void staticMethodInvocationWithMultipleChainedMethodInvocation() {
         List.of(firstProjectionArgument, firstProjectionArgument)
-            .chained(firstProjectionArgument, firstProjectionArgument)
-            .another();
+                .chained(firstProjectionArgument, firstProjectionArgument)
+                .another();
     }
 
     public void nonStaticMultipleChainedMethodInvocations() {
         registry
-            .of(firstProjectionArgument, firstProjectionArgument)
-            .chained(firstProjectionArgument, firstProjectionArgument);
+                .of(firstProjectionArgument, firstProjectionArgument)
+                .chained(firstProjectionArgument, firstProjectionArgument);
     }
 
     public void typeExpressionsInFqnParts() {

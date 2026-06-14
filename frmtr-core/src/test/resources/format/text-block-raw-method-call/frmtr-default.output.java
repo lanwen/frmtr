@@ -29,8 +29,8 @@ final class TextBlockRawMethodCall {
 
     void compare(String csv) {
         assertThat(csv)
-            .isNotNull()
-            .isEqualTo("""
+                .isNotNull()
+                .isEqualTo("""
                 "day","version","total"
                 """);
     }

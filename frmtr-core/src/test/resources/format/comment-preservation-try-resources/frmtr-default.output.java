@@ -6,10 +6,10 @@ class TryResourceCommentSample {
             // keep resource note one
             // keep resource note two
             Zone zone = new Zone(service, auth)
-                // keep chained resource note one
-                // keep chained resource note two
-                .withProperty("retry", "60s")
-                .withMinimumRunningDuration(Duration.ZERO)
+                    // keep chained resource note one
+                    // keep chained resource note two
+                    .withProperty("retry", "60s")
+                    .withMinimumRunningDuration(Duration.ZERO)
         ) {
             zone.start();
         }

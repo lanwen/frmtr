@@ -2,8 +2,8 @@ class ConstructorChainRoots {
 
     void examples() {
         var three = new EndpointFactory(alpha, beta, gamma)
-            .generate("vm-1234", Instance.builder().privateDnsName("very-private-1.internal").build())
-            .blockFirst(Duration.ofSeconds(1));
+                .generate("vm-1234", Instance.builder().privateDnsName("very-private-1.internal").build())
+                .blockFirst(Duration.ofSeconds(1));
 
         var four = new EndpointFactory(
             alpha,
@@ -11,8 +11,8 @@ class ConstructorChainRoots {
             gamma,
             delta
         )
-            .generate("vm-5678", Instance.builder().privateDnsName("very-private-2.internal").build())
-            .blockFirst(Duration.ofSeconds(1));
+                .generate("vm-5678", Instance.builder().privateDnsName("very-private-2.internal").build())
+                .blockFirst(Duration.ofSeconds(1));
 
         var nested = registry.attach(
             new ChannelActor(
@@ -71,12 +71,12 @@ public class ConstructorSamples {
     }
 
     ConstructorSamples(
-        boolean enabled,
-        boolean visible,
-        boolean archived,
-        boolean locked,
-        boolean verified,
-        boolean replicated
+            boolean enabled,
+            boolean visible,
+            boolean archived,
+            boolean locked,
+            boolean verified,
+            boolean replicated
     ) {
         this();
         System.out.println("constructor with six parameters that should wrap");

@@ -1,10 +1,10 @@
 class MultilineShapes {
 
     MultilineShapes(
-        @Lookup(
-            sample.platform.transport.ConfigurationKeys.PRIMARY_STREAM_PROCESSING_CHANNEL
-        ) StreamProcessingDefinition definition,
-        Clock clock
+            @Lookup(
+                sample.platform.transport.ConfigurationKeys.PRIMARY_STREAM_PROCESSING_CHANNEL
+            ) StreamProcessingDefinition definition,
+            Clock clock
     ) {
         this.definition = definition;
         this.clock = clock;
@@ -12,11 +12,11 @@ class MultilineShapes {
 
     Object chain() {
         await()
-            .atMost(Duration.ofSeconds(5))
-            .untilAsserted(() -> verify(worker, times(2)).run());
+                .atMost(Duration.ofSeconds(5))
+                .untilAsserted(() -> verify(worker, times(2)).run());
         Key key = new KeyMaker(Curve.P_256)
-            .algorithm(Algo.ES)
-            .build();
+                .algorithm(Algo.ES)
+                .build();
         value = input == null || input.isEmpty()
             ? List.of()
             : List.copyOf(input);
@@ -30,8 +30,8 @@ class MultilineShapes {
             ? 1
             : 2;
         return pkg.sample.Widget.builder()
-            .name("demo")
-            .build();
+                .name("demo")
+                .build();
     }
 
     Object wrapper() {
@@ -47,9 +47,9 @@ class MultilineShapes {
     }
 
     public void serialize(
-        Predicate value,
-        JsonGenerator gen,
-        SerializerProvider serializers
+            Predicate value,
+            JsonGenerator gen,
+            SerializerProvider serializers
     )
         throws IOException {
         consume(value, gen, serializers);
@@ -57,8 +57,8 @@ class MultilineShapes {
 
     @Route("throws(value)")
     public Result annotated(
-        @Named(")") Predicate value,
-        Mapper mapper
+            @Named(")") Predicate value,
+            Mapper mapper
     )
         throws IOException {
         return mapper.map(value);

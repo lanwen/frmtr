@@ -27,17 +27,29 @@ import java.util.function.Predicate;
  * and trailing-comment rendering decisions from the caller.
  */
 final class CallableSignaturePrinter {
+
     private final CommentTracker comments;
+
     private final RawSource rawSource;
+
     private final FormatterOptions options;
+
     private final Function<Node, String> compact;
+
     private final Function<Node, String> compactTypeLike;
+
     private final Function<Type, Doc> typeBody;
+
     private final JavaFormatRule<AnnotationExpr> annotation;
+
     private final Function<AnnotationExpr, String> annotationFlatText;
+
     private final Function<Modifier, String> modifier;
+
     private final Predicate<Type> typeCanBreak;
+
     private final Function<Node, Doc> unattachedTrailingBlockComment;
+
     private final Function<Doc, String> commentText;
 
     CallableSignaturePrinter(
@@ -52,7 +64,8 @@ final class CallableSignaturePrinter {
             Function<Modifier, String> modifier,
             Predicate<Type> typeCanBreak,
             Function<Node, Doc> unattachedTrailingBlockComment,
-            Function<Doc, String> commentText) {
+            Function<Doc, String> commentText
+    ) {
         this.comments = comments;
         this.rawSource = rawSource;
         this.options = options;
@@ -74,13 +87,21 @@ final class CallableSignaturePrinter {
      * caller-provided force-break decision.
      */
     Doc parameters(NodeList<Parameter> parameters) {
-        return Doc.group(Doc.concat(
+        return Doc.group(
+            Doc.concat(
                 Doc.text("("),
-                Doc.indent(Doc.concat(
-                        Doc.SOFT_LINE,
-                        Doc.joinComma(parameters.stream().map(this::parameter).toList()))),
+                Doc.indent(
+                    Doc.indent(
+                        Doc.concat(
+                            Doc.SOFT_LINE,
+                            Doc.joinComma(parameters.stream().map(this::parameter).toList())
+                        )
+                    )
+                ),
                 Doc.SOFT_LINE,
-                Doc.text(")")));
+                Doc.text(")")
+            )
+        );
     }
 
     /**
@@ -104,12 +125,18 @@ final class CallableSignaturePrinter {
             return Doc.text("()");
         }
         Doc doc = Doc.concat(
-                Doc.text("("),
-                Doc.indent(Doc.concat(
+            Doc.text("("),
+            Doc.indent(
+                Doc.indent(
+                    Doc.concat(
                         forceBreak ? Doc.HARD_LINE : Doc.SOFT_LINE,
-                        Doc.joinComma(parameters))),
-                forceBreak ? Doc.HARD_LINE : Doc.SOFT_LINE,
-                Doc.text(")"));
+                        Doc.joinComma(parameters)
+                    )
+                )
+            ),
+            forceBreak ? Doc.HARD_LINE : Doc.SOFT_LINE,
+            Doc.text(")")
+        );
         return forceBreak ? doc : Doc.group(doc);
     }
 
@@ -165,15 +192,23 @@ final class CallableSignaturePrinter {
      * Prints declaration type parameters using a grouped soft-line layout.
      */
     Doc typeParameters(NodeList<TypeParameter> typeParameters) {
-        return Doc.group(Doc.concat(
+        return Doc.group(
+            Doc.concat(
                 Doc.text("<"),
-                Doc.indent(Doc.concat(
+                Doc.indent(
+                    Doc.concat(
                         Doc.SOFT_LINE,
-                        Doc.joinComma(typeParameters.stream()
-                                .map(this::typeParameter)
-                                .toList()))),
+                        Doc.joinComma(
+                            typeParameters.stream()
+                                    .map(this::typeParameter)
+                                    .toList()
+                        )
+                    )
+                ),
                 Doc.SOFT_LINE,
-                Doc.text(">")));
+                Doc.text(">")
+            )
+        );
     }
 
     /**
@@ -184,14 +219,21 @@ final class CallableSignaturePrinter {
      */
     Doc brokenTypeParameters(NodeList<TypeParameter> typeParameters, boolean indentClosingBracket) {
         Doc parameters = Doc.concat(
-                Doc.text("<"),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), typeParameters.stream()
+            Doc.text("<"),
+            Doc.indent(
+                Doc.concat(
+                    Doc.HARD_LINE,
+                    Doc.join(
+                        Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                        typeParameters.stream()
                                 .map(this::typeParameter)
-                                .toList()))),
-                Doc.HARD_LINE,
-                Doc.text(">"));
+                                .toList()
+                    )
+                )
+            ),
+            Doc.HARD_LINE,
+            Doc.text(">")
+        );
         return indentClosingBracket ? Doc.indent(parameters) : parameters;
     }
 
@@ -201,21 +243,29 @@ final class CallableSignaturePrinter {
      */
     Doc typeParameter(TypeParameter typeParameter) {
         String flat = compactTypeLike.apply(typeParameter);
-        if (!typeParameter.getAnnotations().isEmpty() || typeParameter.getTypeBound().isEmpty() || flat.contains("@")) {
+        if (
+            !typeParameter.getAnnotations().isEmpty()
+            || typeParameter.getTypeBound().isEmpty()
+            || flat.contains("@")
+        ) {
             return Doc.text(compactTypeLike.apply(typeParameter));
         }
         Doc firstBound = typeBody.apply(typeParameter.getTypeBound().get(0));
-        List<Doc> trailingBounds = typeParameter.getTypeBound().stream()
+        List<Doc> trailingBounds = typeParameter.getTypeBound()
+                .stream()
                 .skip(1)
                 .map(bound -> Doc.concat(Doc.text("& "), typeBody.apply(bound)))
                 .toList();
         if (trailingBounds.isEmpty()) {
             return Doc.group(Doc.concat(Doc.text(typeParameter.getNameAsString() + " extends "), firstBound));
         }
-        return Doc.group(Doc.concat(
+        return Doc.group(
+            Doc.concat(
                 Doc.text(typeParameter.getNameAsString() + " extends "),
                 firstBound,
-                Doc.indent(Doc.concat(Doc.LINE, Doc.join(Doc.LINE, trailingBounds)))));
+                Doc.indent(Doc.concat(Doc.LINE, Doc.join(Doc.LINE, trailingBounds)))
+            )
+        );
     }
 
     /**
@@ -228,14 +278,18 @@ final class CallableSignaturePrinter {
             List<Doc> parts = new ArrayList<>();
             parameterLeadingBlockComment(parameter).ifPresent(parts::add);
             parts.add(parameterAnnotationPrefix(parameter));
-            parameter.getModifiers().stream()
+            parameter.getModifiers()
+                    .stream()
                     .map(modifier)
                     .map(text -> Doc.text(text + " "))
                     .forEach(parts::add);
             parts.add(typeBody.apply(parameter.getType()));
             parts.add(Doc.text(" " + parameter.getNameAsString() + parameterTrailingBlockCommentText(parameter)));
-            return Doc.group(Doc.concat(
-                    parts));
+            return Doc.group(
+                Doc.concat(
+                    parts
+                )
+            );
         }
         List<Doc> prefix = new ArrayList<>();
         parameterLeadingBlockComment(parameter).ifPresent(prefix::add);
@@ -257,24 +311,35 @@ final class CallableSignaturePrinter {
             return Doc.EMPTY;
         }
         if (!parameterAnnotationSourceBreaks(parameter)) {
-            return Doc.text(parameter.getAnnotations().stream()
-                            .map(annotationFlatText)
-                            .reduce((left, right) -> left + " " + right)
-                            .orElse("")
-                    + " ");
+            return Doc.text(
+                parameter.getAnnotations()
+                        .stream()
+                        .map(annotationFlatText)
+                        .reduce((left, right) -> left + " " + right)
+                        .orElse("")
+                    + " "
+            );
         }
         return Doc.concat(
-                Doc.join(Doc.text(" "), parameter.getAnnotations().stream()
+            Doc.join(
+                Doc.text(" "),
+                parameter.getAnnotations()
+                        .stream()
                         .map(annotation::format)
-                        .toList()),
-                Doc.text(" "));
+                        .toList()
+            ),
+            Doc.text(" ")
+        );
     }
 
     private boolean parameterAnnotationSourceBreaks(Parameter parameter) {
-        return parameter.getAnnotations().stream()
-                .flatMap(annotation -> annotation.getRange().stream())
-                .anyMatch(range -> range.begin.line < range.end.line)
-                && currentIndentedWidth(parameterFlat(parameter)) > options.lineWidth();
+        return (
+            parameter.getAnnotations()
+                    .stream()
+                    .flatMap(annotation -> annotation.getRange().stream())
+                    .anyMatch(range -> range.begin.line < range.end.line)
+            && currentIndentedWidth(parameterFlat(parameter)) > options.lineWidth()
+        );
     }
 
     private String parameterFlat(Parameter parameter) {
@@ -315,7 +380,8 @@ final class CallableSignaturePrinter {
         if (!lastCallableParameter(parameter)) {
             return Doc.EMPTY;
         }
-        return parameter.getParentNode().stream()
+        return parameter.getParentNode()
+                .stream()
                 .flatMap(parent -> parent.getAllContainedComments().stream())
                 .filter(BlockComment.class::isInstance)
                 .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(parameter, comment))
@@ -335,7 +401,8 @@ final class CallableSignaturePrinter {
                 .filter(CallableDeclaration.class::isInstance)
                 .map(CallableDeclaration.class::cast)
                 .map(declaration -> !declaration.getParameters().isEmpty()
-                        && declaration.getParameters().get(declaration.getParameters().size() - 1) == parameter)
+                        && declaration.getParameters().get(declaration.getParameters().size() - 1) == parameter
+                )
                 .orElse(false);
     }
 

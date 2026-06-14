@@ -6,31 +6,31 @@ public class MethodChainSamples {
 
     public void doSomethingNewWithComment() {
         new RequestBuilder()
-            // comment
-            .something()
-            .more();
+                // comment
+                .something()
+                .more();
 
         new RequestBuilder()
-            .something()
-            // comment
-            .more();
+                .something()
+                // comment
+                .more();
     }
 
     public void doSomethingWithComment() {
         Object
-            // comment
-            .something()
-            .more();
+                // comment
+                .something()
+                .more();
 
         java.Object
-            // comment
-            .something()
-            .more();
+                // comment
+                .something()
+                .more();
 
         java.enterpriseCustomerProvisioningServiceNamespace.Object
-            // comment
-            .something()
-            .more();
+                // comment
+                .something()
+                .more();
 
         java.enterpriseCustomerProvisioningServiceNamespace.Object.something().more();
 
@@ -39,62 +39,62 @@ public class MethodChainSamples {
         java.enterpriseCustomerProvisioningServiceNamespace.Object.something().more();
 
         Object.something()
-            // comment
-            .more();
+                // comment
+                .more();
 
         enterpriseCustomerProvisioningServiceNamespace.java
-            // comment
-            .util()
-            .java.java();
+                // comment
+                .util()
+                .java.java();
 
         enterpriseCustomerProvisioningServiceNamespace.java.util().java.java();
 
         enterpriseCustomerProvisioningServiceNamespace.java
-            /* comment */
-            .util()
-            .java.java();
+                /* comment */
+                .util()
+                .java.java();
 
         enterpriseCustomerProvisioningServiceNamespace.java
-            /* comment */
-            .util()
-            .java.java();
+                /* comment */
+                .util()
+                .java.java();
 
         enterpriseCustomerProvisioningServiceNamespace.java
-            /* comment */ .util()
-            .java.java();
+                /* comment */ .util()
+                .java.java();
     }
 
     public void doSomethingWithComment() {
         requestBuilder
-            // comment
-            .something()
-            .more();
+                // comment
+                .something()
+                .more();
 
         requestBuilder
-            .something()
-            // comment
-            .more();
+                .something()
+                // comment
+                .more();
     }
 
     public void doSomethingNewWithComment() {
         return new RequestBuilder()
-            /* comment */
-            .something()
-            .more();
+                /* comment */
+                .something()
+                .more();
     }
 
     public void doSomethingWithComment() {
         return RequestBuilder
-            /* comment */
-            .something()
-            .more();
+                /* comment */
+                .something()
+                .more();
     }
 
     public void doSomethingWithComment() {
         return requestBuilder
-            /* comment */
-            .something()
-            .more();
+                /* comment */
+                .something()
+                .more();
     }
 
     public void doSomethingLongNew() {
@@ -103,8 +103,8 @@ public class MethodChainSamples {
 
     public void doSomethingLongWithArgument() {
         return something()
-            .more(firstArgument, secondArgument)
-            .and(firstArgument, secondArgument, thirdArgument, fourthArgument, fifthArgument);
+                .more(firstArgument, secondArgument)
+                .and(firstArgument, secondArgument, thirdArgument, fourthArgument, fifthArgument);
     }
 
     public void doSomethingLongNew2() {
@@ -124,8 +124,8 @@ public class MethodChainSamples {
 
     public void multipleInvocationsOnNewExpression() {
         new SessionInvocation(requestIdentifierValue, requestIdentifierValue)
-            .invocation(requestIdentifierValue, requestIdentifierValue)
-            .andAnother();
+                .invocation(requestIdentifierValue, requestIdentifierValue)
+                .andAnother();
     }
 
     void methodReferences() {

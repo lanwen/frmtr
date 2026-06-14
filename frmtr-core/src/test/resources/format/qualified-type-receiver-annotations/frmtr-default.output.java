@@ -5,8 +5,8 @@ class QualifiedReceiverSamples {
 
     // Fix for https://github.com/jhipster/prettier-java/issues/444
     void process(
-        Map.@NonNull Entry<String, ProcessorConfiguration> entry,
-        @NonNull Map<String, Object> context
+            Map.@NonNull Entry<String, ProcessorConfiguration> entry,
+            @NonNull Map<String, Object> context
     ) {}
 }
 

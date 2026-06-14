@@ -263,7 +263,7 @@ final class LambdaExpressionPrinter {
         if (
             objectCreation.getArguments().isEmpty()
             || (!lambdaBodyStartsAfterHeader(lambda, objectCreation)
-                && currentIndentedWidth.applyAsInt(parameters + " -> " + compact.apply(objectCreation)) <= options.lineWidth())
+                && objectCreationLambdaBodyFits(parameters, objectCreation))
         ) {
             return Optional.empty();
         }
@@ -273,6 +273,14 @@ final class LambdaExpressionPrinter {
                 Doc.text(" -> "),
                 brokenObjectCreationRenderer.apply(objectCreation)
             )
+        );
+    }
+
+    private boolean objectCreationLambdaBodyFits(String parameters, ObjectCreationExpr objectCreation) {
+        String flat = parameters + " -> " + compact.apply(objectCreation);
+        return (
+            currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()
+            && !lambdaFlatOverflowsInBrokenArgumentList(flat)
         );
     }
 

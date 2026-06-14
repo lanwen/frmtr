@@ -266,6 +266,19 @@ final class LambdaExpressionArgumentOpener {
                 .expectSubscription();
     }
 
+    WindowRange keepsExceptionSupplierConstructorOpener(List<LedgerEntry> ledgerEntries) {
+        WindowRange range = WindowRange.empty();
+        for (LedgerEntry ledgerEntry : ledgerEntries) {
+            WindowSpan ledgerSpan = spanFor(ledgerEntry).orElseThrow(
+                () -> new IllegalArgumentException(
+                    ledgerEntry.getClass().getSimpleName() + " is missing a layout span"
+                )
+            );
+            range = range.cover(ledgerSpan);
+        }
+        return range;
+    }
+
     FlowResult fillsMissingRows(
             UsageRepository usageRepository,
             String tenantId,

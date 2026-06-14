@@ -57,8 +57,12 @@ public @interface ResourceFixtureSource {
             ParameterDeclarations parameterDeclarations,
             ExtensionContext context
         ) throws Exception {
-            MatchedResources resources = matchedResources(context);
+            MatchedResources resources =
+                matchedResources(source.glob(), context.getRequiredTestClass().getClassLoader());
             Class<?> fixtureType = fixtureParameterType(context);
+            if (fixtureType.equals(FixtureInput.class)) {
+                return fixtureInputs(resources).map(Arguments::of);
+            }
             if (fixtureType.equals(FormatFixture.class)) {
                 return formatFixtures(resources).map(Arguments::of);
             }
@@ -69,6 +73,31 @@ public @interface ResourceFixtureSource {
                 "Unsupported fixture parameter type `%s` for resource glob `%s`."
                     .formatted(fixtureType.getName(), source.glob())
             );
+        }
+
+        /**
+         * Discovers fixture inputs for {@code glob} without requiring any output companion, for callers that only
+         * consume inputs (e.g. {@code @MethodSource} property tests that perturb the source). This is the same
+         * discovery the {@link FixtureInput} {@code @ArgumentsSource} mode uses, exposed as a callable so
+         * transform-heavy tests can reuse it instead of re-walking the resource tree.
+         *
+         * <p>The glob follows the one-directory-per-fixture convention (e.g. {@code root/**}{@code /input.java}); a
+         * {@code **} segment does not match an input placed directly in the glob root, which no fixture does.
+         */
+        public static List<FixtureInput> inputs(String glob) {
+            try {
+                return fixtureInputs(matchedResources(glob, ResourceFixtureSource.class.getClassLoader())).toList();
+            } catch (IOException | URISyntaxException exception) {
+                throw new IllegalStateException(
+                    "Unable to discover fixture inputs for glob `%s`.".formatted(glob), exception);
+            }
+        }
+
+        private static Stream<FixtureInput> fixtureInputs(MatchedResources resources) {
+            return resources.inputs()
+                .stream()
+                .map(input -> new FixtureInput(fixtureName(resources, input.getParent()), readString(input)))
+                .sorted(Comparator.comparing(FixtureInput::name));
         }
 
         private Stream<FormatFixture> formatFixtures(MatchedResources resources) {
@@ -151,10 +180,10 @@ public @interface ResourceFixtureSource {
             }
         }
 
-        private MatchedResources matchedResources(ExtensionContext context) throws IOException, URISyntaxException {
-            String glob = source.glob();
+        private static MatchedResources matchedResources(String glob, ClassLoader classLoader)
+            throws IOException, URISyntaxException {
             String rootName = resourceRootName(glob);
-            Path root = resourceRoot(context, rootName);
+            Path root = resourceRoot(classLoader, rootName);
             PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + glob);
             try (var stream = Files.walk(root)) {
                 List<Path> inputs = stream.filter(Files::isRegularFile)
@@ -168,8 +197,7 @@ public @interface ResourceFixtureSource {
             }
         }
 
-        private static Path resourceRoot(ExtensionContext context, String name) throws URISyntaxException {
-            ClassLoader classLoader = context.getRequiredTestClass().getClassLoader();
+        private static Path resourceRoot(ClassLoader classLoader, String name) throws URISyntaxException {
             return Path.of(Objects.requireNonNull(classLoader.getResource(name), name).toURI())
                 .toAbsolutePath()
                 .normalize();

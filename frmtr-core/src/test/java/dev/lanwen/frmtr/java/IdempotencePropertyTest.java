@@ -10,18 +10,13 @@ import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.Providers;
 import com.github.javaparser.TokenRange;
 import com.github.javaparser.ast.CompilationUnit;
+import dev.lanwen.frmtr.FixtureInput;
 import dev.lanwen.frmtr.Frmtr;
 import dev.lanwen.frmtr.FormatterOptions;
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import dev.lanwen.frmtr.ResourceFixtureSource;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeAll;
@@ -389,21 +384,11 @@ final class IdempotencePropertyTest {
     // --- corpus sources -----------------------------------------------------------------------------------------
 
     private static List<FixtureInput> fixtureInputs() {
-        Path root = resourceRoot("format");
-        try (Stream<Path> walk = Files.walk(root)) {
-            return walk.filter(Files::isRegularFile)
-                    .filter(path -> path.getFileName().toString().equals("input.java"))
-                    .map(path -> new FixtureInput(
-                            root.relativize(path.getParent()).toString().replace('\\', '/'),
-                            readString(path)))
-                    .sorted(Comparator.comparing(FixtureInput::name))
-                    .toList();
-        } catch (IOException exception) {
-            throw new UncheckedIOException("Unable to discover fixture inputs under " + root, exception);
-        }
+        // Reuse ResourceFixtureSource's input discovery (the input-only mode that requires no output companion) so the
+        // glob walk and fixture-name convention live in one place. This test only consumes inputs — it perturbs them and
+        // asserts input-derived invariants — so it stays on @MethodSource and calls the discovery directly.
+        return ResourceFixtureSource.Provider.inputs("format/**/input.java");
     }
-
-    private record FixtureInput(String name, String source) {}
 
     /**
      * Diverse constructs not present as golden outputs — generics, lambdas, switch expressions, records, annotations,
@@ -535,23 +520,4 @@ final class IdempotencePropertyTest {
                 .setAttributeComments(true));
     }
 
-    private static String readString(Path path) {
-        try {
-            return Files.readString(path, StandardCharsets.UTF_8);
-        } catch (IOException exception) {
-            throw new UncheckedIOException("Unable to read fixture input " + path, exception);
-        }
-    }
-
-    private static Path resourceRoot(String name) {
-        try {
-            return Path.of(Objects.requireNonNull(
-                            IdempotencePropertyTest.class.getClassLoader().getResource(name), name)
-                            .toURI())
-                    .toAbsolutePath()
-                    .normalize();
-        } catch (URISyntaxException exception) {
-            throw new IllegalStateException("Unable to resolve resource root " + name, exception);
-        }
-    }
 }

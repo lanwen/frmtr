@@ -70,21 +70,24 @@ gamma
   void json() {
     // language = json
     String glossaryJson = """
-      { "glossary": { "title": "example 'glossary'" } }
-      """;
+    {"glossary":{"title": "example \'glossary\'"}}
+    """;
 
     // language=json
     String config = """
-      { "name": "example", "enabled": true, "timeout": 30 }
-      """;
+          { \t "name":"example",
+      "enabled"   :true,
+            "timeout":30}
+    """;
 
     /* language = JSON */
     String query = """
-      {
-        "sql": "SELECT * FROM users WHERE active=1 AND deleted=0",
-        "limit": 10
-      }
-      """;
+         {
+       "sql":"SELECT * FROM users \
+    WHERE active=1 \
+    AND deleted=0",
+       "limit":10}
+    """;
   }
 
   void java() {
@@ -99,29 +102,19 @@ gamma
   void html() {
     // language=html
     String html = """
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Page Title</title>
-        </head>
-        <body>
-          <h1>My First Heading</h1>
-          <p>My first paragraph.</p>
-        </body>
-      </html>
-      """;
+      <!DOCTYPE html><html><head><title>Page Title</title></head><body><h1>My First Heading</h1><p>My first paragraph.</p></body></html>
+    """;
   }
 
   void typescript() {
     // language=typescript
     String typescript = """
-      const s = `""\"`;
-      """;
+      const s = `\"""`;
+    """;
 
     // language=typescript
     String typescript = """
-      const s = ""; // "
-      """;
+      const s = ""; // \"""";
   }
 
   void unsupported() {

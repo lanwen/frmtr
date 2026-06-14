@@ -141,6 +141,29 @@ final class CallableSignaturePrinter {
     }
 
     /**
+     * Prints parameters on a continuation line while keeping the parameter text compact.
+     *
+     * <p>This is used when a flat signature only overflows because a following clause such as {@code throws} needs room,
+     * and the parameter list itself still fits as one continuation line.
+     */
+    Doc compactContinuationParameters(CallableDeclaration<?> declaration) {
+        String parameters = callableParameterText(declaration);
+        if (parameters.isEmpty()) {
+            return Doc.text("()");
+        }
+        return Doc.concat(
+            Doc.text("("),
+            Doc.indent(Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(parameters)))),
+            Doc.HARD_LINE,
+            Doc.text(")")
+        );
+    }
+
+    boolean parametersFitOnContinuation(CallableDeclaration<?> declaration) {
+        return currentIndentedWidth(options.indentUnit() + callableParameterText(declaration)) <= options.lineWidth();
+    }
+
+    /**
      * Prints a receiver parameter as one compact signature item.
      */
     Doc receiverParameter(ReceiverParameter parameter) {

@@ -31,11 +31,17 @@ import java.util.function.Function;
  * and {@code frmtr-core/src/test/resources/format/record-component-spacing/frmtr-default.output.java}.
  */
 final class ConstructorDeclarationPrinter {
+
     private final CallableSignaturePrinter callableSignatures;
+
     private final Function<NodeWithAnnotations<?>, Doc> annotations;
+
     private final Function<NodeWithModifiers<?>, String> modifiers;
+
     private final Function<List<? extends Node>, String> compactJoin;
+
     private final ThrowsClauseRenderer throwsClause;
+
     private final Function<BlockStmt, Doc> block;
 
     ConstructorDeclarationPrinter(
@@ -44,7 +50,8 @@ final class ConstructorDeclarationPrinter {
             Function<NodeWithModifiers<?>, String> modifiers,
             Function<List<? extends Node>, String> compactJoin,
             ThrowsClauseRenderer throwsClause,
-            Function<BlockStmt, Doc> block) {
+            Function<BlockStmt, Doc> block
+    ) {
         this.callableSignatures = callableSignatures;
         this.annotations = annotations;
         this.modifiers = modifiers;
@@ -68,11 +75,23 @@ final class ConstructorDeclarationPrinter {
         }
         prefix += declaration.getNameAsString();
         docs.add(Doc.text(declaration.getNameAsString()));
-        docs.add(callableSignatures.parameters(
-                declaration,
-                callableSignatures.parametersBreak(prefix, declaration, " {}")));
+        boolean parametersBreak = callableSignatures.parametersBreak(
+            prefix,
+            declaration,
+            constructorParameterSuffix(declaration)
+        );
+        docs.add(parameters(declaration, parametersBreak));
         if (!declaration.getThrownExceptions().isEmpty()) {
-            docs.add(throwsClause.render(prefix, declaration.getParameters(), declaration.getThrownExceptions(), " {"));
+            docs.add(
+                throwsClause.render(
+                    prefix,
+                    declaration.getParameters(),
+                    declaration.getThrownExceptions(),
+                    " {",
+                    false,
+                    parametersBreak
+                )
+            );
         }
         docs.add(Doc.text(" "));
         docs.add(block.apply(declaration.getBody()));
@@ -96,11 +115,27 @@ final class ConstructorDeclarationPrinter {
         prefix += declaration.getNameAsString();
         docs.add(Doc.text(declaration.getNameAsString()));
         if (!declaration.getThrownExceptions().isEmpty()) {
-            docs.add(throwsClause.render(prefix, NodeList.nodeList(), declaration.getThrownExceptions(), " {"));
+            docs.add(
+                throwsClause.render(prefix, NodeList.nodeList(), declaration.getThrownExceptions(), " {", false, false)
+            );
         }
         docs.add(Doc.text(" "));
         docs.add(block.apply(declaration.getBody()));
         return Doc.concat(docs);
+    }
+
+    private String constructorParameterSuffix(ConstructorDeclaration declaration) {
+        if (declaration.getThrownExceptions().isEmpty()) {
+            return " {}";
+        }
+        return " throws " + compactJoin.apply(declaration.getThrownExceptions()) + " {";
+    }
+
+    private Doc parameters(ConstructorDeclaration declaration, boolean parametersBreak) {
+        if (!parametersBreak || !callableSignatures.parametersFitOnContinuation(declaration)) {
+            return callableSignatures.parameters(declaration, parametersBreak);
+        }
+        return callableSignatures.compactContinuationParameters(declaration);
     }
 
     /**
@@ -112,6 +147,9 @@ final class ConstructorDeclarationPrinter {
                 String prefix,
                 NodeList<Parameter> parameters,
                 NodeList<? extends Node> thrownExceptions,
-                String suffix);
+                String suffix,
+                boolean forceBreak,
+                boolean parametersBreak
+        );
     }
 }

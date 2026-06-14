@@ -25,6 +25,16 @@ public abstract class Throws {
     throw new RuntimeException();
   }
 
+  private Selection chooseCandidates(
+      Path root,
+      Predicate<Path> routeMatches,
+      IgnoreMatcher ignoreRules,
+      RejectMatcher skipRules
+  )
+    throws IOException {
+    return Selection.empty();
+  }
+
   void throwServiceException7(String requestId, String accountId, String region, String payload) throws RuntimeException {
     throw new RuntimeException();
   }

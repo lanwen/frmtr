@@ -22,16 +22,21 @@ import java.util.function.ToIntFunction;
  * pieces needed to choose where the throws clause lands.
  */
 final class ThrowsClausePrinter {
+
     private final FormatterOptions options;
+
     private final Function<Node, String> compact;
+
     private final Function<List<? extends Node>, String> compactJoin;
+
     private final ToIntFunction<String> currentIndentedWidth;
 
     ThrowsClausePrinter(
             FormatterOptions options,
             Function<Node, String> compact,
             Function<List<? extends Node>, String> compactJoin,
-            ToIntFunction<String> currentIndentedWidth) {
+            ToIntFunction<String> currentIndentedWidth
+    ) {
         this.options = options;
         this.compact = compact;
         this.compactJoin = compactJoin;
@@ -49,36 +54,64 @@ final class ThrowsClausePrinter {
             String prefix,
             NodeList<Parameter> parameters,
             NodeList<? extends Node> thrownExceptions,
-            String suffix) {
-        return throwsClause(prefix, parameters, thrownExceptions, suffix, false);
+            String suffix
+    ) {
+        return throwsClause(prefix, parameters, thrownExceptions, suffix, false, parametersBreak(prefix, parameters));
     }
 
     /**
      * Places {@code throws ...} on the current line or preserves a caller-detected source break before it.
+     *
+     * <p>When parameters already broke, the closing {@code )} owns the current line. In that shape a source break before
+     * {@code throws} is kept only if the compact {@code ) throws ...} continuation would overflow.
      */
     Doc throwsClause(
             String prefix,
             NodeList<Parameter> parameters,
             NodeList<? extends Node> thrownExceptions,
             String suffix,
-            boolean forceBreak) {
+            boolean forceBreak
+    ) {
+        return throwsClause(
+            prefix,
+            parameters,
+            thrownExceptions,
+            suffix,
+            forceBreak,
+            parametersBreak(prefix, parameters)
+        );
+    }
+
+    Doc throwsClause(
+            String prefix,
+            NodeList<Parameter> parameters,
+            NodeList<? extends Node> thrownExceptions,
+            String suffix,
+            boolean forceBreak,
+            boolean parametersBreak
+    ) {
         String exceptions = compactJoin.apply(thrownExceptions);
         String throwsText = "throws " + exceptions;
-        if (forceBreak) {
+        String flatParameters = "("
+            + parameters.stream().map(compact).reduce((left, right) -> left + ", " + right).orElse("")
+            + ")";
+        String flatSignature = prefix + flatParameters;
+        int sameLineWidth = parametersBreak
+            ? currentIndentedWidth.applyAsInt(") " + throwsText + suffix)
+            : currentIndentedWidth.applyAsInt(flatSignature + " " + throwsText + suffix);
+        if (forceBreak && (!parametersBreak || sameLineWidth > options.lineWidth())) {
             return Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(throwsText)));
         }
-        String flatParameters = "(" + parameters.stream()
-                .map(compact)
-                .reduce((left, right) -> left + ", " + right)
-                .orElse("") + ")";
-        String flatSignature = prefix + flatParameters;
-        boolean parametersBreak = currentIndentedWidth.applyAsInt(flatSignature) > options.lineWidth();
-        int sameLineWidth = parametersBreak
-                ? currentIndentedWidth.applyAsInt(") " + throwsText + suffix)
-                : currentIndentedWidth.applyAsInt(flatSignature + " " + throwsText + suffix);
         if (sameLineWidth <= options.lineWidth()) {
             return Doc.text(" " + throwsText);
         }
         return Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(throwsText)));
+    }
+
+    private boolean parametersBreak(String prefix, NodeList<Parameter> parameters) {
+        String flatParameters = "("
+            + parameters.stream().map(compact).reduce((left, right) -> left + ", " + right).orElse("")
+            + ")";
+        return currentIndentedWidth.applyAsInt(prefix + flatParameters) > options.lineWidth();
     }
 }

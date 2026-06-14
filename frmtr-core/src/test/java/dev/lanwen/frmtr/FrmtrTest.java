@@ -9,11 +9,14 @@ import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParseStart;
 import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.Providers;
+import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Objects;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -431,6 +434,67 @@ final class FrmtrTest {
         assertThat(exception.sourceProblems()).anySatisfy(problem -> assertThat(problem.message()).contains(
                 "yield"
         ));
+    }
+
+    @Test
+    void formattingNeverChangesATextBlockStringValue() {
+        // A text block is a string literal: its JLS-computed value (incidental indent stripped, escapes translated) is
+        // program data, not layout. The formatter must reproduce that value exactly. This source packs the cases that an
+        // embedded-language reformatter would have mangled: JSON with an escaped quote and tab, a backslash
+        // line-continuation that joins two source lines into one value line, significant interior whitespace, and a
+        // compact single-line HTML document that a "pretty printer" would expand across lines.
+        String source = """
+                class Demo {
+                    void embeddedContent() {
+                        String glossary = ""\"
+                            {"glossary":{"title": "example \\'glossary\\'"}}
+                            ""\";
+                        String config = ""\"
+                            { \\t "name":"example",
+                              "enabled"   :true,
+                              "timeout":30}
+                            ""\";
+                        String sql = ""\"
+                            {"sql":"SELECT * FROM users \\
+                            WHERE active=1"}
+                            ""\";
+                        String html = ""\"
+                            <!DOCTYPE html><html><head><title>T</title></head><body><p>Hi</p></body></html>
+                            ""\";
+                    }
+                }
+                """;
+
+        List<String> inputValues = textBlockValues(source);
+        // Sanity: the fixture really does contain several non-trivial text blocks with escapes and interior whitespace.
+        assertThat(inputValues).hasSize(4);
+        assertThat(inputValues.get(0)).contains("example 'glossary'");
+        assertThat(inputValues.get(1)).contains("\t").contains("\"enabled\"   :true");
+        // The backslash line-continuation collapses two source lines into a single value line (no newline between them).
+        assertThat(inputValues.get(2).lines())
+            .anySatisfy(line -> assertThat(line).contains("SELECT * FROM users").contains("WHERE active=1"));
+        // The HTML document is a single line in the value; a reflow into a multiline page would change it.
+        assertThat(inputValues.get(3).lines().count()).isEqualTo(1L);
+
+        String formatted = Frmtr.format(source);
+
+        // The regression lock: every text block in the formatted output resolves to exactly the same String value as the
+        // matching block in the input. Only incidental indentation may move; escapes, interior whitespace, and content
+        // are preserved byte-for-byte. A reflow/expansion/escape-resolution would break this.
+        assertThat(textBlockValues(formatted)).containsExactlyElementsOf(inputValues);
+    }
+
+    private static List<String> textBlockValues(String source) {
+        CompilationUnit unit = new JavaParser(
+            new ParserConfiguration().setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_25)
+        )
+            .parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
+            .getResult()
+            .orElseThrow();
+        return unit.findAll(TextBlockLiteralExpr.class)
+            .stream()
+            .map(TextBlockLiteralExpr::translateEscapes)
+            .toList();
     }
 
     private static FormatterException formatterException(String source) {

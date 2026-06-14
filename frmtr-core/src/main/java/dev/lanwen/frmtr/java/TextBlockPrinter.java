@@ -1,22 +1,21 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.EnumDeclaration;
-import com.github.javaparser.ast.body.RecordDeclaration;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
-import com.github.javaparser.ast.stmt.BlockStmt;
-import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
-import java.util.Optional;
 
 /**
  * Renders Java text-block literal expressions after broad expression dispatch has selected text-block syntax.
  *
- * <p>This helper owns text-block content recognition, fixture-backed HTML/JSON/Java/TypeScript formatting probes, raw
- * text-block fallback rendering, and indentation reconstruction for formatted embedded snippets. The boundary exists
- * because text-block literals need source-token spelling and parent-depth indentation, while the rest of expression
- * dispatch only needs a rendered doc once it knows the expression is a text block.
+ * <p>This helper owns one concern: emitting a text block whose JLS-computed {@code String} value is byte-for-byte the
+ * value of the source literal. A formatter must never change a string literal's value, and a text block is a string
+ * literal, so its content (escapes, significant whitespace, blank lines) is program data, not layout. The boundary
+ * exists because text-block literals need source-token spelling, while the rest of expression dispatch only needs a
+ * rendered doc once it knows the expression is a text block.
+ *
+ * <p>This helper intentionally does <em>not</em> attempt to recognize or reformat embedded languages (HTML, JSON, Java,
+ * TypeScript, …). Reformatting embedded content would resolve escapes, collapse interior whitespace, or reflow lines,
+ * all of which change the runtime value; the formatter leaves that decision to no one — the value is preserved as
+ * written.
  *
  * <p>{@link JavaPrinter} still owns broad expression dispatch and the surrounding statement/declaration pipeline.
  * {@link MethodCallPrinter} still decides when a single text-block argument should be isolated from the call prefix; it
@@ -24,179 +23,30 @@ import java.util.Optional;
  */
 final class TextBlockPrinter {
     private final RawSource rawSource;
-    private final FormatterOptions options;
 
-    TextBlockPrinter(RawSource rawSource, FormatterOptions options) {
+    TextBlockPrinter(RawSource rawSource) {
         this.rawSource = rawSource;
-        this.options = options;
     }
 
     /**
-     * Renders a text-block expression, preferring recognized formatted content and falling back to raw literal layout.
+     * Renders a text-block expression while preserving its JLS-computed {@code String} value exactly.
      *
-     * <p>The formatted branches intentionally produce fixture-specific canonical content. All other text blocks keep the
-     * raw source-derived body so escapes, blank lines, and closing-delimiter placement stay behavior-compatible with the
-     * original printer.
+     * <p>The body is reproduced from the original source token, so escapes, significant whitespace, blank lines, and the
+     * closing-delimiter placement stay exactly as written. No embedded-language reformatting is applied, because that
+     * could change the runtime value of the literal.
      */
     Doc textBlockLiteral(TextBlockLiteralExpr expression) {
-        return formattedTextBlock(expression)
-                .map(content -> Doc.text(renderFormattedTextBlock(content, textBlockContentIndent(expression))))
-                .orElseGet(() -> Doc.text(renderUnformattedTextBlock(expression)));
+        return Doc.text(renderUnformattedTextBlock(expression));
     }
 
     /**
-     * Tries content probes in the legacy order: HTML, JSON, Java, then TypeScript.
+     * Renders a text block from its original source token, preserving the literal value exactly.
      *
-     * <p>The probes are deliberately narrow string matches instead of general language formatters. Later probes only run
-     * after earlier ones decline so overlapping source snippets keep the same winner as the previous JavaPrinter code.
-     */
-    private Optional<String> formattedTextBlock(TextBlockLiteralExpr expression) {
-        return formattedHtmlTextBlock(expression)
-                .or(() -> formattedJsonTextBlock(expression))
-                .or(() -> formattedJavaTextBlock(expression))
-                .or(() -> formattedTypeScriptTextBlock(expression));
-    }
-
-    /**
-     * Recognizes the compact HTML fixture probe and replaces it with the canonical multiline page sample.
-     */
-    private Optional<String> formattedHtmlTextBlock(TextBlockLiteralExpr expression) {
-        String content = expression.stripIndent().strip();
-        if (!content.startsWith("<!DOCTYPE html><html>")) {
-            return Optional.empty();
-        }
-        return Optional.of("""
-                <!DOCTYPE html>
-                <html>
-                  <head>
-                    <title>Page Title</title>
-                  </head>
-                  <body>
-                    <h1>My First Heading</h1>
-                    <p>My first paragraph.</p>
-                  </body>
-                </html>""");
-    }
-
-    /**
-     * Recognizes the JSON fixture probes, including the backslash-continued SQL string case.
-     *
-     * <p>The first two cases are exact or containment checks for compact object samples. The SQL case keeps its own
-     * multiline string match because the collapsed output removes line-continuation whitespace from the JSON value.
-     */
-    private Optional<String> formattedJsonTextBlock(TextBlockLiteralExpr expression) {
-        String content = expression.stripIndent().strip();
-        if (content.equals("{\"glossary\":{\"title\": \"example \\'glossary\\'\"}}")) {
-            return Optional.of("{ \"glossary\": { \"title\": \"example 'glossary'\" } }");
-        }
-        if (content.contains("\"name\":\"example\"")
-                && content.contains("\"enabled\"   :true")
-                && content.contains("\"timeout\":30}")) {
-            return Optional.of("{ \"name\": \"example\", \"enabled\": true, \"timeout\": 30 }");
-        }
-        if (content.equals("""
-                {
-                   "sql":"SELECT * FROM users \\
-                WHERE active=1 \\
-                AND deleted=0",
-                   "limit":10}""")) {
-            return Optional.of("""
-                    {
-                      "sql": "SELECT * FROM users WHERE active=1 AND deleted=0",
-                      "limit": 10
-                    }""");
-        }
-        return Optional.empty();
-    }
-
-    /**
-     * Recognizes the compact Java class fixture only when it has the expected method comment and closing braces.
-     */
-    private Optional<String> formattedJavaTextBlock(TextBlockLiteralExpr expression) {
-        String content = expression.stripIndent().strip();
-        if (!content.startsWith("class Class{void method() {")
-                || !content.contains("// comment")
-                || !content.endsWith("}}")) {
-            return Optional.empty();
-        }
-        return Optional.of("""
-                class Class {
-
-                  void method() {
-                    // comment
-                  }
-                }""");
-    }
-
-    /**
-     * Matches TypeScript probe cases against raw source so escaped triple quotes keep their source spelling.
-     *
-     * <p>These cases distinguish template-string content from line-comment content by token text that JavaParser's
-     * stripped value would otherwise normalize too far for the expected text-block output.
-     */
-    private Optional<String> formattedTypeScriptTextBlock(TextBlockLiteralExpr expression) {
-        String raw = rawSource.raw(expression);
-        if (!raw.contains("const s =")) {
-            return Optional.empty();
-        }
-        if (raw.contains("`") && raw.contains("\\\"" + "\"\"")) {
-            return Optional.of("const s = `\"\"\\\"`;");
-        }
-        if (raw.contains("// \\\"")) {
-            return Optional.of("const s = \"\"; // \"");
-        }
-        return Optional.empty();
-    }
-
-    /**
-     * Renders unrecognized text blocks from the original source token.
-     *
-     * <p>Unknown text blocks may contain layout-sensitive config, SQL, shell, traces, or other snippets. The formatter
-     * must not reinterpret their incidental indentation from AST depth, so this path preserves the literal body and
-     * closing delimiter exactly as written.
+     * <p>Text blocks may carry layout-sensitive config, SQL, shell, traces, JSON, HTML, or other snippets whose escapes
+     * and incidental/significant indentation are part of the value the program will observe. The formatter must not
+     * reinterpret them, so this path preserves the literal body and closing delimiter exactly as written.
      */
     String renderUnformattedTextBlock(TextBlockLiteralExpr expression) {
         return rawSource.raw(expression);
-    }
-
-    /**
-     * Rebuilds a standard text block, indenting only non-empty content lines.
-     *
-     * <p>Empty lines intentionally stay blank instead of receiving spaces so blank-line content remains visually empty
-     * while the closing delimiter still aligns with the surrounding Java indentation.
-     */
-    private String renderFormattedTextBlock(String content, String indent) {
-        StringBuilder text = new StringBuilder("\"\"\"\n");
-        String[] lines = content.split("\n", -1);
-        for (String line : lines) {
-            if (!line.isEmpty()) {
-                text.append(indent).append(line);
-            }
-            text.append("\n");
-        }
-        text.append(indent).append("\"\"\"");
-        return text.toString();
-    }
-
-    /**
-     * Derives literal content indentation from containing block and type declaration depth.
-     *
-     * <p>The expression itself does not carry the formatter's target indentation, so the helper walks parents that add a
-     * Java block nesting level and then repeats the configured indent unit for that depth.
-     */
-    private String textBlockContentIndent(TextBlockLiteralExpr expression) {
-        int depth = 1;
-        Optional<Node> current = expression.getParentNode();
-        while (current.isPresent()) {
-            Node node = current.orElseThrow();
-            if (node instanceof BlockStmt
-                    || node instanceof ClassOrInterfaceDeclaration
-                    || node instanceof EnumDeclaration
-                    || node instanceof RecordDeclaration) {
-                depth++;
-            }
-            current = node.getParentNode();
-        }
-        return options.indentUnit().repeat(depth);
     }
 }

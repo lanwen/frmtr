@@ -160,7 +160,7 @@ final class ExpressionPrinters {
                 compactSource::compactTypeLike,
                 compactSource::compactTypeLikeWithoutOwnComment,
                 commentText);
-        this.textBlocks = new TextBlockPrinter(rawSource, options);
+        this.textBlocks = new TextBlockPrinter(rawSource);
         this.instanceOfExpressions = new InstanceOfExpressionPrinter(
                 options,
                 this::expression,

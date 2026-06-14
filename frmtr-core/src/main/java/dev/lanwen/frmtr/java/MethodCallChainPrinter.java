@@ -828,7 +828,7 @@ final class MethodCallChainPrinter {
                 Doc.indent(
                     Doc.concat(
                         Doc.HARD_LINE,
-                        calls.methodCallArgumentList(call.getArguments(), Doc.HARD_LINE)
+                        calls.methodCallArgumentList(callPrefix, call.getArguments(), Doc.HARD_LINE)
                     )
                 ),
                 Doc.HARD_LINE,
@@ -1289,7 +1289,7 @@ final class MethodCallChainPrinter {
                     Doc.indent(
                         Doc.concat(
                             Doc.SOFT_LINE,
-                            calls.methodCallArgumentList(expression.getArguments(), Doc.LINE)
+                            calls.methodCallArgumentList(prefix, expression.getArguments(), Doc.LINE)
                         )
                     ),
                     Doc.SOFT_LINE,
@@ -1311,7 +1311,7 @@ final class MethodCallChainPrinter {
             Doc.indent(
                 Doc.concat(
                     Doc.HARD_LINE,
-                    calls.methodCallArgumentList(expression.getArguments(), Doc.HARD_LINE)
+                    calls.methodCallArgumentList(prefix, expression.getArguments(), Doc.HARD_LINE)
                 )
             ),
             Doc.HARD_LINE,
@@ -1400,7 +1400,7 @@ final class MethodCallChainPrinter {
                 Doc.indent(
                     Doc.concat(
                         Doc.HARD_LINE,
-                        calls.methodCallArgumentList(expression.getArguments(), Doc.HARD_LINE)
+                        calls.methodCallArgumentList(prefix, expression.getArguments(), Doc.HARD_LINE)
                     )
                 ),
                 Doc.HARD_LINE,

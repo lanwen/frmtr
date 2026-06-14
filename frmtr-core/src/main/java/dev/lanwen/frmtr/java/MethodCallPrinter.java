@@ -52,7 +52,7 @@ final class MethodCallPrinter {
     private final Function<Expression, Doc> expressionRenderer;
     private final BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix;
     private final BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix;
-    private final Function<BinaryExpr, Doc> brokenBinaryExpressionLinesRenderer;
+    private final Function<Expression, Optional<Doc>> brokenArgumentExpressionRenderer;
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments;
     private final BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument;
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments;
@@ -77,7 +77,7 @@ final class MethodCallPrinter {
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments,
             BiFunction<String, NodeList<Expression>, Optional<ExpressionLambdaArgumentLayout.Plan>> expressionLambdaArgumentPlan,
             Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer,
-            Function<BinaryExpr, Doc> brokenBinaryExpressionLinesRenderer,
+            Function<Expression, Optional<Doc>> brokenArgumentExpressionRenderer,
             ToIntFunction<String> currentIndentedWidth,
             ToIntFunction<String> continuationStatementWidth,
             ToIntFunction<String> blockStatementWidth) {
@@ -106,7 +106,7 @@ final class MethodCallPrinter {
         this.expressionRenderer = expressionRenderer;
         this.brokenEnclosedForSuffix = brokenEnclosedForSuffix;
         this.objectCreationWithSuffix = objectCreationWithSuffix;
-        this.brokenBinaryExpressionLinesRenderer = brokenBinaryExpressionLinesRenderer;
+        this.brokenArgumentExpressionRenderer = brokenArgumentExpressionRenderer;
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.commentedExpressionLambdaArgument = commentedExpressionLambdaArgument;
         this.huggableExpressionLambdaArguments = huggableExpressionLambdaArguments;
@@ -216,7 +216,7 @@ final class MethodCallPrinter {
                 Doc.text(prefix + "("),
                 Doc.indent(Doc.concat(
                         methodCallLine(breakMode),
-                        methodCallArgumentList(expression.getArguments(), Doc.LINE))),
+                        methodCallArgumentList(prefix, expression.getArguments(), Doc.LINE))),
                 methodCallLine(breakMode),
                 Doc.text(")"));
         if (breakMode.isForced()) {
@@ -263,7 +263,7 @@ final class MethodCallPrinter {
                 Doc.text(prefix + "("),
                 Doc.indent(Doc.concat(
                         Doc.HARD_LINE,
-                        methodCallArgumentList(expression.getArguments(), Doc.HARD_LINE))),
+                        methodCallArgumentList(prefix, expression.getArguments(), Doc.HARD_LINE))),
                 Doc.HARD_LINE,
                 Doc.text(")")));
     }
@@ -296,7 +296,7 @@ final class MethodCallPrinter {
                 Doc.text(prefix + "("),
                 Doc.indent(Doc.concat(
                         Doc.SOFT_LINE,
-                        methodCallArgumentList(expression.getArguments(), Doc.LINE))),
+                        methodCallArgumentList(prefix, expression.getArguments(), Doc.LINE))),
                 Doc.SOFT_LINE,
                 Doc.text(")")));
     }
@@ -441,7 +441,7 @@ final class MethodCallPrinter {
                     scopedPrefix.orElseThrow(),
                     Doc.indent(Doc.concat(
                             Doc.HARD_LINE,
-                            methodCallArgumentList(expression.getArguments(), Doc.HARD_LINE))),
+                            methodCallArgumentList(methodCallPrefix(expression), expression.getArguments(), Doc.HARD_LINE))),
                     Doc.HARD_LINE,
                     Doc.text(")")));
         }
@@ -450,7 +450,7 @@ final class MethodCallPrinter {
                 Doc.text(prefix + "("),
                 Doc.indent(Doc.concat(
                         Doc.HARD_LINE,
-                        methodCallArgumentList(expression.getArguments(), Doc.HARD_LINE))),
+                        methodCallArgumentList(prefix, expression.getArguments(), Doc.HARD_LINE))),
                 Doc.HARD_LINE,
                 Doc.text(")")));
     }
@@ -596,11 +596,22 @@ final class MethodCallPrinter {
     }
 
     Doc methodCallArgumentList(NodeList<Expression> arguments, Doc line) {
+        return methodCallArgumentList(arguments, line, methodCallArgumentContext(""));
+    }
+
+    Doc methodCallArgumentList(String prefix, NodeList<Expression> arguments, Doc line) {
+        return methodCallArgumentList(arguments, line, methodCallArgumentContext(prefix));
+    }
+
+    private Doc methodCallArgumentList(
+            NodeList<Expression> arguments,
+            Doc line,
+            MethodCallArgumentContext context) {
         List<Doc> docs = new ArrayList<>();
         for (int index = 0; index < arguments.size(); index++) {
             Expression argument = arguments.get(index);
             boolean last = index == arguments.size() - 1;
-            docs.add(methodCallArgumentDoc(argument, last ? "" : ","));
+            docs.add(methodCallArgumentDoc(argument, last ? "" : ",", context));
             if (!last) {
                 docs.add(argumentConsumesSuffix(argument) ? line : Doc.concat(Doc.text(","), line));
             }
@@ -613,17 +624,16 @@ final class MethodCallPrinter {
     }
 
     /**
-     * Keeps a wide binary expression breakable when it appears as one argument in a method-call argument list.
+     * Keeps expressions with their own broken form breakable inside a method-call argument list.
      *
-     * <p>The ordinary expression renderer owns the flat binary spelling. Once the surrounding call list breaks, the
-     * binary-expression helper owns the continuation lines so long string concatenations do not collapse back onto an
-     * over-wide argument line.
+     * <p>The ordinary expression renderer owns the flat spelling. Once the surrounding call list breaks, the expression
+     * helper owns the continuation lines so breakable arguments do not collapse back onto an over-wide argument line.
      */
     private Doc methodCallArgumentDoc(Expression argument) {
-        return methodCallArgumentDoc(argument, "");
+        return methodCallArgumentDoc(argument, "", methodCallArgumentContext(""));
     }
 
-    private Doc methodCallArgumentDoc(Expression argument, String suffix) {
+    private Doc methodCallArgumentDoc(Expression argument, String suffix, MethodCallArgumentContext context) {
         if (argument instanceof MethodCallExpr methodCall && !suffix.isEmpty()) {
             Optional<Doc> compact = compactMethodCallArgumentWithSuffix(methodCall, suffix);
             if (compact.isPresent()) {
@@ -638,12 +648,39 @@ final class MethodCallPrinter {
         if (argument instanceof ObjectCreationExpr objectCreation && !suffix.isEmpty()) {
             return objectCreationWithSuffix.apply(objectCreation, suffix);
         }
-        if (!(argument instanceof BinaryExpr binaryExpr)
-                || !argument.getAllContainedComments().isEmpty()
-                || continuationStatementWidth.applyAsInt(compactSource.compact(binaryExpr)) <= options.lineWidth()) {
-            return expressionRenderer.apply(argument);
+        if (argument.getAllContainedComments().isEmpty()) {
+            Optional<Doc> brokenArgument = brokenArgumentExpressionRenderer.apply(argument);
+            if (
+                brokenArgument.isPresent()
+                && context.argumentWidth(compactSource.compact(argument), suffix) > options.lineWidth()
+            ) {
+                return Doc.ifBreak(brokenArgument.orElseThrow(), expressionRenderer.apply(argument));
+            }
         }
-        return Doc.ifBreak(brokenBinaryExpressionLinesRenderer.apply(binaryExpr), expressionRenderer.apply(argument));
+        return expressionRenderer.apply(argument);
+    }
+
+    private MethodCallArgumentContext methodCallArgumentContext(String prefix) {
+        return new MethodCallArgumentContext(prefix);
+    }
+
+    private final class MethodCallArgumentContext {
+        private final String prefix;
+
+        private MethodCallArgumentContext(String prefix) {
+            this.prefix = prefix;
+        }
+
+        int argumentWidth(String argument, String suffix) {
+            int continuationWidth = continuationStatementWidth.applyAsInt(argument + suffix);
+            if (prefix.isEmpty()) {
+                return continuationWidth;
+            }
+            return Math.max(
+                continuationWidth,
+                continuationStatementWidth.applyAsInt(prefix + "(" + argument + suffix + ")")
+            );
+        }
     }
 
     private Optional<Doc> compactMethodCallArgumentWithSuffix(MethodCallExpr expression, String suffix) {
@@ -725,7 +762,10 @@ final class MethodCallPrinter {
         }
         return Optional.of(Doc.concat(
                 Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, brokenBinaryExpressionLinesRenderer.apply(binaryExpr))),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        brokenArgumentExpressionRenderer.apply(binaryExpr)
+                                .orElseGet(() -> expressionRenderer.apply(binaryExpr)))),
                 Doc.HARD_LINE,
                 Doc.text(")")));
     }

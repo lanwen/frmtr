@@ -42,6 +42,8 @@ final class BinaryExpressionPrinter {
 
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
 
+    private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer;
+
     private final SourceShape sourceShape;
 
     private final Function<Node, String> compact;
@@ -58,6 +60,7 @@ final class BinaryExpressionPrinter {
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
+            Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer,
             SourceShape sourceShape,
             Function<Node, String> compact,
             Function<Node, String> compactWithoutOwnComment,
@@ -69,6 +72,7 @@ final class BinaryExpressionPrinter {
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
+        this.forcedMethodCallChainRenderer = forcedMethodCallChainRenderer;
         this.sourceShape = sourceShape;
         this.compact = compact;
         this.compactWithoutOwnComment = compactWithoutOwnComment;
@@ -117,11 +121,12 @@ final class BinaryExpressionPrinter {
                 expressionRenderer.format(operands.getLast())
             );
         }
+        BinaryExpressionLine firstLine = binaryExpressionLine(binaryExpr.getOperator(), 0, operands.size());
         if (
             options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END
             && operands.size() == 2
             && operands.getFirst() instanceof MethodCallExpr methodCall
-            && shouldBreakEndPositionMethodCallOperand(binaryExpr.getOperator(), methodCall)
+            && shouldBreakEndPositionMethodCallOperand(firstLine, methodCall)
             && continuationStatementWidth.applyAsInt(
                 ") " + binaryExpr.getOperator().asString() + " " + compact.apply(operands.getLast())
             ) <= options.lineWidth()
@@ -135,24 +140,13 @@ final class BinaryExpressionPrinter {
         List<Doc> lines = new ArrayList<>();
         for (int i = 0; i < operands.size(); i++) {
             Expression operandExpression = operands.get(i);
-            Doc operand = binaryExpressionLineOperand(binaryExpr.getOperator(), operandExpression);
-            if (
-                options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END
-                && i < operands.size() - 1
-                && shouldBreakEndPositionMethodCallOperand(binaryExpr.getOperator(), operandExpression)
-            ) {
+            BinaryExpressionLine binaryLine = binaryExpressionLine(binaryExpr.getOperator(), i, operands.size());
+            Doc operand = binaryExpressionLineOperand(binaryLine, operandExpression);
+            if (shouldBreakEndPositionMethodCallOperand(binaryLine, operandExpression)) {
                 MethodCallExpr methodCall = (MethodCallExpr) operandExpression;
                 operand = brokenMethodCallRenderer.apply(methodCall);
             }
-            if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.START && i > 0) {
-                operand = Doc.concat(Doc.text(binaryExpr.getOperator().asString() + " "), operand);
-            } else if (
-                options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END
-                && i < operands.size() - 1
-            ) {
-                operand = Doc.concat(operand, Doc.text(" " + binaryExpr.getOperator().asString()));
-            }
-            lines.add(operand);
+            lines.add(binaryLine.format(operand));
         }
         if (nestedContinuation) {
             List<Doc> nestedLines = new ArrayList<>();
@@ -172,19 +166,19 @@ final class BinaryExpressionPrinter {
      * binary lines when the inner group itself is too wide. Other nested binary operands are parenthesized only when the
      * operator-family rules require it to preserve the source expression's grouping.
      */
-    private Doc binaryExpressionLineOperand(BinaryExpr.Operator operator, Expression operand) {
+    private Doc binaryExpressionLineOperand(BinaryExpressionLine binaryLine, Expression operand) {
         if (
-            operator == BinaryExpr.Operator.OR
+            binaryLine.operator() == BinaryExpr.Operator.OR
             && operand instanceof BinaryExpr binaryOperand
             && binaryOperand.getOperator() == BinaryExpr.Operator.AND
         ) {
-            if (parenthesizedBinaryOperandWidth(operator, compact.apply(binaryOperand)) > options.lineWidth()) {
+            if (parenthesizedBinaryOperandWidth(binaryLine.operator(), compact.apply(binaryOperand)) > options.lineWidth()) {
                 return Doc.concat(Doc.text("("), nestedLines(binaryOperand, true), Doc.text(")"));
             }
             return Doc.concat(Doc.text("("), expressionRenderer.format(binaryOperand), Doc.text(")"));
         }
         if (
-            operator == BinaryExpr.Operator.OR
+            binaryLine.operator() == BinaryExpr.Operator.OR
             && operand instanceof EnclosedExpr enclosedOperand
             && enclosedOperand.getInner() instanceof BinaryExpr binaryOperand
             && (binaryOperand.getOperator() == BinaryExpr.Operator.AND || binaryOperand.getOperator() == BinaryExpr.Operator.OR)
@@ -194,17 +188,34 @@ final class BinaryExpressionPrinter {
         }
         if (
             operand instanceof BinaryExpr binaryOperand
-            && shouldParenthesizeNestedBinary(operator, binaryOperand.getOperator())
+            && shouldParenthesizeNestedBinary(binaryLine.operator(), binaryOperand.getOperator())
         ) {
             return Doc.concat(Doc.text("("), expressionRenderer.format(binaryOperand), Doc.text(")"));
         }
         if (operand instanceof MethodCallExpr && operand.getAllContainedComments().isEmpty()) {
+            MethodCallExpr methodCall = (MethodCallExpr) operand;
             String flat = compact.apply(operand);
-            if (continuationStatementWidth.applyAsInt(flat) <= options.lineWidth()) {
+            if (binaryLine.width(flat) <= options.lineWidth()) {
                 return Doc.text(flat);
             }
+            if (!binaryLine.hasLeadingOperator()) {
+                return expressionRenderer.format(operand);
+            }
+            return forcedMethodCallChainRenderer.apply(methodCall)
+                    .orElseGet(() -> brokenMethodCallRenderer.apply(methodCall));
         }
         return expressionRenderer.format(operand);
+    }
+
+    private BinaryExpressionLine binaryExpressionLine(
+            BinaryExpr.Operator operator,
+            int index,
+            int operandCount
+    ) {
+        if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.START) {
+            return new BinaryExpressionLine(operator, index == 0 ? "" : operator.asString() + " ", "");
+        }
+        return new BinaryExpressionLine(operator, "", index < operandCount - 1 ? " " + operator.asString() : "");
     }
 
     /**
@@ -228,12 +239,45 @@ final class BinaryExpressionPrinter {
      * operator appear visually separated from the operand. This check lets the binary renderer first break the call
      * arguments, then attach the operator after that broken operand.
      */
-    private boolean shouldBreakEndPositionMethodCallOperand(BinaryExpr.Operator operator, Expression operand) {
+    private boolean shouldBreakEndPositionMethodCallOperand(BinaryExpressionLine binaryLine, Expression operand) {
         return (
-            operand instanceof MethodCallExpr methodCall
+            binaryLine.hasTrailingOperator()
+            && operand instanceof MethodCallExpr methodCall
             && !methodCall.getArguments().isEmpty()
-            && continuationStatementWidth.applyAsInt(compact.apply(methodCall) + " " + operator.asString()) > options.lineWidth()
+            && binaryLine.width(compact.apply(methodCall)) > options.lineWidth()
         );
+    }
+
+    private final class BinaryExpressionLine {
+        private final BinaryExpr.Operator operator;
+        private final String leadingOperator;
+        private final String trailingOperator;
+
+        private BinaryExpressionLine(BinaryExpr.Operator operator, String leadingOperator, String trailingOperator) {
+            this.operator = operator;
+            this.leadingOperator = leadingOperator;
+            this.trailingOperator = trailingOperator;
+        }
+
+        BinaryExpr.Operator operator() {
+            return operator;
+        }
+
+        boolean hasLeadingOperator() {
+            return !leadingOperator.isEmpty();
+        }
+
+        boolean hasTrailingOperator() {
+            return !trailingOperator.isEmpty();
+        }
+
+        Doc format(Doc operand) {
+            return Doc.concat(Doc.text(leadingOperator), operand, Doc.text(trailingOperator));
+        }
+
+        int width(String operand) {
+            return continuationStatementWidth.applyAsInt(leadingOperator + operand + trailingOperator);
+        }
     }
 
     boolean hasLineComments(BinaryExpr expression) {

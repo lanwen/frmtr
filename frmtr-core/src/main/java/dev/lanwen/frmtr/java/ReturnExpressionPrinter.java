@@ -39,6 +39,7 @@ final class ReturnExpressionPrinter {
     private final Function<MethodCallExpr, Optional<Doc>> sourceMultilineMethodCall;
     private final Function<MethodCallExpr, Optional<Doc>> compactRootWithBrokenFinalChainSegment;
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain;
+    private final Function<MethodCallExpr, Doc> brokenMethodCall;
     private final Predicate<MethodCallExpr> methodCallChainIsSourceMultiline;
     private final Function<ObjectCreationExpr, Doc> brokenObjectCreation;
     private final BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix;
@@ -56,6 +57,7 @@ final class ReturnExpressionPrinter {
             Function<MethodCallExpr, Optional<Doc>> sourceMultilineMethodCall,
             Function<MethodCallExpr, Optional<Doc>> compactRootWithBrokenFinalChainSegment,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain,
+            Function<MethodCallExpr, Doc> brokenMethodCall,
             Predicate<MethodCallExpr> methodCallChainIsSourceMultiline,
             Function<ObjectCreationExpr, Doc> brokenObjectCreation,
             BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
@@ -71,6 +73,7 @@ final class ReturnExpressionPrinter {
         this.sourceMultilineMethodCall = sourceMultilineMethodCall;
         this.compactRootWithBrokenFinalChainSegment = compactRootWithBrokenFinalChainSegment;
         this.forcedMethodCallChain = forcedMethodCallChain;
+        this.brokenMethodCall = brokenMethodCall;
         this.methodCallChainIsSourceMultiline = methodCallChainIsSourceMultiline;
         this.brokenObjectCreation = brokenObjectCreation;
         this.objectCreationWithSuffix = objectCreationWithSuffix;
@@ -170,7 +173,9 @@ final class ReturnExpressionPrinter {
                 return sourceMultilineCall;
             }
         }
-        return compactRootWithBrokenFinalChainSegment.apply(methodCall).or(() -> forcedMethodCallChain.apply(methodCall));
+        return compactRootWithBrokenFinalChainSegment.apply(methodCall)
+                .or(() -> forcedMethodCallChain.apply(methodCall))
+                .or(() -> Optional.of(brokenMethodCall.apply(methodCall)));
     }
 
     private Optional<Doc> returnWithForcedConditionalBreak(Expression expression) {

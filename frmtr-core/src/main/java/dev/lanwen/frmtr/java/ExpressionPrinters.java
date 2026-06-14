@@ -78,6 +78,7 @@ final class ExpressionPrinters {
                 options,
                 this::expression,
                 this::brokenMethodCall,
+                this::forcedMethodCallChain,
                 context.sourceShape,
                 compactSource::compact,
                 compactSource::compactWithoutOwnComment,
@@ -188,7 +189,7 @@ final class ExpressionPrinters {
                 lambdas::huggableMethodCallExpressionLambdaArguments,
                 lambdas::huggableExpressionLambdaArgumentPlan,
                 textBlocks::renderUnformattedTextBlock,
-                binaryExpr -> binaries.nestedLines(binaryExpr, true),
+                this::brokenMethodCallArgument,
                 this::currentIndentedWidth,
                 this::continuationStatementWidth,
                 this::blockStatementWidth);
@@ -237,6 +238,7 @@ final class ExpressionPrinters {
                 methodCalls::sourceMultilineArguments,
                 methodCalls::compactRootWithBrokenFinalChainSegment,
                 methodCalls::forcedMethodCallChain,
+                methodCalls::brokenMethodCall,
                 methodCalls::methodCallChainIsSourceMultiline,
                 objectCreations::brokenObjectCreation,
                 objectCreations::objectCreationWithSuffix,
@@ -298,6 +300,16 @@ final class ExpressionPrinters {
 
     Doc methodCallArgumentList(NodeList<Expression> arguments, Doc line) {
         return methodCalls.methodCallArgumentList(arguments, line);
+    }
+
+    private Optional<Doc> brokenMethodCallArgument(Expression expression) {
+        if (expression instanceof BinaryExpr binaryExpr) {
+            return Optional.of(binaries.nestedLines(binaryExpr, true));
+        }
+        if (expression instanceof ConditionalExpr conditionalExpr) {
+            return Optional.of(conditionals.conditionalExpression(conditionalExpr, true));
+        }
+        return Optional.empty();
     }
 
     String methodCallPrefix(MethodCallExpr expression) {

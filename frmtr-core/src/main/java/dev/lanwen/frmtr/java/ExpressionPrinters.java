@@ -243,6 +243,7 @@ final class ExpressionPrinters {
                 objectCreations::brokenObjectCreation,
                 objectCreations::objectCreationWithSuffix,
                 conditionals::conditionalExpression,
+                binaries::lines,
                 enclosedExpressions::parenthesizedBreak);
     }
 

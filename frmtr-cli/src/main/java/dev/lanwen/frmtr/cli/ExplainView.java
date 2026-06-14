@@ -328,9 +328,10 @@ final class ExplainView {
         }
         String label = styler.style(Role.LABEL, node.label().orElse("group"));
         if (node.forcedLineBreaks() > 0) {
-            return label + "  "
-                    + styler.style(Role.BREAK, "BREAK")
-                    + styler.style(Role.FADE, " forced " + node.forcedLineBreaks());
+            return label
+            + "  "
+            + styler.style(Role.BREAK, "BREAK")
+            + styler.style(Role.FADE, " forced " + node.forcedLineBreaks());
         }
         return label;
     }

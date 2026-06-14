@@ -44,6 +44,7 @@ final class ReturnExpressionPrinter {
     private final Function<ObjectCreationExpr, Doc> brokenObjectCreation;
     private final BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix;
     private final BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression;
+    private final BiFunction<Expression, Boolean, Doc> binaryLines;
     private final BiFunction<Expression, Boolean, Doc> parenthesizedBreak;
 
     ReturnExpressionPrinter(
@@ -62,6 +63,7 @@ final class ReturnExpressionPrinter {
             Function<ObjectCreationExpr, Doc> brokenObjectCreation,
             BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
             BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression,
+            BiFunction<Expression, Boolean, Doc> binaryLines,
             BiFunction<Expression, Boolean, Doc> parenthesizedBreak) {
         this.options = options;
         this.objectCreationLayoutPolicy = objectCreationLayoutPolicy;
@@ -78,6 +80,7 @@ final class ReturnExpressionPrinter {
         this.brokenObjectCreation = brokenObjectCreation;
         this.objectCreationWithSuffix = objectCreationWithSuffix;
         this.conditionalExpression = conditionalExpression;
+        this.binaryLines = binaryLines;
         this.parenthesizedBreak = parenthesizedBreak;
     }
 
@@ -208,19 +211,36 @@ final class ReturnExpressionPrinter {
     }
 
     /**
-     * Breaks grouped or binary return values by moving the long expression inside parentheses.
+     * Breaks grouped return values by moving the long expression inside parentheses and direct binary values as
+     * continuation lines.
      *
      * <p>Already enclosed expressions keep their source grouping and break only the inner value. Direct binary values use
-     * the same parenthesized break so operator continuations stay governed by the binary-expression policy instead of a
-     * return-specific ad hoc layout.
+     * the binary-expression policy directly unless comments inside the binary need the parenthesized shape to keep their
+     * ownership obvious.
      */
     private Optional<Doc> returnWithParenthesizedValueBreak(Expression expression) {
         if (expression instanceof EnclosedExpr enclosedExpr) {
             return Optional.of(parenthesizedBreak.apply(enclosedExpr.getInner(), false));
         }
         if (expression instanceof BinaryExpr binaryExpr) {
+            if (binaryExpr.getAllContainedComments().isEmpty() && directBinaryReturnFirstLineFits(binaryExpr)) {
+                return Optional.of(binaryLines.apply(binaryExpr, true));
+            }
             return Optional.of(parenthesizedBreak.apply(binaryExpr, false));
         }
         return Optional.empty();
+    }
+
+    private boolean directBinaryReturnFirstLineFits(BinaryExpr expression) {
+        String line = "return " + compact.apply(firstBinaryOperand(expression));
+        return returnLineWidth(expression, line) <= options.lineWidth();
+    }
+
+    private Expression firstBinaryOperand(BinaryExpr expression) {
+        Expression left = expression.getLeft();
+        while (left instanceof BinaryExpr leftBinary && leftBinary.getOperator() == expression.getOperator()) {
+            left = leftBinary.getLeft();
+        }
+        return left;
     }
 }

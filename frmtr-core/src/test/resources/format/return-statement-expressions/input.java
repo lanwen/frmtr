@@ -24,6 +24,10 @@ public abstract class Return {
     return subtotal + tax + shipping + discount + serviceFee + roundingAdjustment + grandTotal;
   }
 
+  Object returnWrappedStatusLabel(StyleWriter styleWriter, RenderNode renderNode) {
+    return statusLabel + "  " + styleWriter.style(StatusRole.ACTIVE, "ACTIVE") + styleWriter.style(StatusRole.MUTED, " forced " + renderNode.requiredBreakCount());
+  }
+
   Object returnExpandedInvoiceTotalAndAlreadyInParenthesis() {
     return (
         subtotal +

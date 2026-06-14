@@ -5,7 +5,9 @@ import dev.lanwen.frmtr.tooling.FormatterRunner;
 import javax.inject.Inject;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.tasks.TaskAction;
+import org.gradle.work.DisableCachingByDefault;
 
+@DisableCachingByDefault(because = "Formatting rewrites source files in place.")
 public abstract class FrmtrJavaFormatTask extends AbstractFrmtrJavaTask {
 
     @Inject

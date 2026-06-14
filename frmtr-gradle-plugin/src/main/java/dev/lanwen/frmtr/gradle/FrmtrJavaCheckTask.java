@@ -9,7 +9,9 @@ import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.TaskAction;
+import org.gradle.work.DisableCachingByDefault;
 
+@DisableCachingByDefault(because = "Formatting checks produce diagnostics instead of reusable task outputs.")
 public abstract class FrmtrJavaCheckTask extends AbstractFrmtrJavaTask {
 
     private final Property<Boolean> printDiffs;

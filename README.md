@@ -138,3 +138,7 @@ sdk env use
 ./gradlew :frmtr-cli:nativeCompile
 ./frmtr-cli/build/native/nativeCompile/frmtr --help
 ```
+
+## License
+
+`frmtr` is released under the MIT License. See [LICENSE](LICENSE).

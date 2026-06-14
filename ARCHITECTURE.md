@@ -38,6 +38,13 @@ Shared subproject conventions configure Java 25, UTF-8 compilation, `-Xlint:all`
 dependency versions, the JBake runtime, and the GraalVM Native Build Tools plugin are managed through the Gradle version
 catalog in `gradle/libs.versions.toml`.
 
+Java-producing modules also share Maven publication metadata. The root build applies `maven-publish`, sources jars, and
+javadoc jars to Java subprojects, then configures generated POMs with the MIT license, project URL, GitHub SCM, issue
+tracker, developer identity, and module descriptions. Non-plugin JVM modules publish a `mavenJava` publication from the
+Java component; `:frmtr-gradle-plugin` lets Gradle's plugin development and Plugin Publish plugins own the plugin and
+marker publications while inheriting the same POM metadata. The static `:site` module is documentation-only and is not
+published as a Maven artifact.
+
 `:frmtr-cli` generates a small `BuildInfo` source file during compilation. It embeds the project version, current Git
 commit SHA, and build timestamp so JVM and native CLI binaries report the same build identity through `--version`.
 

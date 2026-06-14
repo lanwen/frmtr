@@ -20,7 +20,9 @@ import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.SkipWhenEmpty;
+import org.gradle.work.DisableCachingByDefault;
 
+@DisableCachingByDefault(because = "Concrete frmtr tasks define whether their source-processing action is cacheable.")
 public abstract class AbstractFrmtrJavaTask extends DefaultTask {
 
     private final ConfigurableFileCollection sourceFiles;

@@ -4,14 +4,14 @@ class MultilineIfConditionSample {
         var cause = error;
         while (cause != null) {
             if (
-                cause instanceof StatusReply.ErrorMessage message &&
-                StatusReplies.OPEN_UNAVAILABLE.equals(message.toString())
+                cause instanceof StatusReply.ErrorMessage message
+                && StatusReplies.OPEN_UNAVAILABLE.equals(message.toString())
             ) {
                 return true;
             }
             if (
-                cause instanceof UnsupportedOperationException unsupported &&
-                "open".equals(unsupported.getMessage())
+                cause instanceof UnsupportedOperationException unsupported
+                && "open".equals(unsupported.getMessage())
             ) {
                 return true;
             }
@@ -34,9 +34,9 @@ class MultilineIfConditionSample {
 
     void flagPressure(EnvelopeMeta meta, List<Frame> frames) {
         if (
-            ((meta.totalBudget() != null && Objects.equals(meta.usedBudget(), meta.totalBudget())) ||
-                (meta.minimumRemaining() != null && meta.minimumRemaining() < MINIMUM_REMAINING)) ||
-            frames.stream().anyMatch(frame -> frame.interruptedAt() != null)
+            ((meta.totalBudget() != null && Objects.equals(meta.usedBudget(), meta.totalBudget()))
+                || (meta.minimumRemaining() != null && meta.minimumRemaining() < MINIMUM_REMAINING))
+            || frames.stream().anyMatch(frame -> frame.interruptedAt() != null)
         ) {
             sink.record();
         }
@@ -57,8 +57,8 @@ class MultilineIfConditionSample {
             switch (event.kind()) {
                 case DONE -> {
                     if (
-                        event.markers().contains(Marker.PRIMARY_DONE) ||
-                        event.markers().contains(Marker.SECONDARY_CONFIRMED)
+                        event.markers().contains(Marker.PRIMARY_DONE)
+                        || event.markers().contains(Marker.SECONDARY_CONFIRMED)
                     ) {
                         queue.publish(event);
                     }

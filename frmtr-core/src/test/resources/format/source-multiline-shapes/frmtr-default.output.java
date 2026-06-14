@@ -24,8 +24,8 @@ class MultilineShapes {
             ? trimmedValues(source.entries())
             : List.<String>of();
         int calendarShift = (
-            CalendarWindow.from(clock.instant(), ZoneOffset.UTC).dayIndex() ==
-            CalendarWindow.from(clock.instant(), tenantOffset).dayIndex()
+            CalendarWindow.from(clock.instant(), ZoneOffset.UTC).dayIndex()
+            == CalendarWindow.from(clock.instant(), tenantOffset).dayIndex()
         )
             ? 1
             : 2;

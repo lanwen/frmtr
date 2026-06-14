@@ -86,9 +86,9 @@ public class ExpressionOperatorSamples {
             new SessionContext().getSingleton().getAuthentication().getCredentials().getRights().getName();
 
         if (
-            statusCode == 42 ||
-            (statusCode == 42 && statusCode == 42 && statusCode == 42) ||
-            (statusCode == 42 && statusCode == 42)
+            statusCode == 42
+            || (statusCode == 42 && statusCode == 42 && statusCode == 42)
+            || (statusCode == 42 && statusCode == 42)
         ) {
         }
 
@@ -101,9 +101,9 @@ public class ExpressionOperatorSamples {
 
     public void printSwitch() {
         switch (
-            statusCode == 42 ||
-            (statusCode == 42 && statusCode == 42 && statusCode == 42) ||
-            (statusCode == 42 && statusCode == 42)
+            statusCode == 42
+            || (statusCode == 42 && statusCode == 42 && statusCode == 42)
+            || (statusCode == 42 && statusCode == 42)
         ) {
         }
 
@@ -121,9 +121,9 @@ public class ExpressionOperatorSamples {
         while (true) throw new RuntimeException();
 
         while (
-            statusCode == 42 ||
-            (statusCode == 42 && statusCode == 42 && statusCode == 42) ||
-            (statusCode == 42 && statusCode == 42)
+            statusCode == 42
+            || (statusCode == 42 && statusCode == 42 && statusCode == 42)
+            || (statusCode == 42 && statusCode == 42)
         ) {}
 
         while (statusCode != 42 && 42/42 || statusCode & 42 && statusCode > 42 || statusCode < 42 && statusCode == 42) {}
@@ -137,9 +137,9 @@ public class ExpressionOperatorSamples {
         do {
             System.out.println("Formatter input is ready!");
         } while (
-            statusCode == 42 ||
-            (statusCode == 42 && statusCode == 42 && statusCode == 42) ||
-            (statusCode == 42 && statusCode == 42)
+            statusCode == 42
+            || (statusCode == 42 && statusCode == 42 && statusCode == 42)
+            || (statusCode == 42 && statusCode == 42)
         );
 
         do {
@@ -157,9 +157,9 @@ public class ExpressionOperatorSamples {
 
     public void printSynchronized() {
         synchronized (
-            statusCode == 42 ||
-            (statusCode == 42 && statusCode == 42 && statusCode == 42) ||
-            (statusCode == 42 && statusCode == 42)
+            statusCode == 42
+            || (statusCode == 42 && statusCode == 42 && statusCode == 42)
+            || (statusCode == 42 && statusCode == 42)
         ) {
             System.out.println("Formatter input is ready!");
         }

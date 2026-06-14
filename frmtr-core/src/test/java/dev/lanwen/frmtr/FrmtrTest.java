@@ -135,9 +135,11 @@ final class FrmtrTest {
         assertThat(formatted).contains(
             "                item -> currentIndentedWidth.applyAsInt(\n"
                 + "                    declarationPrefix + item.getNameAsString()\n"
-                + "                ) > options.lineWidth()\n");
-        assertThat(formatted.lines())
-            .allSatisfy(line -> assertThat(line.length()).isLessThanOrEqualTo(options.lineWidth()));
+                + "                ) > options.lineWidth()\n"
+        );
+        assertThat(formatted.lines()).allSatisfy(
+            line -> assertThat(line.length()).isLessThanOrEqualTo(options.lineWidth())
+        );
     }
 
     @Test
@@ -179,15 +181,14 @@ final class FrmtrTest {
         assertThat(result.formatted().lines().filter(line -> line.contains(".")).count()).isGreaterThan(5);
         // The printer that broke the chain recorded its own width decision: the measured flat width, the budget it blew,
         // and how many segments the broken chain produced. This is the real "why it wrapped", not an opaque forced break.
-        assertThat(result.explanation().printerWraps())
-            .anySatisfy(wrap -> {
-                assertThat(wrap.construct()).isEqualTo("method chain");
-                assertThat(wrap.label()).isEqualTo("java.expression:MethodCallExpr");
-                assertThat(wrap.available()).isEqualTo(40);
-                assertThat(wrap.flatWidth()).isGreaterThan(40);
-                assertThat(wrap.segments()).isGreaterThanOrEqualTo(5);
-                assertThat(wrap.preview()).startsWith("foo().bar()");
-            });
+        assertThat(result.explanation().printerWraps()).anySatisfy(wrap -> {
+            assertThat(wrap.construct()).isEqualTo("method chain");
+            assertThat(wrap.label()).isEqualTo("java.expression:MethodCallExpr");
+            assertThat(wrap.available()).isEqualTo(40);
+            assertThat(wrap.flatWidth()).isGreaterThan(40);
+            assertThat(wrap.segments()).isGreaterThanOrEqualTo(5);
+            assertThat(wrap.preview()).startsWith("foo().bar()");
+        });
     }
 
     @Test
@@ -204,8 +205,9 @@ final class FrmtrTest {
         // The chain genuinely wrapped: the formatted output spans the selectors across lines.
         assertThat(result.formatted().lines().filter(line -> line.contains(".")).count()).isGreaterThanOrEqualTo(2);
         // The receiver method call carries the forced break, so something visibly wrapped here.
-        assertThat(result.explanation().forcedBreaks())
-            .anySatisfy(forced -> assertThat(forced.label()).contains("java.expression:MethodCallExpr"));
+        assertThat(result.explanation().forcedBreaks()).anySatisfy(
+            forced -> assertThat(forced.label()).contains("java.expression:MethodCallExpr")
+        );
         // But the printer refused to attribute it to width: no width wrap was recorded for the chain.
         assertThat(result.explanation().printerWraps()).isEmpty();
     }
@@ -230,7 +232,8 @@ final class FrmtrTest {
         FormatterOptions narrow = FormatterOptions.defaults().withLineWidth(40);
         String chain = "class A{void m(){foo().bar().baz().qux().quux().corge().grault().garply().waldo().fred();}}";
         String arguments = "class A{void m(){process(alphaValue,betaValue,gammaValue,deltaValue,epsilonValue,zeta);}}";
-        String ternary = "class A{int m(boolean c){int r=c?computeTheFirstValue():computeTheSecondAlternativeValue();return r;}}";
+        String ternary =
+            "class A{int m(boolean c){int r=c?computeTheFirstValue():computeTheSecondAlternativeValue();return r;}}";
         for (String source : new String[] {chain, arguments, ternary}) {
             assertThat(Frmtr.explain(source, narrow).formatted()).isEqualTo(Frmtr.format(source, narrow));
         }
@@ -275,8 +278,8 @@ final class FrmtrTest {
 
         assertThat(exception)
             .hasMessage(
-                "Internal formatter error. This is a bug in frmtr or one of its parser dependencies: " +
-                    "NoSuchFieldError: variables"
+                "Internal formatter error. This is a bug in frmtr or one of its parser dependencies: "
+                    + "NoSuchFieldError: variables"
             )
             .hasCause(cause);
         assertThat(exception.internal()).isTrue();
@@ -294,7 +297,7 @@ final class FrmtrTest {
             FormatterOptions.LambdaArrowParens.PRESERVE
         );
         assertThat(FormatterOptions.defaults().binaryOperatorPosition()).isEqualTo(
-            FormatterOptions.BinaryOperatorPosition.END
+            FormatterOptions.BinaryOperatorPosition.START
         );
     }
 
@@ -329,7 +332,10 @@ final class FrmtrTest {
 
     @Test
     void lexicalParseErrorsIncludeSourceContextFromMessagePosition() throws Exception {
-        String source = Files.readString(resourceRoot("unsupported/string-template-preview/input.java"), StandardCharsets.UTF_8);
+        String source = Files.readString(
+            resourceRoot("unsupported/string-template-preview/input.java"),
+            StandardCharsets.UTF_8
+        );
 
         FormatterException exception = formatterException(source, failOnParseErrorsOptions());
 
@@ -408,15 +414,15 @@ final class FrmtrTest {
     void parseErrorContextCropsLongLinesAroundPosition() {
         String linePrefix = "        int value = 1;";
         String source =
-            "class Demo {\n" +
-            "    void method() {\n" +
-            linePrefix +
-            " ".repeat(4128 - linePrefix.length() - 1) +
-            "public int next = 2;" +
-            " ".repeat(300) +
-            "\n" +
-            "    }\n" +
-            "}\n";
+            "class Demo {\n"
+            + "    void method() {\n"
+            + linePrefix
+            + " ".repeat(4128 - linePrefix.length() - 1)
+            + "public int next = 2;"
+            + " ".repeat(300)
+            + "\n"
+            + "    }\n"
+            + "}\n";
 
         FormatterException exception = formatterException(source, failOnParseErrorsOptions());
 
@@ -492,8 +498,9 @@ final class FrmtrTest {
         assertThat(inputValues.get(0)).contains("example 'glossary'");
         assertThat(inputValues.get(1)).contains("\t").contains("\"enabled\"   :true");
         // The backslash line-continuation collapses two source lines into a single value line (no newline between them).
-        assertThat(inputValues.get(2).lines())
-            .anySatisfy(line -> assertThat(line).contains("SELECT * FROM users").contains("WHERE active=1"));
+        assertThat(inputValues.get(2).lines()).anySatisfy(
+            line -> assertThat(line).contains("SELECT * FROM users").contains("WHERE active=1")
+        );
         // The HTML document is a single line in the value; a reflow into a multiline page would change it.
         assertThat(inputValues.get(3).lines().count()).isEqualTo(1L);
 

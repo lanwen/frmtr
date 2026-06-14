@@ -11,9 +11,9 @@ class TextBlockConcatInitializerOpenerSample {
                  before
                 -12345678901234567890
                 +12345678901234567890123
-                """ +
-            " \n" +
-            """
+                """
+            + " \n"
+            + """
                  after
                 +short
                 \\ No newline at end of file

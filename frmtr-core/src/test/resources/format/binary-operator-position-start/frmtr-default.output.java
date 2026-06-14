@@ -19,27 +19,30 @@ public class BinaryOperations {
 
     public boolean binaryOperationWithComments() {
         boolean a =
-            one ||
-            two >> 1 || // one
+            one
+            || two >> 1
+            // one
             // two
             // three
             // five
             // four
-            three;
+            || three;
 
         boolean b =
-            one ||
-            two >> 1 || // one
+            one
+            || two >> 1
+            // one
             // two
             // three
-            three;
+            || three;
 
         boolean c =
-            one ||
-            two >> 1 || // one
+            one
+            || two >> 1
+            // one
             // two
             // three
-            three;
+            || three;
 
         return a || b || c;
     }
@@ -58,19 +61,19 @@ public class BinaryOperations {
 
     void declarationVsAssignment() {
         var lineLengthInAssignmentMoreThanPrintWidth =
-            "1234567890" +
-            "1234567890" +
-            "1234567890" +
-            "1234567890" +
-            "1234567890" +
-            "1234567890";
+            "1234567890"
+            + "1234567890"
+            + "1234567890"
+            + "1234567890"
+            + "1234567890"
+            + "1234567890";
         lineLengthInAssignmentMoreThanPrintWidth =
-            "1234567890" +
-            "1234567890" +
-            "1234567890" +
-            "1234567890" +
-            "1234567890" +
-            "1234567890";
+            "1234567890"
+            + "1234567890"
+            + "1234567890"
+            + "1234567890"
+            + "1234567890"
+            + "1234567890";
 
         accumulator += leftOperand + rightOperand + carryOperand + bonusOperand + deltaOperand + scaleOperand;
         accumulator %= leftOperand + rightOperand + carryOperand + bonusOperand + deltaOperand + scaleOperand;
@@ -132,9 +135,9 @@ public class BinaryOperations {
         ignored = 1 & (2 == 3);
 
         if (
-            (customerSubtotal + shippingFee == invoiceSubtotal + handlingFee &&
-                discountTotal + taxEstimate == paymentTotal + refundTotal) ||
-            requiresReview
+            (customerSubtotal + shippingFee == invoiceSubtotal + handlingFee
+                && discountTotal + taxEstimate == paymentTotal + refundTotal)
+            || requiresReview
         ) {
         }
 
@@ -142,22 +145,22 @@ public class BinaryOperations {
         }
 
         if (
-            (customerSubtotal + shippingFee == invoiceSubtotal + handlingFee && discountTotal + taxEstimate == paymentTotal + refundTotal) ||
-            (warehouseStock + reservedStock == expectedStock + damagedStock && supplierCredit + carrierCredit == manualCredit + promoCredit) ||
-            (currentBalance + pendingCharge == targetBalance + postedCharge && retainedBudget + plannedBudget == actualBudget + frozenBudget)
+            (customerSubtotal + shippingFee == invoiceSubtotal + handlingFee && discountTotal + taxEstimate == paymentTotal + refundTotal)
+            || (warehouseStock + reservedStock == expectedStock + damagedStock && supplierCredit + carrierCredit == manualCredit + promoCredit)
+            || (currentBalance + pendingCharge == targetBalance + postedCharge && retainedBudget + plannedBudget == actualBudget + frozenBudget)
         ) {
         }
     }
 
     void instanceOf() {
         var hasSnapshot =
-            hasSnapshot &&
-            AccountStore.find(cachedCustomerRecordIdentifier) instanceof CustomerAccountSnapshot snapshot &&
-            snapshot.isOpen();
+            hasSnapshot
+            && AccountStore.find(cachedCustomerRecordIdentifier) instanceof CustomerAccountSnapshot snapshot
+            && snapshot.isOpen();
 
         var snapshotMatch =
-            AccountStore.find(cachedCustomerRecordIdentifier) instanceof CustomerAccountSnapshot snapshot &&
-            snapshot.isOpen();
+            AccountStore.find(cachedCustomerRecordIdentifier) instanceof CustomerAccountSnapshot snapshot
+            && snapshot.isOpen();
 
         ignored = e instanceof @Ann final E baz;
         ignored = f instanceof final @Ann E qux;

@@ -26,13 +26,13 @@ public abstract class Return {
 
     Object returnExpandedInvoiceTotalAndAlreadyInParenthesis() {
         return (
-            subtotal +
-            tax +
-            shipping +
-            discount +
-            serviceFee +
-            roundingAdjustment +
-            grandTotal
+            subtotal
+            + tax
+            + shipping
+            + discount
+            + serviceFee
+            + roundingAdjustment
+            + grandTotal
         );
     }
 

@@ -116,7 +116,7 @@ public record FormatterOptions(
             false,
             false,
             LambdaArrowParens.PRESERVE,
-            BinaryOperatorPosition.END,
+            BinaryOperatorPosition.START,
             ParseErrorBehavior.RECOVER,
             JavaLanguageLevel.LATEST_AVAILABLE
         );
@@ -126,7 +126,7 @@ public record FormatterOptions(
      * Creates options for callers that configure document-rendering shape and parser language level.
      *
      * <p>Raw trailing whitespace is not preserved, require-pragma is disabled, lambda parentheses preserve source
-     * spelling, broken binary operators stay at the end of continuation lines, and parse-error behavior defaults to
+     * spelling, broken binary operators move to the start of continuation lines, and parse-error behavior defaults to
      * {@link ParseErrorBehavior#RECOVER}.
      */
     public static FormatterOptions withJavaLanguageLevel(
@@ -146,7 +146,7 @@ public record FormatterOptions(
             false,
             false,
             LambdaArrowParens.PRESERVE,
-            BinaryOperatorPosition.END,
+            BinaryOperatorPosition.START,
             ParseErrorBehavior.RECOVER,
             javaLanguageLevel
         );

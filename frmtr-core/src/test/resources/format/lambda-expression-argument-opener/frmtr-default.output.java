@@ -207,13 +207,13 @@ final class LambdaExpressionArgumentOpener {
         return probe
             .rows(ledger.rows())
             .allMatch(row ->
-                ((row.count() == 0 && row.day().isBefore(boundary.last())) ||
-                    (row.count() == 1 && row.day().isAfter(boundary.last())) ||
-                    (row.count() == 1 && row.day().isEqual(boundary.last())))
+                ((row.count() == 0 && row.day().isBefore(boundary.last()))
+                    || (row.count() == 1 && row.day().isAfter(boundary.last()))
+                    || (row.count() == 1 && row.day().isEqual(boundary.last())))
             )
             .filteredOn(row ->
-                row.day().isBefore(boundary.last().plusDays(3)) &&
-                    row.day().isAfter(boundary.last())
+                row.day().isBefore(boundary.last().plusDays(3))
+                    && row.day().isAfter(boundary.last())
             );
     }
 

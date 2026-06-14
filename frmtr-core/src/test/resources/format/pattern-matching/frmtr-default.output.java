@@ -3,10 +3,10 @@ class PatternMatchingCases {
     static String formatter(Object value) {
         String formatted = "unknown";
         if (
-            value instanceof Integer i ||
-            candidatePoint instanceof Point ||
-            candidateCircle instanceof Circle c ||
-            candidateSquare instanceof Square
+            value instanceof Integer i
+            || candidatePoint instanceof Point
+            || candidateCircle instanceof Circle c
+            || candidateSquare instanceof Square
         ) {
             formatted = String.format("int %d", i);
         } else if (value instanceof Long l) {
@@ -21,8 +21,8 @@ class PatternMatchingCases {
 
     public boolean test(final Object subject) {
         return (
-            subject instanceof final Integer x &&
-            (x == 5 || x == 6 || x == 7 || x == 8 || x == 9 || x == 10 || x == 11)
+            subject instanceof final Integer x
+            && (x == 5 || x == 6 || x == 7 || x == 8 || x == 9 || x == 10 || x == 11)
         );
     }
 
@@ -36,24 +36,24 @@ class PatternMatchingCases {
             case Buyer preferredBuyer when this.bestAvailableWholesalePrice > b.bestPrice -> true;
             case Buyer preferredBuyer when this.bestAvailableRetailPrice > b.bestPrice -> true;
             case Buyer b when (
-                this.bestPrice > b.bestPrice &&
-                this.bestPrice > b.bestPrice &&
-                this.bestPrice > b.bestPrice &&
                 this.bestPrice > b.bestPrice
+                && this.bestPrice > b.bestPrice
+                && this.bestPrice > b.bestPrice
+                && this.bestPrice > b.bestPrice
             ) -> true;
             case Buyer b when (
-                this.bestPrice > b.bestPrice &&
-                this.bestPrice > b.bestPrice &&
-                this.bestPrice > b.bestPrice &&
                 this.bestPrice > b.bestPrice
+                && this.bestPrice > b.bestPrice
+                && this.bestPrice > b.bestPrice
+                && this.bestPrice > b.bestPrice
             ) -> {
                 return true;
             }
             case Buyer b when (
-                this.bestPrice > b.bestPrice &&
-                this.bestPrice > b.bestPrice &&
-                this.bestPrice > b.bestPrice &&
                 this.bestPrice > b.bestPrice
+                && this.bestPrice > b.bestPrice
+                && this.bestPrice > b.bestPrice
+                && this.bestPrice > b.bestPrice
             ) -> {
                 return true;
             }

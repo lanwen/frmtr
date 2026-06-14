@@ -69,17 +69,14 @@ class ConditionalExpression {
         : backupResult;
 
     RoutingChoice featureEnabled =
-      quotaAvailable(expandedRegionAvailable, planReady, fallbackReady) !=
-      policyReady
+      quotaAvailable(expandedRegionAvailable, planReady, fallbackReady)
+      != policyReady
         ? primaryResult
         : backupResult;
 
     RoutingChoice featureEnabled =
-      quotaAvailable(
-        expandedRegionAvailable,
-        migrationPlanReady,
-        fallbackReady
-      ) != policyReady
+      quotaAvailable(expandedRegionAvailable, migrationPlanReady, fallbackReady)
+      != policyReady
         ? primaryResult
         : backupResult;
 
@@ -89,17 +86,14 @@ class ConditionalExpression {
         : backupResult;
 
     featureEnabled =
-      quotaAvailable(expandedRegionAvailable, planReady, fallbackReady) !=
-      policyReady
+      quotaAvailable(expandedRegionAvailable, planReady, fallbackReady)
+      != policyReady
         ? primaryResult
         : backupResult;
 
     featureEnabled =
-      quotaAvailable(
-        expandedRegionAvailable,
-        migrationPlanReady,
-        fallbackReady
-      ) != policyReady
+      quotaAvailable(expandedRegionAvailable, migrationPlanReady, fallbackReady)
+      != policyReady
         ? primaryResult
         : backupResult;
   }

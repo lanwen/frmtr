@@ -194,7 +194,7 @@ Current public formatter policy includes:
 - `FormatterOptions.LambdaArrowParens`: controls whether single-parameter lambdas preserve, avoid, or always emit
   parentheses.
 - `FormatterOptions.BinaryOperatorPosition`: controls whether broken binary continuation lines keep operators at the end
-  of the previous line or move operators to the start of continuation lines.
+  of the previous line or move operators to the start of continuation lines. The default is `START`.
 
 Parse failures are reported with structured `SourceProblem` entries on `FormatterException`: parser message, one-based
 location when known, nearest enclosing declaration source line when detected, and source context around the failure. CLI
@@ -237,8 +237,9 @@ planning, root promotion, final-segment tails, and chain comments stay in the ch
 header first, then open component lists before moving implemented types to their own continuation. Expression-lambda
 argument planning is split into `ExpressionLambdaArgumentLayout` so call and chain printers share one typed width plan
 instead of rebuilding partial lambda text independently. Broken expression-lambda bodies keep an over-wide binary's
-method-call operand attached to the lambda opener when splitting that call is enough, then fall back to the shared binary
-continuation renderer so the body cannot stay flat past the configured line width.
+method-call operand attached to the lambda opener when splitting that call is enough, keep a compact binary tail on the
+call's closing line when it fits, then fall back to the shared binary continuation renderer so the body cannot stay flat
+past the configured line width.
 
 ## CLI
 

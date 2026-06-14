@@ -86,7 +86,7 @@ public final class TestFormatterOptions {
             preserveRawTrailingWhitespace,
             requirePragma,
             lambdaArrowParens,
-            FormatterOptions.BinaryOperatorPosition.END,
+            FormatterOptions.defaults().binaryOperatorPosition(),
             FormatterOptions.ParseErrorBehavior.RECOVER,
             javaLanguageLevel
         );

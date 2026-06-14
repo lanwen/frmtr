@@ -85,8 +85,8 @@ class T {
                 }
 
                 if (
-                    name == null ||
-                    name.isBlank()
+                    name == null
+                    || name.isBlank()
                 ) {
                     throw new IllegalArgumentException("Name cannot be blank");
                 }

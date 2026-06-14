@@ -13,6 +13,7 @@ import dev.lanwen.frmtr.FormatterOptions;
 import org.junit.jupiter.api.Test;
 
 final class SourceTextTest {
+
     @Test
     void mapsLfJavaParserRangesToSourceOffsets() {
         String source = "class Demo {\n    int value;\n}\n";
@@ -82,11 +83,14 @@ final class SourceTextTest {
 
         String slice = sourceText.slice(sourceText.region(method.getRange().orElseThrow()));
 
-        assertThat(slice).isEqualTo(String.join(
+        assertThat(slice).isEqualTo(
+            String.join(
                 "\n",
                 "void demo() {",
                 "        call();",
-                "    }"));
+                "    }"
+            )
+        );
     }
 
     @Test
@@ -129,26 +133,17 @@ final class SourceTextTest {
     }
 
     private static CompilationUnit parse(String source) {
-        JavaParser parser = new JavaParser(new ParserConfiguration()
+        JavaParser parser = new JavaParser(
+            new ParserConfiguration()
                 .setStoreTokens(true)
-                .setAttributeComments(true));
+                .setAttributeComments(true)
+        );
         return parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
-                .getResult()
-                .orElseThrow();
+            .getResult()
+            .orElseThrow();
     }
 
     private static FormatterOptions options(boolean preserveRawTrailingWhitespace) {
-        return new FormatterOptions(
-                FormatterOptions.DEFAULT_LINE_WIDTH,
-                FormatterOptions.IndentStyle.SPACE,
-                FormatterOptions.DEFAULT_INDENT_WIDTH,
-                FormatterOptions.LineEnding.LF,
-                true,
-                preserveRawTrailingWhitespace,
-                false,
-                FormatterOptions.LambdaArrowParens.PRESERVE,
-                FormatterOptions.BinaryOperatorPosition.END,
-                FormatterOptions.ParseErrorBehavior.RECOVER,
-                FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
+        return FormatterOptions.defaults().withPreserveRawTrailingWhitespace(preserveRawTrailingWhitespace);
     }
 }

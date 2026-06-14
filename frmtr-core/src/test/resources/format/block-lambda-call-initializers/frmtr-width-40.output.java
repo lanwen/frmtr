@@ -8,8 +8,8 @@ class BlockLambdaCallInitializersSample {
         var partitioned =
             entries.partition(entry -> {
                 return (
-                    request.mode() == SelectionMode.ANY &&
-                    entry
+                    request.mode() == SelectionMode.ANY
+                    && entry
                         .state()
                         .shouldPrioritize(
                             subject.owner()
@@ -35,8 +35,8 @@ class BlockLambdaCallInitializersSample {
             entries.partition(
                 (_, entry) -> {
                     return (
-                        request.mode() == SelectionMode.ANY &&
-                        entry
+                        request.mode() == SelectionMode.ANY
+                        && entry
                             .state()
                             .shouldPrioritize(
                                 subject.owner()
@@ -61,8 +61,8 @@ class BlockLambdaCallInitializersSample {
             entries.partition(
                 (_, entry, cursor) -> {
                     return (
-                        request.mode() == SelectionMode.ANY &&
-                        entry
+                        request.mode() == SelectionMode.ANY
+                        && entry
                             .state()
                             .shouldPrioritize(
                                 subject.owner(
@@ -89,8 +89,8 @@ class BlockLambdaCallInitializersSample {
             entryCollectionWithExtremelyLongFormatterFixturePrefixBeforeLambdaArgumentFallback
                 .partition(entry -> {
                     return (
-                        request.mode() == SelectionMode.ANY &&
-                        entry
+                        request.mode() == SelectionMode.ANY
+                        && entry
                             .state()
                             .shouldPrioritize(
                                 subject.owner()

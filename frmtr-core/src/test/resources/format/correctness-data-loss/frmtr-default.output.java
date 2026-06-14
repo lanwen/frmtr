@@ -47,8 +47,8 @@ class DataLossCases {
 
     boolean guarded(Object error) {
         return (
-            error instanceof ReplyEnvelope.Message message &&
-            ReplyCodes.NOT_FOUND.equals(message.toString())
+            error instanceof ReplyEnvelope.Message message
+            && ReplyCodes.NOT_FOUND.equals(message.toString())
         );
     }
 }

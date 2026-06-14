@@ -206,6 +206,14 @@ assertions, as `FormatterException.internal(...)` so adapters can report concise
 VM-level crashes. `Frmtr.debugDoc(...)` shares that wrapping and the same parser, transform, and Java printing path as
 formatting, but returns `DocDebugRenderer` output instead of rendered source.
 
+Two opt-in, off-by-default debug toggles guard formatter correctness during development without affecting normal output.
+`dev.lanwen.frmtr.debug.guardrails` enables comment-accounting and per-transform identity checks; the newer
+`dev.lanwen.frmtr.debug.verify` enables an AST-equivalence verify mode that re-parses the formatter output and asserts
+it is structurally equivalent to the input (modulo comments, whitespace, and the deliberate import reorder), catching a
+meaning-changing printer bug in any construct. Verification is enabled across the `frmtr-core` test suite so every
+golden fixture is also AST-checked. Both toggles live behind `FormatterGuardrails`; see
+[docs/java-formatter-internals.md](docs/java-formatter-internals.md) for details.
+
 `JavaPrinter` creates one per-run `JavaFormatContext`, constructs shared type rendering, and coordinates the three
 printer composer groups: `ExpressionPrinters`, `DeclarationPrinters`, and `StatementPrinters`. Formatter ownership then
 narrows through envelope gates, dispatcher boundaries, and specialized declaration, statement, expression, type,

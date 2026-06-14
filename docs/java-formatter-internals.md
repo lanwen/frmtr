@@ -126,8 +126,9 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
 - `MethodReferencePrinter`: method references, type-argument suffix text, and parenthesized-scope suffixes.
 - `EnclosedSuffixDispatcher`: the bridge used when a broken enclosed expression may need a method-call or
   method-reference suffix preserved.
-- `TextBlockPrinter`: narrow content probes, formatted text-block reconstruction, raw fallback rendering, same-line
-  closing-delimiter preservation, escaped triple-quote source spelling, and parent-depth content indentation.
+- `TextBlockPrinter`: value-preserving text-block rendering. It reproduces the literal from its source token verbatim so
+  the JLS-computed `String` value (escapes, significant whitespace, blank lines) is never changed; it intentionally does
+  not recognize or reformat embedded languages, because that would change the literal's runtime value.
 - `ObjectCreationPrinter`: constructor-call prefixes, comments around `new` and created types, forced constructor
   argument breaks selected by `ObjectCreationLayoutPolicy`, generic type-body breaks, huggable lambda arguments, commented
   constructor argument gaps, and anonymous class body member sequencing.
@@ -261,3 +262,31 @@ Transform checks run from `JavaTransformPipeline` and assert that source-equival
 comment identities, and reorder existing import declarations without cloning or moving their attached comments.
 Raw-source fallback paths that intentionally preserve JavaParser-visible comments go through `RawPreservedSource`, so the
 final assertion reports only comments that were neither structured-printed nor deliberately raw-preserved.
+
+### AST-equivalence verify mode
+
+A separate opt-in check, gated by its own system property `dev.lanwen.frmtr.debug.verify` (read by
+`FormatterGuardrails.verifyEnabled()`), re-parses the formatter's output and asserts it represents the same program as
+the input. It exists because the comment and transform guardrails never observe the *printer*: they cannot catch a
+printer change that alters the token stream (the historical enum-separator data-loss bug). When the toggle is on,
+`JavaFormatter.format` re-parses the rendered output with the same `JavaParser` configuration used for the input
+(stored tokens, attributed comments, language level) and hands both compilation units to
+`FormatterGuardrails.assertAstEquivalent`, which delegates the comparison to `AstEquivalence`. A divergence throws an
+actionable `AssertionError` naming what differed (a dropped/duplicated import, or the first structural divergence with a
+minimized re-print excerpt), surfaced through `Frmtr.format` as a `FormatterException.internal(...)`.
+
+`AstEquivalence` decides equivalence structurally with JavaParser's own `EqualsVisitor` after normalizing both trees
+identically: comments are stripped; imports are sorted with the formatter's own `ImportSortTransform.FORMATTER_IMPORT_ORDER`
+(so the deliberate reorder cancels, while a dropped or duplicated import still differs); parentheses (`EnclosedExpr`) are
+unwrapped (sound because precedence is encoded in the tree shape, not the parentheses, and the comparison is structural
+rather than a printed-string compare); single-parameter lambda parenthesization is canonicalized; redundant empty
+statements inside blocks are dropped; and modifier order is sorted. Text-block **content** is compared by its JLS String
+value (each text block on both sides is replaced by a `StringLiteralExpr` of `translateEscapes()`): the formatter renders
+text blocks verbatim (see `TextBlockPrinter`), so re-indentation does not change the value while any real content change
+does and is flagged. (An earlier cut excluded text-block content because the formatter then rewrote recognized embedded
+snippets and so changed the literal's value; once `TextBlockPrinter` was made value-preserving, content came back in
+scope, and comparing it across the corpus now also guards that the formatter keeps preserving text-block values.) The
+check is **off by
+default** so normal `format(...)` runs do no extra work and stay byte-identical; it is enabled for the whole
+`frmtr-core` test suite (via the test task's system property) so every golden fixture is also AST-checked, and is
+skipped for recovered (partially parsed) inputs, where AST-equivalence is ill-defined.

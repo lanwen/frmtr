@@ -54,8 +54,33 @@ public final class JavaFormatter {
         if (options.requirePragma() && !hasFormatPragma(source)) {
             return source;
         }
-        Doc doc = printDoc(source);
-        return new DocRenderer(options).render(doc);
+        JavaParseResult parseResult = parse(source);
+        Doc doc = printDoc(source, parseResult);
+        String formatted = new DocRenderer(options).render(doc);
+        verifyAstEquivalent(parseResult, formatted);
+        return formatted;
+    }
+
+    /**
+     * Re-parses the formatted output and asserts it represents the same program as the input (roadmap B3, layer 1).
+     *
+     * <p>Gated entirely by {@link FormatterGuardrails#verifyEnabled()}, so a normal run does no extra work and output
+     * stays byte-identical regardless of the toggle. Verification is skipped for recovered (partially-parsed) inputs:
+     * the formatter only round-trips a best-effort tree there, so AST-equivalence is ill-defined and would false-fail.
+     * The re-parse reuses {@code this.parser}, i.e. the exact same {@link ParserConfiguration} (stored tokens,
+     * attributed comments, language level) used for the input, so the two trees are produced under identical settings.
+     */
+    private void verifyAstEquivalent(JavaParseResult inputResult, String formatted) {
+        if (!FormatterGuardrails.verifyEnabled() || inputResult.hasParseProblems()) {
+            return;
+        }
+        JavaParseResult outputResult = parse(formatted);
+        if (outputResult.hasParseProblems()) {
+            throw new AssertionError(
+                    "Formatter AST-equivalence verify failed: formatted output did not parse cleanly under the "
+                            + "input's parser configuration");
+        }
+        FormatterGuardrails.assertAstEquivalent(inputResult.compilationUnit(), outputResult.compilationUnit());
     }
 
     /**
@@ -86,13 +111,20 @@ public final class JavaFormatter {
         return printDocWithPrinter(source).doc();
     }
 
+    private Doc printDoc(String source, JavaParseResult parseResult) {
+        return printDocWithPrinter(source, parseResult).doc();
+    }
+
     /**
      * Builds the document and returns it together with the printer that built it, so explain can read the printer's
      * recorded width decisions. {@link #format(String)} discards the printer and only renders the document, so the
      * recording stays a pure observer with no effect on formatted output.
      */
     private PrintedDoc printDocWithPrinter(String source) {
-        JavaParseResult parseResult = parse(source);
+        return printDocWithPrinter(source, parse(source));
+    }
+
+    private PrintedDoc printDocWithPrinter(String source, JavaParseResult parseResult) {
         // TODO: Expose parseResult.problems() through a future diagnostics/debug result API.
         SourceText sourceText = new SourceText(source);
         if (parseResult.hasParseProblems()) {

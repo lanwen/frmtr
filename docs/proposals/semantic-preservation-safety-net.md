@@ -1,6 +1,6 @@
 # Semantic-Preservation Safety Net: AST-Equivalence, Idempotence, and a Real-World Corpus
 
-Status: Proposed
+Status: Layer 1 implemented; Layers 2-3 proposed
 
 ## Summary
 
@@ -66,7 +66,47 @@ It is worth stating what is *not* at risk: the parser is configured consistently
 language level from `FormatterOptions.javaLanguageLevel()`), so input and output can be parsed with
 identical settings for a fair comparison.
 
-## Layer 1 — AST-equivalence check (proposed-new)
+## Layer 1 — AST-equivalence check (implemented)
+
+> **Implemented.** Landed as `AstEquivalence` plus a `FormatterGuardrails.assertAstEquivalent(...)` hook in
+> `JavaFormatter.format`, gated by the `dev.lanwen.frmtr.debug.verify` system property (off by default, parallel to
+> `dev.lanwen.frmtr.debug.guardrails`). The check re-parses the formatted output with the same `JavaParser`
+> configuration used for the input and compares structurally via JavaParser's `EqualsVisitor` after normalizing both
+> trees identically: comments stripped; imports sorted with `ImportSortTransform.FORMATTER_IMPORT_ORDER` (a dropped or
+> duplicated import still fails, reported by name); `EnclosedExpr` parentheses unwrapped (sound because precedence is in
+> the tree shape and the comparison is structural, not a printed-string compare — see the deviation note below);
+> single-parameter lambda parenthesization canonicalized; redundant block-level empty statements dropped; and modifier
+> order sorted. Text-block **content** is compared by its JLS String value (each text block is replaced on both sides by
+> a `StringLiteralExpr` of `translateEscapes()`), sound because the formatter renders text blocks verbatim and so
+> preserves their value. It is enabled for the whole `frmtr-core`
+> test suite (via the test task system property) so every golden fixture is also AST-checked — the whole suite passes
+> with it on, demonstrating zero false-positives on the existing corpus (and that the formatter preserves every
+> fixture's text-block values) — and is skipped for recovered (partially parsed)
+> inputs. Negative tests in `AstEquivalenceTest` prove it catches a dropped/renamed member, a dropped enum constant,
+> distinct numeric-literal lexemes, a precedence change, and a dropped or duplicated import.
+>
+> **Deviation from Option A as originally written.** The proposal recommended a normalized *re-print string* compare
+> (Option A). That is unsound for the formatter's parenthesis handling: the formatter both adds clarifying parentheses
+> to mixed-precedence expressions (`a && b || c` → `(a && b) || c`) and removes redundant ones, and JavaParser's pretty
+> printer does not re-insert precedence parentheses, so stripping `EnclosedExpr` and string-comparing would equate
+> `(1 + 2) * 3` with `1 + 2 * 3`. The implementation therefore uses Option B's **structural** comparison
+> (`EqualsVisitor`) for the decision and keeps the canonical re-print only to build the human-readable failure message.
+> Two other formatter-owned transforms surfaced and are normalized the same way: modifier reordering and block-level
+> empty-statement removal.
+>
+> **Text-block content (now in scope).** The first cut compared text blocks by their *whitespace-stripped* value, which
+> was unsound (it masked a change confined to interior whitespace). At that time the formatter's recognized-content
+> probes (`TextBlockPrinter`) *also* deliberately re-laid-out embedded HTML/JSON/Java/TypeScript, **changing** the
+> literal's JLS value, so a sharper JLS-value compare produced real differences on the `text-block-language-and-escapes`
+> fixture (e.g. `{"glossary":{"title": "example 'glossary'"}}` → `{ "glossary": { "title": "example 'glossary'" } }`).
+> Those were not false positives — the formatter genuinely changed string values — so as an interim measure text-block
+> content was excluded. That root cause has since been fixed: the content probes were removed and `TextBlockPrinter` now
+> renders text blocks verbatim (a formatter must never change a string literal's value). With the formatter
+> value-preserving, text-block content is back **in scope**, compared by its JLS value (`translateEscapes()` on both
+> sides). `AstEquivalenceTest` locks all three facets: re-indentation verifies clean, a content change — including one
+> confined to significant interior whitespace — is flagged, and replacing a text block with a non-text-block expression
+> diverges. Running this across the whole fixture corpus now also guards that the formatter keeps preserving text-block
+> values.
 
 **Goal:** after producing formatted output, re-parse it with the same parser configuration and
 assert it represents the same program as the input, ignoring trivia (whitespace, comment text and

@@ -17,7 +17,16 @@ import java.util.Map;
  * to callers.
  */
 final class ImportSortTransform implements JavaFormatTransform {
-    private static final Comparator<ImportDeclaration> FORMATTER_IMPORT_ORDER = Comparator
+    /**
+     * The deterministic order this transform imposes on imports: static imports first, then by fully-qualified name.
+     *
+     * <p>Package-visible so the AST-equivalence verifier ({@link AstEquivalence}) can canonicalize import order on both
+     * the input and the formatted output before comparing them. Without this, the verifier would flag the deliberate
+     * reorder this transform performs as a semantic difference. Import order is not semantically meaningful in Java, so
+     * canonicalizing it on both sides is sound; a dropped or duplicated import survives that canonicalization and is
+     * still reported as a real difference.
+     */
+    static final Comparator<ImportDeclaration> FORMATTER_IMPORT_ORDER = Comparator
             .comparing((ImportDeclaration declaration) -> !declaration.isStatic())
             .thenComparing(ImportDeclaration::getNameAsString);
 

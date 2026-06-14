@@ -25,6 +25,13 @@ import java.util.function.Function;
  */
 final class FormatterGuardrails {
     static final String ENABLED_PROPERTY = "dev.lanwen.frmtr.debug.guardrails";
+
+    /**
+     * Toggles the AST-equivalence verify mode (roadmap B3, layer 1). Separate from {@link #ENABLED_PROPERTY} because
+     * verification re-parses the formatted output and so has real cost; it must stay off in the shipped hot path.
+     */
+    static final String VERIFY_PROPERTY = "dev.lanwen.frmtr.debug.verify";
+
     private static final int COMMENT_SNIPPET_LENGTH = 80;
 
     private FormatterGuardrails() {}
@@ -111,6 +118,33 @@ final class FormatterGuardrails {
 
     static boolean enabled() {
         return Boolean.getBoolean(ENABLED_PROPERTY);
+    }
+
+    static boolean verifyEnabled() {
+        return Boolean.getBoolean(VERIFY_PROPERTY);
+    }
+
+    /**
+     * Asserts that the formatted output re-parses to the same program as the input, modulo trivia.
+     *
+     * <p>This is a no-op unless {@value #VERIFY_PROPERTY} is set, so normal {@code format(...)} runs pay nothing and
+     * stay byte-identical. The comparison contract — which differences are trivia (comments, whitespace, import order)
+     * and which are genuine (everything else, including enum-constant count) — lives entirely in {@link AstEquivalence};
+     * this method only routes a mismatch into an actionable {@link AssertionError} consistent with the other guardrails.
+     *
+     * <p>The caller supplies the already-parsed input unit and a freshly re-parsed output unit so this helper does not
+     * need the parser configuration. Callers must skip verification for recovered (partially-parsed) inputs, where
+     * AST-equivalence is ill-defined.
+     */
+    static void assertAstEquivalent(CompilationUnit input, CompilationUnit output) {
+        // Intentionally re-checks verifyEnabled() even though JavaFormatter already gates its call site: this keeps the
+        // helper safe to invoke directly (e.g. from tests) without each caller having to remember the toggle.
+        if (!verifyEnabled()) {
+            return;
+        }
+        AstEquivalence.describeDifference(input, output).ifPresent(difference -> {
+            throw new AssertionError("Formatter AST-equivalence verify failed: " + difference);
+        });
     }
 
     /**

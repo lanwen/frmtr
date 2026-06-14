@@ -105,7 +105,14 @@ missing the ones that matter most:
 - **Effort:** large but additive and incremental. Pairs with B1.
 
 ### B3. A correctness safety net: AST-equivalence + idempotence + a real-world corpus
-**Status:** 🟣 Investigating · _focused proposal:_ [semantic-preservation-safety-net.md](semantic-preservation-safety-net.md)
+**Status:** 🟢 In progress — Layer 1 landed · _focused proposal:_ [semantic-preservation-safety-net.md](semantic-preservation-safety-net.md)
+
+> **Layer 1 landed.** The AST-equivalence verify mode is implemented: a `dev.lanwen.frmtr.debug.verify` toggle
+> (off by default) re-parses the formatter output and asserts it is structurally equivalent to the input (via
+> `AstEquivalence` + `EqualsVisitor`), with import order, comments, parentheses, modifier order, block-level empty
+> statements, and text-block whitespace normalized away — but a dropped/duplicated import or any structural change still
+> fails. Enabled across the `frmtr-core` test suite so every golden fixture is AST-checked. Layers 2 (idempotence
+> property test) and 3 (real-world corpus) remain proposed.
 
 > **Investigation finding:** an idempotence assertion already exists (`FrmtrTest.java:29`); the gap
 > is AST-equivalence. Proposes a `dev.lanwen.frmtr.debug.verify` toggle parallel to the existing

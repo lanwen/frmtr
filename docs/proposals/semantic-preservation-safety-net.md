@@ -1,6 +1,6 @@
 # Semantic-Preservation Safety Net: AST-Equivalence, Idempotence, and a Real-World Corpus
 
-Status: Layer 1 implemented; Layers 2-3 proposed
+Status: Layers 1-2 implemented; Layer 3 proposed
 
 ## Summary
 
@@ -196,7 +196,59 @@ on by default** in `Frmtr.format`. Intended usage:
 - available to developers via `-Ddev.lanwen.frmtr.debug.verify=true` while iterating on a printer;
 - off in the shipped CLI / Gradle plugin hot path.
 
-## Layer 2 — idempotence property test (extends existing)
+## Layer 2 — idempotence property test (implemented)
+
+> **Implemented.** Landed as `IdempotencePropertyTest`
+> (`frmtr-core/src/test/java/dev/lanwen/frmtr/java/IdempotencePropertyTest.java`), a JUnit 5 `@ParameterizedTest` pair
+> running over a corpus deliberately broader than the golden fixtures. The corpus is built three ways: every golden
+> fixture *input* verbatim, two **parse-preserving** mechanical perturbations of each (whitespace *collapsed* to the
+> minimum and *expanded* with extra blanks — rebuilt from JavaParser's own token stream, rewriting only whitespace tokens
+> and emitting identifier/keyword/literal/separator/operator/comment tokens verbatim, so literal and text-block interiors
+> and comment text are never touched and the program parses to the same tree), and a dozen diverse hand-written snippets
+> (generics, lambdas, switch expressions, records, annotations, text blocks, varargs, enums with/without a trailing
+> separator, sealed hierarchies, comment-dense members) not present as golden outputs. Generation is fully deterministic
+> (mechanical token rewrites, no randomness). The corpus parser matches the default-options formatter's
+> `BLEEDING_EDGE` language level, but it does **not** accept everything the formatter accepts: the formatter can RECOVER
+> (best-effort parse) inputs the corpus parser rejects as a `COMPILATION_UNIT` (e.g. unnamed-class / unnamed-pattern
+> fixtures). Only cleanly-parsing inputs are in scope; RECOVER-only inputs are intentionally skipped (AST-equivalence is
+> ill-defined on a best-effort tree, per the Risks section). That skip is no longer silent — a `@BeforeAll` logs the
+> skipped fixture names and count and asserts a minimum corpus size, so coverage erosion surfaces.
+>
+> **Properties asserted (and the one deliberately not).** Over the well-shaped corpus (verbatim fixture inputs + hand-written
+> snippets) the test asserts **strict one-pass idempotence** (`format(format(x)) == format(x)`) *and* **semantic
+> preservation** (`AstEquivalence.equivalent(parse(x), parse(format(x)))`, the Layer 1 comparator, asserted explicitly so
+> it reads as a property rather than only as a verify-mode side effect — and also enforced inside `Frmtr.format` because
+> the suite runs with `dev.lanwen.frmtr.debug.verify=true`). Over the perturbed corpus it asserts **semantic preservation
+> + parse-stability + eventual convergence** but *not* one-pass idempotence, because the formatter is genuinely not
+> one-pass idempotent on arbitrarily-reshaped input (a `return` collapsed onto one over-long line first wraps with its
+> binary chain flat and needs a second pass to break the chain). The convergence assertion is **eventual**: repeated
+> formatting must reach a *fixed point* within a small number of passes (currently 5). Empirically most reshaped inputs
+> reach a fixed point within a couple of passes; a couple need a third; and a few never converge at all — those are
+> recorded as findings (see below), including one non-terminating case whose output grows on every pass. (The earlier
+> claim that the formatter "converges in two passes" was empirically false and has been corrected.) **Convergence *to the
+> formatting of the original* (`format(perturbed(x)) == format(x)`) is deliberately never asserted**: the formatter
+> preserves intentional source shape, so two differently-shaped equivalent inputs may format differently, and asserting
+> otherwise would be wrong.
+>
+> **Findings surfaced by the broadened corpus (excluded from the green corpus, not masked).** Eight perturbed shapes
+> exposed real formatter defects and are listed in the test's `EXCLUDED_AS_FINDINGS` with a per-entry diagnosis.
+> *Non-reparseable output:* `correctness-data-loss`, `enum-declaration-layout`, and
+> `comment-preservation-block-end-comments` (collapsed) format to output that does **not re-parse** — a comment/annotation
+> between enum constants or a trailing comment on a record component is mis-placed and a required separator dropped (the
+> enum-separator data-loss class this whole effort targets, reproduced on re-whitespaced input). *Dropped elements:*
+> `comment-preservation-module-declaration` (collapsed and expanded) drops **every `requires`/`uses` directive**,
+> formatting the module to an empty body (caught by Layer 1 even though the empty module parses). *Non-convergence:*
+> `comment-preservation-method-chain-segments` (collapsed and expanded) **never reaches a fixed point** — each pass grows
+> the output ~12-16 characters in a non-terminating reformat loop; `block-lambda-arrow-parens-always` and
+> `block-lambda-arrow-parens-avoid` (collapsed) format once cleanly but the *second* pass produces source that no longer
+> re-parses, so they oscillate into malformed output rather than settling. These are genuine bugs to fix, tracked here
+> rather than forced green.
+>
+> **Not a finding (corrected).** `formatter-pragma-spacing` (collapsed) was previously listed as a finding for moving a
+> line-based `// @formatter:on` onto a shared line. That is a **perturbation artifact**, not a formatter bug: a
+> line-significant pragma defines its protected region by its line position, so the perturbation now keeps pragma / ignore
+> markers (`@formatter:off`/`@formatter:on`/`frmtr-ignore*`) on their own line — the same way it leaves string interiors
+> untouched — and the fixture is back in the green corpus.
 
 **What already exists:** `FrmtrTest.formatsDiscoveredFixtureAndIsIdempotent`
 (`FrmtrTest.java:29`) already asserts `Frmtr.format(formatted, options).equals(formatted)` for every

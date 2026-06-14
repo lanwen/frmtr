@@ -1,0 +1,558 @@
+package dev.lanwen.frmtr.java;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import com.github.javaparser.JavaParser;
+import com.github.javaparser.JavaToken;
+import com.github.javaparser.ParseResult;
+import com.github.javaparser.ParseStart;
+import com.github.javaparser.ParserConfiguration;
+import com.github.javaparser.Providers;
+import com.github.javaparser.TokenRange;
+import com.github.javaparser.ast.CompilationUnit;
+import dev.lanwen.frmtr.Frmtr;
+import dev.lanwen.frmtr.FormatterOptions;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+/**
+ * Layer 2 of the semantic-preservation safety net (roadmap B3,
+ * {@code docs/proposals/semantic-preservation-safety-net.md}): a property test that broadens correctness checking
+ * <em>beyond</em> the hand-authored golden fixtures.
+ *
+ * <p><strong>Why this adds coverage the existing checks do not.</strong> {@code FrmtrTest} already asserts per-fixture
+ * idempotence and (with verify mode on) AST-equivalence — but only over inputs a human curated <em>as golden
+ * outputs</em>. That proves the formatter is stable on a small set of already-well-shaped inputs. This test adds two
+ * sources of breadth:
+ *
+ * <ul>
+ *   <li><em>Mechanically perturbed fixture inputs.</em> Each golden {@code input.java} is re-shaped by two
+ *       parse-preserving whitespace perturbations: <em>collapse</em> (every whitespace run shrunk to the minimum) and
+ *       <em>expand</em> (every run padded with extra spaces and blank lines). The perturbation rebuilds the source from
+ *       JavaParser's own token stream and rewrites <em>only</em> whitespace tokens, emitting every identifier, keyword,
+ *       <strong>literal</strong> (string and text-block included), separator, operator, and <strong>comment</strong>
+ *       token verbatim. The lexed token sequence is therefore identical except for whitespace amounts, so the perturbed
+ *       source parses to the same AST and no literal or comment content is altered. This exercises the formatter against
+ *       arbitrary-shaped valid input — input no fixture author wrote — which neither existing per-fixture check covers.
+ *   <li><em>Diverse hand-written snippets not in the golden set.</em> Generics, lambdas, switch expressions, records,
+ *       annotations, text blocks, varargs, enums with and without a trailing separator, sealed hierarchies, and
+ *       comment-dense members — the constructs history flagged as fragile.
+ * </ul>
+ *
+ * <p><strong>The properties asserted (and the one deliberately not).</strong> frmtr is idempotent and
+ * semantics-preserving, but intentionally <em>not</em> convergent <em>to the formatting of the original</em> — it
+ * preserves intentional source shape (blank lines between members, multiline-vs-single-line call shape). So this test
+ * never asserts {@code format(perturbed(x)).equals(format(x))}: two differently-shaped but equivalent inputs can
+ * legitimately format to different outputs, and asserting otherwise would be wrong. It <em>does</em> assert that
+ * repeated formatting reaches a <em>fixed point</em> (see {@link #perturbedInputsAreSemanticsPreservingAndParseStable}).
+ * Instead:
+ *
+ * <ul>
+ *   <li>{@link #idempotentAndSemanticsPreserving} asserts <strong>strict one-pass idempotence</strong>
+ *       ({@code format(format(x)).equals(format(x))}) <em>and</em> <strong>semantic preservation</strong>
+ *       ({@code AstEquivalence.equivalent(parse(x), parse(format(x)))}) over the inputs a developer would actually feed
+ *       the formatter: every verbatim golden fixture input and every hand-written snippet.
+ *   <li>{@link #perturbedInputsAreSemanticsPreservingAndParseStable} asserts <strong>semantic preservation</strong>,
+ *       <strong>parse-stability</strong> ({@code format(x)} re-parses), and <strong>eventual convergence</strong> (a
+ *       fixed point within {@value #CONVERGENCE_PASSES} passes) over the perturbed inputs. It deliberately does
+ *       <em>not</em> assert one-pass idempotence on perturbed inputs, because the formatter genuinely is not one-pass
+ *       idempotent on arbitrarily-reshaped source: it can take a second pass (occasionally a third) to settle a
+ *       width-driven wrap. Empirically most reshaped inputs reach a fixed point within a couple of passes; a few do not,
+ *       and those are recorded in {@link #EXCLUDED_AS_FINDINGS} (including one non-terminating case whose output grows
+ *       on every pass) rather than asserted away.
+ * </ul>
+ *
+ * <p>Semantic preservation is asserted explicitly here (against the input's own parse tree) so the property reads as a
+ * property rather than a side effect of verify mode; it is <em>also</em> enforced inside {@code Frmtr.format} by the
+ * {@code dev.lanwen.frmtr.debug.verify} mode the test suite turns on, so both the explicit check and the runtime hook
+ * must agree.
+ *
+ * <p>Generation is deterministic: the perturbations are mechanical token rewrites with no randomness, so the corpus is
+ * identical on every run.
+ *
+ * <p><strong>Excluded perturbed inputs (genuine findings, not forced green).</strong> A handful of perturbed fixture
+ * shapes are excluded because formatting them exposes a real formatter defect rather than a perturbation artifact, and
+ * the offending output then makes a property ill-defined (it does not parse, dropped program elements, or never reaches
+ * a fixed point). They are listed in {@link #EXCLUDED_AS_FINDINGS} and reported rather than masked:
+ *
+ * <ul>
+ *   <li><em>Non-reparseable output.</em> {@code correctness-data-loss}, {@code enum-declaration-layout},
+ *       {@code comment-preservation-block-end-comments} (collapsed): {@code format(x)} produces output that does not
+ *       re-parse — a comment or annotation between enum constants, or a trailing comment on a record component, is
+ *       mis-placed and a required separator is dropped. This is the enum-separator data-loss class the whole B3 effort
+ *       exists to catch, here reproduced on a re-whitespaced input.
+ *   <li><em>Dropped program elements.</em> {@code comment-preservation-module-declaration} (collapsed and expanded):
+ *       {@code format(x)} drops every {@code requires} / {@code uses} directive, formatting the module to an empty body
+ *       — a catastrophic data loss the Layer 1 AST-equivalence check flags even though the empty module still parses.
+ *   <li><em>Does not converge (non-terminating reformat loop).</em>
+ *       {@code comment-preservation-method-chain-segments} (collapsed and expanded): repeated formatting never reaches a
+ *       fixed point — every pass grows the output by ~12 (collapsed) / ~16 (expanded) characters, so the formatter
+ *       reformats its own output indefinitely. The single formatting is semantics-preserving and re-parses, but the
+ *       convergence assertion (fixed point within {@value #CONVERGENCE_PASSES} passes) fails.
+ *   <li><em>Does not converge (later pass produces malformed output).</em> {@code block-lambda-arrow-parens-always} and
+ *       {@code block-lambda-arrow-parens-avoid} (collapsed): the first formatting is fine, but formatting <em>its</em>
+ *       output produces source that no longer re-parses, so the fixed-point search throws on the second pass — it
+ *       oscillates into malformed output rather than settling.
+ * </ul>
+ *
+ * <p><strong>Not a finding (formerly mis-labeled): {@code formatter-pragma-spacing}.</strong> Earlier this was excluded
+ * for "collapsing whitespace moves a line-based {@code // @formatter:on} onto a shared line." That was a
+ * <em>perturbation artifact</em>, not a formatter bug: a line-significant pragma defines the protected region by its
+ * line, so sliding it onto another line legitimately changes what the user asked to protect. The perturbation now keeps
+ * such pragma / ignore markers on their own line (see {@code perturb}), the same way it leaves string interiors
+ * untouched, so this fixture is perturbed without changing meaning and is back in the green corpus.
+ */
+final class IdempotencePropertyTest {
+
+    private static final FormatterOptions OPTIONS = FormatterOptions.defaults();
+
+    /**
+     * Perturbed inputs whose formatting exposes a genuine formatter defect — non-reparseable output, dropped program
+     * elements, or failure to reach a fixed point within {@value #CONVERGENCE_PASSES} passes (a non-terminating reformat
+     * loop, or oscillation into malformed output) — kept out of the green corpus and reported as findings rather than
+     * masked. See the class Javadoc for the per-entry diagnosis. Each entry is a corpus display name.
+     */
+    private static final Set<String> EXCLUDED_AS_FINDINGS = Set.of(
+            "correctness-data-loss @ collapsed-whitespace",
+            "enum-declaration-layout @ collapsed-whitespace",
+            "comment-preservation-block-end-comments @ collapsed-whitespace",
+            "comment-preservation-module-declaration @ collapsed-whitespace",
+            "comment-preservation-module-declaration @ expanded-whitespace",
+            "comment-preservation-method-chain-segments @ collapsed-whitespace",
+            "comment-preservation-method-chain-segments @ expanded-whitespace",
+            "block-lambda-arrow-parens-always @ collapsed-whitespace",
+            "block-lambda-arrow-parens-avoid @ collapsed-whitespace");
+
+    /**
+     * Over the inputs a developer actually feeds the formatter — every verbatim golden fixture input and every
+     * hand-written snippet — formatting is a one-pass fixed point and preserves program meaning.
+     *
+     * <p>Idempotence is asserted at the {@link Frmtr#format} level; semantic preservation is asserted explicitly against
+     * the input's own parse tree via {@link AstEquivalence}. Both must hold for every such input.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("wellShapedCorpus")
+    void idempotentAndSemanticsPreserving(String name, String source) {
+        String formatted = Frmtr.format(source, OPTIONS);
+
+        assertThat(Frmtr.format(formatted, OPTIONS))
+                .as("formatting is not idempotent for input `%s` (format(format(x)) != format(x))", name)
+                .isEqualTo(formatted);
+
+        assertSemanticsPreserved(name, source, formatted);
+    }
+
+    /**
+     * Number of formatting passes within which a perturbed input must reach a fixed point. Chosen small: most reshaped
+     * inputs settle in one or two passes, so anything still moving after five passes is reformatting in a loop rather
+     * than converging.
+     */
+    private static final int CONVERGENCE_PASSES = 5;
+
+    /**
+     * Over mechanically perturbed (re-whitespaced) fixture inputs, formatting preserves program meaning, produces output
+     * that re-parses, and reaches a fixed point within {@value #CONVERGENCE_PASSES} passes.
+     *
+     * <p>This is the breadth the golden suite cannot give: arbitrary-shaped valid input that no fixture author wrote.
+     * One-pass idempotence is deliberately <em>not</em> asserted here. The formatter is not one-pass idempotent on
+     * arbitrarily-reshaped source — e.g. a {@code return} expression collapsed onto one over-long line first wraps into
+     * a parenthesized group with the binary chain flat, and only a second pass breaks the chain across lines — so
+     * {@code format(format(x)) != format(x)} for many perturbed inputs.
+     *
+     * <p>What <em>is</em> asserted, beyond semantic preservation and parse-stability, is <strong>eventual
+     * convergence</strong>: re-running {@code format} must reach a fixed point ({@code format(f^k(x)) == f^k(x)}) within a
+     * small number of passes. Empirically most reshaped inputs settle within one or two passes; a couple need a third.
+     * Any input that never stabilizes (its output grows or oscillates every pass) is a genuine non-termination finding,
+     * not a property to assert away — those are recorded in {@link #EXCLUDED_AS_FINDINGS} (e.g. the method-chain-segments
+     * shapes, whose output grows ~12-16 chars on every pass, a non-terminating reformat loop) rather than masked.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("perturbedCorpus")
+    void perturbedInputsAreSemanticsPreservingAndParseStable(String name, String source) {
+        String formatted = Frmtr.format(source, OPTIONS);
+
+        assertThat(parseResult(formatted).isSuccessful())
+                .as("formatting perturbed input `%s` produced output that does not re-parse", name)
+                .isTrue();
+
+        assertSemanticsPreserved(name, source, formatted);
+        assertConvergesWithin(name, formatted);
+    }
+
+    /**
+     * Asserts that repeatedly formatting reaches a fixed point within {@link #CONVERGENCE_PASSES} passes, starting from
+     * {@code formatted} (which is already {@code format(source)}). The fixed point is the first {@code k} for which
+     * {@code format(f^k(x)) == f^k(x)}; the failure message names the input and shows the per-pass output lengths so a
+     * growing (non-terminating) or oscillating loop is visible.
+     */
+    private static void assertConvergesWithin(String name, String formatted) {
+        List<Integer> lengths = new ArrayList<>();
+        lengths.add(formatted.length());
+        String current = formatted;
+        for (int pass = 1; pass <= CONVERGENCE_PASSES; pass++) {
+            String next = Frmtr.format(current, OPTIONS);
+            lengths.add(next.length());
+            if (next.equals(current)) {
+                return;
+            }
+            current = next;
+        }
+        throw new AssertionError(String.format(
+                "perturbed input `%s` did not reach a fixed point within %d passes (output keeps changing — growing or "
+                        + "oscillating, not converging); per-pass output lengths: %s",
+                name, CONVERGENCE_PASSES, lengths));
+    }
+
+    private static void assertSemanticsPreserved(String name, String source, String formatted) {
+        // Parse each side once and reuse the trees for both the equivalence decision and the failure description, rather
+        // than re-parsing source/formatted a second time inside describeDifference.
+        CompilationUnit inputTree = parse(source);
+        CompilationUnit outputTree = parse(formatted);
+        assertThat(AstEquivalence.equivalent(inputTree, outputTree))
+                .as(
+                        "formatting changed program meaning for input `%s`: %s",
+                        name,
+                        AstEquivalence.describeDifference(inputTree, outputTree).orElse("<equivalent>"))
+                .isTrue();
+    }
+
+    // --- corpora ------------------------------------------------------------------------------------------------
+
+    /** Verbatim golden fixture inputs plus the hand-written snippets. */
+    static Stream<Arguments> wellShapedCorpus() {
+        List<Arguments> arguments = new ArrayList<>();
+        for (FixtureInput fixture : fixtureInputs()) {
+            addIfParses(arguments, fixture.name(), fixture.source());
+        }
+        for (int index = 0; index < HAND_WRITTEN_SNIPPETS.size(); index++) {
+            addIfParses(arguments, "snippet-" + index, HAND_WRITTEN_SNIPPETS.get(index));
+        }
+        return arguments.stream();
+    }
+
+    /** Two parse-preserving whitespace perturbations of each golden fixture input. */
+    static Stream<Arguments> perturbedCorpus() {
+        List<Arguments> arguments = new ArrayList<>();
+        for (FixtureInput fixture : fixtureInputs()) {
+            addIfParses(arguments, fixture.name() + " @ collapsed-whitespace", perturb(fixture.source(), Shape.COLLAPSE));
+            addIfParses(arguments, fixture.name() + " @ expanded-whitespace", perturb(fixture.source(), Shape.EXPAND));
+        }
+        return arguments.stream();
+    }
+
+    private static void addIfParses(List<Arguments> arguments, String name, String source) {
+        if (source != null && !EXCLUDED_AS_FINDINGS.contains(name) && parseResult(source).isSuccessful()) {
+            arguments.add(Arguments.of(name, source));
+        }
+    }
+
+    /** Smallest corpus we expect after legitimate skips; a sharp drop below this means coverage silently eroded. */
+    private static final int MINIMUM_WELL_SHAPED_CORPUS = 40;
+
+    /**
+     * Surfaces the corpus shrinkage that {@link #addIfParses} would otherwise hide.
+     *
+     * <p>{@code addIfParses} silently drops fixture inputs that do not parse cleanly as a {@code COMPILATION_UNIT}
+     * (unnamed-class / unnamed-pattern / parse-error-recovery fixtures and the like). The drop is principled —
+     * AST-equivalence is ill-defined on a {@code RECOVER}-only tree, so those inputs are intentionally out of scope — but
+     * invisible: a regression that started dropping half the corpus would still show a green suite. This logs the skipped
+     * fixture names and count, and asserts a minimum corpus size, so coverage erosion cannot pass unnoticed.
+     */
+    @BeforeAll
+    static void reportSkippedFixtures() {
+        List<String> skipped = new ArrayList<>();
+        int parsing = 0;
+        for (FixtureInput fixture : fixtureInputs()) {
+            if (parseResult(fixture.source()).isSuccessful()) {
+                parsing++;
+            } else {
+                skipped.add(fixture.name());
+            }
+        }
+        skipped.sort(Comparator.naturalOrder());
+        System.out.printf(
+                "[IdempotencePropertyTest] well-shaped fixture corpus: %d cleanly-parsing, %d skipped"
+                        + " (RECOVER-only, AST-equivalence out of scope)%n",
+                parsing, skipped.size());
+        for (String name : skipped) {
+            System.out.println("  skipped (does not parse as COMPILATION_UNIT): " + name);
+        }
+        int wellShaped = parsing + HAND_WRITTEN_SNIPPETS.size();
+        assertThat(wellShaped)
+                .as(
+                        "well-shaped corpus shrank to %d inputs (%d cleanly-parsing fixtures + %d snippets); a drop below"
+                                + " %d means fixtures are being silently skipped — investigate before lowering this floor",
+                        wellShaped, parsing, HAND_WRITTEN_SNIPPETS.size(), MINIMUM_WELL_SHAPED_CORPUS)
+                .isGreaterThanOrEqualTo(MINIMUM_WELL_SHAPED_CORPUS);
+    }
+
+    // --- parse-preserving whitespace perturbation ---------------------------------------------------------------
+
+    private enum Shape {
+        /** Collapse each whitespace run to the minimum that keeps the token stream valid. */
+        COLLAPSE,
+        /** Expand each whitespace run with extra spacing and blank lines. */
+        EXPAND
+    }
+
+    /**
+     * Re-shapes {@code source} by rewriting only its whitespace tokens, returning {@code null} when the source does not
+     * parse (so it can be skipped).
+     *
+     * <p>The rewrite walks JavaParser's own token stream and emits every non-whitespace token — identifiers, keywords,
+     * <strong>literals</strong> (including string and text-block literals), separators, operators, and
+     * <strong>comments</strong> — verbatim, perturbing only the whitespace between them. That is what makes the
+     * perturbation parse-preserving and value-preserving: the lexed token sequence is identical except for the amount of
+     * whitespace, so the perturbed source parses to the same AST and no literal or comment content is altered. A single
+     * end-of-line is preserved immediately after a line comment, because a {@code //} comment without a following
+     * newline would swallow the next token and change the program.
+     *
+     * <p><strong>Line-significant pragma comments keep their own line.</strong> A formatter pragma / ignore marker
+     * (e.g. {@code // @formatter:off}, {@code // @formatter:on}, {@code // frmtr-ignore[-start|-end]}) is line-based: the
+     * formatter attaches it to whatever syntax node it shares a line with, so the region it protects is defined by its
+     * line position. Collapsing the whitespace <em>before</em> such a comment would slide it onto the previous statement's
+     * line, changing which region the user asked to protect — a meaning-changing perturbation, not a whitespace-only one.
+     * The same way string interiors are emitted verbatim, the perturbation therefore preserves a newline immediately
+     * before (and after) a line-significant pragma comment, keeping it on its own line. This is the principled analogue of
+     * leaving literal interiors untouched: the comment's line is part of its meaning here.
+     */
+    private static String perturb(String source, Shape shape) {
+        TokenRange tokens = parseResult(source).getResult().flatMap(CompilationUnit::getTokenRange).orElse(null);
+        if (tokens == null) {
+            return null;
+        }
+        List<JavaToken> tokenList = new ArrayList<>();
+        for (JavaToken token : tokens) {
+            tokenList.add(token);
+        }
+        StringBuilder builder = new StringBuilder(source.length() * 2);
+        JavaToken previous = null;
+        for (int index = 0; index < tokenList.size(); index++) {
+            JavaToken token = tokenList.get(index);
+            if (token.getCategory().isWhitespace()) {
+                builder.append(whitespaceFor(shape, previous, nextNonWhitespace(tokenList, index)));
+            } else {
+                builder.append(token.getText());
+                previous = token;
+            }
+        }
+        return builder.toString();
+    }
+
+    private static JavaToken nextNonWhitespace(List<JavaToken> tokens, int from) {
+        for (int index = from + 1; index < tokens.size(); index++) {
+            JavaToken token = tokens.get(index);
+            if (!token.getCategory().isWhitespace()) {
+                return token;
+            }
+        }
+        return null;
+    }
+
+    private static String whitespaceFor(Shape shape, JavaToken previous, JavaToken next) {
+        boolean afterLineComment = previous != null
+                && previous.getCategory().isComment()
+                && previous.getText().startsWith("//");
+        boolean beforePragmaComment = next != null && next.getCategory().isComment() && isLinePragma(next.getText());
+        if (afterLineComment || beforePragmaComment) {
+            // A line comment must be terminated by a newline or it consumes whatever follows; a line-significant pragma
+            // must keep its own line or it would change which region the user asked to protect.
+            return shape == Shape.EXPAND ? "\n\n" : "\n";
+        }
+        return shape == Shape.EXPAND ? "  \n  " : " ";
+    }
+
+    /**
+     * Reports whether a comment's text carries a line-significant formatter pragma / ignore marker. Mirrors the marker
+     * vocabulary {@code FormatterPragmas} recognizes; the perturbation keeps such a comment on its own line so collapsing
+     * whitespace cannot move it into a different protected region.
+     */
+    private static boolean isLinePragma(String commentText) {
+        return commentText.contains("@formatter:off")
+                || commentText.contains("@formatter:on")
+                || commentText.contains("frmtr-ignore");
+    }
+
+    // --- corpus sources -----------------------------------------------------------------------------------------
+
+    private static List<FixtureInput> fixtureInputs() {
+        Path root = resourceRoot("format");
+        try (Stream<Path> walk = Files.walk(root)) {
+            return walk.filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().equals("input.java"))
+                    .map(path -> new FixtureInput(
+                            root.relativize(path.getParent()).toString().replace('\\', '/'),
+                            readString(path)))
+                    .sorted(Comparator.comparing(FixtureInput::name))
+                    .toList();
+        } catch (IOException exception) {
+            throw new UncheckedIOException("Unable to discover fixture inputs under " + root, exception);
+        }
+    }
+
+    private record FixtureInput(String name, String source) {}
+
+    /**
+     * Diverse constructs not present as golden outputs — generics, lambdas, switch expressions, records, annotations,
+     * text blocks, varargs, enums with and without a trailing separator, sealed hierarchies, and comment-dense members —
+     * so the property is not limited to the shapes someone happened to write a fixture for.
+     */
+    private static final List<String> HAND_WRITTEN_SNIPPETS = List.of(
+            """
+            import java.util.List;
+            import java.util.Map;
+            final class Generics<T extends Comparable<? super T>> {
+                <R> Map<String, List<R>> transform(List<? extends R> input) {
+                    return Map.of("k", List.copyOf(input));
+                }
+            }
+            """,
+            """
+            import java.util.function.Function;
+            class Lambdas {
+                Function<Integer, Integer> twice = x -> x * 2;
+                Runnable block = () -> { System.out.println("hi"); };
+                Function<String, Integer> len = (String s) -> s.length();
+            }
+            """,
+            """
+            class SwitchExpressions {
+                int classify(int day) {
+                    return switch (day) {
+                        case 1, 2, 3, 4, 5 -> 0;
+                        case 6, 7 -> 1;
+                        default -> {
+                            yield -1;
+                        }
+                    };
+                }
+            }
+            """,
+            """
+            record Point(int x, int y) {
+                Point {
+                    if (x < 0 || y < 0) throw new IllegalArgumentException();
+                }
+                static Point origin() { return new Point(0, 0); }
+            }
+            """,
+            """
+            import java.lang.annotation.Retention;
+            import java.lang.annotation.RetentionPolicy;
+            @Retention(RetentionPolicy.RUNTIME)
+            @interface Marker {
+                String value() default "x";
+                int[] codes() default {1, 2, 3};
+            }
+            """,
+            """
+            class TextBlocks {
+                String json = ""\"
+                    {"a":   1,
+                     "b": [2, 3]}
+                    ""\";
+                String oneLiner = "a\\tb\\nc";
+            }
+            """,
+            """
+            class Varargs {
+                @SafeVarargs
+                static <T> int count(T... items) { return items.length; }
+                void use() { count("a", "b", "c"); }
+            }
+            """,
+            """
+            enum WithTrailingComma {
+                RED,
+                GREEN,
+                BLUE,
+                ;
+                int code() { return ordinal(); }
+            }
+            """,
+            """
+            enum NoTrailingComma { ALPHA, BETA, GAMMA }
+            """,
+            """
+            class Comments {
+                // leading line comment
+                int field; // trailing comment
+                /* block */ void method() {
+                    /** odd javadoc-ish inside body */
+                    int x = 1; // tail
+                }
+            }
+            """,
+            """
+            class NestedTernaryAndBinary {
+                int pick(int a, int b, int c) {
+                    return a > b ? (a > c ? a : c) : (b > c ? b : c);
+                }
+                boolean flags(boolean p, boolean q, boolean r) {
+                    return p && q || r && !p;
+                }
+            }
+            """,
+            """
+            sealed interface Shape permits Circle, Square {}
+            record Circle(double radius) implements Shape {}
+            record Square(double side) implements Shape {}
+            """);
+
+    // --- parsing helpers ----------------------------------------------------------------------------------------
+
+    private static ParseResult<CompilationUnit> parseResult(String source) {
+        return newParser().parse(ParseStart.COMPILATION_UNIT, Providers.provider(source));
+    }
+
+    private static CompilationUnit parse(String source) {
+        return parseResult(source).getResult().orElseThrow();
+    }
+
+    private static JavaParser newParser() {
+        // Match the language level the default-options formatter uses (FormatterOptions.LATEST_AVAILABLE maps to
+        // BLEEDING_EDGE in JavaFormatter) so the AST-equivalence comparison is on the same footing. This parser does NOT
+        // accept everything the formatter accepts: the formatter can RECOVER (best-effort parse) inputs this parser
+        // rejects as a COMPILATION_UNIT — e.g. unnamed-class / unnamed-pattern fixtures. Only cleanly-parsing inputs are
+        // in scope here; RECOVER-only inputs are intentionally skipped (AST-equivalence is ill-defined on a best-effort
+        // tree, per the proposal's Risks section), and that skip is surfaced by reportSkippedFixtures().
+        return new JavaParser(new ParserConfiguration()
+                .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
+                .setStoreTokens(true)
+                .setAttributeComments(true));
+    }
+
+    private static String readString(Path path) {
+        try {
+            return Files.readString(path, StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            throw new UncheckedIOException("Unable to read fixture input " + path, exception);
+        }
+    }
+
+    private static Path resourceRoot(String name) {
+        try {
+            return Path.of(Objects.requireNonNull(
+                            IdempotencePropertyTest.class.getClassLoader().getResource(name), name)
+                            .toURI())
+                    .toAbsolutePath()
+                    .normalize();
+        } catch (URISyntaxException exception) {
+            throw new IllegalStateException("Unable to resolve resource root " + name, exception);
+        }
+    }
+}

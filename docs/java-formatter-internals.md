@@ -290,3 +290,12 @@ check is **off by
 default** so normal `format(...)` runs do no extra work and stay byte-identical; it is enabled for the whole
 `frmtr-core` test suite (via the test task's system property) so every golden fixture is also AST-checked, and is
 skipped for recovered (partially parsed) inputs, where AST-equivalence is ill-defined.
+
+`IdempotencePropertyTest` (roadmap B3, layer 2) reuses `AstEquivalence.equivalent(...)` directly as an explicit
+property over a corpus broader than the golden fixtures: every fixture input verbatim, two parse-preserving whitespace
+perturbations of each (rebuilt from JavaParser's token stream, rewriting only whitespace tokens so literal and comment
+content is never touched and the program parses to the same tree), and diverse hand-written snippets. It asserts
+one-pass idempotence + semantic preservation on well-shaped inputs and semantic preservation + parse-stability on
+perturbed inputs, and deliberately never asserts convergence (`format(perturbed(x)) == format(x)`), because the
+formatter preserves intentional source shape. Perturbed shapes that expose genuine defects are excluded as documented
+findings rather than masked.

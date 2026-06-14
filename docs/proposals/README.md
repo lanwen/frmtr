@@ -105,14 +105,22 @@ missing the ones that matter most:
 - **Effort:** large but additive and incremental. Pairs with B1.
 
 ### B3. A correctness safety net: AST-equivalence + idempotence + a real-world corpus
-**Status:** 🟢 In progress — Layer 1 landed · _focused proposal:_ [semantic-preservation-safety-net.md](semantic-preservation-safety-net.md)
+**Status:** 🟢 In progress — Layers 1-2 landed · _focused proposal:_ [semantic-preservation-safety-net.md](semantic-preservation-safety-net.md)
 
 > **Layer 1 landed.** The AST-equivalence verify mode is implemented: a `dev.lanwen.frmtr.debug.verify` toggle
 > (off by default) re-parses the formatter output and asserts it is structurally equivalent to the input (via
 > `AstEquivalence` + `EqualsVisitor`), with import order, comments, parentheses, modifier order, block-level empty
 > statements, and text-block whitespace normalized away — but a dropped/duplicated import or any structural change still
-> fails. Enabled across the `frmtr-core` test suite so every golden fixture is AST-checked. Layers 2 (idempotence
-> property test) and 3 (real-world corpus) remain proposed.
+> fails. Enabled across the `frmtr-core` test suite so every golden fixture is AST-checked.
+
+> **Layer 2 landed.** `IdempotencePropertyTest` runs the idempotence and semantic-preservation properties over a corpus
+> broader than the golden fixtures: every fixture input verbatim, two parse-preserving whitespace perturbations of each
+> (token-stream rewrites that never touch literal/comment content), and diverse hand-written snippets. It asserts
+> one-pass idempotence + AST-equivalence on well-shaped inputs and AST-equivalence + parse-stability on perturbed inputs,
+> and deliberately does **not** assert convergence (the formatter preserves intentional source shape). The broadened
+> corpus surfaced six real data-loss / parse-stability defects on perturbed inputs (dropped enum separators, dropped
+> module directives), excluded from the green corpus and recorded as findings in the proposal. Layer 3 (real-world OSS
+> corpus harness) remains proposed.
 
 > **Investigation finding:** an idempotence assertion already exists (`FrmtrTest.java:29`); the gap
 > is AST-equivalence. Proposes a `dev.lanwen.frmtr.debug.verify` toggle parallel to the existing

@@ -31,6 +31,23 @@ New formatter rules should include golden coverage plus idempotence and reparse 
 rules should prefer fixture coverage that exercises representative source shape, comments, source spacing, and relevant
 formatter options instead of asserting only a narrow printer helper result.
 
+## Semantic-Preservation Property Checks
+
+Beyond the curated golden fixtures, two layers of the semantic-preservation safety net
+([docs/proposals/semantic-preservation-safety-net.md](proposals/semantic-preservation-safety-net.md), roadmap B3)
+verify correctness without anyone having written a fixture for the bug:
+
+- **AST-equivalence verify mode (layer 1):** the `dev.lanwen.frmtr.debug.verify` system property (on for the whole
+  `frmtr-core` test suite) makes `JavaFormatter.format` re-parse its own output and assert structural equivalence to the
+  input via `AstEquivalence`, so every formatted fixture is also meaning-checked.
+- **Idempotence + semantic-preservation property test (layer 2):** `IdempotencePropertyTest` runs over a corpus broader
+  than the golden set — every fixture input verbatim, two parse-preserving whitespace perturbations of each (token-stream
+  rewrites that never touch literal or comment content), and diverse hand-written snippets. It asserts one-pass
+  idempotence + AST-equivalence on well-shaped inputs and AST-equivalence + parse-stability on perturbed inputs. It
+  deliberately does **not** assert convergence (`format(perturbed(x)) == format(x)`): the formatter preserves intentional
+  source shape, so equivalent inputs of different shape may format differently. Perturbed shapes that expose genuine
+  defects are excluded as documented findings rather than masked.
+
 Normal fixtures are discovered by the `@ResourceFixtureSource(glob = "format/**/input.java")` JUnit source extension.
 Each normal fixture must include at least one recognized expected output next to the input:
 `frmtr-default.output.java` for the default configuration or `frmtr-<variant>.output.java` for a named option variant.

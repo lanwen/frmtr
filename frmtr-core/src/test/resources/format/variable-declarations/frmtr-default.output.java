@@ -167,17 +167,13 @@ public class Variables {
     }
 
     public void breakMultipleMethods() {
-        boolean willDrop =
-            predictDropResponse.getSendResult().isIgnorableFailure()
+        boolean willDrop = predictDropResponse.getSendResult().isIgnorableFailure()
             || predictDropResponse.getSendResult().isFatalError();
-        boolean willDrop =
-            predictDropResponse.getSendResult().isIgnorableFailure
+        boolean willDrop = predictDropResponse.getSendResult().isIgnorableFailure
             || predictDropResponse.getSendResult().isFatalError;
-        boolean willDrop =
-            predictDropResponsegetSendResultisIgnorableFailure
+        boolean willDrop = predictDropResponsegetSendResultisIgnorableFailure
             || predictDropResponsegetSendResultisFatalError;
-        boolean willDrop =
-            predictDropResponse.getSendResult().isIgnorableFailure()
+        boolean willDrop = predictDropResponse.getSendResult().isIgnorableFailure()
             || predictDropResponsegetSendResultisFatalError;
     }
 

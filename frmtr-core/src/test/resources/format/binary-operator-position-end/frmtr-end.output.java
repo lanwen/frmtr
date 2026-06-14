@@ -30,8 +30,7 @@ public class BinaryOperations {
     }
 
     public boolean binaryOperationWithComments() {
-        boolean a =
-            one ||
+        boolean a = one ||
             two >> 1 || // one
             // two
             // three
@@ -39,15 +38,13 @@ public class BinaryOperations {
             // four
             three;
 
-        boolean b =
-            one ||
+        boolean b = one ||
             two >> 1 || // one
             // two
             // three
             three;
 
-        boolean c =
-            one ||
+        boolean c = one ||
             two >> 1 || // one
             // two
             // three
@@ -72,8 +69,7 @@ public class BinaryOperations {
     }
 
     void declarationVsAssignment() {
-        var lineLengthInAssignmentMoreThanPrintWidth =
-            "1234567890" +
+        var lineLengthInAssignmentMoreThanPrintWidth = "1234567890" +
             "1234567890" +
             "1234567890" +
             "1234567890" +
@@ -165,8 +161,7 @@ public class BinaryOperations {
     }
 
     void instanceOf() {
-        var hasSnapshot =
-            hasSnapshot &&
+        var hasSnapshot = hasSnapshot &&
             AccountStore.find(cachedCustomerRecordIdentifier) instanceof CustomerAccountSnapshot snapshot &&
             snapshot.isOpen();
 

@@ -42,47 +42,89 @@ import java.util.function.Predicate;
  * variable sequencing while initializer-specific line-width probes and construct fallbacks stay in one place.
  */
 final class VariableInitializerLayout {
+
     private final CommentTracker comments;
+
     private final RawSource rawSource;
+
     private final FormatterOptions options;
+
     private final LayoutWidth layoutWidth;
+
     private final Function<Node, String> compactTypeLike;
+
     private final Function<Node, String> compact;
+
     private final Function<Node, String> compactWithoutOwnComment;
+
     private final Function<List<? extends Node>, String> compactJoin;
+
     private final Function<Expression, Doc> expression;
+
     private final Function<Expression, Doc> expressionWithoutOwnComment;
+
     private final Predicate<BinaryExpr> binaryExpressionHasLineComments;
+
     private final Function<BinaryExpr, Doc> binaryExpressionLinesWithComments;
+
     private final BiFunction<Expression, Boolean, Optional<Doc>> suffixedEnclosedExpression;
+
     private final Function<ArrayAccessExpr, Doc> arrayAccessWithBrokenEnclosedName;
+
     private final Predicate<BinaryExpr> shouldKeepCastDivisionContinuationFlat;
+
     private final BiFunction<Expression, Boolean, Doc> binaryExpressionLines;
+
     private final Function<MethodCallExpr, Doc> methodCall;
+
     private final Function<MethodCallExpr, Doc> brokenMethodCall;
+
     private final Function<MethodCallExpr, Optional<Doc>> mixedFieldMethodCallChain;
+
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain;
+
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainWithSemicolon;
+
     private final Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment;
+
     private final Function<MethodCallExpr, Optional<Expression>> mixedFieldMethodCallRoot;
+
     private final Function<MethodCallExpr, String> methodCallChainFirstLine;
+
     private final Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation;
+
     private final Predicate<MethodCallExpr> methodCallChainIsSourceMultiline;
+
     private final Function<Type, Doc> castType;
+
     private final Function<ConditionalExpr, Doc> brokenConditionalExpression;
+
     private final Predicate<ConditionalExpr> shouldBreakBeforeConditionalInitializer;
+
     private final Predicate<ArrayCreationExpr> arrayCreationTypeBreaks;
+
     private final Function<ArrayCreationExpr, String> arrayCreationPrefix;
+
     private final BiFunction<ArrayInitializerExpr, Boolean, Doc> arrayInitializer;
+
     private final BiFunction<ArrayInitializerExpr, String, String> compactArrayInitializerWithSourceSpacing;
+
     private final Function<ObjectCreationExpr, String> objectCreationPrefix;
+
     private final Function<ClassOrInterfaceType, String> typeNameWithoutArguments;
+
     private final Function<ClassOrInterfaceType, Doc> brokenClassOrInterfaceType;
+
     private final Predicate<Expression> shouldPrintScopeAsDoc;
+
     private final Function<MethodCallExpr, String> methodCallPrefix;
+
     private final FieldDeclarationPrinter.HuggableArgumentsRenderer huggableBlockLambdaArguments;
+
     private final Function<LambdaExpr, String> lambdaParameters;
+
     private final BiPredicate<LambdaExpr, String> lambdaParametersShouldBreak;
+
     private final Function<LambdaExpr, Doc> lambdaExpression;
 
     VariableInitializerLayout(
@@ -127,7 +169,8 @@ final class VariableInitializerLayout {
             FieldDeclarationPrinter.HuggableArgumentsRenderer huggableBlockLambdaArguments,
             Function<LambdaExpr, String> lambdaParameters,
             BiPredicate<LambdaExpr, String> lambdaParametersShouldBreak,
-            Function<LambdaExpr, Doc> lambdaExpression) {
+            Function<LambdaExpr, Doc> lambdaExpression
+    ) {
         this.comments = comments;
         this.rawSource = rawSource;
         this.options = options;
@@ -171,17 +214,21 @@ final class VariableInitializerLayout {
         this.lambdaParametersShouldBreak = lambdaParametersShouldBreak;
         this.lambdaExpression = lambdaExpression;
     }
+
     Doc variableWithStatementTerminator(VariableDeclarator variable, String declarationPrefix) {
-        if (variable.getInitializer().orElse(null) instanceof MethodCallExpr methodCall
-                && methodCallChainHasFinalTrailingLineComment.test(methodCall)) {
+        if (
+            variable.getInitializer().orElse(null) instanceof MethodCallExpr methodCall
+            && methodCallChainHasFinalTrailingLineComment.test(methodCall)
+        ) {
             Optional<Doc> chain = forcedMethodCallChainWithSemicolon.apply(methodCall);
             if (chain.isPresent()) {
                 return variableWithMethodCallChain(
-                        variableName(variable),
-                        declarationPrefix + variable.getNameAsString(),
-                        methodCall,
-                        methodCallChainFirstLine.apply(methodCall),
-                        chain.orElseThrow());
+                    variableName(variable),
+                    declarationPrefix + variable.getNameAsString(),
+                    methodCall,
+                    methodCallChainFirstLine.apply(methodCall),
+                    chain.orElseThrow()
+                );
             }
         }
         Doc declaration = variable.getInitializer()
@@ -197,128 +244,156 @@ final class VariableInitializerLayout {
     Doc variableWithInitializer(
             VariableDeclarator variable,
             Expression initializer,
-            String declarationPrefix) {
+            String declarationPrefix
+    ) {
         String flat = declarationPrefix + variable.getNameAsString() + " = " + compact.apply(initializer) + ";";
         String name = variableName(variable);
         Optional<Doc> preEqualsBlockComment = preEqualsBlockComment(variable, initializer);
         if (preEqualsBlockComment.isPresent()) {
             String commentedName = name + " " + commentText(preEqualsBlockComment.orElseThrow());
             String commentedFlat = declarationPrefix
-                    + commentedName
-                    + " = "
-                    + compactWithoutOwnComment.apply(initializer)
-                    + ";";
+                + commentedName
+                + " = "
+                + compactWithoutOwnComment.apply(initializer)
+                + ";";
             if (layoutWidth.blockStatement(commentedFlat) > options.lineWidth()) {
                 return Doc.concat(
-                        Doc.text(commentedName + " ="),
-                        Doc.indent(Doc.concat(Doc.HARD_LINE, expressionWithoutOwnComment.apply(initializer))));
+                    Doc.text(commentedName + " ="),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, expressionWithoutOwnComment.apply(initializer)))
+                );
             }
             return Doc.concat(Doc.text(commentedName + " = "), expressionWithoutOwnComment.apply(initializer));
         }
         Optional<String> postEqualsBlockComment = postEqualsBlockComment(variable, initializer);
         if (postEqualsBlockComment.isPresent()) {
             String commentedFlat = declarationPrefix
-                    + name
-                    + " = "
-                    + postEqualsBlockComment.orElseThrow()
-                    + " "
-                    + compactWithoutOwnComment.apply(initializer)
-                    + ";";
+                + name
+                + " = "
+                + postEqualsBlockComment.orElseThrow()
+                + " "
+                + compactWithoutOwnComment.apply(initializer)
+                + ";";
             if (layoutWidth.blockStatement(commentedFlat) > options.lineWidth()) {
                 return Doc.concat(
-                        Doc.text(name + " ="),
-                        Doc.indent(Doc.concat(Doc.HARD_LINE, expression.apply(initializer))));
+                    Doc.text(name + " ="),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, expression.apply(initializer)))
+                );
             }
         }
         Optional<Doc> leadingInitializerComments = leadingInitializerComments(variable, initializer);
         if (leadingInitializerComments.isPresent()) {
             return Doc.concat(
-                    Doc.text(name + " ="),
-                    Doc.indent(Doc.concat(
-                            Doc.HARD_LINE,
-                            leadingInitializerComments.orElseThrow(),
-                            Doc.HARD_LINE,
-                            expression.apply(initializer))));
+                Doc.text(name + " ="),
+                Doc.indent(
+                    Doc.concat(
+                        Doc.HARD_LINE,
+                        leadingInitializerComments.orElseThrow(),
+                        Doc.HARD_LINE,
+                        expression.apply(initializer)
+                    )
+                )
+            );
         }
         if (initializer instanceof BinaryExpr binaryExpr && binaryExpressionHasLineComments.test(binaryExpr)) {
+            if (binaryInitializerCanKeepFirstOperandWithEquals(variable, declarationPrefix, binaryExpr)) {
+                return Doc.concat(
+                    Doc.text(name + " = "),
+                    Doc.indent(binaryExpressionLinesWithComments.apply(binaryExpr))
+                );
+            }
             return Doc.concat(
-                    Doc.text(name + " ="),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLinesWithComments.apply(binaryExpr))));
+                Doc.text(name + " ="),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLinesWithComments.apply(binaryExpr)))
+            );
         }
         if (layoutWidth.blockStatement(flat) > options.lineWidth()) {
             Optional<Doc> suffixedEnclosedInitializer = suffixedEnclosedExpression.apply(initializer, true);
             if (suffixedEnclosedInitializer.isPresent()) {
                 return Doc.concat(Doc.text(name + " = "), suffixedEnclosedInitializer.orElseThrow());
             }
-            if (initializer instanceof ArrayAccessExpr arrayAccessExpr
-                    && arrayAccessExpr.getName().isEnclosedExpr()) {
+            if (
+                initializer instanceof ArrayAccessExpr arrayAccessExpr
+                && arrayAccessExpr.getName().isEnclosedExpr()
+            ) {
                 return Doc.concat(Doc.text(name + " = "), arrayAccessWithBrokenEnclosedName.apply(arrayAccessExpr));
             }
             if (initializer instanceof ArrayCreationExpr arrayCreationExpr) {
                 Optional<Doc> arrayCreation = variableWithBrokenArrayCreation(
-                        name,
-                        declarationPrefix + variable.getNameAsString(),
-                        arrayCreationExpr);
+                    name,
+                    declarationPrefix + variable.getNameAsString(),
+                    arrayCreationExpr
+                );
                 if (arrayCreation.isPresent()) {
                     return arrayCreation.orElseThrow();
                 }
             }
             if (initializer instanceof ObjectCreationExpr objectCreationExpr) {
                 Optional<Doc> objectCreation = variableWithBrokenObjectCreation(
-                        name,
-                        declarationPrefix + variable.getNameAsString(),
-                        objectCreationExpr);
+                    name,
+                    declarationPrefix + variable.getNameAsString(),
+                    objectCreationExpr
+                );
                 if (objectCreation.isPresent()) {
                     return objectCreation.orElseThrow();
                 }
             }
             if (initializer instanceof BinaryExpr binaryExpr) {
-                if (binaryInitializerCanKeepTextBlockOpenerWithEquals(variable, declarationPrefix, binaryExpr)) {
+                if (binaryInitializerCanKeepFirstOperandWithEquals(variable, declarationPrefix, binaryExpr)) {
                     return Doc.concat(
-                            Doc.text(name + " = "),
-                            Doc.indent(binaryExpressionLines.apply(initializer, true)));
+                        Doc.text(name + " = "),
+                        Doc.indent(binaryExpressionLines.apply(initializer, true))
+                    );
                 }
                 if (shouldKeepCastDivisionContinuationFlat.test(binaryExpr)) {
                     return Doc.concat(
-                            Doc.text(name + " ="),
-                            Doc.indent(Doc.concat(Doc.HARD_LINE, expression.apply(binaryExpr))));
+                        Doc.text(name + " ="),
+                        Doc.indent(Doc.concat(Doc.HARD_LINE, expression.apply(binaryExpr)))
+                    );
                 }
                 return Doc.concat(
-                        Doc.text(name + " ="),
-                        Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines.apply(initializer, true))));
+                    Doc.text(name + " ="),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines.apply(initializer, true)))
+                );
             }
         }
-        if (initializer instanceof MethodCallExpr methodCall
-                && methodCall.getScope().filter(TextBlockLiteralExpr.class::isInstance).isPresent()) {
+        if (
+            initializer instanceof MethodCallExpr methodCall
+            && methodCall.getScope().filter(TextBlockLiteralExpr.class::isInstance).isPresent()
+        ) {
             return Doc.concat(Doc.text(name + " = "), this.methodCall.apply(methodCall));
         }
-        if (layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
-                && initializer instanceof MethodCallExpr methodCall
-                && !initializerHasOwnBreak(initializer)) {
+        if (
+            layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+            && initializer instanceof MethodCallExpr methodCall
+            && !initializerHasOwnBreak(initializer)
+        ) {
             Optional<Doc> sourceMultilineCall = variableWithSourceMultilineMethodCallInitializer(
-                    variable,
-                    name,
-                    declarationPrefix + variable.getNameAsString(),
-                    methodCall);
+                variable,
+                name,
+                declarationPrefix + variable.getNameAsString(),
+                methodCall
+            );
             if (sourceMultilineCall.isPresent()) {
                 return sourceMultilineCall.orElseThrow();
             }
             if (methodCallChainRootIsObjectCreation.test(methodCall)) {
                 Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
-                        name,
-                        declarationPrefix + variable.getNameAsString(),
-                        methodCall,
-                        false);
+                    name,
+                    declarationPrefix + variable.getNameAsString(),
+                    methodCall,
+                    false
+                );
                 if (directCall.isPresent()) {
                     return directCall.orElseThrow();
                 }
             }
             if (methodCallHasAttachableScope(methodCall)) {
                 Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
-                        name,
-                        declarationPrefix + variable.getNameAsString(),
-                        methodCall,
-                        true);
+                    name,
+                    declarationPrefix + variable.getNameAsString(),
+                    methodCall,
+                    true
+                );
                 if (directCall.isPresent()) {
                     return directCall.orElseThrow();
                 }
@@ -330,115 +405,153 @@ final class VariableInitializerLayout {
             Optional<Doc> forcedChain = forcedMethodCallChain.apply(methodCall);
             if (forcedChain.isPresent()) {
                 return variableWithMethodCallChain(
-                        name,
-                        declarationPrefix + variable.getNameAsString(),
-                        methodCall,
-                        methodCallChainFirstLine.apply(methodCall),
-                        forcedChain.orElseThrow());
+                    name,
+                    declarationPrefix + variable.getNameAsString(),
+                    methodCall,
+                    methodCallChainFirstLine.apply(methodCall),
+                    forcedChain.orElseThrow()
+                );
             }
             Optional<Doc> mixedChain = mixedFieldMethodCallChain.apply(methodCall);
             if (mixedChain.isPresent()) {
                 return variableWithMethodCallChain(
-                        name,
-                        declarationPrefix + variable.getNameAsString(),
-                        methodCall,
-                        mixedFieldMethodCallFirstLine(methodCall),
-                        mixedChain.orElseThrow());
-            }
-            Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
                     name,
                     declarationPrefix + variable.getNameAsString(),
                     methodCall,
-                    false);
+                    mixedFieldMethodCallFirstLine(methodCall),
+                    mixedChain.orElseThrow()
+                );
+            }
+            Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
+                name,
+                declarationPrefix + variable.getNameAsString(),
+                methodCall,
+                false
+            );
             if (directCall.isPresent()) {
                 return directCall.orElseThrow();
             }
         }
-        if (layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
-                && initializer instanceof CastExpr castExpr
-                && castExpr.getExpression() instanceof MethodCallExpr methodCall
-                && !initializerHasOwnBreak(initializer)) {
+        if (
+            layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+            && initializer instanceof CastExpr castExpr
+            && castExpr.getExpression() instanceof MethodCallExpr methodCall
+            && !initializerHasOwnBreak(initializer)
+        ) {
             return Doc.concat(
-                    Doc.text(name + " = "),
-                    castType.apply(castExpr.getType()),
-                    Doc.text(" "),
-                    brokenMethodCall.apply(methodCall));
+                Doc.text(name + " = "),
+                castType.apply(castExpr.getType()),
+                Doc.text(" "),
+                brokenMethodCall.apply(methodCall)
+            );
         }
-        if (layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
-                && initializer instanceof CastExpr castExpr
-                && castTypeNeedsBreak(declarationPrefix + variable.getNameAsString(), castExpr.getType())
-                && !initializerHasOwnBreak(initializer)) {
+        if (
+            layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+            && initializer instanceof CastExpr castExpr
+            && castTypeNeedsBreak(declarationPrefix + variable.getNameAsString(), castExpr.getType())
+            && !initializerHasOwnBreak(initializer)
+        ) {
             return variableWithCastTypeBreak(name, declarationPrefix + variable.getNameAsString(), castExpr);
         }
-        if (layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
-                && initializer instanceof ConditionalExpr conditionalExpr
-                && !initializerHasOwnBreak(initializer)) {
+        if (
+            layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+            && initializer instanceof ConditionalExpr conditionalExpr
+            && !initializerHasOwnBreak(initializer)
+        ) {
             return conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr);
         }
-        if (layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
-                && initializer instanceof LambdaExpr lambdaExpr
-                && !initializerHasOwnBreak(initializer)) {
-            Optional<Doc> expressionLambdaInitializer =
-                    variableWithExpressionLambdaInitializer(name, declarationPrefix + variable.getNameAsString(), lambdaExpr);
+        if (
+            layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+            && initializer instanceof LambdaExpr lambdaExpr
+            && !initializerHasOwnBreak(initializer)
+        ) {
+            Optional<Doc> expressionLambdaInitializer = variableWithExpressionLambdaInitializer(
+                name,
+                declarationPrefix + variable.getNameAsString(),
+                lambdaExpr
+            );
             if (expressionLambdaInitializer.isPresent()) {
                 return expressionLambdaInitializer.orElseThrow();
             }
             Optional<Doc> blockLambdaInitializer = variableWithBlockLambdaInitializer(
-                    name,
-                    declarationPrefix + variable.getNameAsString(),
-                    lambdaExpr);
+                name,
+                declarationPrefix + variable.getNameAsString(),
+                lambdaExpr
+            );
             if (blockLambdaInitializer.isPresent()) {
                 return blockLambdaInitializer.orElseThrow();
             }
             Optional<Doc> lambdaInitializer = variableWithBrokenLambdaParameters(
-                    name,
-                    declarationPrefix + variable.getNameAsString(),
-                    lambdaExpr);
+                name,
+                declarationPrefix + variable.getNameAsString(),
+                lambdaExpr
+            );
             if (lambdaInitializer.isPresent()) {
                 return lambdaInitializer.orElseThrow();
             }
         }
-        if (layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
-                && initializer instanceof StringLiteralExpr) {
+        if (
+            layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+            && initializer instanceof StringLiteralExpr
+        ) {
             return Doc.concat(
-                    Doc.text(name + " ="),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, expression.apply(initializer))));
+                Doc.text(name + " ="),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, expression.apply(initializer)))
+            );
         }
-        if (layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
-                && initializer instanceof ArrayInitializerExpr arrayInitializerExpr
-                && sourceSpansMultipleLines(arrayInitializerExpr)) {
+        if (
+            layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+            && initializer instanceof ArrayInitializerExpr arrayInitializerExpr
+            && sourceSpansMultipleLines(arrayInitializerExpr)
+        ) {
             return Doc.concat(Doc.text(name + " = "), arrayInitializer.apply(arrayInitializerExpr, true));
         }
-        if (layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
-                && !(initializer instanceof StringLiteralExpr)
-                && !(initializer instanceof TextBlockLiteralExpr)
-                && !initializerHasOwnBreak(initializer)) {
+        if (
+            layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+            && !(initializer instanceof StringLiteralExpr)
+            && !(initializer instanceof TextBlockLiteralExpr)
+            && !initializerHasOwnBreak(initializer)
+        ) {
             return Doc.concat(
-                    Doc.text(name + " ="),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, brokenInitializer(initializer))));
+                Doc.text(name + " ="),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, brokenInitializer(initializer)))
+            );
         }
         return Doc.concat(Doc.text(name + " = "), expression.apply(initializer));
     }
 
     /**
-     * Keeps a text-block-led binary initializer from stranding {@code =} when the first literal opener fits.
+     * Keeps a binary initializer from stranding {@code =} when the first operand still fits on the declaration line.
      */
-    private boolean binaryInitializerCanKeepTextBlockOpenerWithEquals(
+    private boolean binaryInitializerCanKeepFirstOperandWithEquals(
             VariableDeclarator variable,
             String declarationPrefix,
-            BinaryExpr binaryExpr) {
-        return binaryStartsWithTextBlock(binaryExpr)
-                && layoutWidth.variableInitializer(
-                                variable, declarationPrefix + variable.getNameAsString() + " = \"\"\"")
-                        <= options.lineWidth();
+            BinaryExpr binaryExpr
+    ) {
+        String firstOperand = binaryInitializerFirstOperandLine(binaryExpr);
+        return (
+            layoutWidth.variableInitializer(
+                variable,
+                declarationPrefix + variable.getNameAsString() + " = " + firstOperand
+            )
+            <= options.lineWidth()
+        );
     }
 
-    private boolean binaryStartsWithTextBlock(BinaryExpr binaryExpr) {
+    private String binaryInitializerFirstOperandLine(BinaryExpr binaryExpr) {
+        Expression firstOperand = firstBinaryOperand(binaryExpr);
+        if (firstOperand instanceof TextBlockLiteralExpr) {
+            return "\"\"\"";
+        }
+        return compact.apply(firstOperand);
+    }
+
+    private Expression firstBinaryOperand(BinaryExpr binaryExpr) {
         Expression left = binaryExpr.getLeft();
         while (left instanceof BinaryExpr leftBinary && leftBinary.getOperator() == binaryExpr.getOperator()) {
             left = leftBinary.getLeft();
         }
-        return left instanceof TextBlockLiteralExpr;
+        return left;
     }
 
     /**
@@ -446,14 +559,19 @@ final class VariableInitializerLayout {
      * {@code =}, but the whole chain fits after the break.
      */
     private Optional<Doc> variableWithCompactObjectCreationChain(String name, MethodCallExpr methodCall) {
-        if (!methodCallChainRootIsObjectCreation.test(methodCall)
-                || methodCallChainIsSourceMultiline.test(methodCall)
-                || layoutWidth.continuationStatement(compact.apply(methodCall) + ";") > options.lineWidth()) {
+        if (
+            !methodCallChainRootIsObjectCreation.test(methodCall)
+            || methodCallChainIsSourceMultiline.test(methodCall)
+            || layoutWidth.continuationStatement(compact.apply(methodCall) + ";") > options.lineWidth()
+        ) {
             return Optional.empty();
         }
-        return Optional.of(Doc.concat(
+        return Optional.of(
+            Doc.concat(
                 Doc.text(name + " ="),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(compact.apply(methodCall))))));
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(compact.apply(methodCall))))
+            )
+        );
     }
 
     /**
@@ -494,36 +612,51 @@ final class VariableInitializerLayout {
     private Optional<Doc> variableWithBrokenArrayCreation(
             String name,
             String flatName,
-            ArrayCreationExpr arrayCreation) {
-        if (arrayCreation.getInitializer().isEmpty()
-                || arrayCreationTypeBreaks.test(arrayCreation)
-                || !arrayCreation.getAllContainedComments().isEmpty()) {
+            ArrayCreationExpr arrayCreation
+    ) {
+        if (
+            arrayCreation.getInitializer().isEmpty()
+            || arrayCreationTypeBreaks.test(arrayCreation)
+            || !arrayCreation.getAllContainedComments().isEmpty()
+        ) {
             return Optional.empty();
         }
         String prefix = arrayCreationPrefix.apply(arrayCreation);
         ArrayInitializerExpr initializer = arrayCreation.getInitializer().orElseThrow();
         if (layoutWidth.currentIndented(flatName + " = " + prefix + " {") <= options.lineWidth()) {
-            return Optional.of(Doc.concat(Doc.text(name + " = " + prefix + " "), arrayInitializer.apply(initializer, true)));
+            return Optional.of(
+                Doc.concat(Doc.text(name + " = " + prefix + " "), arrayInitializer.apply(initializer, true))
+            );
         }
         Optional<String> compactContinuation = compactObjectCreationArrayInitializer(initializer);
-        if (compactContinuation.isPresent()
-                && layoutWidth.currentIndented(prefix + " " + compactContinuation.orElseThrow()) <= options.lineWidth()) {
-            return Optional.of(Doc.concat(
+        if (
+            compactContinuation.isPresent()
+            && layoutWidth.currentIndented(prefix + " " + compactContinuation.orElseThrow()) <= options.lineWidth()
+        ) {
+            return Optional.of(
+                Doc.concat(
                     Doc.text(name + " ="),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(prefix + " " + compactContinuation.orElseThrow())))));
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(prefix + " " + compactContinuation.orElseThrow())))
+                )
+            );
         }
-        return Optional.of(Doc.concat(
+        return Optional.of(
+            Doc.concat(
                 Doc.text(name + " ="),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(prefix + " "), arrayInitializer.apply(initializer, true)))));
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(prefix + " "), arrayInitializer.apply(initializer, true)))
+            )
+        );
     }
 
     /**
      * Keeps an array initializer compact only for the narrow object-creation list that reads better as one continuation.
      */
     private Optional<String> compactObjectCreationArrayInitializer(ArrayInitializerExpr initializer) {
-        if (!initializer.getAllContainedComments().isEmpty()
-                || initializer.getValues().isEmpty()
-                || initializer.getValues().stream().anyMatch(value -> !compactObjectCreationArrayValue(value))) {
+        if (
+            !initializer.getAllContainedComments().isEmpty()
+            || initializer.getValues().isEmpty()
+            || initializer.getValues().stream().anyMatch(value -> !compactObjectCreationArrayValue(value))
+        ) {
             return Optional.empty();
         }
         String values = compactJoin.apply(initializer.getValues());
@@ -535,11 +668,13 @@ final class VariableInitializerLayout {
      * its own argument or anonymous-body layout.
      */
     private boolean compactObjectCreationArrayValue(Expression value) {
-        return value instanceof ObjectCreationExpr objectCreation
-                && objectCreation.getScope().isEmpty()
-                && objectCreation.getTypeArguments().isEmpty()
-                && objectCreation.getArguments().isEmpty()
-                && objectCreation.getAnonymousClassBody().isEmpty();
+        return (
+            value instanceof ObjectCreationExpr objectCreation
+            && objectCreation.getScope().isEmpty()
+            && objectCreation.getTypeArguments().isEmpty()
+            && objectCreation.getArguments().isEmpty()
+            && objectCreation.getAnonymousClassBody().isEmpty()
+        );
     }
 
     /**
@@ -549,7 +684,8 @@ final class VariableInitializerLayout {
     private Optional<Doc> variableWithBrokenObjectCreation(
             String name,
             String flatName,
-            ObjectCreationExpr objectCreation) {
+            ObjectCreationExpr objectCreation
+    ) {
         if (objectCreation.getAnonymousClassBody().isPresent()) {
             return Optional.empty();
         }
@@ -570,10 +706,13 @@ final class VariableInitializerLayout {
     private Optional<Doc> variableWithCommentedObjectCreation(
             String name,
             String flatName,
-            ObjectCreationExpr objectCreation) {
-        if (objectCreation.getArguments().isEmpty()
-                || objectCreation.getComment().filter(BlockComment.class::isInstance).isPresent()
-                || objectCreation.getType().getComment().filter(BlockComment.class::isInstance).isPresent()) {
+            ObjectCreationExpr objectCreation
+    ) {
+        if (
+            objectCreation.getArguments().isEmpty()
+            || objectCreation.getComment().filter(BlockComment.class::isInstance).isPresent()
+            || objectCreation.getType().getComment().filter(BlockComment.class::isInstance).isPresent()
+        ) {
             return Optional.empty();
         }
         String prefix = objectCreationPrefix.apply(objectCreation);
@@ -590,7 +729,8 @@ final class VariableInitializerLayout {
     private Optional<Doc> variableWithBrokenObjectCreationArguments(
             String name,
             String flatName,
-            ObjectCreationExpr objectCreation) {
+            ObjectCreationExpr objectCreation
+    ) {
         if (objectCreation.getArguments().isEmpty()) {
             return Optional.empty();
         }
@@ -601,20 +741,32 @@ final class VariableInitializerLayout {
         if (smallConstructorCanStayFlat(flatName, objectCreation)) {
             return Optional.of(Doc.concat(Doc.text(name + " = "), expression.apply(objectCreation)));
         }
-        return Optional.of(Doc.concat(
+        return Optional.of(
+            Doc.concat(
                 Doc.text(name + " = " + prefix + "("),
-                Doc.indent(Doc.concat(
+                Doc.indent(
+                    Doc.concat(
                         Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), objectCreation.getArguments().stream()
-                                .map(expression)
-                                .toList()))),
+                        Doc.join(
+                            Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                            objectCreation.getArguments()
+                                    .stream()
+                                    .map(expression)
+                                    .toList()
+                        )
+                    )
+                ),
                 Doc.HARD_LINE,
-                Doc.text(")")));
+                Doc.text(")")
+            )
+        );
     }
 
     private boolean smallConstructorCanStayFlat(String flatName, ObjectCreationExpr objectCreation) {
-        return objectCreation.getArguments().size() <= 3
-                && layoutWidth.currentIndented(flatName + " = " + compact.apply(objectCreation) + ";") <= options.lineWidth();
+        return (
+            objectCreation.getArguments().size() <= 3
+            && layoutWidth.currentIndented(flatName + " = " + compact.apply(objectCreation) + ";") <= options.lineWidth()
+        );
     }
 
     /**
@@ -624,22 +776,30 @@ final class VariableInitializerLayout {
     private Optional<Doc> variableWithBrokenObjectCreationTypeArguments(
             String name,
             String flatName,
-            ObjectCreationExpr objectCreation) {
-        if (!objectCreation.getArguments().isEmpty()
-                || objectCreation.getScope().isPresent()
-                || objectCreation.getTypeArguments().isPresent()
-                || !objectCreation.getType().isClassOrInterfaceType()) {
+            ObjectCreationExpr objectCreation
+    ) {
+        if (
+            !objectCreation.getArguments().isEmpty()
+            || objectCreation.getScope().isPresent()
+            || objectCreation.getTypeArguments().isPresent()
+            || !objectCreation.getType().isClassOrInterfaceType()
+        ) {
             return Optional.empty();
         }
         ClassOrInterfaceType type = objectCreation.getType().asClassOrInterfaceType();
-        if (!hasNonEmptyTypeArguments(type)
-                || layoutWidth.currentIndented(flatName + " = new " + typeNameWithoutArguments.apply(type) + "<") > options.lineWidth()) {
+        if (
+            !hasNonEmptyTypeArguments(type)
+            || layoutWidth.currentIndented(flatName + " = new " + typeNameWithoutArguments.apply(type) + "<") > options.lineWidth()
+        ) {
             return Optional.empty();
         }
-        return Optional.of(Doc.concat(
+        return Optional.of(
+            Doc.concat(
                 Doc.text(name + " = new "),
                 brokenClassOrInterfaceType.apply(type),
-                Doc.text("()")));
+                Doc.text("()")
+            )
+        );
     }
 
     /**
@@ -649,12 +809,15 @@ final class VariableInitializerLayout {
             String name,
             String flatName,
             MethodCallExpr methodCall,
-            boolean allowNestedComments) {
-        if (methodCall.getArguments().isEmpty()
-                || (!allowNestedComments && !methodCall.getAllContainedComments().isEmpty())
-                || methodCallChainIsSourceMultiline.test(methodCall)
-                || methodCallHasOwnComment(methodCall)
-                || methodCall.getScope().filter(shouldPrintScopeAsDoc).isPresent()) {
+            boolean allowNestedComments
+    ) {
+        if (
+            methodCall.getArguments().isEmpty()
+            || (!allowNestedComments && !methodCall.getAllContainedComments().isEmpty())
+            || methodCallChainIsSourceMultiline.test(methodCall)
+            || methodCallHasOwnComment(methodCall)
+            || methodCall.getScope().filter(shouldPrintScopeAsDoc).isPresent()
+        ) {
             return Optional.empty();
         }
         String callPrefix = methodCallPrefix.apply(methodCall);
@@ -665,19 +828,34 @@ final class VariableInitializerLayout {
         if (!methodCall.getAllContainedComments().isEmpty()) {
             return Optional.of(Doc.concat(Doc.text(name + " = "), this.methodCall.apply(methodCall)));
         }
-        Optional<Doc> blockLambdaCall = variableWithHuggableBlockLambdaArguments(name, flatName, methodCall, callPrefix);
+        Optional<Doc> blockLambdaCall = variableWithHuggableBlockLambdaArguments(
+            name,
+            flatName,
+            methodCall,
+            callPrefix
+        );
         if (blockLambdaCall.isPresent()) {
             return blockLambdaCall;
         }
-        return Optional.of(Doc.concat(
+        return Optional.of(
+            Doc.concat(
                 Doc.text(name + " = " + callPrefix + "("),
-                Doc.indent(Doc.concat(
+                Doc.indent(
+                    Doc.concat(
                         Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), methodCall.getArguments().stream()
-                                .map(expression)
-                                .toList()))),
+                        Doc.join(
+                            Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                            methodCall.getArguments()
+                                    .stream()
+                                    .map(expression)
+                                    .toList()
+                        )
+                    )
+                ),
                 Doc.HARD_LINE,
-                Doc.text(")")));
+                Doc.text(")")
+            )
+        );
     }
 
     /**
@@ -687,15 +865,16 @@ final class VariableInitializerLayout {
             VariableDeclarator variable,
             String name,
             String flatName,
-            MethodCallExpr methodCall) {
-        if (methodCall.getArguments().isEmpty()
-                || !rawSource.rawWithoutOwnComment(methodCall).contains("\n")
-                || methodCall.getArguments()
-                        .stream()
-                        .anyMatch(argument -> rawSource.rawWithoutOwnComment(argument).contains("\n"))
-                || methodCall.getScope()
-                        .filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n"))
-                        .isPresent()) {
+            MethodCallExpr methodCall
+    ) {
+        if (
+            methodCall.getArguments().isEmpty()
+            || !rawSource.rawWithoutOwnComment(methodCall).contains("\n")
+            || methodCall.getArguments()
+                    .stream()
+                    .anyMatch(argument -> rawSource.rawWithoutOwnComment(argument).contains("\n"))
+            || methodCall.getScope().filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n")).isPresent()
+        ) {
             return Optional.empty();
         }
         String callPrefix = methodCallPrefix.apply(methodCall);
@@ -713,24 +892,28 @@ final class VariableInitializerLayout {
                 .filter(scope -> scope.isNameExpr()
                         || scope.isThisExpr()
                         || scope.isSuperExpr()
-                        || scope instanceof MethodCallExpr scopedCall
-                                && scopedCall.getAllContainedComments().isEmpty()
-                                && methodCallScopeEndsOnNameLine(scopedCall, methodCall))
+                        || (scope instanceof MethodCallExpr scopedCall
+                            && scopedCall.getAllContainedComments().isEmpty()
+                            && methodCallScopeEndsOnNameLine(scopedCall, methodCall))
+                )
                 .isPresent();
     }
 
     private boolean methodCallScopeEndsOnNameLine(MethodCallExpr scope, MethodCallExpr methodCall) {
         return scope.getRange()
                 .flatMap(scopeRange -> methodCall.getName()
-                        .getRange()
-                        .map(nameRange -> scopeRange.end.line == nameRange.begin.line))
+                            .getRange()
+                            .map(nameRange -> scopeRange.end.line == nameRange.begin.line)
+                )
                 .orElse(false);
     }
 
     private boolean methodCallHasOwnComment(MethodCallExpr methodCall) {
-        return methodCall.getComment().isPresent()
-                || methodCall.getName().getComment().isPresent()
-                || methodCall.getScope().flatMap(Expression::getComment).isPresent();
+        return (
+            methodCall.getComment().isPresent()
+            || methodCall.getName().getComment().isPresent()
+            || methodCall.getScope().flatMap(Expression::getComment).isPresent()
+        );
     }
 
     /**
@@ -743,9 +926,14 @@ final class VariableInitializerLayout {
             String name,
             String flatName,
             MethodCallExpr methodCall,
-            String callPrefix) {
+            String callPrefix
+    ) {
         return huggableBlockLambdaArguments
-                .render(callPrefix, methodCall.getArguments(), firstLine -> layoutWidth.currentIndented(flatName + " = " + firstLine))
+                .render(
+                    callPrefix,
+                    methodCall.getArguments(),
+                    firstLine -> layoutWidth.currentIndented(flatName + " = " + firstLine)
+                )
                 .map(call -> Doc.concat(Doc.text(name + " = "), call));
     }
 
@@ -757,9 +945,12 @@ final class VariableInitializerLayout {
             String flatName,
             MethodCallExpr methodCall,
             String firstLine,
-            Doc chain) {
-        if (methodCallChainRootIsObjectCreation.test(methodCall)
-                && layoutWidth.blockStatement(flatName + " = " + firstLine + ";") > options.lineWidth()) {
+            Doc chain
+    ) {
+        if (
+            methodCallChainRootIsObjectCreation.test(methodCall)
+            && layoutWidth.blockStatement(flatName + " = " + firstLine + ";") > options.lineWidth()
+        ) {
             return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
         }
         if (layoutWidth.currentIndented(flatName + " = " + firstLine) > options.lineWidth()) {
@@ -782,19 +973,23 @@ final class VariableInitializerLayout {
     private Doc conditionalInitializer(String name, String flatName, ConditionalExpr initializer) {
         String conditionLine = flatName + " = " + compact.apply(initializer.getCondition());
         String compactInitializer = compact.apply(initializer);
-        if (rawSource.rawWithoutOwnComment(initializer).contains("\n")
-                && layoutWidth.blockStatement(conditionLine + ";") <= options.lineWidth()) {
+        if (
+            rawSource.rawWithoutOwnComment(initializer).contains("\n")
+            && layoutWidth.blockStatement(conditionLine + ";") <= options.lineWidth()
+        ) {
             return Doc.concat(Doc.text(name + " = "), brokenConditionalExpression.apply(initializer));
         }
         if (layoutWidth.continuationStatement(compactInitializer + ";") <= options.lineWidth()) {
             return Doc.concat(
-                    Doc.text(name + " ="),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(compactInitializer))));
+                Doc.text(name + " ="),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(compactInitializer)))
+            );
         }
         if (shouldBreakBeforeConditionalInitializer.test(initializer)) {
             return Doc.concat(
-                    Doc.text(name + " ="),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, brokenConditionalExpression.apply(initializer))));
+                Doc.text(name + " ="),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, brokenConditionalExpression.apply(initializer)))
+            );
         }
         if (layoutWidth.blockStatement(conditionLine + ";") <= options.lineWidth()) {
             return Doc.concat(Doc.text(name + " = "), brokenConditionalExpression.apply(initializer));
@@ -803,13 +998,16 @@ final class VariableInitializerLayout {
             return Doc.concat(Doc.text(name + " = "), brokenConditionalExpression.apply(initializer));
         }
         return Doc.concat(
-                Doc.text(name + " ="),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, brokenConditionalExpression.apply(initializer))));
+            Doc.text(name + " ="),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, brokenConditionalExpression.apply(initializer)))
+        );
     }
 
     private boolean parenthesizedConditionalConditionOpenerFits(String flatName, ConditionalExpr initializer) {
-        return initializer.getCondition() instanceof EnclosedExpr
-                && layoutWidth.currentIndented(flatName + " = (") <= options.lineWidth();
+        return (
+            initializer.getCondition() instanceof EnclosedExpr
+            && layoutWidth.currentIndented(flatName + " = (") <= options.lineWidth()
+        );
     }
 
     /**
@@ -818,25 +1016,34 @@ final class VariableInitializerLayout {
     private Optional<Doc> variableWithExpressionLambdaInitializer(
             String name,
             String flatName,
-            LambdaExpr lambdaExpr) {
+            LambdaExpr lambdaExpr
+    ) {
         if (lambdaExpr.getBody().isBlockStmt() || lambdaExpr.getExpressionBody().isEmpty()) {
             return Optional.empty();
         }
         String parameters = lambdaParameters.apply(lambdaExpr);
-        if (lambdaParametersShouldBreak.test(lambdaExpr, parameters)
-                || !(lambdaExpr.getExpressionBody().orElseThrow() instanceof MethodCallExpr methodCall)) {
+        if (
+            lambdaParametersShouldBreak.test(lambdaExpr, parameters)
+            || !(lambdaExpr.getExpressionBody().orElseThrow() instanceof MethodCallExpr methodCall)
+        ) {
             return Optional.empty();
         }
         Doc body = forcedMethodCallChain.apply(methodCall).orElseGet(() -> expression.apply(methodCall));
         String bodyFirstLine = methodCallChainFirstLine.apply(methodCall);
         String lambdaPrefix = parameters + " ->";
-        if (layoutWidth.currentIndented(flatName + " = " + lambdaPrefix + " " + bodyFirstLine) <= options.lineWidth()) {
+        if (
+            layoutWidth.currentIndented(flatName + " = " + lambdaPrefix + " " + bodyFirstLine)
+            <= options.lineWidth()
+        ) {
             return Optional.of(Doc.concat(Doc.text(name + " = " + lambdaPrefix + " "), body));
         }
         if (layoutWidth.currentIndented(flatName + " = " + lambdaPrefix) <= options.lineWidth()) {
-            return Optional.of(Doc.concat(
+            return Optional.of(
+                Doc.concat(
                     Doc.text(name + " = " + lambdaPrefix),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, body))));
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, body))
+                )
+            );
         }
         return Optional.empty();
     }
@@ -848,11 +1055,14 @@ final class VariableInitializerLayout {
     private Optional<Doc> variableWithBrokenLambdaParameters(
             String name,
             String flatName,
-            LambdaExpr lambdaExpr) {
+            LambdaExpr lambdaExpr
+    ) {
         String parameters = lambdaParameters.apply(lambdaExpr);
-        if (!lambdaExpr.getBody().isBlockStmt()
-                || !lambdaParametersShouldBreak.test(lambdaExpr, parameters)
-                || layoutWidth.currentIndented(flatName + " = (") > options.lineWidth()) {
+        if (
+            !lambdaExpr.getBody().isBlockStmt()
+            || !lambdaParametersShouldBreak.test(lambdaExpr, parameters)
+            || layoutWidth.currentIndented(flatName + " = (") > options.lineWidth()
+        ) {
             return Optional.empty();
         }
         return Optional.of(Doc.concat(Doc.text(name + " = "), lambdaExpression.apply(lambdaExpr)));
@@ -864,13 +1074,16 @@ final class VariableInitializerLayout {
     private Optional<Doc> variableWithBlockLambdaInitializer(
             String name,
             String flatName,
-            LambdaExpr lambdaExpr) {
+            LambdaExpr lambdaExpr
+    ) {
         if (!lambdaExpr.getBody().isBlockStmt()) {
             return Optional.empty();
         }
         String parameters = lambdaParameters.apply(lambdaExpr);
-        if (lambdaParametersShouldBreak.test(lambdaExpr, parameters)
-                || layoutWidth.currentIndented(flatName + " = " + parameters + " -> {") > options.lineWidth()) {
+        if (
+            lambdaParametersShouldBreak.test(lambdaExpr, parameters)
+            || layoutWidth.currentIndented(flatName + " = " + parameters + " -> {") > options.lineWidth()
+        ) {
             return Optional.empty();
         }
         return Optional.of(Doc.concat(Doc.text(name + " = "), lambdaExpression.apply(lambdaExpr)));
@@ -882,7 +1095,8 @@ final class VariableInitializerLayout {
      */
     private Optional<Doc> leadingInitializerComments(VariableDeclarator variable, Expression initializer) {
         List<Comment> leadingComments = new ArrayList<>();
-        variable.getOrphanComments().stream()
+        variable.getOrphanComments()
+                .stream()
                 .filter(LineComment.class::isInstance)
                 .filter(comment -> CommentIndex.startsBefore(comment, initializer))
                 .forEach(leadingComments::add);
@@ -924,8 +1138,10 @@ final class VariableInitializerLayout {
     }
 
     private boolean castTypeNeedsBreak(String flatName, Type type) {
-        return castTypeCanBreak(type)
-                && layoutWidth.currentIndented(flatName + " = (" + compactTypeLike.apply(type) + ")") > options.lineWidth();
+        return (
+            castTypeCanBreak(type)
+            && layoutWidth.currentIndented(flatName + " = (" + compactTypeLike.apply(type) + ")") > options.lineWidth()
+        );
     }
 
     private boolean castTypeOpenerFitsOnEqualsLine(String flatName, Type type) {
@@ -933,23 +1149,26 @@ final class VariableInitializerLayout {
     }
 
     private String castTypeOpener(Type type) {
-        if (type instanceof ClassOrInterfaceType classOrInterfaceType
-                && classOrInterfaceType.getTypeArguments().isPresent()) {
+        if (
+            type instanceof ClassOrInterfaceType classOrInterfaceType
+            && classOrInterfaceType.getTypeArguments().isPresent()
+        ) {
             return "(" + typeNameWithoutArguments.apply(classOrInterfaceType) + "<";
         }
         return "(";
     }
 
     private boolean castTypeCanBreak(Type type) {
-        return type instanceof IntersectionType
-                || (type instanceof ClassOrInterfaceType classOrInterfaceType
-                        && classOrInterfaceType.getTypeArguments().isPresent());
+        return (
+            type instanceof IntersectionType
+            || (type instanceof ClassOrInterfaceType classOrInterfaceType
+                && classOrInterfaceType.getTypeArguments().isPresent())
+        );
     }
 
     private boolean hasNonEmptyTypeArguments(ClassOrInterfaceType type) {
         return type.getTypeArguments().map(arguments -> !arguments.isEmpty()).orElse(false);
     }
-
 
     /**
      * Uses the shared method-chain break as the last initializer fallback before normal expression rendering.
@@ -972,8 +1191,10 @@ final class VariableInitializerLayout {
         if (initializer instanceof ArrayAccessExpr) {
             return true;
         }
-        if (initializer instanceof ObjectCreationExpr objectCreationExpr
-                && objectCreationExpr.getAnonymousClassBody().isPresent()) {
+        if (
+            initializer instanceof ObjectCreationExpr objectCreationExpr
+            && objectCreationExpr.getAnonymousClassBody().isPresent()
+        ) {
             return true;
         }
         if (initializer instanceof SwitchExpr) {
@@ -1011,5 +1232,4 @@ final class VariableInitializerLayout {
         }
         return "";
     }
-
 }

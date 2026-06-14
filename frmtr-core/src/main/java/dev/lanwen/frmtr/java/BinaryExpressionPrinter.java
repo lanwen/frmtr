@@ -178,7 +178,7 @@ final class BinaryExpressionPrinter {
             && operand instanceof BinaryExpr binaryOperand
             && binaryOperand.getOperator() == BinaryExpr.Operator.AND
         ) {
-            if (parenthesizedInnerWidth(compact.apply(binaryOperand)) > options.lineWidth()) {
+            if (parenthesizedBinaryOperandWidth(operator, compact.apply(binaryOperand)) > options.lineWidth()) {
                 return Doc.concat(Doc.text("("), nestedLines(binaryOperand, true), Doc.text(")"));
             }
             return Doc.concat(Doc.text("("), expressionRenderer.format(binaryOperand), Doc.text(")"));
@@ -297,6 +297,10 @@ final class BinaryExpressionPrinter {
      */
     private int parenthesizedInnerWidth(String text) {
         return (options.indentUnit().length() * 2) + text.length();
+    }
+
+    private int parenthesizedBinaryOperandWidth(BinaryExpr.Operator operator, String text) {
+        return continuationStatementWidth.applyAsInt(operator.asString() + " (" + text + ")");
     }
 
     /**

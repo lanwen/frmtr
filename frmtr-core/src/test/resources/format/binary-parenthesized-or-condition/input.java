@@ -6,4 +6,10 @@ class BinaryParenthesizedOrCondition {
             signal instanceof LocalTransportFailure
         );
     }
+
+    boolean shouldWrapGuard(Guard guard, Entry entry, Layout layout, String label, String flat) {
+        return guard instanceof ParenthesizedGuard
+            || measuredEntryWidth(label + flat + " -> {}") >= layout.lineWidth()
+                && !singleLineSource(entry).isPresent();
+    }
 }

@@ -46,8 +46,7 @@ public class Lambda {
     }
 
     public void lambdaWithoutBracesWhichBreak() {
-        call(x ->
-            inventoryRule.isVeryVeryVeryLongConditionTrue()
+        call(x -> inventoryRule.isVeryVeryVeryLongConditionTrue()
                 && inventoryRule.isAnotherVeryVeryLongConditionTrue()
         );
         dispatchJob(orderEvent -> "123456789012345678901234567890123456789012345678");
@@ -232,13 +231,11 @@ public class Lambda {
 
         a.b(c -> d && eligibility.compute() ? g && shipmentWindows.accountStatus() : j && taxRules.hasOverride());
 
-        a.b(c ->
-            d
+        a.b(c -> d
                 && eligibility.compute(regionalInventory, shipmentWindows, accountStatus, pricingRules, taxRules) > 0
         );
 
-        a.b(c, (c0, c1) ->
-            d
+        a.b(c, (c0, c1) -> d
                 && eligibility.compute(regionalInventory, shipmentWindows, accountStatus, pricingRules, taxRules) > 0
         );
 
@@ -263,13 +260,11 @@ public class Lambda {
             ) > 0
         );
 
-        a.b(c ->
-            d
+        a.b(c -> d
                 && eligibility.compute(regionalInventory, shipmentWindows, accountStatus, pricingRules, taxRules)
         );
 
-        a.b(c, (c0, c1) ->
-            d
+        a.b(c, (c0, c1) -> d
                 && eligibility.compute(regionalInventory, shipmentWindows, accountStatus, pricingRules, taxRules)
         );
 

@@ -206,15 +206,28 @@ final class LambdaExpressionArgumentOpener {
     ChainResult keepsLogicalLambdaBodiesBroken(ChainProbe probe, Ledger ledger, DayBoundary boundary) {
         return probe
             .rows(ledger.rows())
-            .allMatch(row ->
-                ((row.count() == 0 && row.day().isBefore(boundary.last()))
+            .allMatch(row -> ((row.count() == 0 && row.day().isBefore(boundary.last()))
                     || (row.count() == 1 && row.day().isAfter(boundary.last()))
                     || (row.count() == 1 && row.day().isEqual(boundary.last())))
             )
-            .filteredOn(row ->
-                row.day().isBefore(boundary.last().plusDays(3))
+            .filteredOn(row -> row.day().isBefore(boundary.last().plusDays(3))
                     && row.day().isAfter(boundary.last())
             );
+    }
+
+    Prefix keepsFirstLogicalOperandWithLambdaHeader(Variable variable, Options options, String declarationPrefix) {
+        return variable.getInitializer()
+            .filter(initializer -> initializer instanceof ArrayCreationExpr
+                    || initializer instanceof BinaryExpr
+                    || initializer instanceof CastExpr
+                    || initializer instanceof ConditionalExpr
+                    || initializer instanceof LambdaExpr
+                    || initializer instanceof MethodCallExpr
+                    || initializer instanceof ObjectCreationExpr
+                    || initializer instanceof SwitchExpr
+            )
+            .map(ignored -> options.indentUnit() + declarationPrefix)
+            .orElse("");
     }
 
     StepProbe keepsConstructorLambdaBodyPacked(

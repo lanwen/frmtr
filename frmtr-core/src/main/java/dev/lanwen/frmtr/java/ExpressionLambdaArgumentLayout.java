@@ -232,6 +232,16 @@ final class ExpressionLambdaArgumentLayout {
         }
         Doc bodyDoc = huggableExpressionLambdaBody(firstLine, bodyExpression);
         if (logicalBinaryBody(bodyExpression).isPresent()) {
+            if (logicalBinaryFirstLineFits(firstLine, bodyExpression)) {
+                return Optional.of(
+                    Doc.concat(
+                        Doc.text(firstLine + " "),
+                        Doc.indent(bodyDoc),
+                        Doc.HARD_LINE,
+                        Doc.text(")")
+                    )
+                );
+            }
             return Optional.of(
                 Doc.concat(
                     Doc.text(firstLine),
@@ -652,6 +662,24 @@ final class ExpressionLambdaArgumentLayout {
             rawSource.rawWithoutOwnComment(bodyExpression).contains("\n")
             && expressionFirstLineWidth(firstLine + " " + bodyFirstSourceLine(bodyExpression)) <= options.lineWidth()
         );
+    }
+
+    private boolean logicalBinaryFirstLineFits(String firstLine, Expression bodyExpression) {
+        return logicalBinaryFirstLine(bodyExpression)
+            .map(bodyFirstLine -> expressionFirstLineWidth(firstLine + " " + bodyFirstLine) <= options.lineWidth())
+            .orElse(false);
+    }
+
+    private Optional<String> logicalBinaryFirstLine(Expression bodyExpression) {
+        if (rawSource.rawWithoutOwnComment(bodyExpression).contains("\n")) {
+            return Optional.of(bodyFirstSourceLine(bodyExpression));
+        }
+        if (bodyExpression instanceof EnclosedExpr enclosedExpr) {
+            return logicalBinaryFirstLine(enclosedExpr.getInner()).map(line -> "(" + line);
+        }
+        return logicalBinaryBody(bodyExpression)
+            .map(BinaryExpr::getLeft)
+            .map(compact);
     }
 
     private boolean bodyFirstSourceLineOverflows(String firstLine, MethodCallExpr methodCall) {

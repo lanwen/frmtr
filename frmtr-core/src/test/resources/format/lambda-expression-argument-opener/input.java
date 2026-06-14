@@ -224,6 +224,20 @@ final class LambdaExpressionArgumentOpener {
             );
     }
 
+    Prefix keepsFirstLogicalOperandWithLambdaHeader(Variable variable, Options options, String declarationPrefix) {
+        return variable.getInitializer()
+            .filter(initializer -> initializer instanceof ArrayCreationExpr
+                || initializer instanceof BinaryExpr
+                || initializer instanceof CastExpr
+                || initializer instanceof ConditionalExpr
+                || initializer instanceof LambdaExpr
+                || initializer instanceof MethodCallExpr
+                || initializer instanceof ObjectCreationExpr
+                || initializer instanceof SwitchExpr)
+            .map(ignored -> options.indentUnit() + declarationPrefix)
+            .orElse("");
+    }
+
     StepProbe keepsConstructorLambdaBodyPacked(
         StepProbe probe,
         PacketRepository packetRepository,

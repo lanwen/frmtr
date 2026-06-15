@@ -736,28 +736,20 @@ final class MethodCallPrinter {
     }
 
     Doc methodCallArgumentList(NodeList<Expression> arguments, Doc line) {
-        return methodCallArgumentList(arguments, line, methodCallArgumentContext(""));
-    }
-
-    Doc methodCallArgumentList(String prefix, NodeList<Expression> arguments, Doc line) {
-        return methodCallArgumentList(arguments, line, methodCallArgumentContext(prefix));
-    }
-
-    private Doc methodCallArgumentList(
-            NodeList<Expression> arguments,
-            Doc line,
-            MethodCallArgumentContext context
-    ) {
         List<Doc> docs = new ArrayList<>();
         for (int index = 0; index < arguments.size(); index++) {
             Expression argument = arguments.get(index);
             boolean last = index == arguments.size() - 1;
-            docs.add(methodCallArgumentDoc(argument, last ? "" : ",", context));
+            docs.add(methodCallArgumentDoc(argument, last ? "" : ","));
             if (!last) {
                 docs.add(argumentConsumesSuffix(argument) ? line : Doc.concat(Doc.text(","), line));
             }
         }
         return Doc.concat(docs);
+    }
+
+    Doc methodCallArgumentList(String prefix, NodeList<Expression> arguments, Doc line) {
+        return methodCallArgumentList(arguments, line);
     }
 
     private boolean argumentConsumesSuffix(Expression argument) {
@@ -771,11 +763,15 @@ final class MethodCallPrinter {
      * helper owns the continuation lines so breakable arguments do not collapse back onto an over-wide argument line.
      */
     private Doc methodCallArgumentDoc(Expression argument) {
-        return methodCallArgumentDoc(argument, "", methodCallArgumentContext(""));
+        return methodCallArgumentDoc(argument, "");
     }
 
-    private Doc methodCallArgumentDoc(Expression argument, String suffix, MethodCallArgumentContext context) {
+    private Doc methodCallArgumentDoc(Expression argument, String suffix) {
         if (argument instanceof MethodCallExpr methodCall && !suffix.isEmpty()) {
+            Optional<Doc> textBlockChain = textBlockRootChainArgumentWithSuffix(methodCall, suffix);
+            if (textBlockChain.isPresent()) {
+                return textBlockChain.orElseThrow();
+            }
             Optional<Doc> compact = compactMethodCallArgumentWithSuffix(methodCall, suffix);
             if (compact.isPresent()) {
                 return compact.orElseThrow();
@@ -793,7 +789,8 @@ final class MethodCallPrinter {
             Optional<Doc> brokenArgument = brokenArgumentExpressionRenderer.apply(argument);
             if (
                 brokenArgument.isPresent()
-                && context.argumentWidth(compactSource.compact(argument), suffix) > options.lineWidth()
+                && (sourceShape.spansMultipleLines(argument)
+                    || continuationStatementWidth.applyAsInt(compactSource.compact(argument) + suffix) > options.lineWidth())
             ) {
                 return Doc.ifBreak(brokenArgument.orElseThrow(), expressionRenderer.apply(argument));
             }
@@ -801,28 +798,36 @@ final class MethodCallPrinter {
         return expressionRenderer.apply(argument);
     }
 
-    private MethodCallArgumentContext methodCallArgumentContext(String prefix) {
-        return new MethodCallArgumentContext(prefix);
-    }
-
-    private final class MethodCallArgumentContext {
-
-        private final String prefix;
-
-        private MethodCallArgumentContext(String prefix) {
-            this.prefix = prefix;
+    private Optional<Doc> textBlockRootChainArgumentWithSuffix(MethodCallExpr expression, String suffix) {
+        if (!expression.getAllContainedComments().isEmpty()) {
+            return Optional.empty();
         }
-
-        int argumentWidth(String argument, String suffix) {
-            int continuationWidth = continuationStatementWidth.applyAsInt(argument + suffix);
-            if (prefix.isEmpty()) {
-                return continuationWidth;
+        List<MethodCallExpr> calls = new ArrayList<>();
+        Expression cursor = expression;
+        while (cursor instanceof MethodCallExpr call) {
+            if (call.getScope().isEmpty() || sourceShape.methodCallArgumentsSpanMultipleLines(call)) {
+                return Optional.empty();
             }
-            return Math.max(
-                continuationWidth,
-                continuationStatementWidth.applyAsInt(prefix + "(" + argument + suffix + ")")
-            );
+            calls.add(0, call);
+            cursor = call.getScope().orElseThrow();
         }
+        if (calls.size() < 2 || !(cursor instanceof TextBlockLiteralExpr textBlockLiteralExpr)) {
+            return Optional.empty();
+        }
+        StringBuilder tail = new StringBuilder();
+        for (MethodCallExpr call : calls) {
+            tail.append(".")
+                    .append(methodCallSelector(call))
+                    .append("(")
+                    .append(compactSource.compactJoin(call.getArguments()))
+                    .append(")");
+        }
+        String literal = unformattedTextBlockRenderer.apply(textBlockLiteralExpr);
+        String closingLine = literal.substring(literal.lastIndexOf('\n') + 1) + tail + suffix;
+        if (closingLine.length() > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(Doc.text(literal), Doc.text(tail + suffix)));
     }
 
     private Optional<Doc> compactMethodCallArgumentWithSuffix(MethodCallExpr expression, String suffix) {

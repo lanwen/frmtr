@@ -17,7 +17,7 @@ public abstract class FrmtrJavaFormatTask extends AbstractFrmtrJavaTask {
 
     @TaskAction
     public void format() {
-        FormatRunResult run = FormatterRunner.write(displayRoot(), selectedFiles(), formatterOptions());
+        FormatRunResult run = FormatterRunner.write(displayRoot(), selectedFiles(), formatterOptions(), state -> {});
         printFailures(run);
         if (run.hasFailures()) {
             throw formatterFailure("format", run);

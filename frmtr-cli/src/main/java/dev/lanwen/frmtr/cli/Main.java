@@ -343,7 +343,8 @@ public final class Main implements Callable<Integer> {
             files,
             options,
             diff || renderLineWidth,
-            diffMode()
+            diffMode(),
+            state -> {}
         );
         for (FormatFileResult result : run.results()) {
             out.println(statusLine(statusMarker(result.status()), result.displayPath()));
@@ -369,7 +370,7 @@ public final class Main implements Callable<Integer> {
     }
 
     private int writeFiles(List<Path> files, FormatterOptions options, long ignored, long excluded) {
-        FormatRunResult run = FormatterRunner.write(workingDirectory, files, options);
+        FormatRunResult run = FormatterRunner.write(workingDirectory, files, options, state -> {});
         printRunFailures(run);
         printWriteSummary(run, ignored, excluded);
         out.flush();

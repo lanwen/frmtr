@@ -7,12 +7,19 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Callable;
+import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -26,9 +33,10 @@ public final class FormatterRunner {
             Path displayRoot,
             List<Path> files,
             FormatterOptions options,
-            boolean includeDiffs
+            boolean includeDiffs,
+            FormatRunProgress progress
     ) {
-        return check(displayRoot, files, options, includeDiffs, UnifiedDiffRenderer.RenderMode.PATCH);
+        return check(displayRoot, files, options, includeDiffs, UnifiedDiffRenderer.RenderMode.PATCH, progress);
     }
 
     public static FormatRunResult check(
@@ -36,23 +44,31 @@ public final class FormatterRunner {
             List<Path> files,
             FormatterOptions options,
             boolean includeDiffs,
-            UnifiedDiffRenderer.RenderMode diffRenderMode
+            UnifiedDiffRenderer.RenderMode diffRenderMode,
+            FormatRunProgress progress
     ) {
         return new FormatRunResult(
             formatSelectedFiles(
                 displayRoot,
                 files,
-                file -> checkFile(displayRoot, file, options, includeDiffs, diffRenderMode)
+                file -> checkFile(displayRoot, file, options, includeDiffs, diffRenderMode),
+                progress
             )
         );
     }
 
-    public static FormatRunResult write(Path displayRoot, List<Path> files, FormatterOptions options) {
+    public static FormatRunResult write(
+            Path displayRoot,
+            List<Path> files,
+            FormatterOptions options,
+            FormatRunProgress progress
+    ) {
         return new FormatRunResult(
             formatSelectedFiles(
                 displayRoot,
                 files,
-                file -> writeFile(displayRoot, file, options)
+                file -> writeFile(displayRoot, file, options),
+                progress
             )
         );
     }
@@ -60,27 +76,77 @@ public final class FormatterRunner {
     private static List<FormatFileResult> formatSelectedFiles(
             Path displayRoot,
             List<Path> files,
-            Function<Path, FormatFileResult> formatter
+            Function<Path, FormatFileResult> formatter,
+            FormatRunProgress progress
     ) {
+        Objects.requireNonNull(progress, "progress");
         List<Path> selected = selectedFiles(displayRoot, files);
-        return mapInInputOrder(selected, workerCount(selected.size()), formatter);
+        return mapInInputOrder(
+            displayRoot,
+            selected,
+            workerCount(selected.size()),
+            formatter,
+            progress
+        );
     }
 
-    private static <T, R> List<R> mapInInputOrder(List<T> inputs, int workers, Function<? super T, R> mapper) {
+    private static List<FormatFileResult> mapInInputOrder(
+            Path displayRoot,
+            List<Path> inputs,
+            int workers,
+            Function<? super Path, FormatFileResult> mapper,
+            FormatRunProgress progress
+    ) {
         if (inputs.isEmpty()) {
+            progress.progress(ProgressSnapshot.started(0, 0));
+            progress.progress(ProgressSnapshot.finished(0, 0, 0, 0));
             return List.of();
         }
         int workerCount = Math.max(1, Math.min(workers, inputs.size()));
-        if (workerCount == 1) {
-            return inputs.stream().map(mapper).toList();
-        }
+        progress.progress(ProgressSnapshot.started(inputs.size(), workerCount));
 
         ExecutorService executor = Executors.newFixedThreadPool(workerCount);
         try {
-            List<Callable<R>> tasks = inputs.stream()
-                    .<Callable<R>>map(input -> () -> mapper.apply(input))
-                    .toList();
-            return executor.invokeAll(tasks).stream().map(FormatterRunner::awaitResult).toList();
+            CompletionService<IndexedResult> completion = new ExecutorCompletionService<>(executor);
+            List<FormatFileResult> results = new ArrayList<>(Collections.nCopies(inputs.size(), null));
+            Map<Integer, Path> active = new LinkedHashMap<>();
+            int submitted = 0;
+            int processed = 0;
+            int changed = 0;
+            int failed = 0;
+
+            submitted = submitUntilWorkerLimit(displayRoot, inputs, mapper, completion, active, submitted, workerCount);
+            progress.progress(running(inputs.size(), processed, changed, failed, workerCount, active));
+
+            while (processed < inputs.size()) {
+                Future<IndexedResult> future = completion.take();
+                IndexedResult result = awaitResult(future);
+                active.remove(result.index());
+                results.set(result.index(), result.result());
+                if (result.result().changed()) {
+                    changed++;
+                }
+                if (result.result().failed()) {
+                    failed++;
+                }
+                processed++;
+
+                submitted = submitUntilWorkerLimit(
+                    displayRoot,
+                    inputs,
+                    mapper,
+                    completion,
+                    active,
+                    submitted,
+                    workerCount
+                );
+                if (processed < inputs.size()) {
+                    progress.progress(running(inputs.size(), processed, changed, failed, workerCount, active));
+                }
+            }
+
+            progress.progress(ProgressSnapshot.finished(inputs.size(), changed, failed, workerCount));
+            return List.copyOf(results);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while formatting files", exception);
@@ -88,6 +154,54 @@ public final class FormatterRunner {
             executor.shutdownNow();
         }
     }
+
+    private static int submitUntilWorkerLimit(
+            Path displayRoot,
+            List<Path> inputs,
+            Function<? super Path, FormatFileResult> mapper,
+            CompletionService<IndexedResult> completion,
+            Map<Integer, Path> active,
+            int submitted,
+            int workerCount
+    ) {
+        int next = submitted;
+        while (next < inputs.size() && active.size() < workerCount) {
+            int index = next;
+            Path input = inputs.get(index);
+            active.put(index, displayPath(displayRoot, input));
+            completion.submit(indexedTask(index, input, mapper));
+            next++;
+        }
+        return next;
+    }
+
+    private static Callable<IndexedResult> indexedTask(
+            int index,
+            Path input,
+            Function<? super Path, FormatFileResult> mapper
+    ) {
+        return () -> new IndexedResult(index, mapper.apply(input));
+    }
+
+    private static ProgressSnapshot.Running running(
+            int totalFiles,
+            int processedFiles,
+            int changedFiles,
+            int failedFiles,
+            int workerCount,
+            Map<Integer, Path> active
+    ) {
+        return ProgressSnapshot.running(
+            totalFiles,
+            processedFiles,
+            changedFiles,
+            failedFiles,
+            workerCount,
+            List.copyOf(active.values())
+        );
+    }
+
+    private record IndexedResult(int index, FormatFileResult result) {}
 
     private static <T> T awaitResult(Future<T> future) {
         try {

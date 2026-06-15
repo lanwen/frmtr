@@ -17,6 +17,9 @@ val projectDescriptions =
         ":frmtr-gradle-plugin" to "Gradle plugin that checks and formats Java source with frmtr.",
         ":frmtr-native-image-support" to "GraalVM native-image support metadata for frmtr.",
         ":site" to "Static onboarding site for frmtr.")
+val centralMavenJavaProjects = setOf(":frmtr-core", ":frmtr-tooling")
+val centralSnapshotProjects = centralMavenJavaProjects + ":frmtr-gradle-plugin"
+val isSnapshotVersion = version.toString().endsWith("-SNAPSHOT")
 
 val frmtrCli = project(":frmtr-cli")
 val frmtrCliRuntimeClasspath = frmtrCli.provider {
@@ -64,6 +67,9 @@ subprojects {
     description = projectDescriptions[path]
 
     pluginManager.withPlugin("java") {
+        val publishesMavenJavaPublication = project.path in centralMavenJavaProjects
+        val publishesCentralSnapshots = project.path in centralSnapshotProjects
+
         pluginManager.apply("maven-publish")
 
         configure<JavaPluginExtension> {
@@ -98,7 +104,7 @@ subprojects {
 
         configure<PublishingExtension> {
             publications {
-                if (project.path != ":frmtr-gradle-plugin") {
+                if (publishesMavenJavaPublication) {
                     register<MavenPublication>("mavenJava") {
                         from(components["java"])
                     }
@@ -136,6 +142,27 @@ subprojects {
                         issueManagement {
                             system.set("GitHub Issues")
                             url.set("$projectUrl/issues")
+                        }
+                    }
+                }
+            }
+
+            if (publishesCentralSnapshots && isSnapshotVersion) {
+                repositories {
+                    maven {
+                        name = "centralPortalSnapshots"
+                        url = uri("https://central.sonatype.com/repository/maven-snapshots/")
+                        credentials {
+                            username =
+                                providers
+                                    .gradleProperty("centralPortalUsername")
+                                    .orElse(providers.environmentVariable("CENTRAL_PORTAL_USERNAME"))
+                                    .orNull
+                            password =
+                                providers
+                                    .gradleProperty("centralPortalPassword")
+                                    .orElse(providers.environmentVariable("CENTRAL_PORTAL_PASSWORD"))
+                                    .orNull
                         }
                     }
                 }

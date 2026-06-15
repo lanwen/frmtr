@@ -40,11 +40,15 @@ catalog in `gradle/libs.versions.toml`.
 
 Java-producing modules also share Maven publication metadata. The root build applies `maven-publish`, sources jars, and
 javadoc jars to Java subprojects, then configures generated POMs with the MIT license, project URL, GitHub SCM, issue
-tracker, developer identity, and module descriptions. Non-plugin JVM modules publish a `mavenJava` publication from the
-Java component; `:frmtr-gradle-plugin` lets Gradle's plugin development and Plugin Publish plugins own the plugin and
-marker publications while inheriting the same POM metadata. Every Java subproject jar also embeds the root MIT license
-as `META-INF/LICENSE` so binary, sources, and javadoc artifacts carry the license text with the published files. The
-static `:site` module is documentation-only and is not published as a Maven artifact.
+tracker, developer identity, and module descriptions. Only `:frmtr-core` and `:frmtr-tooling` register a Central-bound
+`mavenJava` publication because those are the runtime dependencies that published adapters need from Maven repositories.
+The Central Portal snapshot repository is also attached to `:frmtr-gradle-plugin` so snapshot plugin marker and plugin
+artifact publications can be resolved through Gradle's `plugins {}` DSL. `:frmtr-gradle-plugin` lets Gradle's plugin
+development and Plugin Publish plugins own the plugin and marker publications while inheriting the same POM metadata.
+`:frmtr-cli` is distributed as an application/native executable rather than a Maven Central library artifact, and
+`:frmtr-native-image-support` stays a repo-internal build-time companion for native-image builds. Every Java subproject
+jar also embeds the root MIT license as `META-INF/LICENSE` so binary, sources, and javadoc artifacts carry the license
+text with the published files. The static `:site` module is documentation-only and is not published as a Maven artifact.
 
 The Gradle plugin publication declares Plugin Portal compatibility metadata. It currently marks configuration-cache
 support as unsupported until the plugin tasks have a dedicated configuration-cache validation gate.

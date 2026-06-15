@@ -23,11 +23,9 @@ class BlockLambdaCallInitializersSample {
     }
 
     void selectEntriesWithLongCallPrefix(Request request, EntryList entries, Subject subject) {
-        var partitioned = entryCollectionWithExtremelyLongFormatterFixturePrefixBeforeLambdaArgumentFallback.partition(
-            entry -> {
-                return request.mode() == SelectionMode.ANY && entry.state().shouldPrioritize(subject.owner());
-            }
-        );
+        var partitioned = entryCollectionWithExtremelyLongFormatterFixturePrefixBeforeLambdaArgumentFallback.partition(entry -> {
+            return request.mode() == SelectionMode.ANY && entry.state().shouldPrioritize(subject.owner());
+        });
         publishSelection(subject, request.mode(), true, partitioned.getSelected());
     }
 }

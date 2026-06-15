@@ -13,6 +13,7 @@ import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
+import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import java.util.List;
@@ -68,7 +69,11 @@ final class CompactSourceText {
         if (!isFullyParsed(node)) {
             return compactTokenText(node);
         }
-        if (node instanceof StringLiteralExpr || node instanceof CharLiteralExpr) {
+        if (
+            node instanceof StringLiteralExpr
+            || node instanceof CharLiteralExpr
+            || node instanceof TextBlockLiteralExpr
+        ) {
             return rawSource.raw(node);
         }
         if (node instanceof ClassExpr classExpr) {
@@ -81,31 +86,25 @@ final class CompactSourceText {
             return "(" + compact(enclosedExpr.getInner()) + ")";
         }
         if (node instanceof BinaryExpr binaryExpr && containsRawLiteral(binaryExpr)) {
-            return (
-                compact(binaryExpr.getLeft())
+            return compact(binaryExpr.getLeft())
                 + " "
                 + binaryExpr.getOperator().asString()
                 + " "
-                + compact(binaryExpr.getRight())
-            );
+                + compact(binaryExpr.getRight());
         }
         if (node instanceof ConditionalExpr conditionalExpr && containsRawLiteral(conditionalExpr)) {
-            return (
-                compact(conditionalExpr.getCondition())
+            return compact(conditionalExpr.getCondition())
                 + " ? "
                 + compact(conditionalExpr.getThenExpr())
                 + " : "
-                + compact(conditionalExpr.getElseExpr())
-            );
+                + compact(conditionalExpr.getElseExpr());
         }
         if (node instanceof AssignExpr assignExpr && assignExpr.getAllContainedComments().isEmpty()) {
-            return (
-                compact(assignExpr.getTarget())
+            return compact(assignExpr.getTarget())
                 + " "
                 + assignExpr.getOperator().asString()
                 + " "
-                + compact(assignExpr.getValue())
-            );
+                + compact(assignExpr.getValue());
         }
         if (node instanceof MethodCallExpr methodCallExpr && methodCallExpr.getAllContainedComments().isEmpty()) {
             return compactMethodCall(methodCallExpr);
@@ -114,10 +113,9 @@ final class CompactSourceText {
     }
 
     private boolean containsRawLiteral(Node node) {
-        return (
-            node.findFirst(StringLiteralExpr.class).isPresent()
+        return node.findFirst(StringLiteralExpr.class).isPresent()
             || node.findFirst(CharLiteralExpr.class).isPresent()
-        );
+            || node.findFirst(TextBlockLiteralExpr.class).isPresent();
     }
 
     /**
@@ -271,6 +269,9 @@ final class CompactSourceText {
     }
 
     private String compactTokenText(Node node) {
+        if (node.findFirst(TextBlockLiteralExpr.class).isPresent()) {
+            return rawSource.raw(node);
+        }
         return node.getTokenRange()
                 .map(Object::toString)
                 .map(rawSource::normalizeWhitespace)

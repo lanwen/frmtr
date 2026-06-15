@@ -59,6 +59,10 @@ final class StatementRuleEnvelope {
      * leading comments, and trailing line comments have been selected.
      */
     Doc statement(Statement statement) {
+        return statement(statement, statementContent);
+    }
+
+    Doc statement(Statement statement, JavaFormatRule<Statement> statementContent) {
         requireFullyParsed(statement);
         FormatterPragmas.PrintAction action = formatterPragmas.statementAction(statement);
         if (action == FormatterPragmas.PrintAction.RAW_WITH_TRAILING_HARD_LINE) {
@@ -123,19 +127,15 @@ final class StatementRuleEnvelope {
      * Break statements can use an own block comment as inline statement text, so the normal leading slot stays empty.
      */
     private boolean hasInlineBreakBlockComment(Statement statement) {
-        return (
-            statement instanceof BreakStmt
-            && commentPlacement.ownComment(statement, JavaCommentTrivia::isBlock).isPresent()
-        );
+        return statement instanceof BreakStmt
+            && commentPlacement.ownComment(statement, JavaCommentTrivia::isBlock).isPresent();
     }
 
     /**
      * Switch statements can carry a same-line block comment before {@code switch}, so the content rule places it inline.
      */
     private boolean hasInlineSwitchBlockComment(Statement statement) {
-        return (
-            statement instanceof SwitchStmt
-            && commentPlacement.ownComment(statement, JavaCommentTrivia::isBlock).isPresent()
-        );
+        return statement instanceof SwitchStmt
+            && commentPlacement.ownComment(statement, JavaCommentTrivia::isBlock).isPresent();
     }
 }

@@ -16,11 +16,9 @@ public class BinaryOperations {
                 "This operation with two very long string should break" +
                 "in a very nice way"
         );
-        return (
+        return "This operation with two very long string should break" +
             "This operation with two very long string should break" +
-            "This operation with two very long string should break" +
-            "in a very nice way"
-        );
+            "in a very nice way";
     }
 
     @Annotation("This operation should" + "not break")
@@ -153,9 +151,12 @@ public class BinaryOperations {
         }
 
         if (
-            (customerSubtotal + shippingFee == invoiceSubtotal + handlingFee && discountTotal + taxEstimate == paymentTotal + refundTotal) ||
-            (warehouseStock + reservedStock == expectedStock + damagedStock && supplierCredit + carrierCredit == manualCredit + promoCredit) ||
-            (currentBalance + pendingCharge == targetBalance + postedCharge && retainedBudget + plannedBudget == actualBudget + frozenBudget)
+            (customerSubtotal + shippingFee == invoiceSubtotal + handlingFee &&
+                discountTotal + taxEstimate == paymentTotal + refundTotal) ||
+            (warehouseStock + reservedStock == expectedStock + damagedStock &&
+                supplierCredit + carrierCredit == manualCredit + promoCredit) ||
+            (currentBalance + pendingCharge == targetBalance + postedCharge &&
+                retainedBudget + plannedBudget == actualBudget + frozenBudget)
         ) {
         }
     }

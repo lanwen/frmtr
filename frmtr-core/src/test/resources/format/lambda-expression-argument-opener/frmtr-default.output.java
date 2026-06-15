@@ -241,8 +241,8 @@ final class LambdaExpressionArgumentOpener {
             DirectoryClient directoryClient,
             Principal principal
     ) {
-        return probe
-                .withVirtualTime(() -> new SessionReader(
+        return probe.withVirtualTime(
+                    () -> new SessionReader(
                         packetRepository,
                         eventJournal,
                         remoteReader,
@@ -256,13 +256,7 @@ final class LambdaExpressionArgumentOpener {
     }
 
     StepProbe keepsMethodCallLambdaBodyPacked(StepProbe probe, SessionReader sessionReader, Principal principal) {
-        return probe
-                .withVirtualTime(() -> sessionReader.findSessions(
-                        principal.groupId(),
-                        Source.LOCAL,
-                        principal,
-                        null
-                ))
+        return probe.withVirtualTime(() -> sessionReader.findSessions(principal.groupId(), Source.LOCAL, principal, null))
                 .expectSubscription();
     }
 

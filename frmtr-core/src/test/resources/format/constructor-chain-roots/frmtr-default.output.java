@@ -15,15 +15,7 @@ class ConstructorChainRoots {
                 .blockFirst(Duration.ofSeconds(1));
 
         var nested = registry.attach(
-            new ChannelActor(
-                alpha,
-                beta,
-                gamma,
-                delta,
-                epsilon,
-                zeta,
-                eta
-            ).create(),
+            new ChannelActor(alpha, beta, gamma, delta, epsilon, zeta, eta).create(),
             () -> {
                 return monitor.ready();
             }
@@ -41,13 +33,9 @@ class ConstructorChainRoots {
             gamma
         ).connect(certificate);
 
-        try (
-            ManagedEndpoint endpoint = new EndpointFactory(
-                alpha,
-                beta,
-                gamma
-            ).connect(certificate)
-        ) {
+        try (ManagedEndpoint endpoint = new EndpointFactory( alpha, beta, gamma ).connect(
+                certificate
+        )) {
             registry.attach(endpoint);
         }
     }

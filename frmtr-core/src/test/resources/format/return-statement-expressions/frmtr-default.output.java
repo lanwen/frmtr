@@ -45,4 +45,33 @@ public abstract class Return {
     public boolean shouldApproveLongCondition(Example that) {
         return accountHasRequiredVerification && paymentMethodSupportsImmediateCapture;
     }
+
+    boolean routeConstructorBudgetFits(
+            RouteProfile routeProfile,
+            RouteMeter routeMeter,
+            Layout layout,
+            RouteRequest routeRequest,
+            Options options,
+            String routeLabel
+    ) {
+        return (
+            routeProfile.getSegments().size() <= 3
+            && routeMeter.currentIndented(routeLabel + " = " + layout.render(routeRequest) + ";") <= options.lineWidth()
+        );
+    }
+
+    boolean routeCallBodySpansSourceLine(Expression body, SourceText sourceText) {
+        return (
+            body instanceof RouteCall deliveryStep
+            && (sourceText.rawWithoutOwnTrivia(deliveryStep).contains("\n")
+                || deliveryStep.getScope()
+                        .filter(scope -> sourceText.rawWithoutOwnTrivia(scope).contains("\n"))
+                        .isPresent())
+        );
+    }
+
+    boolean routeSignalOperator(RouteBinaryExpression matcher) {
+        return matcher.getOperator() == RouteBinaryExpr.Operator.INBOUND
+            || matcher.getOperator() == RouteBinaryExpr.Operator.OUTBOUND;
+    }
 }

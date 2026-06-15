@@ -26,6 +26,7 @@ final class JavaPrinter {
             types,
             this::statement,
             this::block,
+            this::methodChainLambdaBlock,
             this::body,
             this::switchExpression,
             this::commentText
@@ -63,6 +64,10 @@ final class JavaPrinter {
 
     private Doc block(BlockStmt block) {
         return statements.block(block);
+    }
+
+    private Doc methodChainLambdaBlock(BlockStmt block) {
+        return statements.methodChainLambdaBlock(block);
     }
 
     private Doc statement(Statement statement) {

@@ -20,10 +20,8 @@ class PatternMatchingCases {
     }
 
     public boolean test(final Object subject) {
-        return (
-            subject instanceof final Integer x
-            && (x == 5 || x == 6 || x == 7 || x == 8 || x == 9 || x == 10 || x == 11)
-        );
+        return subject instanceof final Integer x
+            && (x == 5 || x == 6 || x == 7 || x == 8 || x == 9 || x == 10 || x == 11);
     }
 
     void test(Buyer other) {

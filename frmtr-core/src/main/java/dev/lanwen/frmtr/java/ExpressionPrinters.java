@@ -82,6 +82,7 @@ final class ExpressionPrinters {
             TypePrinter types,
             JavaFormatRule<Statement> statementRenderer,
             JavaFormatRule<BlockStmt> blockRenderer,
+            JavaFormatRule<BlockStmt> methodChainLambdaBlockRenderer,
             JavaFormatRule<BodyDeclaration<?>> bodyRenderer,
             JavaFormatRule<SwitchExpr> switchExpressionRenderer,
             Function<Doc, String> commentText
@@ -132,10 +133,12 @@ final class ExpressionPrinters {
             rawSource,
             context.objectCreationLayoutPolicy,
             options,
+            context.layoutWidth,
             this::expression,
             this::brokenObjectCreation,
             statementRenderer,
             blockRenderer,
+            methodChainLambdaBlockRenderer,
             binaries::nestedLines,
             this::brokenMethodCall,
             this::packedExpressionLambdaMethodCallChainBody,
@@ -215,6 +218,7 @@ final class ExpressionPrinters {
             objectCreations::objectCreationWithSuffix,
             objectCreations::objectCreationPrefix,
             lambdas::huggableBlockLambdaArguments,
+            lambdas::huggableMethodChainBlockLambdaArguments,
             lambdas::huggableBlockLambdaFirstLine,
             lambdas::commentedExpressionLambdaArgument,
             lambdas::huggableMethodCallExpressionLambdaArguments,
@@ -263,11 +267,13 @@ final class ExpressionPrinters {
         this.expressionRules = new ExpressionRuleEnvelope(expressionDispatcher::expressionContent);
         this.returnExpressions = new ReturnExpressionPrinter(
             options,
+            context.layoutWidth,
             context.objectCreationLayoutPolicy,
             this::expression,
             lambdas::brokenExpressionLambda,
             compactSource::compact,
             this::currentIndentedWidth,
+            this::continuationStatementWidth,
             methodCalls::sourceMultilineExpressionLambda,
             methodCalls::sourceMultilineArguments,
             methodCalls::compactRootWithBrokenFinalChainSegment,
@@ -310,6 +316,10 @@ final class ExpressionPrinters {
 
     Doc returnStatement(Expression expression) {
         return returnExpressions.returnStatement(expression);
+    }
+
+    Doc returnStatement(Expression expression, LayoutWidth.LineBudget lineBudget) {
+        return returnExpressions.returnStatement(expression, lineBudget);
     }
 
     Doc objectCreationWithSuffix(ObjectCreationExpr expression, String suffix) {
@@ -374,8 +384,19 @@ final class ExpressionPrinters {
         return methodCalls.forcedMethodCallChain(expression);
     }
 
+    Optional<Doc> forcedMethodCallChain(MethodCallExpr expression, LayoutWidth.LineBudget lineBudget) {
+        return methodCalls.forcedMethodCallChain(expression, lineBudget);
+    }
+
     Optional<Doc> forcedMethodCallChainWithSemicolon(MethodCallExpr expression) {
         return methodCalls.forcedMethodCallChainWithSemicolon(expression);
+    }
+
+    Optional<Doc> forcedMethodCallChainWithSemicolon(
+            MethodCallExpr expression,
+            LayoutWidth.LineBudget lineBudget
+    ) {
+        return methodCalls.forcedMethodCallChainWithSemicolon(expression, lineBudget);
     }
 
     boolean methodCallChainHasComments(MethodCallExpr expression) {
@@ -476,6 +497,10 @@ final class ExpressionPrinters {
 
     Optional<Doc> huggableBlockLambdaArguments(String prefix, NodeList<Expression> arguments) {
         return lambdas.huggableBlockLambdaArguments(prefix, arguments);
+    }
+
+    Optional<Doc> huggableMethodChainBlockLambdaArguments(String prefix, NodeList<Expression> arguments) {
+        return lambdas.huggableMethodChainBlockLambdaArguments(prefix, arguments);
     }
 
     Optional<Doc> huggableBlockLambdaArguments(

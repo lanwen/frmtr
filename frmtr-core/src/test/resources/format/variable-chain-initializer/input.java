@@ -25,6 +25,10 @@ class VariableChainInitializerSample {
             .doOnError(error -> snapshot.emit(new BatchFailed(batchId, requestedAt, error)))
             .doFinally(_ -> snapshot.clearInFlight(current.get()))
             .cache();
+        List<RouteGapPlanner.RawGapRegion> routeRawGapRegions = routeRecoveryPlan
+            .filter(RouteImportPlanner::hasRecoverableGap)
+            .map(routeRawGapCollector::rawGapRegions)
+            .orElse(List.of());
         return request.subscribe();
     }
 }

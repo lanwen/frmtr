@@ -1,12 +1,11 @@
 class VariableChainInitializerSample {
 
     Disposable open(Source source) {
-        var request = Flow.defer(source::open)
-                .retryWhen(
-                    RetryPolicy.fixedDelay(Long.MAX_VALUE, OPEN_RETRY_DELAY)
-                            .filter(error -> !isOpenUnsupported(error))
-                            .doBeforeRetry(signal -> log.warn("Unable to open", signal.failure()))
-                );
+        var request = Flow.defer(source::open).retryWhen(
+            RetryPolicy.fixedDelay(Long.MAX_VALUE, OPEN_RETRY_DELAY)
+                    .filter(error -> !isOpenUnsupported(error))
+                    .doBeforeRetry(signal -> log.warn("Unable to open", signal.failure()))
+        );
         Flux<Item> logging = Flux.merge(
             source.distinctUntilChanged(SampleService::signature), // log on change
             source.sample(LOG_PERIOD) // or every X seconds
@@ -26,6 +25,10 @@ class VariableChainInitializerSample {
                 .doOnError(error -> snapshot.emit(new BatchFailed(batchId, requestedAt, error)))
                 .doFinally(_ -> snapshot.clearInFlight(current.get()))
                 .cache();
+        List<RouteGapPlanner.RawGapRegion> routeRawGapRegions = routeRecoveryPlan
+                .filter(RouteImportPlanner::hasRecoverableGap)
+                .map(routeRawGapCollector::rawGapRegions)
+                .orElse(List.of());
         return request.subscribe();
     }
 }

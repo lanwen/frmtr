@@ -83,6 +83,8 @@ final class StatementPrinter {
 
     private final FormatterOptions options;
 
+    private final LayoutWidth layoutWidth;
+
     private final JavaFormatRule<Statement> statementRenderer;
 
     private final JavaFormatRule<SwitchStmt> switchStatementRenderer;
@@ -97,7 +99,7 @@ final class StatementPrinter {
 
     private final Function<AssignExpr, Doc> assignmentStatementRenderer;
 
-    private final Function<Expression, Doc> returnStatementRenderer;
+    private final BiFunction<Expression, LayoutWidth.LineBudget, Doc> returnStatementRenderer;
 
     private final BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix;
 
@@ -119,9 +121,13 @@ final class StatementPrinter {
 
     private final BiFunction<MethodCallExpr, ExpressionStmt, Optional<Doc>> sourceMultilineMethodCallStatementRenderer;
 
-    private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer;
+    private final BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Optional<Doc>> forcedMethodCallChainRenderer;
 
-    private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainWithSemicolonRenderer;
+    private final BiFunction<
+        MethodCallExpr,
+        LayoutWidth.LineBudget,
+        Optional<Doc>
+    > forcedMethodCallChainWithSemicolonRenderer;
 
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
 
@@ -151,6 +157,7 @@ final class StatementPrinter {
             RawSource rawSource,
             SourceShape sourceShape,
             FormatterOptions options,
+            LayoutWidth layoutWidth,
             JavaFormatRule<Statement> statementRenderer,
             JavaFormatRule<SwitchStmt> switchStatementRenderer,
             JavaFormatRule<BlockStmt> blockRenderer,
@@ -158,7 +165,7 @@ final class StatementPrinter {
             JavaFormatRule<BodyDeclaration<?>> bodyRenderer,
             JavaFormatRule<Expression> expressionRenderer,
             Function<AssignExpr, Doc> assignmentStatementRenderer,
-            Function<Expression, Doc> returnStatementRenderer,
+            BiFunction<Expression, LayoutWidth.LineBudget, Doc> returnStatementRenderer,
             BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
             JavaFormatRule<VariableDeclarationExpr> variableDeclarationRenderer,
             JavaFormatRule<VariableDeclarationExpr> variableDeclarationStatementRenderer,
@@ -169,8 +176,8 @@ final class StatementPrinter {
             Function<List<? extends Node>, String> compactJoinTypeLike,
             HuggableArgumentsRenderer huggableBlockLambdaArguments,
             BiFunction<MethodCallExpr, ExpressionStmt, Optional<Doc>> sourceMultilineMethodCallStatementRenderer,
-            Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer,
-            Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainWithSemicolonRenderer,
+            BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Optional<Doc>> forcedMethodCallChainRenderer,
+            BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Optional<Doc>> forcedMethodCallChainWithSemicolonRenderer,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
             Predicate<MethodCallExpr> methodCallChainHasComments,
             Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment,
@@ -188,6 +195,7 @@ final class StatementPrinter {
         this.rawSource = rawSource;
         this.sourceShape = sourceShape;
         this.options = options;
+        this.layoutWidth = layoutWidth;
         this.statementRenderer = statementRenderer;
         this.switchStatementRenderer = switchStatementRenderer;
         this.blockRenderer = blockRenderer;
@@ -229,16 +237,20 @@ final class StatementPrinter {
      * should not be printed from raw source.
      */
     Doc statement(Statement statement) {
+        return statement(statement, LayoutWidth.LineBudget.BLOCK);
+    }
+
+    Doc statement(Statement statement, LayoutWidth.LineBudget lineBudget) {
         return switch (statement) {
             case BlockStmt blockStmt -> blockRenderer.format(blockStmt);
-            case ReturnStmt returnStmt -> returnStatement(returnStmt);
+            case ReturnStmt returnStmt -> returnStatement(returnStmt, lineBudget);
             case ThrowStmt throwStmt -> throwStatement(throwStmt);
             case YieldStmt yieldStmt -> yieldStatement(yieldStmt);
             case ExplicitConstructorInvocationStmt constructorInvocation -> Doc.concat(
                 explicitConstructorInvocation(constructorInvocation),
                 Doc.text(";")
             );
-            case ExpressionStmt expressionStmt -> expressionStatement(expressionStmt);
+            case ExpressionStmt expressionStmt -> expressionStatement(expressionStmt, lineBudget);
             case EmptyStmt ignored -> Doc.text(";");
             case AssertStmt assertStmt -> assertStatement(assertStmt);
             case BreakStmt breakStmt -> breakStatement(breakStmt);
@@ -309,9 +321,9 @@ final class StatementPrinter {
             : " " + commentText(labelComment) + " " + label.asString();
     }
 
-    private Doc returnStatement(ReturnStmt statement) {
+    private Doc returnStatement(ReturnStmt statement, LayoutWidth.LineBudget lineBudget) {
         return statement.getExpression()
-                .map(returnStatementRenderer)
+                .map(expression -> returnStatementRenderer.apply(expression, lineBudget))
                 .orElse(Doc.text("return;" + trailingStatementBlockComment(statement)));
     }
 
@@ -454,7 +466,7 @@ final class StatementPrinter {
         );
     }
 
-    private Doc expressionStatement(ExpressionStmt statement) {
+    private Doc expressionStatement(ExpressionStmt statement, LayoutWidth.LineBudget lineBudget) {
         Expression expression = statement.getExpression();
         Doc trailing = expressionStatementTrailingComment(statement);
         if (expression instanceof VariableDeclarationExpr variableDeclaration) {
@@ -474,25 +486,31 @@ final class StatementPrinter {
                 // semicolon before that comment. Appending Doc.text(";") after the rendered chain would put the ; after
                 // a // comment (`.collect(x) // note;`), commenting the semicolon out and producing non-reparseable
                 // output. The with-semicolon renderer threads the ; into the final segment, before the comment.
-                Optional<Doc> chainWithSemicolon = forcedMethodCallChainWithSemicolonRenderer.apply(methodCall);
+                Optional<Doc> chainWithSemicolon = forcedMethodCallChainWithSemicolonRenderer.apply(
+                    methodCall,
+                    lineBudget
+                );
                 if (chainWithSemicolon.isPresent()) {
                     return Doc.concat(chainWithSemicolon.orElseThrow(), trailing);
                 }
             }
-            if (methodCallStatementWidth(methodCall) > options.lineWidth()) {
+            if (methodCallStatementWidth(methodCall, lineBudget) > options.lineWidth()) {
                 boolean chainBreak = methodCallChainHasComments.test(methodCall)
                     || methodCallChainIsSourceMultiline.test(methodCall)
                     || methodCallChainRootIsObjectCreation.test(methodCall)
                     || !methodCallChainRootIsFieldAccess.test(methodCall);
                 if (chainBreak) {
-                    Optional<Doc> chainWithSemicolon = forcedMethodCallChainWithSemicolonRenderer.apply(methodCall);
+                    Optional<Doc> chainWithSemicolon = forcedMethodCallChainWithSemicolonRenderer.apply(
+                        methodCall,
+                        lineBudget
+                    );
                     if (chainWithSemicolon.isPresent()) {
                         return Doc.concat(chainWithSemicolon.orElseThrow(), trailing);
                     }
                 }
                 return Doc.concat(
                     chainBreak
-                        ? forcedMethodCallChainRenderer.apply(methodCall)
+                        ? forcedMethodCallChainRenderer.apply(methodCall, lineBudget)
                                         .orElseGet(() -> brokenMethodCallRenderer.apply(methodCall))
                         : brokenMethodCallRenderer.apply(methodCall),
                     Doc.text(";"),
@@ -516,13 +534,9 @@ final class StatementPrinter {
                 .orElse(Doc.EMPTY);
     }
 
-    private int blockStatementWidth(String text) {
-        return (options.indentUnit().length() * 2) + text.length();
-    }
-
-    private int methodCallStatementWidth(MethodCallExpr methodCall) {
+    private int methodCallStatementWidth(MethodCallExpr methodCall, LayoutWidth.LineBudget lineBudget) {
         String raw = rawSource.normalizeWhitespace(rawSource.rawWithoutOwnComment(methodCall));
-        return blockStatementWidth(raw + ";");
+        return layoutWidth.line(lineBudget, raw + ";");
     }
 
     private Optional<Comment> conditionalElseStatementTrailingComment(ExpressionStmt statement) {
@@ -714,11 +728,11 @@ final class StatementPrinter {
 
     private String tryResourceMethodCallPrefix(MethodCallExpr methodCall) {
         return methodCall.getScope().map(scope -> compact.apply(scope) + ".").orElse("")
-        + methodCall
-                .getTypeArguments()
-                .map(typeArguments -> "<" + compactJoinTypeLike.apply(typeArguments) + ">")
-                .orElse("")
-        + methodCall.getNameAsString();
+            + methodCall
+                    .getTypeArguments()
+                    .map(typeArguments -> "<" + compactJoinTypeLike.apply(typeArguments) + ">")
+                    .orElse("")
+            + methodCall.getNameAsString();
     }
 
     private Doc tryResource(Expression resource) {
@@ -850,10 +864,8 @@ final class StatementPrinter {
     }
 
     private boolean parameterHasComments(Parameter parameter) {
-        return (
-            parameter.getComment().filter(BlockComment.class::isInstance).isPresent()
-            || !parameter.getAllContainedComments().isEmpty()
-        );
+        return parameter.getComment().filter(BlockComment.class::isInstance).isPresent()
+            || !parameter.getAllContainedComments().isEmpty();
     }
 
     private Doc commentedCatchParameter(Parameter parameter) {
@@ -1118,7 +1130,7 @@ final class StatementPrinter {
         Expression iterable = statement.getIterable();
         String header = "for (" + variable + " : " + compact.apply(iterable) + ")";
         if (
-            blockStatementWidth(header + " {}") <= options.lineWidth()
+            layoutWidth.blockStatement(header + " {}") <= options.lineWidth()
             || !(iterable instanceof MethodCallExpr methodCall)
         ) {
             return Doc.text(header);
@@ -1387,25 +1399,21 @@ final class StatementPrinter {
 
     private String forHeaderExpression(Expression expression) {
         if (expression instanceof BinaryExpr binaryExpr) {
-            return (
-                compact.apply(binaryExpr.getLeft())
+            return compact.apply(binaryExpr.getLeft())
                 + " "
                 + binaryExpr.getOperator().asString()
                 + " "
-                + compactWithOwnBlockComment.apply(binaryExpr.getRight())
-            );
+                + compactWithOwnBlockComment.apply(binaryExpr.getRight());
         }
         if (
             expression instanceof VariableDeclarationExpr variableDeclaration
             && variableDeclaration.getVariables().size() == 1
         ) {
             VariableDeclarator variable = variableDeclaration.getVariables().get(0);
-            return (
-                compactTypeLike.apply(variable.getType())
+            return compactTypeLike.apply(variable.getType())
                 + " "
                 + variable.getNameAsString()
-                + variable.getInitializer().map(initializer -> " = " + compact.apply(initializer)).orElse("")
-            );
+                + variable.getInitializer().map(initializer -> " = " + compact.apply(initializer)).orElse("");
         }
         return compact.apply(expression);
     }

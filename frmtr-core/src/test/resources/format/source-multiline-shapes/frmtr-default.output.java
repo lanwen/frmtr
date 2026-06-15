@@ -50,8 +50,7 @@ class MultilineShapes {
             Predicate value,
             JsonGenerator gen,
             SerializerProvider serializers
-    )
-        throws IOException {
+    ) throws IOException {
         consume(value, gen, serializers);
     }
 
@@ -59,8 +58,7 @@ class MultilineShapes {
     public Result annotated(
             @Named(")") Predicate value,
             Mapper mapper
-    )
-        throws IOException {
+    ) throws IOException {
         return mapper.map(value);
     }
 

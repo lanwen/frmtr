@@ -69,6 +69,10 @@ final class BlockPrinter {
      * statement ranges are left to the child statement printer so they are not emitted twice.
      */
     Doc block(BlockStmt block) {
+        return block(block, statementRenderer);
+    }
+
+    Doc block(BlockStmt block, JavaFormatRule<Statement> statementRenderer) {
         Optional<RecoveredListPlanner.Plan<Statement>> recoveryPlan = recoveryPlan(block);
         if (recoveryPlan.isPresent() && hasRawGap(recoveryPlan.orElseThrow())) {
             return recoveredBlock(block, List.of(), recoveryPlan.orElseThrow());
@@ -76,7 +80,7 @@ final class BlockPrinter {
         if (block.getStatements().isEmpty() && !commentPlacement.hasOrphanComments(block)) {
             return Doc.text("{}");
         }
-        List<Doc> statements = blockContents(block);
+        List<Doc> statements = blockContents(block, statementRenderer);
         if (statements.isEmpty()) {
             return Doc.text("{}");
         }
@@ -147,10 +151,14 @@ final class BlockPrinter {
      * formatted block output.
      */
     private List<Doc> blockContents(BlockStmt block) {
+        return blockContents(block, statementRenderer);
+    }
+
+    private List<Doc> blockContents(BlockStmt block, JavaFormatRule<Statement> statementRenderer) {
         return commentInterleaver.interleave(
             block.getStatements(),
             blockOrphanComments(block),
-            this::printableStatement,
+            (previous, current, index) -> printableStatement(previous, current, index, statementRenderer),
             new SourceOrderedCommentInterleaver.Spacing<>() {
                 @Override
                 public int beginLine(Statement sibling) {
@@ -199,7 +207,8 @@ final class BlockPrinter {
     private Optional<Doc> printableStatement(
             Optional<Statement> previousStatement,
             Statement currentStatement,
-            int ignoredIndex
+            int ignoredIndex,
+            JavaFormatRule<Statement> statementRenderer
     ) {
         if (currentStatement.isEmptyStmt() && previousStatement.orElse(null) instanceof SwitchStmt) {
             return Optional.empty();

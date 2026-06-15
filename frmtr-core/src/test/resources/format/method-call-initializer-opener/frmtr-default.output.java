@@ -32,6 +32,14 @@ class MethodCallInitializerOpenerSample {
                 plan
             )
         );
+        withAuditMode("allow", () -> verifyNoFailure(() -> RouteLayout.render(
+                """
+                    import north.Backup;
+                    import south.Primary;
+                    enum Route { GREEN, AMBER, BLUE }
+                    """
+            )).hasNoRouteFailures()
+        );
         var sampleNameWithEnoughLengthToForceTheReceiverCallOpenerOntoAContinuationLineWhenTheInitializerBreaks =
             receiver.call(
                 Builders.<Result<AlphaBetaGammaDelta>>wrap(item -> {

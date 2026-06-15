@@ -78,6 +78,7 @@ final class StatementPrinters {
             rawSource,
             context.sourceShape,
             options,
+            context.layoutWidth,
             this::statement,
             switches::switchStatement,
             this::block,
@@ -123,8 +124,19 @@ final class StatementPrinters {
         return statementRules.statement(statement);
     }
 
+    Doc statement(Statement statement, LayoutWidth.LineBudget lineBudget) {
+        return statementRules.statement(statement, current -> statements.statement(current, lineBudget));
+    }
+
     Doc block(BlockStmt block) {
         return blocks.block(block);
+    }
+
+    Doc methodChainLambdaBlock(BlockStmt block) {
+        return blocks.block(
+            block,
+            statement -> statement(statement, LayoutWidth.LineBudget.METHOD_CHAIN_LAMBDA_BODY)
+        );
     }
 
     Doc switchExpression(SwitchExpr expression) {

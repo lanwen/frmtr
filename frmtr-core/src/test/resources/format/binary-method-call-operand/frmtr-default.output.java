@@ -1,10 +1,12 @@
 class BinaryMethodCallOperandSample {
 
     String encodedName(String serial) {
-        return "group-"
+        return (
+            "group-"
             + EncoderFactory.getUrlEncoder()
                     .withoutPadding()
-                    .encodeToString(serial.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    .encodeToString(serial.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+        );
     }
 
     boolean any(Items<Item> items, String declarationPrefix, Options options) {
@@ -17,12 +19,14 @@ class BinaryMethodCallOperandSample {
     }
 
     String selectorPrefix(RouteAssemblyStep routeAssemblyStep, RouteTextFormatter routeTextFormatter) {
-        return routeAssemblyStep.context().map(routeContext -> routeTextFormatter.compact(routeContext) + ".").orElse("")
+        return (
+            routeAssemblyStep.context().map(routeContext -> routeTextFormatter.compact(routeContext) + ".").orElse("")
             + routeAssemblyStep
                     .templateTypeArguments()
                     .map(typeArguments -> "<" + routeTextFormatter.compactQualifiedTypes(typeArguments) + ">")
                     .resolveRouteSelector()
-            + (routeAssemblyStep.localRoute() ? "local" : "remote");
+            + (routeAssemblyStep.localRoute() ? "local" : "remote")
+        );
     }
 
     String routeImport(RouteDeclaration declaration) {
@@ -32,14 +36,16 @@ class BinaryMethodCallOperandSample {
     }
 
     boolean routeBudgetFits(RoutePlan routePlan, SegmentBudget segmentBudget, Options options) {
-        return routePlan.hasOrigin()
+        return (
+            routePlan.hasOrigin()
             && routePlan.hasDestination()
             && segmentBudget.continuationRouteWidth(
                 ") "
                     + routePlan.selectedOperator().displayText()
                     + " "
                     + segmentBudget.remainingSegmentExpression()
-               ) <= options.lineWidth();
+               ) <= options.lineWidth()
+        );
     }
 
     boolean routeHeaderOverflows(RouteDeclaration declaration, RouteHeader header, Options options) {

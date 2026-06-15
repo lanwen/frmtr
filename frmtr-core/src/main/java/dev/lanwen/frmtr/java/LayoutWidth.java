@@ -19,29 +19,63 @@ final class LayoutWidth {
 
     private final FormatterOptions options;
 
+    enum LineBudget {
+        /** A top-level member or statement line with one indentation unit already applied. */
+        CURRENT(1),
+
+        /** A statement line inside one ordinary Java block. */
+        BLOCK(2),
+
+        /** A continuation line under a broken statement or member initializer. */
+        CONTINUATION(3),
+
+        /** The closing line of an expression-lambda argument packed inside a broken call argument list. */
+        LAMBDA_ARGUMENT_CLOSING(4),
+
+        /** A statement line inside a block-lambda argument that is itself nested under a broken method chain. */
+        METHOD_CHAIN_LAMBDA_BODY(5);
+
+        private final int indentLevels;
+
+        LineBudget(int indentLevels) {
+            this.indentLevels = indentLevels;
+        }
+
+        int width(FormatterOptions options, String text) {
+            return (options.indentUnit().length() * indentLevels) + text.length();
+        }
+    }
+
     LayoutWidth(FormatterOptions options) {
         this.options = options;
+    }
+
+    /**
+     * Measures text against an explicitly chosen line budget.
+     */
+    int line(LineBudget budget, String text) {
+        return budget.width(options, text);
     }
 
     /**
      * Measures text from the current member/statement indentation baseline.
      */
     int currentIndented(String text) {
-        return options.indentUnit().length() + text.length();
+        return line(LineBudget.CURRENT, text);
     }
 
     /**
      * Measures a statement candidate inside one ordinary block.
      */
     int blockStatement(String text) {
-        return (options.indentUnit().length() * 2) + text.length();
+        return line(LineBudget.BLOCK, text);
     }
 
     /**
      * Measures a continuation line under a broken statement or member initializer.
      */
     int continuationStatement(String text) {
-        return (options.indentUnit().length() * 3) + text.length();
+        return line(LineBudget.CONTINUATION, text);
     }
 
     /**

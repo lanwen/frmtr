@@ -96,6 +96,7 @@ final class MethodCallPrinter {
             BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
             Function<ObjectCreationExpr, String> objectCreationPrefix,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,
+            BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableMethodChainBlockLambdaArguments,
             BiFunction<String, NodeList<Expression>, Optional<String>> huggableBlockLambdaFirstLine,
             BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments,
@@ -124,7 +125,7 @@ final class MethodCallPrinter {
             expressionRenderer,
             brokenObjectCreationRenderer,
             objectCreationPrefix,
-            huggableBlockLambdaArguments,
+            huggableMethodChainBlockLambdaArguments,
             huggableBlockLambdaFirstLine,
             commentedExpressionLambdaArgument,
             huggableExpressionLambdaArguments,
@@ -401,12 +402,33 @@ final class MethodCallPrinter {
         return methodChains.forcedMethodCallChain(expression);
     }
 
+    Optional<Doc> forcedMethodCallChain(
+            MethodCallExpr expression,
+            LayoutWidth.LineBudget lineBudget
+    ) {
+        return methodChains.forcedMethodCallChain(expression, lineBudget);
+    }
+
     Optional<Doc> forcedMethodCallChainWithSemicolon(MethodCallExpr expression) {
         return methodChains.forcedMethodCallChainWithSemicolon(expression);
     }
 
+    Optional<Doc> forcedMethodCallChainWithSemicolon(
+            MethodCallExpr expression,
+            LayoutWidth.LineBudget lineBudget
+    ) {
+        return methodChains.forcedMethodCallChainWithSemicolon(expression, lineBudget);
+    }
+
     Optional<Doc> compactRootWithBrokenFinalChainSegment(MethodCallExpr expression) {
         return methodChains.compactRootWithBrokenFinalChainSegment(expression);
+    }
+
+    Optional<Doc> compactRootWithBrokenFinalChainSegment(
+            MethodCallExpr expression,
+            LayoutWidth.LineBudget lineBudget
+    ) {
+        return methodChains.compactRootWithBrokenFinalChainSegment(expression, lineBudget);
     }
 
     Optional<Doc> sourceMultilineMethodCallStatement(
@@ -601,18 +623,21 @@ final class MethodCallPrinter {
     }
 
     private boolean sourceMultilineMethodCallScope(MethodCallExpr expression) {
-        return methodCallChainIsSourceMultiline(expression)
-            && expression.getScope().filter(MethodCallExpr.class::isInstance).isPresent();
+        return methodCallChainIsSourceMultiline(
+            expression
+        ) && expression.getScope().filter(MethodCallExpr.class::isInstance).isPresent();
     }
 
     private boolean sourceMultilineChainWithConditionalLambda(MethodCallExpr expression) {
-        return methodCallChainIsSourceMultiline(expression)
+        return (
+            methodCallChainIsSourceMultiline(expression)
             && expression.getArguments()
                     .stream()
                     .filter(LambdaExpr.class::isInstance)
                     .map(LambdaExpr.class::cast)
                     .flatMap(lambda -> lambda.getExpressionBody().stream())
-                    .anyMatch(ConditionalExpr.class::isInstance);
+                    .anyMatch(ConditionalExpr.class::isInstance)
+        );
     }
 
     private boolean expressionLambdaBodyOpenerOverflows(
@@ -652,7 +677,8 @@ final class MethodCallPrinter {
     }
 
     private boolean isLogicalBinaryOperator(BinaryExpr expression) {
-        return expression.getOperator() == BinaryExpr.Operator.AND || expression.getOperator() == BinaryExpr.Operator.OR;
+        return expression.getOperator() == BinaryExpr.Operator.AND
+            || expression.getOperator() == BinaryExpr.Operator.OR;
     }
 
     private Optional<BinaryExpr> logicalBinaryBody(Expression body) {
@@ -829,9 +855,7 @@ final class MethodCallPrinter {
     ) {
         return expression.getAllContainedComments()
                 .stream()
-                .anyMatch(comment -> trailingComments.stream().noneMatch(
-                        trailing -> trailing.comment() == comment
-                ));
+                .anyMatch(comment -> trailingComments.stream().noneMatch(trailing -> trailing.comment() == comment));
     }
 
     private List<JavaCommentTrivia> methodCallArgumentTrailingLineComments(MethodCallExpr expression) {

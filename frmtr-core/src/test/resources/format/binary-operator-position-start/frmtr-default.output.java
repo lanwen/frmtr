@@ -138,9 +138,12 @@ public class BinaryOperations {
         }
 
         if (
-            (customerSubtotal + shippingFee == invoiceSubtotal + handlingFee && discountTotal + taxEstimate == paymentTotal + refundTotal)
-            || (warehouseStock + reservedStock == expectedStock + damagedStock && supplierCredit + carrierCredit == manualCredit + promoCredit)
-            || (currentBalance + pendingCharge == targetBalance + postedCharge && retainedBudget + plannedBudget == actualBudget + frozenBudget)
+            (customerSubtotal + shippingFee == invoiceSubtotal + handlingFee
+                && discountTotal + taxEstimate == paymentTotal + refundTotal)
+            || (warehouseStock + reservedStock == expectedStock + damagedStock
+                && supplierCredit + carrierCredit == manualCredit + promoCredit)
+            || (currentBalance + pendingCharge == targetBalance + postedCharge
+                && retainedBudget + plannedBudget == actualBudget + frozenBudget)
         ) {
         }
     }

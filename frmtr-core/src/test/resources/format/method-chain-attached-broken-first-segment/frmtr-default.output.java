@@ -6,7 +6,8 @@ class MethodChainAttachedBrokenFirstSegmentSample {
             RouteDeclaration declaration,
             boolean breakClauses
     ) {
-        routeClause.print(
+        routeClause
+                .print(
                     "primary-routing-policy-with-fallbacks",
                     declaration.primarySegmentsForNetworkGateway(),
                     breakClauses,

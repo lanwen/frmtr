@@ -225,8 +225,14 @@ public class Lambda {
         );
 
         a.b(
-            c -> d ->
-                eligibility.compute(regionalInventory, shipmentWindows, accountStatus, pricingRules, taxRules)
+            c ->
+                d -> eligibility.compute(
+                    regionalInventory,
+                    shipmentWindows,
+                    accountStatus,
+                    pricingRules,
+                    taxRules
+                )
         );
 
         a.b(c -> d && eligibility.compute() ? g && shipmentWindows.accountStatus() : j && taxRules.hasOverride());

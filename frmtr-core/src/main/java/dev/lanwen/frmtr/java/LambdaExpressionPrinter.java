@@ -55,6 +55,8 @@ final class LambdaExpressionPrinter {
 
     private final FormatterOptions options;
 
+    private final LayoutWidth layoutWidth;
+
     private final JavaFormatRule<Expression> expressionRenderer;
 
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
@@ -64,6 +66,8 @@ final class LambdaExpressionPrinter {
     private final JavaFormatRule<Statement> statementRenderer;
 
     private final JavaFormatRule<BlockStmt> blockRenderer;
+
+    private final JavaFormatRule<BlockStmt> methodChainLambdaBlockRenderer;
 
     private final BiFunction<Expression, Boolean, Doc> binaryExpressionNestedLinesRenderer;
 
@@ -83,15 +87,19 @@ final class LambdaExpressionPrinter {
 
     private final ExpressionLambdaArgumentLayout expressionLambdaArguments;
 
+    private final LambdaBodyHeaderLayout lambdaBodyHeaders;
+
     LambdaExpressionPrinter(
             CommentTracker comments,
             RawSource rawSource,
             ObjectCreationLayoutPolicy objectCreationLayoutPolicy,
             FormatterOptions options,
+            LayoutWidth layoutWidth,
             JavaFormatRule<Expression> expressionRenderer,
             Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer,
             JavaFormatRule<Statement> statementRenderer,
             JavaFormatRule<BlockStmt> blockRenderer,
+            JavaFormatRule<BlockStmt> methodChainLambdaBlockRenderer,
             BiFunction<Expression, Boolean, Doc> binaryExpressionNestedLinesRenderer,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
             BiFunction<String, MethodCallExpr, Optional<Doc>> packedMethodCallChainBodyRenderer,
@@ -108,11 +116,13 @@ final class LambdaExpressionPrinter {
         this.rawSource = rawSource;
         this.objectCreationLayoutPolicy = objectCreationLayoutPolicy;
         this.options = options;
+        this.layoutWidth = layoutWidth;
         this.expressionRenderer = expressionRenderer;
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
         this.brokenObjectCreationRenderer = brokenObjectCreationRenderer;
         this.statementRenderer = statementRenderer;
         this.blockRenderer = blockRenderer;
+        this.methodChainLambdaBlockRenderer = methodChainLambdaBlockRenderer;
         this.binaryExpressionNestedLinesRenderer = binaryExpressionNestedLinesRenderer;
         this.compact = compact;
         this.compactWithoutOwnComment = compactWithoutOwnComment;
@@ -135,7 +145,17 @@ final class LambdaExpressionPrinter {
             binaryExpressionNestedLinesRenderer,
             this::lambdaParameters,
             this::lambdaParametersShouldBreak,
-            blockStatementWidth
+            blockStatementWidth,
+            layoutWidth
+        );
+        this.lambdaBodyHeaders = new LambdaBodyHeaderLayout(
+            rawSource,
+            options,
+            expressionRenderer,
+            this::lambdaParametersHaveComments,
+            this::lambdaParametersShouldBreak,
+            this::lambdaParametersForHeader,
+            currentIndentedWidth
         );
     }
 
@@ -189,6 +209,7 @@ final class LambdaExpressionPrinter {
             !parametersHaveComments
             && expressionBody.filter(expressionLambdaArguments::sourceMultilineLogicalBody).isEmpty()
             && expressionBody.filter(expressionLambdaArguments::sourceMultilineMethodCallBody).isEmpty()
+            && expressionBody.filter(expressionLambdaArguments::sourceMultilineBinaryMethodCallBody).isEmpty()
             && expressionBody.filter(body -> lambdaBodyStartsAfterHeader(expression, body)).isEmpty()
             && !lambdaFlatOverflowsInBrokenArgumentList(flat)
             && expressionBody.filter(this::methodCallBodyOverflowsInBrokenArgumentList).isEmpty()
@@ -216,15 +237,19 @@ final class LambdaExpressionPrinter {
                 expressionRenderer.format(expression.getExpressionBody().orElseThrow())
             );
         }
-        Optional<Doc> methodCallBodyWithOpener = expressionBody
-                .filter(MethodCallExpr.class::isInstance)
+        Optional<Doc> methodCallBodyWithOpener = expressionBody.filter(MethodCallExpr.class::isInstance)
                 .map(MethodCallExpr.class::cast)
                 .flatMap(methodCall -> expressionLambdaArguments.methodCallBodyWithOpener(parameters, methodCall));
         if (methodCallBodyWithOpener.isPresent()) {
             return methodCallBodyWithOpener.orElseThrow();
         }
-        Optional<Doc> binaryMethodCallBodyWithOpener = expressionBody
-                .filter(BinaryExpr.class::isInstance)
+        Optional<Doc> sourceMultilineMethodCallBody = expressionBody.flatMap(
+            body -> lambdaBodyHeaders.sourceMultilineMethodCallBodyWithHeader(expression, parameters, body)
+        );
+        if (sourceMultilineMethodCallBody.isPresent()) {
+            return sourceMultilineMethodCallBody.orElseThrow();
+        }
+        Optional<Doc> binaryMethodCallBodyWithOpener = expressionBody.filter(BinaryExpr.class::isInstance)
                 .map(BinaryExpr.class::cast)
                 .flatMap(binary -> expressionLambdaArguments.binaryMethodCallBodyWithOpener(parameters, binary));
         if (binaryMethodCallBodyWithOpener.isPresent()) {
@@ -240,8 +265,7 @@ final class LambdaExpressionPrinter {
         if (binaryBodyWithOpener.isPresent()) {
             return binaryBodyWithOpener.orElseThrow();
         }
-        Optional<Doc> objectCreationBodyWithOpener = expressionBody
-                .filter(ObjectCreationExpr.class::isInstance)
+        Optional<Doc> objectCreationBodyWithOpener = expressionBody.filter(ObjectCreationExpr.class::isInstance)
                 .map(ObjectCreationExpr.class::cast)
                 .flatMap(objectCreation -> objectCreationBodyWithOpener(expression, parameters, objectCreation));
         if (objectCreationBodyWithOpener.isPresent()) {
@@ -278,10 +302,8 @@ final class LambdaExpressionPrinter {
 
     private boolean objectCreationLambdaBodyFits(String parameters, ObjectCreationExpr objectCreation) {
         String flat = parameters + " -> " + compact.apply(objectCreation);
-        return (
-            currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()
-            && !lambdaFlatOverflowsInBrokenArgumentList(flat)
-        );
+        return currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()
+            && !lambdaFlatOverflowsInBrokenArgumentList(flat);
     }
 
     private Optional<Doc> binaryBodyWithFirstOperandOnHeader(
@@ -298,8 +320,7 @@ final class LambdaExpressionPrinter {
         }
         Optional<String> firstOperand = binaryBodyFirstOperandLine(body);
         if (
-            firstOperand
-                    .filter(
+            firstOperand.filter(
                         operand -> currentIndentedWidth.applyAsInt(parameters + " -> " + operand) <= options.lineWidth()
                     )
                     .isEmpty()
@@ -322,10 +343,13 @@ final class LambdaExpressionPrinter {
     }
 
     private boolean methodCallBodyOverflowsInBrokenArgumentList(Expression body) {
-        return (
-            body instanceof MethodCallExpr methodCall
-            && blockStatementWidth.applyAsInt(options.indentUnit().repeat(3) + compact.apply(methodCall)) > options.lineWidth()
+        if (!(body instanceof MethodCallExpr methodCall)) {
+            return false;
+        }
+        int nestedBodyWidth = blockStatementWidth.applyAsInt(
+            options.indentUnit().repeat(3) + compact.apply(methodCall)
         );
+        return nestedBodyWidth > options.lineWidth();
     }
 
     private boolean lambdaFlatOverflowsInBrokenArgumentList(String flat) {
@@ -333,11 +357,9 @@ final class LambdaExpressionPrinter {
     }
 
     private boolean shouldHugBrokenLambdaBody(Expression body) {
-        return (
-            body instanceof MethodCallExpr methodCall
+        return body instanceof MethodCallExpr methodCall
             && methodCall.getArguments().isEmpty()
-            && currentIndentedWidth.applyAsInt(") -> " + compact.apply(methodCall)) <= options.lineWidth()
-        );
+            && currentIndentedWidth.applyAsInt(") -> " + compact.apply(methodCall)) <= options.lineWidth();
     }
 
     private Optional<String> inlineCommentedLambda(LambdaExpr expression) {
@@ -399,10 +421,8 @@ final class LambdaExpressionPrinter {
     }
 
     private boolean isLogicalBinaryOperator(BinaryExpr expression) {
-        return (
-            expression.getOperator() == BinaryExpr.Operator.AND
-            || expression.getOperator() == BinaryExpr.Operator.OR
-        );
+        return expression.getOperator() == BinaryExpr.Operator.AND
+            || expression.getOperator() == BinaryExpr.Operator.OR;
     }
 
     private Optional<Doc> binaryBodyDoc(Expression body) {
@@ -421,10 +441,8 @@ final class LambdaExpressionPrinter {
 
     private boolean lambdaBodyOverflowsInBrokenArgumentList(Expression body) {
         String flat = compact.apply(body);
-        return (
-            currentIndentedWidth.applyAsInt(flat) > options.lineWidth()
-            || blockStatementWidth.applyAsInt(options.indentUnit().repeat(3) + flat) > options.lineWidth()
-        );
+        return currentIndentedWidth.applyAsInt(flat) > options.lineWidth()
+            || blockStatementWidth.applyAsInt(options.indentUnit().repeat(3) + flat) > options.lineWidth();
     }
 
     private Optional<BinaryExpr> binaryBody(Expression body) {
@@ -589,10 +607,8 @@ final class LambdaExpressionPrinter {
     }
 
     boolean lambdaParametersShouldBreak(LambdaExpr expression, String flatParameters) {
-        return (
-            expression.getParameters().size() > 1
-            && currentIndentedWidth.applyAsInt(flatParameters + " -> {}") > options.lineWidth()
-        );
+        return expression.getParameters().size() > 1
+            && currentIndentedWidth.applyAsInt(flatParameters + " -> {}") > options.lineWidth();
     }
 
     String lambdaParameters(LambdaExpr expression) {
@@ -613,12 +629,10 @@ final class LambdaExpressionPrinter {
     }
 
     private boolean lambdaParameterCanAvoidParens(LambdaExpr expression) {
-        return (
-            expression.getParameters().size() == 1
+        return expression.getParameters().size() == 1
             && expression.getParameters().get(0).getAnnotations().isEmpty()
             && expression.getParameters().get(0).getModifiers().isEmpty()
-            && expression.getParameters().get(0).getType().isUnknownType()
-        );
+            && expression.getParameters().get(0).getType().isUnknownType();
     }
 
     /**
@@ -629,7 +643,16 @@ final class LambdaExpressionPrinter {
      * lambda block, so the normal call formatter handles that case.
      */
     Optional<Doc> huggableBlockLambdaArguments(String prefix, NodeList<Expression> arguments) {
-        return huggableBlockLambdaArguments(prefix, arguments, blockStatementWidth);
+        return huggableBlockLambdaArguments(prefix, arguments, blockStatementWidth, this::lambdaExpression);
+    }
+
+    Optional<Doc> huggableMethodChainBlockLambdaArguments(String prefix, NodeList<Expression> arguments) {
+        return huggableBlockLambdaArguments(
+            prefix,
+            arguments,
+            blockStatementWidth,
+            this::methodChainLambdaExpression
+        );
     }
 
     /**
@@ -644,6 +667,15 @@ final class LambdaExpressionPrinter {
             NodeList<Expression> arguments,
             ToIntFunction<String> firstLineWidth
     ) {
+        return huggableBlockLambdaArguments(prefix, arguments, firstLineWidth, this::lambdaExpression);
+    }
+
+    private Optional<Doc> huggableBlockLambdaArguments(
+            String prefix,
+            NodeList<Expression> arguments,
+            ToIntFunction<String> firstLineWidth,
+            Function<LambdaExpr, Doc> lambdaRenderer
+    ) {
         Optional<HuggableBlockLambdaArgument> huggable = huggableBlockLambdaArgument(prefix, arguments);
         if (huggable.isEmpty()) {
             return Optional.empty();
@@ -656,10 +688,22 @@ final class LambdaExpressionPrinter {
         return Optional.of(
             Doc.concat(
                 Doc.text(prefix + "(" + (argument.leadingArguments().isEmpty() ? "" : argument.leadingArguments() + ", ")),
-                lambdaExpression(argument.lambdaExpr()),
+                lambdaRenderer.apply(argument.lambdaExpr()),
                 Doc.text((trailingArguments.isEmpty() ? "" : ", " + trailingArguments) + ")")
             )
         );
+    }
+
+    private Doc methodChainLambdaExpression(LambdaExpr expression) {
+        String parameters = lambdaParameters(expression);
+        if (expression.getBody().isBlockStmt()) {
+            return Doc.concat(
+                lambdaParametersForHeader(expression, parameters),
+                Doc.text(" -> "),
+                methodChainLambdaBlockRenderer.format(expression.getBody().asBlockStmt())
+            );
+        }
+        return lambdaExpression(expression);
     }
 
     /**
@@ -721,11 +765,16 @@ final class LambdaExpressionPrinter {
     private boolean methodCallRootConstructorNeedsBreak(MethodCallExpr expression) {
         List<MethodCallExpr> calls = new ArrayList<>();
         Expression root = methodCallChainRoot(expression, calls);
-        return (
-            !calls.isEmpty()
-            && root instanceof ObjectCreationExpr objectCreation
-            && !objectCreationLayoutPolicy.canKeepCompactChainRoot( objectCreation, currentIndentedWidth.applyAsInt(compact.apply(objectCreation)), options.lineWidth())
+        if (calls.isEmpty() || !(root instanceof ObjectCreationExpr objectCreation)) {
+            return false;
+        }
+        int compactRootWidth = currentIndentedWidth.applyAsInt(compact.apply(objectCreation));
+        boolean compactRootCanStay = objectCreationLayoutPolicy.canKeepCompactChainRoot(
+            objectCreation,
+            compactRootWidth,
+            options.lineWidth()
         );
+        return !compactRootCanStay;
     }
 
     private Expression methodCallChainRoot(MethodCallExpr expression, List<MethodCallExpr> calls) {
@@ -904,10 +953,8 @@ final class LambdaExpressionPrinter {
     }
 
     private boolean isLeadingExpressionLambdaComment(LambdaExpr lambdaExpr, Comment comment) {
-        return (
-            lambdaExpr.getComment().filter(ownComment -> ownComment == comment).isPresent()
-            || startsBefore.test(comment, lambdaExpr)
-        );
+        return lambdaExpr.getComment().filter(ownComment -> ownComment == comment).isPresent()
+            || startsBefore.test(comment, lambdaExpr);
     }
 
     /**

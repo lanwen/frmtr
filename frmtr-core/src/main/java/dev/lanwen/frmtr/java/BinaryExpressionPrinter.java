@@ -156,7 +156,7 @@ final class BinaryExpressionPrinter {
         for (int i = 0; i < operands.size(); i++) {
             Expression operandExpression = operands.get(i);
             BinaryExpressionLine binaryLine = binaryExpressionLine(binaryExpr.getOperator(), i, operands.size());
-            Doc operand = binaryExpressionLineOperand(binaryLine, operandExpression);
+            Doc operand = binaryExpressionLineOperand(binaryLine, operandExpression, nestedContinuation && i > 0);
             if (shouldBreakEndPositionMethodCallOperand(binaryLine, operandExpression)) {
                 MethodCallExpr methodCall = (MethodCallExpr) operandExpression;
                 operand = brokenMethodCallRenderer.apply(methodCall);
@@ -181,7 +181,11 @@ final class BinaryExpressionPrinter {
      * binary lines when the inner group itself is too wide. Other nested binary operands are parenthesized only when the
      * operator-family rules require it to preserve the source expression's grouping.
      */
-    private Doc binaryExpressionLineOperand(BinaryExpressionLine binaryLine, Expression operand) {
+    private Doc binaryExpressionLineOperand(
+            BinaryExpressionLine binaryLine,
+            Expression operand,
+            boolean nestedContinuationLine
+    ) {
         if (
             binaryLine.operator() == BinaryExpr.Operator.OR
             && operand instanceof BinaryExpr binaryOperand
@@ -219,7 +223,7 @@ final class BinaryExpressionPrinter {
         if (operand instanceof MethodCallExpr && operand.getAllContainedComments().isEmpty()) {
             MethodCallExpr methodCall = (MethodCallExpr) operand;
             String flat = compact.apply(operand);
-            if (binaryLine.width(flat) <= options.lineWidth()) {
+            if (binaryLine.width(flat, nestedContinuationLine) <= options.lineWidth()) {
                 return Doc.text(flat);
             }
             if (!binaryLine.hasLeadingOperator()) {
@@ -242,8 +246,9 @@ final class BinaryExpressionPrinter {
         ) {
             return false;
         }
-        return continuationStatementWidth.applyAsInt(methodCallBinaryClosingLine(binaryLine, binaryOperand))
-            <= options.lineWidth();
+        return continuationStatementWidth.applyAsInt(
+            methodCallBinaryClosingLine(binaryLine, binaryOperand)
+        ) <= options.lineWidth();
     }
 
     private String methodCallBinaryClosingLine(BinaryExpressionLine binaryLine, BinaryExpr binaryOperand) {
@@ -326,7 +331,15 @@ final class BinaryExpressionPrinter {
         }
 
         int width(String operand) {
-            return continuationStatementWidth.applyAsInt(leadingOperator + operand + trailingOperator);
+            return width(operand, false);
+        }
+
+        int width(String operand, boolean nestedContinuationLine) {
+            String line = leadingOperator + operand + trailingOperator;
+            if (nestedContinuationLine) {
+                return continuationStatementWidth.applyAsInt(options.indentUnit() + line);
+            }
+            return continuationStatementWidth.applyAsInt(line);
         }
     }
 

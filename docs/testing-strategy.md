@@ -10,8 +10,8 @@ The test suite covers:
 
 - `:frmtr-core`: `Doc` rendering behavior, formatter output, idempotence, reparse validity, comments, parse errors, and
   fixture corpus checks.
-- `:frmtr-tooling`: file-oriented run summaries, deterministic ordering, de-duplication, diffs, write behavior, and
-  per-file failure handling.
+- `:frmtr-tooling`: file-oriented run summaries, deterministic ordering, bounded parallel file processing,
+  de-duplication, diffs, write behavior, and per-file failure handling.
 - `:frmtr-cli`: CLI selector parsing, glob/directory discovery, ignore handling, stdout/write/check behavior, end-of-run
   summaries, explicit no-file diagnostics, option validation, and exit codes.
 - `:frmtr-gradle-plugin`: TestKit functional coverage for task registration, zero-configuration Java defaults, `check`

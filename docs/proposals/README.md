@@ -174,22 +174,22 @@ single `measureFlat` function.
 - **Effort:** contained to `DocRenderer`.
 
 ### M3. Multi-file parallelism + content-addressed caching
-**Status:** 🟣 Investigating · _focused proposal:_ [multi-file-parallelism-and-caching.md](multi-file-parallelism-and-caching.md)
+**Status:** 🟢 In progress — runner-level bounded parallelism landed; Gradle incremental/cache work remains · _focused proposal:_ [multi-file-parallelism-and-caching.md](multi-file-parallelism-and-caching.md)
 
-> **Investigation finding:** `FormatterRunner` is sequential (`stream().map`, no `.parallel()`),
-> and the Gradle tasks declare `@InputFiles` but no outputs / `@CacheableTask` / `InputChanges`, so
-> they reformat the whole source set every run. `Frmtr.format` is **definitively thread-safe**
-> (pure function of `(source, options)`; fresh `JavaFormatContext` per call, no shared mutable
-> state). Recommends order-preserving bounded-pool parallelism + making Gradle's build cache the
-> content-addressed store; a persistent CLI cache stays out of scope per the lazy-ignore non-goal.
-> Generated-file hang evidence adds a progress-output constraint: throughput parallelism should not
-> be claimed to fix silent hangs unless CLI/Gradle get a deterministic result path plus separate
-> progress side channel.
+> **Implementation state:** `FormatterRunner` now uses order-preserving bounded-pool parallelism
+> for `check` and `write`. The Gradle tasks still declare `@InputFiles` but no outputs /
+> `@CacheableTask` / `InputChanges`, so they reformat the whole source set every run. `Frmtr.format`
+> is **definitively thread-safe** (pure function of `(source, options)`; fresh `JavaFormatContext`
+> per call, no shared mutable state). The remaining recommendation is making Gradle's build cache
+> the content-addressed store; a persistent CLI cache stays out of scope per the lazy-ignore
+> non-goal. Generated-file hang evidence still adds a progress-output constraint: throughput
+> parallelism should not be claimed to fix silent hangs unless CLI/Gradle get a deterministic result
+> path plus separate progress side channel.
 
-The tooling runner formats files sequentially and the Gradle plugin reformats unchanged files.
-Format independent files on a thread pool and skip files whose `(content-hash, options,
-formatter-version)` is unchanged via a cache + Gradle incremental inputs/build-cache. On a monorepo
-this is the difference between "fast" and "instant on re-run."
+The tooling runner now formats independent files on a bounded thread pool, while the Gradle plugin
+still reformats unchanged files. Finish this item by skipping files whose `(content-hash, options,
+formatter-version)` is unchanged via Gradle incremental inputs/build-cache. On a monorepo this is
+the difference between "fast" and "instant on re-run."
 
 - **Serves:** fastest (real-world), user-friendly.
 - **Effort:** medium.

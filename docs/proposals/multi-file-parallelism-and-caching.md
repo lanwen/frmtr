@@ -1,28 +1,30 @@
 # Multi-file parallelism and content-addressed caching
 
-Status: Proposed
+Status: Partially implemented — runner-level bounded parallelism landed; Gradle incremental/cache work and progress
+reporting remain proposed.
 
 ## Summary
 
-`frmtr` formats files one at a time. The shared tooling runner
-(`frmtr-tooling/.../FormatterRunner`) iterates the selected file list with a sequential
-`stream().map(...)`, calling `Frmtr.format` once per file. The Gradle plugin compounds this: its
-`frmtrJavaCheck` / `frmtrJavaFormat` tasks declare `@InputFiles` but **no outputs**, are **not**
-`@CacheableTask`, and use **no** `InputChanges` / `@Incremental` wiring — so every invocation
-re-reads and re-formats every source file in the source set, even when nothing changed.
+`frmtr` originally formatted files one at a time. The first implementation slice replaced the shared
+tooling runner's sequential `stream().map(...)` with bounded, order-preserving parallel processing
+for `check` and `write`. The Gradle plugin still compounds unchanged-file work: its `frmtrJavaCheck`
+/ `frmtrJavaFormat` tasks declare `@InputFiles` but **no outputs**, are **not** `@CacheableTask`,
+and use **no** `InputChanges` / `@Incremental` wiring — so every invocation re-reads and
+re-formats every source file in the source set, even when nothing changed.
 
 The generated-file hang finding makes this more than a throughput problem. `check` and `write`
 currently build the complete `FormatRunResult` before CLI or Gradle callers print any per-file
 status, diagnostics, or summary output. A single pathological generated file can therefore make the
 run look silent or stuck even if earlier files were already processed.
 
-This proposal adds two independent, composable speedups, building on the lazy-discovery work in
+This proposal tracks two independent, composable speedups, building on the lazy-discovery work in
 `cli-discovery-lazy-ignore.md` (which made *finding* files cheap; this makes *processing* them
 cheap):
 
-1. **Parallel file processing** in `FormatterRunner` — each file is independent, and `Frmtr.format`
-   is provably safe to call concurrently (see thread-safety analysis), so the per-file work can run
-   on a bounded thread pool while results stay deterministically ordered.
+1. **Parallel file processing** in `FormatterRunner` — **implemented for `check` and `write`**.
+   Each file is independent, and `Frmtr.format` is provably safe to call concurrently (see
+   thread-safety analysis), so the per-file work can run on a bounded thread pool while results stay
+   deterministically ordered.
 2. **Skip-unchanged caching**, keyed by `(content-hash, options, formatter-version)`:
    - In **Gradle**, the idiomatic and durable form — make the tasks `@CacheableTask`, declare proper
      outputs, and use incremental inputs so unchanged files are skipped and warm re-runs are
@@ -31,12 +33,13 @@ cheap):
      respect the explicit non-goal in `cli-discovery-lazy-ignore.md`: *"Do not introduce a
      persistent discovery cache across CLI invocations."* Parallelism alone is the CLI win.
 
-On a monorepo this turns a warm `check` from "re-format everything" into "skip everything," and a
-cold run from sequential into core-parallel.
+On a monorepo the implemented runner slice turns cold multi-file runs from sequential into
+core-parallel. The remaining Gradle slice would turn a warm `check` from "re-format everything" into
+"skip everything."
 
-## Current sequential behavior (grounded)
+## Original sequential behavior (grounded)
 
-### The shared runner is sequential
+### The shared runner was sequential before the first implementation slice
 
 `FormatterRunner.check(...)` and `FormatterRunner.write(...)`
 (`frmtr-tooling/src/main/java/dev/lanwen/frmtr/tooling/FormatterRunner.java`) both do:
@@ -53,7 +56,7 @@ return new FormatRunResult(selectedFiles(displayRoot, files).stream()
   `Frmtr.format(original, options)`, compare, and produce a `FormatFileResult`
   (`UNCHANGED` / `CHANGED` / `WRITTEN` / `WRITTEN_PARTIALLY` / `FAILED`). Per-file failures are
   captured into the result (not thrown), so one bad file never aborts the run.
-- This is a plain sequential `Stream` — **not** `.parallel()`. One CPU core does all formatting.
+- This was a plain sequential `Stream` — **not** `.parallel()`. One CPU core did all formatting.
 - `FormatRunResult` is materialized only after every selected file returns. Because callers print
   after `check(...)` / `write(...)` return, the runner currently offers no in-flight progress signal.
   The recent generated-file hang evidence exposed this directly: one file stuck inside formatting
@@ -137,21 +140,18 @@ guarantees — and any shared `PrintWriter` output must be ordered/serialized, a
 
 ## Proposed design
 
-### (a) Parallel file processing — proposed-new, in `FormatterRunner`
+### (a) Parallel file processing — implemented for `check` / `write` in `FormatterRunner`
 
-Keep `FormatterRunner`'s public surface (`check` / `write`, returning `FormatRunResult`) unchanged.
-Internally, replace the sequential `stream().map(...)` with a bounded parallel map that preserves
-order.
+`FormatterRunner`'s public surface (`check` / `write`, returning `FormatRunResult`) stays
+unchanged. Internally, the runner now uses a bounded parallel map that preserves order.
 
-**Thread pool sizing.** Use a fixed, bounded pool sized to
-`Math.max(1, Runtime.getRuntime().availableProcessors())`, capped (e.g. `min(cores, files.size())`)
-so tiny runs don't spin up idle threads. The work is CPU-bound (parse + render dominate; I/O per
-file is a single read/write), so an unbounded `parallelStream` on the common ForkJoinPool is
-discouraged — it would contend with, and be contended by, other JVM work (especially inside Gradle
-workers). Prefer an explicit `ExecutorService` owned by the call and shut down in a `finally`, with
-completion collected through `ExecutorCompletionService`, `Future`s, or `CompletableFuture`s into
-index-addressed result slots. A dedicated `ForkJoinPool` is acceptable only if it is still bounded
-and scoped to the run. A configurable override (CLI flag / Gradle
+**Thread pool sizing.** The implementation uses a fixed, bounded pool sized to
+`Math.max(1, Runtime.getRuntime().availableProcessors())`, capped at `files.size()` so tiny runs
+don't spin up idle threads. The work is CPU-bound (parse + render dominate; I/O per file is a single
+read/write), so an unbounded `parallelStream` on the common ForkJoinPool is discouraged — it would
+contend with, and be contended by, other JVM work (especially inside Gradle workers). The explicit
+`ExecutorService` is owned by the call and shut down in a `finally`, with `Future`s collected in
+input order. A configurable override (CLI flag / Gradle
 `frmtr { java { maxParallelism = N } }`) is a follow-up, not required for v1.
 
 **Ordering / output determinism.** Results MUST come back in the same order as the already-sorted
@@ -390,7 +390,7 @@ Use the same measurement hygiene `cli-discovery-lazy-ignore.md` established — 
 
 ## Non-goals
 
-- Do not implement code in this proposal-only change.
+- Do not implement Gradle incremental/cache work or CLI progress output in the runner-parallelism slice.
 - Do not introduce a persistent CLI results cache in v1 (respect `cli-discovery-lazy-ignore.md`).
 - Do not change formatter output, `FormatRunResult` shape, CLI output formats, exit codes, or
   summary semantics for processed files.

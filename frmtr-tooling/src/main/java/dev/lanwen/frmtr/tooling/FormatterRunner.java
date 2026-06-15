@@ -11,6 +11,12 @@ import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.function.Function;
 
 public final class FormatterRunner {
 
@@ -33,19 +39,81 @@ public final class FormatterRunner {
             UnifiedDiffRenderer.RenderMode diffRenderMode
     ) {
         return new FormatRunResult(
-            selectedFiles(displayRoot, files)
-                    .stream()
-                    .map(file -> checkFile(displayRoot, file, options, includeDiffs, diffRenderMode))
-                    .toList()
+            formatSelectedFiles(
+                displayRoot,
+                files,
+                file -> checkFile(displayRoot, file, options, includeDiffs, diffRenderMode)
+            )
         );
     }
 
     public static FormatRunResult write(Path displayRoot, List<Path> files, FormatterOptions options) {
         return new FormatRunResult(
-            selectedFiles(displayRoot, files)
-                    .stream()
-                    .map(file -> writeFile(displayRoot, file, options))
-                    .toList()
+            formatSelectedFiles(
+                displayRoot,
+                files,
+                file -> writeFile(displayRoot, file, options)
+            )
+        );
+    }
+
+    private static List<FormatFileResult> formatSelectedFiles(
+            Path displayRoot,
+            List<Path> files,
+            Function<Path, FormatFileResult> formatter
+    ) {
+        List<Path> selected = selectedFiles(displayRoot, files);
+        return mapInInputOrder(selected, workerCount(selected.size()), formatter);
+    }
+
+    private static <T, R> List<R> mapInInputOrder(List<T> inputs, int workers, Function<? super T, R> mapper) {
+        if (inputs.isEmpty()) {
+            return List.of();
+        }
+        int workerCount = Math.max(1, Math.min(workers, inputs.size()));
+        if (workerCount == 1) {
+            return inputs.stream().map(mapper).toList();
+        }
+
+        ExecutorService executor = Executors.newFixedThreadPool(workerCount);
+        try {
+            List<Callable<R>> tasks = inputs.stream()
+                    .<Callable<R>>map(input -> () -> mapper.apply(input))
+                    .toList();
+            return executor.invokeAll(tasks).stream().map(FormatterRunner::awaitResult).toList();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while formatting files", exception);
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    private static <T> T awaitResult(Future<T> future) {
+        try {
+            return future.get();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while formatting files", exception);
+        } catch (ExecutionException exception) {
+            throw rethrowWorkerFailure(exception.getCause());
+        }
+    }
+
+    private static RuntimeException rethrowWorkerFailure(Throwable failure) {
+        if (failure instanceof RuntimeException runtimeException) {
+            return runtimeException;
+        }
+        if (failure instanceof Error error) {
+            throw error;
+        }
+        return new IllegalStateException("File formatter worker failed", failure);
+    }
+
+    private static int workerCount(int fileCount) {
+        return Math.min(
+            Math.max(1, Runtime.getRuntime().availableProcessors()),
+            fileCount
         );
     }
 

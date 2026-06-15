@@ -1,7 +1,7 @@
 # Multi-file parallelism and content-addressed caching
 
-Status: Partially implemented — runner-level bounded parallelism landed; Gradle incremental/cache work and progress
-reporting remain proposed.
+Status: Partially implemented — runner-level bounded parallelism and CLI progress reporting landed;
+Gradle incremental/cache work and any Gradle-native progress/logging follow-up remain proposed.
 
 ## Summary
 
@@ -12,10 +12,10 @@ for `check` and `write`. The Gradle plugin still compounds unchanged-file work: 
 and use **no** `InputChanges` / `@Incremental` wiring — so every invocation re-reads and
 re-formats every source file in the source set, even when nothing changed.
 
-The generated-file hang finding makes this more than a throughput problem. `check` and `write`
-currently build the complete `FormatRunResult` before CLI or Gradle callers print any per-file
-status, diagnostics, or summary output. A single pathological generated file can therefore make the
-run look silent or stuck even if earlier files were already processed.
+The generated-file hang finding makes this more than a throughput problem. `check` and `write` still
+preserve ordered final status, diagnostics, diffs, and summary output, but the CLI now also renders a
+stderr progress side channel while the runner is in flight. Gradle-native progress/logging remains a
+separate follow-up if the plugin needs comparable visibility.
 
 This proposal tracks two independent, composable speedups, building on the lazy-discovery work in
 `cli-discovery-lazy-ignore.md` (which made *finding* files cheap; this makes *processing* them
@@ -57,10 +57,10 @@ return new FormatRunResult(selectedFiles(displayRoot, files).stream()
   (`UNCHANGED` / `CHANGED` / `WRITTEN` / `WRITTEN_PARTIALLY` / `FAILED`). Per-file failures are
   captured into the result (not thrown), so one bad file never aborts the run.
 - This was a plain sequential `Stream` — **not** `.parallel()`. One CPU core did all formatting.
-- `FormatRunResult` is materialized only after every selected file returns. Because callers print
-  after `check(...)` / `write(...)` return, the runner currently offers no in-flight progress signal.
-  The recent generated-file hang evidence exposed this directly: one file stuck inside formatting
-  blocks all visible status output for the run.
+- `FormatRunResult` is materialized only after every selected file returns, preserving ordered final
+  result output. The CLI now subscribes to the runner progress side channel and emits stderr progress
+  while work is in flight; Gradle callers still need a Gradle-native progress/logging follow-up if
+  they require the same visibility.
 
 ### The CLI drives it (and `printFiles` is its own sequential loop)
 
@@ -288,8 +288,9 @@ declare inputs/outputs correctly and let Gradle's build cache be the content-add
   assembly, so no diff fragments interleave across threads. The runner should continue returning
   plain diff text; CLI colorization, including `--render-line-width` ruler coloring, stays in
   `Main` after ordered assembly.
-- **CLI/Gradle printing happens after assembly** (except print mode, addressed in (a)), so console
-  output ordering is unaffected by scheduling.
+- **CLI/Gradle result printing happens after assembly** (except print mode, addressed in (a)), so
+  final output ordering is unaffected by scheduling. CLI progress is separate stderr output emitted
+  while the runner is in flight.
 - **Progress output is separate from result output.** Progress counters or "currently processing"
   diagnostics may be completion-ordered and ephemeral, but status lines, diffs, formatted source,
   and summaries must remain deterministic and script-compatible.
@@ -350,10 +351,10 @@ and CI regression gates exist to validate. Specifically:
 
 - **Cold-run wall-clock on a large repo** (sequential vs parallel), reported as speedup and
   scaling vs core count. Expect near-linear up to memory/I/O limits on CPU-bound formatting.
-- **Time to first visible progress** on a synthetic slow/generated-file repro: current behavior emits
-  no per-file progress until the slow file returns; the proposed progress path should show completed
-  counts or active-file diagnostics while other worker tasks continue. If the first implementation
-  has no progress path, record this explicitly and measure only throughput.
+- **Time to first visible progress** on a synthetic slow/generated-file repro: CLI runs should show
+  completed counts or active-file diagnostics on stderr while other worker tasks continue. Gradle
+  runs should either use a Gradle-native progress/logging follow-up or explicitly measure throughput
+  only.
 - **Warm-run wall-clock and `% files skipped`** for Gradle `frmtrJavaCheck`/`frmtrJavaFormat`:
   - first run (cold cache): 0% skipped;
   - re-run with no changes: ~100% skipped → task `UP-TO-DATE`/`FROM-CACHE`, near-instant;
@@ -390,7 +391,8 @@ Use the same measurement hygiene `cli-discovery-lazy-ignore.md` established — 
 
 ## Non-goals
 
-- Do not implement Gradle incremental/cache work or CLI progress output in the runner-parallelism slice.
+- Do not implement Gradle incremental/cache work or Gradle-native progress/logging in the
+  runner-parallelism slice.
 - Do not introduce a persistent CLI results cache in v1 (respect `cli-discovery-lazy-ignore.md`).
 - Do not change formatter output, `FormatRunResult` shape, CLI output formats, exit codes, or
   summary semantics for processed files.

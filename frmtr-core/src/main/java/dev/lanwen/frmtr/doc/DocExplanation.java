@@ -21,11 +21,12 @@ import java.util.Optional;
  * did this line wrap?" with true width arithmetic for the constructs that actually wrap on real Java.
  */
 public record DocExplanation(
-        int lineWidth,
-        List<GroupDecision> decisions,
-        List<ForcedBreak> forcedBreaks,
-        List<PrinterWrap> printerWraps,
-        Node tree) {
+    int lineWidth,
+    List<GroupDecision> decisions,
+    List<ForcedBreak> forcedBreaks,
+    List<PrinterWrap> printerWraps,
+    Node tree
+) {
     public DocExplanation {
         decisions = List.copyOf(decisions);
         forcedBreaks = List.copyOf(forcedBreaks);
@@ -53,7 +54,7 @@ public record DocExplanation(
      */
     public enum Decision {
         FLAT,
-        BREAK
+        BREAK,
     }
 
     /**
@@ -61,7 +62,8 @@ public record DocExplanation(
      * an unlabeled construct.
      */
     static String ruleName(Optional<String> label) {
-        return label.map(name -> {
+        return label
+                .map(name -> {
                     int colon = name.indexOf(':');
                     return colon >= 0 ? name.substring(colon + 1) : name;
                 })
@@ -79,12 +81,13 @@ public record DocExplanation(
      * groups that contain a hard line break and therefore can never fit flat regardless of width.
      */
     public record GroupDecision(
-            Optional<String> label,
-            Decision decision,
-            int flatWidth,
-            int available,
-            int startColumn,
-            boolean forcedBreak) {
+        Optional<String> label,
+        Decision decision,
+        int flatWidth,
+        int available,
+        int startColumn,
+        boolean forcedBreak
+    ) {
         /**
          * Returns the label's local rule name without the {@code java.*:} provenance prefix, or {@code group} for an
          * unlabeled structural group.
@@ -115,7 +118,11 @@ public record DocExplanation(
      * owns directly; it is zero for group and structural nodes.
      */
     public record Node(
-            Optional<String> label, Optional<GroupDecision> decision, int forcedLineBreaks, List<Node> children) {
+        Optional<String> label,
+        Optional<GroupDecision> decision,
+        int forcedLineBreaks,
+        List<Node> children
+    ) {
         public Node {
             children = List.copyOf(children);
         }

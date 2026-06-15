@@ -23,6 +23,7 @@ import java.util.function.Predicate;
  * accounting.
  */
 final class JavaCommentPlacementPolicy {
+
     private JavaCommentMap commentMap;
 
     /**
@@ -101,7 +102,8 @@ final class JavaCommentPlacementPolicy {
      * Returns source-ordered orphan comments associated directly with {@code node}.
      */
     List<JavaCommentTrivia> orphanCommentsInSourceOrder(Node node) {
-        return orphanComments(node).stream()
+        return orphanComments(node)
+                .stream()
                 .sorted(Comparator.comparingInt(comment -> comment.beginLine(Integer.MAX_VALUE)))
                 .toList();
     }
@@ -187,7 +189,8 @@ final class JavaCommentPlacementPolicy {
         if (nodeBeginLine == Integer.MAX_VALUE) {
             return List.of();
         }
-        List<JavaCommentTrivia> candidates = containedComments(parent).stream()
+        List<JavaCommentTrivia> candidates = containedComments(parent)
+                .stream()
                 .filter(JavaCommentTrivia::isLine)
                 .filter(comment -> comment.beginLine(Integer.MAX_VALUE) < nodeBeginLine)
                 .filter(comment -> !startsInsideOtherDirectChild(parent, node, comment))
@@ -209,14 +212,16 @@ final class JavaCommentPlacementPolicy {
     }
 
     private boolean startsInsideOtherDirectChild(Node parent, Node node, JavaCommentTrivia comment) {
-        return parent.getChildNodes().stream()
+        return parent.getChildNodes()
+                .stream()
                 .filter(child -> !(child instanceof Comment))
                 .filter(child -> child != node)
                 .anyMatch(comment::startsInsideLineRange);
     }
 
     private boolean startsAfterOtherDirectChildOnSameLine(Node parent, Node node, JavaCommentTrivia comment) {
-        return parent.getChildNodes().stream()
+        return parent.getChildNodes()
+                .stream()
                 .filter(child -> !(child instanceof Comment))
                 .filter(child -> child != node)
                 .anyMatch(comment::startsAfterNodeOnSameLine);
@@ -225,13 +230,16 @@ final class JavaCommentPlacementPolicy {
     private List<JavaCommentTrivia> lineCommentsInRange(
             Node container,
             int beginLineInclusive,
-            int endLineExclusive) {
-        return containedComments(container).stream()
+            int endLineExclusive
+    ) {
+        return containedComments(container)
+                .stream()
                 .filter(JavaCommentTrivia::isLine)
                 .filter(comment -> comment.comment()
-                        .getRange()
-                        .map(range -> range.begin.line >= beginLineInclusive && range.begin.line < endLineExclusive)
-                        .orElse(false))
+                            .getRange()
+                            .map(range -> range.begin.line >= beginLineInclusive && range.begin.line < endLineExclusive)
+                            .orElse(false)
+                )
                 .sorted(Comparator.comparing(comment -> comment.comment(), CommentIndex.sourceOrderComparator()))
                 .toList();
     }
@@ -249,7 +257,8 @@ final class JavaCommentPlacementPolicy {
     Optional<JavaCommentTrivia> ownSameLineBlockCommentBeforeNode(Node node) {
         return ownComment(node, comment -> comment.isBlock()
                 && comment.startsOnBeginLine(node)
-                && comment.startsBefore(node));
+                && comment.startsBefore(node)
+        );
     }
 
     /**
@@ -262,7 +271,8 @@ final class JavaCommentPlacementPolicy {
     Optional<JavaCommentTrivia> unattachedTrailingBlockComment(Node node) {
         Optional<Node> parent = node.getParentNode();
         while (parent.isPresent()) {
-            Optional<JavaCommentTrivia> trailing = containedComments(parent.orElseThrow()).stream()
+            Optional<JavaCommentTrivia> trailing = containedComments(parent.orElseThrow())
+                    .stream()
                     .filter(JavaCommentTrivia::isBlock)
                     .filter(comment -> comment.comment().getCommentedNode().isEmpty())
                     .filter(comment -> comment.startsAfterNodeOnSameLine(node))
@@ -292,7 +302,8 @@ final class JavaCommentPlacementPolicy {
     List<JavaCommentTrivia> trailingBlockCommentsAfterNode(Node node) {
         Optional<Node> parent = node.getParentNode();
         while (parent.isPresent()) {
-            List<JavaCommentTrivia> trailing = containedComments(parent.orElseThrow()).stream()
+            List<JavaCommentTrivia> trailing = containedComments(parent.orElseThrow())
+                    .stream()
                     .filter(JavaCommentTrivia::isBlock)
                     .filter(comment -> comment.startsAfterNodeOnSameLine(node))
                     .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))

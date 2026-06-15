@@ -160,7 +160,8 @@ final class CallableSignaturePrinter {
     }
 
     boolean parametersFitOnContinuation(CallableDeclaration<?> declaration) {
-        return currentIndentedWidth(options.indentUnit() + callableParameterText(declaration)) <= options.lineWidth();
+        String continuationLine = options.indentUnit().repeat(2) + callableParameterText(declaration);
+        return currentIndentedWidth(continuationLine) <= options.lineWidth();
     }
 
     /**

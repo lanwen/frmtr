@@ -1,4 +1,4 @@
 interface:
   display_name: "Adopt Fixture"
-  short_description: "Turn code into frmtr fixtures"
-  default_prompt: "Use $adopt-fixture to turn this Java code into a frmtr fixture."
+  short_description: "Turn Java code into frmtr fixtures"
+  default_prompt: "Use $adopt-fixture to turn this Java code, formatter issue, or line-width case into a frmtr fixture."

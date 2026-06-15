@@ -18,11 +18,11 @@ import com.github.javaparser.ast.visitor.EqualsVisitor;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.printer.DefaultPrettyPrinter;
-import java.util.Comparator;
 import com.github.javaparser.printer.configuration.DefaultConfigurationOption;
 import com.github.javaparser.printer.configuration.DefaultPrinterConfiguration;
 import com.github.javaparser.printer.configuration.DefaultPrinterConfiguration.ConfigOption;
 import com.github.javaparser.printer.configuration.PrinterConfiguration;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -120,9 +120,12 @@ final class AstEquivalence {
         if (EqualsVisitor.equals(normalizedInput, normalizedOutput)) {
             return Optional.empty();
         }
-        return Optional.of("formatted output is not AST-equivalent to the input (ignoring comments, whitespace, and "
-                + "import order). First structural divergence:" + System.lineSeparator()
-                + minimizedDiff(canonicalString(normalizedInput), canonicalString(normalizedOutput)));
+        return Optional.of(
+            "formatted output is not AST-equivalent to the input (ignoring comments, whitespace, and "
+                + "import order). First structural divergence:"
+                + System.lineSeparator()
+                + minimizedDiff(canonicalString(normalizedInput), canonicalString(normalizedOutput))
+        );
     }
 
     /**
@@ -160,43 +163,46 @@ final class AstEquivalence {
      * diverges structurally.
      */
     private static void canonicalizePresentation(CompilationUnit unit) {
-        unit.accept(new ModifierVisitor<Void>() {
-            @Override
-            public Visitable visit(EnclosedExpr enclosed, Void arg) {
-                super.visit(enclosed, arg);
-                Expression inner = enclosed.getInner();
-                inner.remove();
-                return inner;
-            }
-
-            @Override
-            public Visitable visit(LambdaExpr lambda, Void arg) {
-                super.visit(lambda, arg);
-                lambda.setEnclosingParameters(true);
-                return lambda;
-            }
-
-            @Override
-            public Visitable visit(TextBlockLiteralExpr textBlock, Void arg) {
-                super.visit(textBlock, arg);
-                // Compare text blocks by their JLS-computed String value (incidental indentation removed, escapes
-                // translated): that value is program data the running program observes. The formatter is
-                // value-preserving for text blocks — TextBlockPrinter renders the source token verbatim — so
-                // re-indentation does not change the value, while any real content change does and must fail.
-                // Replacing the literal with a StringLiteralExpr of its resolved value (rather than dropping it)
-                // also keeps a text block deleted or replaced by a non-text-block expression structurally divergent.
-                return new StringLiteralExpr().setValue(textBlock.translateEscapes());
-            }
-
-            @Override
-            public Visitable visit(EmptyStmt emptyStmt, Void arg) {
-                super.visit(emptyStmt, arg);
-                if (emptyStmt.getParentNode().filter(BlockStmt.class::isInstance).isPresent()) {
-                    return null;
+        unit.accept(
+            new ModifierVisitor<Void>() {
+                @Override
+                public Visitable visit(EnclosedExpr enclosed, Void arg) {
+                    super.visit(enclosed, arg);
+                    Expression inner = enclosed.getInner();
+                    inner.remove();
+                    return inner;
                 }
-                return emptyStmt;
-            }
-        }, null);
+
+                @Override
+                public Visitable visit(LambdaExpr lambda, Void arg) {
+                    super.visit(lambda, arg);
+                    lambda.setEnclosingParameters(true);
+                    return lambda;
+                }
+
+                @Override
+                public Visitable visit(TextBlockLiteralExpr textBlock, Void arg) {
+                    super.visit(textBlock, arg);
+                    // Compare text blocks by their JLS-computed String value (incidental indentation removed, escapes
+                    // translated): that value is program data the running program observes. The formatter is
+                    // value-preserving for text blocks — TextBlockPrinter renders the source token verbatim — so
+                    // re-indentation does not change the value, while any real content change does and must fail.
+                    // Replacing the literal with a StringLiteralExpr of its resolved value (rather than dropping it)
+                    // also keeps a text block deleted or replaced by a non-text-block expression structurally divergent.
+                    return new StringLiteralExpr().setValue(textBlock.translateEscapes());
+                }
+
+                @Override
+                public Visitable visit(EmptyStmt emptyStmt, Void arg) {
+                    super.visit(emptyStmt, arg);
+                    if (emptyStmt.getParentNode().filter(BlockStmt.class::isInstance).isPresent()) {
+                        return null;
+                    }
+                    return emptyStmt;
+                }
+            },
+            null
+        );
 
         unit.stream()
                 .filter(NodeWithModifiers.class::isInstance)
@@ -239,8 +245,12 @@ final class AstEquivalence {
         if (added != null) {
             return Optional.of("import added or duplicated by formatting: " + added);
         }
-        return Optional.of("import declarations differ between input and formatted output: input=" + inputImports
-                + " output=" + outputImports);
+        return Optional.of(
+            "import declarations differ between input and formatted output: input="
+                + inputImports
+                + " output="
+                + outputImports
+        );
     }
 
     /**
@@ -264,8 +274,8 @@ final class AstEquivalence {
 
     private static String printImport(ImportDeclaration declaration) {
         return (declaration.isStatic() ? "static " : "")
-                + declaration.getNameAsString()
-                + (declaration.isAsterisk() ? ".*" : "");
+            + declaration.getNameAsString()
+            + (declaration.isAsterisk() ? ".*" : "");
     }
 
     private static String canonicalString(CompilationUnit unit) {

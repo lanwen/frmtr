@@ -30,7 +30,8 @@ final class AstEquivalenceTest {
     @Test
     void treatsPureReformattingAsEquivalent() {
         CompilationUnit dense = parse("class Demo{int value;void run(){int x=1;}}");
-        CompilationUnit spaced = parse("""
+        CompilationUnit spaced = parse(
+            """
                 class Demo {
                     int value;
 
@@ -38,41 +39,50 @@ final class AstEquivalenceTest {
                         int x = 1;
                     }
                 }
-                """);
+                """
+        );
 
         assertThat(AstEquivalence.equivalent(dense, spaced)).isTrue();
     }
 
     @Test
     void ignoresComments() {
-        CompilationUnit withComments = parse("""
+        CompilationUnit withComments = parse(
+            """
                 // type comment
                 class Demo {
                     int value; // trailing
                 }
-                """);
-        CompilationUnit withoutComments = parse("""
+                """
+        );
+        CompilationUnit withoutComments = parse(
+            """
                 class Demo {
                     int value;
                 }
-                """);
+                """
+        );
 
         assertThat(AstEquivalence.equivalent(withComments, withoutComments)).isTrue();
     }
 
     @Test
     void reportsDroppedMemberAsDifference() {
-        CompilationUnit complete = parse("""
+        CompilationUnit complete = parse(
+            """
                 class Demo {
                     int kept;
                     int dropped;
                 }
-                """);
-        CompilationUnit missingMember = parse("""
+                """
+        );
+        CompilationUnit missingMember = parse(
+            """
                 class Demo {
                     int kept;
                 }
-                """);
+                """
+        );
 
         Optional<String> difference = AstEquivalence.describeDifference(complete, missingMember);
 
@@ -105,38 +115,46 @@ final class AstEquivalenceTest {
 
     @Test
     void treatsImportReorderAsEquivalent() {
-        CompilationUnit sourceOrder = parse("""
+        CompilationUnit sourceOrder = parse(
+            """
                 import b.Beta;
                 import a.Alpha;
                 import static x.Util.help;
 
                 class Demo {}
-                """);
-        CompilationUnit formatterOrder = parse("""
+                """
+        );
+        CompilationUnit formatterOrder = parse(
+            """
                 import static x.Util.help;
 
                 import a.Alpha;
                 import b.Beta;
 
                 class Demo {}
-                """);
+                """
+        );
 
         assertThat(AstEquivalence.equivalent(sourceOrder, formatterOrder)).isTrue();
     }
 
     @Test
     void reportsDroppedImportAsDifference() {
-        CompilationUnit complete = parse("""
+        CompilationUnit complete = parse(
+            """
                 import a.Alpha;
                 import b.Beta;
 
                 class Demo {}
-                """);
-        CompilationUnit missingImport = parse("""
+                """
+        );
+        CompilationUnit missingImport = parse(
+            """
                 import a.Alpha;
 
                 class Demo {}
-                """);
+                """
+        );
 
         Optional<String> difference = AstEquivalence.describeDifference(complete, missingImport);
 
@@ -148,17 +166,21 @@ final class AstEquivalenceTest {
 
     @Test
     void reportsDuplicatedImportAsDifference() {
-        CompilationUnit single = parse("""
+        CompilationUnit single = parse(
+            """
                 import a.Alpha;
 
                 class Demo {}
-                """);
-        CompilationUnit duplicated = parse("""
+                """
+        );
+        CompilationUnit duplicated = parse(
+            """
                 import a.Alpha;
                 import a.Alpha;
 
                 class Demo {}
-                """);
+                """
+        );
 
         Optional<String> difference = AstEquivalence.describeDifference(single, duplicated);
 
@@ -170,8 +192,12 @@ final class AstEquivalenceTest {
 
     @Test
     void treatsModifierReorderAsEquivalent() {
-        CompilationUnit oneOrder = parse("abstract sealed class Parent permits Child {}\nfinal class Child extends Parent {}");
-        CompilationUnit otherOrder = parse("sealed abstract class Parent permits Child {}\nfinal class Child extends Parent {}");
+        CompilationUnit oneOrder = parse(
+            "abstract sealed class Parent permits Child {}\nfinal class Child extends Parent {}"
+        );
+        CompilationUnit otherOrder = parse(
+            "sealed abstract class Parent permits Child {}\nfinal class Child extends Parent {}"
+        );
 
         assertThat(AstEquivalence.equivalent(oneOrder, otherOrder)).isTrue();
     }
@@ -187,8 +213,12 @@ final class AstEquivalenceTest {
     @Test
     void treatsClarifyingParenthesesAsEquivalent() {
         // The formatter adds precedence-preserving parentheses to mixed-precedence expressions; that must verify clean.
-        CompilationUnit bare = parse("class Demo { boolean v(boolean a, boolean b, boolean c) { return a && b || c; } }");
-        CompilationUnit clarified = parse("class Demo { boolean v(boolean a, boolean b, boolean c) { return (a && b) || c; } }");
+        CompilationUnit bare = parse(
+            "class Demo { boolean v(boolean a, boolean b, boolean c) { return a && b || c; } }"
+        );
+        CompilationUnit clarified = parse(
+            "class Demo { boolean v(boolean a, boolean b, boolean c) { return (a && b) || c; } }"
+        );
 
         assertThat(AstEquivalence.equivalent(bare, clarified)).isTrue();
     }
@@ -214,22 +244,26 @@ final class AstEquivalenceTest {
     void treatsReindentedTextBlockAsEquivalent() {
         // The formatter re-indents text blocks to match surrounding code. Re-indentation changes only incidental
         // leading whitespace (which the JLS strips), so it must verify clean rather than read as a value change.
-        CompilationUnit shallowIndent = parse("""
+        CompilationUnit shallowIndent = parse(
+            """
                 class Demo {
                     String s = \"""
                         line one
                         line two
                         \""";
                 }
-                """);
-        CompilationUnit deeperIndent = parse("""
+                """
+        );
+        CompilationUnit deeperIndent = parse(
+            """
                 class Demo {
                     String s = \"""
                               line one
                               line two
                               \""";
                 }
-                """);
+                """
+        );
 
         assertThat(AstEquivalence.equivalent(shallowIndent, deeperIndent)).isTrue();
     }
@@ -239,20 +273,24 @@ final class AstEquivalenceTest {
         // The formatter is value-preserving for text blocks (TextBlockPrinter renders the source verbatim), so layer 1
         // compares text-block content by its JLS String value. A real change to that value — including one confined to
         // significant interior whitespace — must be reported as a difference.
-        CompilationUnit original = parse("""
+        CompilationUnit original = parse(
+            """
                 class Demo {
                     String s = \"""
                         hello world
                         \""";
                 }
-                """);
-        CompilationUnit contentChanged = parse("""
+                """
+        );
+        CompilationUnit contentChanged = parse(
+            """
                 class Demo {
                     String s = \"""
                         goodbye    cruel  world
                         \""";
                 }
-                """);
+                """
+        );
 
         assertThat(AstEquivalence.equivalent(original, contentChanged)).isFalse();
     }
@@ -261,13 +299,15 @@ final class AstEquivalenceTest {
     void reportsTextBlockReplacedByNonTextBlockAsDifference() {
         // Scoping out text-block *content* must not blind layer 1 to the *presence* of a text block: replacing it with a
         // different expression is a genuine structural change and must still be reported.
-        CompilationUnit textBlock = parse("""
+        CompilationUnit textBlock = parse(
+            """
                 class Demo {
                     String s = \"""
                         hello
                         \""";
                 }
-                """);
+                """
+        );
         CompilationUnit ordinaryString = parse("class Demo { String s = \"hello\"; }");
 
         assertThat(AstEquivalence.equivalent(textBlock, ordinaryString)).isFalse();
@@ -275,13 +315,9 @@ final class AstEquivalenceTest {
 
     @Test
     void verifyTogglePassesForNormalFormatting() {
-        withVerify("true", () -> assertThatCode(() -> Frmtr.format("""
-                        import b.Beta;
-                        import a.Alpha;
-
-                        enum Color { RED, GREEN, BLUE }
-                        """))
-                .doesNotThrowAnyException());
+        withVerify("true", () ->
+            assertThatCode(() -> Frmtr.format("import b.Beta; import a.Alpha; enum Color { RED, GREEN, BLUE }")).doesNotThrowAnyException()
+        );
     }
 
     @Test
@@ -349,9 +385,11 @@ final class AstEquivalenceTest {
     }
 
     private static CompilationUnit parse(String source) {
-        JavaParser parser = new JavaParser(new ParserConfiguration()
-                .setStoreTokens(true)
-                .setAttributeComments(true));
+        JavaParser parser = new JavaParser(
+            new ParserConfiguration()
+                    .setStoreTokens(true)
+                    .setAttributeComments(true)
+        );
         return parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
                 .getResult()
                 .orElseThrow();

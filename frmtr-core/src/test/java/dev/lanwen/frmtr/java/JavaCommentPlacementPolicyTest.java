@@ -15,6 +15,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 final class JavaCommentPlacementPolicyTest {
+
     @Test
     void requiresExplicitRunInitializationBeforeServingPlacementQueries() {
         JavaCommentPlacementPolicy policy = new JavaCommentPlacementPolicy();
@@ -33,22 +34,23 @@ final class JavaCommentPlacementPolicyTest {
 
     @Test
     void exposesOwnTrailingAndOrphanCommentsFromTheRunMap() {
-        CompilationUnit unit = parse("""
+        CompilationUnit unit = parse(
+            """
                 class Demo {
                     int value; // field tail
 
                     // type orphan
                 }
-                """);
+                """
+        );
         ClassOrInterfaceDeclaration type = unit.findFirst(ClassOrInterfaceDeclaration.class).orElseThrow();
         FieldDeclaration field = unit.findFirst(FieldDeclaration.class).orElseThrow();
         JavaCommentPlacementPolicy policy = startedPolicy(unit);
 
-        assertThat(policy.trailingLineComment(field))
-                .hasValueSatisfying(comment -> {
-                    assertThat(comment.isLine()).isTrue();
-                    assertThat(comment.comment()).isSameAs(field.getComment().orElseThrow());
-                });
+        assertThat(policy.trailingLineComment(field)).hasValueSatisfying(comment -> {
+            assertThat(comment.isLine()).isTrue();
+            assertThat(comment.comment()).isSameAs(field.getComment().orElseThrow());
+        });
         assertThat(type.getOrphanComments()).isNotEmpty();
         assertThat(policy.orphanCommentsInSourceOrder(type))
                 .extracting(comment -> comment.comment().getContent().strip())
@@ -57,19 +59,20 @@ final class JavaCommentPlacementPolicyTest {
 
     @Test
     void findsContainedLineCommentsBetweenNeighboringBinaryOperands() {
-        CompilationUnit unit = parse("""
+        CompilationUnit unit = parse(
+            """
                 class Demo {
                     boolean value(boolean left, boolean right) {
                         return left // keep with left
                                 && right;
                     }
                 }
-                """);
+                """
+        );
         BinaryExpr binary = unit.findFirst(BinaryExpr.class).orElseThrow();
         JavaCommentPlacementPolicy policy = startedPolicy(unit);
 
-        List<JavaCommentTrivia> comments =
-                policy.lineCommentsBetween(binary, binary.getLeft(), binary.getRight());
+        List<JavaCommentTrivia> comments = policy.lineCommentsBetween(binary, binary.getLeft(), binary.getRight());
 
         assertThat(comments)
                 .extracting(comment -> comment.comment().getContent().strip())
@@ -86,9 +89,11 @@ final class JavaCommentPlacementPolicyTest {
     }
 
     private static CompilationUnit parse(String source) {
-        JavaParser parser = new JavaParser(new ParserConfiguration()
-                .setStoreTokens(true)
-                .setAttributeComments(true));
+        JavaParser parser = new JavaParser(
+            new ParserConfiguration()
+                    .setStoreTokens(true)
+                    .setAttributeComments(true)
+        );
         return parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
                 .getResult()
                 .orElseThrow();

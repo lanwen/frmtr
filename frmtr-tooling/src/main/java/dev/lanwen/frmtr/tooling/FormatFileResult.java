@@ -5,11 +5,12 @@ import java.util.Objects;
 import java.util.Optional;
 
 public record FormatFileResult(
-        Path file,
-        Path displayPath,
-        FormatFileStatus status,
-        String diffText,
-        Exception failure) {
+    Path file,
+    Path displayPath,
+    FormatFileStatus status,
+    String diffText,
+    Exception failure
+) {
     public FormatFileResult {
         file = Objects.requireNonNull(file, "file").toAbsolutePath().normalize();
         displayPath = Objects.requireNonNull(displayPath, "displayPath");
@@ -18,15 +19,19 @@ public record FormatFileResult(
             throw new IllegalArgumentException("failure is required for failed or partially written file results");
         }
         if (status != FormatFileStatus.FAILED && status != FormatFileStatus.WRITTEN_PARTIALLY && failure != null) {
-            throw new IllegalArgumentException("failure is only supported for failed or partially written file results");
+            throw new IllegalArgumentException(
+                "failure is only supported for failed or partially written file results"
+            );
         }
         diffText = diffText == null ? "" : diffText;
     }
 
     public boolean changed() {
-        return status == FormatFileStatus.CHANGED
-                || status == FormatFileStatus.WRITTEN
-                || status == FormatFileStatus.WRITTEN_PARTIALLY;
+        return (
+            status == FormatFileStatus.CHANGED
+            || status == FormatFileStatus.WRITTEN
+            || status == FormatFileStatus.WRITTEN_PARTIALLY
+        );
     }
 
     public boolean failed() {

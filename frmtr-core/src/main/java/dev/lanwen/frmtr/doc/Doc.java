@@ -5,10 +5,13 @@ import java.util.Arrays;
 import java.util.List;
 
 public sealed interface Doc
-        permits Doc.Concat, Doc.Group, Doc.HardLine, Doc.IfBreak, Doc.Indent, Doc.Label, Doc.Line, Doc.SoftLine, Doc.Text {
+    permits Doc.Concat, Doc.Group, Doc.HardLine, Doc.IfBreak, Doc.Indent, Doc.Label, Doc.Line, Doc.SoftLine, Doc.Text {
     Doc EMPTY = new Text("");
+
     Doc LINE = new Line();
+
     Doc SOFT_LINE = new SoftLine();
+
     Doc HARD_LINE = new HardLine();
 
     static Doc text(String value) {

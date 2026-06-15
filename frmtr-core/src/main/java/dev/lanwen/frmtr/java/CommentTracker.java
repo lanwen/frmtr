@@ -25,8 +25,11 @@ import java.util.function.Predicate;
  * consumption and does not introduce new comment rendering policy.
  */
 final class CommentTracker {
+
     private final Set<Comment> printed = Collections.newSetFromMap(new IdentityHashMap<>());
+
     private final Set<Comment> rawRendered = Collections.newSetFromMap(new IdentityHashMap<>());
+
     private final JavaCommentPlacementPolicy commentPlacement;
 
     CommentTracker(JavaCommentPlacementPolicy commentPlacement) {
@@ -42,11 +45,14 @@ final class CommentTracker {
     }
 
     Doc adjacentLeadingLineComments(Node node) {
-        return Doc.concat(commentPlacement.adjacentLeadingLineComments(node).stream()
-                .filter(this::claim)
-                .map(JavaFormatter::commentDoc)
-                .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
-                .toList());
+        return Doc.concat(
+            commentPlacement.adjacentLeadingLineComments(node)
+                    .stream()
+                    .filter(this::claim)
+                    .map(JavaFormatter::commentDoc)
+                    .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
+                    .toList()
+        );
     }
 
     Doc leadingCluster(Node node) {
@@ -65,11 +71,14 @@ final class CommentTracker {
     }
 
     Doc orphanComments(Node node, Predicate<Comment> predicate) {
-        return Doc.concat(commentPlacement.orphanComments(node).stream()
-                .filter(trivia -> predicate.test(trivia.comment()))
-                .filter(this::claim)
-                .map(comment -> Doc.concat(JavaFormatter.commentDoc(comment), Doc.HARD_LINE))
-                .toList());
+        return Doc.concat(
+            commentPlacement.orphanComments(node)
+                    .stream()
+                    .filter(trivia -> predicate.test(trivia.comment()))
+                    .filter(this::claim)
+                    .map(comment -> Doc.concat(JavaFormatter.commentDoc(comment), Doc.HARD_LINE))
+                    .toList()
+        );
     }
 
     List<Doc> orphanCommentStatements(Node node) {
@@ -77,7 +86,8 @@ final class CommentTracker {
     }
 
     List<Doc> orphanCommentStatements(Node node, Predicate<Comment> predicate) {
-        return commentPlacement.orphanComments(node).stream()
+        return commentPlacement.orphanComments(node)
+                .stream()
                 .filter(trivia -> predicate.test(trivia.comment()))
                 .filter(this::claim)
                 .map(JavaFormatter::commentDoc)
@@ -85,7 +95,8 @@ final class CommentTracker {
     }
 
     List<Doc> orphanTriviaCommentStatements(Node node, Predicate<JavaCommentTrivia> predicate) {
-        return commentPlacement.orphanComments(node).stream()
+        return commentPlacement.orphanComments(node)
+                .stream()
                 .filter(predicate)
                 .filter(this::claim)
                 .map(JavaFormatter::commentDoc)
@@ -101,10 +112,12 @@ final class CommentTracker {
     }
 
     private Doc orphanComments(List<JavaCommentTrivia> comments) {
-        return Doc.concat(comments.stream()
-                .filter(this::claim)
-                .map(comment -> Doc.concat(JavaFormatter.commentDoc(comment), Doc.HARD_LINE))
-                .toList());
+        return Doc.concat(
+            comments.stream()
+                    .filter(this::claim)
+                    .map(comment -> Doc.concat(JavaFormatter.commentDoc(comment), Doc.HARD_LINE))
+                    .toList()
+        );
     }
 
     Doc ownComment(Node node, Predicate<Comment> predicate) {
@@ -181,5 +194,4 @@ final class CommentTracker {
     void assertAllCommentsAccounted(CompilationUnit unit) {
         FormatterGuardrails.assertAllCommentsAccounted(unit, printed, rawRendered);
     }
-
 }

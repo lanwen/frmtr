@@ -1,17 +1,19 @@
 ---
 name: adopt-fixture
-description: Adopt Java code into frmtr formatter fixtures. Use when asked to turn a real snippet, diff hunk, regression case, or formatter edge case into fixture files under frmtr-core/src/test/resources/format, especially when the code must be obfuscated, added to the right existing fixture group, or covered by default and option-variant outputs instead of inline tests.
+description: Adopt Java code into frmtr formatter fixtures. Use when asked to turn real code, a snippet, a diff hunk, a pointed-out formatter/code issue, a formatter regression, a line-width limit crossing, or another fixture-worthy edge case into fixture files under frmtr-core/src/test/resources/format, especially when the code must be obfuscated, added to the right existing fixture group, or covered by default and option-variant outputs instead of inline tests.
 ---
 
 # adopt-fixture
 
-Adopt formatter regression cases as file-based fixtures, not inline `Frmtr.format(...)` assertions.
+Adopt Java code as file-based formatter fixtures, not inline `Frmtr.format(...)` assertions.
+When the adoption is prompted by a formatter issue, regression, line-width limit crossing, over-wide output, or raw `--render-line-width` failure, add a fixture in the same change as the formatter fix; do not leave only a helper/code-path change.
 
 ## Workflow
 
 1. Locate the behavior owner before creating files.
    - Search existing fixtures with `rg -n "<construct or identifier>" frmtr-core/src/test/resources/format`.
    - Search nearby formatter code with `rg -n "<printer/helper/rule>" frmtr-core/src/main/java`.
+   - For line-limit failures, include search terms from the over-wide construct and the helper/printer branch being changed.
    - Prefer extending an existing fixture folder when it already covers the same printer branch, option, or decision-tree area.
    - Create a new folder only when the case is genuinely new.
 

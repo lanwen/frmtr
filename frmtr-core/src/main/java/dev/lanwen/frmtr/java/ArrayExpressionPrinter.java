@@ -34,12 +34,19 @@ import java.util.function.ToIntFunction;
  * overflowed; this helper only provides the array-specific shapes after that caller decision.
  */
 final class ArrayExpressionPrinter {
+
     private final CommentTracker comments;
+
     private final FormatterOptions options;
+
     private final JavaFormatRule<Expression> expressionRenderer;
+
     private final BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix;
+
     private final Function<Node, String> compactTypeLike;
+
     private final Function<Node, String> compact;
+
     private final ToIntFunction<String> currentIndentedWidth;
 
     ArrayExpressionPrinter(
@@ -49,7 +56,8 @@ final class ArrayExpressionPrinter {
             BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix,
             Function<Node, String> compactTypeLike,
             Function<Node, String> compact,
-            ToIntFunction<String> currentIndentedWidth) {
+            ToIntFunction<String> currentIndentedWidth
+    ) {
         this.comments = comments;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
@@ -60,12 +68,15 @@ final class ArrayExpressionPrinter {
     }
 
     Doc arrayAccess(ArrayAccessExpr expression) {
-        return Doc.group(Doc.concat(
+        return Doc.group(
+            Doc.concat(
                 expressionRenderer.format(expression.getName()),
                 Doc.text("["),
                 Doc.indent(Doc.concat(Doc.SOFT_LINE, expressionRenderer.format(expression.getIndex()))),
                 Doc.SOFT_LINE,
-                Doc.text("]")));
+                Doc.text("]")
+            )
+        );
     }
 
     /**
@@ -78,25 +89,32 @@ final class ArrayExpressionPrinter {
     Doc arrayAccessWithBrokenEnclosedName(ArrayAccessExpr expression) {
         EnclosedExpr enclosed = expression.getName().asEnclosedExpr();
         return Doc.concat(
-                brokenEnclosedForSuffix.apply(enclosed, true),
-                Doc.text("["),
-                expressionRenderer.format(expression.getIndex()),
-                Doc.text("]"));
+            brokenEnclosedForSuffix.apply(enclosed, true),
+            Doc.text("["),
+            expressionRenderer.format(expression.getIndex()),
+            Doc.text("]")
+        );
     }
 
     Doc arrayCreation(ArrayCreationExpr expression) {
         Doc prefix = Doc.concat(
-                Doc.text("new "),
-                arrayCreationType(expression),
-                Doc.text(compactJoinArrayLevels(expression.getLevels())));
+            Doc.text("new "),
+            arrayCreationType(expression),
+            Doc.text(compactJoinArrayLevels(expression.getLevels()))
+        );
         return expression.getInitializer()
                 .map(initializer -> compactArrayCreation(expression, initializer)
-                        .filter(flat -> currentIndentedWidth.applyAsInt(flat) <= options.lineWidth())
-                        .map(Doc::text)
-                        .orElseGet(() -> Doc.concat(
-                                prefix,
-                                Doc.text(" "),
-                                arrayInitializer(initializer, arrayCreationInitializerRequiresStructuredBreak(initializer)))))
+                            .filter(flat -> currentIndentedWidth.applyAsInt(flat) <= options.lineWidth())
+                            .map(Doc::text)
+                            .orElseGet(() -> Doc.concat(
+                                    prefix,
+                                    Doc.text(" "),
+                                    arrayInitializer(
+                                        initializer,
+                                        arrayCreationInitializerRequiresStructuredBreak(initializer)
+                                    )
+                            ))
+                )
                 .orElse(prefix);
     }
 
@@ -118,22 +136,29 @@ final class ArrayExpressionPrinter {
         if (initializer.getValues().stream().anyMatch(value -> !value.isLiteralExpr())) {
             return Optional.empty();
         }
-        return compactArrayInitializer(initializer).map(initializerText -> arrayCreationPrefix(expression) + " " + initializerText);
+        return compactArrayInitializer(initializer).map(
+            initializerText -> arrayCreationPrefix(expression) + " " + initializerText
+        );
     }
 
     String arrayCreationPrefix(ArrayCreationExpr expression) {
-        return "new "
-                + compactTypeLike.apply(expression.getElementType())
-                + compactJoinArrayLevels(expression.getLevels());
+        return (
+            "new "
+            + compactTypeLike.apply(expression.getElementType())
+            + compactJoinArrayLevels(expression.getLevels())
+        );
     }
 
     private Optional<String> compactArrayInitializer(ArrayInitializerExpr initializer) {
-        if (!initializer.getAllContainedComments().isEmpty()
-                || sourceSpansMultipleLines(initializer)
-                || initializer.getValues().stream().anyMatch(value -> !compactArrayInitializerValue(value))) {
+        if (
+            !initializer.getAllContainedComments().isEmpty()
+            || sourceSpansMultipleLines(initializer)
+            || initializer.getValues().stream().anyMatch(value -> !compactArrayInitializerValue(value))
+        ) {
             return Optional.empty();
         }
-        String values = initializer.getValues().stream()
+        String values = initializer.getValues()
+                .stream()
                 .map(compact)
                 .reduce((left, right) -> left + ", " + right)
                 .orElse("");
@@ -160,15 +185,18 @@ final class ArrayExpressionPrinter {
                 .filter(source -> !source.contains("\n"))
                 .filter(source -> source.length() > 2)
                 .map(source -> Character.isWhitespace(source.charAt(1))
-                        || Character.isWhitespace(source.charAt(source.length() - 2)))
+                        || Character.isWhitespace(source.charAt(source.length() - 2))
+                )
                 .orElse(false);
     }
 
     private boolean compactArrayInitializerValue(Expression value) {
-        return value.isLiteralExpr()
-                || (value.getAllContainedComments().isEmpty()
-                        && !sourceSpansMultipleLines(value)
-                        && !compact.apply(value).contains("\n"));
+        return (
+            value.isLiteralExpr()
+            || (value.getAllContainedComments().isEmpty()
+                && !sourceSpansMultipleLines(value)
+                && !compact.apply(value).contains("\n"))
+        );
     }
 
     private boolean sourceSpansMultipleLines(Node node) {
@@ -191,22 +219,33 @@ final class ArrayExpressionPrinter {
         ClassOrInterfaceType type = expression.getElementType().asClassOrInterfaceType();
         NodeList<com.github.javaparser.ast.type.Type> typeArguments = type.getTypeArguments().orElse(new NodeList<>());
         return Doc.concat(
-                Doc.text(type.getNameWithScope()),
-                Doc.text("<"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), typeArguments.stream()
-                        .map(argument -> Doc.text(compactTypeLike.apply(argument)))
-                        .toList()))),
-                Doc.HARD_LINE,
-                Doc.text(">"));
+            Doc.text(type.getNameWithScope()),
+            Doc.text("<"),
+            Doc.indent(
+                Doc.concat(
+                    Doc.HARD_LINE,
+                    Doc.join(
+                        Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                        typeArguments.stream()
+                                .map(argument -> Doc.text(compactTypeLike.apply(argument)))
+                                .toList()
+                    )
+                )
+            ),
+            Doc.HARD_LINE,
+            Doc.text(">")
+        );
     }
 
     /**
      * Reports whether an array creation type owns a generic type-argument break before its array-level suffixes.
      */
     boolean arrayCreationTypeBreaks(ArrayCreationExpr expression) {
-        return expression.getElementType().isClassOrInterfaceType()
-                && expression.getElementType().asClassOrInterfaceType().getTypeArguments().isPresent()
-                && !expression.getLevels().isEmpty();
+        return (
+            expression.getElementType().isClassOrInterfaceType()
+            && expression.getElementType().asClassOrInterfaceType().getTypeArguments().isPresent()
+            && !expression.getLevels().isEmpty()
+        );
     }
 
     Doc arrayInitializer(ArrayInitializerExpr expression) {
@@ -226,7 +265,11 @@ final class ArrayExpressionPrinter {
             return Doc.text("{}");
         }
         Optional<String> compact = compactArrayInitializer(expression);
-        if (!forceBreak && compact.isPresent() && currentIndentedWidth.applyAsInt(compact.orElseThrow()) <= options.lineWidth()) {
+        if (
+            !forceBreak
+            && compact.isPresent()
+            && currentIndentedWidth.applyAsInt(compact.orElseThrow()) <= options.lineWidth()
+        ) {
             return Doc.text(compact.orElseThrow());
         }
         boolean forceNestedArrayRows = nestedArrayRowsShouldBreak(expression);
@@ -237,10 +280,11 @@ final class ArrayExpressionPrinter {
             values.add(Doc.concat(arrayInitializerValue(value, next, forceNestedArrayRows), Doc.text(",")));
         }
         return Doc.concat(
-                Doc.text("{"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, values))),
-                Doc.HARD_LINE,
-                Doc.text("}"));
+            Doc.text("{"),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, values))),
+            Doc.HARD_LINE,
+            Doc.text("}")
+        );
     }
 
     /**
@@ -252,8 +296,11 @@ final class ArrayExpressionPrinter {
      */
     private Doc arrayInitializerValue(Expression value, Expression next, boolean forceNestedArrayRows) {
         List<Doc> parts = new ArrayList<>();
-        Doc leadingComment = comments.ownComment(value, comment -> comment instanceof BlockComment
-                && CommentIndex.startsBefore(comment, value));
+        Doc leadingComment = comments.ownComment(
+            value,
+            comment -> comment instanceof BlockComment
+                    && CommentIndex.startsBefore(comment, value)
+        );
         if (leadingComment != Doc.EMPTY) {
             parts.add(leadingComment);
             parts.add(Doc.text(" "));
@@ -279,22 +326,27 @@ final class ArrayExpressionPrinter {
     }
 
     private boolean nestedArrayRowsShouldBreak(ArrayInitializerExpr expression) {
-        if (expression.getValues().isEmpty()
-                || expression.getValues().stream().anyMatch(value -> !(value instanceof ArrayInitializerExpr))) {
+        if (
+            expression.getValues().isEmpty()
+            || expression.getValues().stream().anyMatch(value -> !(value instanceof ArrayInitializerExpr))
+        ) {
             return false;
         }
-        return expression.getValues().stream()
+        return expression.getValues()
+                .stream()
                 .map(ArrayInitializerExpr.class::cast)
                 .anyMatch(row -> compactArrayInitializer(row)
-                        .map(compact -> currentIndentedWidth.applyAsInt(compact) > options.lineWidth())
-                        .orElse(true));
+                            .map(compact -> currentIndentedWidth.applyAsInt(compact) > options.lineWidth())
+                            .orElse(true)
+                );
     }
 
     private String compactJoinArrayLevels(NodeList<ArrayCreationLevel> levels) {
         return levels.stream()
                 .map(level -> level.getDimension()
-                        .map(dimension -> "[" + compact.apply(dimension) + "]")
-                        .orElse("[]"))
+                            .map(dimension -> "[" + compact.apply(dimension) + "]")
+                            .orElse("[]")
+                )
                 .reduce(String::concat)
                 .orElse("");
     }

@@ -27,4 +27,10 @@ package dev.lanwen.frmtr.doc;
  * @param segments how many segments the broken layout produced, or zero when not applicable
  */
 public record PrinterWrap(
-        String construct, String label, String preview, int flatWidth, int available, int segments) {}
+    String construct,
+    String label,
+    String preview,
+    int flatWidth,
+    int available,
+    int segments
+) {}

@@ -5,34 +5,45 @@ import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.Test;
 
 final class DocDebugRendererTest {
+
     @Test
     void rendersFlattenedConcatShape() {
         Doc doc = Doc.concat(Doc.text("a"), Doc.concat(Doc.text("b"), Doc.text("c")));
 
         String rendered = DocDebugRenderer.render(doc);
 
-        assertThat(rendered).isEqualTo("""
+        assertThat(rendered).isEqualTo(
+            """
                 Concat
                   Text("a")
                   Text("b")
-                  Text("c")""");
+                  Text("c")"""
+        );
     }
 
     @Test
     void rendersGroupIndentAndBreakChoices() {
-        Doc doc = Doc.group(Doc.concat(
+        Doc doc = Doc.group(
+            Doc.concat(
                 Doc.text("call("),
-                Doc.indent(Doc.concat(
+                Doc.indent(
+                    Doc.concat(
                         Doc.SOFT_LINE,
                         Doc.ifBreak(
-                                Doc.concat(Doc.HARD_LINE, Doc.text("broken")),
-                                Doc.concat(Doc.LINE, Doc.text("flat"))))),
+                            Doc.concat(Doc.HARD_LINE, Doc.text("broken")),
+                            Doc.concat(Doc.LINE, Doc.text("flat"))
+                        )
+                    )
+                ),
                 Doc.SOFT_LINE,
-                Doc.text(")")));
+                Doc.text(")")
+            )
+        );
 
         String rendered = DocDebugRenderer.render(doc);
 
-        assertThat(rendered).isEqualTo("""
+        assertThat(rendered).isEqualTo(
+            """
                 Group
                   Concat
                     Text("call(")
@@ -49,22 +60,28 @@ final class DocDebugRendererTest {
                               Line
                               Text("flat")
                     SoftLine
-                    Text(")")""");
+                    Text(")")"""
+        );
     }
 
     @Test
     void rendersLabelsAsDebugOnlyProvenance() {
-        Doc doc = Doc.label("expression:MethodCallExpr", Doc.group(Doc.concat(Doc.text("call("), Doc.SOFT_LINE, Doc.text(")"))));
+        Doc doc = Doc.label(
+            "expression:MethodCallExpr",
+            Doc.group(Doc.concat(Doc.text("call("), Doc.SOFT_LINE, Doc.text(")")))
+        );
 
         String rendered = DocDebugRenderer.render(doc);
 
-        assertThat(rendered).isEqualTo("""
+        assertThat(rendered).isEqualTo(
+            """
                 Label("expression:MethodCallExpr")
                   Group
                     Concat
                       Text("call(")
                       SoftLine
-                      Text(")")""");
+                      Text(")")"""
+        );
     }
 
     @Test

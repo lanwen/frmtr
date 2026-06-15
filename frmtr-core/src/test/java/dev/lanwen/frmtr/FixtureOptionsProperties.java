@@ -116,9 +116,9 @@ final class FixtureOptionsProperties {
     }
 
     private static int intOption(
-        Path optionsFile,
-        Properties properties,
-        String name
+            Path optionsFile,
+            Properties properties,
+            String name
     ) {
         String value = properties.getProperty(name).trim();
         try {
@@ -132,9 +132,9 @@ final class FixtureOptionsProperties {
     }
 
     private static boolean booleanOption(
-        Path optionsFile,
-        Properties properties,
-        String name
+            Path optionsFile,
+            Properties properties,
+            String name
     ) {
         String value = properties.getProperty(name);
         String normalized = value.trim().toLowerCase(Locale.ROOT);
@@ -150,10 +150,10 @@ final class FixtureOptionsProperties {
     }
 
     private static <T extends Enum<T>> T enumOption(
-        Path optionsFile,
-        Properties properties,
-        String name,
-        Class<T> enumType
+            Path optionsFile,
+            Properties properties,
+            String name,
+            Class<T> enumType
     ) {
         String value = properties.getProperty(name);
         String normalized = value.trim().toUpperCase(Locale.ROOT).replace('-', '_');

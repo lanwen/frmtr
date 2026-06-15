@@ -5,7 +5,9 @@ import org.gradle.api.Action;
 import org.gradle.api.model.ObjectFactory;
 
 public abstract class FrmtrExtension {
+
     private final FrmtrJavaExtension java;
+
     private final FrmtrCheckExtension check;
 
     @Inject

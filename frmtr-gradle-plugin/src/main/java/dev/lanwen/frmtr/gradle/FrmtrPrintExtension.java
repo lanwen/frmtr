@@ -5,6 +5,7 @@ import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.Property;
 
 public abstract class FrmtrPrintExtension {
+
     private final Property<Boolean> diffs;
 
     @Inject

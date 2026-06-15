@@ -18,6 +18,7 @@ import dev.lanwen.frmtr.Frmtr;
 import org.junit.jupiter.api.Test;
 
 final class AnnotationDeclarationPrinterTest {
+
     @Test
     void formatsValidAnnotationMemberSiblingsAroundRawRecoveredMemberGap() {
         String source = """
@@ -43,8 +44,9 @@ final class AnnotationDeclarationPrinterTest {
         String formatted = Frmtr.format(source);
 
         assertThat(AnnotationDeclarationPrinter.hasRecoverableAnnotationMemberListProblem(declaration)).isTrue();
-        assertThat(AnnotationDeclarationPrinter.nearestAnnotationMemberListSibling(recoveredStatement))
-                .contains(brokenMember);
+        assertThat(AnnotationDeclarationPrinter.nearestAnnotationMemberListSibling(recoveredStatement)).contains(
+            brokenMember
+        );
         assertThat(JavaFormatter.isSupportedRecovery(recoveredStatement)).isTrue();
         assertThat(formatted).isEqualTo(source);
     }
@@ -68,21 +70,26 @@ final class AnnotationDeclarationPrinterTest {
         assertThat(result.getResult().orElseThrow().findAll(AnnotationDeclaration.class)).isEmpty();
         assertThat(thrown).isInstanceOfSatisfying(FormatterException.class, exception -> {
             assertThat(exception).hasMessage("Unable to parse Java source");
-            assertThat(exception.sourceProblems()).first().satisfies(problem -> assertThat(problem.message())
-                    .contains("annotation declaration member lists")
-                    .contains("Unsupported recovered node: CompilationUnit"));
+            assertThat(exception.sourceProblems())
+                    .first()
+                    .satisfies(problem -> assertThat(problem.message())
+                                .contains("annotation declaration member lists")
+                                .contains("Unsupported recovered node: CompilationUnit")
+                    );
         });
     }
 
     private static Statement recoveredStatement(BodyDeclaration<?> declaration) {
-        return declaration.findAll(Statement.class).stream()
+        return declaration.findAll(Statement.class)
+                .stream()
                 .filter(statement -> statement.getParsed() != Node.Parsedness.PARSED)
                 .findFirst()
                 .orElseThrow();
     }
 
     private static BodyDeclaration<?> annotationMember(AnnotationDeclaration declaration, String name) {
-        return declaration.getMembers().stream()
+        return declaration.getMembers()
+                .stream()
                 .filter(AnnotationMemberDeclaration.class::isInstance)
                 .map(AnnotationMemberDeclaration.class::cast)
                 .filter(member -> member.getNameAsString().equals(name))
@@ -103,9 +110,11 @@ final class AnnotationDeclarationPrinterTest {
     }
 
     private static JavaParser parser() {
-        return new JavaParser(new ParserConfiguration()
-                .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
-                .setStoreTokens(true)
-                .setAttributeComments(true));
+        return new JavaParser(
+            new ParserConfiguration()
+                    .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
+                    .setStoreTokens(true)
+                    .setAttributeComments(true)
+        );
     }
 }

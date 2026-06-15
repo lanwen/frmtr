@@ -9,31 +9,46 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 final class DiagnosticTextTest {
+
     @Test
     void reconstructsPlainTextFromStyledSpans() {
-        DiagnosticText diagnostic = new DiagnosticText(List.of(
-                new DiagnosticLine(List.of(
+        DiagnosticText diagnostic = new DiagnosticText(
+            List.of(
+                new DiagnosticLine(
+                    List.of(
                         new DiagnosticSpan("┌─ ", DiagnosticStyle.BORDER_GUTTER),
-                        new DiagnosticSpan("Unable to parse Java source:", DiagnosticStyle.ERROR_TEXT))),
-                new DiagnosticLine(List.of(
+                        new DiagnosticSpan("Unable to parse Java source:", DiagnosticStyle.ERROR_TEXT)
+                    )
+                ),
+                new DiagnosticLine(
+                    List.of(
                         new DiagnosticSpan("│ ", DiagnosticStyle.BORDER_GUTTER),
                         new DiagnosticSpan("12", DiagnosticStyle.LINE_NUMBER),
                         new DiagnosticSpan("  ", DiagnosticStyle.BORDER_GUTTER),
-                        new DiagnosticSpan("int value =", DiagnosticStyle.SOURCE_TEXT))),
-                new DiagnosticLine(List.of(
+                        new DiagnosticSpan("int value =", DiagnosticStyle.SOURCE_TEXT)
+                    )
+                ),
+                new DiagnosticLine(
+                    List.of(
                         new DiagnosticSpan("│    ", DiagnosticStyle.BORDER_GUTTER),
-                        new DiagnosticSpan("┌──────────^", DiagnosticStyle.POINTER))),
+                        new DiagnosticSpan("┌──────────^", DiagnosticStyle.POINTER)
+                    )
+                ),
                 new DiagnosticLine(List.of(new DiagnosticSpan("│ ⋮", DiagnosticStyle.GAP))),
-                new DiagnosticLine(List.of(new DiagnosticSpan("└─", DiagnosticStyle.BORDER_GUTTER)))));
+                new DiagnosticLine(List.of(new DiagnosticSpan("└─", DiagnosticStyle.BORDER_GUTTER)))
+            )
+        );
 
-        assertThat(diagnostic.plainText())
-                .isEqualTo(String.join(
-                        System.lineSeparator(),
-                        "┌─ Unable to parse Java source:",
-                        "│ 12  int value =",
-                        "│    ┌──────────^",
-                        "│ ⋮",
-                        "└─"));
+        assertThat(diagnostic.plainText()).isEqualTo(
+            String.join(
+                System.lineSeparator(),
+                "┌─ Unable to parse Java source:",
+                "│ 12  int value =",
+                "│    ┌──────────^",
+                "│ ⋮",
+                "└─"
+            )
+        );
     }
 
     @Test
@@ -52,9 +67,9 @@ final class DiagnosticTextTest {
         assertThat(diagnostic.lines()).containsExactly(line);
         assertThatThrownBy(() -> line.spans().add(new DiagnosticSpan("x", DiagnosticStyle.ERROR_TEXT)))
                 .isInstanceOf(UnsupportedOperationException.class);
-        assertThatThrownBy(() -> diagnostic.lines()
-                        .add(new DiagnosticLine(List.of(new DiagnosticSpan("x", DiagnosticStyle.ERROR_TEXT)))))
-                .isInstanceOf(UnsupportedOperationException.class);
+        assertThatThrownBy(() -> diagnostic.lines().add(
+                new DiagnosticLine(List.of(new DiagnosticSpan("x", DiagnosticStyle.ERROR_TEXT)))
+        )).isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test

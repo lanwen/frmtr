@@ -21,24 +21,35 @@ import java.util.function.Predicate;
  * does not decide how any individual {@link Statement} renders or how formatter pragmas change statement print actions.
  */
 final class BlockPrinter {
+
     private static final String BLOCK_STATEMENT_LIST_RECOVERY_FAILURE =
-            "Unable to recover Java parse error inside block statement list: ";
+        "Unable to recover Java parse error inside block statement list: ";
 
     private final CommentTracker comments;
+
     private final JavaCommentPlacementPolicy commentPlacement;
+
     private final SourceText sourceText;
+
     private final RecoveredListPlanner recoveredListPlanner;
+
     private final RecoveredRawGapPrinter rawGaps;
+
     private final SourceOrderedCommentInterleaver<Statement> commentInterleaver;
+
     private final boolean recoverParseProblems;
+
     private final JavaFormatRule<Statement> statementRenderer;
+
     private final FormatterPragmas formatterPragmas;
+
     private final Predicate<Statement> hasPragma;
 
     BlockPrinter(
             JavaFormatContext context,
             JavaFormatRule<Statement> statementRenderer,
-            Predicate<Statement> hasPragma) {
+            Predicate<Statement> hasPragma
+    ) {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
         this.sourceText = context.sourceText;
@@ -84,9 +95,11 @@ final class BlockPrinter {
             List<Doc> leadingDocs = leadingInside == Doc.EMPTY ? List.of() : List.of(leadingInside);
             return recoveredBlock(block, leadingDocs, recoveryPlan.orElseThrow());
         }
-        if (block.getStatements().isEmpty()
-                && !commentPlacement.hasOrphanComments(block)
-                && leadingInside == Doc.EMPTY) {
+        if (
+            block.getStatements().isEmpty()
+            && !commentPlacement.hasOrphanComments(block)
+            && leadingInside == Doc.EMPTY
+        ) {
             return Doc.text("{}");
         }
         List<Doc> statements = new ArrayList<>();
@@ -116,9 +129,12 @@ final class BlockPrinter {
             return Doc.HARD_LINE;
         }
         boolean hasBlankLineBetween = previousStatement.getRange()
-                .flatMap(previousRange -> currentStatement.getRange()
-                        .map(currentRange -> effectiveBeginLine(currentStatement, currentRange.begin.line)
-                                > previousRange.end.line + 1))
+                .flatMap(previousRange -> currentStatement.getRange().map(
+                        currentRange -> effectiveBeginLine(
+                            currentStatement,
+                            currentRange.begin.line
+                        ) > previousRange.end.line + 1
+                ))
                 .orElse(false);
         return hasBlankLineBetween ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;
     }
@@ -132,52 +148,59 @@ final class BlockPrinter {
      */
     private List<Doc> blockContents(BlockStmt block) {
         return commentInterleaver.interleave(
-                block.getStatements(),
-                blockOrphanComments(block),
-                this::printableStatement,
-                new SourceOrderedCommentInterleaver.Spacing<>() {
-                    @Override
-                    public int beginLine(Statement sibling) {
-                        return sibling.getRange()
-                                .map(range -> effectiveBeginLine(sibling, range.begin.line))
-                                .orElse(Integer.MAX_VALUE);
-                    }
+            block.getStatements(),
+            blockOrphanComments(block),
+            this::printableStatement,
+            new SourceOrderedCommentInterleaver.Spacing<>() {
+                @Override
+                public int beginLine(Statement sibling) {
+                    return sibling.getRange()
+                            .map(range -> effectiveBeginLine(sibling, range.begin.line))
+                            .orElse(Integer.MAX_VALUE);
+                }
 
-                    @Override
-                    public int endLine(Statement sibling) {
-                        return CommentIndex.endLine(sibling, beginLine(sibling));
-                    }
+                @Override
+                public int endLine(Statement sibling) {
+                    return CommentIndex.endLine(sibling, beginLine(sibling));
+                }
 
-                    @Override
-                    public Doc separatorBeforeSibling(
-                            SourceOrderedCommentInterleaver.PreviousEntry<Statement> previous,
-                            Statement currentSibling) {
-                        if (previous.kind() == SourceOrderedCommentInterleaver.EntryKind.SIBLING) {
-                            return statementSeparator(previous.sibling().orElseThrow(), currentSibling);
-                        }
-                        return sourceLineSeparator(previous.endLine(), beginLine(currentSibling));
+                @Override
+                public Doc separatorBeforeSibling(
+                        SourceOrderedCommentInterleaver.PreviousEntry<Statement> previous,
+                        Statement currentSibling
+                ) {
+                    if (previous.kind() == SourceOrderedCommentInterleaver.EntryKind.SIBLING) {
+                        return statementSeparator(previous.sibling().orElseThrow(), currentSibling);
                     }
+                    return sourceLineSeparator(previous.endLine(), beginLine(currentSibling));
+                }
 
-                    @Override
-                    public Doc separatorBeforeComment(
-                            SourceOrderedCommentInterleaver.PreviousEntry<Statement> previous,
-                            JavaCommentTrivia comment) {
-                        if (previous.kind() == SourceOrderedCommentInterleaver.EntryKind.SIBLING
-                                && formatterPragmas.hasStatementTrailingBreakPragma(previous.sibling().orElseThrow())
-                                && formatterPragmas.isRangeEndPragma(comment)) {
-                            return sourceLineSeparatorAfterTrailingBreak(
-                                    previous.endLine(),
-                                    comment.beginLine(Integer.MAX_VALUE));
-                        }
-                        return sourceLineSeparator(previous.endLine(), comment.beginLine(Integer.MAX_VALUE));
+                @Override
+                public Doc separatorBeforeComment(
+                        SourceOrderedCommentInterleaver.PreviousEntry<Statement> previous,
+                        JavaCommentTrivia comment
+                ) {
+                    if (
+                        previous.kind() == SourceOrderedCommentInterleaver.EntryKind.SIBLING
+                        && formatterPragmas.hasStatementTrailingBreakPragma(previous.sibling().orElseThrow())
+                        && formatterPragmas.isRangeEndPragma(comment)
+                    ) {
+                        return sourceLineSeparatorAfterTrailingBreak(
+                            previous.endLine(),
+                            comment.beginLine(Integer.MAX_VALUE)
+                        );
                     }
-                });
+                    return sourceLineSeparator(previous.endLine(), comment.beginLine(Integer.MAX_VALUE));
+                }
+            }
+        );
     }
 
     private Optional<Doc> printableStatement(
             Optional<Statement> previousStatement,
             Statement currentStatement,
-            int ignoredIndex) {
+            int ignoredIndex
+    ) {
         if (currentStatement.isEmptyStmt() && previousStatement.orElse(null) instanceof SwitchStmt) {
             return Optional.empty();
         }
@@ -211,7 +234,8 @@ final class BlockPrinter {
     private Doc recoveredBlock(
             BlockStmt block,
             List<Doc> leadingInside,
-            RecoveredListPlanner.Plan<Statement> plan) {
+            RecoveredListPlanner.Plan<Statement> plan
+    ) {
         List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions = rawGaps.rawGapRegions(plan);
         List<SourceRegion> rawRegions = rawGaps.regions(rawGapRegions);
         rawGaps.requireRecoverableRawRegions(block, rawGapRegions);
@@ -254,8 +278,8 @@ final class BlockPrinter {
                         contents.add(rawGaps.raw(block, rawRegion, "blockStatementList"));
                     }
                     previousEntry = rawRegion.trailingBreakReplaced()
-                            ? EntryKind.RAW_GAP_WITH_TRAILING_BREAK
-                            : EntryKind.RAW_GAP;
+                        ? EntryKind.RAW_GAP_WITH_TRAILING_BREAK
+                        : EntryKind.RAW_GAP;
                 }
             }
         }
@@ -285,10 +309,11 @@ final class BlockPrinter {
             return Optional.empty();
         }
         RecoveredListPlanner.Plan<Statement> plan = recoveredListPlanner.planWithCallerOwnedSafety(
-                block,
-                blockInteriorRegion(block),
-                block.getStatements(),
-                this::isSafeBlockStatementRecoverySibling);
+            block,
+            blockInteriorRegion(block),
+            block.getStatements(),
+            this::isSafeBlockStatementRecoverySibling
+        );
         if (!plan.isSafe()) {
             throw blockStatementListRecoveryFailure(plan.unsafe().orElseThrow().reason());
         }
@@ -313,8 +338,10 @@ final class BlockPrinter {
         if (statement.getParsed() != Node.Parsedness.PARSED) {
             return false;
         }
-        if (statement instanceof SwitchStmt switchStmt
-                && SwitchPrinter.hasRecoverableSwitchEntryListProblem(switchStmt)) {
+        if (
+            statement instanceof SwitchStmt switchStmt
+            && SwitchPrinter.hasRecoverableSwitchEntryListProblem(switchStmt)
+        ) {
             return true;
         }
         return isFullyParsed(statement);
@@ -353,10 +380,11 @@ final class BlockPrinter {
 
     private Doc statementBlock(List<Doc> statements) {
         return Doc.concat(
-                Doc.text("{"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.concat(statements))),
-                Doc.HARD_LINE,
-                Doc.text("}"));
+            Doc.text("{"),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.concat(statements))),
+            Doc.HARD_LINE,
+            Doc.text("}")
+        );
     }
 
     /**
@@ -378,11 +406,16 @@ final class BlockPrinter {
     }
 
     private List<Doc> blockOrphanCommentStatements(BlockStmt block, List<SourceRegion> rawRegions) {
-        return commentPlacement.orphanCommentsOutsideChildRanges(block, block.getStatements()).stream()
+        return commentPlacement.orphanCommentsOutsideChildRanges(block, block.getStatements())
+                .stream()
                 .filter(comment -> comment.comment().getRange().isEmpty()
-                        || rawRegions.stream().noneMatch(region -> RecoveredRawGapPrinter.contains(
-                                region,
-                                sourceText.region(comment.comment().getRange().orElseThrow()))))
+                        || rawRegions
+                                .stream()
+                                .noneMatch(region -> RecoveredRawGapPrinter.contains(
+                                        region,
+                                        sourceText.region(comment.comment().getRange().orElseThrow())
+                                ))
+                )
                 .map(comments::comment)
                 .filter(doc -> doc != Doc.EMPTY)
                 .toList();
@@ -432,6 +465,6 @@ final class BlockPrinter {
         /**
          * The previous emitted entry was a raw recovered gap whose trailing line break was moved to formatter-owned docs.
          */
-        RAW_GAP_WITH_TRAILING_BREAK
+        RAW_GAP_WITH_TRAILING_BREAK,
     }
 }

@@ -17,6 +17,13 @@ public class MethodParameterLists {
             Integer shardCount
     ) {}
 
+    private List<RouteGapPlanner.RawGapRegion> recoverableRouteGapRegions(
+            RouteModule declaration,
+            RecoveredRoutePlanner.Plan<RouteDirective> plan
+    ) {
+        return routeGaps.rawGapRegions(plan);
+    }
+
     void lastParameterDotDotDot(String message, String... labels) {}
 
     void variableArityParameters(Object @Nullable... errorMessageArgs) {}

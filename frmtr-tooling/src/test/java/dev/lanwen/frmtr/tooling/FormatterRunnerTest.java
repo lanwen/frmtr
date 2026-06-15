@@ -36,19 +36,19 @@ final class FormatterRunnerTest {
         List<FormatFileResult> results = run.results();
 
         assertThat(results)
-            .extracting(FormatFileResult::displayPath)
-            .containsExactly(Path.of("src/Changed.java"), Path.of("src/Unchanged.java"));
+                .extracting(FormatFileResult::displayPath)
+                .containsExactly(Path.of("src/Changed.java"), Path.of("src/Unchanged.java"));
         assertThat(run.hasChanges()).isTrue();
         assertThat(run.hasFailures()).isFalse();
         assertThat(run.changedCount()).isEqualTo(1);
         assertThat(results.getFirst().status()).isEqualTo(FormatFileStatus.CHANGED);
         assertThat(results.getFirst().unifiedDiff()).hasValueSatisfying(diff -> assertThat(diff)
-                .contains("diff --git origin frmtr")
-                .contains("--- origin\n+++ frmtr")
-                .doesNotContain("a/src/Changed.java")
-                .doesNotContain("b/src/Changed.java")
-                .contains("-class Changed{int value;}")
-                .contains("+class Changed {")
+                    .contains("diff --git origin frmtr")
+                    .contains("--- origin\n+++ frmtr")
+                    .doesNotContain("a/src/Changed.java")
+                    .doesNotContain("b/src/Changed.java")
+                    .contains("-class Changed{int value;}")
+                    .contains("+class Changed {")
         );
         assertThat(results.getLast().status()).isEqualTo(FormatFileStatus.UNCHANGED);
     }
@@ -67,10 +67,10 @@ final class FormatterRunnerTest {
         );
 
         assertThat(run.results().getFirst().unifiedDiff()).hasValueSatisfying(diff -> assertThat(diff)
-                .contains("@@ -1 +1,4 @@        ⋮ 20")
-                .contains("-class Changed{int va⋮lue;}")
-                .contains("                     ⋮+5")
-                .contains("+class Changed {     ⋮")
+                    .contains("@@ -1 +1,4 @@        ⋮ 20")
+                    .contains("-class Changed{int va⋮lue;}")
+                    .contains("                     ⋮+5")
+                    .contains("+class Changed {     ⋮")
         );
     }
 
@@ -83,8 +83,8 @@ final class FormatterRunnerTest {
         List<FormatFileResult> results = run.results();
 
         assertThat(results)
-            .extracting(FormatFileResult::status)
-            .containsExactly(FormatFileStatus.FAILED, FormatFileStatus.WRITTEN);
+                .extracting(FormatFileResult::status)
+                .containsExactly(FormatFileStatus.FAILED, FormatFileStatus.WRITTEN);
         assertThat(run.hasChanges()).isTrue();
         assertThat(run.hasFailures()).isTrue();
         assertThat(run.changedCount()).isEqualTo(1);
@@ -109,13 +109,13 @@ final class FormatterRunnerTest {
             FormatRunResult run = FormatterRunner.write(dir, List.of(readOnly), FormatterOptions.defaults());
 
             assertThat(run.results())
-                .singleElement()
-                .satisfies(result -> {
-                    assertThat(result.status()).isEqualTo(FormatFileStatus.WRITTEN_PARTIALLY);
-                    assertThat(result.changed()).isTrue();
-                    assertThat(result.failed()).isTrue();
-                    assertThat(result.failureException()).isPresent();
-                });
+                    .singleElement()
+                    .satisfies(result -> {
+                        assertThat(result.status()).isEqualTo(FormatFileStatus.WRITTEN_PARTIALLY);
+                        assertThat(result.changed()).isTrue();
+                        assertThat(result.failed()).isTrue();
+                        assertThat(result.failureException()).isPresent();
+                    });
             assertThat(run.changedCount()).isEqualTo(1);
             assertThat(run.failureCount()).isEqualTo(1);
         } finally {

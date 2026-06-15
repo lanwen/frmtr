@@ -13,5 +13,5 @@ public enum FrmtrJavaLanguageLevel {
     /**
      * Leaves JavaParser's language level unset, selecting raw parser mode without release-specific feature gates.
      */
-    UNDEFINED
+    UNDEFINED,
 }

@@ -29,22 +29,43 @@ import java.util.function.ToIntFunction;
  * keeps only the return-context branch order and receives every reusable formatting decision as a callback.
  */
 final class ReturnExpressionPrinter {
+
     private final FormatterOptions options;
+
     private final ObjectCreationLayoutPolicy objectCreationLayoutPolicy;
+
     private final Function<Expression, Doc> expression;
+
     private final Function<LambdaExpr, Doc> brokenLambdaExpression;
+
     private final Function<Expression, String> compact;
+
     private final ToIntFunction<String> currentIndentedWidth;
+
     private final Function<MethodCallExpr, Optional<Doc>> sourceMultilineExpressionLambda;
+
     private final Function<MethodCallExpr, Optional<Doc>> sourceMultilineMethodCall;
+
     private final Function<MethodCallExpr, Optional<Doc>> compactRootWithBrokenFinalChainSegment;
+
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain;
+
     private final Function<MethodCallExpr, Doc> brokenMethodCall;
+
+    private final BiFunction<MethodCallExpr, String, Doc> brokenMethodCallWithClosingLine;
+
+    private final Function<MethodCallExpr, String> methodCallPrefix;
+
     private final Predicate<MethodCallExpr> methodCallChainIsSourceMultiline;
+
     private final Function<ObjectCreationExpr, Doc> brokenObjectCreation;
+
     private final BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix;
+
     private final BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression;
+
     private final BiFunction<Expression, Boolean, Doc> binaryLines;
+
     private final BiFunction<Expression, Boolean, Doc> parenthesizedBreak;
 
     ReturnExpressionPrinter(
@@ -59,12 +80,15 @@ final class ReturnExpressionPrinter {
             Function<MethodCallExpr, Optional<Doc>> compactRootWithBrokenFinalChainSegment,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain,
             Function<MethodCallExpr, Doc> brokenMethodCall,
+            BiFunction<MethodCallExpr, String, Doc> brokenMethodCallWithClosingLine,
+            Function<MethodCallExpr, String> methodCallPrefix,
             Predicate<MethodCallExpr> methodCallChainIsSourceMultiline,
             Function<ObjectCreationExpr, Doc> brokenObjectCreation,
             BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
             BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression,
             BiFunction<Expression, Boolean, Doc> binaryLines,
-            BiFunction<Expression, Boolean, Doc> parenthesizedBreak) {
+            BiFunction<Expression, Boolean, Doc> parenthesizedBreak
+    ) {
         this.options = options;
         this.objectCreationLayoutPolicy = objectCreationLayoutPolicy;
         this.expression = expression;
@@ -76,6 +100,8 @@ final class ReturnExpressionPrinter {
         this.compactRootWithBrokenFinalChainSegment = compactRootWithBrokenFinalChainSegment;
         this.forcedMethodCallChain = forcedMethodCallChain;
         this.brokenMethodCall = brokenMethodCall;
+        this.brokenMethodCallWithClosingLine = brokenMethodCallWithClosingLine;
+        this.methodCallPrefix = methodCallPrefix;
         this.methodCallChainIsSourceMultiline = methodCallChainIsSourceMultiline;
         this.brokenObjectCreation = brokenObjectCreation;
         this.objectCreationWithSuffix = objectCreationWithSuffix;
@@ -99,8 +125,10 @@ final class ReturnExpressionPrinter {
      * shape; only overflowing return lines enter the return-specific break tree.
      */
     Doc returnExpression(Expression expression) {
-        if (sourceMultilineEnclosedBinary(expression)) {
-            return parenthesizedBreak.apply(((EnclosedExpr) expression).getInner(), true);
+        Optional<BinaryExpr> sourceMultilineEnclosedBinary = sourceMultilineEnclosedBinary(expression);
+        if (sourceMultilineEnclosedBinary.isPresent()) {
+            BinaryExpr binaryExpr = sourceMultilineEnclosedBinary.orElseThrow();
+            return directBinaryReturn(binaryExpr).orElseGet(() -> parenthesizedBreak.apply(binaryExpr, true));
         }
         if (sourceMultilineObjectCreation(expression)) {
             return brokenObjectCreation.apply((ObjectCreationExpr) expression);
@@ -111,17 +139,20 @@ final class ReturnExpressionPrinter {
         return brokenReturnExpression(expression).orElseGet(() -> this.expression.apply(expression));
     }
 
-    private boolean sourceMultilineEnclosedBinary(Expression expression) {
-        return expression instanceof EnclosedExpr enclosedExpr
-                && enclosedExpr.getInner() instanceof BinaryExpr
-                && expression.getRange()
-                        .map(range -> range.begin.line < range.end.line)
-                        .orElse(false);
+    private Optional<BinaryExpr> sourceMultilineEnclosedBinary(Expression expression) {
+        if (
+            expression instanceof EnclosedExpr enclosedExpr
+            && enclosedExpr.getInner() instanceof BinaryExpr binaryExpr
+            && expression.getRange().map(range -> range.begin.line < range.end.line).orElse(false)
+        ) {
+            return Optional.of(binaryExpr);
+        }
+        return Optional.empty();
     }
 
     private boolean sourceMultilineObjectCreation(Expression expression) {
         return expression instanceof ObjectCreationExpr objectCreationExpr
-                && objectCreationLayoutPolicy.shouldPreserveSourceMultilineArguments(objectCreationExpr);
+            && objectCreationLayoutPolicy.shouldPreserveSourceMultilineArguments(objectCreationExpr);
     }
 
     private boolean returnLineFits(Expression expression) {
@@ -131,7 +162,7 @@ final class ReturnExpressionPrinter {
 
     private int returnLineWidth(Expression expression, String line) {
         return expression.getRange()
-                .map(range -> Math.max(0, range.begin.column - "return ".length() + 1) + line.length())
+                .map(range -> Math.max(0, range.begin.column - "return ".length() - 1) + line.length())
                 .orElseGet(() -> currentIndentedWidth.applyAsInt(line));
     }
 
@@ -202,9 +233,11 @@ final class ReturnExpressionPrinter {
      * stay visible at the return value start; only the inner parenthesized expression needs the multi-line shape.
      */
     private Optional<Doc> returnWithLogicalComplementBreak(Expression expression) {
-        if (!(expression instanceof UnaryExpr unaryExpr)
-                || unaryExpr.getOperator() != UnaryExpr.Operator.LOGICAL_COMPLEMENT
-                || !(unaryExpr.getExpression() instanceof EnclosedExpr enclosedExpr)) {
+        if (
+            !(expression instanceof UnaryExpr unaryExpr)
+            || unaryExpr.getOperator() != UnaryExpr.Operator.LOGICAL_COMPLEMENT
+            || !(unaryExpr.getExpression() instanceof EnclosedExpr enclosedExpr)
+        ) {
             return Optional.empty();
         }
         return Optional.of(Doc.concat(Doc.text("!"), parenthesizedBreak.apply(enclosedExpr.getInner(), false)));
@@ -220,20 +253,78 @@ final class ReturnExpressionPrinter {
      */
     private Optional<Doc> returnWithParenthesizedValueBreak(Expression expression) {
         if (expression instanceof EnclosedExpr enclosedExpr) {
+            if (enclosedExpr.getInner() instanceof BinaryExpr binaryExpr) {
+                Optional<Doc> directBinary = directBinaryReturn(binaryExpr);
+                if (directBinary.isPresent()) {
+                    return directBinary;
+                }
+            }
             return Optional.of(parenthesizedBreak.apply(enclosedExpr.getInner(), false));
         }
         if (expression instanceof BinaryExpr binaryExpr) {
-            if (binaryExpr.getAllContainedComments().isEmpty() && directBinaryReturnFirstLineFits(binaryExpr)) {
-                return Optional.of(binaryLines.apply(binaryExpr, true));
+            Optional<Doc> directBinary = directBinaryReturn(binaryExpr);
+            if (directBinary.isPresent()) {
+                return directBinary;
             }
             return Optional.of(parenthesizedBreak.apply(binaryExpr, false));
         }
         return Optional.empty();
     }
 
+    private Optional<Doc> directBinaryReturn(BinaryExpr binaryExpr) {
+        if (!binaryExpr.getAllContainedComments().isEmpty()) {
+            return Optional.empty();
+        }
+        if (directBinaryReturnLineFits(binaryExpr)) {
+            return Optional.of(this.expression.apply(binaryExpr));
+        }
+        Optional<Doc> methodCallLeft = directBinaryReturnWithMethodCallLeft(binaryExpr);
+        if (methodCallLeft.isPresent()) {
+            return methodCallLeft;
+        }
+        if (directBinaryReturnFirstLineFits(binaryExpr)) {
+            return Optional.of(Doc.indent(binaryLines.apply(binaryExpr, true)));
+        }
+        return Optional.empty();
+    }
+
+    private boolean directBinaryReturnLineFits(BinaryExpr expression) {
+        String line = "return " + compact.apply(expression) + ";";
+        return currentIndentedWidth.applyAsInt(line) <= options.lineWidth();
+    }
+
+    private Optional<Doc> directBinaryReturnWithMethodCallLeft(BinaryExpr binaryExpr) {
+        if (
+            !(binaryExpr.getLeft() instanceof MethodCallExpr methodCall)
+            || methodCall.getArguments().isEmpty()
+            || !methodCall.getAllContainedComments().isEmpty()
+            || !binaryExpr.getRight().getAllContainedComments().isEmpty()
+            || !directBinaryReturnMethodCallFirstLineFits(methodCall)
+            || !directBinaryReturnMethodCallClosingLineFits(binaryExpr)
+        ) {
+            return Optional.empty();
+        }
+        return Optional.of(
+            brokenMethodCallWithClosingLine.apply(methodCall, methodCallBinaryReturnClosingLine(binaryExpr))
+        );
+    }
+
+    private boolean directBinaryReturnMethodCallFirstLineFits(MethodCallExpr methodCall) {
+        String line = "return " + methodCallPrefix.apply(methodCall) + "(";
+        return currentIndentedWidth.applyAsInt(line) <= options.lineWidth();
+    }
+
+    private boolean directBinaryReturnMethodCallClosingLineFits(BinaryExpr binaryExpr) {
+        return currentIndentedWidth.applyAsInt(methodCallBinaryReturnClosingLine(binaryExpr)) <= options.lineWidth();
+    }
+
+    private String methodCallBinaryReturnClosingLine(BinaryExpr binaryExpr) {
+        return ") " + binaryExpr.getOperator().asString() + " " + compact.apply(binaryExpr.getRight());
+    }
+
     private boolean directBinaryReturnFirstLineFits(BinaryExpr expression) {
         String line = "return " + compact.apply(firstBinaryOperand(expression));
-        return returnLineWidth(expression, line) <= options.lineWidth();
+        return currentIndentedWidth.applyAsInt(line) <= options.lineWidth();
     }
 
     private Expression firstBinaryOperand(BinaryExpr expression) {

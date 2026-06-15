@@ -23,6 +23,7 @@ import org.junit.jupiter.api.parallel.Resources;
 
 @ResourceLock(Resources.SYSTEM_PROPERTIES)
 final class RecoveredListPlannerTest {
+
     @Test
     void allValidSiblingsProduceOnlyValidEntries() {
         String source = """
@@ -35,8 +36,12 @@ final class RecoveredListPlannerTest {
         ClassOrInterfaceDeclaration type = onlyType(unit);
         SourceText sourceText = new SourceText(source);
 
-        RecoveredListPlanner.Plan<BodyDeclaration<?>> plan = new RecoveredListPlanner(sourceText)
-                .plan(type, classBodyRegion(source), type.getMembers(), member -> true);
+        RecoveredListPlanner.Plan<BodyDeclaration<?>> plan = new RecoveredListPlanner(sourceText).plan(
+            type,
+            classBodyRegion(source),
+            type.getMembers(),
+            member -> true
+        );
 
         assertThat(plan.isSafe()).isTrue();
         assertThat(plan.unsafe()).isEmpty();
@@ -63,16 +68,16 @@ final class RecoveredListPlannerTest {
                 .plan(type, classBodyRegion(source), type.getMembers(), RecoveredListPlannerTest::isBoundaryField);
 
         assertThat(plan.isSafe()).isTrue();
-        assertThat(rawGaps(plan).stream().map(RecoveredListPlanner.RawGap::kind))
-                .containsExactly(
-                        RecoveredListPlanner.RawGapKind.PREFIX,
-                        RecoveredListPlanner.RawGapKind.BETWEEN,
-                        RecoveredListPlanner.RawGapKind.SUFFIX);
-        assertThat(rawGaps(plan).stream().map(gap -> sourceText.slice(gap.region())))
-                .containsExactly(
-                        "\n  int prefix;\n  ",
-                        "\n  int between;\n  ",
-                        "\n  int suffix;\n");
+        assertThat(rawGaps(plan).stream().map(RecoveredListPlanner.RawGap::kind)).containsExactly(
+            RecoveredListPlanner.RawGapKind.PREFIX,
+            RecoveredListPlanner.RawGapKind.BETWEEN,
+            RecoveredListPlanner.RawGapKind.SUFFIX
+        );
+        assertThat(rawGaps(plan).stream().map(gap -> sourceText.slice(gap.region()))).containsExactly(
+            "\n  int prefix;\n  ",
+            "\n  int between;\n  ",
+            "\n  int suffix;\n"
+        );
         assertThat(validSiblingSlices(plan, sourceText)).containsExactly("int first;", "int second;");
     }
 
@@ -92,16 +97,22 @@ final class RecoveredListPlannerTest {
         descendant.setParsed(Node.Parsedness.UNPARSABLE);
         SourceText sourceText = new SourceText(source);
 
-        RecoveredListPlanner.Plan<BodyDeclaration<?>> plan = new RecoveredListPlanner(sourceText)
-                .plan(type, classBodyRegion(source), type.getMembers(), member -> true);
+        RecoveredListPlanner.Plan<BodyDeclaration<?>> plan = new RecoveredListPlanner(sourceText).plan(
+            type,
+            classBodyRegion(source),
+            type.getMembers(),
+            member -> true
+        );
 
         assertThat(broken.getParsed()).isEqualTo(Node.Parsedness.PARSED);
         assertThat(descendant.getParsed()).isEqualTo(Node.Parsedness.UNPARSABLE);
         assertThat(plan.isSafe()).isTrue();
-        assertThat(rawGaps(plan)).singleElement().satisfies(gap -> {
-            assertThat(gap.kind()).isEqualTo(RecoveredListPlanner.RawGapKind.BETWEEN);
-            assertThat(sourceText.slice(gap.region())).contains("void broken() { call(); }");
-        });
+        assertThat(rawGaps(plan))
+                .singleElement()
+                .satisfies(gap -> {
+                    assertThat(gap.kind()).isEqualTo(RecoveredListPlanner.RawGapKind.BETWEEN);
+                    assertThat(sourceText.slice(gap.region())).contains("void broken() { call(); }");
+                });
         assertThat(validSiblingSlices(plan, sourceText)).containsExactly("void before() {}", "void after() {}");
     }
 
@@ -121,19 +132,25 @@ final class RecoveredListPlannerTest {
         SourceText sourceText = new SourceText(source);
         SourceRegion bodyInterior = blockInteriorRegion(source, body);
 
-        RecoveredListPlanner.Plan<Statement> plan = new RecoveredListPlanner(sourceText)
-                .plan(body, bodyInterior, List.of(), statement -> true);
+        RecoveredListPlanner.Plan<Statement> plan = new RecoveredListPlanner(sourceText).plan(
+            body,
+            bodyInterior,
+            List.of(),
+            statement -> true
+        );
 
         assertThat(body.getParsed()).isEqualTo(Node.Parsedness.UNPARSABLE);
         assertThat(bodyInterior.endOffset()).isGreaterThan(bodyInterior.beginOffset());
         assertThat(plan.isSafe()).isTrue();
         assertThat(plan.unsafe()).isEmpty();
         assertThat(validSiblings(plan)).isEmpty();
-        assertThat(rawGaps(plan)).singleElement().satisfies(gap -> {
-            assertThat(gap.kind()).isEqualTo(RecoveredListPlanner.RawGapKind.PREFIX);
-            assertThat(gap.region()).isEqualTo(bodyInterior);
-            assertThat(sourceText.slice(gap.region())).contains("int value = 1;");
-        });
+        assertThat(rawGaps(plan))
+                .singleElement()
+                .satisfies(gap -> {
+                    assertThat(gap.kind()).isEqualTo(RecoveredListPlanner.RawGapKind.PREFIX);
+                    assertThat(gap.region()).isEqualTo(bodyInterior);
+                    assertThat(sourceText.slice(gap.region())).contains("int value = 1;");
+                });
     }
 
     @Test
@@ -144,12 +161,17 @@ final class RecoveredListPlannerTest {
         RecoveredListPlanner planner = new RecoveredListPlanner(sourceText);
 
         RecoveredListPlanner.Plan<Statement> plan = planner.plan(
-                unit, sourceText.region(0, source.length()), List.of(new EmptyStmt()), statement -> true);
+            unit,
+            sourceText.region(0, source.length()),
+            List.of(new EmptyStmt()),
+            statement -> true
+        );
 
         assertThat(plan.isSafe()).isFalse();
         assertThat(plan.entries()).isEmpty();
         assertThat(plan.unsafe()).hasValueSatisfying(
-                unsafe -> assertThat(unsafe.reason()).contains("missing a source range"));
+            unsafe -> assertThat(unsafe.reason()).contains("missing a source range")
+        );
     }
 
     @Test
@@ -166,13 +188,18 @@ final class RecoveredListPlannerTest {
         int valueStart = source.indexOf("value");
         SourceRegion boundaryInsideFieldName = sourceText.region(valueStart, valueStart + "value".length());
 
-        RecoveredListPlanner.Plan<FieldDeclaration> plan = new RecoveredListPlanner(sourceText)
-                .plan(type, boundaryInsideFieldName, List.of(field), ignored -> true);
+        RecoveredListPlanner.Plan<FieldDeclaration> plan = new RecoveredListPlanner(sourceText).plan(
+            type,
+            boundaryInsideFieldName,
+            List.of(field),
+            ignored -> true
+        );
 
         assertThat(plan.isSafe()).isFalse();
         assertThat(plan.entries()).isEmpty();
         assertThat(plan.unsafe()).hasValueSatisfying(
-                unsafe -> assertThat(unsafe.reason()).contains("outside the list boundary"));
+            unsafe -> assertThat(unsafe.reason()).contains("outside the list boundary")
+        );
     }
 
     @Test
@@ -190,14 +217,20 @@ final class RecoveredListPlannerTest {
             SourceText sourceText = new SourceText(source);
             CommentTracker comments = new CommentTracker(new JavaCommentPlacementPolicy());
 
-            RecoveredListPlanner.Plan<BodyDeclaration<?>> plan = new RecoveredListPlanner(sourceText)
-                    .plan(type, classBodyRegion(source), type.getMembers(), member -> !fieldNamed(member, "raw"));
+            RecoveredListPlanner.Plan<BodyDeclaration<?>> plan = new RecoveredListPlanner(sourceText).plan(
+                type,
+                classBodyRegion(source),
+                type.getMembers(),
+                member -> !fieldNamed(member, "raw")
+            );
 
             assertThat(plan.isSafe()).isTrue();
-            assertThat(rawGaps(plan)).singleElement().satisfies(gap -> {
-                assertThat(gap.kind()).isEqualTo(RecoveredListPlanner.RawGapKind.BETWEEN);
-                assertThat(sourceText.slice(gap.region())).contains("// stays raw later");
-            });
+            assertThat(rawGaps(plan))
+                    .singleElement()
+                    .satisfies(gap -> {
+                        assertThat(gap.kind()).isEqualTo(RecoveredListPlanner.RawGapKind.BETWEEN);
+                        assertThat(sourceText.slice(gap.region())).contains("// stays raw later");
+                    });
             assertThatThrownBy(() -> comments.assertAllCommentsAccounted(unit))
                     .isInstanceOf(AssertionError.class)
                     .hasMessageContaining("unclaimed comment")
@@ -210,8 +243,10 @@ final class RecoveredListPlannerTest {
     }
 
     private static boolean fieldNamed(BodyDeclaration<?> member, String name) {
-        return member instanceof FieldDeclaration field
-                && field.getVariables().stream().anyMatch(variable -> variable.getNameAsString().equals(name));
+        return (
+            member instanceof FieldDeclaration field
+            && field.getVariables().stream().anyMatch(variable -> variable.getNameAsString().equals(name))
+        );
     }
 
     private static SourceRegion classBodyRegion(String source) {
@@ -237,16 +272,21 @@ final class RecoveredListPlannerTest {
     }
 
     private static <N extends Node> List<String> validSiblingSlices(
-            RecoveredListPlanner.Plan<N> plan, SourceText sourceText) {
-        return validSiblings(plan).stream()
+            RecoveredListPlanner.Plan<N> plan,
+            SourceText sourceText
+    ) {
+        return validSiblings(plan)
+                .stream()
                 .map(entry -> sourceText.slice(entry.region()))
                 .toList();
     }
 
     @SuppressWarnings("unchecked")
     private static <N extends Node> List<RecoveredListPlanner.ValidSibling<N>> validSiblings(
-            RecoveredListPlanner.Plan<N> plan) {
-        return plan.entries().stream()
+            RecoveredListPlanner.Plan<N> plan
+    ) {
+        return plan.entries()
+                .stream()
                 .filter(RecoveredListPlanner.ValidSibling.class::isInstance)
                 .map(entry -> (RecoveredListPlanner.ValidSibling<N>) entry)
                 .toList();
@@ -254,16 +294,19 @@ final class RecoveredListPlannerTest {
 
     @SuppressWarnings("unchecked")
     private static <N extends Node> List<RecoveredListPlanner.RawGap<N>> rawGaps(RecoveredListPlanner.Plan<N> plan) {
-        return plan.entries().stream()
+        return plan.entries()
+                .stream()
                 .filter(RecoveredListPlanner.RawGap.class::isInstance)
                 .map(entry -> (RecoveredListPlanner.RawGap<N>) entry)
                 .toList();
     }
 
     private static CompilationUnit parse(String source) {
-        JavaParser parser = new JavaParser(new ParserConfiguration()
-                .setStoreTokens(true)
-                .setAttributeComments(true));
+        JavaParser parser = new JavaParser(
+            new ParserConfiguration()
+                    .setStoreTokens(true)
+                    .setAttributeComments(true)
+        );
         return parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
                 .getResult()
                 .orElseThrow();

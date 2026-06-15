@@ -32,13 +32,17 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
 @Command(
-        name = "frmtr",
-        mixinStandardHelpOptions = true,
-        versionProvider = Main.BuildVersionProvider.class,
-        description = "Formats Java source.")
+    name = "frmtr",
+    mixinStandardHelpOptions = true,
+    versionProvider = Main.BuildVersionProvider.class,
+    description = "Formats Java source."
+)
 public final class Main implements Callable<Integer> {
+
     private static final List<String> DEFAULT_SELECTORS = List.of("./**/*.java");
+
     private static final char LINE_WIDTH_MARKER = '⋮';
+
     private static final IStyle LINE_BORDER_STYLE = Style.fg("8");
 
     @Option(names = "--stdin", description = "Read Java source from stdin and print formatted source to stdout.")
@@ -57,69 +61,84 @@ public final class Main implements Callable<Integer> {
     boolean write;
 
     @Option(
-            names = "--explain",
-            description =
-                    "Explain why the formatter wrapped (or kept flat) each group. Reads --stdin or a single file. "
-                            + "Prints the formatted result, why each group broke, a rule-label decision tree, and a legend.")
+        names = "--explain",
+        description = "Explain why the formatter wrapped (or kept flat) each group. Reads --stdin or a single file. "
+            + "Prints the formatted result, why each group broke, a rule-label decision tree, and a legend."
+    )
     boolean explain;
 
     @Option(
-            names = {"-v", "--verbose"},
-            description = "With --explain, show every group in the decision tree, not only the paths that wrapped.")
+        names = { "-v", "--verbose" },
+        description = "With --explain, show every group in the decision tree, not only the paths that wrapped."
+    )
     boolean verbose;
 
     @Option(
-            names = "--exclude",
-            paramLabel = "PATTERN",
-            description = "Exclude files, directories, globs, or comma-separated patterns from selector discovery.")
+        names = "--exclude",
+        paramLabel = "PATTERN",
+        description = "Exclude files, directories, globs, or comma-separated patterns from selector discovery."
+    )
     List<String> excludes = List.of();
 
     @Option(names = "--stacktrace", description = "Print stack traces for formatter and I/O failures.")
     boolean stacktrace;
 
     @Option(
-            names = "--color",
-            paramLabel = "auto|always|never",
-            description = "Color status markers, diff output, and diagnostics. Defaults to ${DEFAULT-VALUE}.",
-            defaultValue = "auto",
-            converter = ColorModeConverter.class)
+        names = "--color",
+        paramLabel = "auto|always|never",
+        description = "Color status markers, diff output, and diagnostics. Defaults to ${DEFAULT-VALUE}.",
+        defaultValue = "auto",
+        converter = ColorModeConverter.class
+    )
     ColorMode colorMode;
 
     @Option(
-            names = "--line-width",
-            description = "Target line width.",
-            defaultValue = "" + FormatterOptions.DEFAULT_LINE_WIDTH)
+        names = "--line-width",
+        description = "Target line width.",
+        defaultValue = ""
+            + FormatterOptions.DEFAULT_LINE_WIDTH
+    )
     int lineWidth;
 
     @Option(
-            names = "--java-level",
-            description = "Java parser language level. Use LATEST_AVAILABLE by default or UNSET for raw parser mode.",
-            defaultValue = "LATEST_AVAILABLE",
-            converter = JavaLanguageLevelConverter.class)
+        names = "--java-level",
+        description = "Java parser language level. Use LATEST_AVAILABLE by default or UNSET for raw parser mode.",
+        defaultValue = "LATEST_AVAILABLE",
+        converter = JavaLanguageLevelConverter.class
+    )
     FormatterOptions.JavaLanguageLevel javaLanguageLevel;
 
     @Option(
-            names = "--parse-error-behavior",
-            paramLabel = "recover|fail",
-            description = "Parse-error behavior. Use RECOVER by default or FAIL for strict parse failures.",
-            defaultValue = "RECOVER",
-            converter = ParseErrorBehaviorConverter.class)
+        names = "--parse-error-behavior",
+        paramLabel = "recover|fail",
+        description = "Parse-error behavior. Use RECOVER by default or FAIL for strict parse failures.",
+        defaultValue = "RECOVER",
+        converter = ParseErrorBehaviorConverter.class
+    )
     FormatterOptions.ParseErrorBehavior parseErrorBehavior;
 
-    @Parameters(arity = "0..*", paramLabel = "SELECTOR", description = "Java files, directories, globs, or comma-separated selectors.")
+    @Parameters(
+        arity = "0..*",
+        paramLabel = "SELECTOR",
+        description = "Java files, directories, globs, or comma-separated selectors."
+    )
     List<String> selectors = List.of();
 
     private final PrintWriter out;
+
     private final PrintWriter err;
+
     private final Path workingDirectory;
+
     private String stdin;
 
     public Main() {
         this(
-                new PrintWriter(new java.io.OutputStreamWriter(System.out, StandardCharsets.UTF_8), true),
-                new PrintWriter(new java.io.OutputStreamWriter(System.err, StandardCharsets.UTF_8), true),
-                Path.of("."),
-                null);
+            new PrintWriter(new java.io.OutputStreamWriter(System.out, StandardCharsets.UTF_8), true),
+            new PrintWriter(new java.io.OutputStreamWriter(System.err, StandardCharsets.UTF_8), true),
+            Path.of("."),
+            null
+        );
     }
 
     Main(PrintWriter out, PrintWriter err, String stdin) {
@@ -146,7 +165,8 @@ public final class Main implements Callable<Integer> {
     }
 
     private static int handleExecutionException(
-            Exception exception, CommandLine commandLine, CommandLine.ParseResult parseResult) {
+            Exception exception, CommandLine commandLine, CommandLine.ParseResult parseResult
+    ) {
         Main main = commandLine.getCommand();
         main.printFailure("frmtr", exception);
         return 2;
@@ -212,18 +232,20 @@ public final class Main implements Callable<Integer> {
 
     private FormatterOptions formatterOptions() {
         return FormatterOptions.withJavaLanguageLevel(
-                        lineWidth,
-                        FormatterOptions.IndentStyle.SPACE,
-                        FormatterOptions.DEFAULT_INDENT_WIDTH,
-                        FormatterOptions.LineEnding.LF,
-                        true,
-                        javaLanguageLevel)
-                .withParseErrorBehavior(parseErrorBehavior);
+            lineWidth,
+            FormatterOptions.IndentStyle.SPACE,
+            FormatterOptions.DEFAULT_INDENT_WIDTH,
+            FormatterOptions.LineEnding.LF,
+            true,
+            javaLanguageLevel
+        ).withParseErrorBehavior(parseErrorBehavior);
     }
 
     private int runExplain() {
         if (check || write || diff || renderLineWidth) {
-            err.println("--explain is its own mode and cannot be combined with --check, --write, --diff, or --render-line-width");
+            err.println(
+                "--explain is its own mode and cannot be combined with --check, --write, --diff, or --render-line-width"
+            );
             return 2;
         }
         FormatterOptions options = formatterOptions();
@@ -243,7 +265,11 @@ public final class Main implements Callable<Integer> {
             err.println("File selector does not exist: " + selectors.getFirst());
             return 2;
         }
-        return explainSource(displayPath(file).toString(), () -> Files.readString(file, StandardCharsets.UTF_8), options);
+        return explainSource(
+            displayPath(file).toString(),
+            () -> Files.readString(file, StandardCharsets.UTF_8),
+            options
+        );
     }
 
     private int explainSource(String target, SourceSupplier source, FormatterOptions options) {
@@ -297,8 +323,11 @@ public final class Main implements Callable<Integer> {
             }
             out.println(statusLine(statusMarker(FormatFileStatus.CHANGED), displayPath));
             if (diff || renderLineWidth) {
-                out.print(colorizeDiff(
-                        UnifiedDiffRenderer.render(displayPath, original, formatted, options.lineWidth(), diffMode())));
+                out.print(
+                    colorizeDiff(
+                        UnifiedDiffRenderer.render(displayPath, original, formatted, options.lineWidth(), diffMode())
+                    )
+                );
             }
             out.flush();
             return 1;
@@ -309,7 +338,13 @@ public final class Main implements Callable<Integer> {
     }
 
     private int checkFiles(List<Path> files, FormatterOptions options, long excluded) {
-        FormatRunResult run = FormatterRunner.check(workingDirectory, files, options, diff || renderLineWidth, diffMode());
+        FormatRunResult run = FormatterRunner.check(
+            workingDirectory,
+            files,
+            options,
+            diff || renderLineWidth,
+            diffMode()
+        );
         for (FormatFileResult result : run.results()) {
             out.println(statusLine(statusMarker(result.status()), result.displayPath()));
             if (result.failed() && !stacktrace) {
@@ -351,12 +386,15 @@ public final class Main implements Callable<Integer> {
                 printFormatted(files, i, file, formatted);
                 printed++;
             } catch (FormatterException | IOException exception) {
-                failures.add(new FormatFileResult(
+                failures.add(
+                    new FormatFileResult(
                         file,
                         displayPath(file),
                         FormatFileStatus.FAILED,
                         "",
-                        exception));
+                        exception
+                    )
+                );
             }
         }
         FormatRunResult failureRun = new FormatRunResult(failures);
@@ -572,8 +610,12 @@ public final class Main implements Callable<Integer> {
 
     private IStyle[] diagnosticStyle(DiagnosticStyle style) {
         return switch (style) {
-            case ERROR_TEXT, POINTER -> new IStyle[] {Style.fg_red};
-            case LINE_NUMBER, BORDER_GUTTER, GAP -> new IStyle[] {LINE_BORDER_STYLE};
+            case ERROR_TEXT, POINTER -> new IStyle[] {
+                Style.fg_red,
+            };
+            case LINE_NUMBER, BORDER_GUTTER, GAP -> new IStyle[] {
+                LINE_BORDER_STYLE,
+            };
             case SOURCE_TEXT -> new IStyle[0];
         };
     }
@@ -603,8 +645,11 @@ public final class Main implements Callable<Integer> {
             return;
         }
         if (stacktrace) {
-            run.failedResults().forEach(result -> result.failureException()
-                    .ifPresent(exception -> printFailure(result.displayPath().toString(), exception)));
+            run
+                .failedResults()
+                .forEach(result -> result.failureException().ifPresent(
+                          exception -> printFailure(result.displayPath().toString(), exception)
+                ));
             return;
         }
         err.println(colorizeDiagnostic(FormatterRunFailureRenderer.renderDiagnostic(run)));
@@ -612,9 +657,11 @@ public final class Main implements Callable<Integer> {
     }
 
     private String failureMessage(Exception exception) {
-        if (exception instanceof FormatterException formatterException
-                && formatterException.internal()
-                && !stacktrace) {
+        if (
+            exception instanceof FormatterException formatterException
+            && formatterException.internal()
+            && !stacktrace
+        ) {
             return exception.getMessage() + " (run with --stacktrace for details)";
         }
         return colorizeDiagnostic(FormatterFailureRenderer.renderDiagnostic(exception));
@@ -625,7 +672,8 @@ public final class Main implements Callable<Integer> {
     }
 
     static final class JavaLanguageLevelConverter
-            implements CommandLine.ITypeConverter<FormatterOptions.JavaLanguageLevel> {
+        implements CommandLine.ITypeConverter<FormatterOptions.JavaLanguageLevel> {
+
         @Override
         public FormatterOptions.JavaLanguageLevel convert(String value) {
             String normalized = value.trim().toUpperCase().replace('-', '_');
@@ -640,7 +688,8 @@ public final class Main implements Callable<Integer> {
     }
 
     static final class ParseErrorBehaviorConverter
-            implements CommandLine.ITypeConverter<FormatterOptions.ParseErrorBehavior> {
+        implements CommandLine.ITypeConverter<FormatterOptions.ParseErrorBehavior> {
+
         @Override
         public FormatterOptions.ParseErrorBehavior convert(String value) {
             String normalized = value.trim().toUpperCase().replace('-', '_');
@@ -676,6 +725,7 @@ public final class Main implements Callable<Integer> {
     }
 
     static final class ColorModeConverter implements CommandLine.ITypeConverter<ColorMode> {
+
         @Override
         public ColorMode convert(String value) {
             String normalized = value.trim().toUpperCase().replace('-', '_');
@@ -684,12 +734,13 @@ public final class Main implements Callable<Integer> {
     }
 
     static final class BuildVersionProvider implements CommandLine.IVersionProvider {
+
         @Override
         public String[] getVersion() {
             return new String[] {
                 "frmtr version " + BuildInfo.VERSION,
                 "commit " + BuildInfo.COMMIT_SHA,
-                "built " + BuildInfo.BUILD_TIMESTAMP
+                "built " + BuildInfo.BUILD_TIMESTAMP,
             };
         }
     }

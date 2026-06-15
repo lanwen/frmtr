@@ -47,14 +47,23 @@ import java.util.function.ToIntFunction;
  * near {@code variableWithComment1} through {@code variableWithComment4} cover the before/after {@code =} branches.
  */
 final class FieldDeclarationPrinter {
+
     private final FormatterOptions options;
+
     private final LayoutWidth layoutWidth;
+
     private final Function<NodeWithAnnotations<?>, Doc> declarationAnnotations;
+
     private final Function<NodeWithModifiers<?>, String> modifiers;
+
     private final Function<NodeWithAnnotations<?>, String> inlineAnnotations;
+
     private final Function<Node, String> compactTypeLike;
+
     private final Function<Type, Doc> typeBody;
+
     private final Predicate<Type> typeCanBreak;
+
     private final VariableInitializerLayout initializers;
 
     FieldDeclarationPrinter(
@@ -105,7 +114,8 @@ final class FieldDeclarationPrinter {
             HuggableArgumentsRenderer huggableBlockLambdaArguments,
             Function<LambdaExpr, String> lambdaParameters,
             BiPredicate<LambdaExpr, String> lambdaParametersShouldBreak,
-            Function<LambdaExpr, Doc> lambdaExpression) {
+            Function<LambdaExpr, Doc> lambdaExpression
+    ) {
         this.options = options;
         this.layoutWidth = layoutWidth;
         this.declarationAnnotations = declarationAnnotations;
@@ -115,49 +125,50 @@ final class FieldDeclarationPrinter {
         this.typeBody = typeBody;
         this.typeCanBreak = typeCanBreak;
         this.initializers = new VariableInitializerLayout(
-                comments,
-                rawSource,
-                sourceShape,
-                options,
-                layoutWidth,
-                compactTypeLike,
-                compact,
-                compactWithoutOwnComment,
-                compactJoin,
-                expression,
-                expressionWithoutOwnComment,
-                binaryExpressionHasLineComments,
-                binaryExpressionLinesWithComments,
-                suffixedEnclosedExpression,
-                arrayAccessWithBrokenEnclosedName,
-                shouldKeepCastDivisionContinuationFlat,
-                binaryExpressionLines,
-                methodCall,
-                brokenMethodCall,
-                mixedFieldMethodCallChain,
-                forcedMethodCallChain,
-                forcedMethodCallChainWithSemicolon,
-                methodCallChainHasFinalTrailingLineComment,
-                mixedFieldMethodCallRoot,
-                methodCallChainFirstLine,
-                methodCallChainRootIsObjectCreation,
-                methodCallChainIsSourceMultiline,
-                castType,
-                brokenConditionalExpression,
-                shouldBreakBeforeConditionalInitializer,
-                arrayCreationTypeBreaks,
-                arrayCreationPrefix,
-                arrayInitializer,
-                compactArrayInitializerWithSourceSpacing,
-                objectCreationPrefix,
-                typeNameWithoutArguments,
-                brokenClassOrInterfaceType,
-                shouldPrintScopeAsDoc,
-                methodCallPrefix,
-                huggableBlockLambdaArguments,
-                lambdaParameters,
-                lambdaParametersShouldBreak,
-                lambdaExpression);
+            comments,
+            rawSource,
+            sourceShape,
+            options,
+            layoutWidth,
+            compactTypeLike,
+            compact,
+            compactWithoutOwnComment,
+            compactJoin,
+            expression,
+            expressionWithoutOwnComment,
+            binaryExpressionHasLineComments,
+            binaryExpressionLinesWithComments,
+            suffixedEnclosedExpression,
+            arrayAccessWithBrokenEnclosedName,
+            shouldKeepCastDivisionContinuationFlat,
+            binaryExpressionLines,
+            methodCall,
+            brokenMethodCall,
+            mixedFieldMethodCallChain,
+            forcedMethodCallChain,
+            forcedMethodCallChainWithSemicolon,
+            methodCallChainHasFinalTrailingLineComment,
+            mixedFieldMethodCallRoot,
+            methodCallChainFirstLine,
+            methodCallChainRootIsObjectCreation,
+            methodCallChainIsSourceMultiline,
+            castType,
+            brokenConditionalExpression,
+            shouldBreakBeforeConditionalInitializer,
+            arrayCreationTypeBreaks,
+            arrayCreationPrefix,
+            arrayInitializer,
+            compactArrayInitializerWithSourceSpacing,
+            objectCreationPrefix,
+            typeNameWithoutArguments,
+            brokenClassOrInterfaceType,
+            shouldPrintScopeAsDoc,
+            methodCallPrefix,
+            huggableBlockLambdaArguments,
+            lambdaParameters,
+            lambdaParametersShouldBreak,
+            lambdaExpression
+        );
     }
 
     /**
@@ -174,23 +185,38 @@ final class FieldDeclarationPrinter {
             String flatType = inlineAnnotations.apply(declaration) + compactTypeLike.apply(type) + " ";
             declarationPrefix += flatType;
             if (fieldTypeShouldBreak(type, declaration.getVariables(), declarationPrefix)) {
-                Doc variables = Doc.joinComma(declaration.getVariables().stream()
-                        .map(variable -> variable(variable, ""))
-                        .toList());
-                docs.add(Doc.group(Doc.concat(
-                        Doc.text(inlineAnnotations.apply(declaration)),
-                        typeBody.apply(type),
-                        Doc.text(" "),
-                        variables)));
+                Doc variables = Doc.joinComma(
+                    declaration.getVariables()
+                            .stream()
+                            .map(variable -> variable(variable, ""))
+                            .toList()
+                );
+                docs.add(
+                    Doc.group(
+                        Doc.concat(
+                            Doc.text(inlineAnnotations.apply(declaration)),
+                            typeBody.apply(type),
+                            Doc.text(" "),
+                            variables
+                        )
+                    )
+                );
                 docs.add(Doc.text(";"));
                 return Doc.concat(docs);
             }
             docs.add(Doc.text(flatType));
         }
         String variableDeclarationPrefix = declarationPrefix;
-        docs.add(Doc.group(Doc.joinComma(declaration.getVariables().stream()
-                .map(variable -> variable(variable, variableDeclarationPrefix))
-                .toList())));
+        docs.add(
+            Doc.group(
+                Doc.joinComma(
+                    declaration.getVariables()
+                            .stream()
+                            .map(variable -> variable(variable, variableDeclarationPrefix))
+                            .toList()
+                )
+            )
+        );
         docs.add(Doc.text(";"));
         return Doc.concat(docs);
     }
@@ -201,12 +227,16 @@ final class FieldDeclarationPrinter {
     private boolean fieldTypeShouldBreak(
             Type type,
             NodeList<VariableDeclarator> variables,
-            String declarationPrefix) {
-        return typeCanBreak.test(type)
-                && variables.stream()
-                        .anyMatch(variable -> layoutWidth.currentIndented(
-                                        declarationPrefix + variable.getNameAsString())
-                                > options.lineWidth());
+            String declarationPrefix
+    ) {
+        return (
+            typeCanBreak.test(type)
+            && variables.stream()
+                    .anyMatch(variable -> layoutWidth.currentIndented(
+                            declarationPrefix + variable.getNameAsString()
+                        ) > options.lineWidth()
+                    )
+        );
     }
 
     /**
@@ -235,6 +265,7 @@ final class FieldDeclarationPrinter {
         Optional<Doc> render(
                 String prefix,
                 NodeList<Expression> arguments,
-                ToIntFunction<String> firstLineWidth);
+                ToIntFunction<String> firstLineWidth
+        );
     }
 }

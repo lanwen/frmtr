@@ -15,26 +15,26 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 final class MainTest {
+
     private static final Pattern ANSI_ESCAPE = Pattern.compile("\\u001B\\[[;\\d]*m");
 
     @Test
     void formatsStdinToStdoutWithStdinOption() {
         StringWriter out = new StringWriter();
         StringWriter err = new StringWriter();
-        Main main = new Main(
-                new PrintWriter(out, true),
-                new PrintWriter(err, true),
-                "class Demo{int value;}");
+        Main main = new Main(new PrintWriter(out, true), new PrintWriter(err, true), "class Demo{int value;}");
 
         int exitCode = Main.commandLine(main).execute("--stdin");
 
         assertThat(exitCode).isZero();
-        assertThat(out.toString()).isEqualTo("""
+        assertThat(out.toString()).isEqualTo(
+            """
                 class Demo {
 
                     int value;
                 }
-                """);
+                """
+        );
         assertThat(err.toString()).isEmpty();
     }
 
@@ -43,12 +43,14 @@ final class MainTest {
         Result result = run(Path.of("."), "class Demo{int value;}", "--stdin", "--color", "always");
 
         assertThat(result.exitCode()).isZero();
-        assertThat(result.out()).isEqualTo("""
+        assertThat(result.out()).isEqualTo(
+            """
                 class Demo {
 
                     int value;
                 }
-                """);
+                """
+        );
         assertThat(result.out()).doesNotContain("\u001B[");
         assertThat(result.err()).isEmpty();
     }
@@ -74,15 +76,16 @@ final class MainTest {
     @Test
     void checkStdinReportsUnchangedSource() {
         Result result = run(
-                Path.of("."),
-                """
+            Path.of("."),
+            """
                 class Demo {
 
                     int value;
                 }
                 """,
-                "--stdin",
-                "--check");
+            "--stdin",
+            "--check"
+        );
 
         assertThat(result.exitCode()).isZero();
         assertThat(result.out()).isEqualTo("✓ stdin\n");
@@ -108,26 +111,29 @@ final class MainTest {
                 .contains("diff --git origin frmtr\n")
                 .contains("--- origin\n+++ frmtr\n")
                 .contains("-class Demo{int value;}\n")
-                .contains("""
+                .contains(
+                    """
                         +class Demo {
                         +
                         +    int value;
                         +}
-                        """);
+                        """
+                );
         assertThat(result.err()).isEmpty();
     }
 
     @Test
     void explainStdinShowsFormattedOutputWhyAndLegend() {
         Result result = run(
-                Path.of("."),
-                "class A{void m(){foo().bar().baz().qux().quux().corge().grault().garply().waldo().fred();}}",
-                "--stdin",
-                "--explain",
-                "--line-width",
-                "40",
-                "--color",
-                "never");
+            Path.of("."),
+            "class A{void m(){foo().bar().baz().qux().quux().corge().grault().garply().waldo().fred();}}",
+            "--stdin",
+            "--explain",
+            "--line-width",
+            "40",
+            "--color",
+            "never"
+        );
 
         assertThat(result.exitCode()).isZero();
         assertThat(result.out())
@@ -151,14 +157,15 @@ final class MainTest {
     @Test
     void explainReportsRealWidthArithmeticForWrappingMethodChainThroughTheCli() {
         Result result = run(
-                Path.of("."),
-                "class A{void m(){var x=builder().alpha().beta().gamma().delta().epsilon().zeta().eta().theta();}}",
-                "--stdin",
-                "--explain",
-                "--line-width",
-                "40",
-                "--color",
-                "never");
+            Path.of("."),
+            "class A{void m(){var x=builder().alpha().beta().gamma().delta().epsilon().zeta().eta().theta();}}",
+            "--stdin",
+            "--explain",
+            "--line-width",
+            "40",
+            "--color",
+            "never"
+        );
 
         assertThat(result.exitCode()).isZero();
         // End-to-end: a chain that overflows a narrow width produces the width-arithmetic "why", surfaced from the
@@ -177,14 +184,15 @@ final class MainTest {
     @Test
     void explainReportsWidthDrivenTernaryBreakWithArithmetic() {
         Result result = run(
-                Path.of("."),
-                "class A{int m(boolean c){int r=c?computeTheFirstValue():computeTheSecondAlternativeValue();return r;}}",
-                "--stdin",
-                "--explain",
-                "--line-width",
-                "40",
-                "--color",
-                "never");
+            Path.of("."),
+            "class A{int m(boolean c){int r=c?computeTheFirstValue():computeTheSecondAlternativeValue();return r;}}",
+            "--stdin",
+            "--explain",
+            "--line-width",
+            "40",
+            "--color",
+            "never"
+        );
 
         assertThat(result.exitCode()).isZero();
         // The ternary reports the real width it measured against the budget, named as a ternary.
@@ -196,14 +204,15 @@ final class MainTest {
     @Test
     void explainReportsWidthDrivenArgumentListBreakWithArithmetic() {
         Result result = run(
-                Path.of("."),
-                "class A{void m(){process(alphaValue,betaValue,gammaValue,deltaValue,epsilonValue,zeta);}}",
-                "--stdin",
-                "--explain",
-                "--line-width",
-                "40",
-                "--color",
-                "never");
+            Path.of("."),
+            "class A{void m(){process(alphaValue,betaValue,gammaValue,deltaValue,epsilonValue,zeta);}}",
+            "--stdin",
+            "--explain",
+            "--line-width",
+            "40",
+            "--color",
+            "never"
+        );
 
         assertThat(result.exitCode()).isZero();
         String why = whySection(result.out());
@@ -216,16 +225,18 @@ final class MainTest {
         // The method holds a width-wrapping chain (recorded with real arithmetic) AND a separate call that wraps for a
         // trailing line comment, not width. Both are MethodCallExpr, so a label-only suppression would hide the second.
         // The chain must report width arithmetic; the comment-driven call must still appear as a rule-driven break.
-        Result result = run(
+        Result result =
+            run(
                 Path.of("."),
                 "class A{\n void m(){\n  foo().bar().baz().qux().quux().corge().grault().garply().waldo().fred();\n"
-                        + "  note(value, // keep\n   other);\n }\n}\n",
+                    + "  note(value, // keep\n   other);\n }\n}\n",
                 "--stdin",
                 "--explain",
                 "--line-width",
                 "40",
                 "--color",
-                "never");
+                "never"
+            );
 
         assertThat(result.exitCode()).isZero();
         String why = whySection(result.out());
@@ -288,19 +299,21 @@ final class MainTest {
     @Test
     void explainColorAlwaysColorsTheReportButKeepsPlainTextStable() {
         Result colored = run(
-                Path.of("."),
-                "class A{int x = 1;}",
-                "--stdin",
-                "--explain",
-                "--color",
-                "always");
+            Path.of("."),
+            "class A{int x = 1;}",
+            "--stdin",
+            "--explain",
+            "--color",
+            "always"
+        );
         Result plain = run(
-                Path.of("."),
-                "class A{int x = 1;}",
-                "--stdin",
-                "--explain",
-                "--color",
-                "never");
+            Path.of("."),
+            "class A{int x = 1;}",
+            "--stdin",
+            "--explain",
+            "--color",
+            "never"
+        );
 
         assertThat(colored.out()).contains("\u001B[");
         assertThat(stripAnsi(colored.out())).isEqualTo(plain.out());
@@ -324,14 +337,15 @@ final class MainTest {
     @Test
     void colorAlwaysColorsLineWidthBorderGray() {
         Result result = run(
-                Path.of("."),
-                "class Demo{int value;}",
-                "--stdin",
-                "--render-line-width",
-                "--line-width",
-                "20",
-                "--color",
-                "always");
+            Path.of("."),
+            "class Demo{int value;}",
+            "--stdin",
+            "--render-line-width",
+            "--line-width",
+            "20",
+            "--color",
+            "always"
+        );
 
         assertThat(result.exitCode()).isEqualTo(1);
         assertThat(result.out())
@@ -348,13 +362,14 @@ final class MainTest {
     @Test
     void colorAlwaysColorsCheckSummaryStats(@TempDir Path dir) throws IOException {
         write(
-                dir.resolve("src/AFormatted.java"),
-                """
+            dir.resolve("src/AFormatted.java"),
+            """
                 class AFormatted {
 
                     int value;
                 }
-                """);
+                """
+        );
         write(dir.resolve("src/BChanged.java"), "class BChanged{int value;}");
         write(dir.resolve("src/ZBroken.java"), "class {");
 
@@ -379,11 +394,13 @@ final class MainTest {
         assertThat(colored.exitCode()).isEqualTo(2);
         assertThat(stripAnsi(colored.out())).isEqualTo(plain.out());
         assertThat(plain.out())
-                .startsWith("""
+                .startsWith(
+                    """
                         ! src/Broken.java
                         ┌─ Unable to parse Java source:
                         │ 1  class {
-                        """)
+                        """
+                )
                 .endsWith("Checked 1 file: 1 failed.\n");
         assertThat(colored.out())
                 .contains("\u001B[31m!\u001B[0m src/Broken.java\n")
@@ -406,7 +423,14 @@ final class MainTest {
 
     @Test
     void renderLineWidthStdinPrintsDecoratedDiffAtConfiguredLineWidth() {
-        Result result = run(Path.of("."), "class Demo{int value;}", "--stdin", "--render-line-width", "--line-width", "20");
+        Result result = run(
+            Path.of("."),
+            "class Demo{int value;}",
+            "--stdin",
+            "--render-line-width",
+            "--line-width",
+            "20"
+        );
 
         assertThat(result.exitCode()).isEqualTo(1);
         assertThat(result.out())
@@ -423,9 +447,10 @@ final class MainTest {
     @Test
     void lineWidthOptionDefaultsToCoreFormatterDefault() {
         Main main = new Main(
-                new PrintWriter(new StringWriter(), true),
-                new PrintWriter(new StringWriter(), true),
-                "class Demo{int value;}");
+            new PrintWriter(new StringWriter(), true),
+            new PrintWriter(new StringWriter(), true),
+            "class Demo{int value;}"
+        );
 
         int exitCode = Main.commandLine(main).execute("--stdin");
 
@@ -436,24 +461,27 @@ final class MainTest {
     @Test
     void noArgsChecksJavaFilesByDefault(@TempDir Path dir) throws IOException {
         write(
-                dir.resolve("Formatted.java"),
-                """
+            dir.resolve("Formatted.java"),
+            """
                 class Formatted {
 
                     int value;
                 }
-                """);
+                """
+        );
         write(dir.resolve("src/Main.java"), "class Main{int value;}");
         write(dir.resolve("README.md"), "# ignored\n");
 
         Result result = run(dir, "class Input{int value;}");
 
         assertThat(result.exitCode()).isEqualTo(1);
-        assertThat(result.out()).isEqualTo("""
+        assertThat(result.out()).isEqualTo(
+            """
                 ✓ Formatted.java
                 ✗ src/Main.java
                 Checked 2 files: 1 unchanged, 1 would change.
-                """);
+                """
+        );
         assertThat(result.err()).isEmpty();
     }
 
@@ -540,12 +568,14 @@ final class MainTest {
         assertThat(result.exitCode()).isZero();
         assertThat(result.out()).isEqualTo("Processed 1 file: 1 formatted.\n");
         assertThat(result.err()).isEmpty();
-        assertThat(Files.readString(dir.resolve("src/Main.java"))).isEqualTo("""
+        assertThat(Files.readString(dir.resolve("src/Main.java"))).isEqualTo(
+            """
                 class Main {
 
                     int value;
                 }
-                """);
+                """
+        );
     }
 
     @Test
@@ -559,18 +589,22 @@ final class MainTest {
         assertThat(result.exitCode()).isZero();
         assertThat(result.out()).isEqualTo("Processed 2 files: 2 formatted.\n");
         assertThat(result.err()).isEmpty();
-        assertThat(Files.readString(dir.resolve("src/Main.java"))).isEqualTo("""
+        assertThat(Files.readString(dir.resolve("src/Main.java"))).isEqualTo(
+            """
                 class Main {
 
                     int value;
                 }
-                """);
-        assertThat(Files.readString(dir.resolve("examples/Example.java"))).isEqualTo("""
+                """
+        );
+        assertThat(Files.readString(dir.resolve("examples/Example.java"))).isEqualTo(
+            """
                 class Example {
 
                     int value;
                 }
-                """);
+                """
+        );
     }
 
     @Test
@@ -580,12 +614,14 @@ final class MainTest {
         Result result = run(dir, null, "src/Main.java");
 
         assertThat(result.exitCode()).isZero();
-        assertThat(result.out()).isEqualTo("""
+        assertThat(result.out()).isEqualTo(
+            """
                 class Main {
 
                     int value;
                 }
-                """);
+                """
+        );
         assertThat(result.err()).isEqualTo("Processed 1 file: 1 printed.\n");
     }
 
@@ -597,7 +633,8 @@ final class MainTest {
         Result result = run(dir, null, "a/*.java,b/*.java");
 
         assertThat(result.exitCode()).isZero();
-        assertThat(result.out()).isEqualTo("""
+        assertThat(result.out()).isEqualTo(
+            """
                 ==> a/A.java <==
                 class A {
 
@@ -609,7 +646,8 @@ final class MainTest {
 
                     int value;
                 }
-                """);
+                """
+        );
         assertThat(result.err()).isEqualTo("Processed 2 files: 2 printed.\n");
     }
 
@@ -622,10 +660,12 @@ final class MainTest {
         assertThat(result.exitCode()).isEqualTo(2);
         assertThat(result.out()).isEmpty();
         assertThat(result.err())
-                .startsWith("""
+                .startsWith(
+                    """
                         ┌─ Unable to parse Java source:
                         │ 1  class {
-                        """)
+                        """
+                )
                 .contains("Parse error")
                 .contains("│    │")
                 .contains("^")
@@ -635,55 +675,63 @@ final class MainTest {
     @Test
     void checkReportsPassedAndChangedFilesAndReturnsOne(@TempDir Path dir) throws IOException {
         write(
-                dir.resolve("src/Formatted.java"),
-                """
+            dir.resolve("src/Formatted.java"),
+            """
                 class Formatted {
 
                     int value;
                 }
-                """);
+                """
+        );
         write(dir.resolve("src/Main.java"), "class Main{int value;}");
 
         Result result = run(dir, null, "--check", "src");
 
         assertThat(result.exitCode()).isEqualTo(1);
-        assertThat(result.out()).isEqualTo("""
+        assertThat(result.out()).isEqualTo(
+            """
                 ✓ src/Formatted.java
                 ✗ src/Main.java
                 Checked 2 files: 1 unchanged, 1 would change.
-                """);
+                """
+        );
         assertThat(result.err()).isEmpty();
     }
 
     @Test
     void checkDiffPrintsUnifiedDiffForChangedFilesOnly(@TempDir Path dir) throws IOException {
         write(
-                dir.resolve("src/Formatted.java"),
-                """
+            dir.resolve("src/Formatted.java"),
+            """
                 class Formatted {
 
                     int value;
                 }
-                """);
+                """
+        );
         write(dir.resolve("src/Main.java"), "class Main{int value;}");
 
         Result result = run(dir, null, "--check", "--diff", "src");
 
         assertThat(result.exitCode()).isEqualTo(1);
         assertThat(result.out())
-                .startsWith("""
+                .startsWith(
+                    """
                         ✓ src/Formatted.java
                         ✗ src/Main.java
-                        """)
+                        """
+                )
                 .contains("diff --git origin frmtr\n")
                 .contains("--- origin\n+++ frmtr\n")
                 .contains("-class Main{int value;}\n")
-                .contains("""
+                .contains(
+                    """
                         +class Main {
                         +
                         +    int value;
                         +}
-                        """)
+                        """
+                )
                 .doesNotContain("a/src/Main.java")
                 .doesNotContain("b/src/Main.java");
         int formattedIndex = result.out().indexOf("✓ src/Formatted.java\n");
@@ -705,17 +753,21 @@ final class MainTest {
         assertThat(result.out())
                 .startsWith("✗ src/AChanged.java\n")
                 .contains("diff --git origin frmtr\n")
-                .contains("""
+                .contains(
+                    """
                         +class AChanged {
                         +
                         +    int value;
                         +}
-                        """)
-                .contains("""
+                        """
+                )
+                .contains(
+                    """
                         ! src/ZBroken.java
                         ┌─ Unable to parse Java source:
                         │ 1  class {
-                        """)
+                        """
+                )
                 .endsWith("Checked 2 files: 1 would change, 1 failed.\n");
         int diffIndex = result.out().indexOf("diff --git origin frmtr\n");
         int failureIndex = result.out().indexOf("! src/ZBroken.java\n┌─ Unable to parse Java source:\n");
@@ -733,11 +785,13 @@ final class MainTest {
 
         assertThat(result.exitCode()).isEqualTo(2);
         assertThat(result.out())
-                .startsWith("""
+                .startsWith(
+                    """
                         ! src/Broken.java
                         ┌─ Unable to parse Java source:
                         │ 1  class {
-                        """)
+                        """
+                )
                 .contains("Parse-error recovery is configured")
                 .contains("Parse error")
                 .contains("│    │")
@@ -754,11 +808,13 @@ final class MainTest {
 
         assertThat(result.exitCode()).isEqualTo(2);
         assertThat(result.out())
-                .startsWith("""
+                .startsWith(
+                    """
                         ! src/Broken.java
                         ┌─ Unable to parse Java source:
                         │ 1  class {
-                        """)
+                        """
+                )
                 .contains("Parse error")
                 .endsWith("Checked 1 file: 1 failed.\n");
         assertThat(result.err()).isEmpty();
@@ -767,23 +823,26 @@ final class MainTest {
     @Test
     void writeReportsLexicalErrorsWithContextAndProcessedSummary(@TempDir Path dir) {
         write(
-                dir.resolve("src/TemplateExpression.java"),
-                """
+            dir.resolve("src/TemplateExpression.java"),
+            """
                 class TemplateExpression {
 
                   String info = STR."My name is \\{name}";
                 }
-                """);
+                """
+        );
 
         Result result = run(dir, null, "--write", "src");
 
         assertThat(result.exitCode()).isEqualTo(2);
         assertThat(result.out()).isEqualTo("Processed 1 file: 0 formatted, 1 failed.\n");
         assertThat(result.err())
-                .startsWith("""
+                .startsWith(
+                    """
                         ┌─ Unable to parse Java source:
                         │ 1  class TemplateExpression {
-                        """)
+                        """
+                )
                 .contains("│ 1  class TemplateExpression {")
                 .contains("│ 3    String info = STR.\"My name is \\{name}\";")
                 .contains("│    │")
@@ -798,10 +857,12 @@ final class MainTest {
         Result result = run(dir, null, "--stacktrace", "--check", "src");
 
         assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.out()).isEqualTo("""
+        assertThat(result.out()).isEqualTo(
+            """
                 ! src/Broken.java
                 Checked 1 file: 1 failed.
-                """);
+                """
+        );
         assertThat(result.err())
                 .contains("src/Broken.java: Unable to parse Java source:")
                 .contains("Problem stacktrace")
@@ -816,11 +877,13 @@ final class MainTest {
 
         assertThat(result.exitCode()).isEqualTo(2);
         assertThat(result.out())
-                .startsWith("""
+                .startsWith(
+                    """
                         ! src/Switch.java
                         ┌─ Unable to parse Java source:
                         │ 1  class Switch {
-                        """)
+                        """
+                )
                 .contains("yield")
                 .contains("│ 4              case CreateCommand cmd -> {")
                 .contains("│    │")
@@ -836,10 +899,12 @@ final class MainTest {
         Result result = run(dir, null, "--check", "--java-level", "25", "src");
 
         assertThat(result.exitCode()).isEqualTo(1);
-        assertThat(result.out()).isEqualTo("""
+        assertThat(result.out()).isEqualTo(
+            """
                 ✗ src/Switch.java
                 Checked 1 file: 1 would change.
-                """);
+                """
+        );
         assertThat(result.err()).isEmpty();
     }
 
@@ -852,10 +917,12 @@ final class MainTest {
         Result result = run(dir, null, "--check", "--exclude", "src/generated, fixtures/**/*.java", ".");
 
         assertThat(result.exitCode()).isEqualTo(1);
-        assertThat(result.out()).isEqualTo("""
+        assertThat(result.out()).isEqualTo(
+            """
                 ✗ src/Kept.java
                 Checked 1 file: 1 would change, 2 excluded.
-                """);
+                """
+        );
         assertThat(result.err()).isEmpty();
     }
 
@@ -869,13 +936,17 @@ final class MainTest {
         assertThat(result.exitCode()).isZero();
         assertThat(result.out()).isEqualTo("Processed 2 files: 1 formatted, 1 excluded.\n");
         assertThat(result.err()).isEmpty();
-        assertThat(Files.readString(dir.resolve("src/Kept.java"))).isEqualTo("""
+        assertThat(Files.readString(dir.resolve("src/Kept.java"))).isEqualTo(
+            """
                 class Kept {
 
                     int value;
                 }
-                """);
-        assertThat(Files.readString(dir.resolve("src/generated/Generated.java"))).isEqualTo("class Generated{int value;}");
+                """
+        );
+        assertThat(Files.readString(dir.resolve("src/generated/Generated.java"))).isEqualTo(
+            "class Generated{int value;}"
+        );
     }
 
     @Test
@@ -898,10 +969,12 @@ final class MainTest {
         Result result = run(dir, null, "--check", ".");
 
         assertThat(result.exitCode()).isEqualTo(1);
-        assertThat(result.out()).isEqualTo("""
+        assertThat(result.out()).isEqualTo(
+            """
                 ✗ kept/Kept.java
                 Checked 1 file: 1 would change.
-                """);
+                """
+        );
         assertThat(result.err()).isEmpty();
     }
 
@@ -916,12 +989,14 @@ final class MainTest {
         assertThat(result.exitCode()).isZero();
         assertThat(result.out()).isEqualTo("Processed 2 files: 1 formatted, 1 ignored.\n");
         assertThat(result.err()).isEmpty();
-        assertThat(Files.readString(dir.resolve("kept/Kept.java"))).isEqualTo("""
+        assertThat(Files.readString(dir.resolve("kept/Kept.java"))).isEqualTo(
+            """
                 class Kept {
 
                     int value;
                 }
-                """);
+                """
+        );
     }
 
     @Test
@@ -948,21 +1023,26 @@ final class MainTest {
         assertThat(result.exitCode()).isZero();
         assertThat(result.out()).isEqualTo("Processed 2 files: 1 formatted, 1 ignored.\n");
         assertThat(result.err()).isEmpty();
-        assertThat(Files.readString(dir.resolve("selected/Kept.java"))).isEqualTo("""
+        assertThat(Files.readString(dir.resolve("selected/Kept.java"))).isEqualTo(
+            """
                 class Kept {
 
                     int value;
                 }
-                """);
+                """
+        );
         assertThat(Files.readString(dir.resolve("selected/Ignored.java"))).isEqualTo("class Ignored{int value;}");
     }
 
     @Test
     void directorySelectorLoadsNestedGitignoreRulesWithDirectoryLocalScope(@TempDir Path dir) throws IOException {
-        write(dir.resolve("selected/nested/.gitignore"), """
+        write(
+            dir.resolve("selected/nested/.gitignore"),
+            """
                 /*.java
                 !/Keep.java
-                """);
+                """
+        );
         write(dir.resolve("selected/nested/Drop.java"), "class Drop{int value;}");
         write(dir.resolve("selected/nested/Keep.java"), "class Keep{int value;}");
         write(dir.resolve("selected/nested/deep/Drop.java"), "class DeepDrop{int value;}");
@@ -973,18 +1053,22 @@ final class MainTest {
         assertThat(result.out()).isEqualTo("Processed 3 files: 2 formatted, 1 ignored.\n");
         assertThat(result.err()).isEmpty();
         assertThat(Files.readString(dir.resolve("selected/nested/Drop.java"))).isEqualTo("class Drop{int value;}");
-        assertThat(Files.readString(dir.resolve("selected/nested/Keep.java"))).isEqualTo("""
+        assertThat(Files.readString(dir.resolve("selected/nested/Keep.java"))).isEqualTo(
+            """
                 class Keep {
 
                     int value;
                 }
-                """);
-        assertThat(Files.readString(dir.resolve("selected/nested/deep/Drop.java"))).isEqualTo("""
+                """
+        );
+        assertThat(Files.readString(dir.resolve("selected/nested/deep/Drop.java"))).isEqualTo(
+            """
                 class DeepDrop {
 
                     int value;
                 }
-                """);
+                """
+        );
     }
 
     @Test
@@ -1001,20 +1085,26 @@ final class MainTest {
         assertThat(result.exitCode()).isZero();
         assertThat(result.out()).isEqualTo("Processed 4 files: 2 formatted, 2 ignored.\n");
         assertThat(result.err()).isEmpty();
-        assertThat(Files.readString(dir.resolve("src/rootIgnored/Ignored.java"))).isEqualTo("class Ignored{int value;}");
+        assertThat(Files.readString(dir.resolve("src/rootIgnored/Ignored.java"))).isEqualTo(
+            "class Ignored{int value;}"
+        );
         assertThat(Files.readString(dir.resolve("src/nested/Drop.java"))).isEqualTo("class Drop{int value;}");
-        assertThat(Files.readString(dir.resolve("src/nested/Keep.java"))).isEqualTo("""
+        assertThat(Files.readString(dir.resolve("src/nested/Keep.java"))).isEqualTo(
+            """
                 class Keep {
 
                     int value;
                 }
-                """);
-        assertThat(Files.readString(dir.resolve("src/Other.java"))).isEqualTo("""
+                """
+        );
+        assertThat(Files.readString(dir.resolve("src/Other.java"))).isEqualTo(
+            """
                 class Other {
 
                     int value;
                 }
-                """);
+                """
+        );
     }
 
     @Test
@@ -1028,7 +1118,9 @@ final class MainTest {
         assertThat(result.exitCode()).isZero();
         assertThat(result.out()).isEqualTo("Processed 2 files: 1 formatted, 1 excluded.\n");
         assertThat(result.err()).isEmpty();
-        assertThat(Files.readString(dir.resolve("src/generated/Generated.java"))).isEqualTo("class Generated{int value;}");
+        assertThat(Files.readString(dir.resolve("src/generated/Generated.java"))).isEqualTo(
+            "class Generated{int value;}"
+        );
     }
 
     private static Result run(Path workingDirectory, String stdin, String... args) {

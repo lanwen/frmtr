@@ -13,6 +13,7 @@ import org.junit.jupiter.api.condition.EnabledInNativeImage;
 
 @EnabledInNativeImage
 final class NativeCompatibilityTest {
+
     @Test
     void formatsFieldDeclarationAndSwitchYieldSyntaxWithDefaultLanguageLevelInNativeImage() {
         Result result = run();
@@ -47,7 +48,8 @@ final class NativeCompatibilityTest {
 
     private static String fixture() {
         try (InputStream input = NativeCompatibilityTest.class.getResourceAsStream(
-                "/native-compatibility/field-declaration-switch-yield.java")) {
+                "/native-compatibility/field-declaration-switch-yield.java"
+        )) {
             if (input == null) {
                 throw new IllegalStateException("Missing native compatibility fixture");
             }

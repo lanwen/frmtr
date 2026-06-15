@@ -16,7 +16,9 @@ import java.util.Optional;
  * Expressions without one of those suffix shapes stay with the caller's ordinary fallback path.
  */
 final class EnclosedSuffixDispatcher {
+
     private final MethodCallPrinter methodCalls;
+
     private final MethodReferencePrinter methodReferences;
 
     EnclosedSuffixDispatcher(MethodCallPrinter methodCalls, MethodReferencePrinter methodReferences) {

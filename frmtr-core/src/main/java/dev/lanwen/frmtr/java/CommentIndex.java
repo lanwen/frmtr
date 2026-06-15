@@ -19,6 +19,7 @@ import java.util.List;
  * surrounding layout, and when a comment is rendered or marked as consumed by {@link CommentTracker}.
  */
 final class CommentIndex {
+
     private static final Comparator<Comment> SOURCE_ORDER = Comparator.comparing(CommentIndex::beginPosition);
 
     private CommentIndex() {}
@@ -27,7 +28,8 @@ final class CommentIndex {
      * Reports whether JavaParser found any contained line comments under {@code node}.
      */
     static boolean hasContainedLineComments(Node node) {
-        return node.getAllContainedComments().stream()
+        return node.getAllContainedComments()
+                .stream()
                 .map(JavaCommentTrivia::from)
                 .anyMatch(JavaCommentTrivia::isLine);
     }
@@ -42,12 +44,15 @@ final class CommentIndex {
     static List<Comment> lineCommentsBetween(Node container, Node previous, Node next) {
         int previousLine = previous.getRange().map(range -> range.end.line).orElse(Integer.MIN_VALUE);
         int nextLine = next.getRange().map(range -> range.begin.line).orElse(Integer.MAX_VALUE);
-        return container.getAllContainedComments().stream()
+        return container.getAllContainedComments()
+                .stream()
                 .map(JavaCommentTrivia::from)
                 .filter(JavaCommentTrivia::isLine)
-                .filter(comment -> comment.comment().getRange()
-                        .map(range -> range.begin.line >= previousLine && range.begin.line < nextLine)
-                        .orElse(false))
+                .filter(comment -> comment.comment()
+                            .getRange()
+                            .map(range -> range.begin.line >= previousLine && range.begin.line < nextLine)
+                            .orElse(false)
+                )
                 .map(JavaCommentTrivia::comment)
                 .sorted(sourceOrderComparator())
                 .toList();
@@ -117,8 +122,9 @@ final class CommentIndex {
      */
     static boolean startsOnEndLine(Node node, Comment comment) {
         return node.getRange()
-                .flatMap(nodeRange -> comment.getRange()
-                        .map(commentRange -> commentRange.begin.line == nodeRange.end.line))
+                .flatMap(nodeRange -> comment.getRange().map(
+                        commentRange -> commentRange.begin.line == nodeRange.end.line
+                ))
                 .orElse(false);
     }
 
@@ -130,9 +136,10 @@ final class CommentIndex {
      */
     static boolean startsInsideLineRange(Comment comment, Node node) {
         return comment.getRange()
-                .flatMap(commentRange -> node.getRange()
-                        .map(nodeRange -> commentRange.begin.line >= nodeRange.begin.line
-                                && commentRange.begin.line <= nodeRange.end.line))
+                .flatMap(commentRange -> node.getRange().map(
+                        nodeRange -> commentRange.begin.line >= nodeRange.begin.line
+                                && commentRange.begin.line <= nodeRange.end.line
+                ))
                 .orElse(false);
     }
 
@@ -144,8 +151,9 @@ final class CommentIndex {
      */
     static boolean sameBeginLine(Node left, Node right) {
         return left.getRange()
-                .flatMap(leftRange -> right.getRange()
-                        .map(rightRange -> leftRange.begin.line == rightRange.begin.line))
+                .flatMap(leftRange -> right.getRange().map(
+                        rightRange -> leftRange.begin.line == rightRange.begin.line
+                ))
                 .orElse(false);
     }
 
@@ -164,7 +172,9 @@ final class CommentIndex {
      */
     static boolean startsOnBeginLine(Comment comment, Node node) {
         return comment.getRange()
-                .flatMap(commentRange -> node.getRange().map(nodeRange -> commentRange.begin.line == nodeRange.begin.line))
+                .flatMap(
+                    commentRange -> node.getRange().map(nodeRange -> commentRange.begin.line == nodeRange.begin.line)
+                )
                 .orElse(false);
     }
 
@@ -175,7 +185,9 @@ final class CommentIndex {
      */
     static boolean startsBeforeBeginLine(Comment comment, Node node) {
         return comment.getRange()
-                .flatMap(commentRange -> node.getRange().map(nodeRange -> commentRange.begin.line < nodeRange.begin.line))
+                .flatMap(
+                    commentRange -> node.getRange().map(nodeRange -> commentRange.begin.line < nodeRange.begin.line)
+                )
                 .orElse(false);
     }
 
@@ -198,10 +210,10 @@ final class CommentIndex {
     static boolean startsBeforeEnd(Comment comment, Node node) {
         return comment.getRange()
                 .flatMap(commentRange -> node.getRange().map(nodeRange -> {
-                    if (commentRange.begin.line != nodeRange.end.line) {
-                        return commentRange.begin.line < nodeRange.end.line;
-                    }
-                    return commentRange.begin.column <= nodeRange.end.column;
+                        if (commentRange.begin.line != nodeRange.end.line) {
+                            return commentRange.begin.line < nodeRange.end.line;
+                        }
+                        return commentRange.begin.column <= nodeRange.end.column;
                 }))
                 .orElse(false);
     }
@@ -221,9 +233,10 @@ final class CommentIndex {
      */
     static boolean startsAfterNodeOnSameLine(Node node, Comment comment) {
         return node.getRange()
-                .flatMap(nodeRange -> comment.getRange()
-                        .map(commentRange -> commentRange.begin.line == nodeRange.end.line
-                                && commentRange.begin.column > nodeRange.end.column))
+                .flatMap(nodeRange -> comment.getRange().map(
+                        commentRange -> commentRange.begin.line == nodeRange.end.line
+                                && commentRange.begin.column > nodeRange.end.column
+                ))
                 .orElse(false);
     }
 
@@ -232,9 +245,10 @@ final class CommentIndex {
      */
     static boolean startsImmediatelyAfterNodeOnSameLine(Node node, Comment comment) {
         return node.getRange()
-                .flatMap(nodeRange -> comment.getRange()
-                        .map(commentRange -> commentRange.begin.line == nodeRange.end.line
-                                && commentRange.begin.column == nodeRange.end.column + 1))
+                .flatMap(nodeRange -> comment.getRange().map(
+                        commentRange -> commentRange.begin.line == nodeRange.end.line
+                                && commentRange.begin.column == nodeRange.end.column + 1
+                ))
                 .orElse(false);
     }
 

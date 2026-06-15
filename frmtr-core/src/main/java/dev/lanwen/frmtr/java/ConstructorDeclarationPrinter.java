@@ -80,7 +80,8 @@ final class ConstructorDeclarationPrinter {
             declaration,
             constructorParameterSuffix(declaration)
         );
-        docs.add(parameters(declaration, parametersBreak));
+        boolean compactContinuationParameters = !declaration.getThrownExceptions().isEmpty();
+        docs.add(parameters(declaration, parametersBreak, compactContinuationParameters));
         if (!declaration.getThrownExceptions().isEmpty()) {
             docs.add(
                 throwsClause.render(
@@ -131,8 +132,16 @@ final class ConstructorDeclarationPrinter {
         return " throws " + compactJoin.apply(declaration.getThrownExceptions()) + " {";
     }
 
-    private Doc parameters(ConstructorDeclaration declaration, boolean parametersBreak) {
-        if (!parametersBreak || !callableSignatures.parametersFitOnContinuation(declaration)) {
+    private Doc parameters(
+            ConstructorDeclaration declaration,
+            boolean parametersBreak,
+            boolean compactContinuationParameters
+    ) {
+        if (
+            !parametersBreak
+            || !compactContinuationParameters
+            || !callableSignatures.parametersFitOnContinuation(declaration)
+        ) {
             return callableSignatures.parameters(declaration, parametersBreak);
         }
         return callableSignatures.compactContinuationParameters(declaration);

@@ -22,6 +22,7 @@ import java.util.List;
  * the recorded decisions.
  */
 final class LayoutDecisionLog {
+
     private final List<PrinterWrap> wraps = new ArrayList<>();
 
     /**
@@ -33,7 +34,13 @@ final class LayoutDecisionLog {
      * report each wrap once.
      */
     void recordWidthBreak(
-            String construct, String label, String preview, int flatWidth, int available, int segments) {
+            String construct,
+            String label,
+            String preview,
+            int flatWidth,
+            int available,
+            int segments
+    ) {
         wraps.add(new PrinterWrap(construct, label, preview, flatWidth, available, segments));
     }
 

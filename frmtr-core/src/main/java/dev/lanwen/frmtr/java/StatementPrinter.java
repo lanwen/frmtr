@@ -72,41 +72,77 @@ import java.util.function.ToIntFunction;
  * {@code frmtr-core/src/test/resources/format/comment-preservation-if-statement/frmtr-default.output.java}.
  */
 final class StatementPrinter {
+
     private final CommentTracker comments;
+
     private final JavaCommentPlacementPolicy commentPlacement;
+
     private final RawSource rawSource;
+
     private final SourceShape sourceShape;
+
     private final FormatterOptions options;
+
     private final JavaFormatRule<Statement> statementRenderer;
+
     private final JavaFormatRule<SwitchStmt> switchStatementRenderer;
+
     private final JavaFormatRule<BlockStmt> blockRenderer;
+
     private final BiFunction<BlockStmt, Doc, Doc> blockWithLeadingRenderer;
+
     private final JavaFormatRule<BodyDeclaration<?>> bodyRenderer;
+
     private final JavaFormatRule<Expression> expressionRenderer;
+
     private final Function<AssignExpr, Doc> assignmentStatementRenderer;
+
     private final Function<Expression, Doc> returnStatementRenderer;
+
     private final BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix;
+
     private final JavaFormatRule<VariableDeclarationExpr> variableDeclarationRenderer;
+
     private final JavaFormatRule<VariableDeclarationExpr> variableDeclarationStatementRenderer;
+
     private final Function<Node, String> compact;
+
     private final Function<Node, String> compactWithoutOwnComment;
+
     private final Function<List<? extends Node>, String> compactJoin;
+
     private final Function<Node, String> compactTypeLike;
+
     private final Function<List<? extends Node>, String> compactJoinTypeLike;
+
     private final HuggableArgumentsRenderer huggableBlockLambdaArguments;
+
     private final BiFunction<MethodCallExpr, ExpressionStmt, Optional<Doc>> sourceMultilineMethodCallStatementRenderer;
+
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer;
+
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainWithSemicolonRenderer;
+
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
+
     private final Predicate<MethodCallExpr> methodCallChainHasComments;
+
     private final Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment;
+
     private final Predicate<MethodCallExpr> methodCallChainIsSourceMultiline;
+
     private final Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation;
+
     private final Predicate<MethodCallExpr> methodCallChainRootIsFieldAccess;
+
     private final Function<Expression, Doc> ifConditionRenderer;
+
     private final Function<Expression, Doc> controlConditionRenderer;
+
     private final Function<Expression, String> compactWithOwnBlockComment;
+
     private final Function<Node, Doc> sameLineBlockCommentBeforeNode;
+
     private final ToIntFunction<String> currentIndentedWidth;
 
     StatementPrinter(
@@ -145,7 +181,8 @@ final class StatementPrinter {
             Function<Expression, Doc> controlConditionRenderer,
             Function<Expression, String> compactWithOwnBlockComment,
             Function<Node, Doc> sameLineBlockCommentBeforeNode,
-            ToIntFunction<String> currentIndentedWidth) {
+            ToIntFunction<String> currentIndentedWidth
+    ) {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
         this.rawSource = rawSource;
@@ -197,24 +234,32 @@ final class StatementPrinter {
             case ReturnStmt returnStmt -> returnStatement(returnStmt);
             case ThrowStmt throwStmt -> throwStatement(throwStmt);
             case YieldStmt yieldStmt -> yieldStatement(yieldStmt);
-            case ExplicitConstructorInvocationStmt constructorInvocation -> Doc.concat(explicitConstructorInvocation(constructorInvocation), Doc.text(";"));
+            case ExplicitConstructorInvocationStmt constructorInvocation -> Doc.concat(
+                explicitConstructorInvocation(constructorInvocation),
+                Doc.text(";")
+            );
             case ExpressionStmt expressionStmt -> expressionStatement(expressionStmt);
             case EmptyStmt ignored -> Doc.text(";");
             case AssertStmt assertStmt -> assertStatement(assertStmt);
             case BreakStmt breakStmt -> breakStatement(breakStmt);
             case ContinueStmt continueStmt -> continueStatement(continueStmt);
             case LabeledStmt labeledStmt -> labeledStatement(labeledStmt);
-            case LocalClassDeclarationStmt localClassDeclaration -> bodyRenderer.format(localClassDeclaration.getClassDeclaration());
-            case LocalRecordDeclarationStmt localRecordDeclaration -> bodyRenderer.format(localRecordDeclaration.getRecordDeclaration());
+            case LocalClassDeclarationStmt localClassDeclaration -> bodyRenderer.format(
+                localClassDeclaration.getClassDeclaration()
+            );
+            case LocalRecordDeclarationStmt localRecordDeclaration -> bodyRenderer.format(
+                localRecordDeclaration.getRecordDeclaration()
+            );
             case IfStmt ifStmt -> ifStatement(ifStmt);
             case WhileStmt whileStmt -> whileStatement(whileStmt);
             case DoStmt doStmt -> doStatement(doStmt);
             case TryStmt tryStmt -> tryStatement(tryStmt);
             case SynchronizedStmt synchronizedStmt -> Doc.concat(
-                    Doc.text("synchronized "),
-                    controlConditionRenderer.apply(synchronizedStmt.getExpression()),
-                    Doc.text(" "),
-                    blockRenderer.format(synchronizedStmt.getBody()));
+                Doc.text("synchronized "),
+                controlConditionRenderer.apply(synchronizedStmt.getExpression()),
+                Doc.text(" "),
+                blockRenderer.format(synchronizedStmt.getBody())
+            );
             case ForStmt forStmt -> forStatement(forStmt);
             case ForEachStmt forEachStmt -> forEachStatement(forEachStmt);
             case SwitchStmt switchStmt -> switchStatementRenderer.format(switchStmt);
@@ -225,8 +270,13 @@ final class StatementPrinter {
     private Doc breakStatement(BreakStmt statement) {
         Doc leadingBlockComment = comments.ownComment(statement, BlockComment.class::isInstance);
         String prefix = leadingBlockComment == Doc.EMPTY ? "" : commentText(leadingBlockComment) + " ";
-        return Doc.text(prefix + "break" + statement.getLabel().map(label -> " " + label.asString()).orElse("") + ";"
-                + trailingStatementBlockComment(statement));
+        return Doc.text(
+            prefix
+                + "break"
+                + statement.getLabel().map(label -> " " + label.asString()).orElse("")
+                + ";"
+                + trailingStatementBlockComment(statement)
+        );
     }
 
     private Doc continueStatement(ContinueStmt statement) {
@@ -255,8 +305,8 @@ final class StatementPrinter {
     private String continueLabel(com.github.javaparser.ast.expr.SimpleName label) {
         Doc labelComment = comments.ownComment(label, BlockComment.class::isInstance);
         return labelComment == Doc.EMPTY
-                ? " " + label.asString()
-                : " " + commentText(labelComment) + " " + label.asString();
+            ? " " + label.asString()
+            : " " + commentText(labelComment) + " " + label.asString();
     }
 
     private Doc returnStatement(ReturnStmt statement) {
@@ -285,9 +335,10 @@ final class StatementPrinter {
             return body;
         }
         return Doc.concat(
-                Doc.join(Doc.HARD_LINE, leadingComments.stream().map(Doc::text).toList()),
-                Doc.HARD_LINE,
-                body);
+            Doc.join(Doc.HARD_LINE, leadingComments.stream().map(Doc::text).toList()),
+            Doc.HARD_LINE,
+            body
+        );
     }
 
     private void consumeLabeledBodyLeadingLineComment(Statement statement) {
@@ -295,11 +346,19 @@ final class StatementPrinter {
     }
 
     private Doc labeledStatementBody(Statement statement) {
-        if (statement instanceof ForEachStmt forEachStmt
-                && forEachStmt.getBody().isBlockStmt()
-                && forEachStmt.getBody().asBlockStmt().getStatements().isEmpty()
-                && forEachStmt.getBody().asBlockStmt().getOrphanComments().isEmpty()) {
-            return Doc.text("for (" + compact.apply(forEachStmt.getVariable()) + " : " + compact.apply(forEachStmt.getIterable()) + ") {}");
+        if (
+            statement instanceof ForEachStmt forEachStmt
+            && forEachStmt.getBody().isBlockStmt()
+            && forEachStmt.getBody().asBlockStmt().getStatements().isEmpty()
+            && forEachStmt.getBody().asBlockStmt().getOrphanComments().isEmpty()
+        ) {
+            return Doc.text(
+                "for ("
+                    + compact.apply(forEachStmt.getVariable())
+                    + " : "
+                    + compact.apply(forEachStmt.getIterable())
+                    + ") {}"
+            );
         }
         if (statement instanceof BlockStmt blockStmt) {
             return blockRenderer.format(blockStmt);
@@ -363,8 +422,11 @@ final class StatementPrinter {
 
     private Doc explicitConstructorInvocation(ExplicitConstructorInvocationStmt statement) {
         String prefix = statement.getExpression().map(expression -> compact.apply(expression) + ".").orElse("")
-                + statement.getTypeArguments().map(typeArguments -> "<" + compactJoinTypeLike.apply(typeArguments) + ">").orElse("")
-                + (statement.isThis() ? "this" : "super");
+            + statement
+                    .getTypeArguments()
+                    .map(typeArguments -> "<" + compactJoinTypeLike.apply(typeArguments) + ">")
+                    .orElse("")
+            + (statement.isThis() ? "this" : "super");
         if (statement.getArguments().isEmpty()) {
             return Doc.text(prefix + "()");
         }
@@ -372,15 +434,24 @@ final class StatementPrinter {
         if (huggableLambda.isPresent()) {
             return huggableLambda.orElseThrow();
         }
-        return Doc.group(Doc.concat(
+        return Doc.group(
+            Doc.concat(
                 Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(
+                Doc.indent(
+                    Doc.concat(
                         Doc.SOFT_LINE,
-                        Doc.joinComma(statement.getArguments().stream()
-                                .map(expressionRenderer::format)
-                                .toList()))),
+                        Doc.joinComma(
+                            statement.getArguments()
+                                    .stream()
+                                    .map(expressionRenderer::format)
+                                    .toList()
+                        )
+                    )
+                ),
                 Doc.SOFT_LINE,
-                Doc.text(")")));
+                Doc.text(")")
+            )
+        );
     }
 
     private Doc expressionStatement(ExpressionStmt statement) {
@@ -391,7 +462,10 @@ final class StatementPrinter {
         }
         if (expression instanceof MethodCallExpr methodCall) {
             if (!methodCallChainIsSourceMultiline.test(methodCall)) {
-                Optional<Doc> sourceMultilineCall = sourceMultilineMethodCallStatementRenderer.apply(methodCall, statement);
+                Optional<Doc> sourceMultilineCall = sourceMultilineMethodCallStatementRenderer.apply(
+                    methodCall,
+                    statement
+                );
                 if (sourceMultilineCall.isPresent()) {
                     return Doc.concat(sourceMultilineCall.orElseThrow(), Doc.text(";"), trailing);
                 }
@@ -407,9 +481,9 @@ final class StatementPrinter {
             }
             if (methodCallStatementWidth(methodCall) > options.lineWidth()) {
                 boolean chainBreak = methodCallChainHasComments.test(methodCall)
-                        || methodCallChainIsSourceMultiline.test(methodCall)
-                        || methodCallChainRootIsObjectCreation.test(methodCall)
-                        || !methodCallChainRootIsFieldAccess.test(methodCall);
+                    || methodCallChainIsSourceMultiline.test(methodCall)
+                    || methodCallChainRootIsObjectCreation.test(methodCall)
+                    || !methodCallChainRootIsFieldAccess.test(methodCall);
                 if (chainBreak) {
                     Optional<Doc> chainWithSemicolon = forcedMethodCallChainWithSemicolonRenderer.apply(methodCall);
                     if (chainWithSemicolon.isPresent()) {
@@ -417,12 +491,13 @@ final class StatementPrinter {
                     }
                 }
                 return Doc.concat(
-                        chainBreak
-                                ? forcedMethodCallChainRenderer.apply(methodCall)
+                    chainBreak
+                        ? forcedMethodCallChainRenderer.apply(methodCall)
                                         .orElseGet(() -> brokenMethodCallRenderer.apply(methodCall))
-                                : brokenMethodCallRenderer.apply(methodCall),
-                        Doc.text(";"),
-                        trailing);
+                        : brokenMethodCallRenderer.apply(methodCall),
+                    Doc.text(";"),
+                    trailing
+                );
             }
         }
         if (expression instanceof AssignExpr assignExpr) {
@@ -451,11 +526,15 @@ final class StatementPrinter {
     }
 
     private Optional<Comment> conditionalElseStatementTrailingComment(ExpressionStmt statement) {
-        return statement.getExpression().findAll(ConditionalExpr.class).stream()
-                .flatMap(conditionalExpr -> conditionalExpr.getElseExpr().getComment()
-                        .filter(LineComment.class::isInstance)
-                        .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(statement, comment))
-                        .stream())
+        return statement.getExpression()
+                .findAll(ConditionalExpr.class)
+                .stream()
+                .flatMap(conditionalExpr -> conditionalExpr.getElseExpr()
+                            .getComment()
+                            .filter(LineComment.class::isInstance)
+                            .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(statement, comment))
+                            .stream()
+                )
                 .findFirst();
     }
 
@@ -483,11 +562,14 @@ final class StatementPrinter {
                 docs.add(catchPrefixComment);
                 docs.add(Doc.text(" "));
             }
-            docs.add(catchClause(
+            docs.add(
+                catchClause(
                     clause,
                     statement.getCatchClauses().size(),
                     statement.getFinallyBlock().isPresent(),
-                    Doc.concat(previousBlockTrailingComment, ownLineCommentBeforeNode(clause))));
+                    Doc.concat(previousBlockTrailingComment, ownLineCommentBeforeNode(clause))
+                )
+            );
             previousBlockTrailingComment = trailingCommentAfterClause(clause);
         }
         if (statement.getFinallyBlock().isPresent()) {
@@ -499,7 +581,9 @@ final class StatementPrinter {
                 docs.add(Doc.text(" "));
             }
             docs.add(Doc.text("finally "));
-            docs.add(tryBlock(finallyBlock, Doc.concat(previousBlockTrailingComment, ownLineCommentBeforeNode(finallyBlock))));
+            docs.add(
+                tryBlock(finallyBlock, Doc.concat(previousBlockTrailingComment, ownLineCommentBeforeNode(finallyBlock)))
+            );
         }
         Doc finalTrailingComment = statement.getFinallyBlock()
                 .map(comments::trailingLineComment)
@@ -528,7 +612,8 @@ final class StatementPrinter {
         }
         SourceShape.TryResourcesShape resourceShape = sourceShape.tryResources(statement);
         boolean trailingSemicolon = resourceShape.trailingSemicolon();
-        String flatResources = statement.getResources().stream()
+        String flatResources = statement.getResources()
+                .stream()
                 .map(compact)
                 .reduce((left, right) -> left + "; " + right)
                 .orElse("");
@@ -536,21 +621,104 @@ final class StatementPrinter {
             flatResources += ";";
         }
         String flat = "try (" + flatResources + ")";
-        if (!resourceShape.spansMultipleLines()
-                && !tryResourcesHaveLeadingComments(statement)
-                && currentIndentedWidth.applyAsInt(flat + " {}") <= options.lineWidth()) {
+        if (
+            !resourceShape.spansMultipleLines()
+            && !tryResourcesHaveLeadingComments(statement)
+            && currentIndentedWidth.applyAsInt(flat + " {}") <= options.lineWidth()
+        ) {
             return Doc.text(" (" + flatResources + ")");
         }
-        return Doc.concat(
+        Optional<Doc> attachedMethodCallResource = attachedSingleMethodCallResource(statement, resourceShape);
+        if (attachedMethodCallResource.isPresent()) {
+            return Doc.concat(
                 Doc.text(" ("),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(
-                                Doc.concat(Doc.text(";"), Doc.HARD_LINE),
-                                statement.getResources().stream().map(this::tryResource).toList()),
-                        trailingSemicolon ? Doc.text(";") : Doc.EMPTY)),
+                attachedMethodCallResource.orElseThrow(),
+                Doc.text(")")
+            );
+        }
+        return Doc.concat(
+            Doc.text(" ("),
+            Doc.indent(
+                Doc.concat(
+                    Doc.HARD_LINE,
+                    Doc.join(
+                        Doc.concat(Doc.text(";"), Doc.HARD_LINE),
+                        statement.getResources().stream().map(this::tryResource).toList()
+                    ),
+                    trailingSemicolon ? Doc.text(";") : Doc.EMPTY
+                )
+            ),
+            Doc.HARD_LINE,
+            Doc.text(")")
+        );
+    }
+
+    /**
+     * Keeps one multiline method-call resource attached to {@code try (} so the resource initializer owns the break.
+     */
+    private Optional<Doc> attachedSingleMethodCallResource(
+            TryStmt statement,
+            SourceShape.TryResourcesShape resourceShape
+    ) {
+        if (
+            !resourceShape.spansMultipleLines()
+            || resourceShape.trailingSemicolon()
+            || tryResourcesHaveLeadingComments(statement)
+            || statement.getResources().size() != 1
+            || !(statement.getResources().get(0) instanceof VariableDeclarationExpr declaration)
+            || !declaration.getModifiers().isEmpty()
+            || !declaration.getAnnotations().isEmpty()
+            || !declaration.getAllContainedComments().isEmpty()
+            || declaration.getVariables().size() != 1
+        ) {
+            return Optional.empty();
+        }
+        VariableDeclarator variable = declaration.getVariables().get(0);
+        Optional<MethodCallExpr> initializer = variable.getInitializer()
+                .filter(MethodCallExpr.class::isInstance)
+                .map(MethodCallExpr.class::cast)
+                .filter(methodCall -> !methodCall.getArguments().isEmpty())
+                .filter(methodCall -> methodCall.getAllContainedComments().isEmpty());
+        if (initializer.isEmpty()) {
+            return Optional.empty();
+        }
+        MethodCallExpr methodCall = initializer.orElseThrow();
+        String resourcePrefix = compactTypeLike.apply(variable.getType())
+            + " "
+            + variable.getNameAsString()
+            + " = "
+            + tryResourceMethodCallPrefix(methodCall)
+            + "(";
+        if (currentIndentedWidth.applyAsInt("try (" + resourcePrefix) > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(
+            Doc.concat(
+                Doc.text(resourcePrefix),
+                Doc.indent(
+                    Doc.indent(
+                        Doc.concat(
+                            Doc.HARD_LINE,
+                            Doc.join(
+                                Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                                methodCall.getArguments().stream().map(expressionRenderer::format).toList()
+                            )
+                        )
+                    )
+                ),
                 Doc.HARD_LINE,
-                Doc.text(")"));
+                Doc.text(")")
+            )
+        );
+    }
+
+    private String tryResourceMethodCallPrefix(MethodCallExpr methodCall) {
+        return methodCall.getScope().map(scope -> compact.apply(scope) + ".").orElse("")
+        + methodCall
+                .getTypeArguments()
+                .map(typeArguments -> "<" + compactJoinTypeLike.apply(typeArguments) + ">")
+                .orElse("")
+        + methodCall.getNameAsString();
     }
 
     private Doc tryResource(Expression resource) {
@@ -565,12 +733,14 @@ final class StatementPrinter {
     }
 
     private boolean tryResourcesHaveLeadingComments(TryStmt statement) {
-        return statement.getResources().stream()
+        return statement.getResources()
+                .stream()
                 .anyMatch(resource -> !commentPlacement.adjacentLeadingLineComments(resource).isEmpty()
                         || commentPlacement.leadingComment(resource)
                                 .filter(JavaCommentTrivia::isLine)
                                 .filter(comment -> comment.startsBeforeBeginLine(resource))
-                                .isPresent());
+                                .isPresent()
+                );
     }
 
     private Doc trailingCommentAfterClause(CatchClause clause) {
@@ -584,14 +754,17 @@ final class StatementPrinter {
     private Doc ownBlockCommentBeforeNode(Node node) {
         return comments.ownComment(node, comment -> comment instanceof BlockComment
                 && comment.getRange()
-                        .flatMap(commentRange -> node.getRange()
-                                .map(nodeRange -> CommentIndex.startsBefore(commentRange, nodeRange)))
-                        .orElse(false));
+                        .flatMap(commentRange -> node.getRange().map(
+                                nodeRange -> CommentIndex.startsBefore(commentRange, nodeRange)
+                        ))
+                        .orElse(false)
+        );
     }
 
     private Doc ownLineCommentBeforeNode(Node node) {
         return comments.ownComment(node, comment -> comment instanceof LineComment
-                && CommentIndex.startsBeforeBeginLine(comment, node));
+                && CommentIndex.startsBeforeBeginLine(comment, node)
+        );
     }
 
     private Doc rawTrailingLineComment(Node node) {
@@ -614,7 +787,8 @@ final class StatementPrinter {
                 .filter(BlockStmt.class::isInstance)
                 .map(BlockStmt.class::cast)
                 .map(parent -> Doc.concat(
-                        comments.orphanCommentStatements(parent, comment -> CommentIndex.startsOnEndLine(node, comment))))
+                        comments.orphanCommentStatements(parent, comment -> CommentIndex.startsOnEndLine(node, comment))
+                ))
                 .orElse(Doc.EMPTY);
     }
 
@@ -637,15 +811,16 @@ final class StatementPrinter {
 
     private Doc catchClause(CatchClause clause, int catchCount, boolean hasFinally, Doc leadingInside) {
         boolean compactEmptyBody = catchCount == 1
-                && !hasFinally
-                && clause.getBody().getStatements().isEmpty()
-                && clause.getBody().getOrphanComments().isEmpty()
-                && leadingInside == Doc.EMPTY;
+            && !hasFinally
+            && clause.getBody().getStatements().isEmpty()
+            && clause.getBody().getOrphanComments().isEmpty()
+            && leadingInside == Doc.EMPTY;
         return Doc.concat(
-                Doc.text("catch ("),
-                catchParameter(clause.getParameter()),
-                Doc.text(") "),
-                compactEmptyBody ? Doc.text("{}") : tryBlock(clause.getBody(), leadingInside));
+            Doc.text("catch ("),
+            catchParameter(clause.getParameter()),
+            Doc.text(") "),
+            compactEmptyBody ? Doc.text("{}") : tryBlock(clause.getBody(), leadingInside)
+        );
     }
 
     private Doc catchParameter(Parameter parameter) {
@@ -653,7 +828,10 @@ final class StatementPrinter {
             return commentedCatchParameter(parameter);
         }
         String flat = compactCatchParameter(parameter);
-        if (!flat.contains("|") || currentIndentedWidth.applyAsInt("catch (" + flat + ") {}") <= options.lineWidth()) {
+        if (
+            !flat.contains("|")
+            || currentIndentedWidth.applyAsInt("catch (" + flat + ") {}") <= options.lineWidth()
+        ) {
             return Doc.text(flat);
         }
         String type = compactTypeLike.apply(parameter.getType());
@@ -672,12 +850,15 @@ final class StatementPrinter {
     }
 
     private boolean parameterHasComments(Parameter parameter) {
-        return parameter.getComment().filter(BlockComment.class::isInstance).isPresent()
-                || !parameter.getAllContainedComments().isEmpty();
+        return (
+            parameter.getComment().filter(BlockComment.class::isInstance).isPresent()
+            || !parameter.getAllContainedComments().isEmpty()
+        );
     }
 
     private Doc commentedCatchParameter(Parameter parameter) {
-        String rawType = parameter.getType().getTokenRange()
+        String rawType = parameter.getType()
+                .getTokenRange()
                 .map(Object::toString)
                 .orElseGet(() -> compactTypeLike.apply(parameter.getType()));
         List<String> parts = List.of(rawType.split("\\s*\\|\\s*"));
@@ -712,27 +893,36 @@ final class StatementPrinter {
         Doc betweenThenAndElseBlockComment = blockCommentBetweenThenAndElse(statement);
         docs.add(ifCondition(statement));
         docs.add(ifThenStatement(statement));
-        statement.getElseStmt().ifPresent(elseStatement -> {
-            if (elseStatement.isEmptyStmt()) {
-                docs.add(emptyElseStatement(statement, elseStatement));
-                return;
-            }
-            Doc elseLeadingLineComment = comments.ownComment(elseStatement, LineComment.class::isInstance);
-            Doc elseLeadingBlockComment = sameLineBlockCommentBeforeNode.apply(elseStatement);
-            Doc elseTrailingLineComment = trailingLineComment(elseStatement);
-            docs.add(elseChainSeparator(
-                    statement,
-                    elseStatement,
-                    thenTrailingLineComment,
-                    betweenThenAndElseBlockComment,
-                    elseLeadingLineComment,
-                    elseLeadingBlockComment));
-            docs.add(elseStatement.isIfStmt() ? statementRenderer.format(elseStatement) : nestedStatement(elseStatement));
-            if (elseTrailingLineComment != Doc.EMPTY) {
-                docs.add(Doc.text(" "));
-                docs.add(elseTrailingLineComment);
-            }
-        });
+        statement
+                .getElseStmt()
+                .ifPresent(elseStatement -> {
+                    if (elseStatement.isEmptyStmt()) {
+                        docs.add(emptyElseStatement(statement, elseStatement));
+                        return;
+                    }
+                    Doc elseLeadingLineComment = comments.ownComment(elseStatement, LineComment.class::isInstance);
+                    Doc elseLeadingBlockComment = sameLineBlockCommentBeforeNode.apply(elseStatement);
+                    Doc elseTrailingLineComment = trailingLineComment(elseStatement);
+                    docs.add(
+                        elseChainSeparator(
+                            statement,
+                            elseStatement,
+                            thenTrailingLineComment,
+                            betweenThenAndElseBlockComment,
+                            elseLeadingLineComment,
+                            elseLeadingBlockComment
+                        )
+                    );
+                    docs.add(
+                        elseStatement.isIfStmt()
+                            ? statementRenderer.format(elseStatement)
+                            : nestedStatement(elseStatement)
+                    );
+                    if (elseTrailingLineComment != Doc.EMPTY) {
+                        docs.add(Doc.text(" "));
+                        docs.add(elseTrailingLineComment);
+                    }
+                });
         if (statement.getElseStmt().isEmpty() && thenTrailingLineComment != Doc.EMPTY) {
             docs.add(Doc.text(" "));
             docs.add(thenTrailingLineComment);
@@ -743,12 +933,16 @@ final class StatementPrinter {
     private Doc ifWithEmptyThenStatement(IfStmt statement) {
         List<Doc> docs = new ArrayList<>();
         docs.add(Doc.text("if (" + ifEmptyThenCondition(statement) + ");"));
-        statement.getElseStmt().ifPresent(elseStatement -> {
-            docs.add(Doc.HARD_LINE);
-            docs.add(elseStatement.isEmptyStmt()
-                    ? Doc.text("else;" + trailingEmptyBodyBlockComment(elseStatement))
-                    : Doc.concat(Doc.text("else "), nestedStatement(elseStatement)));
-        });
+        statement
+                .getElseStmt()
+                .ifPresent(elseStatement -> {
+                    docs.add(Doc.HARD_LINE);
+                    docs.add(
+                        elseStatement.isEmptyStmt()
+                            ? Doc.text("else;" + trailingEmptyBodyBlockComment(elseStatement))
+                            : Doc.concat(Doc.text("else "), nestedStatement(elseStatement))
+                    );
+                });
         return Doc.concat(docs);
     }
 
@@ -778,17 +972,21 @@ final class StatementPrinter {
         }
         Statement thenStatement = statement.getThenStmt();
         Statement elseStatement = statement.getElseStmt().orElseThrow();
-        return statement.getAllContainedComments().stream()
+        return statement.getAllContainedComments()
+                .stream()
                 .filter(BlockComment.class::isInstance)
                 .filter(comment -> comment.getRange()
-                        .flatMap(commentRange -> thenStatement.getRange()
-                                .flatMap(thenRange -> elseStatement.getRange()
-                                        .map(elseRange -> commentRange.begin.line == thenRange.end.line
+                            .flatMap(commentRange -> thenStatement.getRange().flatMap(
+                                    thenRange -> elseStatement.getRange().map(
+                                        elseRange -> commentRange.begin.line == thenRange.end.line
                                                 && commentRange.begin.column > thenRange.end.column
                                                 && commentRange.begin.column <= thenRange.end.column + 2
                                                 && commentRange.begin.line == elseRange.begin.line
-                                                && commentRange.begin.column < elseRange.begin.column)))
-                        .orElse(false))
+                                                && commentRange.begin.column < elseRange.begin.column
+                                    )
+                            ))
+                            .orElse(false)
+                )
                 .findFirst()
                 .map(comments::comment)
                 .orElse(Doc.EMPTY);
@@ -809,11 +1007,13 @@ final class StatementPrinter {
     }
 
     private Doc ifThenStatement(IfStmt statement) {
-        if (statement.getElseStmt().isEmpty()
-                && statement.getThenStmt().isBlockStmt()
-                && statement.getThenStmt().asBlockStmt().getStatements().isEmpty()
-                && statement.getThenStmt().asBlockStmt().getOrphanComments().isEmpty()
-                && compact.apply(statement.getCondition()).contains("instanceof")) {
+        if (
+            statement.getElseStmt().isEmpty()
+            && statement.getThenStmt().isBlockStmt()
+            && statement.getThenStmt().asBlockStmt().getStatements().isEmpty()
+            && statement.getThenStmt().asBlockStmt().getOrphanComments().isEmpty()
+            && compact.apply(statement.getCondition()).contains("instanceof")
+        ) {
             return Doc.concat(Doc.text("{"), Doc.HARD_LINE, Doc.text("}"));
         }
         return nestedStatement(statement.getThenStmt());
@@ -825,7 +1025,8 @@ final class StatementPrinter {
             Doc thenTrailingLineComment,
             Doc betweenThenAndElseBlockComment,
             Doc elseLeadingLineComment,
-            Doc elseLeadingBlockComment) {
+            Doc elseLeadingBlockComment
+    ) {
         if (thenTrailingLineComment != Doc.EMPTY) {
             return Doc.concat(Doc.HARD_LINE, thenTrailingLineComment, Doc.HARD_LINE, Doc.text("else "));
         }
@@ -853,20 +1054,24 @@ final class StatementPrinter {
      * rule envelope preserves statement gates before this printer selects the switch-statement branch again.
      */
     private Doc nestedStatement(Statement statement) {
-        if (statement.isBlockStmt()
-                && statement.asBlockStmt().getStatements().isEmpty()
-                && statement.asBlockStmt().getOrphanComments().isEmpty()
-                && statement.getParentNode().filter(IfStmt.class::isInstance).isPresent()) {
+        if (
+            statement.isBlockStmt()
+            && statement.asBlockStmt().getStatements().isEmpty()
+            && statement.asBlockStmt().getOrphanComments().isEmpty()
+            && statement.getParentNode().filter(IfStmt.class::isInstance).isPresent()
+        ) {
             return emptyControlBlock(statement.asBlockStmt());
         }
         if (statement.isBlockStmt()) {
             return statementRenderer.format(statement);
         }
-        if (statement.isIfStmt()
-                || statement.isForStmt()
-                || statement.isForEachStmt()
-                || statement.isWhileStmt()
-                || statement.isDoStmt()) {
+        if (
+            statement.isIfStmt()
+            || statement.isForStmt()
+            || statement.isForEachStmt()
+            || statement.isWhileStmt()
+            || statement.isDoStmt()
+        ) {
             return Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement)));
         }
         return statementRenderer.format(statement);
@@ -883,18 +1088,24 @@ final class StatementPrinter {
 
     private Doc forEachStatement(ForEachStmt statement) {
         if (statement.getBody().isEmptyStmt()) {
-            return Doc.text("for (" + compact.apply(statement.getVariable()) + " : "
-                    + emptyBodyHeaderExpression(statement.getIterable(), statement.getBody()) + ");"
-                    + trailingEmptyBodyBlockComment(statement));
+            return Doc.text(
+                "for ("
+                    + compact.apply(statement.getVariable())
+                    + " : "
+                    + emptyBodyHeaderExpression(statement.getIterable(), statement.getBody())
+                    + ");"
+                    + trailingEmptyBodyBlockComment(statement)
+            );
         }
         Doc header = forEachHeader(statement);
         Optional<Doc> lineComment = lineCommentBeforeNestedBody(statement);
         if (lineComment.isPresent() && !statement.getBody().isBlockStmt()) {
             return Doc.concat(
-                    header,
-                    Doc.text(" "),
-                    lineComment.orElseThrow(),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement.getBody()))));
+                header,
+                Doc.text(" "),
+                lineComment.orElseThrow(),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement.getBody())))
+            );
         }
         return Doc.concat(header, Doc.text(" "), nestedStatement(statement.getBody()));
     }
@@ -906,14 +1117,17 @@ final class StatementPrinter {
         String variable = forEachVariable(statement);
         Expression iterable = statement.getIterable();
         String header = "for (" + variable + " : " + compact.apply(iterable) + ")";
-        if (blockStatementWidth(header + " {}") <= options.lineWidth()
-                || !(iterable instanceof MethodCallExpr methodCall)) {
+        if (
+            blockStatementWidth(header + " {}") <= options.lineWidth()
+            || !(iterable instanceof MethodCallExpr methodCall)
+        ) {
             return Doc.text(header);
         }
         return Doc.concat(
-                Doc.text("for (" + variable + " : "),
-                brokenMethodCallRenderer.apply(methodCall),
-                Doc.text(")"));
+            Doc.text("for (" + variable + " : "),
+            brokenMethodCallRenderer.apply(methodCall),
+            Doc.text(")")
+        );
     }
 
     private String forEachVariable(ForEachStmt statement) {
@@ -925,8 +1139,8 @@ final class StatementPrinter {
         }
         String variable = raw.substring(open + 1, colon);
         return variable.contains("/*")
-                ? CommentedTokenText.tokenLine(CommentedTokenText.tokens(variable))
-                : compact.apply(statement.getVariable());
+            ? CommentedTokenText.tokenLine(CommentedTokenText.tokens(variable))
+            : compact.apply(statement.getVariable());
     }
 
     /**
@@ -949,7 +1163,8 @@ final class StatementPrinter {
     }
 
     private String forHeader(ForStmt statement) {
-        String init = statement.getInitialization().stream()
+        String init = statement.getInitialization()
+                .stream()
                 .map(this::forHeaderExpression)
                 .reduce((left, right) -> left + ", " + right)
                 .orElse("");
@@ -973,18 +1188,27 @@ final class StatementPrinter {
 
     private Doc whileStatement(WhileStmt statement) {
         if (statement.getBody().isEmptyStmt()) {
-            return Doc.text("while (" + emptyBodyHeaderExpression(statement.getCondition(), statement.getBody()) + ");"
-                    + trailingEmptyBodyBlockComment(statement));
+            return Doc.text(
+                "while ("
+                    + emptyBodyHeaderExpression(statement.getCondition(), statement.getBody())
+                    + ");"
+                    + trailingEmptyBodyBlockComment(statement)
+            );
         }
         Optional<Doc> commentedBody = commentedLoopBody(statement, statement.getBody());
         if (commentedBody.isPresent()) {
-            return Doc.concat(Doc.text("while "), controlConditionRenderer.apply(statement.getCondition()), commentedBody.orElseThrow());
-        }
-        return Doc.concat(
+            return Doc.concat(
                 Doc.text("while "),
                 controlConditionRenderer.apply(statement.getCondition()),
-                Doc.text(" "),
-                nestedStatement(statement.getBody()));
+                commentedBody.orElseThrow()
+            );
+        }
+        return Doc.concat(
+            Doc.text("while "),
+            controlConditionRenderer.apply(statement.getCondition()),
+            Doc.text(" "),
+            nestedStatement(statement.getBody())
+        );
     }
 
     /**
@@ -1034,13 +1258,27 @@ final class StatementPrinter {
     }
 
     private Doc doWhileTail(DoStmt statement) {
-        Optional<Comment> conditionComment = statement.getCondition().getComment().filter(BlockComment.class::isInstance);
-        if (conditionComment.isPresent()
-                && conditionCommentStartsBeforeExpression(statement.getCondition(), conditionComment.orElseThrow())) {
+        Optional<Comment> conditionComment = statement.getCondition().getComment().filter(
+            BlockComment.class::isInstance
+        );
+        if (
+            conditionComment.isPresent()
+            && conditionCommentStartsBeforeExpression(statement.getCondition(), conditionComment.orElseThrow())
+        ) {
             Doc comment = comments.comment(conditionComment.orElseThrow());
-            return Doc.text(" " + commentText(comment) + " while (" + compactWithoutOwnComment.apply(statement.getCondition()) + ");");
+            return Doc.text(
+                " "
+                    + commentText(comment)
+                    + " while ("
+                    + compactWithoutOwnComment.apply(statement.getCondition())
+                    + ");"
+            );
         }
-        return Doc.concat(Doc.text(" while "), controlConditionRenderer.apply(statement.getCondition()), Doc.text(";"));
+        return Doc.concat(
+            Doc.text(" while "),
+            controlConditionRenderer.apply(statement.getCondition()),
+            Doc.text(";")
+        );
     }
 
     /**
@@ -1050,11 +1288,16 @@ final class StatementPrinter {
      * the header or stay after the semicolon depending on how JavaParser exposes them for the original source.
      */
     private Doc loopWithEmptyBody(String header, Node statement) {
-        Doc bodyComment = statement instanceof ForStmt forStmt ? emptyBodyOwnBlockComment(forStmt.getBody()) : Doc.EMPTY;
+        Doc bodyComment =
+            statement instanceof ForStmt forStmt ? emptyBodyOwnBlockComment(forStmt.getBody()) : Doc.EMPTY;
         if (bodyComment == Doc.EMPTY) {
             return Doc.text(header + ";" + trailingEmptyBodyBlockComment(statement));
         }
-        return Doc.concat(bodyComment, Doc.HARD_LINE, Doc.text(header + ";" + trailingEmptyBodyBlockComment(statement)));
+        return Doc.concat(
+            bodyComment,
+            Doc.HARD_LINE,
+            Doc.text(header + ";" + trailingEmptyBodyBlockComment(statement))
+        );
     }
 
     private String emptyBodyHeaderExpression(Expression expression, Statement body) {
@@ -1107,7 +1350,9 @@ final class StatementPrinter {
     private Doc unattachedTrailingLineComment(Node node) {
         Optional<Node> parent = node.getParentNode();
         while (parent.isPresent()) {
-            Optional<Doc> trailing = parent.orElseThrow().getAllContainedComments().stream()
+            Optional<Doc> trailing = parent.orElseThrow()
+                    .getAllContainedComments()
+                    .stream()
                     .filter(LineComment.class::isInstance)
                     .filter(comment -> comment.getCommentedNode().isEmpty())
                     .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(node, comment))
@@ -1124,7 +1369,9 @@ final class StatementPrinter {
     private Doc unattachedTrailingBlockComment(Node node) {
         Optional<Node> parent = node.getParentNode();
         while (parent.isPresent()) {
-            Optional<Doc> trailing = parent.orElseThrow().getAllContainedComments().stream()
+            Optional<Doc> trailing = parent.orElseThrow()
+                    .getAllContainedComments()
+                    .stream()
                     .filter(BlockComment.class::isInstance)
                     .filter(comment -> comment.getCommentedNode().isEmpty())
                     .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(node, comment))
@@ -1140,19 +1387,25 @@ final class StatementPrinter {
 
     private String forHeaderExpression(Expression expression) {
         if (expression instanceof BinaryExpr binaryExpr) {
-            return compact.apply(binaryExpr.getLeft())
-                    + " "
-                    + binaryExpr.getOperator().asString()
-                    + " "
-                    + compactWithOwnBlockComment.apply(binaryExpr.getRight());
+            return (
+                compact.apply(binaryExpr.getLeft())
+                + " "
+                + binaryExpr.getOperator().asString()
+                + " "
+                + compactWithOwnBlockComment.apply(binaryExpr.getRight())
+            );
         }
-        if (expression instanceof VariableDeclarationExpr variableDeclaration
-                && variableDeclaration.getVariables().size() == 1) {
+        if (
+            expression instanceof VariableDeclarationExpr variableDeclaration
+            && variableDeclaration.getVariables().size() == 1
+        ) {
             VariableDeclarator variable = variableDeclaration.getVariables().get(0);
-            return compactTypeLike.apply(variable.getType())
-                    + " "
-                    + variable.getNameAsString()
-                    + variable.getInitializer().map(initializer -> " = " + compact.apply(initializer)).orElse("");
+            return (
+                compactTypeLike.apply(variable.getType())
+                + " "
+                + variable.getNameAsString()
+                + variable.getInitializer().map(initializer -> " = " + compact.apply(initializer)).orElse("")
+            );
         }
         return compact.apply(expression);
     }

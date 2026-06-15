@@ -11,8 +11,8 @@ import com.github.javaparser.Providers;
 import com.github.javaparser.TokenRange;
 import com.github.javaparser.ast.CompilationUnit;
 import dev.lanwen.frmtr.FixtureInput;
-import dev.lanwen.frmtr.Frmtr;
 import dev.lanwen.frmtr.FormatterOptions;
+import dev.lanwen.frmtr.Frmtr;
 import dev.lanwen.frmtr.ResourceFixtureSource;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -205,10 +205,15 @@ final class IdempotencePropertyTest {
             }
             current = next;
         }
-        throw new AssertionError(String.format(
+        throw new AssertionError(
+            String.format(
                 "perturbed input `%s` did not reach a fixed point within %d passes (output keeps changing — growing or "
-                        + "oscillating, not converging); per-pass output lengths: %s",
-                name, CONVERGENCE_PASSES, lengths));
+                    + "oscillating, not converging); per-pass output lengths: %s",
+                name,
+                CONVERGENCE_PASSES,
+                lengths
+            )
+        );
     }
 
     private static void assertSemanticsPreserved(String name, String source, String formatted) {
@@ -218,9 +223,10 @@ final class IdempotencePropertyTest {
         CompilationUnit outputTree = parse(formatted);
         assertThat(AstEquivalence.equivalent(inputTree, outputTree))
                 .as(
-                        "formatting changed program meaning for input `%s`: %s",
-                        name,
-                        AstEquivalence.describeDifference(inputTree, outputTree).orElse("<equivalent>"))
+                    "formatting changed program meaning for input `%s`: %s",
+                    name,
+                    AstEquivalence.describeDifference(inputTree, outputTree).orElse("<equivalent>")
+                )
                 .isTrue();
     }
 
@@ -242,7 +248,11 @@ final class IdempotencePropertyTest {
     static Stream<Arguments> perturbedCorpus() {
         List<Arguments> arguments = new ArrayList<>();
         for (FixtureInput fixture : fixtureInputs()) {
-            addIfParses(arguments, fixture.name() + " @ collapsed-whitespace", perturb(fixture.source(), Shape.COLLAPSE));
+            addIfParses(
+                arguments,
+                fixture.name() + " @ collapsed-whitespace",
+                perturb(fixture.source(), Shape.COLLAPSE)
+            );
             addIfParses(arguments, fixture.name() + " @ expanded-whitespace", perturb(fixture.source(), Shape.EXPAND));
         }
         return arguments.stream();
@@ -279,18 +289,24 @@ final class IdempotencePropertyTest {
         }
         skipped.sort(Comparator.naturalOrder());
         System.out.printf(
-                "[IdempotencePropertyTest] well-shaped fixture corpus: %d cleanly-parsing, %d skipped"
-                        + " (RECOVER-only, AST-equivalence out of scope)%n",
-                parsing, skipped.size());
+            "[IdempotencePropertyTest] well-shaped fixture corpus: %d cleanly-parsing, %d skipped"
+                + " (RECOVER-only, AST-equivalence out of scope)%n",
+            parsing,
+            skipped.size()
+        );
         for (String name : skipped) {
             System.out.println("  skipped (does not parse as COMPILATION_UNIT): " + name);
         }
         int wellShaped = parsing + HAND_WRITTEN_SNIPPETS.size();
         assertThat(wellShaped)
                 .as(
-                        "well-shaped corpus shrank to %d inputs (%d cleanly-parsing fixtures + %d snippets); a drop below"
-                                + " %d means fixtures are being silently skipped — investigate before lowering this floor",
-                        wellShaped, parsing, HAND_WRITTEN_SNIPPETS.size(), MINIMUM_WELL_SHAPED_CORPUS)
+                    "well-shaped corpus shrank to %d inputs (%d cleanly-parsing fixtures + %d snippets); a drop below"
+                        + " %d means fixtures are being silently skipped — investigate before lowering this floor",
+                    wellShaped,
+                    parsing,
+                    HAND_WRITTEN_SNIPPETS.size(),
+                    MINIMUM_WELL_SHAPED_CORPUS
+                )
                 .isGreaterThanOrEqualTo(MINIMUM_WELL_SHAPED_CORPUS);
     }
 
@@ -300,9 +316,8 @@ final class IdempotencePropertyTest {
         /** Collapse each whitespace run to the minimum that keeps the token stream valid. */
         COLLAPSE,
         /** Expand each whitespace run with extra spacing and blank lines. */
-        EXPAND
+        EXPAND,
     }
-
     /**
      * Re-shapes {@code source} by rewriting only its whitespace tokens, returning {@code null} when the source does not
      * parse (so it can be skipped).
@@ -346,7 +361,6 @@ final class IdempotencePropertyTest {
         }
         return builder.toString();
     }
-
     private static JavaToken nextNonWhitespace(List<JavaToken> tokens, int from) {
         for (int index = from + 1; index < tokens.size(); index++) {
             JavaToken token = tokens.get(index);
@@ -519,5 +533,4 @@ final class IdempotencePropertyTest {
                 .setStoreTokens(true)
                 .setAttributeComments(true));
     }
-
 }

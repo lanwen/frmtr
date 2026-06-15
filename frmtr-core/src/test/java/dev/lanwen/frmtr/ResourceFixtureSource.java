@@ -54,11 +54,12 @@ public @interface ResourceFixtureSource {
 
         @Override
         public Stream<? extends Arguments> provideArguments(
-            ParameterDeclarations parameterDeclarations,
-            ExtensionContext context
+                ParameterDeclarations parameterDeclarations, ExtensionContext context
         ) throws Exception {
-            MatchedResources resources =
-                matchedResources(source.glob(), context.getRequiredTestClass().getClassLoader());
+            MatchedResources resources = matchedResources(
+                source.glob(),
+                context.getRequiredTestClass().getClassLoader()
+            );
             Class<?> fixtureType = fixtureParameterType(context);
             if (fixtureType.equals(FixtureInput.class)) {
                 return fixtureInputs(resources).map(Arguments::of);
@@ -71,7 +72,7 @@ public @interface ResourceFixtureSource {
             }
             throw new IllegalStateException(
                 "Unsupported fixture parameter type `%s` for resource glob `%s`."
-                    .formatted(fixtureType.getName(), source.glob())
+                        .formatted(fixtureType.getName(), source.glob())
             );
         }
 
@@ -89,22 +90,24 @@ public @interface ResourceFixtureSource {
                 return fixtureInputs(matchedResources(glob, ResourceFixtureSource.class.getClassLoader())).toList();
             } catch (IOException | URISyntaxException exception) {
                 throw new IllegalStateException(
-                    "Unable to discover fixture inputs for glob `%s`.".formatted(glob), exception);
+                    "Unable to discover fixture inputs for glob `%s`.".formatted(glob),
+                    exception
+                );
             }
         }
 
         private static Stream<FixtureInput> fixtureInputs(MatchedResources resources) {
             return resources.inputs()
-                .stream()
-                .map(input -> new FixtureInput(fixtureName(resources, input.getParent()), readString(input)))
-                .sorted(Comparator.comparing(FixtureInput::name));
+                    .stream()
+                    .map(input -> new FixtureInput(fixtureName(resources, input.getParent()), readString(input)))
+                    .sorted(Comparator.comparing(FixtureInput::name));
         }
 
         private Stream<FormatFixture> formatFixtures(MatchedResources resources) {
             return resources.inputs()
-                .stream()
-                .flatMap(input -> formatFixtures(resources, input))
-                .sorted(Comparator.comparing(FormatFixture::name));
+                    .stream()
+                    .flatMap(input -> formatFixtures(resources, input))
+                    .sorted(Comparator.comparing(FormatFixture::name));
         }
 
         private Stream<FormatFixture> formatFixtures(MatchedResources resources, Path input) {
@@ -112,12 +115,12 @@ public @interface ResourceFixtureSource {
             String fixtureName = fixtureName(resources, directory);
             try (var stream = Files.list(directory)) {
                 List<FormatFixture> fixtures = stream.filter(Files::isRegularFile)
-                    .flatMap(output -> formatFixture(fixtureName, input, output))
-                    .toList();
+                        .flatMap(output -> formatFixture(fixtureName, input, output))
+                        .toList();
                 if (fixtures.isEmpty()) {
                     throw new IllegalStateException(
                         "Missing formatter output for fixture `%s`. Expected `frmtr-<variant>.output.java` next to %s."
-                            .formatted(fixtureName, input)
+                                .formatted(fixtureName, input)
                     );
                 }
                 return fixtures.stream();
@@ -147,9 +150,9 @@ public @interface ResourceFixtureSource {
 
         private Stream<UnsupportedFixture> unsupportedFixtures(MatchedResources resources) {
             return resources.inputs()
-                .stream()
-                .map(input -> unsupportedFixture(resources, input))
-                .sorted(Comparator.comparing(UnsupportedFixture::name));
+                    .stream()
+                    .map(input -> unsupportedFixture(resources, input))
+                    .sorted(Comparator.comparing(UnsupportedFixture::name));
         }
 
         private UnsupportedFixture unsupportedFixture(MatchedResources resources, Path input) {
@@ -158,7 +161,7 @@ public @interface ResourceFixtureSource {
             if (!Files.isRegularFile(error)) {
                 throw new IllegalStateException(
                     "Missing unsupported fixture error companion for `%s`. Expected `error.txt` next to %s."
-                        .formatted(fixtureName, input)
+                            .formatted(fixtureName, input)
                 );
             }
             return new UnsupportedFixture(fixtureName, readString(input), readLines(error));
@@ -180,16 +183,17 @@ public @interface ResourceFixtureSource {
             }
         }
 
-        private static MatchedResources matchedResources(String glob, ClassLoader classLoader)
-            throws IOException, URISyntaxException {
+        private static MatchedResources matchedResources(
+                String glob, ClassLoader classLoader
+        ) throws IOException, URISyntaxException {
             String rootName = resourceRootName(glob);
             Path root = resourceRoot(classLoader, rootName);
             PathMatcher matcher = FileSystems.getDefault().getPathMatcher("glob:" + glob);
             try (var stream = Files.walk(root)) {
                 List<Path> inputs = stream.filter(Files::isRegularFile)
-                    .filter(path -> matcher.matches(resourcePath(rootName, root, path)))
-                    .sorted()
-                    .toList();
+                        .filter(path -> matcher.matches(resourcePath(rootName, root, path)))
+                        .sorted()
+                        .toList();
                 if (inputs.isEmpty()) {
                     throw new IllegalStateException("No resource fixtures matched glob `%s`.".formatted(glob));
                 }
@@ -199,8 +203,8 @@ public @interface ResourceFixtureSource {
 
         private static Path resourceRoot(ClassLoader classLoader, String name) throws URISyntaxException {
             return Path.of(Objects.requireNonNull(classLoader.getResource(name), name).toURI())
-                .toAbsolutePath()
-                .normalize();
+                    .toAbsolutePath()
+                    .normalize();
         }
 
         private static String resourceRootName(String glob) {
@@ -234,8 +238,8 @@ public @interface ResourceFixtureSource {
 
         private static String fixtureName(MatchedResources resources, Path fixtureDirectory) {
             String resourcePath = resourcePath(resources.rootName(), resources.root(), fixtureDirectory)
-                .toString()
-                .replace(File.separatorChar, '/');
+                    .toString()
+                    .replace(File.separatorChar, '/');
             String rootPrefix = resources.rootName().isBlank() ? "" : resources.rootName() + "/";
             if (!rootPrefix.isBlank() && resourcePath.startsWith(rootPrefix)) {
                 return resourcePath.substring(rootPrefix.length());
@@ -248,7 +252,7 @@ public @interface ResourceFixtureSource {
             if (parameterTypes.length != 1) {
                 throw new IllegalStateException(
                     "@ResourceFixtureSource supports exactly one fixture parameter on %s."
-                        .formatted(context.getRequiredTestMethod().getName())
+                            .formatted(context.getRequiredTestMethod().getName())
                 );
             }
             return parameterTypes[0];

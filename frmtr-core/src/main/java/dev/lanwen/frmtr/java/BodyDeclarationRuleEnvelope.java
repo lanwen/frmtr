@@ -18,16 +18,21 @@ import dev.lanwen.frmtr.doc.Doc;
  * layout stay with their existing owners.
  */
 final class BodyDeclarationRuleEnvelope {
+
     private final CommentTracker comments;
+
     private final FormatterPragmas formatterPragmas;
+
     private final RawPreservedSource rawPreservedSource;
+
     private final JavaFormatRule<BodyDeclaration<?>> bodyContent;
 
     BodyDeclarationRuleEnvelope(
             CommentTracker comments,
             FormatterPragmas formatterPragmas,
             RawPreservedSource rawPreservedSource,
-            JavaFormatRule<BodyDeclaration<?>> bodyContent) {
+            JavaFormatRule<BodyDeclaration<?>> bodyContent
+    ) {
         this.comments = comments;
         this.formatterPragmas = formatterPragmas;
         this.rawPreservedSource = rawPreservedSource;
@@ -47,8 +52,9 @@ final class BodyDeclarationRuleEnvelope {
         Doc doc = switch (action) {
             case RAW -> rawBody(declaration);
             case FORMAT -> formattedBody(declaration);
-            case RAW_WITH_TRAILING_HARD_LINE -> throw new IllegalStateException("body declarations cannot use "
-                    + FormatterPragmas.PrintAction.RAW_WITH_TRAILING_HARD_LINE);
+            case RAW_WITH_TRAILING_HARD_LINE -> throw new IllegalStateException(
+                "body declarations cannot use " + FormatterPragmas.PrintAction.RAW_WITH_TRAILING_HARD_LINE
+            );
         };
         return Doc.label("java.bodyDeclaration:" + declaration.getClass().getSimpleName(), doc);
     }
@@ -58,7 +64,8 @@ final class BodyDeclarationRuleEnvelope {
      *
      * <p>Declaration printers may still own nested comments inside the declaration grammar, but the outer attached
      * comment belongs to this envelope so all body declarations pass through one comment gate before content dispatch.
-     * A same-line trailing line comment is kept after the declaration instead of being reclassified as a leading comment.
+     * A same-line trailing line comment is kept after the declaration instead of being reclassified as a leading
+     * comment.
      */
     private Doc formattedBody(BodyDeclaration<?> declaration) {
         Doc trailing = comments.trailingLineComment(declaration);
@@ -82,7 +89,10 @@ final class BodyDeclarationRuleEnvelope {
             return;
         }
         // TODO: Expose the rejected recovered declaration through formatter diagnostics once recovery reporting exists.
-        throw new FormatterException("Unsupported Java parse-error recovery reached declaration formatter: "
-                + declaration.getClass().getSimpleName());
+        throw new FormatterException(recoveredDeclarationMessage(declaration.getClass().getSimpleName()));
+    }
+
+    private static String recoveredDeclarationMessage(String declarationName) {
+        return "Unsupported Java parse-error recovery reached declaration formatter: " + declarationName;
     }
 }

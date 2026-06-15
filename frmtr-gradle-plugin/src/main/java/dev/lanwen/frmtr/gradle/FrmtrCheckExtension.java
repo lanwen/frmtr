@@ -5,6 +5,7 @@ import org.gradle.api.Action;
 import org.gradle.api.model.ObjectFactory;
 
 public abstract class FrmtrCheckExtension {
+
     private final FrmtrPrintExtension print;
 
     @Inject

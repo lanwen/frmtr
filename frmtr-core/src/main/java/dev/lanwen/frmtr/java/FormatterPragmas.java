@@ -11,6 +11,7 @@ import com.github.javaparser.ast.Node;
  * JavaPrinter dispatch path renders a node when formatting remains enabled.
  */
 final class FormatterPragmas {
+
     private boolean formattingDisabled;
 
     /**
@@ -112,7 +113,7 @@ final class FormatterPragmas {
         RAW,
 
         /** Emit the current statement from raw source and preserve the legacy extra hard line after an ignore pragma. */
-        RAW_WITH_TRAILING_HARD_LINE
+        RAW_WITH_TRAILING_HARD_LINE,
     }
 
     private enum Pragma {
@@ -132,6 +133,6 @@ final class FormatterPragmas {
         IGNORE,
 
         /** Marks nodes with no recognized formatter pragma so the current persistent state decides the action. */
-        NONE
+        NONE,
     }
 }

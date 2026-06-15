@@ -27,23 +27,33 @@ import java.util.function.Predicate;
  * inside methods render, or which annotations count as declaration annotations.
  */
 final class MemberBlockPrinter {
+
     private static final String MEMBER_DECLARATION_LIST_RECOVERY_FAILURE =
-            "Unable to recover Java parse error inside member declaration list: ";
+        "Unable to recover Java parse error inside member declaration list: ";
 
     private final CommentTracker comments;
+
     private final JavaCommentPlacementPolicy commentPlacement;
+
     private final SourceText sourceText;
+
     private final RecoveredListPlanner recoveredListPlanner;
+
     private final RecoveredRawGapPrinter rawGaps;
+
     private final SourceOrderedCommentInterleaver<BodyDeclaration<?>> commentInterleaver;
+
     private final boolean recoverParseProblems;
+
     private final Predicate<BodyDeclaration<?>> hasDeclarationAnnotations;
+
     private final Predicate<BodyDeclaration<?>> hasPragma;
 
     MemberBlockPrinter(
             JavaFormatContext context,
             Predicate<BodyDeclaration<?>> hasDeclarationAnnotations,
-            Predicate<BodyDeclaration<?>> hasPragma) {
+            Predicate<BodyDeclaration<?>> hasPragma
+    ) {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
         this.sourceText = context.sourceText;
@@ -62,11 +72,20 @@ final class MemberBlockPrinter {
      * <p>The member renderer is invoked once per declaration before sequencing starts, so declaration formatting remains
      * owned by the caller while this method owns only the surrounding member-content layout.
      */
-    Doc memberBlock(NodeList<BodyDeclaration<?>> members, Node owner, Function<BodyDeclaration<?>, Doc> memberRenderer) {
+    Doc memberBlock(
+            NodeList<BodyDeclaration<?>> members,
+            Node owner,
+            Function<BodyDeclaration<?>, Doc> memberRenderer
+    ) {
         Doc openingBraceTrailingComment = openingBraceTrailingLineComment(owner);
         Optional<RecoveredListPlanner.Plan<BodyDeclaration<?>>> recoveryPlan = recoveryPlan(owner, members);
         if (recoveryPlan.isPresent() && hasRawGap(recoveryPlan.orElseThrow())) {
-            return recoveredMemberBlock(owner, recoveryPlan.orElseThrow(), openingBraceTrailingComment, memberRenderer);
+            return recoveredMemberBlock(
+                owner,
+                recoveryPlan.orElseThrow(),
+                openingBraceTrailingComment,
+                memberRenderer
+            );
         }
 
         List<Doc> memberDocs = new ArrayList<>(members.stream().map(memberRenderer).toList());
@@ -82,20 +101,22 @@ final class MemberBlockPrinter {
             }
             comments.addAll(orphanComments);
             return Doc.concat(
-                    Doc.text("{"),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, comments))),
-                    Doc.HARD_LINE,
-                    Doc.text("}"));
+                Doc.text("{"),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, comments))),
+                Doc.HARD_LINE,
+                Doc.text("}")
+            );
         }
         Doc contents = memberContents(owner, members, memberDocs);
         if (openingBraceTrailingComment != Doc.EMPTY) {
             contents = Doc.concat(openingBraceTrailingComment, Doc.HARD_LINE, contents);
         }
         return Doc.concat(
-                Doc.text("{"),
-                Doc.indent(Doc.concat(memberBlockOpeningBreak(owner), contents)),
-                Doc.HARD_LINE,
-                Doc.text("}"));
+            Doc.text("{"),
+            Doc.indent(Doc.concat(memberBlockOpeningBreak(owner), contents)),
+            Doc.HARD_LINE,
+            Doc.text("}")
+        );
     }
 
     /**
@@ -118,8 +139,10 @@ final class MemberBlockPrinter {
      * that class, enum, and annotation bodies keep for the formatter's member-block style.
      */
     private Doc memberBlockOpeningBreak(Node owner) {
-        if (owner instanceof RecordDeclaration
-                || owner instanceof ClassOrInterfaceDeclaration declaration && declaration.isInterface()) {
+        if (
+            owner instanceof RecordDeclaration
+            || (owner instanceof ClassOrInterfaceDeclaration declaration && declaration.isInterface())
+        ) {
             return Doc.HARD_LINE;
         }
         return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
@@ -132,7 +155,8 @@ final class MemberBlockPrinter {
      * those comments back before, between, or after the already-rendered member docs.
      */
     private Doc memberContents(Node owner, NodeList<BodyDeclaration<?>> members, List<Doc> memberDocs) {
-        return Doc.concat(commentInterleaver.interleave(
+        return Doc.concat(
+            commentInterleaver.interleave(
                 members,
                 commentPlacement.orphanCommentsInSourceOrder(owner),
                 (previous, current, index) -> Optional.of(memberDocs.get(index)),
@@ -150,7 +174,8 @@ final class MemberBlockPrinter {
                     @Override
                     public Doc separatorBeforeSibling(
                             SourceOrderedCommentInterleaver.PreviousEntry<BodyDeclaration<?>> previous,
-                            BodyDeclaration<?> currentSibling) {
+                            BodyDeclaration<?> currentSibling
+                    ) {
                         if (previous.kind() == SourceOrderedCommentInterleaver.EntryKind.SIBLING) {
                             return memberSeparator(owner, previous.sibling().orElseThrow(), currentSibling);
                         }
@@ -160,10 +185,13 @@ final class MemberBlockPrinter {
                     @Override
                     public Doc separatorBeforeComment(
                             SourceOrderedCommentInterleaver.PreviousEntry<BodyDeclaration<?>> previous,
-                            JavaCommentTrivia comment) {
+                            JavaCommentTrivia comment
+                    ) {
                         return sourceLineSeparator(previous.endLine(), comment.beginLine(Integer.MAX_VALUE));
                     }
-                }));
+                }
+            )
+        );
     }
 
     private int memberBeginLine(BodyDeclaration<?> member) {
@@ -185,11 +213,16 @@ final class MemberBlockPrinter {
             Node owner,
             RecoveredListPlanner.Plan<BodyDeclaration<?>> plan,
             Doc openingBraceTrailingComment,
-            Function<BodyDeclaration<?>, Doc> memberRenderer) {
+            Function<BodyDeclaration<?>, Doc> memberRenderer
+    ) {
         Optional<SourceRegion> openingBraceTrailingCommentRegion = openingBraceTrailingLineCommentRegion(owner);
         List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions = rawGaps.rawGapRegions(
-                plan,
-                region -> withoutOpeningBraceTrailingComment(region, openingBraceTrailingCommentRegion));
+            plan,
+            region -> withoutOpeningBraceTrailingComment(
+                region,
+                openingBraceTrailingCommentRegion
+            )
+        );
         List<SourceRegion> rawRegions = rawGaps.regions(rawGapRegions);
         rawGaps.requireRecoverableRawRegions(owner, rawGapRegions);
         List<JavaCommentTrivia> orphanComments = orphanCommentsOutsideRawRegions(owner, rawRegions);
@@ -211,10 +244,17 @@ final class MemberBlockPrinter {
 
         int rawGapIndex = 0;
         for (RecoveredListPlanner.Entry<BodyDeclaration<?>> entry : plan.entries()) {
-            while (orphanIndex < orphanComments.size()
-                    && orphanComments.get(orphanIndex).beginLine(Integer.MAX_VALUE) < entry.region().beginLine()) {
+            while (
+                orphanIndex < orphanComments.size()
+                && orphanComments.get(orphanIndex).beginLine(Integer.MAX_VALUE) < entry.region().beginLine()
+            ) {
                 previousEntry = appendRecoveredOrphanComment(
-                        contents, owner, orphanComments.get(orphanIndex++), previousEntry, previousEndLine);
+                    contents,
+                    owner,
+                    orphanComments.get(orphanIndex++),
+                    previousEntry,
+                    previousEndLine
+                );
                 if (previousEntry == EntryKind.ORPHAN_COMMENT) {
                     previousEndLine = orphanComments.get(orphanIndex - 1).endLine(Integer.MAX_VALUE);
                 }
@@ -223,7 +263,13 @@ final class MemberBlockPrinter {
                 case RecoveredListPlanner.ValidSibling<?> valid -> {
                     BodyDeclaration<?> currentMember = (BodyDeclaration<?>) valid.sibling();
                     appendSeparatorBeforeRecoveredMember(
-                            contents, owner, previousEntry, previousEndLine, previousMember, currentMember);
+                        contents,
+                        owner,
+                        previousEntry,
+                        previousEndLine,
+                        previousMember,
+                        currentMember
+                    );
                     contents.add(memberRenderer.apply(currentMember));
                     previousEndLine = CommentIndex.endLine(currentMember, Integer.MAX_VALUE);
                     previousMember = currentMember;
@@ -235,14 +281,19 @@ final class MemberBlockPrinter {
                         contents.add(rawGaps.raw(owner, rawRegion, "memberDeclarationList"));
                     }
                     previousEntry = rawRegion.trailingBreakReplaced()
-                            ? EntryKind.RAW_GAP_WITH_TRAILING_BREAK
-                            : EntryKind.RAW_GAP;
+                        ? EntryKind.RAW_GAP_WITH_TRAILING_BREAK
+                        : EntryKind.RAW_GAP;
                 }
             }
         }
         while (orphanIndex < orphanComments.size()) {
             previousEntry = appendRecoveredOrphanComment(
-                    contents, owner, orphanComments.get(orphanIndex++), previousEntry, previousEndLine);
+                contents,
+                owner,
+                orphanComments.get(orphanIndex++),
+                previousEntry,
+                previousEndLine
+            );
             if (previousEntry == EntryKind.ORPHAN_COMMENT) {
                 previousEndLine = orphanComments.get(orphanIndex - 1).endLine(Integer.MAX_VALUE);
             }
@@ -253,12 +304,7 @@ final class MemberBlockPrinter {
         }
         Doc closingBreak = switch (previousEntry) {
             case RAW_GAP -> Doc.EMPTY;
-            case NONE,
-                            OPENING_BRACE_COMMENT,
-                            ORPHAN_COMMENT,
-                            VALID_MEMBER,
-                            RAW_GAP_WITH_TRAILING_BREAK ->
-                    Doc.HARD_LINE;
+            case NONE, OPENING_BRACE_COMMENT, ORPHAN_COMMENT, VALID_MEMBER, RAW_GAP_WITH_TRAILING_BREAK -> Doc.HARD_LINE;
         };
         return Doc.concat(Doc.text("{"), Doc.indent(Doc.concat(contents)), closingBreak, Doc.text("}"));
     }
@@ -268,7 +314,8 @@ final class MemberBlockPrinter {
             Node owner,
             JavaCommentTrivia comment,
             EntryKind previousEntry,
-            int previousEndLine) {
+            int previousEndLine
+    ) {
         appendSeparatorBeforeRecoveredOrphanComment(contents, owner, previousEntry, previousEndLine, comment);
         Doc commentDoc = comments.comment(comment);
         if (commentDoc == Doc.EMPTY) {
@@ -284,13 +331,17 @@ final class MemberBlockPrinter {
             EntryKind previousEntry,
             int previousEndLine,
             BodyDeclaration<?> previousMember,
-            BodyDeclaration<?> currentMember) {
+            BodyDeclaration<?> currentMember
+    ) {
         switch (previousEntry) {
             case NONE -> contents.add(memberBlockOpeningBreak(owner));
             case VALID_MEMBER -> contents.add(memberSeparator(owner, previousMember, currentMember));
-            case ORPHAN_COMMENT -> contents.add(sourceLineSeparator(
+            case ORPHAN_COMMENT -> contents.add(
+                sourceLineSeparator(
                     previousEndLine,
-                    CommentIndex.beginLine(currentMember, Integer.MAX_VALUE)));
+                    CommentIndex.beginLine(currentMember, Integer.MAX_VALUE)
+                )
+            );
             case OPENING_BRACE_COMMENT, RAW_GAP_WITH_TRAILING_BREAK -> contents.add(Doc.HARD_LINE);
             case RAW_GAP -> {
                 // Raw source already owns the separation before this formatted member.
@@ -303,12 +354,16 @@ final class MemberBlockPrinter {
             Node owner,
             EntryKind previousEntry,
             int previousEndLine,
-            JavaCommentTrivia comment) {
+            JavaCommentTrivia comment
+    ) {
         switch (previousEntry) {
             case NONE -> contents.add(memberBlockOpeningBreak(owner));
-            case VALID_MEMBER, ORPHAN_COMMENT -> contents.add(sourceLineSeparator(
+            case VALID_MEMBER, ORPHAN_COMMENT -> contents.add(
+                sourceLineSeparator(
                     previousEndLine,
-                    comment.beginLine(Integer.MAX_VALUE)));
+                    comment.beginLine(Integer.MAX_VALUE)
+                )
+            );
             case OPENING_BRACE_COMMENT, RAW_GAP_WITH_TRAILING_BREAK -> contents.add(Doc.HARD_LINE);
             case RAW_GAP -> {
                 // Raw source already owns the separation before this orphan comment.
@@ -318,15 +373,17 @@ final class MemberBlockPrinter {
 
     private Optional<RecoveredListPlanner.Plan<BodyDeclaration<?>>> recoveryPlan(
             Node owner,
-            NodeList<BodyDeclaration<?>> members) {
+            NodeList<BodyDeclaration<?>> members
+    ) {
         if (!recoverParseProblems || !hasImmediateMemberListRecoveryProblem(owner, members)) {
             return Optional.empty();
         }
         RecoveredListPlanner.Plan<BodyDeclaration<?>> plan = recoveredListPlanner.plan(
-                owner,
-                requireMemberBlockInteriorRegion(owner),
-                members,
-                member -> member.getParsed() == Node.Parsedness.PARSED);
+            owner,
+            requireMemberBlockInteriorRegion(owner),
+            members,
+            member -> member.getParsed() == Node.Parsedness.PARSED
+        );
         if (!plan.isSafe()) {
             throw memberDeclarationListRecoveryFailure(plan.unsafe().orElseThrow().reason());
         }
@@ -334,13 +391,16 @@ final class MemberBlockPrinter {
     }
 
     private static boolean hasImmediateMemberListRecoveryProblem(Node owner, NodeList<BodyDeclaration<?>> members) {
-        return owner.getParsed() != Node.Parsedness.PARSED
-                || members.stream().anyMatch(member -> member.getParsed() != Node.Parsedness.PARSED);
+        return (
+            owner.getParsed() != Node.Parsedness.PARSED
+            || members.stream().anyMatch(member -> member.getParsed() != Node.Parsedness.PARSED)
+        );
     }
 
     private SourceRegion withoutOpeningBraceTrailingComment(
             SourceRegion region,
-            Optional<SourceRegion> openingBraceTrailingCommentRegion) {
+            Optional<SourceRegion> openingBraceTrailingCommentRegion
+    ) {
         if (openingBraceTrailingCommentRegion.isEmpty()) {
             return region;
         }
@@ -356,11 +416,16 @@ final class MemberBlockPrinter {
     }
 
     private List<JavaCommentTrivia> orphanCommentsOutsideRawRegions(Node owner, List<SourceRegion> rawRegions) {
-        return commentPlacement.orphanCommentsInSourceOrder(owner).stream()
+        return commentPlacement.orphanCommentsInSourceOrder(owner)
+                .stream()
                 .filter(comment -> comment.comment().getRange().isEmpty()
-                        || rawRegions.stream().noneMatch(region -> RecoveredRawGapPrinter.contains(
-                                region,
-                                sourceText.region(comment.comment().getRange().orElseThrow()))))
+                        || rawRegions
+                                .stream()
+                                .noneMatch(region -> RecoveredRawGapPrinter.contains(
+                                        region,
+                                        sourceText.region(comment.comment().getRange().orElseThrow())
+                                ))
+                )
                 .toList();
     }
 
@@ -386,15 +451,17 @@ final class MemberBlockPrinter {
         // the same line as the brace and be mistaken for a brace comment, stealing it from the member that owns it.
         // Cap the boundary at the first member's source start so only comments written before any member qualify.
         int firstLineEndOffset = Math.min(lineEndOffset, firstMemberBeginOffset(owner, interior).orElse(lineEndOffset));
-        return commentPlacement.containedComments(owner).stream()
+        return commentPlacement.containedComments(owner)
+                .stream()
                 .filter(JavaCommentTrivia::isLine)
                 .filter(comment -> comment.comment()
-                        .getRange()
-                        .map(sourceText::region)
-                        .filter(region -> RecoveredRawGapPrinter.contains(interior, region))
-                        .filter(region -> region.beginLine() == interior.beginLine())
-                        .filter(region -> region.beginOffset() < firstLineEndOffset)
-                        .isPresent())
+                            .getRange()
+                            .map(sourceText::region)
+                            .filter(region -> RecoveredRawGapPrinter.contains(interior, region))
+                            .filter(region -> region.beginLine() == interior.beginLine())
+                            .filter(region -> region.beginOffset() < firstLineEndOffset)
+                            .isPresent()
+                )
                 .findFirst();
     }
 
@@ -408,7 +475,8 @@ final class MemberBlockPrinter {
      * they are exactly what the scan is trying to classify; only non-comment members mark where body content starts.
      */
     private Optional<Integer> firstMemberBeginOffset(Node owner, SourceRegion interior) {
-        return owner.getChildNodes().stream()
+        return owner.getChildNodes()
+                .stream()
                 .filter(child -> !(child instanceof com.github.javaparser.ast.comments.Comment))
                 .flatMap(child -> child.getRange().stream())
                 .map(range -> sourceText.region(range).beginOffset())
@@ -466,7 +534,9 @@ final class MemberBlockPrinter {
     private SourceRegion tokenRegion(JavaToken token, String description) {
         return token.getRange()
                 .map(sourceText::region)
-                .orElseThrow(() -> new IllegalArgumentException("member block " + description + " is missing a source range"));
+                .orElseThrow(
+                    () -> new IllegalArgumentException("member block " + description + " is missing a source range")
+                );
     }
 
     private static boolean hasRawGap(RecoveredListPlanner.Plan<BodyDeclaration<?>> plan) {
@@ -517,14 +587,16 @@ final class MemberBlockPrinter {
             return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
         }
         // Interface methods without bodies read as a signature list unless annotations make each item standalone.
-        if (owner instanceof ClassOrInterfaceDeclaration declaration
-                && declaration.isInterface()
-                && previous instanceof MethodDeclaration previousMethod
-                && current instanceof MethodDeclaration currentMethod
-                && previousMethod.getBody().isEmpty()
-                && currentMethod.getBody().isEmpty()
-                && !hasDeclarationAnnotations.test(previous)
-                && !hasDeclarationAnnotations.test(current)) {
+        if (
+            owner instanceof ClassOrInterfaceDeclaration declaration
+            && declaration.isInterface()
+            && previous instanceof MethodDeclaration previousMethod
+            && current instanceof MethodDeclaration currentMethod
+            && previousMethod.getBody().isEmpty()
+            && currentMethod.getBody().isEmpty()
+            && !hasDeclarationAnnotations.test(previous)
+            && !hasDeclarationAnnotations.test(current)
+        ) {
             return Doc.HARD_LINE;
         }
         if (previous instanceof FieldDeclaration && current instanceof FieldDeclaration) {
@@ -536,8 +608,9 @@ final class MemberBlockPrinter {
 
     private Optional<Boolean> hasSourceBlankLineBetween(BodyDeclaration<?> previous, BodyDeclaration<?> current) {
         return previous.getRange()
-                .flatMap(previousRange -> current.getRange()
-                        .map(currentRange -> currentRange.begin.line > previousRange.end.line + 1));
+                .flatMap(previousRange -> current.getRange().map(
+                        currentRange -> currentRange.begin.line > previousRange.end.line + 1
+                ));
     }
 
     private enum EntryKind {
@@ -569,6 +642,6 @@ final class MemberBlockPrinter {
         /**
          * The previous emitted entry was a raw recovered member gap whose trailing line break moved to formatter docs.
          */
-        RAW_GAP_WITH_TRAILING_BREAK
+        RAW_GAP_WITH_TRAILING_BREAK,
     }
 }

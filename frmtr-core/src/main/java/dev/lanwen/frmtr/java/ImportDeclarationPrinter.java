@@ -17,6 +17,7 @@ import dev.lanwen.frmtr.doc.Doc;
  * fixtures cover the import-section cases that remain in {@link CompilationUnitPrinter}.
  */
 final class ImportDeclarationPrinter {
+
     private final CommentTracker comments;
 
     ImportDeclarationPrinter(CommentTracker comments) {
@@ -33,6 +34,9 @@ final class ImportDeclarationPrinter {
     Doc importDeclaration(ImportDeclaration declaration) {
         String prefix = declaration.isStatic() ? "import static " : "import ";
         String suffix = declaration.isAsterisk() ? ".*" : "";
-        return Doc.concat(comments.leading(declaration), Doc.text(prefix + declaration.getNameAsString() + suffix + ";"));
+        return Doc.concat(
+            comments.leading(declaration),
+            Doc.text(prefix + declaration.getNameAsString() + suffix + ";")
+        );
     }
 }

@@ -18,18 +18,25 @@ import dev.lanwen.frmtr.doc.Doc;
  * only assembles the statement-side graph that calls those decisions.
  */
 final class StatementPrinters {
+
     private final JavaFormatContext context;
+
     private final BlockPrinter blocks;
+
     private final StatementPrinter statements;
+
     private final SwitchPrinter switches;
+
     private final ControlConditionPrinter controlConditions;
+
     private final StatementRuleEnvelope statementRules;
 
     StatementPrinters(
             JavaFormatContext context,
             TypePrinter types,
             ExpressionPrinters expressions,
-            DeclarationPrinters declarations) {
+            DeclarationPrinters declarations
+    ) {
         this.context = context;
         FormatterOptions options = context.options;
         CommentTracker comments = context.comments;
@@ -38,76 +45,78 @@ final class StatementPrinters {
         RawSource rawSource = context.rawSource;
         CompactSourceText compactSource = context.compactSource;
         CommentPlacement commentPlacement = context.commentPlacement;
-        this.blocks = new BlockPrinter(
-                context,
-                this::statement,
-                formatterPragmas::hasPragma);
+        this.blocks = new BlockPrinter(context, this::statement, formatterPragmas::hasPragma);
         this.controlConditions = new ControlConditionPrinter(
-                comments,
-                rawSource,
-                options,
-                expressions::expression,
-                compactSource::compact,
-                compactSource::compactJoin,
-                compactSource::compactWithoutOwnComment,
-                expressions::expressionHasParenthesizedNestedBinary,
-                expression -> expressions.binaryLines(expression, true),
-                this::currentIndentedWidth,
-                this::blockStatementWidth,
-                context.layoutDecisions);
+            comments,
+            rawSource,
+            options,
+            expressions::expression,
+            compactSource::compact,
+            compactSource::compactJoin,
+            compactSource::compactWithoutOwnComment,
+            expressions::expressionHasParenthesizedNestedBinary,
+            expression -> expressions.binaryConditionLines(expression, true),
+            expressions::forcedMethodCallChain,
+            this::currentIndentedWidth,
+            this::blockStatementWidth,
+            context.layoutDecisions
+        );
         this.switches = new SwitchPrinter(
-                context,
-                this::statement,
-                expressions::expression,
-                this::block,
-                blocks::statementSeparator,
-                controlConditions::controlCondition,
-                expressions::binaryLines,
-                declarations::modifiers,
-                this::currentIndentedWidth);
+            context,
+            this::statement,
+            expressions::expression,
+            this::block,
+            blocks::statementSeparator,
+            controlConditions::controlCondition,
+            expressions::binaryLines,
+            declarations::modifiers,
+            this::currentIndentedWidth
+        );
         this.statements = new StatementPrinter(
-                comments,
-                commentPlacementPolicy,
-                rawSource,
-                context.sourceShape,
-                options,
-                this::statement,
-                switches::switchStatement,
-                this::block,
-                blocks::blockWithLeading,
-                declarations::body,
-                expressions::expression,
-                expressions::assignmentStatement,
-                expressions::returnStatement,
-                expressions::objectCreationWithSuffix,
-                declarations::variableDeclaration,
-                declarations::variableDeclarationStatement,
-                compactSource::compact,
-                compactSource::compactWithoutOwnComment,
-                compactSource::compactJoin,
-                compactSource::compactTypeLike,
-                types::compactJoinTypeLike,
-                expressions::huggableBlockLambdaArguments,
-                expressions::sourceMultilineMethodCallStatement,
-                expressions::forcedMethodCallChain,
-                expressions::forcedMethodCallChainWithSemicolon,
-                expressions::brokenMethodCall,
-                expressions::methodCallChainHasComments,
-                expressions::methodCallChainHasFinalTrailingLineComment,
-                expressions::methodCallChainIsSourceMultiline,
-                expressions::methodCallChainRootIsObjectCreation,
-                expressions::methodCallChainRootIsFieldAccess,
-                controlConditions::ifCondition,
-                controlConditions::controlCondition,
-                controlConditions::compactWithOwnBlockComment,
-                commentPlacement::ownSameLineBlockCommentBeforeNode,
-                this::currentIndentedWidth);
+            comments,
+            commentPlacementPolicy,
+            rawSource,
+            context.sourceShape,
+            options,
+            this::statement,
+            switches::switchStatement,
+            this::block,
+            blocks::blockWithLeading,
+            declarations::body,
+            expressions::expression,
+            expressions::assignmentStatement,
+            expressions::returnStatement,
+            expressions::objectCreationWithSuffix,
+            declarations::variableDeclaration,
+            declarations::variableDeclarationStatement,
+            compactSource::compact,
+            compactSource::compactWithoutOwnComment,
+            compactSource::compactJoin,
+            compactSource::compactTypeLike,
+            types::compactJoinTypeLike,
+            expressions::huggableBlockLambdaArguments,
+            expressions::sourceMultilineMethodCallStatement,
+            expressions::forcedMethodCallChain,
+            expressions::forcedMethodCallChainWithSemicolon,
+            expressions::brokenMethodCall,
+            expressions::methodCallChainHasComments,
+            expressions::methodCallChainHasFinalTrailingLineComment,
+            expressions::methodCallChainIsSourceMultiline,
+            expressions::methodCallChainRootIsObjectCreation,
+            expressions::methodCallChainRootIsFieldAccess,
+            controlConditions::ifCondition,
+            controlConditions::controlCondition,
+            controlConditions::compactWithOwnBlockComment,
+            commentPlacement::ownSameLineBlockCommentBeforeNode,
+            this::currentIndentedWidth
+        );
         this.statementRules = new StatementRuleEnvelope(
-                comments,
-                commentPlacementPolicy,
-                formatterPragmas,
-                context.rawPreservedSource,
-                statements::statement);
+            comments,
+            commentPlacementPolicy,
+            formatterPragmas,
+            context.rawPreservedSource,
+            statements::statement
+        );
     }
 
     Doc statement(Statement statement) {

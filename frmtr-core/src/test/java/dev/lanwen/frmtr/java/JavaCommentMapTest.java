@@ -20,13 +20,16 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 final class JavaCommentMapTest {
+
     @Test
     void matchesJavaParserWhenOwnCommentsAreExcludedFromTheirNodeContainedComments() {
-        CompilationUnit unit = parse("""
+        CompilationUnit unit = parse(
+            """
                 class Demo {
                     int value; // field own
                 }
-                """);
+                """
+        );
         JavaCommentMap map = JavaCommentMap.from(unit);
         FieldDeclaration field = unit.findFirst(FieldDeclaration.class).orElseThrow();
 
@@ -39,13 +42,15 @@ final class JavaCommentMapTest {
 
     @Test
     void matchesJavaParserOrphanFirstOrderBeforeChildOwnComments() {
-        CompilationUnit unit = parse("""
+        CompilationUnit unit = parse(
+            """
                 class Demo {
                     int value; // field own
 
                     // type orphan
                 }
-                """);
+                """
+        );
         JavaCommentMap map = JavaCommentMap.from(unit);
         ClassOrInterfaceDeclaration type = onlyType(unit);
 
@@ -53,13 +58,13 @@ final class JavaCommentMapTest {
         assertThat(type.getOrphanComments())
                 .extracting(comment -> comment.getContent().strip())
                 .containsExactly("type orphan");
-        assertThat(commentContents(map.containedComments(type)))
-                .containsExactly("type orphan", "field own");
+        assertThat(commentContents(map.containedComments(type))).containsExactly("type orphan", "field own");
     }
 
     @Test
     void matchesJavaParserChildOwnBeforeChildContainedComments() {
-        CompilationUnit unit = parse("""
+        CompilationUnit unit = parse(
+            """
                 class Demo {
                     // method own
                     void run() {
@@ -67,18 +72,19 @@ final class JavaCommentMapTest {
                         call();
                     }
                 }
-                """);
+                """
+        );
         JavaCommentMap map = JavaCommentMap.from(unit);
         ClassOrInterfaceDeclaration type = onlyType(unit);
 
         assertAllContainedCommentsMatchJavaParser(unit, map);
-        assertThat(commentContents(map.containedComments(type)))
-                .containsExactly("method own", "statement own");
+        assertThat(commentContents(map.containedComments(type))).containsExactly("method own", "statement own");
     }
 
     @Test
     void matchesJavaParserForNestedStatementComments() {
-        CompilationUnit unit = parse("""
+        CompilationUnit unit = parse(
+            """
                 class Demo {
                     void run(boolean ready) {
                         if (ready) {
@@ -89,18 +95,19 @@ final class JavaCommentMapTest {
                         }
                     }
                 }
-                """);
+                """
+        );
         JavaCommentMap map = JavaCommentMap.from(unit);
         IfStmt ifStatement = unit.findFirst(IfStmt.class).orElseThrow();
 
         assertAllContainedCommentsMatchJavaParser(unit, map);
-        assertThat(commentContents(map.containedComments(ifStatement)))
-                .containsExactly("nested call");
+        assertThat(commentContents(map.containedComments(ifStatement))).containsExactly("nested call");
     }
 
     @Test
     void matchesJavaParserForMethodCallArgumentComments() {
-        CompilationUnit unit = parse("""
+        CompilationUnit unit = parse(
+            """
                 class Demo {
                     void run(int first, int second, int third) {
                         call(
@@ -110,21 +117,23 @@ final class JavaCommentMapTest {
                                 third);
                     }
                 }
-                """);
+                """
+        );
         JavaCommentMap map = JavaCommentMap.from(unit);
-        MethodCallExpr call = unit.findAll(MethodCallExpr.class).stream()
+        MethodCallExpr call = unit.findAll(MethodCallExpr.class)
+                .stream()
                 .filter(expression -> expression.getNameAsString().equals("call"))
                 .findFirst()
                 .orElseThrow();
 
         assertAllContainedCommentsMatchJavaParser(unit, map);
-        assertThat(commentContents(map.containedComments(call)))
-                .containsExactly("second argument", "third argument");
+        assertThat(commentContents(map.containedComments(call))).containsExactly("second argument", "third argument");
     }
 
     @Test
     void matchesJavaParserForArrayInitializerComments() {
-        CompilationUnit unit = parse("""
+        CompilationUnit unit = parse(
+            """
                 class Demo {
                     int[] values = {
                             // first value
@@ -132,33 +141,33 @@ final class JavaCommentMapTest {
                             /* second value */ 2
                     };
                 }
-                """);
+                """
+        );
         JavaCommentMap map = JavaCommentMap.from(unit);
         ArrayInitializerExpr initializer = unit.findFirst(ArrayInitializerExpr.class).orElseThrow();
 
         assertAllContainedCommentsMatchJavaParser(unit, map);
-        assertThat(commentContents(map.containedComments(initializer)))
-                .containsExactly("first value", "second value");
+        assertThat(commentContents(map.containedComments(initializer))).containsExactly("first value", "second value");
     }
 
     @Test
     void matchesJavaParserForLambdaAndConditionalComments() {
-        CompilationUnit unit = parse("""
+        CompilationUnit unit = parse(
+            """
                 class Demo {
                     java.util.function.IntUnaryOperator op = value -> value > 0
                             ? /* positive */ value
                             : /* negative */ -value;
                 }
-                """);
+                """
+        );
         JavaCommentMap map = JavaCommentMap.from(unit);
         LambdaExpr lambda = unit.findFirst(LambdaExpr.class).orElseThrow();
         ConditionalExpr conditional = unit.findFirst(ConditionalExpr.class).orElseThrow();
 
         assertAllContainedCommentsMatchJavaParser(unit, map);
-        assertThat(commentContents(map.containedComments(lambda)))
-                .containsExactly("positive", "negative");
-        assertThat(commentContents(map.containedComments(conditional)))
-                .containsExactly("positive", "negative");
+        assertThat(commentContents(map.containedComments(lambda))).containsExactly("positive", "negative");
+        assertThat(commentContents(map.containedComments(conditional))).containsExactly("positive", "negative");
     }
 
     @Test
@@ -175,24 +184,28 @@ final class JavaCommentMapTest {
 
     @Test
     void reusesCanonicalTriviaWrappersForRepeatedRawCommentIdentities() {
-        CompilationUnit unit = parse("""
+        CompilationUnit unit = parse(
+            """
                 class Demo {
                     int value; // field own
 
                     // type orphan
                 }
-                """);
+                """
+        );
         JavaCommentMap map = JavaCommentMap.from(unit);
         ClassOrInterfaceDeclaration type = onlyType(unit);
         FieldDeclaration field = unit.findFirst(FieldDeclaration.class).orElseThrow();
 
         JavaCommentTrivia fieldOwn = map.ownComment(field).orElseThrow();
-        JavaCommentTrivia containedFieldOwn = map.containedComments(type).stream()
+        JavaCommentTrivia containedFieldOwn = map.containedComments(type)
+                .stream()
                 .filter(comment -> comment.comment() == fieldOwn.comment())
                 .findFirst()
                 .orElseThrow();
         JavaCommentTrivia typeOrphan = map.orphanComments(type).getFirst();
-        JavaCommentTrivia containedTypeOrphan = map.containedComments(type).stream()
+        JavaCommentTrivia containedTypeOrphan = map.containedComments(type)
+                .stream()
                 .filter(comment -> comment.comment() == typeOrphan.comment())
                 .findFirst()
                 .orElseThrow();
@@ -221,9 +234,11 @@ final class JavaCommentMapTest {
     }
 
     private static CompilationUnit parse(String source) {
-        JavaParser parser = new JavaParser(new ParserConfiguration()
-                .setStoreTokens(true)
-                .setAttributeComments(true));
+        JavaParser parser = new JavaParser(
+            new ParserConfiguration()
+                    .setStoreTokens(true)
+                    .setAttributeComments(true)
+        );
         return parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
                 .getResult()
                 .orElseThrow();

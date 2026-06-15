@@ -16,17 +16,21 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 final class JavaCommentTriviaTest {
+
     @Test
     void classifiesJavaParserCommentKinds() {
-        CompilationUnit unit = parse("""
+        CompilationUnit unit = parse(
+            """
                 /** type doc */
                 class Demo {
                     // value line
                     int value; /* value block */
                 }
-                """);
+                """
+        );
 
-        List<JavaCommentKind> kinds = unit.getAllContainedComments().stream()
+        List<JavaCommentKind> kinds = unit.getAllContainedComments()
+                .stream()
                 .map(JavaCommentTrivia::from)
                 .map(JavaCommentTrivia::kind)
                 .toList();
@@ -36,11 +40,13 @@ final class JavaCommentTriviaTest {
 
     @Test
     void delegatesSourceLineQueriesToCommentIndex() {
-        CompilationUnit unit = parse("""
+        CompilationUnit unit = parse(
+            """
                 class Demo {
                     int value; // value line
                 }
-                """);
+                """
+        );
         FieldDeclaration field = unit.findFirst(FieldDeclaration.class).orElseThrow();
         JavaCommentTrivia comment = field.getComment().map(JavaCommentTrivia::from).orElseThrow();
 
@@ -52,12 +58,18 @@ final class JavaCommentTriviaTest {
 
     @Test
     void claimsCommentsByIdentityForTrackerState() {
-        Comment comment = parse("""
+        Comment comment = parse(
+            """
                 class Demo {
                     // value line
                     int value;
                 }
-                """).findFirst(FieldDeclaration.class).orElseThrow().getComment().orElseThrow();
+                """
+        )
+                .findFirst(FieldDeclaration.class)
+                .orElseThrow()
+                .getComment()
+                .orElseThrow();
         JavaCommentTrivia trivia = JavaCommentTrivia.from(comment);
         Set<Comment> claimed = Collections.newSetFromMap(new IdentityHashMap<>());
 
@@ -68,9 +80,11 @@ final class JavaCommentTriviaTest {
     }
 
     private static CompilationUnit parse(String source) {
-        JavaParser parser = new JavaParser(new ParserConfiguration()
-                .setStoreTokens(true)
-                .setAttributeComments(true));
+        JavaParser parser = new JavaParser(
+            new ParserConfiguration()
+                    .setStoreTokens(true)
+                    .setAttributeComments(true)
+        );
         return parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
                 .getResult()
                 .orElseThrow();

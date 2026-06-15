@@ -12,6 +12,7 @@ import java.util.List;
  * framing and terminal color mapping to callers.
  */
 public final class FormatterFailureRenderer {
+
     private FormatterFailureRenderer() {}
 
     public static String render(Exception exception) {
@@ -19,12 +20,16 @@ public final class FormatterFailureRenderer {
     }
 
     public static DiagnosticText renderDiagnostic(Exception exception) {
-        if (exception instanceof FormatterException formatterException
-                && !formatterException.sourceProblems().isEmpty()) {
+        if (
+            exception instanceof FormatterException formatterException
+            && !formatterException.sourceProblems().isEmpty()
+        ) {
             return renderFormatterException(formatterException);
         }
         String message = exception.getMessage();
-        return diagnosticText(errorLine(message == null || message.isBlank() ? exception.getClass().getSimpleName() : message));
+        return diagnosticText(
+            errorLine(message == null || message.isBlank() ? exception.getClass().getSimpleName() : message)
+        );
     }
 
     private static DiagnosticText renderFormatterException(FormatterException exception) {
@@ -43,14 +48,17 @@ public final class FormatterFailureRenderer {
         List<DiagnosticLine> lines = new ArrayList<>();
         int lineNumberWidth = lineNumberWidth(problem);
         problem.enclosingUnitLine()
-                .filter(unitLine -> problem.contextLines().stream()
-                        .noneMatch(contextLine -> contextLine.lineNumber() == unitLine.lineNumber()))
+                .filter(unitLine -> problem.contextLines().stream().noneMatch(
+                        contextLine -> contextLine.lineNumber() == unitLine.lineNumber()
+                ))
                 .ifPresent(unitLine -> lines.add(sourceLine(lineNumberWidth, unitLine)));
         boolean messageRendered = false;
         for (FormatterException.SourceLine line : problem.contextLines()) {
             lines.add(sourceLine(lineNumberWidth, line));
-            if (problem.location().isPresent()
-                    && problem.location().orElseThrow().line() == line.lineNumber()) {
+            if (
+                problem.location().isPresent()
+                && problem.location().orElseThrow().line() == line.lineNumber()
+            ) {
                 messageRendered = appendPointerAndMessage(lines, lineNumberWidth, line, problem);
             }
         }
@@ -61,7 +69,8 @@ public final class FormatterFailureRenderer {
     }
 
     private static int lineNumberWidth(FormatterException.SourceProblem problem) {
-        int contextWidth = problem.contextLines().stream()
+        int contextWidth = problem.contextLines()
+                .stream()
                 .mapToInt(line -> Integer.toString(line.lineNumber()).length())
                 .max()
                 .orElse(0);
@@ -73,24 +82,29 @@ public final class FormatterFailureRenderer {
 
     private static DiagnosticLine sourceLine(int lineNumberWidth, FormatterException.SourceLine line) {
         return diagnosticLine(
-                span(String.format("%" + lineNumberWidth + "d", line.lineNumber()), DiagnosticStyle.LINE_NUMBER),
-                span("  ", DiagnosticStyle.BORDER_GUTTER),
-                span(line.text(), DiagnosticStyle.SOURCE_TEXT));
+            span(String.format("%" + lineNumberWidth + "d", line.lineNumber()), DiagnosticStyle.LINE_NUMBER),
+            span("  ", DiagnosticStyle.BORDER_GUTTER),
+            span(line.text(), DiagnosticStyle.SOURCE_TEXT)
+        );
     }
 
     private static boolean appendPointerAndMessage(
             List<DiagnosticLine> lines,
             int lineNumberWidth,
             FormatterException.SourceLine line,
-            FormatterException.SourceProblem problem) {
+            FormatterException.SourceProblem problem
+    ) {
         FormatterException.SourceLocation location = problem.location().orElseThrow();
         int pointerOffset = location.column() - line.startColumn();
         if (pointerOffset < 0 || pointerOffset > line.text().length()) {
             return false;
         }
-        lines.add(diagnosticLine(
+        lines.add(
+            diagnosticLine(
                 span(" ".repeat(lineNumberWidth + 2), DiagnosticStyle.BORDER_GUTTER),
-                span("-".repeat(pointerOffset) + "^", DiagnosticStyle.POINTER)));
+                span("-".repeat(pointerOffset) + "^", DiagnosticStyle.POINTER)
+            )
+        );
         lines.add(errorLine(problem.message()));
         return true;
     }

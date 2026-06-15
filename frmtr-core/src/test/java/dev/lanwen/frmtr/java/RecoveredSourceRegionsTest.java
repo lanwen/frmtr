@@ -21,30 +21,31 @@ import org.junit.jupiter.api.parallel.Resources;
 
 @ResourceLock(Resources.SYSTEM_PROPERTIES)
 final class RecoveredSourceRegionsTest {
+
     @Test
     void emitsLabeledRawDocForRecoveredRegion() {
         String source = "class Demo {\n"
-                + "  int before;\n"
-                + "  int value; // inside\n"
-                + "  int after;\n"
-                + "}\n";
+            + "  int before;\n"
+            + "  int value; // inside\n"
+            + "  int after;\n"
+            + "}\n";
         CompilationUnit unit = parse(source);
         RecoveredSourceRegions recovered = recoveredSourceRegions(source, commentTracker());
         SourceRegion region = region(source, "int value; // inside");
 
         Doc doc = recovered.raw(unit, region, "member");
 
-        assertThat(DocDebugRenderer.render(doc)).isEqualTo("""
+        assertThat(DocDebugRenderer.render(doc)).isEqualTo(
+            """
                 Label("java.recoveredRegion:member@3:3-3:22")
-                  Text("int value; // inside")""");
+                  Text("int value; // inside")"""
+        );
     }
 
     @Test
     void rawAccountsCommentsFullyContainedByRecoveredRegion() {
         withGuardrails("true", () -> {
-            String source = "class Demo {\n"
-                    + "  int value; // inside\n"
-                    + "}\n";
+            String source = "class Demo {\n" + "  int value; // inside\n" + "}\n";
             CompilationUnit unit = parse(source);
             CommentTracker comments = commentTracker();
             RecoveredSourceRegions recovered = recoveredSourceRegions(source, comments);
@@ -58,10 +59,7 @@ final class RecoveredSourceRegionsTest {
     @Test
     void leavesCommentsOutsideRecoveredRegionForStructuredAccounting() {
         withGuardrails("true", () -> {
-            String source = "class Demo {\n"
-                    + "  int value; // inside\n"
-                    + "  int after; // outside\n"
-                    + "}\n";
+            String source = "class Demo {\n" + "  int value; // inside\n" + "  int after; // outside\n" + "}\n";
             CompilationUnit unit = parse(source);
             CommentTracker comments = commentTracker();
             RecoveredSourceRegions recovered = recoveredSourceRegions(source, comments);
@@ -78,9 +76,7 @@ final class RecoveredSourceRegionsTest {
 
     @Test
     void detectsCommentsCrossingRecoveredRegionBoundaries() {
-        String source = "class Demo {\n"
-                + "  int value; /* crossing */\n"
-                + "}\n";
+        String source = "class Demo {\n" + "  int value; /* crossing */\n" + "}\n";
         CompilationUnit unit = parse(source);
         SourceText sourceText = new SourceText(source);
         Comment comment = unit.getAllContainedComments().getFirst();
@@ -89,8 +85,13 @@ final class RecoveredSourceRegionsTest {
         RecoveredSourceRegions recovered = recoveredSourceRegions(source, commentTracker());
 
         RecoveredSourceRegions.CrossingCommentBoundaryException thrown = catchThrowableOfType(
-                RecoveredSourceRegions.CrossingCommentBoundaryException.class,
-                () -> recovered.raw(unit, crossingRegion, "member"));
+            RecoveredSourceRegions.CrossingCommentBoundaryException.class,
+            () -> recovered.raw(
+                unit,
+                crossingRegion,
+                "member"
+            )
+        );
 
         assertThat(thrown)
                 .hasMessageContaining("Recovered source region")
@@ -102,9 +103,7 @@ final class RecoveredSourceRegionsTest {
 
     @Test
     void rejectsRangeLessCommentsBeforeRecoveredRawAccounting() {
-        String source = "class Demo {\n"
-                + "  int value;\n"
-                + "}\n";
+        String source = "class Demo {\n" + "  int value;\n" + "}\n";
         CompilationUnit unit = parse(source);
         LineComment rangeLessComment = new LineComment("range-less");
         unit.addOrphanComment(rangeLessComment);
@@ -112,8 +111,13 @@ final class RecoveredSourceRegionsTest {
         SourceRegion region = region(source, "int value;");
 
         RecoveredSourceRegions.CrossingCommentBoundaryException thrown = catchThrowableOfType(
-                RecoveredSourceRegions.CrossingCommentBoundaryException.class,
-                () -> recovered.raw(unit, region, "member"));
+            RecoveredSourceRegions.CrossingCommentBoundaryException.class,
+            () -> recovered.raw(
+                unit,
+                region,
+                "member"
+            )
+        );
 
         assertThat(rangeLessComment.getRange()).isEmpty();
         assertThat(unit.getAllContainedComments()).contains(rangeLessComment);
@@ -128,9 +132,7 @@ final class RecoveredSourceRegionsTest {
     @Test
     void doesNotAccountCommentsWhenRecoveredRawDocConstructionFails() {
         withGuardrails("true", () -> {
-            String source = "class Demo {\n"
-                    + "  int value; // inside\n"
-                    + "}\n";
+            String source = "class Demo {\n" + "  int value; // inside\n" + "}\n";
             CompilationUnit unit = parse(source);
             CommentTracker comments = commentTracker();
             RecoveredSourceRegions recovered = recoveredSourceRegions(source, comments);
@@ -157,9 +159,11 @@ final class RecoveredSourceRegionsTest {
     }
 
     private static CompilationUnit parse(String source) {
-        JavaParser parser = new JavaParser(new ParserConfiguration()
-                .setStoreTokens(true)
-                .setAttributeComments(true));
+        JavaParser parser = new JavaParser(
+            new ParserConfiguration()
+                    .setStoreTokens(true)
+                    .setAttributeComments(true)
+        );
         return parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
                 .getResult()
                 .orElseThrow();

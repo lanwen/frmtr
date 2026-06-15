@@ -24,6 +24,7 @@ import java.util.function.Function;
  * appropriate when guardrails are disabled, and how rendered output should be assembled.
  */
 final class FormatterGuardrails {
+
     static final String ENABLED_PROPERTY = "dev.lanwen.frmtr.debug.guardrails";
 
     /**
@@ -46,8 +47,9 @@ final class FormatterGuardrails {
     static boolean claimComment(JavaCommentTrivia trivia, Set<Comment> claimedComments) {
         boolean claimed = trivia.claim(claimedComments);
         if (!claimed && enabled()) {
-            throw new AssertionError("Formatter comment guardrail failed: duplicate claim for "
-                    + describe(trivia.comment()));
+            throw new AssertionError(
+                "Formatter comment guardrail failed: duplicate claim for " + describe(trivia.comment())
+            );
         }
         return claimed;
     }
@@ -71,7 +73,8 @@ final class FormatterGuardrails {
      */
     static void accountRawCommentsWithoutOwnComment(Node node, Set<Comment> rawRenderedComments) {
         Optional<Comment> ownComment = node.getComment();
-        node.getAllContainedComments().stream()
+        node.getAllContainedComments()
+                .stream()
                 .filter(comment -> ownComment.stream().noneMatch(own -> own == comment))
                 .forEach(rawRenderedComments::add);
     }
@@ -82,19 +85,21 @@ final class FormatterGuardrails {
     static void assertAllCommentsAccounted(
             Node root,
             Set<Comment> claimedComments,
-            Set<Comment> rawRenderedComments) {
+            Set<Comment> rawRenderedComments
+    ) {
         if (!enabled()) {
             return;
         }
-        List<Comment> missedComments = root.getAllContainedComments().stream()
+        List<Comment> missedComments = root.getAllContainedComments()
+                .stream()
                 .filter(comment -> !claimedComments.contains(comment))
                 .filter(comment -> !rawRenderedComments.contains(comment))
                 .sorted(CommentIndex.sourceOrderComparator())
                 .toList();
         if (!missedComments.isEmpty()) {
-            throw new AssertionError("Formatter comment guardrail failed: unclaimed comment "
-                    + describe(missedComments.getFirst())
-                    + " was exposed by JavaParser but was not printed or raw-accounted before formatting completed");
+            throw new AssertionError(
+                "Formatter comment guardrail failed: unclaimed comment " + describe(missedComments.getFirst()) + " was exposed by JavaParser but was not printed or raw-accounted before formatting completed"
+            );
         }
     }
 
@@ -155,15 +160,25 @@ final class FormatterGuardrails {
      * unit, cloning declarations, or swapping JavaParser-visible comments should fail fast during formatter development.
      */
     static final class TransformSnapshot {
+
         private final boolean enabled;
+
         private final String transformName;
+
         private final CompilationUnit unit;
+
         private final List<Node> nodes;
+
         private final Set<Node> nodeIdentities;
+
         private final List<Comment> comments;
+
         private final Set<Comment> commentIdentities;
+
         private final List<ImportDeclaration> imports;
+
         private final Set<ImportDeclaration> importIdentities;
+
         private final Map<ImportDeclaration, Optional<Comment>> importComments;
 
         private TransformSnapshot(
@@ -176,7 +191,8 @@ final class FormatterGuardrails {
                 Set<Comment> commentIdentities,
                 List<ImportDeclaration> imports,
                 Set<ImportDeclaration> importIdentities,
-                Map<ImportDeclaration, Optional<Comment>> importComments) {
+                Map<ImportDeclaration, Optional<Comment>> importComments
+        ) {
             this.enabled = enabled;
             this.transformName = transformName;
             this.unit = unit;
@@ -191,16 +207,17 @@ final class FormatterGuardrails {
 
         private static TransformSnapshot disabled() {
             return new TransformSnapshot(
-                    false,
-                    "",
-                    null,
-                    List.of(),
-                    Set.of(),
-                    List.of(),
-                    Set.of(),
-                    List.of(),
-                    Set.of(),
-                    Map.of());
+                false,
+                "",
+                null,
+                List.of(),
+                Set.of(),
+                List.of(),
+                Set.of(),
+                List.of(),
+                Set.of(),
+                Map.of()
+            );
         }
 
         private static TransformSnapshot capture(String transformName, CompilationUnit unit) {
@@ -210,16 +227,17 @@ final class FormatterGuardrails {
             Map<ImportDeclaration, Optional<Comment>> importComments = new IdentityHashMap<>();
             imports.forEach(importDeclaration -> importComments.put(importDeclaration, importDeclaration.getComment()));
             return new TransformSnapshot(
-                    true,
-                    transformName,
-                    unit,
-                    nodes,
-                    identitySet(nodes),
-                    comments,
-                    identitySet(comments),
-                    imports,
-                    identitySet(imports),
-                    importComments);
+                true,
+                transformName,
+                unit,
+                nodes,
+                identitySet(nodes),
+                comments,
+                identitySet(comments),
+                imports,
+                identitySet(imports),
+                importComments
+            );
         }
 
         private void assertPreserved(JavaTransformResult result) {
@@ -227,49 +245,58 @@ final class FormatterGuardrails {
                 return;
             }
             if (!transformName.equals(result.transformName())) {
-                fail("returned result metadata for "
+                fail(
+                    "returned result metadata for "
                         + result.transformName()
                         + " after the pipeline invoked "
-                        + transformName);
+                        + transformName
+                );
             }
             CompilationUnit transformed = result.unit();
             if (transformed != unit) {
-                fail("returned a different CompilationUnit instance; transforms must keep the original JavaParser tree "
-                        + "unless the transform pipeline is redesigned");
+                fail(
+                    "returned a different CompilationUnit instance; transforms must keep the original JavaParser tree "
+                        + "unless the transform pipeline is redesigned"
+                );
             }
             assertIdentitySetPreserved(
-                    comments,
-                    commentIdentities,
-                    transformed.getAllContainedComments(),
-                    "JavaParser-visible comment was lost or replaced by identity",
-                    "introduced a new JavaParser-visible comment identity",
-                    FormatterGuardrails::describe);
+                comments,
+                commentIdentities,
+                transformed.getAllContainedComments(),
+                "JavaParser-visible comment was lost or replaced by identity",
+                "introduced a new JavaParser-visible comment identity",
+                FormatterGuardrails::describe
+            );
             assertImportDeclarationsPreserved(transformed);
             assertIdentitySetPreserved(
-                    nodes,
-                    nodeIdentities,
-                    transformed.stream().toList(),
-                    "JavaParser tree node was lost or replaced by identity",
-                    "introduced a new JavaParser tree node identity",
-                    FormatterGuardrails::describe);
+                nodes,
+                nodeIdentities,
+                transformed.stream().toList(),
+                "JavaParser tree node was lost or replaced by identity",
+                "introduced a new JavaParser tree node identity",
+                FormatterGuardrails::describe
+            );
         }
 
         private void assertImportDeclarationsPreserved(CompilationUnit transformed) {
             List<ImportDeclaration> transformedImports = List.copyOf(transformed.getImports());
             assertIdentitySetPreserved(
-                    imports,
-                    importIdentities,
-                    transformedImports,
-                    "import declaration node was lost or replaced instead of being reordered in place",
-                    "introduced a new import declaration node instead of reordering existing imports in place",
-                    FormatterGuardrails::describeImport);
+                imports,
+                importIdentities,
+                transformedImports,
+                "import declaration node was lost or replaced instead of being reordered in place",
+                "introduced a new import declaration node instead of reordering existing imports in place",
+                FormatterGuardrails::describeImport
+            );
             for (ImportDeclaration importDeclaration : imports) {
                 Optional<Comment> beforeComment = importComments.get(importDeclaration);
                 Optional<Comment> afterComment = importDeclaration.getComment();
                 if (commentsDiffer(beforeComment, afterComment)) {
-                    fail("comment attachment changed for "
+                    fail(
+                        "comment attachment changed for "
                             + describeImport(importDeclaration)
-                            + "; comments attached to import declarations must remain on their original import nodes");
+                            + "; comments attached to import declarations must remain on their original import nodes"
+                    );
                 }
             }
         }
@@ -280,7 +307,8 @@ final class FormatterGuardrails {
                 List<T> after,
                 String missingMessage,
                 String addedMessage,
-                Function<T, String> describe) {
+                Function<T, String> describe
+        ) {
             Set<T> afterIdentities = identitySet(after);
             before.stream()
                     .filter(item -> !afterIdentities.contains(item))
@@ -293,10 +321,7 @@ final class FormatterGuardrails {
         }
 
         private void fail(String invariant) {
-            throw new AssertionError("Formatter transform guardrail failed for "
-                    + transformName
-                    + ": "
-                    + invariant);
+            throw new AssertionError("Formatter transform guardrail failed for " + transformName + ": " + invariant);
         }
     }
 
@@ -320,11 +345,7 @@ final class FormatterGuardrails {
 
     private static String describeImport(ImportDeclaration declaration) {
         String kind = declaration.isStatic() ? "static import " : "import ";
-        return "ImportDeclaration "
-                + kind
-                + declaration.getNameAsString()
-                + " at "
-                + range(declaration);
+        return "ImportDeclaration " + kind + declaration.getNameAsString() + " at " + range(declaration);
     }
 
     private static String describe(Node node) {

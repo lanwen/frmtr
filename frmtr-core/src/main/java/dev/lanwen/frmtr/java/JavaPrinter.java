@@ -9,28 +9,34 @@ import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 
 final class JavaPrinter {
+
     private final JavaFormatContext context;
+
     private final ExpressionPrinters expressions;
+
     private final DeclarationPrinters declarations;
+
     private final StatementPrinters statements;
 
     JavaPrinter(FormatterOptions options, SourceText sourceText, boolean recoverParseProblems) {
         this.context = new JavaFormatContext(options, sourceText, recoverParseProblems);
         TypePrinter types = new TypePrinter(options, context.compactSource::compactTypeLike);
         this.expressions = new ExpressionPrinters(
-                context,
-                types,
-                this::statement,
-                this::block,
-                this::body,
-                this::switchExpression,
-                this::commentText);
+            context,
+            types,
+            this::statement,
+            this::block,
+            this::body,
+            this::switchExpression,
+            this::commentText
+        );
         this.declarations = new DeclarationPrinters(
-                context,
-                types,
-                expressions,
-                this::block,
-                this::commentText);
+            context,
+            types,
+            expressions,
+            this::block,
+            this::commentText
+        );
         this.statements = new StatementPrinters(context, types, expressions, declarations);
     }
 

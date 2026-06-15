@@ -44,13 +44,13 @@ final class FrmtrTest {
         assertThat(exception).hasMessage(fixture.expectedError().getFirst());
         assertThat(exception.sourceProblems()).isNotEmpty();
         fixture.expectedError()
-            .stream()
-            .skip(1)
-            .filter(line -> !line.isBlank())
-            .forEach(expectedProblem -> assertThat(exception.sourceProblems())
-                    .extracting(FormatterException.SourceProblem::message)
-                    .anySatisfy(message -> assertThat(message).contains(expectedProblem))
-            );
+                .stream()
+                .skip(1)
+                .filter(line -> !line.isBlank())
+                .forEach(expectedProblem -> assertThat(exception.sourceProblems())
+                            .extracting(FormatterException.SourceProblem::message)
+                            .anySatisfy(message -> assertThat(message).contains(expectedProblem))
+                );
     }
 
     @Test
@@ -58,13 +58,13 @@ final class FrmtrTest {
         String rendered = Frmtr.debugDoc("class Demo{int value;}");
 
         assertThat(rendered)
-            .contains("Group")
-            .contains("Concat")
-            .contains("Indent")
-            .contains("Text(\"class \")")
-            .contains("Text(\"Demo\")")
-            .contains("Text(\"int \")")
-            .contains("Text(\"value\")");
+                .contains("Group")
+                .contains("Concat")
+                .contains("Indent")
+                .contains("Text(\"class \")")
+                .contains("Text(\"Demo\")")
+                .contains("Text(\"int \")")
+                .contains("Text(\"value\")");
     }
 
     @Test
@@ -72,11 +72,11 @@ final class FrmtrTest {
         String rendered = Frmtr.debugDoc("class Demo{void method(){call(value);}}");
 
         assertThat(rendered)
-            .contains("Label(\"java.compilationUnit\")")
-            .contains("Label(\"java.bodyDeclaration:ClassOrInterfaceDeclaration\")")
-            .contains("Label(\"java.bodyDeclaration:MethodDeclaration\")")
-            .contains("Label(\"java.statement:ExpressionStmt\")")
-            .contains("Label(\"java.expression:MethodCallExpr\")");
+                .contains("Label(\"java.compilationUnit\")")
+                .contains("Label(\"java.bodyDeclaration:ClassOrInterfaceDeclaration\")")
+                .contains("Label(\"java.bodyDeclaration:MethodDeclaration\")")
+                .contains("Label(\"java.statement:ExpressionStmt\")")
+                .contains("Label(\"java.expression:MethodCallExpr\")");
     }
 
     @Test
@@ -254,11 +254,11 @@ final class FrmtrTest {
         FormatterException exception = FormatterException.internal(cause);
 
         assertThat(exception)
-            .hasMessage(
-                "Internal formatter error. This is a bug in frmtr or one of its parser dependencies: "
-                    + "NoSuchFieldError: variables"
-            )
-            .hasCause(cause);
+                .hasMessage(
+                    "Internal formatter error. This is a bug in frmtr or one of its parser dependencies: "
+                        + "NoSuchFieldError: variables"
+                )
+                .hasCause(cause);
         assertThat(exception.internal()).isTrue();
     }
 
@@ -291,20 +291,20 @@ final class FrmtrTest {
 
         assertThat(exception).hasMessage("Unable to parse Java source");
         assertThat(exception.sourceProblems())
-            .singleElement()
-            .satisfies(problem -> {
-                assertThat(problem.message()).contains("(line 3,col 23) Parse error");
-                assertThat(problem.location()).hasValue(new FormatterException.SourceLocation(3, 23));
-                assertThat(problem.enclosingUnitLine()).hasValue(
-                    new FormatterException.SourceLine(2, 1, "    void method() {")
-                );
-                assertThat(problem.contextLines())
-                    .extracting(FormatterException.SourceLine::lineNumber)
-                    .containsExactly(1, 2, 3, 4, 5);
-                assertThat(problem.contextLines())
-                    .contains(new FormatterException.SourceLine(2, 1, "    void method() {"))
-                    .contains(new FormatterException.SourceLine(3, 1, "        var something ="));
-            });
+                .singleElement()
+                .satisfies(problem -> {
+                    assertThat(problem.message()).contains("(line 3,col 23) Parse error");
+                    assertThat(problem.location()).hasValue(new FormatterException.SourceLocation(3, 23));
+                    assertThat(problem.enclosingUnitLine()).hasValue(
+                        new FormatterException.SourceLine(2, 1, "    void method() {")
+                    );
+                    assertThat(problem.contextLines())
+                            .extracting(FormatterException.SourceLine::lineNumber)
+                            .containsExactly(1, 2, 3, 4, 5);
+                    assertThat(problem.contextLines())
+                            .contains(new FormatterException.SourceLine(2, 1, "    void method() {"))
+                            .contains(new FormatterException.SourceLine(3, 1, "        var something ="));
+                });
     }
 
     @Test
@@ -318,17 +318,19 @@ final class FrmtrTest {
 
         assertThat(exception).hasMessage("Unable to parse Java source");
         assertThat(exception.sourceProblems())
-            .first()
-            .satisfies(problem -> {
-                assertThat(problem.message()).contains("Lexical error at line 3, column 34");
-                assertThat(problem.location()).hasValue(new FormatterException.SourceLocation(3, 34));
-                assertThat(problem.enclosingUnitLine()).hasValue(
-                    new FormatterException.SourceLine(1, 1, "class TemplateExpression {")
-                );
-                assertThat(problem.contextLines())
-                    .contains(new FormatterException.SourceLine(1, 1, "class TemplateExpression {"))
-                    .contains(new FormatterException.SourceLine(3, 1, "  String info = STR.\"My name is \\{name}\";"));
-            });
+                .first()
+                .satisfies(problem -> {
+                    assertThat(problem.message()).contains("Lexical error at line 3, column 34");
+                    assertThat(problem.location()).hasValue(new FormatterException.SourceLocation(3, 34));
+                    assertThat(problem.enclosingUnitLine()).hasValue(
+                        new FormatterException.SourceLine(1, 1, "class TemplateExpression {")
+                    );
+                    assertThat(problem.contextLines())
+                            .contains(new FormatterException.SourceLine(1, 1, "class TemplateExpression {"))
+                            .contains(
+                                new FormatterException.SourceLine(3, 1, "  String info = STR.\"My name is \\{name}\";")
+                            );
+                });
     }
 
     @Test
@@ -347,9 +349,9 @@ final class FrmtrTest {
 
         assertThat(exception).hasMessage("Unable to parse Java source");
         assertThat(exception.sourceProblems())
-            .hasSize(2)
-            .anySatisfy(problem -> assertThat(problem.message()).contains("(line 3,col 17) Parse error"))
-            .anySatisfy(problem -> assertThat(problem.message()).contains("(line 6,col 17) Parse error"));
+                .hasSize(2)
+                .anySatisfy(problem -> assertThat(problem.message()).contains("(line 3,col 17) Parse error"))
+                .anySatisfy(problem -> assertThat(problem.message()).contains("(line 6,col 17) Parse error"));
     }
 
     @Test
@@ -375,23 +377,22 @@ final class FrmtrTest {
         FormatterException exception = formatterException(source, failOnParseErrorsOptions());
 
         assertThat(exception.sourceProblems())
-            .first()
-            .satisfies(problem -> assertThat(problem.contextLines())
-                    .extracting(FormatterException.SourceLine::lineNumber)
-                    .containsExactly(3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
-            );
+                .first()
+                .satisfies(problem -> assertThat(problem.contextLines())
+                            .extracting(FormatterException.SourceLine::lineNumber)
+                            .containsExactly(3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13)
+                );
         assertThat(exception.sourceProblems())
-            .first()
-            .satisfies(problem -> assertThat(problem.enclosingUnitLine()).hasValue(
-                    new FormatterException.SourceLine(2, 1, "    void method() {")
-            ));
+                .first()
+                .satisfies(problem -> assertThat(problem.enclosingUnitLine()).hasValue(
+                        new FormatterException.SourceLine(2, 1, "    void method() {")
+                ));
     }
 
     @Test
     void parseErrorContextCropsLongLinesAroundPosition() {
         String linePrefix = "        int value = 1;";
-        String source =
-            "class Demo {\n"
+        String source = "class Demo {\n"
             + "    void method() {\n"
             + linePrefix
             + " ".repeat(4128 - linePrefix.length() - 1)
@@ -404,22 +405,22 @@ final class FrmtrTest {
         FormatterException exception = formatterException(source, failOnParseErrorsOptions());
 
         assertThat(exception.sourceProblems())
-            .first()
-            .satisfies(problem -> {
-                FormatterException.SourceLocation location = problem.location().orElseThrow();
-                FormatterException.SourceLine errorLine = problem.contextLines()
-                    .stream()
-                    .filter(line -> line.lineNumber() == location.line())
-                    .findFirst()
-                    .orElseThrow();
-                assertThat(location.column()).isEqualTo(4128);
-                assertThat(errorLine.startColumn()).isEqualTo(4000);
-                assertThat(errorLine.text()).hasSize(256);
-                assertThat(location.column()).isBetween(
-                    errorLine.startColumn(),
-                    errorLine.startColumn() + errorLine.text().length()
-                );
-            });
+                .first()
+                .satisfies(problem -> {
+                    FormatterException.SourceLocation location = problem.location().orElseThrow();
+                    FormatterException.SourceLine errorLine = problem.contextLines()
+                            .stream()
+                            .filter(line -> line.lineNumber() == location.line())
+                            .findFirst()
+                            .orElseThrow();
+                    assertThat(location.column()).isEqualTo(4128);
+                    assertThat(errorLine.startColumn()).isEqualTo(4000);
+                    assertThat(errorLine.text()).hasSize(256);
+                    assertThat(location.column()).isBetween(
+                        errorLine.startColumn(),
+                        errorLine.startColumn() + errorLine.text().length()
+                    );
+                });
     }
 
     @Test
@@ -493,13 +494,13 @@ final class FrmtrTest {
         CompilationUnit unit = new JavaParser(
             new ParserConfiguration().setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_25)
         )
-            .parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
-            .getResult()
-            .orElseThrow();
+                .parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
+                .getResult()
+                .orElseThrow();
         return unit.findAll(TextBlockLiteralExpr.class)
-            .stream()
-            .map(TextBlockLiteralExpr::translateEscapes)
-            .toList();
+                .stream()
+                .map(TextBlockLiteralExpr::translateEscapes)
+                .toList();
     }
 
     private static FormatterException formatterException(String source) {
@@ -557,7 +558,7 @@ final class FrmtrTest {
 
     private static Path resourceRoot(String name) throws URISyntaxException {
         return Path.of(Objects.requireNonNull(FrmtrTest.class.getClassLoader().getResource(name), name).toURI())
-            .toAbsolutePath()
-            .normalize();
+                .toAbsolutePath()
+                .normalize();
     }
 }

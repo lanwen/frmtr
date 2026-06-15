@@ -434,6 +434,9 @@ final class ExpressionLambdaArgumentLayout {
                 .or(() -> packedMethodCallChainBody(firstLine, bodyExpression).map(
                         doc -> PackedLambdaBody.closingOnOwnLine(doc, ")")
                 ))
+                .or(() -> packedBodyEmptyCallScope(firstLine, bodyExpression).map(
+                        doc -> PackedLambdaBody.closingOnOwnLine(doc, ")")
+                ))
                 .or(() -> packedBodyCallScopeWithoutClosingLine(firstLine, bodyExpression).map(
                         doc -> PackedLambdaBody.closingOnOwnLine(doc, "))")
                 ));
@@ -600,6 +603,35 @@ final class ExpressionLambdaArgumentLayout {
                         methodCallArgumentList.apply(methodCall.getArguments(), Doc.HARD_LINE)
                     )
                 )
+            )
+        );
+    }
+
+    private Optional<Doc> packedBodyEmptyCallScope(String firstLine, Expression bodyExpression) {
+        if (
+            !(bodyExpression instanceof MethodCallExpr methodCall)
+            || methodCall.getScope().isEmpty()
+            || !methodCall.getArguments().isEmpty()
+        ) {
+            return Optional.empty();
+        }
+        String scope = compact.apply(methodCall.getScope().orElseThrow());
+        String bodyFirstLine = bodyFirstSourceLine(bodyExpression);
+        if (!bodyFirstLine.equals(scope)) {
+            return Optional.empty();
+        }
+        String compactCall = scope + "." + methodCallSelector(methodCall) + "()";
+        if (expressionFirstLineWidth(firstLine + " " + compactCall) <= options.lineWidth()) {
+            return Optional.of(Doc.text(compactCall));
+        }
+        if (expressionFirstLineWidth(firstLine + " " + scope) > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(
+            Doc.concat(
+                Doc.text(scope),
+                Doc.HARD_LINE,
+                Doc.text("." + methodCallSelector(methodCall) + "()")
             )
         );
     }
@@ -787,7 +819,10 @@ final class ExpressionLambdaArgumentLayout {
     private String methodCallPrefix(MethodCallExpr expression) {
         return (
             expression.getScope().map(scope -> compact.apply(scope) + ".").orElse("")
-            + expression.getTypeArguments().map(typeArguments -> "<" + compactJoin.apply(typeArguments) + ">").orElse("")
+            + expression
+                    .getTypeArguments()
+                    .map(typeArguments -> "<" + compactJoin.apply(typeArguments) + ">")
+                    .orElse("")
             + expression.getNameAsString()
         );
     }
@@ -822,7 +857,10 @@ final class ExpressionLambdaArgumentLayout {
         return (
             expression.getScope().map(scope -> compact.apply(scope) + ".").orElse("")
             + "new "
-            + expression.getTypeArguments().map(typeArguments -> "<" + compactJoin.apply(typeArguments) + ">").orElse("")
+            + expression
+                    .getTypeArguments()
+                    .map(typeArguments -> "<" + compactJoin.apply(typeArguments) + ">")
+                    .orElse("")
             + compact.apply(expression.getType())
         );
     }

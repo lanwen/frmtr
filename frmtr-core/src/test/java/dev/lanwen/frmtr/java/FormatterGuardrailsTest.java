@@ -22,6 +22,7 @@ import org.junit.jupiter.api.parallel.Resources;
 
 @ResourceLock(Resources.SYSTEM_PROPERTIES)
 final class FormatterGuardrailsTest {
+
     @Test
     void duplicateCommentClaimsKeepExistingSkipBehaviorByDefault() {
         withGuardrails(null, () -> {
@@ -29,9 +30,7 @@ final class FormatterGuardrailsTest {
             LineComment comment = new LineComment("value");
 
             assertThat(comments.comment(comment)).isNotEqualTo(Doc.EMPTY);
-            assertThatCode(() -> assertThat(comments.comment(comment))
-                            .isEqualTo(Doc.EMPTY))
-                    .doesNotThrowAnyException();
+            assertThatCode(() -> assertThat(comments.comment(comment)).isEqualTo( Doc.EMPTY )).doesNotThrowAnyException();
         });
     }
 
@@ -78,11 +77,13 @@ final class FormatterGuardrailsTest {
     @Test
     void missedCommentAccountingKeepsExistingBehaviorByDefault() {
         withGuardrails(null, () -> {
-            CompilationUnit unit = parse("""
+            CompilationUnit unit = parse(
+                """
                     class Demo {
                         int value; // value
                     }
-                    """);
+                    """
+            );
             CommentTracker comments = commentTracker();
 
             assertThatCode(() -> comments.assertAllCommentsAccounted(unit)).doesNotThrowAnyException();
@@ -92,11 +93,13 @@ final class FormatterGuardrailsTest {
     @Test
     void missedCommentAccountingFailsAtCompletionWhenDebugGuardrailsAreEnabled() {
         withGuardrails("true", () -> {
-            CompilationUnit unit = parse("""
+            CompilationUnit unit = parse(
+                """
                     class Demo {
                         int value; // value
                     }
-                    """);
+                    """
+            );
             CommentTracker comments = commentTracker();
 
             assertThatThrownBy(() -> comments.assertAllCommentsAccounted(unit))
@@ -111,15 +114,18 @@ final class FormatterGuardrailsTest {
     @Test
     void rawRenderedCommentsAreAccountedAtCompletionWhenDebugGuardrailsAreEnabled() {
         withGuardrails("true", () -> {
-            CompilationUnit unit = parse("""
+            CompilationUnit unit = parse(
+                """
                     class Demo {
                         int value; // value
                     }
-                    """);
+                    """
+            );
             CommentTracker comments = commentTracker();
             RawPreservedSource rawPreservedSource = new RawPreservedSource(
-                    new RawSource(FormatterOptions.defaults()),
-                    comments);
+                new RawSource(FormatterOptions.defaults()),
+                comments
+            );
             rawPreservedSource.raw(unit);
 
             assertThatCode(() -> comments.assertAllCommentsAccounted(unit)).doesNotThrowAnyException();
@@ -129,14 +135,16 @@ final class FormatterGuardrailsTest {
     @Test
     void formatterCompletesWhenStructuredCommentsAreClaimedWithDebugGuardrailsEnabled() {
         withGuardrails("true", () -> {
-            String formatted = new JavaFormatter(FormatterOptions.defaults()).format("""
+            String formatted = new JavaFormatter(FormatterOptions.defaults()).format(
+                """
                     package dev.example;
                     // demo type
                     class Demo {
                         // value comment
                         int value; // trailing value
                     }
-                    """);
+                    """
+            );
 
             assertThat(formatted)
                     .contains("// demo type")
@@ -148,7 +156,8 @@ final class FormatterGuardrailsTest {
     @Test
     void transformGuardrailsKeepExistingBehaviorByDefault() {
         withGuardrails(null, () -> {
-            CompilationUnit unit = parse("""
+            CompilationUnit unit = parse(
+                """
                     package dev.example;
 
                     // demo import
@@ -156,13 +165,16 @@ final class FormatterGuardrailsTest {
 
                     // demo type
                     class Demo {}
-                    """);
+                    """
+            );
 
-            CompilationUnit transformed = new JavaTransformPipeline(List.of(
-                            new ReplacingImportDeclarationTransform(),
-                            new ReplacingTypeCommentTransform(),
-                            new ReplacingCompilationUnitTransform()))
-                    .transform(unit);
+            CompilationUnit transformed = new JavaTransformPipeline(
+                List.of(
+                    new ReplacingImportDeclarationTransform(),
+                    new ReplacingTypeCommentTransform(),
+                    new ReplacingCompilationUnitTransform()
+                )
+            ).transform(unit);
 
             assertThat(transformed).isNotSameAs(unit);
         });
@@ -174,7 +186,8 @@ final class FormatterGuardrailsTest {
             CompilationUnit unit = parse("class Demo {}");
 
             assertThatThrownBy(() -> new JavaTransformPipeline(List.of(new ReplacingCompilationUnitTransform()))
-                            .transform(unit))
+                        .transform(unit)
+            )
                     .isInstanceOf(AssertionError.class)
                     .hasMessageContaining("ReplacingCompilationUnitTransform")
                     .hasMessageContaining("different CompilationUnit instance")
@@ -185,13 +198,16 @@ final class FormatterGuardrailsTest {
     @Test
     void transformThatReplacesVisibleCommentFailsWhenDebugGuardrailsAreEnabled() {
         withGuardrails("true", () -> {
-            CompilationUnit unit = parse("""
+            CompilationUnit unit = parse(
+                """
                     // demo type
                     class Demo {}
-                    """);
+                    """
+            );
 
-            assertThatThrownBy(() -> new JavaTransformPipeline(List.of(new ReplacingTypeCommentTransform()))
-                            .transform(unit))
+            assertThatThrownBy(() -> new JavaTransformPipeline(List.of(new ReplacingTypeCommentTransform())).transform(
+                    unit
+            ))
                     .isInstanceOf(AssertionError.class)
                     .hasMessageContaining("ReplacingTypeCommentTransform")
                     .hasMessageContaining("JavaParser-visible comment")
@@ -203,17 +219,20 @@ final class FormatterGuardrailsTest {
     @Test
     void transformThatReplacesImportDeclarationFailsWhenDebugGuardrailsAreEnabled() {
         withGuardrails("true", () -> {
-            CompilationUnit unit = parse("""
+            CompilationUnit unit = parse(
+                """
                     package dev.example;
 
                     // demo import
                     import z.Value;
 
                     class Demo {}
-                    """);
+                    """
+            );
 
             assertThatThrownBy(() -> new JavaTransformPipeline(List.of(new ReplacingImportDeclarationTransform()))
-                            .transform(unit))
+                        .transform(unit)
+            )
                     .isInstanceOf(AssertionError.class)
                     .hasMessageContaining("ReplacingImportDeclarationTransform")
                     .hasMessageContaining("import declaration node")
@@ -225,7 +244,8 @@ final class FormatterGuardrailsTest {
     @Test
     void transformThatMovesImportCommentsFailsWhenDebugGuardrailsAreEnabled() {
         withGuardrails("true", () -> {
-            CompilationUnit unit = parse("""
+            CompilationUnit unit = parse(
+                """
                     package dev.example;
 
                     // first import
@@ -234,10 +254,12 @@ final class FormatterGuardrailsTest {
                     import b.Second;
 
                     class Demo {}
-                    """);
+                    """
+            );
 
             assertThatThrownBy(() -> new JavaTransformPipeline(List.of(new SwappingImportCommentsTransform()))
-                            .transform(unit))
+                        .transform(unit)
+            )
                     .isInstanceOf(AssertionError.class)
                     .hasMessageContaining("SwappingImportCommentsTransform")
                     .hasMessageContaining("comment attachment changed")
@@ -249,7 +271,8 @@ final class FormatterGuardrailsTest {
     @Test
     void transformThatReplacesNonImportNodeFailsWhenDebugGuardrailsAreEnabled() {
         withGuardrails("true", () -> {
-            CompilationUnit unit = parse("""
+            CompilationUnit unit = parse(
+                """
                     package dev.example;
 
                     import z.Value;
@@ -257,10 +280,12 @@ final class FormatterGuardrailsTest {
                     class Demo {
                         void value() {}
                     }
-                    """);
+                    """
+            );
 
             assertThatThrownBy(() -> new JavaTransformPipeline(List.of(new ReplacingTypeDeclarationTransform()))
-                            .transform(unit))
+                        .transform(unit)
+            )
                     .isInstanceOf(AssertionError.class)
                     .hasMessageContaining("ReplacingTypeDeclarationTransform")
                     .hasMessageContaining("JavaParser tree node")
@@ -272,18 +297,21 @@ final class FormatterGuardrailsTest {
     @Test
     void formatterCompletesWhenRawPragmaCommentsAreAccountedWithDebugGuardrailsEnabled() {
         withGuardrails("true", () -> {
-            String formatted = new JavaFormatter(FormatterOptions.defaults()).format("""
+            String formatted = new JavaFormatter(FormatterOptions.defaults()).format(
+                """
                     class Demo {
                         // frmtr-ignore
                         void messy( ) { int value=1; /* preserved */ }
                     }
-                    """);
+                    """
+            );
 
             assertThat(formatted).contains("/* preserved */");
         });
     }
 
     private static final class ReplacingCompilationUnitTransform implements JavaFormatTransform {
+
         @Override
         public JavaTransformResult transform(CompilationUnit unit) {
             return JavaTransformResult.completed(this, new CompilationUnit());
@@ -291,6 +319,7 @@ final class FormatterGuardrailsTest {
     }
 
     private static final class ReplacingTypeCommentTransform implements JavaFormatTransform {
+
         @Override
         public JavaTransformResult transform(CompilationUnit unit) {
             unit.getType(0).setComment(new LineComment("replacement"));
@@ -299,12 +328,16 @@ final class FormatterGuardrailsTest {
     }
 
     private static final class ReplacingImportDeclarationTransform implements JavaFormatTransform {
+
         @Override
         public JavaTransformResult transform(CompilationUnit unit) {
             ImportDeclaration imported = unit.getImport(0);
             Optional<Comment> comment = imported.getComment();
-            ImportDeclaration replacement =
-                    new ImportDeclaration(imported.getName(), imported.isStatic(), imported.isAsterisk());
+            ImportDeclaration replacement = new ImportDeclaration(
+                imported.getName(),
+                imported.isStatic(),
+                imported.isAsterisk()
+            );
             comment.ifPresent(replacement::setComment);
             unit.getImports().set(0, replacement);
             return JavaTransformResult.completed(this, unit);
@@ -312,6 +345,7 @@ final class FormatterGuardrailsTest {
     }
 
     private static final class SwappingImportCommentsTransform implements JavaFormatTransform {
+
         @Override
         public JavaTransformResult transform(CompilationUnit unit) {
             ImportDeclaration first = unit.getImport(0);
@@ -325,6 +359,7 @@ final class FormatterGuardrailsTest {
     }
 
     private static final class ReplacingTypeDeclarationTransform implements JavaFormatTransform {
+
         @Override
         public JavaTransformResult transform(CompilationUnit unit) {
             unit.getTypes().set(0, unit.getType(0).clone());
@@ -351,9 +386,11 @@ final class FormatterGuardrailsTest {
     }
 
     private static CompilationUnit parse(String source) {
-        JavaParser parser = new JavaParser(new ParserConfiguration()
-                .setStoreTokens(true)
-                .setAttributeComments(true));
+        JavaParser parser = new JavaParser(
+            new ParserConfiguration()
+                    .setStoreTokens(true)
+                    .setAttributeComments(true)
+        );
         return parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
                 .getResult()
                 .orElseThrow();

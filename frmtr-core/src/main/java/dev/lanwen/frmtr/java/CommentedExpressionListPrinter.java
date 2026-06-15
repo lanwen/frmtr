@@ -22,14 +22,16 @@ import java.util.function.Function;
  * and they provide the prefix text plus the expression renderer for individual arguments.
  */
 final class CommentedExpressionListPrinter {
+
     private final CommentTracker comments;
+
     private final JavaCommentPlacementPolicy commentPlacement;
+
     private final CompactSourceText compactSource;
+
     private final Function<Expression, Doc> expressionRenderer;
 
-    CommentedExpressionListPrinter(
-            JavaFormatContext context,
-            Function<Expression, Doc> expressionRenderer) {
+    CommentedExpressionListPrinter(JavaFormatContext context, Function<Expression, Doc> expressionRenderer) {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
         this.compactSource = context.compactSource;
@@ -62,9 +64,11 @@ final class CommentedExpressionListPrinter {
                 if (commentDoc == Doc.EMPTY) {
                     continue;
                 }
-                if (comment.startsOnEndLine(argument)
-                        || comment.startsAfterNodeOnSameLine(argument)
-                        || argumentContainsComment(argument, comment)) {
+                if (
+                    comment.startsOnEndLine(argument)
+                    || comment.startsAfterNodeOnSameLine(argument)
+                    || argumentContainsComment(argument, comment)
+                ) {
                     if (hasNext && !commaAppended) {
                         argumentLine = Doc.concat(argumentLine, Doc.text(","));
                         commaAppended = true;
@@ -84,11 +88,14 @@ final class CommentedExpressionListPrinter {
         if (lines.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(Doc.concat(
+        return Optional.of(
+            Doc.concat(
                 Doc.text(prefix + "("),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, lines))),
                 Doc.HARD_LINE,
-                Doc.text(")")));
+                Doc.text(")")
+            )
+        );
     }
 
     private Doc argumentLine(Expression argument, List<JavaCommentTrivia> trailingComments) {
@@ -102,11 +109,13 @@ final class CommentedExpressionListPrinter {
         return trailingComments.stream()
                 .anyMatch(comment -> comment.startsOnEndLine(argument)
                         || comment.startsAfterNodeOnSameLine(argument)
-                        || argumentContainsComment(argument, comment));
+                        || argumentContainsComment(argument, comment)
+                );
     }
 
     private boolean argumentContainsComment(Expression argument, JavaCommentTrivia comment) {
-        return argument.getAllContainedComments().stream()
+        return argument.getAllContainedComments()
+                .stream()
                 .anyMatch(contained -> contained == comment.comment());
     }
 
@@ -121,18 +130,20 @@ final class CommentedExpressionListPrinter {
      * Reports source-line comments in argument gaps without consulting printed-comment state.
      */
     boolean hasLineComments(Node container, NodeList<Expression> arguments) {
-        return !arguments.isEmpty()
-                && argumentCommentGaps(container, arguments).stream()
-                        .flatMap(List::stream)
-                        .findAny()
-                        .isPresent();
+        return (
+            !arguments.isEmpty()
+            && argumentCommentGaps(container, arguments).stream().flatMap(List::stream).findAny().isPresent()
+        );
     }
 
     private List<List<JavaCommentTrivia>> argumentCommentGaps(Node container, NodeList<Expression> arguments) {
         List<List<JavaCommentTrivia>> gaps = new ArrayList<>();
-        gaps.add(commentPlacement.lineCommentsBeforeFirst(container, arguments.get(0)).stream()
-                .filter(comment -> !comment.startsBeforeBeginLine(argumentListAnchor(container)))
-                .toList());
+        gaps.add(
+            commentPlacement.lineCommentsBeforeFirst(container, arguments.get(0))
+                    .stream()
+                    .filter(comment -> !comment.startsBeforeBeginLine(argumentListAnchor(container)))
+                    .toList()
+        );
         for (int index = 0; index < arguments.size(); index++) {
             Expression argument = arguments.get(index);
             if (index + 1 < arguments.size()) {
@@ -151,7 +162,8 @@ final class CommentedExpressionListPrinter {
      * statement printers need to keep that comment at the completed-call boundary.
      */
     private List<JavaCommentTrivia> trailingArgumentComments(Node container, Expression argument) {
-        return commentPlacement.lineCommentsAfterLast(container, argument).stream()
+        return commentPlacement.lineCommentsAfterLast(container, argument)
+                .stream()
                 .filter(comment -> !comment.startsAfterNodeOnSameLine(container))
                 .toList();
     }

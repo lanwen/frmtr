@@ -3,8 +3,11 @@ package dev.lanwen.frmtr.doc;
 import dev.lanwen.frmtr.FormatterOptions;
 
 public final class DocRenderer {
+
     private final FormatterOptions options;
+
     private final StringBuilder out = new StringBuilder();
+
     private int column;
 
     public DocRenderer(FormatterOptions options) {
@@ -44,7 +47,11 @@ public final class DocRenderer {
                 Mode next = DocWidths.fits(group.doc(), options.lineWidth() - column) ? Mode.FLAT : Mode.BREAK;
                 render(group.doc(), indent, next);
             }
-            case Doc.IfBreak conditional -> render(mode == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(), indent, mode);
+            case Doc.IfBreak conditional -> render(
+                mode == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(),
+                indent,
+                mode
+            );
             case Doc.Label label -> render(label.doc(), indent, mode);
         }
     }
@@ -62,7 +69,7 @@ public final class DocRenderer {
     private void newline(int indent) {
         trimTrailingHorizontalWhitespace();
         out.append(options.lineEnding().value())
-            .repeat(options.indentUnit(), indent);
+                .repeat(options.indentUnit(), indent);
         column = options.indentUnit().length() * indent;
     }
 
@@ -78,6 +85,6 @@ public final class DocRenderer {
 
     private enum Mode {
         FLAT,
-        BREAK
+        BREAK,
     }
 }

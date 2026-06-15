@@ -22,10 +22,15 @@ import java.util.function.ToIntFunction;
  * {@link InstanceOfExpr} is assembled.
  */
 final class InstanceOfExpressionPrinter {
+
     private final FormatterOptions options;
+
     private final JavaFormatRule<Expression> expression;
+
     private final Function<Node, String> compact;
+
     private final Function<Node, String> compactTypeLike;
+
     private final ToIntFunction<String> currentIndentedWidth;
 
     InstanceOfExpressionPrinter(
@@ -33,7 +38,8 @@ final class InstanceOfExpressionPrinter {
             JavaFormatRule<Expression> expression,
             Function<Node, String> compact,
             Function<Node, String> compactTypeLike,
-            ToIntFunction<String> currentIndentedWidth) {
+            ToIntFunction<String> currentIndentedWidth
+    ) {
         this.options = options;
         this.expression = expression;
         this.compact = compact;

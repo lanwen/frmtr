@@ -37,21 +37,33 @@ import java.util.function.Predicate;
  * {@code frmtr-core/src/test/resources/format/unnamed-class-compilation-unit/frmtr-default.output.java}.
  */
 final class CompilationUnitPrinter {
+
     private static final String IMPORT_DECLARATION_LIST_RECOVERY_FAILURE =
-            "Unable to recover Java parse error inside import declaration list: ";
+        "Unable to recover Java parse error inside import declaration list: ";
+
     private static final String TOP_LEVEL_DECLARATION_LIST_RECOVERY_FAILURE =
-            "Unable to recover Java parse error inside top-level declaration list: ";
+        "Unable to recover Java parse error inside top-level declaration list: ";
 
     private final CommentTracker comments;
+
     private final SourceText sourceText;
+
     private final RecoveredListPlanner recoveredListPlanner;
+
     private final RecoveredRawGapPrinter importRawGaps;
+
     private final RecoveredRawGapPrinter topLevelRawGaps;
+
     private final boolean recoverParseProblems;
+
     private final PackageDeclarationPrinter packageDeclarations;
+
     private final ImportDeclarationPrinter importDeclarations;
+
     private final JavaFormatRule<ModuleDeclaration> moduleDeclarations;
+
     private final JavaFormatRule<BodyDeclaration<?>> bodyDeclarations;
+
     private final Predicate<BodyDeclaration<?>> hasPragma;
 
     CompilationUnitPrinter(
@@ -59,16 +71,19 @@ final class CompilationUnitPrinter {
             PackageDeclarationPrinter packageDeclarations,
             ImportDeclarationPrinter importDeclarations,
             JavaFormatRule<ModuleDeclaration> moduleDeclarations,
-            JavaFormatRule<BodyDeclaration<?>> bodyDeclarations) {
+            JavaFormatRule<BodyDeclaration<?>> bodyDeclarations
+    ) {
         this.comments = context.comments;
         this.sourceText = context.sourceText;
         this.recoveredListPlanner = context.recoveredListPlanner;
         this.importRawGaps = new RecoveredRawGapPrinter(
-                context,
-                CompilationUnitPrinter::importDeclarationListRecoveryFailure);
+            context,
+            CompilationUnitPrinter::importDeclarationListRecoveryFailure
+        );
         this.topLevelRawGaps = new RecoveredRawGapPrinter(
-                context,
-                CompilationUnitPrinter::topLevelDeclarationListRecoveryFailure);
+            context,
+            CompilationUnitPrinter::topLevelDeclarationListRecoveryFailure
+        );
         this.recoverParseProblems = context.recoverParseProblems;
         this.packageDeclarations = packageDeclarations;
         this.importDeclarations = importDeclarations;
@@ -108,9 +123,11 @@ final class CompilationUnitPrinter {
             }
             parts.add(orphanComments);
         }
-        unit.getPackageDeclaration().ifPresent(packageDeclaration -> {
-            parts.add(packageDeclarations.packageDeclaration(packageDeclaration));
-        });
+        unit
+                .getPackageDeclaration()
+                .ifPresent(packageDeclaration -> {
+                    parts.add(packageDeclarations.packageDeclaration(packageDeclaration));
+                });
         hasStructuralParts = unit.getPackageDeclaration().isPresent();
         Optional<Doc> imports = imports(unit, importRecoveryPlan, importRawGapRegions);
         if (imports.isPresent()) {
@@ -151,22 +168,26 @@ final class CompilationUnitPrinter {
     private Doc orphanCommentsBeforeFirstType(
             CompilationUnit unit,
             int firstTypeLine,
-            List<RecoveredRawGapPrinter.RawGapRegion> importRawGapRegions) {
+            List<RecoveredRawGapPrinter.RawGapRegion> importRawGapRegions
+    ) {
         if (importRawGapRegions.isEmpty()) {
             return comments.orphanCommentsBeforeLine(unit, firstTypeLine);
         }
         return comments.orphanComments(unit, comment -> CommentIndex.beginLine(comment, Integer.MAX_VALUE) < firstTypeLine
-                && !isContainedByRawGap(comment, importRawGapRegions));
+                && !isContainedByRawGap(comment, importRawGapRegions)
+        );
     }
 
     private boolean isContainedByRawGap(
             Comment comment,
-            List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions) {
+            List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions
+    ) {
         try {
             return comment.getRange()
                     .map(sourceText::region)
-                    .map(commentRegion -> rawGapRegions.stream()
-                            .anyMatch(rawGap -> RecoveredRawGapPrinter.contains(rawGap.region(), commentRegion)))
+                    .map(commentRegion -> rawGapRegions.stream().anyMatch(
+                            rawGap -> RecoveredRawGapPrinter.contains(rawGap.region(), commentRegion)
+                    ))
                     .orElse(false);
         } catch (IllegalArgumentException exception) {
             return false;
@@ -177,9 +198,12 @@ final class CompilationUnitPrinter {
         Optional<ClassOrInterfaceDeclaration> compactClass = compactClass(unit);
         if (compactClass.isPresent()) {
             NodeList<BodyDeclaration<?>> members = compactClass.orElseThrow().getMembers();
-            return joinedTopLevelDeclarations(members, members.stream()
-                    .map(bodyDeclarations::format)
-                    .toList());
+            return joinedTopLevelDeclarations(
+                members,
+                members.stream()
+                        .map(bodyDeclarations::format)
+                        .toList()
+            );
         }
         List<BodyDeclaration<?>> declarations = topLevelTypes(unit);
         if (declarations.isEmpty()) {
@@ -202,7 +226,8 @@ final class CompilationUnitPrinter {
      */
     private Doc recoveredTopLevelDeclarations(
             CompilationUnit unit,
-            RecoveredListPlanner.Plan<BodyDeclaration<?>> plan) {
+            RecoveredListPlanner.Plan<BodyDeclaration<?>> plan
+    ) {
         List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions = topLevelRawGaps.rawGapRegions(plan);
         topLevelRawGaps.requireRecoverableRawRegions(unit, rawGapRegions);
 
@@ -215,10 +240,11 @@ final class CompilationUnitPrinter {
                 case RecoveredListPlanner.ValidSibling<?> valid -> {
                     BodyDeclaration<?> currentDeclaration = (BodyDeclaration<?>) valid.sibling();
                     appendSeparatorBeforeRecoveredTopLevelDeclaration(
-                            contents,
-                            previousEntry,
-                            previousDeclaration,
-                            currentDeclaration);
+                        contents,
+                        previousEntry,
+                        previousDeclaration,
+                        currentDeclaration
+                    );
                     contents.add(bodyDeclarations.format(currentDeclaration));
                     previousDeclaration = currentDeclaration;
                     previousEntry = EntryKind.VALID_DECLARATION;
@@ -229,8 +255,8 @@ final class CompilationUnitPrinter {
                         contents.add(topLevelRawGaps.raw(unit, rawRegion, "topLevelDeclarationList"));
                     }
                     previousEntry = rawRegion.trailingBreakReplaced()
-                            ? EntryKind.RAW_GAP_WITH_TRAILING_BREAK
-                            : EntryKind.RAW_GAP;
+                        ? EntryKind.RAW_GAP_WITH_TRAILING_BREAK
+                        : EntryKind.RAW_GAP;
                 }
             }
         }
@@ -241,12 +267,15 @@ final class CompilationUnitPrinter {
             List<Doc> contents,
             EntryKind previousEntry,
             BodyDeclaration<?> previousDeclaration,
-            BodyDeclaration<?> currentDeclaration) {
+            BodyDeclaration<?> currentDeclaration
+    ) {
         if (contents.isEmpty()) {
             return;
         }
         switch (previousEntry) {
-            case VALID_DECLARATION -> contents.add(topLevelDeclarationSeparator(previousDeclaration, currentDeclaration));
+            case VALID_DECLARATION -> contents.add(
+                topLevelDeclarationSeparator(previousDeclaration, currentDeclaration)
+            );
             case RAW_GAP_WITH_TRAILING_BREAK -> contents.add(Doc.HARD_LINE);
             case NONE, RAW_GAP -> {
                 // Raw source already owns the separation before this declaration.
@@ -256,15 +285,17 @@ final class CompilationUnitPrinter {
 
     private Optional<RecoveredListPlanner.Plan<BodyDeclaration<?>>> recoveryPlan(
             CompilationUnit unit,
-            List<BodyDeclaration<?>> declarations) {
+            List<BodyDeclaration<?>> declarations
+    ) {
         if (!recoverParseProblems || !hasRecoverableTopLevelDeclarationListProblem(declarations)) {
             return Optional.empty();
         }
         RecoveredListPlanner.Plan<BodyDeclaration<?>> plan = recoveredListPlanner.plan(
-                unit,
-                topLevelDeclarationListRegion(declarations),
-                declarations,
-                declaration -> declaration.getParsed() == Node.Parsedness.PARSED);
+            unit,
+            topLevelDeclarationListRegion(declarations),
+            declarations,
+            declaration -> declaration.getParsed() == Node.Parsedness.PARSED
+        );
         if (!plan.isSafe()) {
             throw topLevelDeclarationListRecoveryFailure(plan.unsafe().orElseThrow().reason());
         }
@@ -280,7 +311,8 @@ final class CompilationUnitPrinter {
                         .map(sourceText::region)
                         .filter(region -> region.beginOffset() < region.endOffset())
                         .orElseThrow(() -> new IllegalArgumentException(
-                                declaration.getClass().getSimpleName() + " is missing a source range"));
+                                declaration.getClass().getSimpleName() + " is missing a source range"
+                        ));
                 beginOffset = Math.min(beginOffset, declarationRegion.beginOffset());
                 endOffset = Math.max(endOffset, declarationRegion.endOffset());
             }
@@ -295,7 +327,8 @@ final class CompilationUnitPrinter {
 
     private Optional<Doc> joinedTopLevelDeclarations(
             List<? extends BodyDeclaration<?>> declarations,
-            List<Doc> declarationDocs) {
+            List<Doc> declarationDocs
+    ) {
         if (declarationDocs.isEmpty()) {
             return Optional.empty();
         }
@@ -323,8 +356,10 @@ final class CompilationUnitPrinter {
     }
 
     private static boolean hasRecoverableTopLevelDeclarationListProblem(List<BodyDeclaration<?>> declarations) {
-        return declarations.stream().anyMatch(declaration -> declaration.getParsed() != Node.Parsedness.PARSED)
-                && declarations.stream().anyMatch(declaration -> declaration.getParsed() == Node.Parsedness.PARSED);
+        return (
+            declarations.stream().anyMatch(declaration -> declaration.getParsed() != Node.Parsedness.PARSED)
+            && declarations.stream().anyMatch(declaration -> declaration.getParsed() == Node.Parsedness.PARSED)
+        );
     }
 
     private static boolean hasRawGap(RecoveredListPlanner.Plan<?> plan) {
@@ -339,7 +374,10 @@ final class CompilationUnitPrinter {
      * body declarations.
      */
     private Optional<ClassOrInterfaceDeclaration> compactClass(CompilationUnit unit) {
-        if (unit.getTypes().size() != 1 || !(unit.getTypes().get(0) instanceof ClassOrInterfaceDeclaration declaration)) {
+        if (
+            unit.getTypes().size() != 1
+            || !(unit.getTypes().get(0) instanceof ClassOrInterfaceDeclaration declaration)
+        ) {
             return Optional.empty();
         }
         return declaration.isCompact() ? Optional.of(declaration) : Optional.empty();
@@ -372,18 +410,20 @@ final class CompilationUnitPrinter {
         /**
          * The previous entry was a raw source island whose final line break was replaced by formatter-owned output.
          */
-        RAW_GAP_WITH_TRAILING_BREAK
+        RAW_GAP_WITH_TRAILING_BREAK,
     }
 
     private int firstTypeLine(CompilationUnit unit) {
-        return unit.getTypes().stream()
+        return unit.getTypes()
+                .stream()
                 .mapToInt(type -> CommentIndex.beginLine(type, Integer.MAX_VALUE))
                 .min()
                 .orElse(Integer.MAX_VALUE);
     }
 
     private int lastTypeLine(CompilationUnit unit) {
-        int lastSourceBackedLine = unit.getTypes().stream()
+        int lastSourceBackedLine = unit.getTypes()
+                .stream()
                 .mapToInt(type -> CommentIndex.endLine(type, Integer.MIN_VALUE))
                 .max()
                 .orElse(Integer.MIN_VALUE);
@@ -401,7 +441,8 @@ final class CompilationUnitPrinter {
     private Optional<Doc> imports(
             CompilationUnit unit,
             Optional<RecoveredListPlanner.Plan<ImportDeclaration>> recoveryPlan,
-            List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions) {
+            List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions
+    ) {
         if (recoveryPlan.isPresent() && hasRawGap(recoveryPlan.orElseThrow())) {
             return Optional.of(recoveredImports(unit, recoveryPlan.orElseThrow(), rawGapRegions));
         }
@@ -432,7 +473,8 @@ final class CompilationUnitPrinter {
     private Doc recoveredImports(
             CompilationUnit unit,
             RecoveredListPlanner.Plan<ImportDeclaration> plan,
-            List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions) {
+            List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions
+    ) {
         importRawGaps.requireRecoverableRawRegions(unit, rawGapRegions);
 
         List<Doc> contents = new ArrayList<>();
@@ -454,8 +496,8 @@ final class CompilationUnitPrinter {
                         contents.add(importRawGaps.raw(unit, rawRegion, "importDeclarationList"));
                     }
                     previousEntry = rawRegion.trailingBreakReplaced()
-                            ? ImportEntryKind.RAW_GAP_WITH_TRAILING_BREAK
-                            : ImportEntryKind.RAW_GAP;
+                        ? ImportEntryKind.RAW_GAP_WITH_TRAILING_BREAK
+                        : ImportEntryKind.RAW_GAP;
                 }
             }
         }
@@ -466,7 +508,8 @@ final class CompilationUnitPrinter {
             List<Doc> contents,
             ImportEntryKind previousEntry,
             ImportDeclaration previousImport,
-            ImportDeclaration currentImport) {
+            ImportDeclaration currentImport
+    ) {
         if (contents.isEmpty()) {
             return;
         }
@@ -490,11 +533,12 @@ final class CompilationUnitPrinter {
             return Optional.empty();
         }
         RecoveredListPlanner.Plan<ImportDeclaration> plan = recoveredListPlanner.plan(
-                unit,
-                importDeclarationListRegion(declarations),
-                declarations,
-                declaration -> declaration.getParsed() == Node.Parsedness.PARSED,
-                this::importDeclarationRegion);
+            unit,
+            importDeclarationListRegion(declarations),
+            declarations,
+            declaration -> declaration.getParsed() == Node.Parsedness.PARSED,
+            this::importDeclarationRegion
+        );
         if (!plan.isSafe()) {
             throw importDeclarationListRecoveryFailure(plan.unsafe().orElseThrow().reason());
         }
@@ -506,9 +550,11 @@ final class CompilationUnitPrinter {
         int endOffset = Integer.MIN_VALUE;
         try {
             for (ImportDeclaration declaration : declarations) {
-                SourceRegion declarationRegion = importDeclarationRegion(declaration)
-                        .orElseThrow(() -> new IllegalArgumentException(
-                                declaration.getClass().getSimpleName() + " is missing a source range"));
+                SourceRegion declarationRegion = importDeclarationRegion(declaration).orElseThrow(
+                    () -> new IllegalArgumentException(
+                        declaration.getClass().getSimpleName() + " is missing a source range"
+                    )
+                );
                 beginOffset = Math.min(beginOffset, declarationRegion.beginOffset());
                 endOffset = Math.max(endOffset, importDeclarationBoundaryEnd(declaration));
             }
@@ -566,8 +612,10 @@ final class CompilationUnitPrinter {
     }
 
     static boolean hasRecoverableImportDeclarationListProblem(List<ImportDeclaration> declarations) {
-        return declarations.stream().anyMatch(declaration -> !isFullyParsed(declaration))
-                && declarations.stream().anyMatch(CompilationUnitPrinter::isFullyParsed);
+        return (
+            declarations.stream().anyMatch(declaration -> !isFullyParsed(declaration))
+            && declarations.stream().anyMatch(CompilationUnitPrinter::isFullyParsed)
+        );
     }
 
     private static boolean isFullyParsed(Node node) {
@@ -575,25 +623,33 @@ final class CompilationUnitPrinter {
     }
 
     private Doc importChunk(ImportChunks.ImportChunk chunk) {
-        List<ImportDeclaration> staticImports = chunk.imports().stream()
+        List<ImportDeclaration> staticImports = chunk.imports()
+                .stream()
                 .filter(ImportDeclaration::isStatic)
                 .toList();
-        List<ImportDeclaration> normalImports = chunk.imports().stream()
+        List<ImportDeclaration> normalImports = chunk.imports()
+                .stream()
                 .filter(importDeclaration -> !importDeclaration.isStatic())
                 .toList();
         List<Doc> blocks = new ArrayList<>();
         if (!staticImports.isEmpty()) {
-            blocks.add(Doc.join(
+            blocks.add(
+                Doc.join(
                     Doc.HARD_LINE,
-                    staticImports.stream().map(importDeclarations::importDeclaration).toList()));
+                    staticImports.stream().map(importDeclarations::importDeclaration).toList()
+                )
+            );
         }
         if (!normalImports.isEmpty() && !staticImports.isEmpty()) {
             blocks.add(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE));
         }
         if (!normalImports.isEmpty()) {
-            blocks.add(Doc.join(
+            blocks.add(
+                Doc.join(
                     Doc.HARD_LINE,
-                    normalImports.stream().map(importDeclarations::importDeclaration).toList()));
+                    normalImports.stream().map(importDeclarations::importDeclaration).toList()
+                )
+            );
         }
         return Doc.concat(blocks);
     }
@@ -625,6 +681,6 @@ final class CompilationUnitPrinter {
         /**
          * The previous entry was a raw malformed import-list gap whose trailing line break moved to formatter docs.
          */
-        RAW_GAP_WITH_TRAILING_BREAK
+        RAW_GAP_WITH_TRAILING_BREAK,
     }
 }

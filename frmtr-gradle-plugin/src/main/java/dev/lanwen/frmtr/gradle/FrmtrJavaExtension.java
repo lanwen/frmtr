@@ -9,9 +9,13 @@ import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Property;
 
 public abstract class FrmtrJavaExtension {
+
     private final ListProperty<String> includes;
+
     private final ListProperty<String> excludes;
+
     private final Property<Integer> lineWidth;
+
     private final Property<FrmtrJavaLanguageLevel> languageLevel;
 
     @Inject

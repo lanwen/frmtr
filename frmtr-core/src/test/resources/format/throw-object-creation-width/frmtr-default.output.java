@@ -10,4 +10,11 @@ class ThrowObjectCreationWidthSample {
             );
         }
     }
+
+    void rejectRecoveredRoute(RouteNode routeNode) {
+        // TODO: Publish rejected route member through diagnostics once recovery reporting exists.
+        throw new RouteRecoveryException(
+            "Unsupported route parse-error recovery reached member formatter: " + routeNode.getClass().getSimpleName()
+        );
+    }
 }

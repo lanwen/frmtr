@@ -15,7 +15,9 @@ import org.eclipse.jgit.diff.RawText;
 import org.eclipse.jgit.diff.RawTextComparator;
 
 public final class UnifiedDiffRenderer {
+
     private static final char LINE_WIDTH_MARKER = '⋮';
+
     private static final int LINE_WIDTH_RULER_PROXIMITY = 10;
 
     private UnifiedDiffRenderer() {}
@@ -32,7 +34,7 @@ public final class UnifiedDiffRenderer {
         /**
          * Adds a dotted source-width marker to and around hunk lines near or over the configured formatter width.
          */
-        LINE_WIDTH_RULER
+        LINE_WIDTH_RULER,
     }
 
     public static String render(Path displayPath, String original, String formatted) throws IOException {
@@ -40,8 +42,13 @@ public final class UnifiedDiffRenderer {
     }
 
     public static String render(
-            Path displayPath, String original, String formatted, int lineWidth, RenderMode renderMode)
-            throws IOException {
+            Path displayPath,
+            String original,
+            String formatted,
+            int lineWidth,
+            RenderMode renderMode
+    )
+        throws IOException {
         String diff = renderPatch(displayPath, original, formatted);
         return switch (Objects.requireNonNull(renderMode, "renderMode")) {
             case PATCH -> diff;
@@ -102,8 +109,12 @@ public final class UnifiedDiffRenderer {
         while (lineStart < diff.length()) {
             int lineEnd = diff.indexOf('\n', lineStart);
             boolean hasLineEnding = lineEnd >= 0;
-            lines.add(new DiffLine(
-                    hasLineEnding ? diff.substring(lineStart, lineEnd) : diff.substring(lineStart), hasLineEnding));
+            lines.add(
+                new DiffLine(
+                    hasLineEnding ? diff.substring(lineStart, lineEnd) : diff.substring(lineStart),
+                    hasLineEnding
+                )
+            );
             lineStart = hasLineEnding ? lineEnd + 1 : diff.length();
         }
         return List.copyOf(lines);
@@ -164,15 +175,17 @@ public final class UnifiedDiffRenderer {
         if (overflow <= 0) {
             return prefix + source + " ".repeat(lineWidth - source.length()) + LINE_WIDTH_MARKER;
         }
-        return prefix
-                + source.substring(0, lineWidth)
-                + LINE_WIDTH_MARKER
-                + source.substring(lineWidth)
-                + "\n"
-                + " ".repeat(lineWidth + 1)
-                + LINE_WIDTH_MARKER
-                + "+"
-                + overflow;
+        return (
+            prefix
+            + source.substring(0, lineWidth)
+            + LINE_WIDTH_MARKER
+            + source.substring(lineWidth)
+            + "\n"
+            + " ".repeat(lineWidth + 1)
+            + LINE_WIDTH_MARKER
+            + "+"
+            + overflow
+        );
     }
 
     private static void appendHunkHeader(StringBuilder decorated, String line, int lineWidth) {

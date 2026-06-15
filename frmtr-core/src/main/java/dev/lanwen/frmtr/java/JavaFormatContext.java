@@ -21,21 +21,37 @@ import dev.lanwen.frmtr.FormatterOptions;
  * formatter dependencies for the current Java source file.
  */
 final class JavaFormatContext {
+
     final FormatterOptions options;
+
     final CommentTracker comments;
+
     final JavaCommentPlacementPolicy commentPlacementPolicy;
+
     final FormatterPragmas formatterPragmas;
+
     final RawSource rawSource;
+
     final RawPreservedSource rawPreservedSource;
+
     final SourceText sourceText;
+
     final SourceShape sourceShape;
+
     final ObjectCreationLayoutPolicy objectCreationLayoutPolicy;
+
     final RecoveredListPlanner recoveredListPlanner;
+
     final RecoveredSourceRegions recoveredSourceRegions;
+
     final CompactSourceText compactSource;
+
     final LayoutWidth layoutWidth;
+
     final LayoutDecisionLog layoutDecisions;
+
     final CommentPlacement commentPlacement;
+
     final boolean recoverParseProblems;
 
     JavaFormatContext(FormatterOptions options, SourceText sourceText, boolean recoverParseProblems) {

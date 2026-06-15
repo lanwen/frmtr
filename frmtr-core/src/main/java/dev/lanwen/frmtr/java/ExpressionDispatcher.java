@@ -34,24 +34,43 @@ import dev.lanwen.frmtr.doc.Doc;
  * formatting, and recursive expression callbacks.
  */
 final class ExpressionDispatcher {
+
     private final JavaFormatRule<AssignExpr> assignments;
+
     private final JavaFormatRule<ArrayAccessExpr> arrayAccesses;
+
     private final JavaFormatRule<ArrayCreationExpr> arrayCreations;
+
     private final JavaFormatRule<ArrayInitializerExpr> arrayInitializers;
+
     private final JavaFormatRule<AnnotationExpr> annotationExpressions;
+
     private final JavaFormatRule<BinaryExpr> binaries;
+
     private final JavaFormatRule<CastExpr> casts;
+
     private final JavaFormatRule<ClassExpr> classExpressions;
+
     private final JavaFormatRule<ConditionalExpr> conditionals;
+
     private final JavaFormatRule<EnclosedExpr> enclosedExpressions;
+
     private final JavaFormatRule<FieldAccessExpr> fieldAccesses;
+
     private final JavaFormatRule<InstanceOfExpr> instanceOfExpressions;
+
     private final JavaFormatRule<LambdaExpr> lambdas;
+
     private final JavaFormatRule<MethodCallExpr> methodCalls;
+
     private final JavaFormatRule<MethodReferenceExpr> methodReferences;
+
     private final JavaFormatRule<ObjectCreationExpr> objectCreations;
+
     private final JavaFormatRule<SwitchExpr> switches;
+
     private final JavaFormatRule<TextBlockLiteralExpr> textBlocks;
+
     private final CompactSourceText compactSource;
 
     ExpressionDispatcher(
@@ -73,7 +92,8 @@ final class ExpressionDispatcher {
             JavaFormatRule<ObjectCreationExpr> objectCreations,
             JavaFormatRule<SwitchExpr> switches,
             JavaFormatRule<TextBlockLiteralExpr> textBlocks,
-            CompactSourceText compactSource) {
+            CompactSourceText compactSource
+    ) {
         this.assignments = assignments;
         this.arrayAccesses = arrayAccesses;
         this.arrayCreations = arrayCreations;

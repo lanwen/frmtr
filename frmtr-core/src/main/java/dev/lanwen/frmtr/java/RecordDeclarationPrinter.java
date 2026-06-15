@@ -37,21 +37,37 @@ import java.util.function.ToIntFunction;
  * {@code frmtr-core/src/test/resources/format/annotation-interface-declaration/input.java}.
  */
 final class RecordDeclarationPrinter {
+
     private final CommentTracker comments;
+
     private final JavaCommentPlacementPolicy commentPlacement;
+
     private final FormatterOptions options;
+
     private final Function<NodeWithAnnotations<?>, Doc> annotations;
+
     private final Function<NodeWithModifiers<?>, String> modifiers;
+
     private final Function<NodeList<TypeParameter>, Doc> typeParameters;
+
     private final Function<NodeList<TypeParameter>, String> flatTypeParameters;
+
     private final Function<Node, String> compact;
+
     private final Function<List<? extends Node>, String> compactJoin;
+
     private final Function<List<? extends Node>, String> compactJoinTypeLike;
+
     private final Function<Node, String> compactTypeLike;
+
     private final Function<Type, Doc> typeBody;
+
     private final JavaFormatRule<AnnotationExpr> annotation;
+
     private final Function<AnnotationExpr, String> annotationFlatText;
+
     private final ToIntFunction<String> currentIndentedWidth;
+
     private final Function<RecordDeclaration, Doc> memberBlock;
 
     RecordDeclarationPrinter(
@@ -70,7 +86,8 @@ final class RecordDeclarationPrinter {
             JavaFormatRule<AnnotationExpr> annotation,
             Function<AnnotationExpr, String> annotationFlatText,
             ToIntFunction<String> currentIndentedWidth,
-            Function<RecordDeclaration, Doc> memberBlock) {
+            Function<RecordDeclaration, Doc> memberBlock
+    ) {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
         this.options = options;
@@ -117,7 +134,8 @@ final class RecordDeclarationPrinter {
         if (declaration.getTypeParameters().size() > 2) {
             return true;
         }
-        String parameters = declaration.getParameters().stream()
+        String parameters = declaration.getParameters()
+                .stream()
                 .map(this::recordComponentFlat)
                 .reduce((left, right) -> left + ", " + right)
                 .orElse("");
@@ -126,8 +144,10 @@ final class RecordDeclarationPrinter {
             return recordHeaderWidth(declaration, parameterHeader + " {}") > options.lineWidth();
         }
         String implementedTypes = compactJoinTypeLike.apply(declaration.getImplementedTypes());
-        return recordHeaderWidth(declaration, parameterHeader + " implements " + implementedTypes + " {}")
-                > options.lineWidth();
+        return (
+            recordHeaderWidth(declaration, parameterHeader + " implements " + implementedTypes + " {}")
+            > options.lineWidth()
+        );
     }
 
     /**
@@ -145,10 +165,11 @@ final class RecordDeclarationPrinter {
                 .toList();
         Doc line = forceBreak || hasTrailingLineComment || hasGapLineComment ? Doc.HARD_LINE : Doc.SOFT_LINE;
         Doc doc = Doc.concat(
-                Doc.text("("),
-                Doc.indent(Doc.concat(line, Doc.concat(parameters))),
-                line,
-                Doc.text(")"));
+            Doc.text("("),
+            Doc.indent(Doc.concat(line, Doc.concat(parameters))),
+            line,
+            Doc.text(")")
+        );
         return forceBreak ? doc : Doc.group(doc);
     }
 
@@ -157,7 +178,8 @@ final class RecordDeclarationPrinter {
      */
     private List<RecordComponentLayout> recordComponentLayouts(
             RecordDeclaration declaration,
-            boolean forceBreak) {
+            boolean forceBreak
+    ) {
         List<RecordComponentLayout> layouts = new ArrayList<>();
         for (int i = 0; i < declaration.getParameters().size(); i++) {
             Parameter parameter = declaration.getParameters().get(i);
@@ -170,18 +192,24 @@ final class RecordDeclarationPrinter {
                 Parameter next = declaration.getParameters().get(i + 1);
                 gapComments = recordComponentGapComments(declaration, parameter, next);
                 boolean componentHasGapLineComment = !gapComments.isEmpty();
-                separator = Optional.of(recordParameterSeparator(
+                separator = Optional.of(
+                    recordParameterSeparator(
                         forceBreak || componentHasGapLineComment,
                         componentHasTrailingLineComment,
                         !componentHasGapLineComment
-                                && next.getComment().isEmpty()
-                                && recordComponentsHaveBlankLine(parameter, next)));
+                            && next.getComment().isEmpty()
+                            && recordComponentsHaveBlankLine(parameter, next)
+                    )
+                );
             }
-            layouts.add(new RecordComponentLayout(
+            layouts.add(
+                new RecordComponentLayout(
                     recordComponent(parameter, trailing, hasNext),
                     separator,
                     gapComments,
-                    componentHasTrailingLineComment));
+                    componentHasTrailingLineComment
+                )
+            );
         }
         return layouts;
     }
@@ -192,7 +220,8 @@ final class RecordDeclarationPrinter {
     private Doc recordParameterSeparator(
             boolean forceBreak,
             boolean previousHasTrailingLineComment,
-            boolean sourceBlankLine) {
+            boolean sourceBlankLine
+    ) {
         Doc line = sourceBlankLine ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;
         if (previousHasTrailingLineComment) {
             return line;
@@ -203,8 +232,10 @@ final class RecordDeclarationPrinter {
     private List<Doc> recordComponentGapComments(
             RecordDeclaration declaration,
             Parameter previous,
-            Parameter next) {
-        return commentPlacement.lineCommentsBetween(declaration, previous, next).stream()
+            Parameter next
+    ) {
+        return commentPlacement.lineCommentsBetween(declaration, previous, next)
+                .stream()
                 .filter(comment -> !comment.startsOnEndLine(previous))
                 .map(comments::comment)
                 .filter(comment -> comment != Doc.EMPTY)
@@ -213,8 +244,9 @@ final class RecordDeclarationPrinter {
 
     private boolean recordComponentsHaveBlankLine(Parameter previous, Parameter next) {
         return previous.getRange()
-                .flatMap(previousRange -> next.getRange()
-                        .map(nextRange -> nextRange.begin.line - previousRange.end.line > 1))
+                .flatMap(previousRange -> next.getRange().map(
+                        nextRange -> nextRange.begin.line - previousRange.end.line > 1
+                ))
                 .orElse(false);
     }
 
@@ -229,7 +261,8 @@ final class RecordDeclarationPrinter {
             parts.add(leading);
         }
         if (recordComponentAnnotationsShouldBreak(parameter)) {
-            parameter.getAnnotations().stream()
+            parameter.getAnnotations()
+                    .stream()
                     .map(annotation::format)
                     .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
                     .forEach(parts::add);
@@ -258,7 +291,8 @@ final class RecordDeclarationPrinter {
     }
 
     private Doc recordComponentTrailingBlockComment(Parameter parameter) {
-        return commentPlacement.trailingBlockCommentsAfterNode(parameter.getName()).stream()
+        return commentPlacement.trailingBlockCommentsAfterNode(parameter.getName())
+                .stream()
                 .filter(comment -> commentEndsBeforeNextRecordComponent(parameter, comment.comment()))
                 .findFirst()
                 .map(comments::comment)
@@ -272,13 +306,15 @@ final class RecordDeclarationPrinter {
                 .flatMap(record -> {
                     int index = record.getParameters().indexOf(parameter);
                     return index >= 0 && index + 1 < record.getParameters().size()
-                            ? Optional.of(record.getParameters().get(index + 1))
-                            : Optional.<Parameter>empty();
+                        ? Optional.of(record.getParameters().get(index + 1))
+                        : Optional.<Parameter>empty();
                 })
                 .map(next -> comment.getRange()
-                        .flatMap(commentRange -> next.getRange()
-                                .map(nextRange -> CommentIndex.startsBefore(commentRange, nextRange)))
-                        .orElse(false))
+                            .flatMap(commentRange -> next.getRange().map(
+                                    nextRange -> CommentIndex.startsBefore(commentRange, nextRange)
+                            ))
+                            .orElse(false)
+                )
                 .orElse(true);
     }
 
@@ -297,27 +333,35 @@ final class RecordDeclarationPrinter {
 
     private Doc recordComponentAnnotationPrefix(Parameter parameter) {
         return Doc.concat(
-                Doc.join(Doc.text(" "), parameter.getAnnotations().stream()
+            Doc.join(
+                Doc.text(" "),
+                parameter.getAnnotations()
+                        .stream()
                         .map(annotation::format)
-                        .toList()),
-                Doc.text(" "));
+                        .toList()
+            ),
+            Doc.text(" ")
+        );
     }
 
     private boolean recordComponentAnnotationsStartOnDifferentLines(Parameter parameter) {
-        Optional<Integer> firstAnnotationLine = parameter.getAnnotations().stream()
+        Optional<Integer> firstAnnotationLine = parameter.getAnnotations()
+                .stream()
                 .findFirst()
                 .flatMap(annotation -> annotation.getRange().map(range -> range.begin.line));
         if (firstAnnotationLine.isEmpty()) {
             return false;
         }
         int firstLine = firstAnnotationLine.orElseThrow();
-        return parameter.getAnnotations().stream()
+        return parameter.getAnnotations()
+                .stream()
                 .flatMap(annotation -> annotation.getRange().stream())
                 .anyMatch(range -> range.begin.line > firstLine);
     }
 
     private boolean recordComponentHasSourceMultilineAnnotation(Parameter parameter) {
-        return parameter.getAnnotations().stream()
+        return parameter.getAnnotations()
+                .stream()
                 .flatMap(annotation -> annotation.getRange().stream())
                 .anyMatch(range -> range.begin.line < range.end.line);
     }
@@ -328,7 +372,8 @@ final class RecordDeclarationPrinter {
             return parameterTrailing;
         }
         return comments.ownComment(parameter.getType(), comment -> comment instanceof LineComment
-                && CommentIndex.startsAfterNodeOnSameLine(parameter.getName(), comment));
+                && CommentIndex.startsAfterNodeOnSameLine(parameter.getName(), comment)
+        );
     }
 
     /**
@@ -377,27 +422,39 @@ final class RecordDeclarationPrinter {
     private Optional<Doc> recordImplementsTypes(
             String prefix,
             RecordDeclaration declaration,
-            boolean parametersBreak) {
+            boolean parametersBreak
+    ) {
         if (declaration.getImplementedTypes().isEmpty()) {
             return Optional.empty();
         }
         String flat = "implements " + compactJoinTypeLike.apply(declaration.getImplementedTypes());
         String parameterHeader = parametersBreak
-                ? ")"
-                : prefix + "(" + declaration.getParameters().stream()
-                        .map(this::recordComponentFlat)
-                        .reduce((left, right) -> left + ", " + right)
-                        .orElse("") + ")";
+            ? ")"
+            : prefix + "(" + declaration.getParameters()
+                    .stream()
+                    .map(this::recordComponentFlat)
+                    .reduce((left, right) -> left + ", " + right)
+                    .orElse("") + ")";
         if (recordHeaderWidth(declaration, parameterHeader + " " + flat + " {}") <= options.lineWidth()) {
             return Optional.of(Doc.text(" " + flat));
         }
-        return Optional.of(Doc.concat(
+        return Optional.of(
+            Doc.concat(
                 Doc.text(" implements"),
-                Doc.indent(Doc.concat(
+                Doc.indent(
+                    Doc.concat(
                         Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), declaration.getImplementedTypes().stream()
-                                .map(type -> Doc.text(compactTypeLike.apply(type)))
-                                .toList())))));
+                        Doc.join(
+                            Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                            declaration.getImplementedTypes()
+                                    .stream()
+                                    .map(type -> Doc.text(compactTypeLike.apply(type)))
+                                    .toList()
+                        )
+                    )
+                )
+            )
+        );
     }
 
     /**
@@ -433,10 +490,11 @@ final class RecordDeclarationPrinter {
     }
 
     private record RecordComponentLayout(
-            Doc component,
-            Optional<Doc> separator,
-            List<Doc> gapComments,
-            boolean hasTrailingLineComment) {
+        Doc component,
+        Optional<Doc> separator,
+        List<Doc> gapComments,
+        boolean hasTrailingLineComment
+    ) {
         boolean hasGapLineComment() {
             return !gapComments.isEmpty();
         }

@@ -18,6 +18,7 @@ import dev.lanwen.frmtr.doc.DocRenderer;
 import org.junit.jupiter.api.Test;
 
 final class CompilationUnitPrinterTest {
+
     @Test
     void formatsValidImportSiblingsAroundRawRecoveredImportGap() {
         String source = """
@@ -41,7 +42,8 @@ final class CompilationUnitPrinterTest {
 
         String formatted = printRecovered(unit, source);
 
-        assertThat(formatted).isEqualTo("""
+        assertThat(formatted).isEqualTo(
+            """
                 // file header
 
                 package dev.example;
@@ -57,7 +59,8 @@ final class CompilationUnitPrinterTest {
                 import java.io.File;
 
                 class Demo {}
-                """);
+                """
+        );
     }
 
     @Test
@@ -76,13 +79,15 @@ final class CompilationUnitPrinterTest {
 
         String formatted = printRecovered(unit, source);
 
-        assertThat(formatted).isEqualTo("""
+        assertThat(formatted).isEqualTo(
+            """
                 import java.util.List;
                 import java . util . Set; // keep raw
                 import java.io.File;
 
                 class Demo {}
-                """);
+                """
+        );
     }
 
     @Test
@@ -104,7 +109,8 @@ final class CompilationUnitPrinterTest {
 
         String formatted = printRecovered(unit, source);
 
-        assertThat(formatted).isEqualTo("""
+        assertThat(formatted).isEqualTo(
+            """
                 // file header
 
                 package dev.example;
@@ -126,7 +132,8 @@ final class CompilationUnitPrinterTest {
                         after(3);
                     }
                 }
-                """);
+                """
+        );
     }
 
     @Test
@@ -178,8 +185,9 @@ final class CompilationUnitPrinterTest {
     }
 
     private static String printRecovered(CompilationUnit unit, String source) {
-        return new DocRenderer(FormatterOptions.defaults())
-                .render(new JavaPrinter(FormatterOptions.defaults(), new SourceText(source), true).print(unit));
+        return new DocRenderer(FormatterOptions.defaults()).render(
+            new JavaPrinter(FormatterOptions.defaults(), new SourceText(source), true).print(unit)
+        );
     }
 
     private static ClassOrInterfaceDeclaration type(CompilationUnit unit, String name) {
@@ -187,16 +195,19 @@ final class CompilationUnitPrinterTest {
     }
 
     private static ImportDeclaration importDeclaration(CompilationUnit unit, String name) {
-        return unit.getImports().stream()
+        return unit.getImports()
+                .stream()
                 .filter(importDeclaration -> importDeclaration.getNameAsString().equals(name))
                 .findFirst()
                 .orElseThrow();
     }
 
     private static CompilationUnit parse(String source) {
-        JavaParser parser = new JavaParser(new ParserConfiguration()
-                .setStoreTokens(true)
-                .setAttributeComments(true));
+        JavaParser parser = new JavaParser(
+            new ParserConfiguration()
+                    .setStoreTokens(true)
+                    .setAttributeComments(true)
+        );
         return parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
                 .getResult()
                 .orElseThrow();

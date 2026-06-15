@@ -26,21 +26,13 @@ public abstract class Return {
 
     Object returnWrappedStatusLabel(StyleWriter styleWriter, RenderNode renderNode) {
         return statusLabel
-        + "  "
-        + styleWriter.style(StatusRole.ACTIVE, "ACTIVE")
-        + styleWriter.style(StatusRole.MUTED, " forced " + renderNode.requiredBreakCount());
+            + "  "
+            + styleWriter.style(StatusRole.ACTIVE, "ACTIVE")
+            + styleWriter.style(StatusRole.MUTED, " forced " + renderNode.requiredBreakCount());
     }
 
     Object returnExpandedInvoiceTotalAndAlreadyInParenthesis() {
-        return (
-            subtotal
-            + tax
-            + shipping
-            + discount
-            + serviceFee
-            + roundingAdjustment
-            + grandTotal
-        );
+        return subtotal + tax + shipping + discount + serviceFee + roundingAdjustment + grandTotal;
     }
 
     boolean unaryParenthesized() {

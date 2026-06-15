@@ -8,6 +8,7 @@ import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
@@ -31,17 +32,31 @@ import java.util.function.ToIntFunction;
  * parentheses.
  */
 final class ControlConditionPrinter {
+
     private final CommentTracker comments;
+
     private final RawSource rawSource;
+
     private final FormatterOptions options;
+
     private final Function<Expression, Doc> expressionRenderer;
+
     private final Function<Expression, String> compact;
+
     private final Function<List<? extends Node>, String> compactJoin;
+
     private final Function<Expression, String> compactWithoutOwnComment;
+
     private final Predicate<Expression> expressionHasParenthesizedNestedBinary;
+
     private final Function<Expression, Doc> brokenExpressionLines;
+
+    private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain;
+
     private final ToIntFunction<String> currentIndentedWidth;
+
     private final ToIntFunction<String> blockStatementWidth;
+
     private final LayoutDecisionLog layoutDecisions;
 
     ControlConditionPrinter(
@@ -54,9 +69,11 @@ final class ControlConditionPrinter {
             Function<Expression, String> compactWithoutOwnComment,
             Predicate<Expression> expressionHasParenthesizedNestedBinary,
             Function<Expression, Doc> brokenExpressionLines,
+            Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain,
             ToIntFunction<String> currentIndentedWidth,
             ToIntFunction<String> blockStatementWidth,
-            LayoutDecisionLog layoutDecisions) {
+            LayoutDecisionLog layoutDecisions
+    ) {
         this.comments = comments;
         this.rawSource = rawSource;
         this.options = options;
@@ -66,6 +83,7 @@ final class ControlConditionPrinter {
         this.compactWithoutOwnComment = compactWithoutOwnComment;
         this.expressionHasParenthesizedNestedBinary = expressionHasParenthesizedNestedBinary;
         this.brokenExpressionLines = brokenExpressionLines;
+        this.forcedMethodCallChain = forcedMethodCallChain;
         this.currentIndentedWidth = currentIndentedWidth;
         this.blockStatementWidth = blockStatementWidth;
         this.layoutDecisions = layoutDecisions;
@@ -118,7 +136,28 @@ final class ControlConditionPrinter {
                 return brokenMethodCall.orElseThrow();
             }
         }
+        Optional<Doc> complementedMethodCallChain = complementedMethodCallChainCondition(expression);
+        if (complementedMethodCallChain.isPresent()) {
+            return complementedMethodCallChain.orElseThrow();
+        }
         return brokenCondition(expression);
+    }
+
+    private Optional<Doc> complementedMethodCallChainCondition(Expression expression) {
+        if (
+            !(expression instanceof UnaryExpr unaryExpr)
+            || unaryExpr.getOperator() != UnaryExpr.Operator.LOGICAL_COMPLEMENT
+            || !(unaryExpr.getExpression() instanceof MethodCallExpr methodCall)
+        ) {
+            return Optional.empty();
+        }
+        return forcedMethodCallChain.apply(methodCall)
+                .map(chain -> Doc.concat(
+                        Doc.text("("),
+                        Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text("!"), chain)),
+                        Doc.HARD_LINE,
+                        Doc.text(")")
+                ));
     }
 
     /**
@@ -135,12 +174,13 @@ final class ControlConditionPrinter {
             return;
         }
         layoutDecisions.recordWidthBreak(
-                "if condition",
-                "java.statement:IfStmt",
-                "if (" + ifConditionPreview(flat) + ")",
-                flatWidth,
-                options.lineWidth(),
-                0);
+            "if condition",
+            "java.statement:IfStmt",
+            "if (" + ifConditionPreview(flat) + ")",
+            flatWidth,
+            options.lineWidth(),
+            0
+        );
     }
 
     private String ifConditionPreview(String flat) {
@@ -164,31 +204,44 @@ final class ControlConditionPrinter {
         if (blockStatementWidth.applyAsInt("if (" + prefix + "(") > options.lineWidth()) {
             return Optional.empty();
         }
-        Doc argumentLines = Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), expression.getArguments().stream()
-                .map(expressionRenderer)
-                .toList());
-        return Optional.of(Doc.concat(
+        Doc argumentLines = Doc.join(
+            Doc.concat(Doc.text(","), Doc.HARD_LINE),
+            expression.getArguments()
+                    .stream()
+                    .map(expressionRenderer)
+                    .toList()
+        );
+        return Optional.of(
+            Doc.concat(
                 Doc.text("(" + prefix + "("),
                 Doc.indent(Doc.indent(Doc.concat(Doc.HARD_LINE, argumentLines))),
-                Doc.indent(Doc.concat(
+                Doc.indent(
+                    Doc.concat(
                         Doc.HARD_LINE,
-                        Doc.text("))")))));
+                        Doc.text("))")
+                    )
+                )
+            )
+        );
     }
 
     private String methodCallPrefix(MethodCallExpr expression) {
-        return expression.getScope().map(scope -> compact.apply(scope) + ".").orElse("")
-                + expression.getTypeArguments()
-                        .map(typeArguments -> "<" + compactJoin.apply(typeArguments) + ">")
-                        .orElse("")
-                + expression.getNameAsString();
+        return (
+            expression.getScope().map(scope -> compact.apply(scope) + ".").orElse("")
+            + expression.getTypeArguments()
+                    .map(typeArguments -> "<" + compactJoin.apply(typeArguments) + ">")
+                    .orElse("")
+            + expression.getNameAsString()
+        );
     }
 
     private Doc brokenCondition(Expression expression) {
         return Doc.concat(
-                Doc.text("("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, brokenExpressionLines.apply(expression))),
-                Doc.HARD_LINE,
-                Doc.text(")"));
+            Doc.text("("),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, brokenExpressionLines.apply(expression))),
+            Doc.HARD_LINE,
+            Doc.text(")")
+        );
     }
 
     private Optional<Doc> commentedIfCondition(Expression condition) {
@@ -197,21 +250,24 @@ final class ControlConditionPrinter {
             Comment comment = ownComment.orElseThrow();
             Doc printedComment = comments.comment(comment);
             Doc conditionDoc = conditionCommentStartsBeforeExpression(condition, comment)
-                    ? Doc.join(Doc.HARD_LINE, List.of(printedComment, Doc.text(compactWithoutOwnComment.apply(condition))))
-                    : Doc.text(compactWithoutOwnComment.apply(condition) + " " + commentText(printedComment));
-            return Optional.of(Doc.concat(
+                ? Doc.join(Doc.HARD_LINE, List.of(printedComment, Doc.text(compactWithoutOwnComment.apply(condition))))
+                : Doc.text(compactWithoutOwnComment.apply(condition) + " " + commentText(printedComment));
+            return Optional.of(
+                Doc.concat(
                     Doc.text("("),
                     Doc.indent(Doc.concat(Doc.HARD_LINE, conditionDoc)),
                     Doc.HARD_LINE,
-                    Doc.text(")")));
+                    Doc.text(")")
+                )
+            );
         }
         if (ownComment.filter(BlockComment.class::isInstance).isPresent()) {
             Comment comment = ownComment.orElseThrow();
             String text = commentText(comments.comment(comment));
             String expressionText = compactWithoutOwnComment.apply(condition);
             String conditionText = conditionCommentStartsBeforeExpression(condition, comment)
-                    ? text + " " + expressionText
-                    : expressionText + " " + text;
+                ? text + " " + expressionText
+                : expressionText + " " + text;
             return Optional.of(Doc.text("(" + conditionText + ")"));
         }
         Doc trailingBlock = trailingBlockCommentBeforeCloseParen(condition);
@@ -226,10 +282,11 @@ final class ControlConditionPrinter {
         while (expression instanceof EnclosedExpr enclosedExpr) {
             expression = enclosedExpr.getInner();
         }
-        return expression instanceof BinaryExpr binaryExpr
-                && (binaryExpr.getOperator() == BinaryExpr.Operator.AND
-                        || binaryExpr.getOperator() == BinaryExpr.Operator.OR)
-                && rawSource.rawWithoutOwnComment(condition).contains("\n");
+        return (
+            expression instanceof BinaryExpr binaryExpr
+            && (binaryExpr.getOperator() == BinaryExpr.Operator.AND || binaryExpr.getOperator() == BinaryExpr.Operator.OR)
+            && rawSource.rawWithoutOwnComment(condition).contains("\n")
+        );
     }
 
     private Doc trailingBlockCommentBeforeCloseParen(Expression condition) {
@@ -238,8 +295,9 @@ final class ControlConditionPrinter {
                 .flatMap(parent -> parent.getAllContainedComments().stream())
                 .filter(BlockComment.class::isInstance)
                 .filter(comment -> comment.getCommentedNode()
-                        .map(BlockStmt.class::isInstance)
-                        .orElse(false))
+                            .map(BlockStmt.class::isInstance)
+                            .orElse(false)
+                )
                 .filter(comment -> CommentIndex.startsImmediatelyAfterNodeOnSameLine(condition, comment))
                 .findFirst()
                 .map(comments::comment)
@@ -262,8 +320,8 @@ final class ControlConditionPrinter {
         String commentText = commentText(comments.comment(comment));
         String expressionText = compactWithoutOwnComment.apply(expression);
         return conditionCommentStartsBeforeExpression(expression, comment)
-                ? commentText + " " + expressionText
-                : expressionText + " " + commentText;
+            ? commentText + " " + expressionText
+            : expressionText + " " + commentText;
     }
 
     private boolean conditionCommentStartsBeforeExpression(Expression condition, Comment comment) {

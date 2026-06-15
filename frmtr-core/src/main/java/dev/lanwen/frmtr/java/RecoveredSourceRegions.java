@@ -20,10 +20,13 @@ import java.util.Objects;
  * crossing comments should widen or fail a plan, and where recovered docs belong in surrounding syntax layout.
  */
 final class RecoveredSourceRegions {
+
     private static final String LABEL_PREFIX = "java.recoveredRegion";
 
     private final SourceText sourceText;
+
     private final FormatterOptions options;
+
     private final CommentTracker comments;
 
     RecoveredSourceRegions(SourceText sourceText, FormatterOptions options, CommentTracker comments) {
@@ -62,7 +65,8 @@ final class RecoveredSourceRegions {
         Objects.requireNonNull(region, "region");
         List<Comment> contained = new ArrayList<>();
         List<Comment> crossing = new ArrayList<>();
-        commentRoot.getAllContainedComments().stream()
+        commentRoot.getAllContainedComments()
+                .stream()
                 .sorted(CommentIndex.sourceOrderComparator())
                 .forEach(comment -> {
                     if (comment.getRange().isEmpty()) {
@@ -94,12 +98,13 @@ final class RecoveredSourceRegions {
         }
         return "%s:%s@%d:%d-%d:%d"
                 .formatted(
-                        LABEL_PREFIX,
-                        kind,
-                        region.beginLine(),
-                        region.beginColumn(),
-                        region.endLine(),
-                        region.endColumn());
+                    LABEL_PREFIX,
+                    kind,
+                    region.beginLine(),
+                    region.beginColumn(),
+                    region.endLine(),
+                    region.endColumn()
+                );
     }
 
     /**
@@ -129,9 +134,11 @@ final class RecoveredSourceRegions {
      * Reports that a recovered source region would split a JavaParser-visible comment.
      */
     static final class CrossingCommentBoundaryException extends RuntimeException {
+
         private static final long serialVersionUID = 1L;
 
         private final transient SourceRegion region;
+
         private final transient List<Comment> crossingComments;
 
         CrossingCommentBoundaryException(SourceRegion region, List<Comment> crossingComments) {
@@ -151,12 +158,14 @@ final class RecoveredSourceRegions {
         private static String message(SourceRegion region, List<Comment> crossingComments) {
             Comment first = crossingComments.getFirst();
             String range = first.getRange().map(Object::toString).orElse("unknown range");
-            return "Recovered source region "
-                    + region.lineColumnLabel()
-                    + (first.getRange().isPresent() ? " crosses " : " cannot safely account ")
-                    + first.getClass().getSimpleName()
-                    + " at "
-                    + range;
+            return (
+                "Recovered source region "
+                + region.lineColumnLabel()
+                + (first.getRange().isPresent() ? " crosses " : " cannot safely account ")
+                + first.getClass().getSimpleName()
+                + " at "
+                + range
+            );
         }
     }
 }

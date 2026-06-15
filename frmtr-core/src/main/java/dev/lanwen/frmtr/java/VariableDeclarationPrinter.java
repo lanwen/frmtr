@@ -37,14 +37,23 @@ import java.util.function.ToIntFunction;
  * and only decides how a {@link VariableDeclarationExpr} joins the already-rendered pieces.
  */
 final class VariableDeclarationPrinter {
+
     private final FormatterOptions options;
+
     private final Function<NodeWithAnnotations<?>, Doc> annotations;
+
     private final Function<NodeWithModifiers<?>, String> modifiers;
+
     private final Function<Node, String> compactTypeLike;
+
     private final Function<Type, Doc> typeBody;
+
     private final Predicate<Type> typeCanBreak;
+
     private final BiFunction<VariableDeclarator, String, Doc> variable;
+
     private final BiFunction<VariableDeclarator, String, Doc> terminatedVariable;
+
     private final ToIntFunction<String> currentIndentedWidth;
 
     VariableDeclarationPrinter(
@@ -56,7 +65,8 @@ final class VariableDeclarationPrinter {
             Predicate<Type> typeCanBreak,
             BiFunction<VariableDeclarator, String, Doc> variable,
             BiFunction<VariableDeclarator, String, Doc> terminatedVariable,
-            ToIntFunction<String> currentIndentedWidth) {
+            ToIntFunction<String> currentIndentedWidth
+    ) {
         this.options = options;
         this.annotations = annotations;
         this.modifiers = modifiers;
@@ -94,12 +104,16 @@ final class VariableDeclarationPrinter {
             String flatType = compactTypeLike.apply(type) + " ";
             declarationPrefix += flatType;
             if (localVariableTypeShouldBreak(type, declaration.getVariables(), declarationPrefix)) {
-                Doc variables = Doc.joinComma(declaration.getVariables().stream()
-                        .map(variable -> variableDoc(
-                                variable,
-                                localVariableDeclarationPrefix(variable, ""),
-                                statementTerminator && isLastVariable(declaration, variable)))
-                        .toList());
+                Doc variables = Doc.joinComma(
+                    declaration.getVariables()
+                            .stream()
+                            .map(variable -> variableDoc(
+                                    variable,
+                                    localVariableDeclarationPrefix(variable, ""),
+                                    statementTerminator && isLastVariable(declaration, variable)
+                            ))
+                            .toList()
+                );
                 docs.add(Doc.group(Doc.concat(typeBody.apply(type), Doc.text(" "), variables)));
                 return Doc.concat(docs);
             }
@@ -107,27 +121,44 @@ final class VariableDeclarationPrinter {
         }
         String variableDeclarationPrefix = declarationPrefix;
         if (localVariableDeclaratorsShouldBreak(declaration.getVariables())) {
-            docs.add(Doc.indent(Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), declaration.getVariables().stream()
-                    .map(variable -> variableDoc(
-                            variable,
-                            localVariableDeclarationPrefix(variable, variableDeclarationPrefix),
-                            statementTerminator && isLastVariable(declaration, variable)))
-                    .toList())));
+            docs.add(
+                Doc.indent(
+                    Doc.join(
+                        Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                        declaration.getVariables()
+                                .stream()
+                                .map(variable -> variableDoc(
+                                        variable,
+                                        localVariableDeclarationPrefix(variable, variableDeclarationPrefix),
+                                        statementTerminator && isLastVariable(declaration, variable)
+                                ))
+                                .toList()
+                    )
+                )
+            );
             return Doc.concat(docs);
         }
-        docs.add(Doc.group(Doc.joinComma(declaration.getVariables().stream()
-                .map(variable -> variableDoc(
-                        variable,
-                        localVariableDeclarationPrefix(variable, variableDeclarationPrefix),
-                        statementTerminator && isLastVariable(declaration, variable)))
-                .toList())));
+        docs.add(
+            Doc.group(
+                Doc.joinComma(
+                    declaration.getVariables()
+                            .stream()
+                            .map(variable -> variableDoc(
+                                    variable,
+                                    localVariableDeclarationPrefix(variable, variableDeclarationPrefix),
+                                    statementTerminator && isLastVariable(declaration, variable)
+                            ))
+                            .toList()
+                )
+            )
+        );
         return Doc.concat(docs);
     }
 
     private Doc variableDoc(VariableDeclarator variable, String declarationPrefix, boolean statementTerminator) {
         return statementTerminator
-                ? terminatedVariable.apply(variable, declarationPrefix)
-                : this.variable.apply(variable, declarationPrefix);
+            ? terminatedVariable.apply(variable, declarationPrefix)
+            : this.variable.apply(variable, declarationPrefix);
     }
 
     private boolean isLastVariable(VariableDeclarationExpr declaration, VariableDeclarator variable) {
@@ -154,12 +185,16 @@ final class VariableDeclarationPrinter {
     private boolean localVariableTypeShouldBreak(
             Type type,
             NodeList<VariableDeclarator> variables,
-            String declarationPrefix) {
-        return typeCanBreak.test(type)
-                && variables.stream()
-                        .anyMatch(variable -> currentIndentedWidth.applyAsInt(
-                                        declarationPrefix + variable.getNameAsString())
-                                > options.lineWidth());
+            String declarationPrefix
+    ) {
+        return (
+            typeCanBreak.test(type)
+            && variables.stream()
+                    .anyMatch(variable -> currentIndentedWidth.applyAsInt(
+                            declarationPrefix + variable.getNameAsString()
+                        ) > options.lineWidth()
+                    )
+        );
     }
 
     /**
@@ -178,7 +213,8 @@ final class VariableDeclarationPrinter {
                         || initializer instanceof LambdaExpr
                         || initializer instanceof MethodCallExpr
                         || initializer instanceof ObjectCreationExpr
-                        || initializer instanceof SwitchExpr)
+                        || initializer instanceof SwitchExpr
+                )
                 .map(ignored -> options.indentUnit() + declarationPrefix)
                 .orElse("");
     }

@@ -2,8 +2,8 @@ package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.GeneratedJavaParserConstants;
 import com.github.javaparser.JavaToken;
-import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.RecordPatternExpr;
@@ -43,26 +43,44 @@ import java.util.function.ToIntFunction;
  * {@code frmtr-core/src/test/resources/format/unnamed-variables-patterns/input.java}.
  */
 final class SwitchPrinter {
+
     private static final String SWITCH_ENTRY_LIST_RECOVERY_FAILURE =
-            "Unable to recover Java parse error inside switch entry list: ";
+        "Unable to recover Java parse error inside switch entry list: ";
 
     private final CommentTracker comments;
+
     private final RawSource rawSource;
+
     private final RawPreservedSource rawPreservedSource;
+
     private final FormatterOptions options;
+
     private final SourceText sourceText;
+
     private final RecoveredListPlanner recoveredListPlanner;
+
     private final RecoveredRawGapPrinter rawGaps;
+
     private final boolean recoverParseProblems;
+
     private final JavaFormatRule<Statement> statementRenderer;
+
     private final JavaFormatRule<Expression> expressionRenderer;
+
     private final JavaFormatRule<BlockStmt> blockRenderer;
+
     private final BiFunction<Statement, Statement, Doc> statementSeparator;
+
     private final Function<Expression, Doc> controlConditionRenderer;
+
     private final Function<Expression, Doc> binaryExpressionLinesRenderer;
+
     private final CompactSourceText compactSource;
+
     private final CommentPlacement commentPlacement;
+
     private final Function<NodeWithModifiers<?>, String> modifiers;
+
     private final ToIntFunction<String> currentIndentedWidth;
 
     /**
@@ -79,7 +97,7 @@ final class SwitchPrinter {
         SINGLE_WRAPPED_LABEL,
 
         /** Put each label on its own line because a comma-separated label list exceeds the available width. */
-        WRAPPED_LABEL_LIST
+        WRAPPED_LABEL_LIST,
     }
 
     /**
@@ -99,7 +117,7 @@ final class SwitchPrinter {
         COMMENTED_RULE_BODY,
 
         /** Render a rule entry body after {@code ->} on the same line through the normal body renderer. */
-        INLINE_RULE_BODY
+        INLINE_RULE_BODY,
     }
 
     /**
@@ -119,7 +137,7 @@ final class SwitchPrinter {
         RAW_GAP,
 
         /** The previous recovered switch-block item was a raw source gap whose trailing break moved to formatter docs. */
-        RAW_GAP_WITH_TRAILING_BREAK
+        RAW_GAP_WITH_TRAILING_BREAK,
     }
 
     SwitchPrinter(
@@ -131,7 +149,8 @@ final class SwitchPrinter {
             Function<Expression, Doc> controlConditionRenderer,
             Function<Expression, Doc> binaryExpressionLinesRenderer,
             Function<NodeWithModifiers<?>, String> modifiers,
-            ToIntFunction<String> currentIndentedWidth) {
+            ToIntFunction<String> currentIndentedWidth
+    ) {
         this.comments = context.comments;
         this.rawSource = context.rawSource;
         this.rawPreservedSource = context.rawPreservedSource;
@@ -164,20 +183,22 @@ final class SwitchPrinter {
         Doc prefix = leadingBlockComment == Doc.EMPTY ? Doc.EMPTY : Doc.concat(leadingBlockComment, Doc.text(" "));
         if (statement.getEntries().isEmpty()) {
             return Doc.concat(
-                    prefix,
-                    Doc.text("switch "),
-                    controlConditionRenderer.apply(statement.getSelector()),
-                    Doc.text(" {"),
-                    Doc.HARD_LINE,
-                    Doc.text("}"));
-        }
-        Doc selectorLineComment = comments.ownTriviaComment(statement.getSelector(), JavaCommentTrivia::isLine);
-        return Doc.concat(
                 prefix,
                 Doc.text("switch "),
                 controlConditionRenderer.apply(statement.getSelector()),
-                Doc.text(" "),
-                switchBlock(statement, statement.getEntries(), selectorLineComment));
+                Doc.text(" {"),
+                Doc.HARD_LINE,
+                Doc.text("}")
+            );
+        }
+        Doc selectorLineComment = comments.ownTriviaComment(statement.getSelector(), JavaCommentTrivia::isLine);
+        return Doc.concat(
+            prefix,
+            Doc.text("switch "),
+            controlConditionRenderer.apply(statement.getSelector()),
+            Doc.text(" "),
+            switchBlock(statement, statement.getEntries(), selectorLineComment)
+        );
     }
 
     /**
@@ -185,8 +206,9 @@ final class SwitchPrinter {
      */
     Doc switchExpression(SwitchExpr expression) {
         return Doc.concat(
-                Doc.text("switch (" + compactSource.compact(expression.getSelector()) + ") "),
-                switchBlock(expression, expression.getEntries()));
+            Doc.text("switch (" + compactSource.compact(expression.getSelector()) + ") "),
+            switchBlock(expression, expression.getEntries())
+        );
     }
 
     private Doc switchBlock(Node owner, NodeList<SwitchEntry> entries) {
@@ -213,10 +235,11 @@ final class SwitchPrinter {
         }
         entryDocs.addAll(entries.stream().map(this::switchEntry).toList());
         return Doc.concat(
-                Doc.text("{"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, entryDocs))),
-                Doc.HARD_LINE,
-                Doc.text("}"));
+            Doc.text("{"),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, entryDocs))),
+            Doc.HARD_LINE,
+            Doc.text("}")
+        );
     }
 
     /**
@@ -228,7 +251,8 @@ final class SwitchPrinter {
     private Doc recoveredSwitchBlock(
             Node owner,
             RecoveredListPlanner.Plan<SwitchEntry> plan,
-            Doc leadingInside) {
+            Doc leadingInside
+    ) {
         List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions = rawGaps.rawGapRegions(plan);
         rawGaps.requireRecoverableRawRegions(owner, rawGapRegions);
 
@@ -256,8 +280,8 @@ final class SwitchPrinter {
                         contents.add(rawGaps.raw(owner, rawRegion, "switchEntryList"));
                     }
                     previousEntry = rawRegion.trailingBreakReplaced()
-                            ? EntryKind.RAW_GAP_WITH_TRAILING_BREAK
-                            : EntryKind.RAW_GAP;
+                        ? EntryKind.RAW_GAP_WITH_TRAILING_BREAK
+                        : EntryKind.RAW_GAP;
                 }
             }
         }
@@ -274,7 +298,8 @@ final class SwitchPrinter {
 
     private void appendSeparatorBeforeRecoveredSwitchEntry(
             List<Doc> contents,
-            EntryKind previousEntry) {
+            EntryKind previousEntry
+    ) {
         if (contents.isEmpty()) {
             contents.add(Doc.HARD_LINE);
             return;
@@ -291,7 +316,8 @@ final class SwitchPrinter {
     private void appendSeparatorBeforeRecoveredRawGap(
             List<Doc> contents,
             EntryKind previousEntry,
-            RecoveredRawGapPrinter.RawGapRegion rawRegion) {
+            RecoveredRawGapPrinter.RawGapRegion rawRegion
+    ) {
         if (previousEntry != EntryKind.LEADING_DOC || rawRegionStartsWithLineBreak(rawRegion.region())) {
             return;
         }
@@ -314,15 +340,17 @@ final class SwitchPrinter {
 
     private Optional<RecoveredListPlanner.Plan<SwitchEntry>> recoveryPlan(
             Node owner,
-            NodeList<SwitchEntry> entries) {
+            NodeList<SwitchEntry> entries
+    ) {
         if (!recoverParseProblems || !hasRecoverableSwitchEntryListProblem(owner, entries)) {
             return Optional.empty();
         }
         RecoveredListPlanner.Plan<SwitchEntry> plan = recoveredListPlanner.plan(
-                owner,
-                requireSwitchBlockInteriorRegion(owner),
-                entries,
-                entry -> entry.getParsed() == Node.Parsedness.PARSED);
+            owner,
+            requireSwitchBlockInteriorRegion(owner),
+            entries,
+            entry -> entry.getParsed() == Node.Parsedness.PARSED
+        );
         if (!plan.isSafe()) {
             throw switchEntryListRecoveryFailure(plan.unsafe().orElseThrow().reason());
         }
@@ -408,7 +436,9 @@ final class SwitchPrinter {
     private SourceRegion tokenRegion(JavaToken token, String description) {
         return token.getRange()
                 .map(sourceText::region)
-                .orElseThrow(() -> new IllegalArgumentException("switch block " + description + " is missing a source range"));
+                .orElseThrow(
+                    () -> new IllegalArgumentException("switch block " + description + " is missing a source range")
+                );
     }
 
     private static boolean hasRawGap(RecoveredListPlanner.Plan<SwitchEntry> plan) {
@@ -424,8 +454,11 @@ final class SwitchPrinter {
      */
     private Doc switchEntry(SwitchEntry entry) {
         Doc leadingComment = switchEntryLeadingComments(entry);
-        Doc trailingComment = comments.ownTriviaComment(entry, commentNode -> commentNode.isLine()
-                && commentNode.startsOnBeginLine(entry));
+        Doc trailingComment = comments.ownTriviaComment(
+            entry,
+            commentNode -> commentNode.isLine()
+                    && commentNode.startsOnBeginLine(entry)
+        );
         if (trailingComment == Doc.EMPTY) {
             Optional<Doc> raw = rawSingleLineSwitchEntry(entry);
             if (raw.isPresent()) {
@@ -440,16 +473,18 @@ final class SwitchPrinter {
             case COMMENTED_RULE_BODY -> {
                 Statement statement = entry.getStatements().get(0);
                 yield Doc.concat(
-                        label,
-                        guard,
-                        Doc.text(" ->"),
-                        Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement))));
-            }
-            case INLINE_RULE_BODY -> Doc.concat(
                     label,
                     guard,
-                    Doc.text(" -> "),
-                    switchEntryBody(entry.getStatements().get(0)));
+                    Doc.text(" ->"),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement)))
+                );
+            }
+            case INLINE_RULE_BODY -> Doc.concat(
+                label,
+                guard,
+                Doc.text(" -> "),
+                switchEntryBody(entry.getStatements().get(0))
+            );
         };
         entryDoc = trailingComment == Doc.EMPTY ? entryDoc : Doc.concat(entryDoc, Doc.text(" "), trailingComment);
         return Doc.concat(leadingComment, entryDoc);
@@ -464,8 +499,11 @@ final class SwitchPrinter {
         if (leadingComments != Doc.EMPTY) {
             return leadingComments;
         }
-        Doc leadingComment = comments.ownTriviaComment(entry, commentNode -> commentNode.isLine()
-                && commentNode.startsBeforeBeginLine(entry));
+        Doc leadingComment = comments.ownTriviaComment(
+            entry,
+            commentNode -> commentNode.isLine()
+                    && commentNode.startsBeforeBeginLine(entry)
+        );
         if (leadingComment == Doc.EMPTY) {
             return Doc.EMPTY;
         }
@@ -495,7 +533,8 @@ final class SwitchPrinter {
         if (entry.isDefault()) {
             return Doc.text(defaultSwitchEntryLabel(entry));
         }
-        String flatLabels = entry.getLabels().stream()
+        String flatLabels = entry.getLabels()
+                .stream()
                 .map(this::switchLabelText)
                 .reduce((left, right) -> left + ", " + right)
                 .orElse("");
@@ -504,12 +543,17 @@ final class SwitchPrinter {
             case FLAT -> Doc.text(flat);
             case SINGLE_WRAPPED_LABEL -> Doc.concat(Doc.text("case "), switchLabel(entry.getLabels().get(0)));
             case WRAPPED_LABEL_LIST -> Doc.concat(
-                    Doc.text("case"),
-                    Doc.indent(Doc.concat(
-                            Doc.HARD_LINE,
-                            Doc.join(
-                                    Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                                    entry.getLabels().stream().map(label -> Doc.text(switchLabelText(label))).toList()))));
+                Doc.text("case"),
+                Doc.indent(
+                    Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(
+                            Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                            entry.getLabels().stream().map(label -> Doc.text(switchLabelText(label))).toList()
+                        )
+                    )
+                )
+            );
         };
     }
 
@@ -530,8 +574,10 @@ final class SwitchPrinter {
      * Reports whether a record-pattern label needs its own wrapped pattern rendering.
      */
     private boolean switchLabelBreaks(Expression label) {
-        return label instanceof RecordPatternExpr
-                && currentIndentedWidth.applyAsInt("case " + switchLabelText(label) + " -> {}") > options.lineWidth();
+        return (
+            label instanceof RecordPatternExpr
+            && currentIndentedWidth.applyAsInt("case " + switchLabelText(label) + " -> {}") > options.lineWidth()
+        );
     }
 
     /**
@@ -585,14 +631,22 @@ final class SwitchPrinter {
      */
     private Doc recordPattern(RecordPatternExpr pattern) {
         return Doc.concat(
-                Doc.text(modifiers.apply(pattern) + compactSource.compactTypeLike(pattern.getType()) + "("),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), pattern.getPatternList().stream()
+            Doc.text(modifiers.apply(pattern) + compactSource.compactTypeLike(pattern.getType()) + "("),
+            Doc.indent(
+                Doc.concat(
+                    Doc.HARD_LINE,
+                    Doc.join(
+                        Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                        pattern.getPatternList()
+                                .stream()
                                 .map(this::recordPatternComponent)
-                                .toList()))),
-                Doc.HARD_LINE,
-                Doc.text(")"));
+                                .toList()
+                    )
+                )
+            ),
+            Doc.HARD_LINE,
+            Doc.text(")")
+        );
     }
 
     private Doc recordPatternComponent(Expression pattern) {
@@ -619,20 +673,25 @@ final class SwitchPrinter {
         }
         Expression guardedExpression = guard instanceof EnclosedExpr enclosedExpr ? enclosedExpr.getInner() : guard;
         return Doc.concat(
-                Doc.text(" when ("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLinesRenderer.apply(guardedExpression))),
-                Doc.HARD_LINE,
-                Doc.text(")"));
+            Doc.text(" when ("),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLinesRenderer.apply(guardedExpression))),
+            Doc.HARD_LINE,
+            Doc.text(")")
+        );
     }
 
     private boolean switchGuardBreaks(SwitchEntry entry, Expression guard, String flat) {
-        String label = "case " + entry.getLabels().stream()
-                .map(this::switchLabelText)
-                .reduce((left, right) -> left + ", " + right)
-                .orElse("");
-        return guard instanceof EnclosedExpr
-                || switchEntryWidth(label + flat + " -> {}") >= options.lineWidth()
-                        && !rawSingleLineSwitchEntry(entry).isPresent();
+        String label = "case "
+            + entry.getLabels()
+                    .stream()
+                    .map(this::switchLabelText)
+                    .reduce((left, right) -> left + ", " + right)
+                    .orElse("");
+        return (
+            guard instanceof EnclosedExpr
+            || (switchEntryWidth(label + flat + " -> {}") >= options.lineWidth()
+                && !rawSingleLineSwitchEntry(entry).isPresent())
+        );
     }
 
     private int switchEntryWidth(String text) {
@@ -641,7 +700,12 @@ final class SwitchPrinter {
 
     private Doc switchStatementGroupEntry(Doc label, Doc guard, NodeList<Statement> statements) {
         if (statements.size() == 1 && statements.get(0).isBlockStmt()) {
-            return Doc.concat(label, guard, Doc.text(": "), switchStatementGroupBlock(statements.get(0).asBlockStmt()));
+            return Doc.concat(
+                label,
+                guard,
+                Doc.text(": "),
+                switchStatementGroupBlock(statements.get(0).asBlockStmt())
+            );
         }
         return Doc.concat(label, guard, Doc.text(":"), switchEntryStatements(statements));
     }
@@ -677,7 +741,11 @@ final class SwitchPrinter {
         if (entry.getType() == SwitchEntry.Type.STATEMENT_GROUP) {
             return Optional.empty();
         }
-        String raw = entry.getTokenRange().map(Object::toString).orElseGet(() -> rawSource.rawWithoutOwnComment(entry)).stripTrailing();
+        String raw = entry
+                .getTokenRange()
+                .map(Object::toString)
+                .orElseGet(() -> rawSource.rawWithoutOwnComment(entry))
+                .stripTrailing();
         if (!raw.contains("->") || raw.contains("\n")) {
             return Optional.empty();
         }
@@ -766,14 +834,17 @@ final class SwitchPrinter {
 
     static boolean isCollapsedMalformedSwitchStatement(
             Statement statement,
-            SourceText sourceText) {
+            SourceText sourceText
+    ) {
         if (statement.getParsed() == Node.Parsedness.PARSED || statement.getRange().isEmpty()) {
             return false;
         }
         try {
             SourceRegion statementRegion = sourceText.region(statement.getRange().orElseThrow());
-            return startsWithSwitchKeyword(sourceText.slice(statementRegion))
-                    || isAfterSwitchKeywordTrivia(sourceText, statementRegion.beginOffset());
+            return (
+                startsWithSwitchKeyword(sourceText.slice(statementRegion))
+                || isAfterSwitchKeywordTrivia(sourceText, statementRegion.beginOffset())
+            );
         } catch (IllegalArgumentException exception) {
             return false;
         }
@@ -781,15 +852,19 @@ final class SwitchPrinter {
 
     private static boolean hasRecoverableSwitchEntryListProblem(
             Node owner,
-            NodeList<SwitchEntry> entries) {
-        return owner.getParsed() == Node.Parsedness.PARSED
-                && entries.stream().anyMatch(entry -> !isFullyParsed(entry))
-                && owner.stream()
-                        .filter(node -> node != owner)
-                        .filter(node -> node.getParsed() != Node.Parsedness.PARSED)
-                        .allMatch(node -> nearestSwitchEntryListSibling(node)
+            NodeList<SwitchEntry> entries
+    ) {
+        return (
+            owner.getParsed() == Node.Parsedness.PARSED
+            && entries.stream().anyMatch(entry -> !isFullyParsed(entry))
+            && owner.stream()
+                    .filter(node -> node != owner)
+                    .filter(node -> node.getParsed() != Node.Parsedness.PARSED)
+                    .allMatch(node -> nearestSwitchEntryListSibling(node)
                                 .filter(entries::contains)
-                                .isPresent());
+                                .isPresent()
+                    )
+        );
     }
 
     private static boolean isSwitchEntryListSibling(SwitchEntry entry) {
@@ -812,14 +887,17 @@ final class SwitchPrinter {
 
     private static boolean isAfterSwitchKeywordTrivia(
             SourceText sourceText,
-            int statementBeginOffset) {
+            int statementBeginOffset
+    ) {
         String prefix = sourceText.slice(sourceText.region(0, statementBeginOffset));
         int cursor = skipBackwardTrivia(prefix, prefix.length());
         int switchBegin = cursor - "switch".length();
-        return switchBegin >= 0
-                && prefix.regionMatches(switchBegin, "switch", 0, "switch".length())
-                && isKeywordBoundary(prefix, switchBegin - 1)
-                && isKeywordBoundary(prefix, cursor);
+        return (
+            switchBegin >= 0
+            && prefix.regionMatches(switchBegin, "switch", 0, "switch".length())
+            && isKeywordBoundary(prefix, switchBegin - 1)
+            && isKeywordBoundary(prefix, cursor)
+        );
     }
 
     private static boolean startsWithSwitchKeyword(String source) {

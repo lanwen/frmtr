@@ -26,6 +26,7 @@ import java.util.Set;
  * individual {@link ImportDeclaration} is printed.
  */
 final class ImportChunks {
+
     private static final Comparator<ImportDeclaration> SOURCE_ORDER = Comparator.comparing(ImportChunks::beginPosition);
 
     private ImportChunks() {}
@@ -56,8 +57,7 @@ final class ImportChunks {
         boolean separatorBeforeCurrent = false;
         for (ImportDeclaration importDeclaration : sourceImports) {
             boolean separatorBeforeImport = hasSeparatorBefore(previous, importDeclaration);
-            boolean sortBoundaryBeforeImport =
-                    separatorBeforeImport || hasDetachedLeadingComment(importDeclaration);
+            boolean sortBoundaryBeforeImport = separatorBeforeImport || hasDetachedLeadingComment(importDeclaration);
             if (!current.isEmpty() && sortBoundaryBeforeImport) {
                 chunks.add(new ImportChunk(current, separatorBeforeCurrent));
                 current = new ArrayList<>();
@@ -136,9 +136,12 @@ final class ImportChunks {
         private ImportChunk inCurrentOrder(List<ImportDeclaration> currentImports) {
             Set<ImportDeclaration> chunkImports = Collections.newSetFromMap(new IdentityHashMap<>());
             chunkImports.addAll(imports);
-            return new ImportChunk(currentImports.stream()
-                    .filter(chunkImports::contains)
-                    .toList(), separatorBefore);
+            return new ImportChunk(
+                currentImports.stream()
+                        .filter(chunkImports::contains)
+                        .toList(),
+                separatorBefore
+            );
         }
     }
 }

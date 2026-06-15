@@ -25,10 +25,15 @@ import java.util.function.ToIntFunction;
  * those decisions as callbacks and only decides how a selected {@link MethodReferenceExpr} is assembled.
  */
 final class MethodReferencePrinter {
+
     private final FormatterOptions options;
+
     private final Function<Node, String> compact;
+
     private final Function<List<? extends Node>, String> compactJoinTypeLike;
+
     private final BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix;
+
     private final ToIntFunction<String> blockStatementWidth;
 
     MethodReferencePrinter(
@@ -36,7 +41,8 @@ final class MethodReferencePrinter {
             Function<Node, String> compact,
             Function<List<? extends Node>, String> compactJoinTypeLike,
             BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix,
-            ToIntFunction<String> blockStatementWidth) {
+            ToIntFunction<String> blockStatementWidth
+    ) {
         this.options = options;
         this.compact = compact;
         this.compactJoinTypeLike = compactJoinTypeLike;
@@ -52,19 +58,22 @@ final class MethodReferencePrinter {
      * parenthesized scope must keep {@code ::member} attached after the closing parenthesis.
      */
     Doc methodReference(MethodReferenceExpr expression) {
-        return suffixedEnclosedMethodReference(expression, false)
-                .orElseGet(() -> Doc.text(compact.apply(expression)));
+        return suffixedEnclosedMethodReference(expression, false).orElseGet(
+            () -> Doc.text(compact.apply(expression))
+        );
     }
 
     /**
      * Prints only the suffix attached after a method-reference scope.
      */
     private String methodReferenceSuffix(MethodReferenceExpr expression) {
-        return "::"
-                + expression.getTypeArguments()
-                        .map(typeArguments -> "<" + compactJoinTypeLike.apply(typeArguments) + ">")
-                        .orElse("")
-                + expression.getIdentifier();
+        return (
+            "::"
+            + expression.getTypeArguments()
+                    .map(typeArguments -> "<" + compactJoinTypeLike.apply(typeArguments) + ">")
+                    .orElse("")
+            + expression.getIdentifier()
+        );
     }
 
     /**
@@ -76,14 +85,20 @@ final class MethodReferencePrinter {
      * stays attached after that broken parenthesized scope.
      */
     Optional<Doc> suffixedEnclosedMethodReference(MethodReferenceExpr expression, boolean leadingBreak) {
-        if (!leadingBreak && blockStatementWidth.applyAsInt(compact.apply(expression) + ";") <= options.lineWidth()) {
+        if (
+            !leadingBreak
+            && blockStatementWidth.applyAsInt(compact.apply(expression) + ";") <= options.lineWidth()
+        ) {
             return Optional.empty();
         }
         if (!(expression.getScope() instanceof EnclosedExpr enclosed)) {
             return Optional.empty();
         }
-        return Optional.of(Doc.concat(
+        return Optional.of(
+            Doc.concat(
                 brokenEnclosedForSuffix.apply(enclosed, leadingBreak),
-                Doc.text(methodReferenceSuffix(expression))));
+                Doc.text(methodReferenceSuffix(expression))
+            )
+        );
     }
 }

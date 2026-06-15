@@ -11,6 +11,7 @@ import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.TaskAction;
 
 public abstract class FrmtrJavaCheckTask extends AbstractFrmtrJavaTask {
+
     private final Property<Boolean> printDiffs;
 
     @Inject
@@ -26,7 +27,12 @@ public abstract class FrmtrJavaCheckTask extends AbstractFrmtrJavaTask {
 
     @TaskAction
     public void checkFormatting() {
-        FormatRunResult run = FormatterRunner.check(displayRoot(), selectedFiles(), formatterOptions(), printDiffs.get());
+        FormatRunResult run = FormatterRunner.check(
+            displayRoot(),
+            selectedFiles(),
+            formatterOptions(),
+            printDiffs.get()
+        );
         run.changedResults().forEach(this::printChanged);
         printFailures(run);
 
@@ -36,8 +42,9 @@ public abstract class FrmtrJavaCheckTask extends AbstractFrmtrJavaTask {
 
         if (run.hasChanges()) {
             throw new GradleException(
-                    "frmtr found %d unformatted Java file(s). Run ./gradlew frmtrFormat."
-                            .formatted(run.changedCount()));
+                "frmtr found %d unformatted Java file(s). Run ./gradlew frmtrFormat."
+                        .formatted(run.changedCount())
+            );
         }
     }
 

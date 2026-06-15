@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 final class UnifiedDiffRendererTest {
+
     @Test
     void rendersPatchLikeDiffByDefault() throws Exception {
         String diff = UnifiedDiffRenderer.render(Path.of("Demo.java"), "class Demo{int value;}", "class Demo {}\n");
@@ -29,8 +30,8 @@ final class UnifiedDiffRendererTest {
                 -12345678901234567890
                 +12345678901234567890123
                 """
-                + " \n"
-                + """
+            + " \n"
+            + """
                  after
                 +short
                 \\ No newline at end of file
@@ -43,7 +44,8 @@ final class UnifiedDiffRendererTest {
         String blankNeighbor = " ".repeat(21) + "⋮\n";
         String overflow = " ".repeat(21) + "⋮+3\n";
 
-        assertThat(decorated).isEqualTo("""
+        assertThat(decorated).isEqualTo(
+            """
                 diff --git origin frmtr
                 --- origin
                 +++ frmtr
@@ -60,6 +62,7 @@ final class UnifiedDiffRendererTest {
                  after
                 +short
                 \\ No newline at end of file
-                """);
+                """
+        );
     }
 }

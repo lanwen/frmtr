@@ -3,8 +3,8 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
-import com.github.javaparser.ast.expr.CharLiteralExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
+import com.github.javaparser.ast.expr.CharLiteralExpr;
 import com.github.javaparser.ast.expr.ClassExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
@@ -29,7 +29,9 @@ import java.util.function.Function;
  * breaks belong, and which structured expression or declaration printer should handle a node.
  */
 final class CompactSourceText {
+
     private final RawSource rawSource;
+
     private Function<AnnotationExpr, String> annotationFlatText;
 
     CompactSourceText(RawSource rawSource) {
@@ -79,25 +81,31 @@ final class CompactSourceText {
             return "(" + compact(enclosedExpr.getInner()) + ")";
         }
         if (node instanceof BinaryExpr binaryExpr && containsRawLiteral(binaryExpr)) {
-            return compact(binaryExpr.getLeft())
-                    + " "
-                    + binaryExpr.getOperator().asString()
-                    + " "
-                    + compact(binaryExpr.getRight());
+            return (
+                compact(binaryExpr.getLeft())
+                + " "
+                + binaryExpr.getOperator().asString()
+                + " "
+                + compact(binaryExpr.getRight())
+            );
         }
         if (node instanceof ConditionalExpr conditionalExpr && containsRawLiteral(conditionalExpr)) {
-            return compact(conditionalExpr.getCondition())
-                    + " ? "
-                    + compact(conditionalExpr.getThenExpr())
-                    + " : "
-                    + compact(conditionalExpr.getElseExpr());
+            return (
+                compact(conditionalExpr.getCondition())
+                + " ? "
+                + compact(conditionalExpr.getThenExpr())
+                + " : "
+                + compact(conditionalExpr.getElseExpr())
+            );
         }
         if (node instanceof AssignExpr assignExpr && assignExpr.getAllContainedComments().isEmpty()) {
-            return compact(assignExpr.getTarget())
-                    + " "
-                    + assignExpr.getOperator().asString()
-                    + " "
-                    + compact(assignExpr.getValue());
+            return (
+                compact(assignExpr.getTarget())
+                + " "
+                + assignExpr.getOperator().asString()
+                + " "
+                + compact(assignExpr.getValue())
+            );
         }
         if (node instanceof MethodCallExpr methodCallExpr && methodCallExpr.getAllContainedComments().isEmpty()) {
             return compactMethodCall(methodCallExpr);
@@ -106,8 +114,10 @@ final class CompactSourceText {
     }
 
     private boolean containsRawLiteral(Node node) {
-        return node.findFirst(StringLiteralExpr.class).isPresent()
-                || node.findFirst(CharLiteralExpr.class).isPresent();
+        return (
+            node.findFirst(StringLiteralExpr.class).isPresent()
+            || node.findFirst(CharLiteralExpr.class).isPresent()
+        );
     }
 
     /**
@@ -119,10 +129,10 @@ final class CompactSourceText {
      */
     private String compactMethodCall(MethodCallExpr expression) {
         String prefix = expression.getScope().map(scope -> compact(scope) + ".").orElse("")
-                + expression.getTypeArguments()
-                        .map(typeArguments -> "<" + compactJoinTypeLike(typeArguments) + ">")
-                        .orElse("")
-                + expression.getNameAsString();
+            + expression.getTypeArguments()
+                    .map(typeArguments -> "<" + compactJoinTypeLike(typeArguments) + ">")
+                    .orElse("")
+            + expression.getNameAsString();
         return prefix + "(" + compactJoin(expression.getArguments()) + ")";
     }
 
@@ -166,11 +176,14 @@ final class CompactSourceText {
         if (type.getAnnotations().isEmpty()) {
             return "";
         }
-        return type.getAnnotations().stream()
-                .map(this::annotationFlatText)
-                .reduce((left, right) -> left + " " + right)
-                .orElse("")
-                + " ";
+        return (
+            type.getAnnotations()
+                    .stream()
+                    .map(this::annotationFlatText)
+                    .reduce((left, right) -> left + " " + right)
+                    .orElse("")
+            + " "
+        );
     }
 
     private String annotationFlatText(AnnotationExpr annotation) {
@@ -227,14 +240,17 @@ final class CompactSourceText {
             String typeArguments = methodCall.getTypeArguments()
                     .map(arguments -> "<" + compactJoinTypeLike(arguments) + ">")
                     .orElse("");
-            String arguments = methodCall.getArguments().stream()
+            String arguments = methodCall.getArguments()
+                    .stream()
                     .map(this::commentFree)
                     .reduce((left, right) -> left + ", " + right)
                     .orElse("");
             return scope + typeArguments + methodCall.getNameAsString() + "(" + arguments + ")";
         }
-        if (expression instanceof MethodReferenceExpr methodReference
-                && methodReference.getAllContainedComments().isEmpty()) {
+        if (
+            expression instanceof MethodReferenceExpr methodReference
+            && methodReference.getAllContainedComments().isEmpty()
+        ) {
             String typeArguments = methodReference.getTypeArguments()
                     .map(arguments -> "<" + compactJoinTypeLike(arguments) + ">")
                     .orElse("");

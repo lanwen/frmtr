@@ -32,20 +32,32 @@ import java.util.function.Function;
  * {@code frmtr-core/src/test/resources/format/annotation-interface-declaration/frmtr-default.output.java}.
  */
 final class AnnotationDeclarationPrinter {
+
     private static final String ANNOTATION_MEMBER_LIST_RECOVERY_FAILURE =
-            "Unable to recover Java parse error inside annotation declaration member list: ";
+        "Unable to recover Java parse error inside annotation declaration member list: ";
 
     private final FormatterOptions options;
+
     private final LayoutWidth layoutWidth;
+
     private final SourceText sourceText;
+
     private final RecoveredListPlanner recoveredListPlanner;
+
     private final RecoveredRawGapPrinter rawGaps;
+
     private final boolean recoverParseProblems;
+
     private final Function<NodeWithAnnotations<?>, Doc> annotations;
+
     private final Function<NodeWithModifiers<?>, String> modifiers;
+
     private final Function<Type, String> compactTypeLike;
+
     private final Function<Type, Doc> typeBody;
+
     private final Function<Expression, Doc> expression;
+
     private final Function<BodyDeclaration<?>, Doc> memberRenderer;
 
     /**
@@ -62,7 +74,7 @@ final class AnnotationDeclarationPrinter {
         RAW_GAP,
 
         /** The previous recovered annotation body item was a raw source gap whose trailing break moved to formatter docs. */
-        RAW_GAP_WITH_TRAILING_BREAK
+        RAW_GAP_WITH_TRAILING_BREAK,
     }
 
     AnnotationDeclarationPrinter(
@@ -72,12 +84,16 @@ final class AnnotationDeclarationPrinter {
             Function<Type, String> compactTypeLike,
             Function<Type, Doc> typeBody,
             Function<Expression, Doc> expression,
-            Function<BodyDeclaration<?>, Doc> memberRenderer) {
+            Function<BodyDeclaration<?>, Doc> memberRenderer
+    ) {
         this.options = context.options;
         this.layoutWidth = context.layoutWidth;
         this.sourceText = context.sourceText;
         this.recoveredListPlanner = context.recoveredListPlanner;
-        this.rawGaps = new RecoveredRawGapPrinter(context, AnnotationDeclarationPrinter::annotationMemberListRecoveryFailure);
+        this.rawGaps = new RecoveredRawGapPrinter(
+            context,
+            AnnotationDeclarationPrinter::annotationMemberListRecoveryFailure
+        );
         this.recoverParseProblems = context.recoverParseProblems;
         this.annotations = annotations;
         this.modifiers = modifiers;
@@ -115,10 +131,11 @@ final class AnnotationDeclarationPrinter {
         }
         List<Doc> memberDocs = declaration.getMembers().stream().map(memberRenderer).toList();
         return Doc.concat(
-                Doc.text("{"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE), memberDocs))),
-                Doc.HARD_LINE,
-                Doc.text("}"));
+            Doc.text("{"),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE), memberDocs))),
+            Doc.HARD_LINE,
+            Doc.text("}")
+        );
     }
 
     /**
@@ -129,7 +146,8 @@ final class AnnotationDeclarationPrinter {
      */
     private Doc recoveredAnnotationMemberBlock(
             AnnotationDeclaration declaration,
-            RecoveredListPlanner.Plan<BodyDeclaration<?>> plan) {
+            RecoveredListPlanner.Plan<BodyDeclaration<?>> plan
+    ) {
         List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions = rawGaps.rawGapRegions(plan);
         rawGaps.requireRecoverableRawRegions(declaration, rawGapRegions);
 
@@ -150,8 +168,8 @@ final class AnnotationDeclarationPrinter {
                         contents.add(rawGaps.raw(declaration, rawRegion, "annotationDeclarationMemberList"));
                     }
                     previousEntry = rawRegion.trailingBreakReplaced()
-                            ? EntryKind.RAW_GAP_WITH_TRAILING_BREAK
-                            : EntryKind.RAW_GAP;
+                        ? EntryKind.RAW_GAP_WITH_TRAILING_BREAK
+                        : EntryKind.RAW_GAP;
                 }
             }
         }
@@ -164,7 +182,8 @@ final class AnnotationDeclarationPrinter {
 
     private void appendSeparatorBeforeRecoveredAnnotationMember(
             List<Doc> contents,
-            EntryKind previousEntry) {
+            EntryKind previousEntry
+    ) {
         switch (previousEntry) {
             case NONE -> contents.add(Doc.HARD_LINE);
             case VALID_MEMBER -> contents.add(annotationMemberSeparator());
@@ -184,10 +203,11 @@ final class AnnotationDeclarationPrinter {
             return Optional.empty();
         }
         RecoveredListPlanner.Plan<BodyDeclaration<?>> plan = recoveredListPlanner.plan(
-                declaration,
-                requireAnnotationBodyInteriorRegion(declaration),
-                declaration.getMembers(),
-                member -> member.getParsed() == Node.Parsedness.PARSED);
+            declaration,
+            requireAnnotationBodyInteriorRegion(declaration),
+            declaration.getMembers(),
+            member -> member.getParsed() == Node.Parsedness.PARSED
+        );
         if (!plan.isSafe()) {
             throw annotationMemberListRecoveryFailure(plan.unsafe().orElseThrow().reason());
         }
@@ -245,7 +265,8 @@ final class AnnotationDeclarationPrinter {
         return token.getRange()
                 .map(sourceText::region)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "annotation declaration body " + description + " is missing a source range"));
+                        "annotation declaration body " + description + " is missing a source range"
+                ));
     }
 
     /**
@@ -259,10 +280,15 @@ final class AnnotationDeclarationPrinter {
         Doc defaultValue = declaration.getDefaultValue()
                 .map(value -> Doc.indent(Doc.concat(Doc.LINE, Doc.text("default "), expression.apply(value))))
                 .orElse(Doc.EMPTY);
-        docs.add(Doc.group(Doc.concat(
-                annotationMemberSignature(declaration, modifierText),
-                defaultValue,
-                Doc.text(";"))));
+        docs.add(
+            Doc.group(
+                Doc.concat(
+                    annotationMemberSignature(declaration, modifierText),
+                    defaultValue,
+                    Doc.text(";")
+                )
+            )
+        );
         return Doc.concat(docs);
     }
 
@@ -270,22 +296,31 @@ final class AnnotationDeclarationPrinter {
      * Keeps the annotation member type and method name together when only the default-value clause forces a break.
      */
     private Doc annotationMemberSignature(AnnotationMemberDeclaration declaration, String modifierText) {
-        String flatSignature = compactTypeLike.apply(declaration.getType()) + " " + declaration.getNameAsString() + "()";
+        String flatSignature = compactTypeLike.apply(declaration.getType())
+            + " "
+            + declaration.getNameAsString()
+            + "()";
         if (layoutWidth.currentIndented(modifierText + flatSignature) <= options.lineWidth()) {
             return Doc.text(flatSignature);
         }
-        return Doc.concat(typeBody.apply(declaration.getType()), Doc.text(" " + declaration.getNameAsString() + "()"));
+        return Doc.concat(
+            typeBody.apply(declaration.getType()),
+            Doc.text(" " + declaration.getNameAsString() + "()")
+        );
     }
 
     static boolean hasRecoverableAnnotationMemberListProblem(AnnotationDeclaration declaration) {
-        return declaration.getParsed() == Node.Parsedness.PARSED
-                && declaration.getMembers().stream().anyMatch(member -> !isFullyParsed(member))
-                && declaration.stream()
-                        .filter(node -> node != declaration)
-                        .filter(node -> node.getParsed() != Node.Parsedness.PARSED)
-                        .allMatch(node -> nearestAnnotationMemberListSibling(node)
+        return (
+            declaration.getParsed() == Node.Parsedness.PARSED
+            && declaration.getMembers().stream().anyMatch(member -> !isFullyParsed(member))
+            && declaration.stream()
+                    .filter(node -> node != declaration)
+                    .filter(node -> node.getParsed() != Node.Parsedness.PARSED)
+                    .allMatch(node -> nearestAnnotationMemberListSibling(node)
                                 .filter(declaration.getMembers()::contains)
-                                .isPresent());
+                                .isPresent()
+                    )
+        );
     }
 
     static boolean isRecoverableAnnotationMemberListSibling(BodyDeclaration<?> member) {

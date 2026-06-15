@@ -12,6 +12,7 @@ import dev.lanwen.frmtr.FormatterOptions;
 import org.junit.jupiter.api.Test;
 
 final class CompactSourceTextTest {
+
     @Test
     void compactTypeLikeFallsBackToTokensForUnparsedAnnotatedClassTypesBeforeAnnotationPolicy() {
         Type type = parseType("Map<@A String>");
@@ -24,10 +25,12 @@ final class CompactSourceTextTest {
     }
 
     private static Type parseType(String source) {
-        JavaParser parser = new JavaParser(new ParserConfiguration()
-                .setStoreTokens(true)
-                .setAttributeComments(true)
-                .setLanguageLevel(ParserConfiguration.LanguageLevel.RAW));
+        JavaParser parser = new JavaParser(
+            new ParserConfiguration()
+                    .setStoreTokens(true)
+                    .setAttributeComments(true)
+                    .setLanguageLevel(ParserConfiguration.LanguageLevel.RAW)
+        );
         return parser.parse(ParseStart.TYPE, Providers.provider(source))
                 .getResult()
                 .orElseThrow();

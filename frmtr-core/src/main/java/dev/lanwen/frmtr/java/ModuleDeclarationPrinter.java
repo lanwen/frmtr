@@ -28,15 +28,25 @@ import java.util.function.Predicate;
  * frmtr-core/src/test/resources/format/comment-preservation-module-declaration/frmtr-default.output.java}.
  */
 final class ModuleDeclarationPrinter {
+
     private final CommentTracker comments;
+
     private final RawSource rawSource;
+
     private final RawPreservedSource rawPreservedSource;
+
     private final CommentedModulePrinter commentedModules;
+
     private final Function<NodeWithAnnotations<?>, Doc> annotations;
+
     private final Function<Doc, String> commentText;
+
     private final Function<Node, String> compact;
+
     private final Function<ModuleDeclaration, Doc> moduleBlock;
+
     private final Predicate<ModuleDeclaration> structuredRecoveryCommentSafety;
+
     private final boolean recoverParseProblems;
 
     ModuleDeclarationPrinter(
@@ -49,7 +59,8 @@ final class ModuleDeclarationPrinter {
             Function<Node, String> compact,
             Function<ModuleDeclaration, Doc> moduleBlock,
             Predicate<ModuleDeclaration> structuredRecoveryCommentSafety,
-            boolean recoverParseProblems) {
+            boolean recoverParseProblems
+    ) {
         this.comments = comments;
         this.rawSource = rawSource;
         this.rawPreservedSource = rawPreservedSource;
@@ -74,24 +85,26 @@ final class ModuleDeclarationPrinter {
     Doc moduleDeclaration(ModuleDeclaration declaration) {
         String raw = rawSource.raw(declaration);
         boolean recoveredDirectiveList = recoverParseProblems
-                && ModuleBlockPrinter.hasRecoverableModuleDirectiveListProblem(declaration);
+            && ModuleBlockPrinter.hasRecoverableModuleDirectiveListProblem(declaration);
         boolean commentedModule = raw.contains("/*") || raw.contains("//");
         boolean canUseStructuredRecovery = commentedModule
-                && recoveredDirectiveList
-                && structuredRecoveryCommentSafety.test(declaration);
+            && recoveredDirectiveList
+            && structuredRecoveryCommentSafety.test(declaration);
         if (commentedModule && !canUseStructuredRecovery) {
             Doc leadingBlock = comments.ownComment(declaration, BlockComment.class::isInstance);
             String leadingText = commentText.apply(leadingBlock);
             String commentedRaw = leadingText.isEmpty() ? raw : leadingText + raw;
             return rawPreservedSource.rawWithoutOwnComment(
-                    declaration,
-                    commentedModules.formatCommentedModule(commentedRaw));
+                declaration,
+                commentedModules.formatCommentedModule(commentedRaw)
+            );
         }
         return Doc.concat(
-                comments.leading(declaration),
-                annotations.apply(declaration),
-                Doc.text(moduleKeyword(declaration) + compact.apply(declaration.getName()) + " "),
-                moduleBlock.apply(declaration));
+            comments.leading(declaration),
+            annotations.apply(declaration),
+            Doc.text(moduleKeyword(declaration) + compact.apply(declaration.getName()) + " "),
+            moduleBlock.apply(declaration)
+        );
     }
 
     private String moduleKeyword(ModuleDeclaration declaration) {

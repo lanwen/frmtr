@@ -21,6 +21,7 @@ import dev.lanwen.frmtr.doc.DocRenderer;
 import org.junit.jupiter.api.Test;
 
 final class SwitchPrinterTest {
+
     @Test
     void formatsValidSwitchStatementGroupSiblingsAroundRawRecoveredStatementGroup() {
         String source = """
@@ -42,7 +43,8 @@ final class SwitchPrinterTest {
 
         assertThat(SwitchPrinter.hasRecoverableSwitchEntryListProblem(statement)).isTrue();
         assertThat(JavaFormatter.isSupportedRecovery(recoveredStatement)).isTrue();
-        assertThat(formatted).isEqualTo("""
+        assertThat(formatted).isEqualTo(
+            """
                 class Demo {
 
                     void method(int value) {
@@ -55,7 +57,8 @@ final class SwitchPrinterTest {
                         }
                     }
                 }
-                """);
+                """
+        );
     }
 
     @Test
@@ -79,7 +82,8 @@ final class SwitchPrinterTest {
         String formatted = printRecovered(unit, source);
 
         assertThat(SwitchPrinter.hasRecoverableSwitchEntryListProblem(statement)).isTrue();
-        assertThat(formatted).isEqualTo("""
+        assertThat(formatted).isEqualTo(
+            """
                 class Demo {
 
                     void method(int value) {
@@ -93,7 +97,8 @@ final class SwitchPrinterTest {
                         }
                     }
                 }
-                """);
+                """
+        );
     }
 
     @Test
@@ -118,7 +123,8 @@ final class SwitchPrinterTest {
 
         assertThat(SwitchPrinter.hasRecoverableSwitchEntryListProblem(expression)).isTrue();
         assertThat(JavaFormatter.isSupportedRecovery(recoveredStatement)).isTrue();
-        assertThat(formatted).isEqualTo("""
+        assertThat(formatted).isEqualTo(
+            """
                 class Demo {
 
                     String method(int value) {
@@ -130,7 +136,8 @@ final class SwitchPrinterTest {
                         };
                     }
                 }
-                """);
+                """
+        );
     }
 
     @Test
@@ -154,7 +161,8 @@ final class SwitchPrinterTest {
         String formatted = Frmtr.format(source);
 
         assertThat(SwitchPrinter.hasRecoverableSwitchEntryListProblem(statement)).isTrue();
-        assertThat(formatted).isEqualTo("""
+        assertThat(formatted).isEqualTo(
+            """
                 class Demo {
 
                     void method(int value) {
@@ -169,7 +177,8 @@ final class SwitchPrinterTest {
                         afterBlock();
                     }
                 }
-                """);
+                """
+        );
     }
 
     @Test
@@ -195,7 +204,8 @@ final class SwitchPrinterTest {
 
         assertThat(SwitchPrinter.hasRecoverableSwitchEntryListProblem(statement)).isTrue();
         assertThat(JavaFormatter.isSupportedRecovery(recoveredStatement)).isTrue();
-        assertThat(formatted).isEqualTo("""
+        assertThat(formatted).isEqualTo(
+            """
                 class Demo {
 
                     void method(int value) {
@@ -208,7 +218,8 @@ final class SwitchPrinterTest {
                         }
                     }
                 }
-                """);
+                """
+        );
     }
 
     @Test
@@ -259,19 +270,26 @@ final class SwitchPrinterTest {
         assertThat(result.isSuccessful()).isFalse();
         assertThat(result.getResult()).isPresent();
         assertThat(result.getResult().orElseThrow().findAll(SwitchStmt.class)).isEmpty();
-        assertThat(result.getResult().orElseThrow().findAll(Statement.class).stream()
-                        .filter(statement -> statement.getParsed() != Node.Parsedness.PARSED))
+        assertThat(
+            result.getResult()
+                    .orElseThrow()
+                    .findAll(Statement.class)
+                    .stream()
+                    .filter(statement -> statement.getParsed() != Node.Parsedness.PARSED)
+        )
                 .singleElement()
                 .satisfies(statement -> {
                     assertThat(statement.getTokenRange().orElseThrow().toString()).startsWith("()");
-                    assertThat(SwitchPrinter.isCollapsedMalformedSwitchStatement(statement, new SourceText(source)))
-                            .isTrue();
+                    assertThat(SwitchPrinter.isCollapsedMalformedSwitchStatement(statement, new SourceText(source))).isTrue();
                 });
         assertThat(thrown).isInstanceOfSatisfying(FormatterException.class, exception -> {
             assertThat(exception).hasMessage("Unable to parse Java source");
-            assertThat(exception.sourceProblems()).first().satisfies(problem -> assertThat(problem.message())
-                    .contains("switch entry lists")
-                    .contains("Unsupported recovered node: UnparsableStmt"));
+            assertThat(exception.sourceProblems())
+                    .first()
+                    .satisfies(problem -> assertThat(problem.message())
+                                .contains("switch entry lists")
+                                .contains("Unsupported recovered node: UnparsableStmt")
+                    );
         });
     }
 
@@ -298,9 +316,12 @@ final class SwitchPrinterTest {
         assertThat(unit.findAll(Statement.class)).isEmpty();
         assertThat(thrown).isInstanceOfSatisfying(FormatterException.class, exception -> {
             assertThat(exception).hasMessage("Unable to parse Java source");
-            assertThat(exception.sourceProblems()).first().satisfies(problem -> assertThat(problem.message())
-                    .contains("switch entry lists")
-                    .contains("Unsupported recovered node: CompilationUnit"));
+            assertThat(exception.sourceProblems())
+                    .first()
+                    .satisfies(problem -> assertThat(problem.message())
+                                .contains("switch entry lists")
+                                .contains("Unsupported recovered node: CompilationUnit")
+                    );
         });
     }
 
@@ -322,30 +343,39 @@ final class SwitchPrinterTest {
         assertThat(result.isSuccessful()).isFalse();
         assertThat(result.getResult()).isPresent();
         assertThat(result.getResult().orElseThrow().findAll(SwitchStmt.class)).isEmpty();
-        assertThat(result.getResult().orElseThrow().findAll(Statement.class).stream()
-                        .filter(statement -> statement.getParsed() != Node.Parsedness.PARSED))
+        assertThat(
+            result.getResult()
+                    .orElseThrow()
+                    .findAll(Statement.class)
+                    .stream()
+                    .filter(statement -> statement.getParsed() != Node.Parsedness.PARSED)
+        )
                 .singleElement()
                 .satisfies(statement -> {
                     assertThat(statement.getTokenRange().orElseThrow().toString()).startsWith("()");
-                    assertThat(SwitchPrinter.isCollapsedMalformedSwitchStatement(statement, new SourceText(source)))
-                            .isTrue();
+                    assertThat(SwitchPrinter.isCollapsedMalformedSwitchStatement(statement, new SourceText(source))).isTrue();
                 });
         assertThat(thrown).isInstanceOfSatisfying(FormatterException.class, exception -> {
             assertThat(exception).hasMessage("Unable to parse Java source");
-            assertThat(exception.sourceProblems()).first().satisfies(problem -> assertThat(problem.message())
-                    .contains("switch entry lists")
-                    .contains("Unsupported recovered node: UnparsableStmt"));
+            assertThat(exception.sourceProblems())
+                    .first()
+                    .satisfies(problem -> assertThat(problem.message())
+                                .contains("switch entry lists")
+                                .contains("Unsupported recovered node: UnparsableStmt")
+                    );
         });
     }
 
     private static String printRecovered(CompilationUnit unit, String source) {
-        return new DocRenderer(FormatterOptions.defaults())
-                .render(new JavaPrinter(FormatterOptions.defaults(), new SourceText(source), true).print(unit));
+        return new DocRenderer(FormatterOptions.defaults()).render(
+            new JavaPrinter(FormatterOptions.defaults(), new SourceText(source), true).print(unit)
+        );
     }
 
     private static Statement recoveredStatement(SwitchEntry entry) {
         assertThat(entry.getParsed()).isEqualTo(Node.Parsedness.PARSED);
-        return entry.findAll(Statement.class).stream()
+        return entry.findAll(Statement.class)
+                .stream()
                 .filter(statement -> statement.getParsed() != Node.Parsedness.PARSED)
                 .findFirst()
                 .orElseThrow();
@@ -368,15 +398,18 @@ final class SwitchPrinterTest {
     }
 
     private static CompilationUnit parse(String source) {
-        return parser().parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
+        return parser()
+                .parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
                 .getResult()
                 .orElseThrow();
     }
 
     private static JavaParser parser() {
-        return new JavaParser(new ParserConfiguration()
-                .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
-                .setStoreTokens(true)
-                .setAttributeComments(true));
+        return new JavaParser(
+            new ParserConfiguration()
+                    .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
+                    .setStoreTokens(true)
+                    .setAttributeComments(true)
+        );
     }
 }

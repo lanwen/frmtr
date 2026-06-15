@@ -33,7 +33,8 @@ public record FormatRunResult(List<FormatFileResult> results) {
     }
 
     public Optional<Exception> firstFailure() {
-        return failedResults().stream()
+        return failedResults()
+                .stream()
                 .flatMap(result -> result.failureException().stream())
                 .findFirst();
     }

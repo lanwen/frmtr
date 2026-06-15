@@ -130,12 +130,12 @@ public record FormatterOptions(
      * {@link ParseErrorBehavior#RECOVER}.
      */
     public static FormatterOptions withJavaLanguageLevel(
-        int lineWidth,
-        IndentStyle indentStyle,
-        int indentWidth,
-        LineEnding lineEnding,
-        boolean trailingNewline,
-        JavaLanguageLevel javaLanguageLevel
+            int lineWidth,
+            IndentStyle indentStyle,
+            int indentWidth,
+            LineEnding lineEnding,
+            boolean trailingNewline,
+            JavaLanguageLevel javaLanguageLevel
     ) {
         return new FormatterOptions(
             lineWidth,

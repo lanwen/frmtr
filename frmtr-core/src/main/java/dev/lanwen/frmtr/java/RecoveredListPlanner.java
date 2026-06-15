@@ -21,6 +21,7 @@ import java.util.function.Predicate;
  * or indentation rules apply around the returned entries.
  */
 final class RecoveredListPlanner {
+
     private final SourceText sourceText;
 
     RecoveredListPlanner(SourceText sourceText) {
@@ -59,7 +60,8 @@ final class RecoveredListPlanner {
             Node owner,
             SourceRegion listRegion,
             List<N> siblings,
-            Predicate<? super N> validSibling) {
+            Predicate<? super N> validSibling
+    ) {
         return plan(owner, listRegion, siblings, validSibling, this::siblingRegion, true);
     }
 
@@ -76,7 +78,8 @@ final class RecoveredListPlanner {
             SourceRegion listRegion,
             List<N> siblings,
             Predicate<? super N> validSibling,
-            Function<? super N, Optional<SourceRegion>> regionForSibling) {
+            Function<? super N, Optional<SourceRegion>> regionForSibling
+    ) {
         return plan(owner, listRegion, siblings, validSibling, regionForSibling, true);
     }
 
@@ -91,7 +94,8 @@ final class RecoveredListPlanner {
             Node owner,
             SourceRegion listRegion,
             List<N> siblings,
-            Predicate<? super N> safeSibling) {
+            Predicate<? super N> safeSibling
+    ) {
         return plan(owner, listRegion, siblings, safeSibling, this::siblingRegion, false);
     }
 
@@ -101,7 +105,8 @@ final class RecoveredListPlanner {
             List<N> siblings,
             Predicate<? super N> safeSibling,
             Function<? super N, Optional<SourceRegion>> regionForSibling,
-            boolean requireFullyParsedSibling) {
+            boolean requireFullyParsedSibling
+    ) {
         Objects.requireNonNull(owner, "owner");
         Objects.requireNonNull(listRegion, "listRegion");
         Objects.requireNonNull(siblings, "siblings");
@@ -124,20 +129,23 @@ final class RecoveredListPlanner {
             Objects.requireNonNull(sibling, "sibling");
             Optional<SourceRegion> maybeRegion = regionForSibling.apply(sibling);
             if (maybeRegion.isEmpty()) {
-                return Plan.unsafe("sibling %s is missing a source range"
-                        .formatted(sibling.getClass().getSimpleName()));
+                return Plan.unsafe(
+                    "sibling %s is missing a source range"
+                            .formatted(sibling.getClass().getSimpleName())
+                );
             }
             SourceRegion region = maybeRegion.orElseThrow();
             if (!contains(boundary, region)) {
-                return Plan.unsafe("sibling %s has a source range outside the list boundary"
-                        .formatted(sibling.getClass().getSimpleName()));
+                return Plan.unsafe(
+                    "sibling %s has a source range outside the list boundary"
+                            .formatted(sibling.getClass().getSimpleName())
+                );
             }
             if (region.beginOffset() < previousEndOffset) {
                 return Plan.unsafe("sibling source ranges are not ordered and non-overlapping");
             }
             previousEndOffset = region.endOffset();
-            boolean safeToFormat = safeSibling.test(sibling)
-                    && (!requireFullyParsedSibling || fullyParsed(sibling));
+            boolean safeToFormat = safeSibling.test(sibling) && (!requireFullyParsedSibling || fullyParsed(sibling));
             siblingRegions.add(new SiblingRegion<>(sibling, region, safeToFormat));
         }
 
@@ -249,7 +257,7 @@ final class RecoveredListPlanner {
         /**
          * Raw source after the last valid sibling, spanning from that sibling's end to the list boundary end.
          */
-        SUFFIX
+        SUFFIX,
     }
 
     /**

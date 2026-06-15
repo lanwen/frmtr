@@ -15,7 +15,9 @@ import dev.lanwen.frmtr.doc.Doc;
  * comment docs are spaced, and whether a source-position fork should affect the surrounding layout.
  */
 final class CommentPlacement {
+
     private final CommentTracker comments;
+
     private final JavaCommentPlacementPolicy commentPlacement;
 
     CommentPlacement(CommentTracker comments, JavaCommentPlacementPolicy commentPlacement) {

@@ -33,5 +33,5 @@ public enum DiagnosticStyle {
     /**
      * Marks elision rows that indicate omitted source lines or omitted diagnostic blocks.
      */
-    GAP
+    GAP,
 }

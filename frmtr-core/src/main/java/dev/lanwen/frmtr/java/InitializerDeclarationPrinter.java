@@ -18,6 +18,7 @@ import java.util.function.Function;
  * and {@code frmtr-core/src/test/resources/format/comment-preservation-block-end-comments/frmtr-default.output.java}.
  */
 final class InitializerDeclarationPrinter {
+
     private final Function<BlockStmt, Doc> block;
 
     InitializerDeclarationPrinter(Function<BlockStmt, Doc> block) {
@@ -32,7 +33,8 @@ final class InitializerDeclarationPrinter {
      */
     Doc initializer(InitializerDeclaration declaration) {
         return Doc.concat(
-                declaration.isStatic() ? Doc.text("static ") : Doc.EMPTY,
-                block.apply(declaration.getBody()));
+            declaration.isStatic() ? Doc.text("static ") : Doc.EMPTY,
+            block.apply(declaration.getBody())
+        );
     }
 }

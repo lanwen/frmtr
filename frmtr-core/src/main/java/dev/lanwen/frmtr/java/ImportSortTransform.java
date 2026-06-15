@@ -17,6 +17,7 @@ import java.util.Map;
  * to callers.
  */
 final class ImportSortTransform implements JavaFormatTransform {
+
     /**
      * The deterministic order this transform imposes on imports: static imports first, then by fully-qualified name.
      *
@@ -26,9 +27,9 @@ final class ImportSortTransform implements JavaFormatTransform {
      * canonicalizing it on both sides is sound; a dropped or duplicated import survives that canonicalization and is
      * still reported as a real difference.
      */
-    static final Comparator<ImportDeclaration> FORMATTER_IMPORT_ORDER = Comparator
-            .comparing((ImportDeclaration declaration) -> !declaration.isStatic())
-            .thenComparing(ImportDeclaration::getNameAsString);
+    static final Comparator<ImportDeclaration> FORMATTER_IMPORT_ORDER =
+        Comparator.comparing((ImportDeclaration declaration) -> !declaration.isStatic())
+                .thenComparing(ImportDeclaration::getNameAsString);
 
     /**
      * Reorders imports in place without cloning JavaParser nodes.
@@ -40,7 +41,8 @@ final class ImportSortTransform implements JavaFormatTransform {
      */
     @Override
     public JavaTransformResult transform(CompilationUnit unit) {
-        List<ImportDeclaration> sortedImports = ImportChunks.orderedChunks(unit).stream()
+        List<ImportDeclaration> sortedImports = ImportChunks.orderedChunks(unit)
+                .stream()
                 .flatMap(chunk -> chunk.imports().stream().sorted(FORMATTER_IMPORT_ORDER))
                 .toList();
         Map<ImportDeclaration, Integer> sortedIndex = new IdentityHashMap<>();

@@ -11,6 +11,13 @@ public class MethodParameterLists {
 
   public void longListOfParametersThatShouldBreak(String accountId, Integer retryCount, String region, Integer batchSize, String owner, Integer shardCount) {}
 
+  private List<RouteGapPlanner.RawGapRegion> recoverableRouteGapRegions(
+      RouteModule declaration,
+      RecoveredRoutePlanner.Plan<RouteDirective> plan
+  ) {
+    return routeGaps.rawGapRegions(plan);
+  }
+
   void lastParameterDotDotDot(String message, String... labels) {
   }
 

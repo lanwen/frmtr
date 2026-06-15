@@ -27,10 +27,15 @@ import java.util.function.ToIntFunction;
  * and its cast type are assembled.
  */
 final class CastExpressionPrinter {
+
     private final FormatterOptions options;
+
     private final JavaFormatRule<Expression> expression;
+
     private final Function<Node, String> compactTypeLike;
+
     private final Function<Type, Doc> typeBody;
+
     private final ToIntFunction<String> currentIndentedWidth;
 
     CastExpressionPrinter(
@@ -38,7 +43,8 @@ final class CastExpressionPrinter {
             JavaFormatRule<Expression> expression,
             Function<Node, String> compactTypeLike,
             Function<Type, Doc> typeBody,
-            ToIntFunction<String> currentIndentedWidth) {
+            ToIntFunction<String> currentIndentedWidth
+    ) {
         this.options = options;
         this.expression = expression;
         this.compactTypeLike = compactTypeLike;
@@ -54,9 +60,10 @@ final class CastExpressionPrinter {
      */
     Doc castExpression(CastExpr expression) {
         return Doc.concat(
-                castType(expression.getType()),
-                Doc.text(" "),
-                this.expression.format(expression.getExpression()));
+            castType(expression.getType()),
+            Doc.text(" "),
+            this.expression.format(expression.getExpression())
+        );
     }
 
     /**
@@ -68,20 +75,26 @@ final class CastExpressionPrinter {
      * cast instead of forcing the surrounding assignment to keep an over-wide atomic type string.
      */
     Doc castType(Type type) {
-        if (type instanceof IntersectionType intersectionType
-                && currentIndentedWidth.applyAsInt("(" + compactTypeLike.apply(type) + ")") > options.lineWidth()) {
+        if (
+            type instanceof IntersectionType intersectionType
+            && currentIndentedWidth.applyAsInt("(" + compactTypeLike.apply(type) + ")") > options.lineWidth()
+        ) {
             List<Doc> elements = new ArrayList<>();
             for (int i = 0; i < intersectionType.getElements().size(); i++) {
                 Type element = intersectionType.getElements().get(i);
                 elements.add(Doc.text((i == 0 ? "" : "& ") + compactTypeLike.apply(element)));
             }
             return Doc.concat(
-                    Doc.text("("),
-                    Doc.indent(Doc.concat(
-                            Doc.HARD_LINE,
-                            Doc.join(Doc.HARD_LINE, elements))),
-                    Doc.HARD_LINE,
-                    Doc.text(")"));
+                Doc.text("("),
+                Doc.indent(
+                    Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(Doc.HARD_LINE, elements)
+                    )
+                ),
+                Doc.HARD_LINE,
+                Doc.text(")")
+            );
         }
         return Doc.group(Doc.concat(Doc.text("("), typeBody.apply(type), Doc.text(")")));
     }
@@ -97,13 +110,16 @@ final class CastExpressionPrinter {
         if (!(expression instanceof CastExpr castExpr)) {
             return 0;
         }
-        return 1 + castExpr.getExpression()
-                .toMethodCallExpr()
-                .flatMap(MethodCallExpr::getScope)
-                .filter(EnclosedExpr.class::isInstance)
-                .map(EnclosedExpr.class::cast)
-                .map(EnclosedExpr::getInner)
-                .map(this::nestedCastDepth)
-                .orElse(0);
+        return (
+            1
+            + castExpr.getExpression()
+                    .toMethodCallExpr()
+                    .flatMap(MethodCallExpr::getScope)
+                    .filter(EnclosedExpr.class::isInstance)
+                    .map(EnclosedExpr.class::cast)
+                    .map(EnclosedExpr::getInner)
+                    .map(this::nestedCastDepth)
+                    .orElse(0)
+        );
     }
 }

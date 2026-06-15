@@ -16,6 +16,7 @@ import com.github.javaparser.ast.stmt.TryStmt;
  * document assembly.
  */
 final class ObjectCreationLayoutPolicy {
+
     private static final int MAX_FLAT_ARGUMENTS = 3;
 
     private final SourceShape sourceShape;
@@ -31,9 +32,11 @@ final class ObjectCreationLayoutPolicy {
      * arguments before the source break is honored, so compact small constructors can still collapse when they fit.
      */
     boolean shouldPreserveSourceMultilineArguments(ObjectCreationExpr expression) {
-        return sourceShape.objectCreationArgumentsSpanMultipleLines(expression)
-                && expression.getAllContainedComments().isEmpty()
-                && (isTryResourceObjectCreation(expression) || !hasFlatArgumentCount(expression));
+        return (
+            sourceShape.objectCreationArgumentsSpanMultipleLines(expression)
+            && expression.getAllContainedComments().isEmpty()
+            && (isTryResourceObjectCreation(expression) || !hasFlatArgumentCount(expression))
+        );
     }
 
     /**
@@ -51,11 +54,13 @@ final class ObjectCreationLayoutPolicy {
      * Reports whether a constructor root can stay compact when a surrounding method-call chain is forced to break.
      */
     boolean canKeepCompactChainRoot(ObjectCreationExpr expression, int compactWidth, int lineWidth) {
-        return hasFlatArgumentCount(expression)
-                && expression.getAnonymousClassBody().isEmpty()
-                && expression.getAllContainedComments().isEmpty()
-                && !sourceShape.objectCreationArgumentsSpanMultipleLines(expression)
-                && compactWidth <= lineWidth;
+        return (
+            hasFlatArgumentCount(expression)
+            && expression.getAnonymousClassBody().isEmpty()
+            && expression.getAllContainedComments().isEmpty()
+            && !sourceShape.objectCreationArgumentsSpanMultipleLines(expression)
+            && compactWidth <= lineWidth
+        );
     }
 
     private boolean hasFlatArgumentCount(ObjectCreationExpr expression) {

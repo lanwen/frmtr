@@ -37,7 +37,9 @@ import java.util.function.ToIntFunction;
  * {@code frmtr-core/src/test/resources/format/annotated-qualified-types/frmtr-default.output.java}.
  */
 final class TypePrinter {
+
     private final FormatterOptions options;
+
     private final Function<Node, String> compactTypeLike;
 
     TypePrinter(FormatterOptions options, Function<Node, String> compactTypeLike) {
@@ -93,25 +95,29 @@ final class TypePrinter {
      */
     <T extends Node> Optional<Doc> typeClause(String keyword, NodeList<T> types, boolean breakBeforeClause) {
         return typeClause(
-                keyword,
-                types,
-                breakBeforeClause,
-                text -> text.length() + options.indentUnit().length());
+            keyword,
+            types,
+            breakBeforeClause,
+            text -> text.length() + options.indentUnit().length()
+        );
     }
 
     <T extends Node> Optional<Doc> typeClause(
             String keyword,
             NodeList<T> types,
             boolean breakBeforeClause,
-            ToIntFunction<String> width) {
+            ToIntFunction<String> width
+    ) {
         if (types.isEmpty()) {
             return Optional.empty();
         }
         String flat = keyword + " " + compactJoinTypeLike(types);
         if (!breakBeforeClause) {
-            if (types.size() == 1
-                    && types.get(0) instanceof ClassOrInterfaceType type
-                    && typeArgumentCount(type) > 2) {
+            if (
+                types.size() == 1
+                && types.get(0) instanceof ClassOrInterfaceType type
+                && typeArgumentCount(type) > 2
+            ) {
                 return Optional.of(Doc.concat(Doc.text(" " + keyword + " "), brokenClassOrInterfaceType(type)));
             }
             return Optional.of(Doc.text(" " + flat));
@@ -119,22 +125,40 @@ final class TypePrinter {
         if (width.applyAsInt(flat) <= options.lineWidth()) {
             return Optional.of(Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(flat))));
         }
-        if (types.size() == 1
-                && types.get(0) instanceof ClassOrInterfaceType type
-                && typeArgumentCount(type) > 2) {
-            return Optional.of(Doc.indent(Doc.concat(
-                    Doc.HARD_LINE,
-                    Doc.text(keyword + " "),
-                    brokenClassOrInterfaceType(type))));
-        }
-        return Optional.of(Doc.indent(Doc.concat(
-                Doc.HARD_LINE,
-                Doc.text(keyword),
-                Doc.indent(Doc.concat(
+        if (
+            types.size() == 1
+            && types.get(0) instanceof ClassOrInterfaceType type
+            && typeArgumentCount(type) > 2
+        ) {
+            return Optional.of(
+                Doc.indent(
+                    Doc.concat(
                         Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), types.stream()
-                                .map(type -> Doc.text(compactTypeLike.apply(type)))
-                                .toList()))))));
+                        Doc.text(keyword + " "),
+                        brokenClassOrInterfaceType(type)
+                    )
+                )
+            );
+        }
+        return Optional.of(
+            Doc.indent(
+                Doc.concat(
+                    Doc.HARD_LINE,
+                    Doc.text(keyword),
+                    Doc.indent(
+                        Doc.concat(
+                            Doc.HARD_LINE,
+                            Doc.join(
+                                Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                                types.stream()
+                                        .map(type -> Doc.text(compactTypeLike.apply(type)))
+                                        .toList()
+                            )
+                        )
+                    )
+                )
+            )
+        );
     }
 
     /**
@@ -142,23 +166,33 @@ final class TypePrinter {
      */
     Doc brokenClassOrInterfaceType(ClassOrInterfaceType type) {
         return Doc.concat(
-                Doc.text(typeNameWithoutArguments(type) + "<"),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), type.getTypeArguments().stream()
+            Doc.text(typeNameWithoutArguments(type) + "<"),
+            Doc.indent(
+                Doc.concat(
+                    Doc.HARD_LINE,
+                    Doc.join(
+                        Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                        type.getTypeArguments()
+                                .stream()
                                 .flatMap(NodeList::stream)
                                 .map(this::genericArgumentBody)
-                                .toList()))),
-                Doc.HARD_LINE,
-                Doc.text(">"));
+                                .toList()
+                    )
+                )
+            ),
+            Doc.HARD_LINE,
+            Doc.text(">")
+        );
     }
 
     /**
      * Reports whether a type can use the shared generic-body renderer.
      */
     boolean typeCanBreak(Type type) {
-        return type instanceof ClassOrInterfaceType classOrInterfaceType
-                && hasNonEmptyTypeArguments(classOrInterfaceType);
+        return (
+            type instanceof ClassOrInterfaceType classOrInterfaceType
+            && hasNonEmptyTypeArguments(classOrInterfaceType)
+        );
     }
 
     /**
@@ -173,8 +207,10 @@ final class TypePrinter {
         if (annotatedType.isPresent()) {
             return annotatedType.orElseThrow();
         }
-        if (type instanceof ClassOrInterfaceType classOrInterfaceType
-                && classOrInterfaceType.getTypeArguments().isPresent()) {
+        if (
+            type instanceof ClassOrInterfaceType classOrInterfaceType
+            && classOrInterfaceType.getTypeArguments().isPresent()
+        ) {
             return classOrInterfaceTypeBody(classOrInterfaceType);
         }
         return Doc.text(compactTypeLike.apply(type));
@@ -189,15 +225,22 @@ final class TypePrinter {
 
     private Doc classOrInterfaceTypeBody(ClassOrInterfaceType type, String nameWithoutArguments) {
         return Doc.concat(
-                Doc.text(nameWithoutArguments + "<"),
-                Doc.indent(Doc.concat(
-                        Doc.SOFT_LINE,
-                        Doc.joinComma(type.getTypeArguments().stream()
+            Doc.text(nameWithoutArguments + "<"),
+            Doc.indent(
+                Doc.concat(
+                    Doc.SOFT_LINE,
+                    Doc.joinComma(
+                        type.getTypeArguments()
+                                .stream()
                                 .flatMap(NodeList::stream)
                                 .map(this::genericArgumentBody)
-                                .toList()))),
-                Doc.SOFT_LINE,
-                Doc.text(">"));
+                                .toList()
+                    )
+                )
+            ),
+            Doc.SOFT_LINE,
+            Doc.text(">")
+        );
     }
 
     private Doc genericArgumentBody(Type type) {
@@ -209,30 +252,44 @@ final class TypePrinter {
         if (annotated.filter(parsed -> parsed.annotations().size() > 1).isPresent()) {
             PrefixAnnotatedType parsed = annotated.orElseThrow();
             return Doc.concat(
-                    Doc.join(Doc.HARD_LINE, parsed.annotations().stream()
-                            .map(Doc::text)
-                            .toList()),
+                Doc.join(
                     Doc.HARD_LINE,
-                    Doc.text(parsed.tail()));
+                    parsed.annotations()
+                            .stream()
+                            .map(Doc::text)
+                            .toList()
+                ),
+                Doc.HARD_LINE,
+                Doc.text(parsed.tail())
+            );
         }
         return groupedTypeBody(type);
     }
 
     private Optional<Doc> sourceAnnotatedGenericArgumentBody(Type type) {
-        if (type.getAnnotations().isEmpty()
-                || type.getAnnotations().stream().noneMatch(this::sourceMultilineAnnotation)) {
+        if (
+            type.getAnnotations().isEmpty()
+            || type.getAnnotations().stream().noneMatch(this::sourceMultilineAnnotation)
+        ) {
             return Optional.empty();
         }
         Optional<PrefixAnnotatedType> annotated = prefixAnnotatedType(type);
         if (annotated.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(Doc.concat(
-                Doc.join(Doc.text(" "), type.getAnnotations().stream()
-                        .map(this::typeAnnotation)
-                        .toList()),
+        return Optional.of(
+            Doc.concat(
+                Doc.join(
+                    Doc.text(" "),
+                    type.getAnnotations()
+                            .stream()
+                            .map(this::typeAnnotation)
+                            .toList()
+                ),
                 Doc.text(" "),
-                Doc.text(annotated.orElseThrow().tail())));
+                Doc.text(annotated.orElseThrow().tail())
+            )
+        );
     }
 
     private Doc typeAnnotation(AnnotationExpr annotation) {
@@ -250,22 +307,31 @@ final class TypePrinter {
 
     private Doc brokenNormalAnnotation(NormalAnnotationExpr annotation) {
         return Doc.concat(
-                Doc.text("@" + compactTypeLike.apply(annotation.getName()) + "("),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), annotation.getPairs().stream()
+            Doc.text("@" + compactTypeLike.apply(annotation.getName()) + "("),
+            Doc.indent(
+                Doc.concat(
+                    Doc.HARD_LINE,
+                    Doc.join(
+                        Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                        annotation.getPairs()
+                                .stream()
                                 .map(this::annotationPair)
-                                .toList()))),
-                Doc.HARD_LINE,
-                Doc.text(")"));
+                                .toList()
+                    )
+                )
+            ),
+            Doc.HARD_LINE,
+            Doc.text(")")
+        );
     }
 
     private Doc brokenSingleMemberAnnotation(SingleMemberAnnotationExpr annotation) {
         return Doc.concat(
-                Doc.text("@" + compactTypeLike.apply(annotation.getName()) + "("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(compactTypeLike.apply(annotation.getMemberValue())))),
-                Doc.HARD_LINE,
-                Doc.text(")"));
+            Doc.text("@" + compactTypeLike.apply(annotation.getName()) + "("),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(compactTypeLike.apply(annotation.getMemberValue())))),
+            Doc.HARD_LINE,
+            Doc.text(")")
+        );
     }
 
     private Doc annotationPair(MemberValuePair pair) {
@@ -283,15 +349,23 @@ final class TypePrinter {
     }
 
     private Optional<Doc> prefixAnnotatedTypeBody(Type type) {
-        if (type instanceof ClassOrInterfaceType classOrInterfaceType
-                && classOrInterfaceType.getTypeArguments().isPresent()) {
-            return prefixAnnotatedType(classOrInterfaceType)
-                    .map(annotated -> Doc.group(Doc.concat(
-                            Doc.join(Doc.LINE, annotated.annotations().stream()
-                                    .map(Doc::text)
-                                    .toList()),
+        if (
+            type instanceof ClassOrInterfaceType classOrInterfaceType
+            && classOrInterfaceType.getTypeArguments().isPresent()
+        ) {
+            return prefixAnnotatedType(classOrInterfaceType).map(annotated -> Doc.group(
+                    Doc.concat(
+                        Doc.join(
                             Doc.LINE,
-                            classOrInterfaceTypeBody(classOrInterfaceType, typeNameWithoutArguments(annotated.tail())))));
+                            annotated.annotations()
+                                    .stream()
+                                    .map(Doc::text)
+                                    .toList()
+                        ),
+                        Doc.LINE,
+                        classOrInterfaceTypeBody(classOrInterfaceType, typeNameWithoutArguments(annotated.tail()))
+                    )
+            ));
         }
         return prefixAnnotatedFlatTypeBody(type);
     }
@@ -302,12 +376,21 @@ final class TypePrinter {
             return Optional.empty();
         }
         PrefixAnnotatedType annotated = parsed.orElseThrow();
-        return Optional.of(Doc.group(Doc.concat(
-                Doc.join(Doc.LINE, annotated.annotations().stream()
-                        .map(Doc::text)
-                        .toList()),
-                Doc.LINE,
-                Doc.text(annotated.tail()))));
+        return Optional.of(
+            Doc.group(
+                Doc.concat(
+                    Doc.join(
+                        Doc.LINE,
+                        annotated.annotations()
+                                .stream()
+                                .map(Doc::text)
+                                .toList()
+                    ),
+                    Doc.LINE,
+                    Doc.text(annotated.tail())
+                )
+            )
+        );
     }
 
     private Optional<PrefixAnnotatedType> prefixAnnotatedType(Type type) {
@@ -318,11 +401,15 @@ final class TypePrinter {
         if (!compact.startsWith("@")) {
             return Optional.empty();
         }
-        return Optional.of(new PrefixAnnotatedType(
-                type.getAnnotations().stream()
+        return Optional.of(
+            new PrefixAnnotatedType(
+                type.getAnnotations()
+                        .stream()
                         .map(compactTypeLike)
                         .toList(),
-                compactTypeLike.apply(unannotated(type))));
+                compactTypeLike.apply(unannotated(type))
+            )
+        );
     }
 
     private Type unannotated(Type type) {

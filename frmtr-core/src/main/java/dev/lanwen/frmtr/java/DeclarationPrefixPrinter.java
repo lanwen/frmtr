@@ -23,12 +23,15 @@ import java.util.function.Function;
  * assembly, member sequencing, expression dispatch, and source-comment attachment to the caller.
  */
 final class DeclarationPrefixPrinter {
+
     private final JavaFormatRule<AnnotationExpr> annotationRenderer;
+
     private final Function<AnnotationExpr, String> annotationFlatText;
 
     DeclarationPrefixPrinter(
             JavaFormatRule<AnnotationExpr> annotationRenderer,
-            Function<AnnotationExpr, String> annotationFlatText) {
+            Function<AnnotationExpr, String> annotationFlatText
+    ) {
         this.annotationRenderer = annotationRenderer;
         this.annotationFlatText = annotationFlatText;
     }
@@ -41,16 +44,20 @@ final class DeclarationPrefixPrinter {
         if (!(node instanceof NodeWithModifiers<?> nodeWithModifiers)) {
             return annotations(node);
         }
-        return annotations(node.getAnnotations().stream()
-                .filter(annotation -> !afterAllModifiers(annotation, nodeWithModifiers))
-                .toList());
+        return annotations(
+            node.getAnnotations()
+                    .stream()
+                    .filter(annotation -> !afterAllModifiers(annotation, nodeWithModifiers))
+                    .toList()
+        );
     }
 
     boolean hasDeclarationAnnotations(NodeWithAnnotations<?> node) {
         if (!(node instanceof NodeWithModifiers<?> nodeWithModifiers)) {
             return !node.getAnnotations().isEmpty();
         }
-        return node.getAnnotations().stream()
+        return node.getAnnotations()
+                .stream()
                 .anyMatch(annotation -> !afterAllModifiers(annotation, nodeWithModifiers));
     }
 
@@ -58,16 +65,19 @@ final class DeclarationPrefixPrinter {
         if (annotations.isEmpty()) {
             return Doc.EMPTY;
         }
-        return Doc.concat(annotations.stream()
-                .map(annotation -> Doc.concat(annotationRenderer.format(annotation), Doc.HARD_LINE))
-                .toList());
+        return Doc.concat(
+            annotations.stream()
+                    .map(annotation -> Doc.concat(annotationRenderer.format(annotation), Doc.HARD_LINE))
+                    .toList()
+        );
     }
 
     String inlineAnnotations(NodeWithAnnotations<?> node) {
         if (!(node instanceof NodeWithModifiers<?> nodeWithModifiers)) {
             return "";
         }
-        String annotations = node.getAnnotations().stream()
+        String annotations = node.getAnnotations()
+                .stream()
                 .filter(annotation -> afterAllModifiers(annotation, nodeWithModifiers))
                 .map(annotation -> annotationFlatText.apply(annotation) + " ")
                 .reduce("", String::concat);
@@ -87,11 +97,13 @@ final class DeclarationPrefixPrinter {
             return false;
         }
         return annotation.getRange()
-                .flatMap(annotationRange -> node.getModifiers().stream()
-                        .map(Modifier::getRange)
-                        .flatMap(Optional::stream)
-                        .max(this::compareRangeEnds)
-                        .map(modifierRange -> startsAfter(annotationRange, modifierRange)))
+                .flatMap(annotationRange -> node.getModifiers()
+                            .stream()
+                            .map(Modifier::getRange)
+                            .flatMap(Optional::stream)
+                            .max(this::compareRangeEnds)
+                            .map(modifierRange -> startsAfter(annotationRange, modifierRange))
+                )
                 .orElse(false);
     }
 
@@ -114,11 +126,17 @@ final class DeclarationPrefixPrinter {
         if (node.getModifiers().isEmpty()) {
             return "";
         }
-        return String.join(" ", node.getModifiers().stream()
+        return (
+            String.join(
+                " ",
+                node.getModifiers()
+                        .stream()
                         .sorted(Comparator.comparingInt(this::modifierRank))
                         .map(this::modifier)
-                        .toList())
-                + " ";
+                        .toList()
+            )
+            + " "
+        );
     }
 
     String modifier(Modifier modifier) {

@@ -11,6 +11,7 @@ package dev.lanwen.frmtr.doc;
  * indentation does not affect flat width.
  */
 final class DocWidths {
+
     /** Sentinel flat width signalling that a document contains a forced break and cannot fit on one line. */
     static final int NO_FIT = -1;
 

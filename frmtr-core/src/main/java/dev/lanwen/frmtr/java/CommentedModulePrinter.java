@@ -15,6 +15,7 @@ import java.util.List;
  * module path.
  */
 final class CommentedModulePrinter {
+
     /**
      * Rebuilds a raw commented module declaration after the caller has chosen this escape hatch.
      *

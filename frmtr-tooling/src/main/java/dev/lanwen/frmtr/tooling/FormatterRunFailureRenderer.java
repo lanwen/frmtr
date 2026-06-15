@@ -13,6 +13,7 @@ import java.util.List;
  * handling, and terminal color mapping to callers.
  */
 public final class FormatterRunFailureRenderer {
+
     private static final int MAX_MESSAGE_LINE_LENGTH = 80;
 
     private FormatterRunFailureRenderer() {}
@@ -22,7 +23,8 @@ public final class FormatterRunFailureRenderer {
     }
 
     public static DiagnosticText renderDiagnostic(FormatRunResult run) {
-        return run.failedResults().stream()
+        return run.failedResults()
+                .stream()
                 .map(FormatterRunFailureRenderer::renderDiagnostic)
                 .collect(DiagnosticTextBuilder.joining(fileSeparator()));
     }
@@ -37,19 +39,26 @@ public final class FormatterRunFailureRenderer {
     }
 
     private static DiagnosticLine renderFailureTitle(Exception exception) {
-        if (exception instanceof FormatterException formatterException
-                && !formatterException.sourceProblems().isEmpty()) {
+        if (
+            exception instanceof FormatterException formatterException
+            && !formatterException.sourceProblems().isEmpty()
+        ) {
             return diagnosticLine(span(formatterException.getMessage() + ":", DiagnosticStyle.ERROR_TEXT));
         }
         String message = exception.getMessage();
         return diagnosticLine(
-                span(message == null || message.isBlank() ? exception.getClass().getSimpleName() : message,
-                        DiagnosticStyle.ERROR_TEXT));
+            span(
+                message == null || message.isBlank() ? exception.getClass().getSimpleName() : message,
+                DiagnosticStyle.ERROR_TEXT
+            )
+        );
     }
 
     private static DiagnosticText renderFailureBody(Exception exception) {
-        if (exception instanceof FormatterException formatterException
-                && !formatterException.sourceProblems().isEmpty()) {
+        if (
+            exception instanceof FormatterException formatterException
+            && !formatterException.sourceProblems().isEmpty()
+        ) {
             return renderFormatterException(formatterException);
         }
         if (exception instanceof FormatterException formatterException && formatterException.internal()) {
@@ -59,19 +68,25 @@ public final class FormatterRunFailureRenderer {
     }
 
     private static DiagnosticText stacktraceHint() {
-        return diagnosticText(diagnosticLine(
-                span("Run with --stacktrace to get more details.", DiagnosticStyle.ERROR_TEXT)));
+        return diagnosticText(
+            diagnosticLine(
+                span("Run with --stacktrace to get more details.", DiagnosticStyle.ERROR_TEXT)
+            )
+        );
     }
 
     private static DiagnosticText renderFormatterException(FormatterException exception) {
         int lineNumberWidth = lineNumberWidth(exception.sourceProblems());
-        return exception.sourceProblems().stream()
+        return exception.sourceProblems()
+                .stream()
                 .map(problem -> diagnosticText(renderSourceProblem(problem, lineNumberWidth)))
                 .collect(DiagnosticTextBuilder.joining(problemSeparator(lineNumberWidth)));
     }
 
     private static List<DiagnosticLine> renderSourceProblem(
-            FormatterException.SourceProblem problem, int lineNumberWidth) {
+            FormatterException.SourceProblem problem,
+            int lineNumberWidth
+    ) {
         List<DiagnosticLine> lines = new ArrayList<>();
         boolean messageRendered = false;
         Integer lastSourceLineNumber = null;
@@ -81,8 +96,10 @@ public final class FormatterRunFailureRenderer {
             }
             lines.add(sourceLine(lineNumberWidth, line));
             lastSourceLineNumber = line.lineNumber();
-            if (problem.location().isPresent()
-                    && problem.location().orElseThrow().line() == line.lineNumber()) {
+            if (
+                problem.location().isPresent()
+                && problem.location().orElseThrow().line() == line.lineNumber()
+            ) {
                 messageRendered = appendPointerAndMessage(lines, lineNumberWidth, line, problem);
             }
         }
@@ -95,7 +112,8 @@ public final class FormatterRunFailureRenderer {
     private static List<FormatterException.SourceLine> sourceLines(FormatterException.SourceProblem problem) {
         List<FormatterException.SourceLine> lines = new ArrayList<>();
         problem.enclosingUnitLine().ifPresent(lines::add);
-        problem.contextLines().stream()
+        problem.contextLines()
+                .stream()
                 .filter(line -> lines.stream().noneMatch(existing -> existing.lineNumber() == line.lineNumber()))
                 .forEach(lines::add);
         lines.sort(Comparator.comparingInt(FormatterException.SourceLine::lineNumber));
@@ -106,16 +124,20 @@ public final class FormatterRunFailureRenderer {
             List<DiagnosticLine> lines,
             int lineNumberWidth,
             FormatterException.SourceLine line,
-            FormatterException.SourceProblem problem) {
+            FormatterException.SourceProblem problem
+    ) {
         FormatterException.SourceLocation location = problem.location().orElseThrow();
         int pointerOffset = location.column() - line.startColumn();
         if (pointerOffset < 0 || pointerOffset > line.text().length()) {
             return false;
         }
         String gutter = " ".repeat(lineNumberWidth + 2);
-        lines.add(diagnosticLine(
+        lines.add(
+            diagnosticLine(
                 span(gutter, DiagnosticStyle.BORDER_GUTTER),
-                span(pointerLine(pointerOffset), DiagnosticStyle.POINTER)));
+                span(pointerLine(pointerOffset), DiagnosticStyle.POINTER)
+            )
+        );
         lines.add(diagnosticLine(span(gutter, DiagnosticStyle.BORDER_GUTTER), span("│", DiagnosticStyle.POINTER)));
         appendMessage(lines, gutter, problem.message());
         return true;
@@ -133,28 +155,39 @@ public final class FormatterRunFailureRenderer {
         long contentLineCount = lines.stream().filter(line -> !line.isEmpty()).count();
         int contentLineIndex = 0;
         if (contentLineCount == 0) {
-            rendered.add(diagnosticLine(
+            rendered.add(
+                diagnosticLine(
                     span(gutter, DiagnosticStyle.BORDER_GUTTER),
-                    span("└─ ", DiagnosticStyle.POINTER)));
+                    span("└─ ", DiagnosticStyle.POINTER)
+                )
+            );
             return;
         }
         for (int index = 0; index < lines.size(); index++) {
             String line = lines.get(index);
             if (line.isEmpty()) {
-                rendered.add(diagnosticLine(
+                rendered.add(
+                    diagnosticLine(
                         span(gutter, DiagnosticStyle.BORDER_GUTTER),
-                        span("│", DiagnosticStyle.POINTER)));
+                        span("│", DiagnosticStyle.POINTER)
+                    )
+                );
                 continue;
             }
             contentLineIndex++;
             boolean lastContentLine = contentLineIndex == contentLineCount;
             List<String> wrapped = wrapMessageLine(line);
             for (int wrappedIndex = 0; wrappedIndex < wrapped.size(); wrappedIndex++) {
-                rendered.add(diagnosticLine(
+                rendered.add(
+                    diagnosticLine(
                         span(gutter, DiagnosticStyle.BORDER_GUTTER),
-                        span(messageLinePrefix(contentLineCount, lastContentLine, wrappedIndex, wrapped.size()),
-                                DiagnosticStyle.POINTER),
-                        span(wrapped.get(wrappedIndex), DiagnosticStyle.ERROR_TEXT)));
+                        span(
+                            messageLinePrefix(contentLineCount, lastContentLine, wrappedIndex, wrapped.size()),
+                            DiagnosticStyle.POINTER
+                        ),
+                        span(wrapped.get(wrappedIndex), DiagnosticStyle.ERROR_TEXT)
+                    )
+                );
             }
         }
     }
@@ -175,7 +208,11 @@ public final class FormatterRunFailureRenderer {
     }
 
     private static String messageLinePrefix(
-            long contentLineCount, boolean lastContentLine, int wrappedIndex, int wrappedLineCount) {
+            long contentLineCount,
+            boolean lastContentLine,
+            int wrappedIndex,
+            int wrappedLineCount
+    ) {
         boolean onlyRenderedLine = contentLineCount == 1 && wrappedLineCount == 1;
         boolean lastRenderedLine = lastContentLine && wrappedIndex == wrappedLineCount - 1;
         if (onlyRenderedLine || lastRenderedLine) {
@@ -194,9 +231,10 @@ public final class FormatterRunFailureRenderer {
 
     private static DiagnosticLine sourceLine(int lineNumberWidth, FormatterException.SourceLine line) {
         return diagnosticLine(
-                span(String.format("%" + lineNumberWidth + "d", line.lineNumber()), DiagnosticStyle.LINE_NUMBER),
-                span("  ", DiagnosticStyle.BORDER_GUTTER),
-                span(line.text(), DiagnosticStyle.SOURCE_TEXT));
+            span(String.format("%" + lineNumberWidth + "d", line.lineNumber()), DiagnosticStyle.LINE_NUMBER),
+            span("  ", DiagnosticStyle.BORDER_GUTTER),
+            span(line.text(), DiagnosticStyle.SOURCE_TEXT)
+        );
     }
 
     private static DiagnosticLine gapLine(int lineNumberWidth) {
@@ -256,15 +294,18 @@ public final class FormatterRunFailureRenderer {
     }
 
     private static final class DiagnosticTextBuilder {
+
         private final List<DiagnosticLine> lines = new ArrayList<>();
 
         private static java.util.stream.Collector<DiagnosticText, DiagnosticTextBuilder, DiagnosticText> joining(
-                List<DiagnosticLine> separator) {
+                List<DiagnosticLine> separator
+        ) {
             return java.util.stream.Collector.of(
-                    DiagnosticTextBuilder::new,
-                    (builder, diagnostic) -> builder.add(diagnostic, separator),
-                    (left, right) -> left.add(right.build(), separator),
-                    DiagnosticTextBuilder::build);
+                DiagnosticTextBuilder::new,
+                (builder, diagnostic) -> builder.add(diagnostic, separator),
+                (left, right) -> left.add(right.build(), separator),
+                DiagnosticTextBuilder::build
+            );
         }
 
         private DiagnosticTextBuilder add(DiagnosticText diagnostic, List<DiagnosticLine> separator) {

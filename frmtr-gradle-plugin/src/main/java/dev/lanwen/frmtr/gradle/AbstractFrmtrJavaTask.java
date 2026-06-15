@@ -22,11 +22,17 @@ import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.SkipWhenEmpty;
 
 public abstract class AbstractFrmtrJavaTask extends DefaultTask {
+
     private final ConfigurableFileCollection sourceFiles;
+
     private final ListProperty<String> includes;
+
     private final ListProperty<String> excludes;
+
     private final Property<Integer> lineWidth;
+
     private final Property<FormatterOptions.JavaLanguageLevel> javaLanguageLevel;
+
     private final DirectoryProperty projectDirectory;
 
     @Inject
@@ -74,12 +80,13 @@ public abstract class AbstractFrmtrJavaTask extends DefaultTask {
 
     protected FormatterOptions formatterOptions() {
         return FormatterOptions.withJavaLanguageLevel(
-                lineWidth.get(),
-                FormatterOptions.IndentStyle.SPACE,
-                FormatterOptions.DEFAULT_INDENT_WIDTH,
-                FormatterOptions.LineEnding.LF,
-                true,
-                javaLanguageLevel.get());
+            lineWidth.get(),
+            FormatterOptions.IndentStyle.SPACE,
+            FormatterOptions.DEFAULT_INDENT_WIDTH,
+            FormatterOptions.LineEnding.LF,
+            true,
+            javaLanguageLevel.get()
+        );
     }
 
     protected Path displayRoot() {
@@ -88,7 +95,8 @@ public abstract class AbstractFrmtrJavaTask extends DefaultTask {
 
     protected List<Path> selectedFiles() {
         Path root = displayRoot().toAbsolutePath().normalize();
-        return sourceFiles.getFiles().stream()
+        return sourceFiles.getFiles()
+                .stream()
                 .map(file -> file.toPath().toAbsolutePath().normalize())
                 .distinct()
                 .sorted(Comparator.comparing(path -> displayPath(root, path).toString()))
@@ -103,8 +111,9 @@ public abstract class AbstractFrmtrJavaTask extends DefaultTask {
 
     protected GradleException formatterFailure(String action, FormatRunResult run) {
         return new GradleException(
-                "frmtr failed to %s %d Java file(s).".formatted(action, run.failureCount()),
-                run.firstFailure().orElse(null));
+            "frmtr failed to %s %d Java file(s).".formatted(action, run.failureCount()),
+            run.firstFailure().orElse(null)
+        );
     }
 
     private Path displayPath(Path root, Path path) {

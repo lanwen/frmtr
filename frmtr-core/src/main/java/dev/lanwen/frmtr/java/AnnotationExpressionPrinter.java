@@ -33,12 +33,19 @@ import java.util.function.ToIntFunction;
  * annotation value is a binary expression that must break.
  */
 final class AnnotationExpressionPrinter {
+
     private final CommentTracker comments;
+
     private final JavaCommentPlacementPolicy commentPlacement;
+
     private final FormatterOptions options;
+
     private final JavaFormatRule<Expression> expressionRenderer;
+
     private final BiFunction<Expression, Boolean, Doc> nestedBinaryLines;
+
     private final Function<Node, String> compact;
+
     private final ToIntFunction<String> currentIndentedWidth;
 
     AnnotationExpressionPrinter(
@@ -48,7 +55,8 @@ final class AnnotationExpressionPrinter {
             JavaFormatRule<Expression> expressionRenderer,
             BiFunction<Expression, Boolean, Doc> nestedBinaryLines,
             Function<Node, String> compact,
-            ToIntFunction<String> currentIndentedWidth) {
+            ToIntFunction<String> currentIndentedWidth
+    ) {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
         this.options = options;
@@ -74,9 +82,12 @@ final class AnnotationExpressionPrinter {
         } else {
             formatted = Doc.text("@" + compact.apply(annotation.getName()));
         }
-        Doc trailing = comments.ownTriviaComment(annotation, comment -> comment.isLine()
-                && comment.startsOnBeginLine(annotation.getName())
-                && comment.startsAfterNodeOnSameLine(annotation.getName()));
+        Doc trailing = comments.ownTriviaComment(
+            annotation,
+            comment -> comment.isLine()
+                    && comment.startsOnBeginLine(annotation.getName())
+                    && comment.startsAfterNodeOnSameLine(annotation.getName())
+        );
         if (trailing != Doc.EMPTY) {
             return Doc.concat(formatted, Doc.text(" "), trailing);
         }
@@ -92,8 +103,9 @@ final class AnnotationExpressionPrinter {
         }
         if (annotation instanceof SingleMemberAnnotationExpr singleMemberAnnotation) {
             return brokenSingleMemberAnnotation(
-                    "@" + compact.apply(singleMemberAnnotation.getName()),
-                    annotationValue(singleMemberAnnotation.getMemberValue()));
+                "@" + compact.apply(singleMemberAnnotation.getName()),
+                annotationValue(singleMemberAnnotation.getMemberValue())
+            );
         }
         return annotation(annotation);
     }
@@ -110,9 +122,12 @@ final class AnnotationExpressionPrinter {
         if (annotation.getPairs().isEmpty()) {
             return Doc.text(prefix + "()");
         }
-        if (!annotation.getPairs().stream()
-                .map(MemberValuePair::getValue)
-                .anyMatch(value -> annotationValueHasLineComments(value) || annotationValueMustBreak(value))) {
+        if (
+            !annotation.getPairs()
+                    .stream()
+                    .map(MemberValuePair::getValue)
+                    .anyMatch(value -> annotationValueHasLineComments(value) || annotationValueMustBreak(value))
+        ) {
             String flat = prefix + "(" + compactJoinAnnotationPairs(annotation.getPairs()) + ")";
             if (currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
                 return Doc.text(flat);
@@ -125,13 +140,15 @@ final class AnnotationExpressionPrinter {
         String prefix = "@" + compact.apply(annotation.getName());
         return Doc.concat(
             Doc.text(prefix + "("),
-            Doc.indent(Doc.concat(
-                Doc.HARD_LINE,
-                Doc.join(
-                    Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                    annotation.getPairs().stream().map(this::annotationPair).toList()
+            Doc.indent(
+                Doc.concat(
+                    Doc.HARD_LINE,
+                    Doc.join(
+                        Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                        annotation.getPairs().stream().map(this::annotationPair).toList()
+                    )
                 )
-            )),
+            ),
             Doc.HARD_LINE,
             Doc.text(")")
         );
@@ -156,8 +173,10 @@ final class AnnotationExpressionPrinter {
         if (currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
             return Doc.text(flat);
         }
-        if (memberValue instanceof ArrayInitializerExpr
-                && currentIndentedWidth.applyAsInt(flatValue) <= options.lineWidth()) {
+        if (
+            memberValue instanceof ArrayInitializerExpr
+            && currentIndentedWidth.applyAsInt(flatValue) <= options.lineWidth()
+        ) {
             return brokenSingleMemberAnnotation(prefix, Doc.text(flatValue));
         }
         if (!(memberValue instanceof BinaryExpr)) {
@@ -168,17 +187,26 @@ final class AnnotationExpressionPrinter {
 
     private Doc brokenSingleMemberAnnotation(String prefix, Doc value) {
         return Doc.concat(
-                Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, value)),
-                Doc.HARD_LINE,
-                Doc.text(")"));
+            Doc.text(prefix + "("),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, value)),
+            Doc.HARD_LINE,
+            Doc.text(")")
+        );
     }
 
     private Doc annotationPair(MemberValuePair pair) {
-        if (pair.getValue() instanceof ArrayInitializerExpr arrayInitializerExpr
-                && currentIndentedWidth.applyAsInt(pair.getNameAsString() + " = "
-                        + compactAnnotationArrayInitializer(arrayInitializerExpr)) > options.lineWidth()) {
-            return Doc.concat(Doc.text(pair.getNameAsString() + " = "), annotationArrayInitializer(arrayInitializerExpr));
+        if (
+            pair.getValue() instanceof ArrayInitializerExpr arrayInitializerExpr
+            && currentIndentedWidth.applyAsInt(
+                pair.getNameAsString()
+                    + " = "
+                    + compactAnnotationArrayInitializer(arrayInitializerExpr)
+            ) > options.lineWidth()
+        ) {
+            return Doc.concat(
+                Doc.text(pair.getNameAsString() + " = "),
+                annotationArrayInitializer(arrayInitializerExpr)
+            );
         }
         return Doc.concat(Doc.text(pair.getNameAsString() + " = "), annotationValue(pair.getValue()));
     }
@@ -192,12 +220,22 @@ final class AnnotationExpressionPrinter {
      */
     String annotationFlatText(AnnotationExpr annotation) {
         if (annotation instanceof NormalAnnotationExpr normalAnnotation) {
-            return "@" + compact.apply(normalAnnotation.getName()) + "("
-                    + compactJoinAnnotationPairs(normalAnnotation.getPairs()) + ")";
+            return (
+                "@"
+                + compact.apply(normalAnnotation.getName())
+                + "("
+                + compactJoinAnnotationPairs(normalAnnotation.getPairs())
+                + ")"
+            );
         }
         if (annotation instanceof SingleMemberAnnotationExpr singleMemberAnnotation) {
-            return "@" + compact.apply(singleMemberAnnotation.getName()) + "("
-                    + compactAnnotationValue(singleMemberAnnotation.getMemberValue()) + ")";
+            return (
+                "@"
+                + compact.apply(singleMemberAnnotation.getName())
+                + "("
+                + compactAnnotationValue(singleMemberAnnotation.getMemberValue())
+                + ")"
+            );
         }
         return "@" + compact.apply(annotation.getName());
     }
@@ -245,15 +283,16 @@ final class AnnotationExpressionPrinter {
         for (int index = 0; index < expression.getValues().size(); index++) {
             Expression value = expression.getValues().get(index);
             List<JavaCommentTrivia> trailingComments = index + 1 < expression.getValues().size()
-                    ? commentPlacement.lineCommentsBetween(expression, value, expression.getValues().get(index + 1))
-                    : commentPlacement.lineCommentsAfterLast(expression, value);
+                ? commentPlacement.lineCommentsBetween(expression, value, expression.getValues().get(index + 1))
+                : commentPlacement.lineCommentsAfterLast(expression, value);
             lines.add(annotationArrayValueLine(value, trailingComments));
         }
         return Doc.concat(
-                Doc.text("{"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, lines))),
-                Doc.HARD_LINE,
-                Doc.text("}"));
+            Doc.text("{"),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, lines))),
+            Doc.HARD_LINE,
+            Doc.text("}")
+        );
     }
 
     private Doc annotationArrayValueLine(Expression value, List<JavaCommentTrivia> trailingComments) {
@@ -286,17 +325,21 @@ final class AnnotationExpressionPrinter {
         if (value instanceof AnnotationExpr annotation && annotationArrayAnnotationLineOverflows(annotation)) {
             return brokenAnnotationArrayValue(annotation);
         }
-        if (value instanceof BinaryExpr binaryExpr
-                && (sourceSpansMultipleLines(value)
-                        || currentIndentedWidth.applyAsInt(compactAnnotationValue(value)) > options.lineWidth())) {
+        if (
+            value instanceof BinaryExpr binaryExpr
+            && (sourceSpansMultipleLines(value)
+                || currentIndentedWidth.applyAsInt(compactAnnotationValue(value)) > options.lineWidth())
+        ) {
             return nestedBinaryLines.apply(binaryExpr, true);
         }
         return expressionRenderer.format(value);
     }
 
     private boolean annotationArrayAnnotationLineOverflows(AnnotationExpr annotation) {
-        return currentIndentedWidth.applyAsInt(options.indentUnit() + compactAnnotationValue(annotation) + ",")
-                > options.lineWidth();
+        return (
+            currentIndentedWidth.applyAsInt(options.indentUnit() + compactAnnotationValue(annotation) + ",")
+            > options.lineWidth()
+        );
     }
 
     private Doc brokenAnnotationArrayValue(AnnotationExpr annotation) {
@@ -305,8 +348,9 @@ final class AnnotationExpressionPrinter {
         }
         if (annotation instanceof SingleMemberAnnotationExpr singleMemberAnnotation) {
             return brokenSingleMemberAnnotation(
-                    "@" + compact.apply(singleMemberAnnotation.getName()),
-                    annotationValue(singleMemberAnnotation.getMemberValue()));
+                "@" + compact.apply(singleMemberAnnotation.getName()),
+                annotationValue(singleMemberAnnotation.getMemberValue())
+            );
         }
         return expressionRenderer.format(annotation);
     }
@@ -325,7 +369,8 @@ final class AnnotationExpressionPrinter {
     }
 
     private String compactJoinAnnotationPairs(List<MemberValuePair> pairs) {
-        return pairs.stream().map(pair -> pair.getNameAsString() + " = " + compactAnnotationValue(pair.getValue()))
+        return pairs.stream()
+                .map(pair -> pair.getNameAsString() + " = " + compactAnnotationValue(pair.getValue()))
                 .reduce((left, right) -> left + ", " + right)
                 .orElse("");
     }
@@ -351,7 +396,8 @@ final class AnnotationExpressionPrinter {
     }
 
     private String compactAnnotationArrayInitializer(ArrayInitializerExpr expression) {
-        String values = expression.getValues().stream()
+        String values = expression.getValues()
+                .stream()
                 .map(this::compactAnnotationValue)
                 .reduce((left, right) -> left + ", " + right)
                 .orElse("");
@@ -362,10 +408,10 @@ final class AnnotationExpressionPrinter {
     }
 
     private boolean annotationValueHasLineComments(Expression value) {
-        return commentPlacement.hasContainedLineComments(value)
-                || commentPlacement.leadingComment(value)
-                        .filter(JavaCommentTrivia::isLine)
-                        .isPresent();
+        return (
+            commentPlacement.hasContainedLineComments(value)
+            || commentPlacement.leadingComment(value).filter(JavaCommentTrivia::isLine).isPresent()
+        );
     }
 
     private boolean sourceMultilineAnnotation(AnnotationExpr annotation) {

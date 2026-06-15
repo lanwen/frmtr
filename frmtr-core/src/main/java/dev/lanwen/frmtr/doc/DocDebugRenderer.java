@@ -10,6 +10,7 @@ package dev.lanwen.frmtr.doc;
  * printers.
  */
 public final class DocDebugRenderer {
+
     private static final String INDENT = "  ";
 
     private DocDebugRenderer() {}

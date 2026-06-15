@@ -19,7 +19,9 @@ import dev.lanwen.frmtr.doc.Doc;
  * {@link FieldAccessExpr} is assembled.
  */
 final class FieldAccessPrinter {
+
     private final CommentTracker comments;
+
     private final JavaFormatRule<Expression> expression;
 
     FieldAccessPrinter(CommentTracker comments, JavaFormatRule<Expression> expression) {
@@ -36,8 +38,11 @@ final class FieldAccessPrinter {
      */
     Doc fieldAccess(FieldAccessExpr expression) {
         Doc scope = this.expression.format(expression.getScope());
-        Doc nameComment = comments.ownComment(expression.getName(), comment -> comment instanceof LineComment
-                || comment instanceof BlockComment);
+        Doc nameComment = comments.ownComment(
+            expression.getName(),
+            comment -> comment instanceof LineComment
+                    || comment instanceof BlockComment
+        );
         if (nameComment != Doc.EMPTY) {
             return Doc.concat(scope, nameComment, Doc.HARD_LINE, Doc.text("." + expression.getNameAsString()));
         }

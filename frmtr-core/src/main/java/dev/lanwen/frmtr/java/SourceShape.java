@@ -19,7 +19,9 @@ import java.util.Optional;
  * asking one shared source-shape helper before collapsing a user's existing multiline form.
  */
 final class SourceShape {
+
     private final RawSource rawSource;
+
     private final SourceText sourceText;
 
     SourceShape(RawSource rawSource, SourceText sourceText) {
@@ -50,9 +52,10 @@ final class SourceShape {
      */
     boolean methodCallArgumentsSpanMultipleLines(MethodCallExpr expression) {
         return argumentsSpanMultipleLines(
-                expression.getName(),
-                expression.getArguments(),
-                expression.getRange());
+            expression.getName(),
+            expression.getArguments(),
+            expression.getRange()
+        );
     }
 
     /**
@@ -63,7 +66,8 @@ final class SourceShape {
         if (selectorLine.isEmpty()) {
             return false;
         }
-        return expression.getArguments().stream()
+        return expression.getArguments()
+                .stream()
                 .filter(LambdaExpr.class::isInstance)
                 .map(LambdaExpr.class::cast)
                 .filter(lambda -> lambda.getExpressionBody().isPresent())
@@ -76,9 +80,12 @@ final class SourceShape {
      */
     boolean objectCreationArgumentsSpanMultipleLines(ObjectCreationExpr expression) {
         return argumentsSpanMultipleLines(
-                expression.getType(),
-                expression.getArguments(),
-                expression.getAnonymousClassBody().isPresent() ? Optional.empty() : expression.getRange());
+            expression.getType(),
+            expression.getArguments(),
+            expression.getAnonymousClassBody().isPresent()
+                ? Optional.empty()
+                : expression.getRange()
+        );
     }
 
     /**
@@ -104,7 +111,8 @@ final class SourceShape {
      * Reports whether a method's throws keyword starts its own source line.
      */
     boolean throwsStartsOnOwnLine(CallableDeclaration<?> declaration) {
-        Optional<Range> firstExceptionRange = declaration.getThrownExceptions().stream()
+        Optional<Range> firstExceptionRange = declaration.getThrownExceptions()
+                .stream()
                 .findFirst()
                 .flatMap(Node::getRange);
         if (firstExceptionRange.isEmpty()) {
@@ -112,8 +120,7 @@ final class SourceShape {
         }
         String linePrefix = sourceText.linePrefix(firstExceptionRange.orElseThrow().begin);
         String trimmedPrefix = linePrefix.stripLeading();
-        return trimmedPrefix.startsWith("throws")
-                && trimmedPrefix.substring("throws".length()).isBlank();
+        return trimmedPrefix.startsWith("throws") && trimmedPrefix.substring("throws".length()).isBlank();
     }
 
     /**
@@ -127,15 +134,18 @@ final class SourceShape {
         Optional<Range> firstResourceRange = firstRange(statement.getResources());
         Optional<Range> lastResourceRange = lastRange(statement.getResources());
         Optional<Range> blockRange = statement.getTryBlock().getRange();
-        if (statementRange.isEmpty()
-                || firstResourceRange.isEmpty()
-                || lastResourceRange.isEmpty()
-                || blockRange.isEmpty()) {
+        if (
+            statementRange.isEmpty()
+            || firstResourceRange.isEmpty()
+            || lastResourceRange.isEmpty()
+            || blockRange.isEmpty()
+        ) {
             return new TryResourcesShape(false, false);
         }
-        boolean spansMultipleLines = firstResourceRange.orElseThrow().begin.line > statementRange.orElseThrow().begin.line
-                || nodesSpanMultipleLines(statement.getResources())
-                || lastResourceRange.orElseThrow().end.line < blockRange.orElseThrow().begin.line;
+        boolean spansMultipleLines =
+            firstResourceRange.orElseThrow().begin.line > statementRange.orElseThrow().begin.line
+            || nodesSpanMultipleLines(statement.getResources())
+            || lastResourceRange.orElseThrow().end.line < blockRange.orElseThrow().begin.line;
         boolean trailingSemicolon = sourceText
                 .sliceBetween(lastResourceRange.orElseThrow(), blockRange.orElseThrow())
                 .stripLeading()
@@ -146,7 +156,8 @@ final class SourceShape {
     private boolean argumentsSpanMultipleLines(
             Node prefix,
             NodeList<? extends Node> arguments,
-            Optional<Range> containingRange) {
+            Optional<Range> containingRange
+    ) {
         if (arguments.isEmpty()) {
             return false;
         }
@@ -170,9 +181,7 @@ final class SourceShape {
     private boolean nodesSpanMultipleLines(NodeList<? extends Node> nodes) {
         Optional<Range> first = firstRange(nodes);
         Optional<Range> last = lastRange(nodes);
-        return first.isPresent()
-                && last.isPresent()
-                && first.orElseThrow().begin.line < last.orElseThrow().end.line;
+        return first.isPresent() && last.isPresent() && first.orElseThrow().begin.line < last.orElseThrow().end.line;
     }
 
     private boolean entriesStartOnMultipleLines(NodeList<? extends Node> nodes) {

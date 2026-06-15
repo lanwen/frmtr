@@ -30,16 +30,27 @@ import java.util.function.ToIntFunction;
  * decision tree in the same order as the previous inline printer path.
  */
 final class AssignmentExpressionPrinter {
+
     private final FormatterOptions options;
+
     private final Function<Expression, Doc> expression;
+
     private final Function<Node, String> compact;
+
     private final ToIntFunction<String> blockStatementWidth;
+
     private final BiFunction<Expression, Boolean, Optional<Doc>> suffixedEnclosedExpression;
+
     private final Predicate<BinaryExpr> shouldKeepCastDivisionContinuationFlat;
+
     private final BiFunction<Expression, Boolean, Doc> binaryExpressionLines;
+
     private final Function<ObjectCreationExpr, Doc> brokenObjectCreation;
+
     private final BiFunction<AssignExpr, MethodCallExpr, Optional<Doc>> methodCallAssignment;
+
     private final BiFunction<AssignExpr, MethodCallExpr, Optional<Doc>> methodCallAssignmentWithSemicolon;
+
     private final BiFunction<AssignExpr, ConditionalExpr, Optional<Doc>> conditionalAssignment;
 
     AssignmentExpressionPrinter(
@@ -53,7 +64,8 @@ final class AssignmentExpressionPrinter {
             Function<ObjectCreationExpr, Doc> brokenObjectCreation,
             BiFunction<AssignExpr, MethodCallExpr, Optional<Doc>> methodCallAssignment,
             BiFunction<AssignExpr, MethodCallExpr, Optional<Doc>> methodCallAssignmentWithSemicolon,
-            BiFunction<AssignExpr, ConditionalExpr, Optional<Doc>> conditionalAssignment) {
+            BiFunction<AssignExpr, ConditionalExpr, Optional<Doc>> conditionalAssignment
+    ) {
         this.options = options;
         this.expression = expression;
         this.compact = compact;
@@ -87,8 +99,10 @@ final class AssignmentExpressionPrinter {
 
     Doc assignmentStatement(AssignExpr expression) {
         String flat = compact.apply(expression);
-        if (blockStatementWidth.applyAsInt(flat + ";") > options.lineWidth()
-                && expression.getValue() instanceof MethodCallExpr methodCall) {
+        if (
+            blockStatementWidth.applyAsInt(flat + ";") > options.lineWidth()
+            && expression.getValue() instanceof MethodCallExpr methodCall
+        ) {
             Optional<Doc> methodCallValue = methodCallAssignmentWithSemicolon.apply(expression, methodCall);
             if (methodCallValue.isPresent()) {
                 return methodCallValue.orElseThrow();
@@ -141,7 +155,8 @@ final class AssignmentExpressionPrinter {
         return suffixedEnclosedValue.map(value -> Doc.concat(
                 this.expression.apply(expression.getTarget()),
                 Doc.text(" " + expression.getOperator().asString() + " "),
-                value));
+                value
+        ));
     }
 
     /**
@@ -157,15 +172,21 @@ final class AssignmentExpressionPrinter {
             return Optional.empty();
         }
         if (shouldKeepCastDivisionContinuationFlat.test(binaryExpression)) {
-            return Optional.of(Doc.concat(
+            return Optional.of(
+                Doc.concat(
                     this.expression.apply(expression.getTarget()),
                     Doc.text(" " + expression.getOperator().asString()),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, this.expression.apply(binaryExpression)))));
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, this.expression.apply(binaryExpression)))
+                )
+            );
         }
-        return Optional.of(Doc.concat(
+        return Optional.of(
+            Doc.concat(
                 this.expression.apply(expression.getTarget()),
                 Doc.text(" " + expression.getOperator().asString()),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines.apply(expression.getValue(), true)))));
+                Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines.apply(expression.getValue(), true)))
+            )
+        );
     }
 
     /**
@@ -175,14 +196,19 @@ final class AssignmentExpressionPrinter {
      * creations and leaves anonymous-class member sequencing to {@link ObjectCreationPrinter}.
      */
     private Optional<Doc> assignmentWithObjectCreationValue(AssignExpr expression) {
-        if (!(expression.getValue() instanceof ObjectCreationExpr objectCreationExpression)
-                || objectCreationExpression.getAnonymousClassBody().isPresent()) {
+        if (
+            !(expression.getValue() instanceof ObjectCreationExpr objectCreationExpression)
+            || objectCreationExpression.getAnonymousClassBody().isPresent()
+        ) {
             return Optional.empty();
         }
-        return Optional.of(Doc.concat(
+        return Optional.of(
+            Doc.concat(
                 this.expression.apply(expression.getTarget()),
                 Doc.text(" " + expression.getOperator().asString() + " "),
-                brokenObjectCreation.apply(objectCreationExpression)));
+                brokenObjectCreation.apply(objectCreationExpression)
+            )
+        );
     }
 
     /**
@@ -222,16 +248,20 @@ final class AssignmentExpressionPrinter {
         if (!(expression.getValue() instanceof AssignExpr nestedAssignment)) {
             return Optional.empty();
         }
-        return Optional.of(Doc.concat(
+        return Optional.of(
+            Doc.concat(
                 this.expression.apply(expression.getTarget()),
                 Doc.text(" " + expression.getOperator().asString()),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, this.expression.apply(nestedAssignment)))));
+                Doc.indent(Doc.concat(Doc.HARD_LINE, this.expression.apply(nestedAssignment)))
+            )
+        );
     }
 
     private Doc flatAssignment(AssignExpr expression) {
         return Doc.concat(
-                this.expression.apply(expression.getTarget()),
-                Doc.text(" " + expression.getOperator().asString() + " "),
-                this.expression.apply(expression.getValue()));
+            this.expression.apply(expression.getTarget()),
+            Doc.text(" " + expression.getOperator().asString() + " "),
+            this.expression.apply(expression.getValue())
+        );
     }
 }

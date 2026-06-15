@@ -12,6 +12,7 @@ import java.util.List;
  * {@link JavaPrinter} and the printer layer.
  */
 final class JavaTransformPipeline {
+
     private final List<JavaFormatTransform> transforms;
 
     JavaTransformPipeline(List<JavaFormatTransform> transforms) {
@@ -28,8 +29,10 @@ final class JavaTransformPipeline {
     CompilationUnit transform(CompilationUnit unit) {
         CompilationUnit transformed = unit;
         for (JavaFormatTransform transform : transforms) {
-            FormatterGuardrails.TransformSnapshot guardrails =
-                    FormatterGuardrails.beforeTransform(transform, transformed);
+            FormatterGuardrails.TransformSnapshot guardrails = FormatterGuardrails.beforeTransform(
+                transform,
+                transformed
+            );
             JavaTransformResult result = transform.transform(transformed);
             FormatterGuardrails.assertTransformInvariants(guardrails, result);
             transformed = result.unit();

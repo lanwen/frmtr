@@ -21,4 +21,30 @@ class BinaryMethodCallOperandSample {
             + routeAssemblyStep.templateTypeArguments().map(typeArguments -> "<" + routeTextFormatter.compactQualifiedTypes(typeArguments) + ">").resolveRouteSelector()
             + (routeAssemblyStep.localRoute() ? "local" : "remote");
     }
+
+    String routeImport(RouteDeclaration declaration) {
+        return (
+            (declaration.externalRoute() ? "external " : "")
+            + declaration.qualifiedName()
+            + (declaration.allSegments() ? ".*" : "")
+        );
+    }
+
+    boolean routeBudgetFits(RoutePlan routePlan, SegmentBudget segmentBudget, Options options) {
+        return routePlan.hasOrigin()
+            && routePlan.hasDestination()
+            && segmentBudget.continuationRouteWidth(
+                ") "
+                    + routePlan.selectedOperator().displayText()
+                    + " "
+                    + segmentBudget.remainingSegmentExpression()
+            ) <= options.lineWidth();
+    }
+
+    boolean routeHeaderOverflows(RouteDeclaration declaration, RouteHeader header, Options options) {
+        return (
+            routeHeaderWidth(declaration, header.flatText() + " " + (declaration.emptyStops() ? "{}" : "{"))
+            > options.lineWidth()
+        );
+    }
 }

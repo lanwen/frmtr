@@ -42,19 +42,33 @@ import java.util.function.ToIntFunction;
  * {@code frmtr-core/src/test/resources/format/expression-operators-layout/frmtr-default.output.java}.
  */
 final class ConditionalExpressionPrinter {
+
     private final CommentTracker comments;
+
     private final FormatterOptions options;
+
     private final RawSource rawSource;
+
     private final SourceShape sourceShape;
+
     private final CompactSourceText compactSource;
+
     private final Function<Expression, Doc> expressionRenderer;
+
     private final Function<Expression, Doc> expressionWithoutOwnCommentRenderer;
+
     private final ToIntFunction<String> currentIndentedWidth;
+
     private final ToIntFunction<String> blockStatementWidth;
+
     private final ToIntFunction<String> continuationStatementWidth;
+
     private final BiFunction<Expression, Boolean, Doc> binaryExpressionLinesRenderer;
+
     private final BiFunction<Expression, Boolean, Doc> nestedBinaryExpressionLinesRenderer;
+
     private final Predicate<Expression> expressionHasParenthesizedNestedBinary;
+
     private final LayoutDecisionLog layoutDecisions;
 
     /**
@@ -93,7 +107,7 @@ final class ConditionalExpressionPrinter {
         ASSIGNMENT_CONTINUATION_BINARY,
 
         /** Render a wide binary condition with nested-expression continuation indentation. */
-        NESTED_BINARY
+        NESTED_BINARY,
     }
 
     ConditionalExpressionPrinter(
@@ -105,7 +119,8 @@ final class ConditionalExpressionPrinter {
             ToIntFunction<String> continuationStatementWidth,
             BiFunction<Expression, Boolean, Doc> binaryExpressionLinesRenderer,
             BiFunction<Expression, Boolean, Doc> nestedBinaryExpressionLinesRenderer,
-            Predicate<Expression> expressionHasParenthesizedNestedBinary) {
+            Predicate<Expression> expressionHasParenthesizedNestedBinary
+    ) {
         this.comments = context.comments;
         this.options = context.options;
         this.rawSource = context.rawSource;
@@ -131,31 +146,49 @@ final class ConditionalExpressionPrinter {
      * {@code :} branches break below it.
      */
     Optional<Doc> assignmentWithConditionalValue(AssignExpr assignExpr, ConditionalExpr conditionalExpr) {
-        if (sourceShape.spansMultipleLines(conditionalExpr) && sourceShape.startsOnSameLine(assignExpr, conditionalExpr)) {
-            return Optional.of(Doc.concat(
+        if (
+            sourceShape.spansMultipleLines(conditionalExpr)
+            && sourceShape.startsOnSameLine(assignExpr, conditionalExpr)
+        ) {
+            return Optional.of(
+                Doc.concat(
                     expressionRenderer.apply(assignExpr.getTarget()),
                     Doc.text(" " + assignExpr.getOperator().asString() + " "),
-                    conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED)));
+                    conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED)
+                )
+            );
         }
-        if (shouldBreakBeforeConditionalInitializer(conditionalExpr)
-                || shouldBreakBeforeConditionalAssignment(conditionalExpr)) {
-            return Optional.of(Doc.concat(
+        if (
+            shouldBreakBeforeConditionalInitializer(conditionalExpr)
+            || shouldBreakBeforeConditionalAssignment(conditionalExpr)
+        ) {
+            return Optional.of(
+                Doc.concat(
                     expressionRenderer.apply(assignExpr.getTarget()),
                     Doc.text(" " + assignExpr.getOperator().asString()),
-                    Doc.indent(Doc.concat(
+                    Doc.indent(
+                        Doc.concat(
                             Doc.HARD_LINE,
-                            conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED)))));
+                            conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED)
+                        )
+                    )
+                )
+            );
         }
-        String conditionLine = compactSource.compact(assignExpr.getTarget()) + " "
-                + assignExpr.getOperator().asString()
-                + " "
-                + compactSource.compact(conditionalExpr.getCondition())
-                + ";";
+        String conditionLine = compactSource.compact(assignExpr.getTarget())
+            + " "
+            + assignExpr.getOperator().asString()
+            + " "
+            + compactSource.compact(conditionalExpr.getCondition())
+            + ";";
         if (blockStatementWidth.applyAsInt(conditionLine) <= options.lineWidth()) {
-            return Optional.of(Doc.concat(
+            return Optional.of(
+                Doc.concat(
                     expressionRenderer.apply(assignExpr.getTarget()),
                     Doc.text(" " + assignExpr.getOperator().asString() + " "),
-                    conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED)));
+                    conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED)
+                )
+            );
         }
         return Optional.empty();
     }
@@ -168,13 +201,17 @@ final class ConditionalExpressionPrinter {
      * assignment instead.
      */
     boolean shouldBreakBeforeConditionalInitializer(ConditionalExpr initializer) {
-        return initializer.getCondition() instanceof BinaryExpr
-                && (initializer.getThenExpr() instanceof BinaryExpr || initializer.getElseExpr() instanceof BinaryExpr);
+        return (
+            initializer.getCondition() instanceof BinaryExpr
+            && (initializer.getThenExpr() instanceof BinaryExpr || initializer.getElseExpr() instanceof BinaryExpr)
+        );
     }
 
     private boolean shouldBreakBeforeConditionalAssignment(ConditionalExpr conditionalExpr) {
-        return conditionalExpr.getCondition() instanceof BinaryExpr binaryExpr
-                && binaryExpr.findAll(MethodCallExpr.class).stream().findAny().isPresent();
+        return (
+            conditionalExpr.getCondition() instanceof BinaryExpr binaryExpr
+            && binaryExpr.findAll(MethodCallExpr.class).stream().findAny().isPresent()
+        );
     }
 
     Doc conditionalExpression(ConditionalExpr expression) {
@@ -202,11 +239,12 @@ final class ConditionalExpressionPrinter {
         if (!breakMode.isForced() && flatWidth <= options.lineWidth()) {
             if (expressionHasParenthesizedNestedBinary.test(expression)) {
                 return Doc.concat(
-                        conditionalCondition(expression),
-                        Doc.text(" ? "),
-                        conditionalBranch(expression.getThenExpr()),
-                        Doc.text(" : "),
-                        conditionalBranch(expression.getElseExpr()));
+                    conditionalCondition(expression),
+                    Doc.text(" ? "),
+                    conditionalBranch(expression.getThenExpr()),
+                    Doc.text(" : "),
+                    conditionalBranch(expression.getElseExpr())
+                );
             }
             return Doc.text(flat);
         }
@@ -228,12 +266,13 @@ final class ConditionalExpressionPrinter {
             return;
         }
         layoutDecisions.recordWidthBreak(
-                "ternary",
-                "java.expression:" + expression.getClass().getSimpleName(),
-                ternaryPreview(flat),
-                flatWidth,
-                options.lineWidth(),
-                0);
+            "ternary",
+            "java.expression:" + expression.getClass().getSimpleName(),
+            ternaryPreview(flat),
+            flatWidth,
+            options.lineWidth(),
+            0
+        );
     }
 
     /**
@@ -247,14 +286,18 @@ final class ConditionalExpressionPrinter {
 
     private Doc brokenConditionalExpression(ConditionalExpr expression) {
         return Doc.concat(
-                conditionalCondition(expression),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.text("? "),
-                        conditionalBranch(expression.getThenExpr()),
-                        Doc.HARD_LINE,
-                        Doc.text(": "),
-                        conditionalBranch(expression.getElseExpr()))));
+            conditionalCondition(expression),
+            Doc.indent(
+                Doc.concat(
+                    Doc.HARD_LINE,
+                    Doc.text("? "),
+                    conditionalBranch(expression.getThenExpr()),
+                    Doc.HARD_LINE,
+                    Doc.text(": "),
+                    conditionalBranch(expression.getElseExpr())
+                )
+            )
+        );
     }
 
     /**
@@ -269,23 +312,28 @@ final class ConditionalExpressionPrinter {
         if (expression.getAllContainedComments().stream().noneMatch(LineComment.class::isInstance)) {
             return Optional.empty();
         }
-        Optional<Comment> conditionComment = expression.getCondition().getComment()
+        Optional<Comment> conditionComment = expression.getCondition()
+                .getComment()
                 .filter(LineComment.class::isInstance);
-        Optional<Comment> thenComment = expression.getThenExpr().getComment()
+        Optional<Comment> thenComment = expression.getThenExpr()
+                .getComment()
                 .filter(LineComment.class::isInstance);
-        Optional<Comment> elseComment = expression.getElseExpr().getComment()
+        Optional<Comment> elseComment = expression.getElseExpr()
+                .getComment()
                 .filter(LineComment.class::isInstance);
-        Optional<Comment> leadingThenComment =
-                thenComment.filter(comment -> CommentIndex.startsBefore(comment, expression.getThenExpr()));
-        Optional<Comment> conditionTrailingComment =
-                conditionComment
-                        .filter(comment -> conditionalQuestionCommentTrailsCondition(expression, comment))
-                        .or(() -> leadingThenComment
-                                .filter(comment -> conditionalQuestionCommentTrailsCondition(expression, comment)));
+        Optional<Comment> leadingThenComment = thenComment.filter(
+            comment -> CommentIndex.startsBefore(comment, expression.getThenExpr())
+        );
+        Optional<Comment> conditionTrailingComment = conditionComment
+                .filter(comment -> conditionalQuestionCommentTrailsCondition(expression, comment))
+                .or(() -> leadingThenComment.filter(
+                        comment -> conditionalQuestionCommentTrailsCondition(expression, comment)
+                ));
         Optional<Comment> questionComment = conditionComment
                 .filter(comment -> !conditionalQuestionCommentTrailsCondition(expression, comment))
-                .or(() -> leadingThenComment
-                        .filter(comment -> !conditionalQuestionCommentTrailsCondition(expression, comment)));
+                .or(() -> leadingThenComment.filter(
+                        comment -> !conditionalQuestionCommentTrailsCondition(expression, comment)
+                ));
         Optional<Comment> thenTrailingComment = thenComment
                 .filter(comment -> !CommentIndex.startsBefore(comment, expression.getThenExpr()))
                 .filter(comment -> !commentAppearsAfterColon(expression, comment));
@@ -297,21 +345,29 @@ final class ConditionalExpressionPrinter {
                 .filter(comment -> colonComment.filter(colon -> colon == comment).isEmpty())
                 .filter(comment -> !CommentIndex.startsBefore(comment, expression.getElseExpr()))
                 .filter(comment -> !conditionalElseCommentIsStatementTrailing(expression, comment));
-        return Optional.of(Doc.concat(
+        return Optional.of(
+            Doc.concat(
                 conditionalConditionWithTrailingComment(expression.getCondition(), conditionTrailingComment),
-                Doc.indent(Doc.concat(
+                Doc.indent(
+                    Doc.concat(
                         Doc.HARD_LINE,
                         conditionalCommentedBranch(
-                                "?",
-                                expression.getThenExpr(),
-                                questionComment,
-                                thenTrailingComment),
+                            "?",
+                            expression.getThenExpr(),
+                            questionComment,
+                            thenTrailingComment
+                        ),
                         Doc.HARD_LINE,
                         conditionalCommentedBranch(
-                                ":",
-                                expression.getElseExpr(),
-                                colonComment,
-                                elseTrailingComment)))));
+                            ":",
+                            expression.getElseExpr(),
+                            colonComment,
+                            elseTrailingComment
+                        )
+                    )
+                )
+            )
+        );
     }
 
     private Doc conditionalConditionWithTrailingComment(Expression condition, Optional<Comment> trailingComment) {
@@ -322,8 +378,10 @@ final class ConditionalExpressionPrinter {
     }
 
     private boolean conditionalQuestionCommentTrailsCondition(ConditionalExpr expression, Comment comment) {
-        return commentAppearsAfterOperator(expression, comment, "?")
-                && CommentIndex.startsAfterNodeOnSameLine(expression.getCondition(), comment);
+        return (
+            commentAppearsAfterOperator(expression, comment, "?")
+            && CommentIndex.startsAfterNodeOnSameLine(expression.getCondition(), comment)
+        );
     }
 
     /**
@@ -334,14 +392,16 @@ final class ConditionalExpressionPrinter {
             String operatorToken,
             Expression branch,
             Optional<Comment> leadingComment,
-            Optional<Comment> trailingComment) {
+            Optional<Comment> trailingComment
+    ) {
         if (leadingComment.isPresent()) {
             return Doc.concat(
-                    Doc.text(operatorToken + " "),
-                    comments.comment(leadingComment.orElseThrow()),
-                    Doc.HARD_LINE,
-                    Doc.text("  "),
-                    expressionWithoutOwnCommentRenderer.apply(branch));
+                Doc.text(operatorToken + " "),
+                comments.comment(leadingComment.orElseThrow()),
+                Doc.HARD_LINE,
+                Doc.text("  "),
+                expressionWithoutOwnCommentRenderer.apply(branch)
+            );
         }
         Doc trailing = trailingComment
                 .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
@@ -375,24 +435,31 @@ final class ConditionalExpressionPrinter {
     private boolean commentAppearsAfterOperator(
             ConditionalExpr expression,
             Comment comment,
-            String operatorToken) {
+            String operatorToken
+    ) {
         return expression.getTokenRange()
-                .flatMap(tokenRange -> expression.getRange().flatMap(expressionRange -> comment.getRange()
-                        .map(commentRange -> {
-                            List<String> lines = tokenRange.toString().lines().toList();
-                            int lineIndex = commentRange.begin.line - expressionRange.begin.line;
-                            if (lineIndex < 0 || lineIndex >= lines.size()) {
-                                return false;
-                            }
-                            int column = lineIndex == 0
+                .flatMap(tokenRange -> expression.getRange().flatMap(
+                        expressionRange -> comment.getRange().map(
+                            commentRange -> {
+                                List<String> lines = tokenRange.toString().lines().toList();
+                                int lineIndex = commentRange.begin.line - expressionRange.begin.line;
+                                if (lineIndex < 0 || lineIndex >= lines.size()) {
+                                    return false;
+                                }
+                                int column = lineIndex == 0
                                     ? commentRange.begin.column - expressionRange.begin.column
                                     : commentRange.begin.column - 1;
-                            if (column <= 0) {
-                                return false;
+                                if (column <= 0) {
+                                    return false;
+                                }
+                                String prefix = lines.get(lineIndex).substring(
+                                    0,
+                                    Math.min(column, lines.get(lineIndex).length())
+                                );
+                                return prefix.contains(operatorToken);
                             }
-                            String prefix = lines.get(lineIndex).substring(0, Math.min(column, lines.get(lineIndex).length()));
-                            return prefix.contains(operatorToken);
-                        })))
+                        )
+                ))
                 .orElse(false);
     }
 
@@ -415,9 +482,12 @@ final class ConditionalExpressionPrinter {
 
     private ConditionalConditionLayout conditionalConditionLayout(
             ConditionalExpr expression,
-            Expression condition) {
-        if (binaryCondition(condition).isEmpty()
-                || continuationStatementWidth.applyAsInt(compactSource.compact(condition)) <= options.lineWidth()) {
+            Expression condition
+    ) {
+        if (
+            binaryCondition(condition).isEmpty()
+            || continuationStatementWidth.applyAsInt(compactSource.compact(condition)) <= options.lineWidth()
+        ) {
             return ConditionalConditionLayout.EXPRESSION;
         }
         if (conditionalIsAssignmentValue(expression) || conditionalIsVariableInitializer(expression)) {
@@ -428,15 +498,17 @@ final class ConditionalExpressionPrinter {
 
     private Doc enclosedBinaryCondition(
             Expression condition,
-            BiFunction<Expression, Boolean, Doc> binaryRenderer) {
+            BiFunction<Expression, Boolean, Doc> binaryRenderer
+    ) {
         BinaryExpr binary = binaryCondition(condition).orElseThrow();
         Doc lines = binaryRenderer.apply(binary, true);
         for (int i = 0; i < enclosedDepth(condition); i++) {
             lines = Doc.concat(
-                    Doc.text("("),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, lines)),
-                    Doc.HARD_LINE,
-                    Doc.text(")"));
+                Doc.text("("),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, lines)),
+                Doc.HARD_LINE,
+                Doc.text(")")
+            );
         }
         return lines;
     }
@@ -487,5 +559,4 @@ final class ConditionalExpressionPrinter {
         }
         return expressionRenderer.apply(branch);
     }
-
 }

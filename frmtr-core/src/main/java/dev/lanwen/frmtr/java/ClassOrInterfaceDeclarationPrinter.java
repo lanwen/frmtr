@@ -40,20 +40,35 @@ import java.util.function.ToIntFunction;
  * {@code frmtr-core/src/test/resources/format/generic-type-body-breaks/frmtr-default.output.java}.
  */
 final class ClassOrInterfaceDeclarationPrinter {
+
     private final CommentTracker comments;
+
     private final RawSource rawSource;
+
     private final RawPreservedSource rawPreservedSource;
+
     private final FormatterOptions options;
+
     private final CommentedInterfacePrinter commentedInterfaces;
+
     private final CallableSignaturePrinter callableSignatures;
+
     private final Function<NodeWithAnnotations<?>, Doc> annotations;
+
     private final Function<NodeWithModifiers<?>, String> modifiers;
+
     private final Function<NodeList<ClassOrInterfaceType>, Optional<Doc>> inlineExtendsTypes;
+
     private final Function<NodeList<ClassOrInterfaceType>, Optional<Doc>> inlineImplementsTypes;
+
     private final Function<NodeList<ClassOrInterfaceType>, Optional<Doc>> inlinePermitsTypes;
+
     private final TypeClausePrinter typeClause;
+
     private final Function<NodeList<TypeParameter>, String> flatTypeParameters;
+
     private final BiFunction<String, NodeList<ClassOrInterfaceType>, String> flatTypeClause;
+
     private final Function<ClassOrInterfaceDeclaration, Doc> memberBlock;
 
     ClassOrInterfaceDeclarationPrinter(
@@ -71,7 +86,8 @@ final class ClassOrInterfaceDeclarationPrinter {
             TypeClausePrinter typeClause,
             Function<NodeList<TypeParameter>, String> flatTypeParameters,
             BiFunction<String, NodeList<ClassOrInterfaceType>, String> flatTypeClause,
-            Function<ClassOrInterfaceDeclaration, Doc> memberBlock) {
+            Function<ClassOrInterfaceDeclaration, Doc> memberBlock
+    ) {
         this.comments = comments;
         this.rawSource = rawSource;
         this.rawPreservedSource = rawPreservedSource;
@@ -101,8 +117,9 @@ final class ClassOrInterfaceDeclarationPrinter {
         String raw = rawSource.raw(declaration);
         if (declaration.isInterface() && commentedInterfaces.hasCommentedHeader(raw)) {
             return rawPreservedSource.rawWithoutOwnComment(
-                    declaration,
-                    commentedInterfaces.formatCommentedInterface(raw));
+                declaration,
+                commentedInterfaces.formatCommentedInterface(raw)
+            );
         }
         if (shouldBreakClassOrInterfaceHeader(declaration)) {
             return brokenClassOrInterface(declaration);
@@ -133,22 +150,24 @@ final class ClassOrInterfaceDeclarationPrinter {
      * block.
      */
     private boolean shouldBreakClassOrInterfaceHeader(ClassOrInterfaceDeclaration declaration) {
-        if (declaration.getExtendedTypes().isEmpty()
-                && declaration.getImplementedTypes().isEmpty()
-                && declaration.getPermittedTypes().isEmpty()) {
+        if (
+            declaration.getExtendedTypes().isEmpty()
+            && declaration.getImplementedTypes().isEmpty()
+            && declaration.getPermittedTypes().isEmpty()
+        ) {
             return false;
         }
         String flatHeader = modifiers.apply(declaration)
-                + (declaration.isInterface() ? "interface " : "class ")
-                + declaration.getNameAsString()
-                + flatTypeParameters.apply(declaration.getTypeParameters())
-                + flatTypeClause.apply("extends", declaration.getExtendedTypes())
-                + flatTypeClause.apply("implements", declaration.getImplementedTypes())
-                + flatTypeClause.apply("permits", declaration.getPermittedTypes());
+            + (declaration.isInterface() ? "interface " : "class ")
+            + declaration.getNameAsString()
+            + flatTypeParameters.apply(declaration.getTypeParameters())
+            + flatTypeClause.apply("extends", declaration.getExtendedTypes())
+            + flatTypeClause.apply("implements", declaration.getImplementedTypes())
+            + flatTypeClause.apply("permits", declaration.getPermittedTypes());
         return classOrInterfaceHeaderWidth(
-                        declaration,
-                        flatHeader + " " + (emptyMemberBlock(declaration) ? "{}" : "{"))
-                > options.lineWidth();
+            declaration,
+            flatHeader + " " + (emptyMemberBlock(declaration) ? "{}" : "{")
+        ) > options.lineWidth();
     }
 
     /**
@@ -167,30 +186,36 @@ final class ClassOrInterfaceDeclarationPrinter {
         header.add(Doc.text(declaration.getNameAsString()));
         boolean breakTypeParameters = classOrInterfaceTypeParametersBreak(declaration);
         if (breakTypeParameters) {
-            header.add(callableSignatures.brokenTypeParameters(
+            header.add(
+                callableSignatures.brokenTypeParameters(
                     declaration.getTypeParameters(),
-                    classOrInterfaceHeaderClauses(declaration) > 1));
+                    classOrInterfaceHeaderClauses(declaration) > 1
+                )
+            );
         } else if (!declaration.getTypeParameters().isEmpty()) {
             header.add(callableSignatures.typeParameters(declaration.getTypeParameters()));
         }
         boolean breakClauses = classOrInterfaceHeaderClauses(declaration) > 1 || !breakTypeParameters;
         typeClause.print(
-                        "extends",
-                        declaration.getExtendedTypes(),
-                        breakClauses,
-                        text -> classOrInterfaceClauseWidth(declaration, text))
+                    "extends",
+                    declaration.getExtendedTypes(),
+                    breakClauses,
+                    text -> classOrInterfaceClauseWidth(declaration, text)
+                )
                 .ifPresent(header::add);
         typeClause.print(
-                        "implements",
-                        declaration.getImplementedTypes(),
-                        breakClauses,
-                        text -> classOrInterfaceClauseWidth(declaration, text))
+                    "implements",
+                    declaration.getImplementedTypes(),
+                    breakClauses,
+                    text -> classOrInterfaceClauseWidth(declaration, text)
+                )
                 .ifPresent(header::add);
         typeClause.print(
-                        "permits",
-                        declaration.getPermittedTypes(),
-                        breakClauses,
-                        text -> classOrInterfaceClauseWidth(declaration, text))
+                    "permits",
+                    declaration.getPermittedTypes(),
+                    breakClauses,
+                    text -> classOrInterfaceClauseWidth(declaration, text)
+                )
                 .ifPresent(header::add);
         header.add(Doc.text(" "));
         header.add(memberBlock.apply(declaration));
@@ -210,24 +235,27 @@ final class ClassOrInterfaceDeclarationPrinter {
         }
         if (classOrInterfaceHeaderClauses(declaration) > 1) {
             String headerHead = modifiers.apply(declaration)
-                    + (declaration.isInterface() ? "interface " : "class ")
-                    + declaration.getNameAsString()
-                    + flatTypeParameters.apply(declaration.getTypeParameters());
+                + (declaration.isInterface() ? "interface " : "class ")
+                + declaration.getNameAsString()
+                + flatTypeParameters.apply(declaration.getTypeParameters());
             return classOrInterfaceHeaderWidth(declaration, headerHead) > options.lineWidth();
         }
         if (declaration.getTypeParameters().size() > 2) {
             return true;
         }
         String headerHead = modifiers.apply(declaration)
-                + (declaration.isInterface() ? "interface " : "class ")
-                + declaration.getNameAsString()
-                + flatTypeParameters.apply(declaration.getTypeParameters());
+            + (declaration.isInterface() ? "interface " : "class ")
+            + declaration.getNameAsString()
+            + flatTypeParameters.apply(declaration.getTypeParameters());
         return classOrInterfaceHeaderWidth(declaration, headerHead) > options.lineWidth();
     }
 
     private Doc nameLeadingLineComment(ClassOrInterfaceDeclaration declaration) {
-        Doc comment = comments.ownComment(declaration.getName(), candidate -> candidate instanceof LineComment
-                && CommentIndex.startsBeforeBeginLine(candidate, declaration.getName()));
+        Doc comment = comments.ownComment(
+            declaration.getName(),
+            candidate -> candidate instanceof LineComment
+                    && CommentIndex.startsBeforeBeginLine(candidate, declaration.getName())
+        );
         return comment == Doc.EMPTY ? Doc.EMPTY : Doc.concat(comment, Doc.HARD_LINE);
     }
 
@@ -289,6 +317,7 @@ final class ClassOrInterfaceDeclarationPrinter {
                 String keyword,
                 NodeList<ClassOrInterfaceType> types,
                 boolean breakBeforeClause,
-                ToIntFunction<String> width);
+                ToIntFunction<String> width
+        );
     }
 }

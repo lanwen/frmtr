@@ -20,8 +20,11 @@ import java.util.Objects;
  * formatter docs.
  */
 final class SourceText {
+
     private final String source;
+
     private final int[] lineStartOffsets;
+
     private final int[] lineContentEndOffsets;
 
     SourceText(String source) {
@@ -50,12 +53,13 @@ final class SourceText {
         Objects.requireNonNull(begin, "begin");
         Objects.requireNonNull(endInclusive, "endInclusive");
         return new SourceRegion(
-                offset(begin),
-                offsetAfter(endInclusive),
-                begin.line,
-                begin.column,
-                endInclusive.line,
-                endInclusive.column);
+            offset(begin),
+            offsetAfter(endInclusive),
+            begin.line,
+            begin.column,
+            endInclusive.line,
+            endInclusive.column
+        );
     }
 
     /**
@@ -74,12 +78,13 @@ final class SourceText {
         SourcePosition begin = positionAt(beginOffset);
         SourcePosition end = endOffset == beginOffset ? begin : positionAt(endOffset - 1);
         return new SourceRegion(
-                beginOffset,
-                endOffset,
-                begin.line(),
-                begin.column(),
-                end.line(),
-                end.column());
+            beginOffset,
+            endOffset,
+            begin.line(),
+            begin.column(),
+            end.line(),
+            end.column()
+        );
     }
 
     /**
@@ -185,7 +190,8 @@ final class SourceText {
         int lineLength = lineContentEndOffsets[lineIndex] - lineStartOffsets[lineIndex];
         if (position.column > lineLength + 1) {
             throw new IllegalArgumentException(
-                    "column %d is outside line %d".formatted(position.column, position.line));
+                "column %d is outside line %d".formatted(position.column, position.line)
+            );
         }
         return lineIndex;
     }

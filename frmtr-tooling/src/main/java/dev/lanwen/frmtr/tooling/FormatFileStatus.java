@@ -20,5 +20,5 @@ public enum FormatFileStatus {
     /**
      * The file could not be read, parsed, formatted, or written during the run.
      */
-    FAILED
+    FAILED,
 }

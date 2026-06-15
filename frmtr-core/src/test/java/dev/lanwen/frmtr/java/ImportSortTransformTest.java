@@ -16,6 +16,7 @@ import org.junit.jupiter.api.parallel.Resources;
 
 @ResourceLock(Resources.SYSTEM_PROPERTIES)
 final class ImportSortTransformTest {
+
     @Test
     void reportsTransformResultMetadata() {
         CompilationUnit unit = parse("class Demo {}");
@@ -28,7 +29,8 @@ final class ImportSortTransformTest {
 
     @Test
     void reordersCompilationUnitImportsWithoutReplacingNodes() {
-        CompilationUnit unit = parse("""
+        CompilationUnit unit = parse(
+            """
                 package dev.example;
 
                 import z.Normal;
@@ -36,13 +38,18 @@ final class ImportSortTransformTest {
                 import a.Normal;
 
                 class Demo {}
-                """);
+                """
+        );
         ImportDeclaration normalZ = unit.getImport(0);
         ImportDeclaration staticA = unit.getImport(1);
         ImportDeclaration normalA = unit.getImport(2);
 
-        CompilationUnit transformed = withGuardrails("true", () -> new JavaTransformPipeline(List.of(new ImportSortTransform()))
-                .transform(unit));
+        CompilationUnit transformed = withGuardrails(
+            "true",
+            () -> new JavaTransformPipeline(List.of(new ImportSortTransform())).transform(
+                unit
+            )
+        );
 
         assertThat(transformed).isSameAs(unit);
         assertThat(unit.getImport(0)).isSameAs(staticA);
@@ -55,7 +62,8 @@ final class ImportSortTransformTest {
 
     @Test
     void sortsInsideChunksWithoutCrossingBlankBoundaries() {
-        CompilationUnit unit = parse("""
+        CompilationUnit unit = parse(
+            """
                 package dev.example;
 
                 import z.BeforeBoundary;
@@ -65,14 +73,19 @@ final class ImportSortTransformTest {
                 import a.Normal;
 
                 class Demo {}
-                """);
+                """
+        );
         ImportDeclaration beforeBoundary = unit.getImport(0);
         ImportDeclaration normalB = unit.getImport(1);
         ImportDeclaration staticA = unit.getImport(2);
         ImportDeclaration normalA = unit.getImport(3);
 
-        CompilationUnit transformed = withGuardrails("true", () -> new JavaTransformPipeline(List.of(new ImportSortTransform()))
-                .transform(unit));
+        CompilationUnit transformed = withGuardrails(
+            "true",
+            () -> new JavaTransformPipeline(List.of(new ImportSortTransform())).transform(
+                unit
+            )
+        );
 
         assertThat(transformed).isSameAs(unit);
         assertThat(unit.getImports()).containsExactly(beforeBoundary, staticA, normalA, normalB);
@@ -80,7 +93,8 @@ final class ImportSortTransformTest {
 
     @Test
     void anchorsDetachedLeadingCommentsAsChunkBoundaries() {
-        CompilationUnit unit = parse("""
+        CompilationUnit unit = parse(
+            """
                 package dev.example;
 
                 import z.BeforeComment;
@@ -90,24 +104,31 @@ final class ImportSortTransformTest {
                 import a.Normal;
 
                 class Demo {}
-                """);
+                """
+        );
         ImportDeclaration beforeComment = unit.getImport(0);
         ImportDeclaration commented = unit.getImport(1);
         ImportDeclaration staticA = unit.getImport(2);
         ImportDeclaration normalA = unit.getImport(3);
 
-        CompilationUnit transformed = withGuardrails("true", () -> new JavaTransformPipeline(List.of(new ImportSortTransform()))
-                .transform(unit));
+        CompilationUnit transformed = withGuardrails(
+            "true",
+            () -> new JavaTransformPipeline(List.of(new ImportSortTransform())).transform(
+                unit
+            )
+        );
 
         assertThat(transformed).isSameAs(unit);
         assertThat(unit.getImports()).containsExactly(beforeComment, commented, staticA, normalA);
-        assertThat(commented.getComment()).hasValueSatisfying(comment -> assertThat(comment.toString().stripTrailing())
-                .isEqualTo("// keep attached to this import"));
+        assertThat(commented.getComment()).hasValueSatisfying(comment -> assertThat(comment.toString().stripTrailing()).isEqualTo(
+                "// keep attached to this import"
+        ));
     }
 
     @Test
     void printsImportChunksWithoutRegroupingAcrossBoundaries() {
-        String formatted = Frmtr.format("""
+        String formatted = Frmtr.format(
+            """
                 package dev.example;
 
                 import z.BeforeBoundary;
@@ -117,9 +138,11 @@ final class ImportSortTransformTest {
                 import a.Normal;
 
                 class Demo {}
-                """);
+                """
+        );
 
-        assertThat(formatted).isEqualTo("""
+        assertThat(formatted).isEqualTo(
+            """
                 package dev.example;
 
                 import z.BeforeBoundary;
@@ -130,12 +153,14 @@ final class ImportSortTransformTest {
                 import b.Normal;
 
                 class Demo {}
-                """);
+                """
+        );
     }
 
     @Test
     void printsAdjacentLeadingCommentImportWithoutChunkBlankLine() {
-        String formatted = Frmtr.format("""
+        String formatted = Frmtr.format(
+            """
                 package dev.example;
 
                 import z.BeforeComment;
@@ -144,9 +169,11 @@ final class ImportSortTransformTest {
                 import a.AfterComment;
 
                 class Demo {}
-                """);
+                """
+        );
 
-        assertThat(formatted).isEqualTo("""
+        assertThat(formatted).isEqualTo(
+            """
                 package dev.example;
 
                 import z.BeforeComment;
@@ -155,12 +182,14 @@ final class ImportSortTransformTest {
                 import a.AfterComment;
 
                 class Demo {}
-                """);
+                """
+        );
     }
 
     @Test
     void printsSourceGapBeforeLeadingCommentImportAsBlankChunkSeparator() {
-        String formatted = Frmtr.format("""
+        String formatted = Frmtr.format(
+            """
                 package dev.example;
 
                 import z.BeforeComment;
@@ -170,9 +199,11 @@ final class ImportSortTransformTest {
                 import a.AfterComment;
 
                 class Demo {}
-                """);
+                """
+        );
 
-        assertThat(formatted).isEqualTo("""
+        assertThat(formatted).isEqualTo(
+            """
                 package dev.example;
 
                 import z.BeforeComment;
@@ -182,13 +213,16 @@ final class ImportSortTransformTest {
                 import a.AfterComment;
 
                 class Demo {}
-                """);
+                """
+        );
     }
 
     private static CompilationUnit parse(String source) {
-        JavaParser parser = new JavaParser(new ParserConfiguration()
-                .setStoreTokens(true)
-                .setAttributeComments(true));
+        JavaParser parser = new JavaParser(
+            new ParserConfiguration()
+                    .setStoreTokens(true)
+                    .setAttributeComments(true)
+        );
         return parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
                 .getResult()
                 .orElseThrow();

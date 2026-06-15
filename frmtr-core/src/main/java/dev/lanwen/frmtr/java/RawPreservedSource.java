@@ -15,7 +15,9 @@ import dev.lanwen.frmtr.doc.Doc;
  * this helper.
  */
 final class RawPreservedSource {
+
     private final RawSource rawSource;
+
     private final CommentTracker comments;
 
     RawPreservedSource(RawSource rawSource, CommentTracker comments) {

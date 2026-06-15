@@ -14,7 +14,12 @@ final class DocExplainRendererTest {
 
     private static DocExplanation explain(int lineWidth, Doc doc) {
         FormatterOptions options = TestFormatterOptions.forLayout(
-                lineWidth, FormatterOptions.IndentStyle.SPACE, 2, FormatterOptions.LineEnding.LF, false);
+            lineWidth,
+            FormatterOptions.IndentStyle.SPACE,
+            2,
+            FormatterOptions.LineEnding.LF,
+            false
+        );
         return new DocExplainRenderer(options).explain(doc, java.util.List.of());
     }
 
@@ -36,9 +41,10 @@ final class DocExplainRendererTest {
     @Test
     void recordsBreakWhenGroupExceedsAvailableColumns() {
         Doc doc = Doc.delimited(
-                "call(",
-                ")",
-                Doc.concat(Doc.text("firstArgument"), Doc.text(","), Doc.LINE, Doc.text("secondArgument")));
+            "call(",
+            ")",
+            Doc.concat(Doc.text("firstArgument"), Doc.text(","), Doc.LINE, Doc.text("secondArgument"))
+        );
 
         DocExplanation explanation = explain(20, doc);
 
@@ -66,10 +72,12 @@ final class DocExplainRendererTest {
     @Test
     void attributesForcedHardBreaksToNearestEnclosingLabel() {
         Doc chain = Doc.label(
-                "java.expression:MethodCallExpr",
-                Doc.concat(
-                        Doc.text("root()"),
-                        Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(".a()"), Doc.HARD_LINE, Doc.text(".b()")))));
+            "java.expression:MethodCallExpr",
+            Doc.concat(
+                Doc.text("root()"),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(".a()"), Doc.HARD_LINE, Doc.text(".b()")))
+            )
+        );
         Doc doc = Doc.label("java.statement:ExpressionStmt", chain);
 
         DocExplanation explanation = explain(40, doc);
@@ -96,10 +104,22 @@ final class DocExplainRendererTest {
     @Test
     void carriesPrinterWrapsThroughUntouchedForCallerMerge() {
         Doc doc = Doc.label("java.statement:ExpressionStmt", Doc.text("x"));
-        PrinterWrap wrap = new PrinterWrap("method chain", "java.expression:MethodCallExpr", "foo().bar()…", 78, 40, 8);
+        PrinterWrap wrap = new PrinterWrap(
+            "method chain",
+            "java.expression:MethodCallExpr",
+            "foo().bar()…",
+            78,
+            40,
+            8
+        );
 
         FormatterOptions options = TestFormatterOptions.forLayout(
-                40, FormatterOptions.IndentStyle.SPACE, 2, FormatterOptions.LineEnding.LF, false);
+            40,
+            FormatterOptions.IndentStyle.SPACE,
+            2,
+            FormatterOptions.LineEnding.LF,
+            false
+        );
         DocExplanation explanation = new DocExplainRenderer(options).explain(doc, java.util.List.of(wrap));
 
         // The renderer passes printer wraps through verbatim and exposes their labels so callers can de-duplicate the
@@ -111,8 +131,9 @@ final class DocExplainRendererTest {
     @Test
     void prunesStructuralWrappersButKeepsLabelsAndGroups() {
         Doc doc = Doc.concat(
-                Doc.text("prefix "),
-                Doc.label("java.expression:Inner", Doc.group(Doc.text("x"))));
+            Doc.text("prefix "),
+            Doc.label("java.expression:Inner", Doc.group(Doc.text("x")))
+        );
 
         DocExplanation explanation = explain(40, doc);
 
@@ -121,8 +142,9 @@ final class DocExplainRendererTest {
                 .singleElement()
                 .satisfies(label -> {
                     assertThat(label.label()).contains("java.expression:Inner");
-                    assertThat(label.children()).singleElement().satisfies(group -> assertThat(group.decision())
-                            .isPresent());
+                    assertThat(label.children()).singleElement().satisfies(
+                        group -> assertThat(group.decision()).isPresent()
+                    );
                 });
     }
 }

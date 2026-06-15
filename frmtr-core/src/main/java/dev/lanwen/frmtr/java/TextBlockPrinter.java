@@ -22,6 +22,7 @@ import dev.lanwen.frmtr.doc.Doc;
  * asks this helper only for the literal text that preserves the source text-block layout.
  */
 final class TextBlockPrinter {
+
     private final RawSource rawSource;
 
     TextBlockPrinter(RawSource rawSource) {

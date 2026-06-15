@@ -18,14 +18,14 @@ import dev.lanwen.frmtr.doc.Doc;
  * covered near {@code frmtr-core/src/test/resources/format/comment-preservation-class-members}.
  */
 final class PackageDeclarationPrinter {
+
     private final CommentTracker comments;
+
     private final RawSource rawSource;
+
     private final FormatterOptions options;
 
-    PackageDeclarationPrinter(
-            CommentTracker comments,
-            RawSource rawSource,
-            FormatterOptions options) {
+    PackageDeclarationPrinter(CommentTracker comments, RawSource rawSource, FormatterOptions options) {
         this.comments = comments;
         this.rawSource = rawSource;
         this.options = options;
@@ -53,9 +53,11 @@ final class PackageDeclarationPrinter {
         if (!leading.startsWith("/*") && !leading.startsWith("//")) {
             return Doc.EMPTY;
         }
-        return Doc.text(options.preserveRawTrailingWhitespace()
+        return Doc.text(
+            options.preserveRawTrailingWhitespace()
                 ? leading
-                : rawSource.stripTrailingHorizontalWhitespace(leading));
+                : rawSource.stripTrailingHorizontalWhitespace(leading)
+        );
     }
 
     /**

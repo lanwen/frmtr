@@ -18,6 +18,7 @@ import dev.lanwen.frmtr.doc.Doc;
  * their existing owners.
  */
 final class ExpressionRuleEnvelope {
+
     private final JavaFormatRule<Expression> expressionContent;
 
     ExpressionRuleEnvelope(JavaFormatRule<Expression> expressionContent) {
@@ -29,7 +30,10 @@ final class ExpressionRuleEnvelope {
      */
     Doc expression(Expression expression) {
         requireFullyParsed(expression);
-        return Doc.label("java.expression:" + expression.getClass().getSimpleName(), expressionContent.format(expression));
+        return Doc.label(
+            "java.expression:" + expression.getClass().getSimpleName(),
+            expressionContent.format(expression)
+        );
     }
 
     /**
@@ -49,7 +53,8 @@ final class ExpressionRuleEnvelope {
             return;
         }
         // TODO: Expose the rejected recovered expression through formatter diagnostics once recovery reporting exists.
-        throw new FormatterException("Unsupported Java parse-error recovery reached expression formatter: "
-                + expression.getClass().getSimpleName());
+        throw new FormatterException(
+            "Unsupported Java parse-error recovery reached expression formatter: " + expression.getClass().getSimpleName()
+        );
     }
 }

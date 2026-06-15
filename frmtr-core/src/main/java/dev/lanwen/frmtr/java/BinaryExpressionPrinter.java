@@ -12,6 +12,7 @@ import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.ToIntFunction;
 
@@ -42,6 +43,8 @@ final class BinaryExpressionPrinter {
 
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
 
+    private final BiFunction<MethodCallExpr, String, Doc> brokenMethodCallWithClosingLineRenderer;
+
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer;
 
     private final SourceShape sourceShape;
@@ -60,6 +63,7 @@ final class BinaryExpressionPrinter {
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
+            BiFunction<MethodCallExpr, String, Doc> brokenMethodCallWithClosingLineRenderer,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer,
             SourceShape sourceShape,
             Function<Node, String> compact,
@@ -72,6 +76,7 @@ final class BinaryExpressionPrinter {
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
+        this.brokenMethodCallWithClosingLineRenderer = brokenMethodCallWithClosingLineRenderer;
         this.forcedMethodCallChainRenderer = forcedMethodCallChainRenderer;
         this.sourceShape = sourceShape;
         this.compact = compact;
@@ -90,6 +95,13 @@ final class BinaryExpressionPrinter {
 
     Doc nestedLines(Expression expression, boolean forceBreak) {
         return lines(expression, forceBreak, true);
+    }
+
+    Doc conditionLines(Expression expression, boolean forceBreak) {
+        if (expression instanceof BinaryExpr binaryExpr && !isLogicalOperator(binaryExpr.getOperator())) {
+            return nestedLines(expression, forceBreak);
+        }
+        return lines(expression, forceBreak);
     }
 
     /**
@@ -128,8 +140,11 @@ final class BinaryExpressionPrinter {
             && operands.getFirst() instanceof MethodCallExpr methodCall
             && shouldBreakEndPositionMethodCallOperand(firstLine, methodCall)
             && continuationStatementWidth.applyAsInt(
-                ") " + binaryExpr.getOperator().asString() + " " + compact.apply(operands.getLast())
-            ) <= options.lineWidth()
+                ") "
+                    + binaryExpr.getOperator().asString()
+                    + " "
+                    + compact.apply(operands.getLast())
+               ) <= options.lineWidth()
         ) {
             return Doc.concat(
                 brokenMethodCallRenderer.apply(methodCall),
@@ -172,17 +187,19 @@ final class BinaryExpressionPrinter {
             && operand instanceof BinaryExpr binaryOperand
             && binaryOperand.getOperator() == BinaryExpr.Operator.AND
         ) {
-            if (parenthesizedBinaryOperandWidth(binaryLine.operator(), compact.apply(binaryOperand)) > options.lineWidth()) {
+            if (
+                parenthesizedBinaryOperandWidth(binaryLine.operator(), compact.apply(binaryOperand))
+                    > options.lineWidth()
+            ) {
                 return Doc.concat(Doc.text("("), nestedLines(binaryOperand, true), Doc.text(")"));
             }
             return Doc.concat(Doc.text("("), expressionRenderer.format(binaryOperand), Doc.text(")"));
         }
         if (
-            binaryLine.operator() == BinaryExpr.Operator.OR
-            && operand instanceof EnclosedExpr enclosedOperand
+            operand instanceof EnclosedExpr enclosedOperand
             && enclosedOperand.getInner() instanceof BinaryExpr binaryOperand
-            && (binaryOperand.getOperator() == BinaryExpr.Operator.AND || binaryOperand.getOperator() == BinaryExpr.Operator.OR)
-            && sourceShape.spansMultipleLines(enclosedOperand)
+            && (sourceShape.spansMultipleLines(enclosedOperand)
+                || binaryLine.width(compact.apply(enclosedOperand)) > options.lineWidth())
         ) {
             return Doc.concat(Doc.text("("), nestedLines(binaryOperand, true), Doc.text(")"));
         }
@@ -191,6 +208,13 @@ final class BinaryExpressionPrinter {
             && shouldParenthesizeNestedBinary(binaryLine.operator(), binaryOperand.getOperator())
         ) {
             return Doc.concat(Doc.text("("), expressionRenderer.format(binaryOperand), Doc.text(")"));
+        }
+        if (leadingOperatorMethodCallBinarySuffixCanAlign(binaryLine, operand)) {
+            BinaryExpr binaryOperand = (BinaryExpr) operand;
+            return brokenMethodCallWithClosingLineRenderer.apply(
+                (MethodCallExpr) binaryOperand.getLeft(),
+                methodCallBinaryClosingLine(binaryLine, binaryOperand)
+            );
         }
         if (operand instanceof MethodCallExpr && operand.getAllContainedComments().isEmpty()) {
             MethodCallExpr methodCall = (MethodCallExpr) operand;
@@ -205,6 +229,29 @@ final class BinaryExpressionPrinter {
                     .orElseGet(() -> brokenMethodCallRenderer.apply(methodCall));
         }
         return expressionRenderer.format(operand);
+    }
+
+    private boolean leadingOperatorMethodCallBinarySuffixCanAlign(BinaryExpressionLine binaryLine, Expression operand) {
+        if (
+            !binaryLine.hasLeadingOperator()
+            || !(operand instanceof BinaryExpr binaryOperand)
+            || !(binaryOperand.getLeft() instanceof MethodCallExpr methodCall)
+            || !methodCall.getAllContainedComments().isEmpty()
+            || !binaryOperand.getRight().getAllContainedComments().isEmpty()
+            || !sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+        ) {
+            return false;
+        }
+        return continuationStatementWidth.applyAsInt(methodCallBinaryClosingLine(binaryLine, binaryOperand))
+            <= options.lineWidth();
+    }
+
+    private String methodCallBinaryClosingLine(BinaryExpressionLine binaryLine, BinaryExpr binaryOperand) {
+        return " ".repeat(binaryLine.leadingOperatorWidth())
+            + ") "
+            + binaryOperand.getOperator().asString()
+            + " "
+            + compact.apply(binaryOperand.getRight());
     }
 
     private BinaryExpressionLine binaryExpressionLine(
@@ -225,11 +272,9 @@ final class BinaryExpressionPrinter {
      * being divided. Callers use this predicate to put the whole binary expression on the continuation line instead.
      */
     boolean shouldKeepCastDivisionContinuationFlat(BinaryExpr expression) {
-        return (
-            expression.getOperator() == BinaryExpr.Operator.DIVIDE
+        return expression.getOperator() == BinaryExpr.Operator.DIVIDE
             && expression.getLeft() instanceof CastExpr
-            && blockStatementWidth.applyAsInt(compact.apply(expression)) <= options.lineWidth()
-        );
+            && blockStatementWidth.applyAsInt(compact.apply(expression)) <= options.lineWidth();
     }
 
     /**
@@ -240,17 +285,18 @@ final class BinaryExpressionPrinter {
      * arguments, then attach the operator after that broken operand.
      */
     private boolean shouldBreakEndPositionMethodCallOperand(BinaryExpressionLine binaryLine, Expression operand) {
-        return (
-            binaryLine.hasTrailingOperator()
+        return binaryLine.hasTrailingOperator()
             && operand instanceof MethodCallExpr methodCall
             && !methodCall.getArguments().isEmpty()
-            && binaryLine.width(compact.apply(methodCall)) > options.lineWidth()
-        );
+            && binaryLine.width(compact.apply(methodCall)) > options.lineWidth();
     }
 
     private final class BinaryExpressionLine {
+
         private final BinaryExpr.Operator operator;
+
         private final String leadingOperator;
+
         private final String trailingOperator;
 
         private BinaryExpressionLine(BinaryExpr.Operator operator, String leadingOperator, String trailingOperator) {
@@ -265,6 +311,10 @@ final class BinaryExpressionPrinter {
 
         boolean hasLeadingOperator() {
             return !leadingOperator.isEmpty();
+        }
+
+        int leadingOperatorWidth() {
+            return leadingOperator.length();
         }
 
         boolean hasTrailingOperator() {
@@ -396,10 +446,8 @@ final class BinaryExpressionPrinter {
     private Doc binaryLeftOperand(BinaryExpr expression) {
         if (
             expression.getLeft() instanceof BinaryExpr leftBinary
-            && (shouldParenthesizeLeftBinary(expression.getOperator(), leftBinary.getOperator()) || shouldParenthesizeNestedBinary(
-                expression.getOperator(),
-                leftBinary.getOperator()
-            ))
+            && (shouldParenthesizeLeftBinary(expression.getOperator(), leftBinary.getOperator())
+                || shouldParenthesizeNestedBinary(expression.getOperator(), leftBinary.getOperator()))
         ) {
             return Doc.concat(Doc.text("("), expressionRenderer.format(leftBinary), Doc.text(")"));
         }
@@ -423,10 +471,8 @@ final class BinaryExpressionPrinter {
      * operation keeps its parentheses.
      */
     private boolean shouldParenthesizeLeftBinary(BinaryExpr.Operator outer, BinaryExpr.Operator inner) {
-        return (
-            (outer == BinaryExpr.Operator.DIVIDE || outer == BinaryExpr.Operator.REMAINDER)
-            && (inner == BinaryExpr.Operator.MULTIPLY || inner == BinaryExpr.Operator.REMAINDER)
-        );
+        return (outer == BinaryExpr.Operator.DIVIDE || outer == BinaryExpr.Operator.REMAINDER)
+            && (inner == BinaryExpr.Operator.MULTIPLY || inner == BinaryExpr.Operator.REMAINDER);
     }
 
     /**
@@ -451,7 +497,12 @@ final class BinaryExpressionPrinter {
         }
         if (
             isBitwiseOperator(outer)
-            && (isShiftOperator(inner) || isRelationalOperator(inner) || isEqualityOperator(inner) || outer == BinaryExpr.Operator.BINARY_OR && (inner == BinaryExpr.Operator.BINARY_AND || inner == BinaryExpr.Operator.XOR) || outer == BinaryExpr.Operator.XOR && inner == BinaryExpr.Operator.BINARY_AND)
+            && (isShiftOperator(inner)
+                || isRelationalOperator(inner)
+                || isEqualityOperator(inner)
+                || (outer == BinaryExpr.Operator.BINARY_OR
+                    && (inner == BinaryExpr.Operator.BINARY_AND || inner == BinaryExpr.Operator.XOR))
+                || (outer == BinaryExpr.Operator.XOR && inner == BinaryExpr.Operator.BINARY_AND))
         ) {
             return true;
         }
@@ -459,21 +510,17 @@ final class BinaryExpressionPrinter {
     }
 
     private boolean isShiftOperator(BinaryExpr.Operator operator) {
-        return (
-            operator == BinaryExpr.Operator.LEFT_SHIFT
+        return operator == BinaryExpr.Operator.LEFT_SHIFT
             || operator == BinaryExpr.Operator.SIGNED_RIGHT_SHIFT
-            || operator == BinaryExpr.Operator.UNSIGNED_RIGHT_SHIFT
-        );
+            || operator == BinaryExpr.Operator.UNSIGNED_RIGHT_SHIFT;
     }
 
     private boolean isArithmeticOperator(BinaryExpr.Operator operator) {
-        return (
-            operator == BinaryExpr.Operator.PLUS
+        return operator == BinaryExpr.Operator.PLUS
             || operator == BinaryExpr.Operator.MINUS
             || operator == BinaryExpr.Operator.MULTIPLY
             || operator == BinaryExpr.Operator.DIVIDE
-            || operator == BinaryExpr.Operator.REMAINDER
-        );
+            || operator == BinaryExpr.Operator.REMAINDER;
     }
 
     private boolean isAdditiveOperator(BinaryExpr.Operator operator) {
@@ -481,32 +528,30 @@ final class BinaryExpressionPrinter {
     }
 
     private boolean isMultiplicativeOperator(BinaryExpr.Operator operator) {
-        return (
-            operator == BinaryExpr.Operator.MULTIPLY
+        return operator == BinaryExpr.Operator.MULTIPLY
             || operator == BinaryExpr.Operator.DIVIDE
-            || operator == BinaryExpr.Operator.REMAINDER
-        );
+            || operator == BinaryExpr.Operator.REMAINDER;
     }
 
     private boolean isRelationalOperator(BinaryExpr.Operator operator) {
-        return (
-            operator == BinaryExpr.Operator.LESS
+        return operator == BinaryExpr.Operator.LESS
             || operator == BinaryExpr.Operator.GREATER
             || operator == BinaryExpr.Operator.LESS_EQUALS
-            || operator == BinaryExpr.Operator.GREATER_EQUALS
-        );
+            || operator == BinaryExpr.Operator.GREATER_EQUALS;
     }
 
     private boolean isBitwiseOperator(BinaryExpr.Operator operator) {
-        return (
-            operator == BinaryExpr.Operator.BINARY_AND
+        return operator == BinaryExpr.Operator.BINARY_AND
             || operator == BinaryExpr.Operator.XOR
-            || operator == BinaryExpr.Operator.BINARY_OR
-        );
+            || operator == BinaryExpr.Operator.BINARY_OR;
     }
 
     private boolean isEqualityOperator(BinaryExpr.Operator operator) {
         return operator == BinaryExpr.Operator.EQUALS || operator == BinaryExpr.Operator.NOT_EQUALS;
+    }
+
+    private boolean isLogicalOperator(BinaryExpr.Operator operator) {
+        return operator == BinaryExpr.Operator.AND || operator == BinaryExpr.Operator.OR;
     }
 
     /**
@@ -518,10 +563,8 @@ final class BinaryExpressionPrinter {
     boolean expressionHasParenthesizedNestedBinary(Expression expression) {
         return expression.findAll(BinaryExpr.class).stream().anyMatch(binary ->
             (binary.getLeft() instanceof BinaryExpr leftBinary
-                && (shouldParenthesizeLeftBinary(binary.getOperator(), leftBinary.getOperator()) || shouldParenthesizeNestedBinary(
-                    binary.getOperator(),
-                    leftBinary.getOperator()
-                )))
+                && (shouldParenthesizeLeftBinary(binary.getOperator(), leftBinary.getOperator())
+                    || shouldParenthesizeNestedBinary(binary.getOperator(), leftBinary.getOperator())))
                 || (binary.getRight() instanceof BinaryExpr rightBinary
                     && shouldParenthesizeNestedBinary(binary.getOperator(), rightBinary.getOperator()))
         );

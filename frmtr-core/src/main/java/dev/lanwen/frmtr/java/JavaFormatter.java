@@ -35,10 +35,13 @@ import java.util.List;
 import java.util.Optional;
 
 public final class JavaFormatter {
-    private static final JavaTransformPipeline TRANSFORMS =
-            new JavaTransformPipeline(List.of(new ImportSortTransform()));
+
+    private static final JavaTransformPipeline TRANSFORMS = new JavaTransformPipeline(
+        List.of(new ImportSortTransform())
+    );
 
     private final FormatterOptions options;
+
     private final JavaParser parser;
 
     public JavaFormatter(FormatterOptions options) {
@@ -77,8 +80,8 @@ public final class JavaFormatter {
         JavaParseResult outputResult = parse(formatted);
         if (outputResult.hasParseProblems()) {
             throw new AssertionError(
-                    "Formatter AST-equivalence verify failed: formatted output did not parse cleanly under the "
-                            + "input's parser configuration");
+                "Formatter AST-equivalence verify failed: formatted output did not parse cleanly under the " + "input's parser configuration"
+            );
         }
         FormatterGuardrails.assertAstEquivalent(inputResult.compilationUnit(), outputResult.compilationUnit());
     }
@@ -102,8 +105,10 @@ public final class JavaFormatter {
     public ExplainResult explain(String source) {
         PrintedDoc printed = printDocWithPrinter(source);
         String formatted = new DocRenderer(options).render(printed.doc());
-        DocExplanation explanation =
-                new DocExplainRenderer(options).explain(printed.doc(), printed.printer().layoutDecisions());
+        DocExplanation explanation = new DocExplainRenderer(options).explain(
+            printed.doc(),
+            printed.printer().layoutDecisions()
+        );
         return new ExplainResult(formatted, explanation);
     }
 
@@ -128,18 +133,18 @@ public final class JavaFormatter {
         // TODO: Expose parseResult.problems() through a future diagnostics/debug result API.
         SourceText sourceText = new SourceText(source);
         if (parseResult.hasParseProblems()) {
-            unsupportedRecoveryReason(parseResult.compilationUnit(), sourceText)
-                    .ifPresent(reason -> {
-                        throw parseFailure(
-                                source,
-                                parseResult.problems(),
-                                new ParseProblemException(parseResult.problems()),
-                                Optional.of(reason));
-                    });
+            unsupportedRecoveryReason(parseResult.compilationUnit(), sourceText).ifPresent(reason -> {
+                throw parseFailure(
+                    source,
+                    parseResult.problems(),
+                    new ParseProblemException(parseResult.problems()),
+                    Optional.of(reason)
+                );
+            });
         }
         CompilationUnit printableUnit = parseResult.hasParseProblems()
-                ? parseResult.compilationUnit()
-                : TRANSFORMS.transform(parseResult.compilationUnit());
+            ? parseResult.compilationUnit()
+            : TRANSFORMS.transform(parseResult.compilationUnit());
         JavaPrinter printer = new JavaPrinter(options, sourceText, parseResult.hasParseProblems());
         return new PrintedDoc(printer.print(printableUnit), printer);
     }
@@ -161,14 +166,14 @@ public final class JavaFormatter {
 
     private JavaParseResult parse(String source) {
         try {
-            ParseResult<CompilationUnit> result =
-                    parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source));
+            ParseResult<CompilationUnit> result = parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source));
             return parseResult(source, result);
         } catch (TokenMgrException exception) {
             throw new FormatterException(
-                    "Unable to parse Java source",
-                    exception,
-                    ParseErrorSourceContext.from(source, exception));
+                "Unable to parse Java source",
+                exception,
+                ParseErrorSourceContext.from(source, exception)
+            );
         } catch (ParseProblemException exception) {
             throw parseFailure(source, exception.getProblems(), exception, thrownBeforeRecoveredCompilationUnit());
         }
@@ -177,22 +182,27 @@ public final class JavaFormatter {
     private JavaParseResult parseResult(String source, ParseResult<CompilationUnit> result) {
         if (result.getResult().isEmpty()) {
             throw parseFailure(
-                    source,
-                    result.getProblems(),
-                    new ParseProblemException(result.getProblems()),
-                    noRecoveredCompilationUnit());
+                source,
+                result.getProblems(),
+                new ParseProblemException(result.getProblems()),
+                noRecoveredCompilationUnit()
+            );
         }
         var parseResult = new JavaParseResult(
-                result.getResult().orElseThrow(),
-                result.getProblems(),
-                !result.isSuccessful() || !result.getProblems().isEmpty());
-        if (parseResult.hasParseProblems()
-                && options.parseErrorBehavior() == FormatterOptions.ParseErrorBehavior.FAIL) {
+            result.getResult().orElseThrow(),
+            result.getProblems(),
+            !result.isSuccessful() || !result.getProblems().isEmpty()
+        );
+        if (
+            parseResult.hasParseProblems()
+            && options.parseErrorBehavior() == FormatterOptions.ParseErrorBehavior.FAIL
+        ) {
             throw parseFailure(
-                    source,
-                    parseResult.problems(),
-                    new ParseProblemException(parseResult.problems()),
-                    Optional.empty());
+                source,
+                parseResult.problems(),
+                new ParseProblemException(parseResult.problems()),
+                Optional.empty()
+            );
         }
         return parseResult;
     }
@@ -201,10 +211,13 @@ public final class JavaFormatter {
             String source,
             List<Problem> problems,
             ParseProblemException cause,
-            Optional<String> recoveryFailureReason) {
+            Optional<String> recoveryFailureReason
+    ) {
         List<FormatterException.SourceProblem> sourceProblems = ParseErrorSourceContext.from(source, problems);
-        if (options.parseErrorBehavior() == FormatterOptions.ParseErrorBehavior.RECOVER
-                && recoveryFailureReason.isPresent()) {
+        if (
+            options.parseErrorBehavior() == FormatterOptions.ParseErrorBehavior.RECOVER
+            && recoveryFailureReason.isPresent()
+        ) {
             sourceProblems = withRecoveryFailureReason(sourceProblems, recoveryFailureReason.orElseThrow());
         }
         return new FormatterException("Unable to parse Java source", cause, sourceProblems);
@@ -212,17 +225,23 @@ public final class JavaFormatter {
 
     private static List<FormatterException.SourceProblem> withRecoveryFailureReason(
             List<FormatterException.SourceProblem> sourceProblems,
-            String reason) {
+            String reason
+    ) {
         if (sourceProblems.isEmpty()) {
-            return List.of(new FormatterException.SourceProblem(reason, Optional.empty(), Optional.empty(), List.of()));
+            return List.of(
+                new FormatterException.SourceProblem(reason, Optional.empty(), Optional.empty(), List.of())
+            );
         }
         FormatterException.SourceProblem first = sourceProblems.getFirst();
         List<FormatterException.SourceProblem> withReason = new java.util.ArrayList<>();
-        withReason.add(new FormatterException.SourceProblem(
+        withReason.add(
+            new FormatterException.SourceProblem(
                 reason + System.lineSeparator() + System.lineSeparator() + first.message(),
                 first.location(),
                 first.enclosingUnitLine(),
-                first.contextLines()));
+                first.contextLines()
+            )
+        );
         withReason.addAll(sourceProblems.subList(1, sourceProblems.size()));
         return List.copyOf(withReason);
     }
@@ -232,7 +251,8 @@ public final class JavaFormatter {
             return Optional.empty();
         }
         return Optional.of(
-                "Parse-error recovery is configured, but this recovery slice only supports malformed block statement lists, class/interface/record member declaration lists, import declaration lists, top-level declaration lists, module directive lists, switch entry lists, enum constant lists, and annotation declaration member lists.");
+            "Parse-error recovery is configured, but this recovery slice only supports malformed block statement lists, class/interface/record member declaration lists, import declaration lists, top-level declaration lists, module directive lists, switch entry lists, enum constant lists, and annotation declaration member lists."
+        );
     }
 
     private Optional<String> unsupportedRecoveryReason(CompilationUnit unit, SourceText sourceText) {
@@ -248,10 +268,12 @@ public final class JavaFormatter {
         return recoveredNodes.stream()
                 .filter(node -> !isSupportedRecovery(node, Optional.of(sourceText)))
                 .findFirst()
-                .map(node -> parseProblemsUnsupportedByCurrentPrinters().orElseThrow()
-                        + " Unsupported recovered node: "
-                        + node.getClass().getSimpleName()
-                        + node.getRange().map(range -> " at " + range).orElse("."));
+                .map(
+                    node -> parseProblemsUnsupportedByCurrentPrinters().orElseThrow()
+                            + " Unsupported recovered node: "
+                            + node.getClass().getSimpleName()
+                            + node.getRange().map(range -> " at " + range).orElse(".")
+                );
     }
 
     static boolean isSupportedRecovery(Node recoveredNode) {
@@ -259,14 +281,16 @@ public final class JavaFormatter {
     }
 
     private static boolean isSupportedRecovery(Node recoveredNode, Optional<SourceText> sourceText) {
-        return isSupportedSwitchEntryListRecovery(recoveredNode)
-                || isSupportedEnumConstantListRecovery(recoveredNode)
-                || isSupportedAnnotationMemberListRecovery(recoveredNode)
-                || isSupportedBlockStatementListRecovery(recoveredNode, sourceText)
-                || isSupportedMemberDeclarationListRecovery(recoveredNode)
-                || isSupportedImportDeclarationListRecovery(recoveredNode)
-                || isSupportedTopLevelDeclarationListRecovery(recoveredNode)
-                || isSupportedModuleDirectiveListRecovery(recoveredNode);
+        return (
+            isSupportedSwitchEntryListRecovery(recoveredNode)
+            || isSupportedEnumConstantListRecovery(recoveredNode)
+            || isSupportedAnnotationMemberListRecovery(recoveredNode)
+            || isSupportedBlockStatementListRecovery(recoveredNode, sourceText)
+            || isSupportedMemberDeclarationListRecovery(recoveredNode)
+            || isSupportedImportDeclarationListRecovery(recoveredNode)
+            || isSupportedTopLevelDeclarationListRecovery(recoveredNode)
+            || isSupportedModuleDirectiveListRecovery(recoveredNode)
+        );
     }
 
     private static boolean isSupportedSwitchEntryListRecovery(Node recoveredNode) {
@@ -289,11 +313,14 @@ public final class JavaFormatter {
 
     private static boolean isSupportedBlockStatementListRecovery(
             Node recoveredNode,
-            Optional<SourceText> sourceText) {
-        if (SwitchPrinter.nearestSwitchEntryListSibling(recoveredNode).isPresent()
-                || EnumDeclarationPrinter.nearestEnumConstantListSibling(recoveredNode).isPresent()
-                || AnnotationDeclarationPrinter.nearestAnnotationMemberListSibling(recoveredNode).isPresent()
-                || isCollapsedMalformedSwitchStatement(recoveredNode, sourceText)) {
+            Optional<SourceText> sourceText
+    ) {
+        if (
+            SwitchPrinter.nearestSwitchEntryListSibling(recoveredNode).isPresent()
+            || EnumDeclarationPrinter.nearestEnumConstantListSibling(recoveredNode).isPresent()
+            || AnnotationDeclarationPrinter.nearestAnnotationMemberListSibling(recoveredNode).isPresent()
+            || isCollapsedMalformedSwitchStatement(recoveredNode, sourceText)
+        ) {
             return false;
         }
         if (recoveredNode instanceof BlockStmt) {
@@ -304,10 +331,12 @@ public final class JavaFormatter {
 
     private static boolean isCollapsedMalformedSwitchStatement(
             Node recoveredNode,
-            Optional<SourceText> sourceText) {
+            Optional<SourceText> sourceText
+    ) {
         return sourceText
                 .filter(source -> recoveredNode instanceof Statement statement
-                        && SwitchPrinter.isCollapsedMalformedSwitchStatement(statement, source))
+                        && SwitchPrinter.isCollapsedMalformedSwitchStatement(statement, source)
+                )
                 .isPresent();
     }
 
@@ -402,16 +431,19 @@ public final class JavaFormatter {
     }
 
     private static boolean isSupportedTopLevelDeclarationListRecovery(Node recoveredNode) {
-        if (!(recoveredNode instanceof TypeDeclaration<?> type)
-                || type.getParsed() == Node.Parsedness.PARSED) {
+        if (
+            !(recoveredNode instanceof TypeDeclaration<?> type)
+            || type.getParsed() == Node.Parsedness.PARSED
+        ) {
             return false;
         }
         return type.getParentNode()
                 .filter(CompilationUnit.class::isInstance)
                 .map(CompilationUnit.class::cast)
                 .filter(unit -> unit.getTypes().contains(type))
-                .map(unit -> unit.getTypes().stream()
-                        .anyMatch(sibling -> sibling != type && sibling.getParsed() == Node.Parsedness.PARSED))
+                .map(unit -> unit.getTypes().stream().anyMatch(
+                        sibling -> sibling != type && sibling.getParsed() == Node.Parsedness.PARSED
+                ))
                 .orElse(false);
     }
 
@@ -453,7 +485,9 @@ public final class JavaFormatter {
         if (options.parseErrorBehavior() == FormatterOptions.ParseErrorBehavior.FAIL) {
             return Optional.empty();
         }
-        return Optional.of("Parse-error recovery is configured, but JavaParser did not return a compilation unit to recover.");
+        return Optional.of(
+            "Parse-error recovery is configured, but JavaParser did not return a compilation unit to recover."
+        );
     }
 
     private Optional<String> thrownBeforeRecoveredCompilationUnit() {
@@ -461,11 +495,13 @@ public final class JavaFormatter {
             return Optional.empty();
         }
         return Optional.of(
-                "Parse-error recovery is configured, but JavaParser threw before returning a recovered compilation unit.");
+            "Parse-error recovery is configured, but JavaParser threw before returning a recovered compilation unit."
+        );
     }
 
     private static ParserConfiguration.LanguageLevel javaParserLanguageLevel(
-            FormatterOptions.JavaLanguageLevel languageLevel) {
+            FormatterOptions.JavaLanguageLevel languageLevel
+    ) {
         return switch (languageLevel) {
             case UNSET -> null;
             case LATEST_AVAILABLE -> ParserConfiguration.LanguageLevel.BLEEDING_EDGE;
@@ -490,10 +526,7 @@ public final class JavaFormatter {
         };
     }
 
-    private record JavaParseResult(
-            CompilationUnit compilationUnit,
-            List<Problem> problems,
-            boolean hasParseProblems) {
+    private record JavaParseResult(CompilationUnit compilationUnit, List<Problem> problems, boolean hasParseProblems) {
         private JavaParseResult {
             problems = List.copyOf(problems);
         }
@@ -538,9 +571,14 @@ public final class JavaFormatter {
     private static String normalizeBlockComment(String value) {
         String text = value.stripTrailing();
         List<String> lines = text.lines().toList();
-        if (lines.size() < 3 || lines.stream().skip(1).limit(lines.size() - 2)
-                .map(String::stripLeading)
-                .anyMatch(line -> !line.startsWith("*"))) {
+        if (
+            lines.size() < 3
+            || lines.stream()
+                    .skip(1)
+                    .limit(lines.size() - 2)
+                    .map(String::stripLeading)
+                    .anyMatch(line -> !line.startsWith("*"))
+        ) {
             return text;
         }
         List<String> normalized = new java.util.ArrayList<>();

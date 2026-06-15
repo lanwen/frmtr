@@ -26,10 +26,15 @@ import dev.lanwen.frmtr.doc.Doc;
  * {@code frmtr-core/src/test/resources/format/require-pragma-format/frmtr-default.output.java}.
  */
 final class StatementRuleEnvelope {
+
     private final CommentTracker comments;
+
     private final JavaCommentPlacementPolicy commentPlacement;
+
     private final FormatterPragmas formatterPragmas;
+
     private final RawPreservedSource rawPreservedSource;
+
     private final JavaFormatRule<Statement> statementContent;
 
     StatementRuleEnvelope(
@@ -37,7 +42,8 @@ final class StatementRuleEnvelope {
             JavaCommentPlacementPolicy commentPlacement,
             FormatterPragmas formatterPragmas,
             RawPreservedSource rawPreservedSource,
-            JavaFormatRule<Statement> statementContent) {
+            JavaFormatRule<Statement> statementContent
+    ) {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
         this.formatterPragmas = formatterPragmas;
@@ -64,7 +70,10 @@ final class StatementRuleEnvelope {
         Doc trailing = statement instanceof TryStmt ? Doc.EMPTY : comments.trailingLineComment(statement);
         Doc leading = leadingComment(statement, trailing);
         Doc body = statementContent.format(statement);
-        return label(statement, Doc.concat(leading, body, trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing)));
+        return label(
+            statement,
+            Doc.concat(leading, body, trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing))
+        );
     }
 
     private Doc label(Statement statement, Doc doc) {
@@ -98,28 +107,35 @@ final class StatementRuleEnvelope {
         if (statement.stream().allMatch(node -> node.getParsed() == Node.Parsedness.PARSED)) {
             return;
         }
-        if (statement instanceof SwitchStmt switchStmt
-                && SwitchPrinter.hasRecoverableSwitchEntryListProblem(switchStmt)) {
+        if (
+            statement instanceof SwitchStmt switchStmt
+            && SwitchPrinter.hasRecoverableSwitchEntryListProblem(switchStmt)
+        ) {
             return;
         }
         // TODO: Expose the rejected recovered statement through formatter diagnostics once recovery reporting exists.
-        throw new FormatterException("Unsupported Java parse-error recovery reached statement formatter: "
-                + statement.getClass().getSimpleName());
+        throw new FormatterException(
+            "Unsupported Java parse-error recovery reached statement formatter: " + statement.getClass().getSimpleName()
+        );
     }
 
     /**
      * Break statements can use an own block comment as inline statement text, so the normal leading slot stays empty.
      */
     private boolean hasInlineBreakBlockComment(Statement statement) {
-        return statement instanceof BreakStmt
-                && commentPlacement.ownComment(statement, JavaCommentTrivia::isBlock).isPresent();
+        return (
+            statement instanceof BreakStmt
+            && commentPlacement.ownComment(statement, JavaCommentTrivia::isBlock).isPresent()
+        );
     }
 
     /**
      * Switch statements can carry a same-line block comment before {@code switch}, so the content rule places it inline.
      */
     private boolean hasInlineSwitchBlockComment(Statement statement) {
-        return statement instanceof SwitchStmt
-                && commentPlacement.ownComment(statement, JavaCommentTrivia::isBlock).isPresent();
+        return (
+            statement instanceof SwitchStmt
+            && commentPlacement.ownComment(statement, JavaCommentTrivia::isBlock).isPresent()
+        );
     }
 }

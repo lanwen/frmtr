@@ -29,16 +29,27 @@ import java.util.function.ToIntFunction;
  * decisions as callbacks and only chooses which parenthesized layout applies to a selected enclosed expression.
  */
 final class EnclosedExpressionPrinter {
+
     private final FormatterOptions options;
+
     private final Function<Expression, Doc> expression;
+
     private final BiFunction<Expression, Boolean, Doc> binaryLines;
+
     private final Predicate<BinaryExpr> binaryExpressionHasLineComments;
+
     private final Function<BinaryExpr, Doc> binaryLinesWithComments;
+
     private final Function<Node, String> compact;
+
     private final ToIntFunction<String> currentIndentedWidth;
+
     private final ToIntFunction<String> continuationStatementWidth;
+
     private final ToIntFunction<Expression> nestedCastDepth;
+
     private final Function<LambdaExpr, Doc> parenthesizedLambdaBreak;
+
     private final BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression;
 
     EnclosedExpressionPrinter(
@@ -52,7 +63,8 @@ final class EnclosedExpressionPrinter {
             ToIntFunction<String> continuationStatementWidth,
             ToIntFunction<Expression> nestedCastDepth,
             Function<LambdaExpr, Doc> parenthesizedLambdaBreak,
-            BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression) {
+            BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression
+    ) {
         this.options = options;
         this.expression = expression;
         this.binaryLines = binaryLines;
@@ -82,20 +94,26 @@ final class EnclosedExpressionPrinter {
                 return Doc.concat(Doc.text("("), this.expression.apply(expression.getInner()), Doc.text(")"));
             }
             return Doc.concat(
-                    Doc.text("("),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, this.expression.apply(expression.getInner()))),
-                    Doc.HARD_LINE,
-                    Doc.text(")"));
+                Doc.text("("),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, this.expression.apply(expression.getInner()))),
+                Doc.HARD_LINE,
+                Doc.text(")")
+            );
         }
-        if (expression.getInner() instanceof ConditionalExpr conditionalExpr
-                && continuationStatementWidth.applyAsInt(compact.apply(expression)) >= options.lineWidth()) {
+        if (
+            expression.getInner() instanceof ConditionalExpr conditionalExpr
+            && continuationStatementWidth.applyAsInt(compact.apply(expression)) >= options.lineWidth()
+        ) {
             return Doc.concat(
-                    Doc.text("("),
-                    conditionalExpression.apply(conditionalExpr, true),
-                    Doc.text(")"));
+                Doc.text("("),
+                conditionalExpression.apply(conditionalExpr, true),
+                Doc.text(")")
+            );
         }
-        if (expression.getInner() instanceof LambdaExpr lambdaExpr
-                && expression.getParentNode().filter(ExpressionStmt.class::isInstance).isPresent()) {
+        if (
+            expression.getInner() instanceof LambdaExpr lambdaExpr
+            && expression.getParentNode().filter(ExpressionStmt.class::isInstance).isPresent()
+        ) {
             return parenthesizedLambdaBreak.apply(lambdaExpr);
         }
         if (currentIndentedWidth.applyAsInt(compact.apply(expression)) <= options.lineWidth()) {
@@ -122,10 +140,11 @@ final class EnclosedExpressionPrinter {
      */
     Doc parenthesizedBreak(Expression expression, boolean forceBinaryBreak) {
         return Doc.concat(
-                Doc.text("("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, parenthesizedBreakContent(expression, forceBinaryBreak))),
-                Doc.HARD_LINE,
-                Doc.text(")"));
+            Doc.text("("),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, parenthesizedBreakContent(expression, forceBinaryBreak))),
+            Doc.HARD_LINE,
+            Doc.text(")")
+        );
     }
 
     private Doc parenthesizedBreakContent(Expression expression, boolean forceBinaryBreak) {
@@ -148,8 +167,10 @@ final class EnclosedExpressionPrinter {
         if (inner instanceof LambdaExpr lambdaExpr) {
             return parenthesizedLambdaBreak.apply(lambdaExpr);
         }
-        if (inner instanceof ConditionalExpr conditionalExpr
-                && (!leadingBreak || conditionalConditionHasNestedBinary(conditionalExpr))) {
+        if (
+            inner instanceof ConditionalExpr conditionalExpr
+            && (!leadingBreak || conditionalConditionHasNestedBinary(conditionalExpr))
+        ) {
             return parenthesizedConditionalTrailingBreak(conditionalExpr);
         }
         return parenthesizedBreak(inner, leadingBreak || inner instanceof BinaryExpr);
@@ -163,8 +184,10 @@ final class EnclosedExpressionPrinter {
      * different nested layout.
      */
     private boolean conditionalConditionHasNestedBinary(ConditionalExpr expression) {
-        return expression.getCondition() instanceof BinaryExpr binaryExpr
-                && (binaryExpr.getLeft() instanceof BinaryExpr || binaryExpr.getRight() instanceof BinaryExpr);
+        return (
+            expression.getCondition() instanceof BinaryExpr binaryExpr
+            && (binaryExpr.getLeft() instanceof BinaryExpr || binaryExpr.getRight() instanceof BinaryExpr)
+        );
     }
 
     /**
@@ -176,16 +199,20 @@ final class EnclosedExpressionPrinter {
      */
     private Doc parenthesizedConditionalTrailingBreak(ConditionalExpr expression) {
         return Doc.concat(
-                Doc.text("("),
-                this.expression.apply(expression.getCondition()),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.text("? "),
-                        this.expression.apply(expression.getThenExpr()),
-                        Doc.HARD_LINE,
-                        Doc.text(": "),
-                        this.expression.apply(expression.getElseExpr()))),
-                Doc.HARD_LINE,
-                Doc.text(")"));
+            Doc.text("("),
+            this.expression.apply(expression.getCondition()),
+            Doc.indent(
+                Doc.concat(
+                    Doc.HARD_LINE,
+                    Doc.text("? "),
+                    this.expression.apply(expression.getThenExpr()),
+                    Doc.HARD_LINE,
+                    Doc.text(": "),
+                    this.expression.apply(expression.getElseExpr())
+                )
+            ),
+            Doc.HARD_LINE,
+            Doc.text(")")
+        );
     }
 }

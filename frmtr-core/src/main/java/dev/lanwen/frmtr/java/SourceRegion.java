@@ -10,13 +10,7 @@ package dev.lanwen.frmtr.java;
  * <p>Callers still decide whether a region is safe to recover, how comments inside it are accounted, and how any raw
  * slice is rendered into formatter docs.
  */
-record SourceRegion(
-        int beginOffset,
-        int endOffset,
-        int beginLine,
-        int beginColumn,
-        int endLine,
-        int endColumn) {
+record SourceRegion(int beginOffset, int endOffset, int beginLine, int beginColumn, int endLine, int endColumn) {
     SourceRegion {
         if (beginOffset < 0) {
             throw new IllegalArgumentException("beginOffset must be non-negative");

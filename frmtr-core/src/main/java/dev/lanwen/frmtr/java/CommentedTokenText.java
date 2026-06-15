@@ -11,6 +11,7 @@ import java.util.List;
  * general AST nodes, or decide whether commented source should be formatted structurally or preserved as raw text.
  */
 final class CommentedTokenText {
+
     private static final String COMMENTED_TOKEN_PUNCTUATION = "{};,().";
 
     private CommentedTokenText() {}
@@ -47,11 +48,13 @@ final class CommentedTokenText {
                 continue;
             }
             int end = cursor + 1;
-            while (end < line.length()
-                    && !Character.isWhitespace(line.charAt(end))
-                    && COMMENTED_TOKEN_PUNCTUATION.indexOf(line.charAt(end)) < 0
-                    && !line.startsWith("/*", end)
-                    && !line.startsWith("//", end)) {
+            while (
+                end < line.length()
+                && !Character.isWhitespace(line.charAt(end))
+                && COMMENTED_TOKEN_PUNCTUATION.indexOf(line.charAt(end)) < 0
+                && !line.startsWith("/*", end)
+                && !line.startsWith("//", end)
+            ) {
                 end++;
             }
             tokens.add(line.substring(cursor, end));
@@ -98,7 +101,11 @@ final class CommentedTokenText {
                     out.append(' ');
                 }
                 out.append(token);
-                if (moveCommentsAfterDotBeforeDot && cursor + 1 < tokens.size() && tokens.get(cursor + 1).equals(".")) {
+                if (
+                    moveCommentsAfterDotBeforeDot
+                    && cursor + 1 < tokens.size()
+                    && tokens.get(cursor + 1).equals(".")
+                ) {
                     cursor += 2;
                     while (cursor < tokens.size() && isComment(tokens.get(cursor))) {
                         out.append(' ').append(tokens.get(cursor++));

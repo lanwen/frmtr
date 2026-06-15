@@ -19,6 +19,7 @@ import dev.lanwen.frmtr.doc.DocRenderer;
 import org.junit.jupiter.api.Test;
 
 final class MemberBlockPrinterTest {
+
     @Test
     void formatsValidClassMemberSiblingsAroundRawRecoveredMemberGap() {
         String source = """
@@ -33,7 +34,8 @@ final class MemberBlockPrinterTest {
 
         String formatted = printRecovered(unit, source);
 
-        assertThat(formatted).isEqualTo("""
+        assertThat(formatted).isEqualTo(
+            """
                 class Demo {
 
                     // keep brace
@@ -41,7 +43,8 @@ final class MemberBlockPrinterTest {
                     int broken=2; // keep raw
                     int after = 3;
                 }
-                """);
+                """
+        );
     }
 
     @Test
@@ -58,7 +61,8 @@ final class MemberBlockPrinterTest {
 
         String formatted = printRecovered(unit, source);
 
-        assertThat(formatted).isEqualTo("""
+        assertThat(formatted).isEqualTo(
+            """
                 record Demo() {
                     void before() {
                         before(1);
@@ -68,7 +72,8 @@ final class MemberBlockPrinterTest {
                         after(3);
                     }
                 }
-                """);
+                """
+        );
     }
 
     @Test
@@ -98,14 +103,18 @@ final class MemberBlockPrinterTest {
     }
 
     private static String printRecovered(CompilationUnit unit, String source) {
-        return new DocRenderer(FormatterOptions.defaults())
-                .render(new JavaPrinter(FormatterOptions.defaults(), new SourceText(source), true).print(unit));
+        return new DocRenderer(FormatterOptions.defaults()).render(
+            new JavaPrinter(FormatterOptions.defaults(), new SourceText(source), true).print(unit)
+        );
     }
 
     private static BodyDeclaration<?> field(CompilationUnit unit, String name) {
-        return onlyClass(unit).getFields().stream()
-                .filter(field -> field.getVariables().stream()
-                        .anyMatch(variable -> variable.getNameAsString().equals(name)))
+        return onlyClass(unit)
+                .getFields()
+                .stream()
+                .filter(field -> field.getVariables().stream().anyMatch(
+                        variable -> variable.getNameAsString().equals(name)
+                ))
                 .findFirst()
                 .orElseThrow();
     }
@@ -123,9 +132,11 @@ final class MemberBlockPrinterTest {
     }
 
     private static CompilationUnit parse(String source) {
-        JavaParser parser = new JavaParser(new ParserConfiguration()
-                .setStoreTokens(true)
-                .setAttributeComments(true));
+        JavaParser parser = new JavaParser(
+            new ParserConfiguration()
+                    .setStoreTokens(true)
+                    .setAttributeComments(true)
+        );
         return parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
                 .getResult()
                 .orElseThrow();

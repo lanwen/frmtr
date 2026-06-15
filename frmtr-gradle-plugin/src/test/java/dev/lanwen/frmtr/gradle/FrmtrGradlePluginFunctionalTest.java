@@ -14,17 +14,20 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 final class FrmtrGradlePluginFunctionalTest {
+
     @TempDir
     private Path projectDir;
 
     @Test
     void registersProjectLocalTasksInNonJavaProjects() {
         writeSettings();
-        writeBuildFile("""
+        writeBuildFile(
+            """
                 plugins {
                     id("dev.lanwen.frmtr")
                 }
-                """);
+                """
+        );
 
         BuildResult tasks = gradle("tasks", "--all").build();
         BuildResult check = gradle("frmtrCheck").build();
@@ -40,12 +43,14 @@ final class FrmtrGradlePluginFunctionalTest {
     @Test
     void checksAndFormatsJavaSourceSetsWithZeroConfiguration() {
         writeSettings();
-        writeBuildFile("""
+        writeBuildFile(
+            """
                 plugins {
                     java
                     id("dev.lanwen.frmtr")
                 }
-                """);
+                """
+        );
         write("src/main/java/demo/Main.java", "package demo; class Main{int value;}");
 
         BuildResult failedCheck = gradle("frmtrCheck").buildAndFail();
@@ -62,14 +67,16 @@ final class FrmtrGradlePluginFunctionalTest {
         BuildResult format = gradle("frmtrFormat").build();
 
         assertThat(format.task(":frmtrJavaFormat").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
-        assertThat(read("src/main/java/demo/Main.java")).isEqualTo("""
+        assertThat(read("src/main/java/demo/Main.java")).isEqualTo(
+            """
                 package demo;
 
                 class Main {
 
                     int value;
                 }
-                """);
+                """
+        );
 
         BuildResult passedCheck = gradle("frmtrCheck").build();
 
@@ -80,12 +87,14 @@ final class FrmtrGradlePluginFunctionalTest {
     @Test
     void wiresFrmtrCheckIntoGradleCheckLifecycle() {
         writeSettings();
-        writeBuildFile("""
+        writeBuildFile(
+            """
                 plugins {
                     java
                     id("dev.lanwen.frmtr")
                 }
-                """);
+                """
+        );
         write("src/main/java/demo/Main.java", "package demo; class Main{int value;}");
 
         BuildResult result = gradle("check").buildAndFail();
@@ -97,7 +106,8 @@ final class FrmtrGradlePluginFunctionalTest {
     @Test
     void javaFiltersUseSourceRootRelativeGradlePatterns() {
         writeSettings();
-        writeBuildFile("""
+        writeBuildFile(
+            """
                 plugins {
                     java
                     id("dev.lanwen.frmtr")
@@ -109,7 +119,8 @@ final class FrmtrGradlePluginFunctionalTest {
                         exclude("**/Excluded.java")
                     }
                 }
-                """);
+                """
+        );
         write("src/main/java/demo/Included.java", "package demo; class Included{int value;}");
         write("src/main/java/demo/Excluded.java", "package demo; class Excluded{int value;}");
         write("src/main/java/demo/Skipped.java", "package demo; class Skipped{int value;}");
@@ -117,14 +128,16 @@ final class FrmtrGradlePluginFunctionalTest {
         BuildResult result = gradle("frmtrFormat").build();
 
         assertThat(result.task(":frmtrJavaFormat").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
-        assertThat(read("src/main/java/demo/Included.java")).isEqualTo("""
+        assertThat(read("src/main/java/demo/Included.java")).isEqualTo(
+            """
                 package demo;
 
                 class Included {
 
                     int value;
                 }
-                """);
+                """
+        );
         assertThat(read("src/main/java/demo/Excluded.java")).isEqualTo("package demo; class Excluded{int value;}");
         assertThat(read("src/main/java/demo/Skipped.java")).isEqualTo("package demo; class Skipped{int value;}");
     }
@@ -132,7 +145,8 @@ final class FrmtrGradlePluginFunctionalTest {
     @Test
     void honorsJavaSourceSetExcludes() {
         writeSettings();
-        writeBuildFile("""
+        writeBuildFile(
+            """
                 plugins {
                     java
                     id("dev.lanwen.frmtr")
@@ -145,29 +159,34 @@ final class FrmtrGradlePluginFunctionalTest {
                         }
                     }
                 }
-                """);
+                """
+        );
         write("src/main/java/demo/IncludedBySourceSet.java", "package demo; class IncludedBySourceSet{int value;}");
         write("src/main/java/demo/ExcludedBySourceSet.java", "package demo; class ExcludedBySourceSet{int value;}");
 
         BuildResult result = gradle("frmtrFormat").build();
 
         assertThat(result.task(":frmtrJavaFormat").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
-        assertThat(read("src/main/java/demo/IncludedBySourceSet.java")).isEqualTo("""
+        assertThat(read("src/main/java/demo/IncludedBySourceSet.java")).isEqualTo(
+            """
                 package demo;
 
                 class IncludedBySourceSet {
 
                     int value;
                 }
-                """);
-        assertThat(read("src/main/java/demo/ExcludedBySourceSet.java"))
-                .isEqualTo("package demo; class ExcludedBySourceSet{int value;}");
+                """
+        );
+        assertThat(read("src/main/java/demo/ExcludedBySourceSet.java")).isEqualTo(
+            "package demo; class ExcludedBySourceSet{int value;}"
+        );
     }
 
     @Test
     void excludesBuildDirectorySourcesByDefault() {
         writeSettings();
-        writeBuildFile("""
+        writeBuildFile(
+            """
                 plugins {
                     java
                     id("dev.lanwen.frmtr")
@@ -178,7 +197,8 @@ final class FrmtrGradlePluginFunctionalTest {
                         java.srcDir(layout.buildDirectory.dir("generated/sources/demo"))
                     }
                 }
-                """);
+                """
+        );
         write("build/generated/sources/demo/demo/Generated.java", "package demo; class Generated{int value;}");
 
         BuildResult result = gradle("frmtrCheck").build();
@@ -190,7 +210,8 @@ final class FrmtrGradlePluginFunctionalTest {
     @Test
     void canDisableCheckDiffPrinting() {
         writeSettings();
-        writeBuildFile("""
+        writeBuildFile(
+            """
                 plugins {
                     java
                     id("dev.lanwen.frmtr")
@@ -203,7 +224,8 @@ final class FrmtrGradlePluginFunctionalTest {
                         }
                     }
                 }
-                """);
+                """
+        );
         write("src/main/java/demo/Main.java", "package demo; class Main{int value;}");
 
         BuildResult result = gradle("frmtrCheck").buildAndFail();
@@ -216,7 +238,8 @@ final class FrmtrGradlePluginFunctionalTest {
     @Test
     void infersJavaLanguageLevelFromSourceCompatibility() {
         writeSettings();
-        writeBuildFile("""
+        writeBuildFile(
+            """
                 plugins {
                     java
                     id("dev.lanwen.frmtr")
@@ -225,7 +248,8 @@ final class FrmtrGradlePluginFunctionalTest {
                 java {
                     sourceCompatibility = JavaVersion.VERSION_1_8
                 }
-                """);
+                """
+        );
         write("src/main/java/demo/TextBlockDemo.java", textBlockSource());
 
         BuildResult result = gradle("frmtrCheck").buildAndFail();
@@ -242,7 +266,8 @@ final class FrmtrGradlePluginFunctionalTest {
     @Test
     void explicitLatestAvailableLanguageLevelOverridesSourceCompatibility() {
         writeSettings();
-        writeBuildFile("""
+        writeBuildFile(
+            """
                 import dev.lanwen.frmtr.gradle.FrmtrJavaLanguageLevel
 
                 plugins {
@@ -259,7 +284,8 @@ final class FrmtrGradlePluginFunctionalTest {
                         languageLevel.set(FrmtrJavaLanguageLevel.LATEST_AVAILABLE)
                     }
                 }
-                """);
+                """
+        );
         write("src/main/java/demo/SwitchDemo.java", switchExpressionYieldSource());
 
         BuildResult result = gradle("frmtrFormat").build();

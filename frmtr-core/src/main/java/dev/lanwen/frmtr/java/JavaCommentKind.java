@@ -29,5 +29,5 @@ enum JavaCommentKind {
      * A comment implementation outside JavaParser's standard Java comment subclasses; callers should preserve it through
      * the generic comment rendering path rather than assigning line, block, or Javadoc-specific layout meaning.
      */
-    UNKNOWN
+    UNKNOWN,
 }

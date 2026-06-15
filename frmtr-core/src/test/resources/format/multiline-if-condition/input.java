@@ -46,6 +46,29 @@ class MultilineIfConditionSample {
         sink.record(user.id());
     }
 
+    void screenRouteAnnotations(RouteAnnotation routeAnnotation) {
+        if (!routeAnnotation.segmentPairs().stream()
+                .map(RouteSegmentPair::candidate)
+                .anyMatch(candidate -> candidate.hasRouteComments() || candidate.mustRebuildRoute())) {
+            sink.record(routeAnnotation);
+        }
+    }
+
+    void nestedRouteCheckpoint(Object checkpoint, WidthProbe widthProbe, RenderOptions options) {
+        if (
+            checkpoint instanceof RouteCheckpoint routeCheckpoint &&
+            (routeCheckpoint.sourceSpansMultipleStops() || widthProbe.measure(routeCheckpoint.compactRouteName()) > options.lineWidth())
+        ) {
+            sink.record(routeCheckpoint);
+        }
+    }
+
+    void rejectOverwideRoute(RouteBudget routeBudget, DeliveryRoute deliveryRoute, RouteLeg routeLeg, RenderOptions options) {
+        if (routeBudget.estimatedTransferWidth(deliveryRoute.primaryStop(), routeLeg.compactSegmentName()) > options.lineWidth()) {
+            sink.record(routeLeg);
+        }
+    }
+
     void publishFinishedMarker(Queue queue) {
         runner.attach(event -> {
             switch (event.kind()) {

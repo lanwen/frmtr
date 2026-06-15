@@ -14,6 +14,14 @@ class TryResourceLayoutSample {
             use(left, right);
         }
     }
+
+    void attachedMethodCallResource() {
+        try (InputStream routeStream = ResourceCatalogFixture.class.getResourceAsStream(
+                "/fixtures/routes/primary-route-plan.java"
+        )) {
+            load(routeStream);
+        }
+    }
 }
 
 public class TryCatch {

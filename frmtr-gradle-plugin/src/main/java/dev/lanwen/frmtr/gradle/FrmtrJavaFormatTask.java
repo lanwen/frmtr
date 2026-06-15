@@ -7,6 +7,7 @@ import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.tasks.TaskAction;
 
 public abstract class FrmtrJavaFormatTask extends AbstractFrmtrJavaTask {
+
     @Inject
     public FrmtrJavaFormatTask(ObjectFactory objects) {
         super(objects);

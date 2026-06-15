@@ -137,8 +137,9 @@ final class MethodDeclarationPrinter {
         boolean sourceParametersBreak = sourceShape.callableParametersSpanMultipleLines(declaration);
         boolean parametersBreak = !breakReturnType
             && callableSignatures.parametersBreak(prefix, declaration, methodParameterSuffix(declaration));
+        boolean compactContinuationParameters = !declaration.getThrownExceptions().isEmpty();
         docs.add(returnType(declaration, returnType, breakReturnType));
-        docs.add(parameters(declaration, sourceParametersBreak, parametersBreak));
+        docs.add(parameters(declaration, sourceParametersBreak, parametersBreak, compactContinuationParameters));
         if (!declaration.getThrownExceptions().isEmpty()) {
             docs.add(
                 throwsClause.render(
@@ -209,8 +210,17 @@ final class MethodDeclarationPrinter {
         return " throws " + compactJoin(declaration.getThrownExceptions()) + suffix;
     }
 
-    private Doc parameters(MethodDeclaration declaration, boolean sourceParametersBreak, boolean parametersBreak) {
-        if (parametersBreak && callableSignatures.parametersFitOnContinuation(declaration)) {
+    private Doc parameters(
+            MethodDeclaration declaration,
+            boolean sourceParametersBreak,
+            boolean parametersBreak,
+            boolean compactContinuationParameters
+    ) {
+        if (
+            parametersBreak
+            && compactContinuationParameters
+            && callableSignatures.parametersFitOnContinuation(declaration)
+        ) {
             return callableSignatures.compactContinuationParameters(declaration);
         }
         return callableSignatures.parameters(declaration, sourceParametersBreak || parametersBreak);

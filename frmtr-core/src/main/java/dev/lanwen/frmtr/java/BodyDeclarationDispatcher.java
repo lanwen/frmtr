@@ -27,17 +27,29 @@ import java.util.function.Function;
  * remains with specialized declaration printers.
  */
 final class BodyDeclarationDispatcher {
+
     private final RawPreservedSource rawPreservedSource;
+
     private final Function<BodyDeclaration<?>, String> compactSource;
+
     private final JavaFormatRule<ClassOrInterfaceDeclaration> classOrInterfaces;
+
     private final JavaFormatRule<RecordDeclaration> records;
+
     private final JavaFormatRule<EnumDeclaration> enums;
+
     private final JavaFormatRule<AnnotationDeclaration> annotationDeclarations;
+
     private final JavaFormatRule<AnnotationMemberDeclaration> annotationMembers;
+
     private final JavaFormatRule<FieldDeclaration> fields;
+
     private final JavaFormatRule<MethodDeclaration> methods;
+
     private final JavaFormatRule<CompactConstructorDeclaration> compactConstructors;
+
     private final JavaFormatRule<ConstructorDeclaration> constructors;
+
     private final JavaFormatRule<InitializerDeclaration> initializers;
 
     BodyDeclarationDispatcher(
@@ -52,7 +64,8 @@ final class BodyDeclarationDispatcher {
             JavaFormatRule<MethodDeclaration> methods,
             JavaFormatRule<CompactConstructorDeclaration> compactConstructors,
             JavaFormatRule<ConstructorDeclaration> constructors,
-            JavaFormatRule<InitializerDeclaration> initializers) {
+            JavaFormatRule<InitializerDeclaration> initializers
+    ) {
         this.rawPreservedSource = rawPreservedSource;
         this.compactSource = compactSource;
         this.classOrInterfaces = classOrInterfaces;
@@ -76,10 +89,14 @@ final class BodyDeclarationDispatcher {
             case RecordDeclaration recordDeclaration -> records.format(recordDeclaration);
             case EnumDeclaration enumDeclaration -> enums.format(enumDeclaration);
             case AnnotationDeclaration annotationDeclaration -> annotationDeclarations.format(annotationDeclaration);
-            case AnnotationMemberDeclaration annotationMemberDeclaration -> annotationMembers.format(annotationMemberDeclaration);
+            case AnnotationMemberDeclaration annotationMemberDeclaration -> annotationMembers.format(
+                annotationMemberDeclaration
+            );
             case FieldDeclaration fieldDeclaration -> fields.format(fieldDeclaration);
             case MethodDeclaration methodDeclaration -> methods.format(methodDeclaration);
-            case CompactConstructorDeclaration compactConstructorDeclaration -> compactConstructors.format(compactConstructorDeclaration);
+            case CompactConstructorDeclaration compactConstructorDeclaration -> compactConstructors.format(
+                compactConstructorDeclaration
+            );
             case ConstructorDeclaration constructorDeclaration -> constructors.format(constructorDeclaration);
             case InitializerDeclaration initializerDeclaration -> initializers.format(initializerDeclaration);
             default -> rawDeclaration(declaration);

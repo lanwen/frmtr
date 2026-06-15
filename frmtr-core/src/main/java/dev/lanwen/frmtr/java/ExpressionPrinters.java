@@ -38,24 +38,43 @@ import java.util.function.ToIntFunction;
  * declaration and statement composers and exposes only the existing expression helper callbacks they already used.
  */
 final class ExpressionPrinters {
+
     private final JavaFormatContext context;
+
     private final BinaryExpressionPrinter binaries;
+
     private final AnnotationExpressionPrinter annotationExpressions;
+
     private final ConditionalExpressionPrinter conditionals;
+
     private final LambdaExpressionPrinter lambdas;
+
     private final ArrayExpressionPrinter arrays;
+
     private final ObjectCreationPrinter objectCreations;
+
     private final TextBlockPrinter textBlocks;
+
     private final CastExpressionPrinter casts;
+
     private final ClassExpressionPrinter classExpressions;
+
     private final EnclosedExpressionPrinter enclosedExpressions;
+
     private final InstanceOfExpressionPrinter instanceOfExpressions;
+
     private final FieldAccessPrinter fieldAccesses;
+
     private final MethodReferencePrinter methodReferences;
+
     private final MethodCallPrinter methodCalls;
+
     private final EnclosedSuffixDispatcher enclosedSuffixes;
+
     private final AssignmentExpressionPrinter assignments;
+
     private final ReturnExpressionPrinter returnExpressions;
+
     private final ExpressionRuleEnvelope expressionRules;
 
     ExpressionPrinters(
@@ -65,7 +84,8 @@ final class ExpressionPrinters {
             JavaFormatRule<BlockStmt> blockRenderer,
             JavaFormatRule<BodyDeclaration<?>> bodyRenderer,
             JavaFormatRule<SwitchExpr> switchExpressionRenderer,
-            Function<Doc, String> commentText) {
+            Function<Doc, String> commentText
+    ) {
         this.context = context;
         FormatterOptions options = context.options;
         CommentTracker comments = context.comments;
@@ -73,178 +93,195 @@ final class ExpressionPrinters {
         RawSource rawSource = context.rawSource;
         CompactSourceText compactSource = context.compactSource;
         this.binaries = new BinaryExpressionPrinter(
-                comments,
-                commentPlacementPolicy,
-                options,
-                this::expression,
-                this::brokenMethodCall,
-                this::forcedMethodCallChain,
-                context.sourceShape,
-                compactSource::compact,
-                compactSource::compactWithoutOwnComment,
-                this::continuationStatementWidth,
-                this::blockStatementWidth);
+            comments,
+            commentPlacementPolicy,
+            options,
+            this::expression,
+            this::brokenMethodCall,
+            this::brokenMethodCallWithClosingLine,
+            this::forcedMethodCallChain,
+            context.sourceShape,
+            compactSource::compact,
+            compactSource::compactWithoutOwnComment,
+            this::continuationStatementWidth,
+            this::blockStatementWidth
+        );
         this.annotationExpressions = new AnnotationExpressionPrinter(
-                comments,
-                commentPlacementPolicy,
-                options,
-                this::expression,
-                binaries::nestedLines,
-                compactSource::compact,
-                this::currentIndentedWidth);
+            comments,
+            commentPlacementPolicy,
+            options,
+            this::expression,
+            binaries::nestedLines,
+            compactSource::compact,
+            this::currentIndentedWidth
+        );
         compactSource.useAnnotationFlatText(annotationExpressions::annotationFlatText);
         this.conditionals = new ConditionalExpressionPrinter(
-                context,
-                this::expression,
-                this::expressionWithoutOwnComment,
-                this::currentIndentedWidth,
-                this::blockStatementWidth,
-                this::continuationStatementWidth,
-                binaries::lines,
-                binaries::nestedLines,
-                binaries::expressionHasParenthesizedNestedBinary);
+            context,
+            this::expression,
+            this::expressionWithoutOwnComment,
+            this::currentIndentedWidth,
+            this::blockStatementWidth,
+            this::continuationStatementWidth,
+            binaries::lines,
+            binaries::nestedLines,
+            binaries::expressionHasParenthesizedNestedBinary
+        );
         this.lambdas = new LambdaExpressionPrinter(
-                comments,
-                rawSource,
-                context.objectCreationLayoutPolicy,
-                options,
-                this::expression,
-                this::brokenObjectCreation,
-                statementRenderer,
-                blockRenderer,
-                binaries::nestedLines,
-                this::brokenMethodCall,
-                this::packedExpressionLambdaMethodCallChainBody,
-                this::methodCallArgumentList,
-                compactSource::compact,
-                compactSource::compactWithoutOwnComment,
-                compactSource::compactJoin,
-                this::currentIndentedWidth,
-                this::blockStatementWidth,
-                CommentIndex::startsBefore,
-                CommentIndex::startsOnSameLine);
+            comments,
+            rawSource,
+            context.objectCreationLayoutPolicy,
+            options,
+            this::expression,
+            this::brokenObjectCreation,
+            statementRenderer,
+            blockRenderer,
+            binaries::nestedLines,
+            this::brokenMethodCall,
+            this::packedExpressionLambdaMethodCallChainBody,
+            this::methodCallArgumentList,
+            compactSource::compact,
+            compactSource::compactWithoutOwnComment,
+            compactSource::compactJoin,
+            this::currentIndentedWidth,
+            this::blockStatementWidth,
+            CommentIndex::startsBefore,
+            CommentIndex::startsOnSameLine
+        );
         this.casts = new CastExpressionPrinter(
-                options,
-                this::expression,
-                compactSource::compactTypeLike,
-                types::typeBody,
-                this::currentIndentedWidth);
+            options,
+            this::expression,
+            compactSource::compactTypeLike,
+            types::typeBody,
+            this::currentIndentedWidth
+        );
         this.classExpressions = new ClassExpressionPrinter(compactSource::compactTypeLike);
         this.enclosedExpressions = new EnclosedExpressionPrinter(
-                options,
-                this::expression,
-                binaries::lines,
-                binaries::hasLineComments,
-                binaries::linesWithComments,
-                compactSource::compact,
-                this::currentIndentedWidth,
-                this::continuationStatementWidth,
-                casts::nestedCastDepth,
-                lambdas::parenthesizedLambdaBreak,
-                conditionals::conditionalExpression);
+            options,
+            this::expression,
+            binaries::lines,
+            binaries::hasLineComments,
+            binaries::linesWithComments,
+            compactSource::compact,
+            this::currentIndentedWidth,
+            this::continuationStatementWidth,
+            casts::nestedCastDepth,
+            lambdas::parenthesizedLambdaBreak,
+            conditionals::conditionalExpression
+        );
         this.arrays = new ArrayExpressionPrinter(
-                comments,
-                options,
-                this::expression,
-                enclosedExpressions::brokenEnclosedForSuffix,
-                compactSource::compactTypeLike,
-                compactSource::compact,
-                this::currentIndentedWidth);
+            comments,
+            options,
+            this::expression,
+            enclosedExpressions::brokenEnclosedForSuffix,
+            compactSource::compactTypeLike,
+            compactSource::compact,
+            this::currentIndentedWidth
+        );
         this.objectCreations = new ObjectCreationPrinter(
-                context,
-                types,
-                this::expression,
-                lambdas::huggableBlockLambdaArguments,
-                bodyRenderer,
-                compactSource::compact,
-                compactSource::compactJoin,
-                compactSource::compactTypeLike,
-                compactSource::compactTypeLikeWithoutOwnComment,
-                commentText);
+            context,
+            types,
+            this::expression,
+            lambdas::huggableBlockLambdaArguments,
+            bodyRenderer,
+            compactSource::compact,
+            compactSource::compactJoin,
+            compactSource::compactTypeLike,
+            compactSource::compactTypeLikeWithoutOwnComment,
+            commentText
+        );
         this.textBlocks = new TextBlockPrinter(rawSource);
         this.instanceOfExpressions = new InstanceOfExpressionPrinter(
-                options,
-                this::expression,
-                compactSource::compact,
-                compactSource::compactTypeLike,
-                this::currentIndentedWidth);
+            options,
+            this::expression,
+            compactSource::compact,
+            compactSource::compactTypeLike,
+            this::currentIndentedWidth
+        );
         this.fieldAccesses = new FieldAccessPrinter(comments, this::expression);
         this.methodReferences = new MethodReferencePrinter(
-                options,
-                compactSource::compact,
-                types::compactJoinTypeLike,
-                enclosedExpressions::brokenEnclosedForSuffix,
-                this::blockStatementWidth);
+            options,
+            compactSource::compact,
+            types::compactJoinTypeLike,
+            enclosedExpressions::brokenEnclosedForSuffix,
+            this::blockStatementWidth
+        );
         this.methodCalls = new MethodCallPrinter(
-                context,
-                types,
-                this::expression,
-                enclosedExpressions::brokenEnclosedForSuffix,
-                objectCreations::brokenObjectCreation,
-                objectCreations::objectCreationWithSuffix,
-                objectCreations::objectCreationPrefix,
-                lambdas::huggableBlockLambdaArguments,
-                lambdas::huggableBlockLambdaFirstLine,
-                lambdas::commentedExpressionLambdaArgument,
-                lambdas::huggableMethodCallExpressionLambdaArguments,
-                lambdas::huggableExpressionLambdaArgumentPlan,
-                textBlocks::renderUnformattedTextBlock,
-                this::brokenMethodCallArgument,
-                this::currentIndentedWidth,
-                this::continuationStatementWidth,
-                this::blockStatementWidth);
+            context,
+            types,
+            this::expression,
+            enclosedExpressions::brokenEnclosedForSuffix,
+            objectCreations::brokenObjectCreation,
+            objectCreations::objectCreationWithSuffix,
+            objectCreations::objectCreationPrefix,
+            lambdas::huggableBlockLambdaArguments,
+            lambdas::huggableBlockLambdaFirstLine,
+            lambdas::commentedExpressionLambdaArgument,
+            lambdas::huggableMethodCallExpressionLambdaArguments,
+            lambdas::huggableExpressionLambdaArgumentPlan,
+            textBlocks::renderUnformattedTextBlock,
+            this::brokenMethodCallArgument,
+            this::currentIndentedWidth,
+            this::continuationStatementWidth,
+            this::blockStatementWidth
+        );
         this.enclosedSuffixes = new EnclosedSuffixDispatcher(methodCalls, methodReferences);
         this.assignments = new AssignmentExpressionPrinter(
-                options,
-                this::expression,
-                compactSource::compact,
-                this::blockStatementWidth,
-                enclosedSuffixes::suffixedEnclosedExpression,
-                binaries::shouldKeepCastDivisionContinuationFlat,
-                binaries::lines,
-                objectCreations::brokenObjectCreation,
-                methodCalls::assignmentWithBrokenMethodCallArguments,
-                methodCalls::assignmentWithBrokenMethodCallArgumentsAndSemicolon,
-                conditionals::assignmentWithConditionalValue);
+            options,
+            this::expression,
+            compactSource::compact,
+            this::blockStatementWidth,
+            enclosedSuffixes::suffixedEnclosedExpression,
+            binaries::shouldKeepCastDivisionContinuationFlat,
+            binaries::lines,
+            objectCreations::brokenObjectCreation,
+            methodCalls::assignmentWithBrokenMethodCallArguments,
+            methodCalls::assignmentWithBrokenMethodCallArgumentsAndSemicolon,
+            conditionals::assignmentWithConditionalValue
+        );
         ExpressionDispatcher expressionDispatcher = new ExpressionDispatcher(
-                assignments::assignment,
-                arrays::arrayAccess,
-                arrays::arrayCreation,
-                arrays::arrayInitializer,
-                annotationExpressions::annotation,
-                binaries::binaryExpression,
-                casts::castExpression,
-                classExpressions::classExpression,
-                conditionals::conditionalExpression,
-                enclosedExpressions::enclosedExpression,
-                fieldAccesses::fieldAccess,
-                instanceOfExpressions::instanceOfExpression,
-                lambdas::lambdaExpression,
-                methodCalls::methodCall,
-                methodReferences::methodReference,
-                objectCreations::objectCreation,
-                switchExpressionRenderer,
-                textBlocks::textBlockLiteral,
-                compactSource);
+            assignments::assignment,
+            arrays::arrayAccess,
+            arrays::arrayCreation,
+            arrays::arrayInitializer,
+            annotationExpressions::annotation,
+            binaries::binaryExpression,
+            casts::castExpression,
+            classExpressions::classExpression,
+            conditionals::conditionalExpression,
+            enclosedExpressions::enclosedExpression,
+            fieldAccesses::fieldAccess,
+            instanceOfExpressions::instanceOfExpression,
+            lambdas::lambdaExpression,
+            methodCalls::methodCall,
+            methodReferences::methodReference,
+            objectCreations::objectCreation,
+            switchExpressionRenderer,
+            textBlocks::textBlockLiteral,
+            compactSource
+        );
         this.expressionRules = new ExpressionRuleEnvelope(expressionDispatcher::expressionContent);
         this.returnExpressions = new ReturnExpressionPrinter(
-                options,
-                context.objectCreationLayoutPolicy,
-                this::expression,
-                lambdas::brokenExpressionLambda,
-                compactSource::compact,
-                this::currentIndentedWidth,
-                methodCalls::sourceMultilineExpressionLambda,
-                methodCalls::sourceMultilineArguments,
-                methodCalls::compactRootWithBrokenFinalChainSegment,
-                methodCalls::forcedMethodCallChain,
-                methodCalls::brokenMethodCall,
-                methodCalls::methodCallChainIsSourceMultiline,
-                objectCreations::brokenObjectCreation,
-                objectCreations::objectCreationWithSuffix,
-                conditionals::conditionalExpression,
-                binaries::lines,
-                enclosedExpressions::parenthesizedBreak);
+            options,
+            context.objectCreationLayoutPolicy,
+            this::expression,
+            lambdas::brokenExpressionLambda,
+            compactSource::compact,
+            this::currentIndentedWidth,
+            methodCalls::sourceMultilineExpressionLambda,
+            methodCalls::sourceMultilineArguments,
+            methodCalls::compactRootWithBrokenFinalChainSegment,
+            methodCalls::forcedMethodCallChain,
+            methodCalls::brokenMethodCall,
+            methodCalls::brokenMethodCallWithClosingLine,
+            methodCalls::methodCallPrefix,
+            methodCalls::methodCallChainIsSourceMultiline,
+            objectCreations::brokenObjectCreation,
+            objectCreations::objectCreationWithSuffix,
+            conditionals::conditionalExpression,
+            binaries::lines,
+            enclosedExpressions::parenthesizedBreak
+        );
     }
 
     Doc expression(Expression expression) {
@@ -289,6 +326,10 @@ final class ExpressionPrinters {
 
     Doc brokenMethodCall(MethodCallExpr expression) {
         return methodCalls.brokenMethodCall(expression);
+    }
+
+    Doc brokenMethodCallWithClosingLine(MethodCallExpr expression, String closingLine) {
+        return methodCalls.brokenMethodCallWithClosingLine(expression, closingLine);
     }
 
     Optional<Doc> packedExpressionLambdaMethodCallChainBody(String firstLine, MethodCallExpr expression) {
@@ -381,6 +422,10 @@ final class ExpressionPrinters {
         return binaries.lines(expression, forceBreak);
     }
 
+    Doc binaryConditionLines(Expression expression, boolean forceBreak) {
+        return binaries.conditionLines(expression, forceBreak);
+    }
+
     boolean expressionHasParenthesizedNestedBinary(Expression expression) {
         return binaries.expressionHasParenthesizedNestedBinary(expression);
     }
@@ -436,7 +481,8 @@ final class ExpressionPrinters {
     Optional<Doc> huggableBlockLambdaArguments(
             String prefix,
             NodeList<Expression> arguments,
-            ToIntFunction<String> firstLineWidth) {
+            ToIntFunction<String> firstLineWidth
+    ) {
         return lambdas.huggableBlockLambdaArguments(prefix, arguments, firstLineWidth);
     }
 

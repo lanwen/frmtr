@@ -16,6 +16,7 @@ import java.util.Optional;
  * semantically valid and whether overflow should force a break.
  */
 final class LayoutWidth {
+
     private final FormatterOptions options;
 
     LayoutWidth(FormatterOptions options) {

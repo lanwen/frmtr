@@ -37,24 +37,34 @@ import java.util.function.Function;
  * format/module-declarations-directives/frmtr-default.output.java} shows the expected structured module behavior.
  */
 final class ModuleBlockPrinter {
+
     private static final String MODULE_DIRECTIVE_LIST_RECOVERY_FAILURE =
-            "Unable to recover Java parse error inside module directive list: ";
+        "Unable to recover Java parse error inside module directive list: ";
 
     private final CommentTracker comments;
+
     private final FormatterOptions options;
+
     private final SourceText sourceText;
+
     private final RecoveredListPlanner recoveredListPlanner;
+
     private final RecoveredRawGapPrinter rawGaps;
+
     private final boolean recoverParseProblems;
+
     private final Function<Node, String> compact;
+
     private final Function<List<? extends Node>, String> compactJoin;
+
     private final Function<ModuleRequiresDirective, String> requiresModifiers;
 
     ModuleBlockPrinter(
             JavaFormatContext context,
             Function<Node, String> compact,
             Function<List<? extends Node>, String> compactJoin,
-            Function<ModuleRequiresDirective, String> requiresModifiers) {
+            Function<ModuleRequiresDirective, String> requiresModifiers
+    ) {
         this.comments = context.comments;
         this.options = context.options;
         this.sourceText = context.sourceText;
@@ -76,18 +86,20 @@ final class ModuleBlockPrinter {
         Optional<RecoveredListPlanner.Plan<ModuleDirective>> recoveryPlan = recoveryPlan(declaration);
         if (recoveryPlan.isPresent() && hasRawGap(recoveryPlan.orElseThrow())) {
             return recoveredModuleBlock(
-                    declaration,
-                    recoveryPlan.orElseThrow(),
-                    recoverableRawGapRegions(declaration, recoveryPlan.orElseThrow()));
+                declaration,
+                recoveryPlan.orElseThrow(),
+                recoverableRawGapRegions(declaration, recoveryPlan.orElseThrow())
+            );
         }
         if (declaration.getDirectives().isEmpty()) {
             return Doc.text("{}");
         }
         return Doc.concat(
-                Doc.text("{"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, moduleContents(declaration.getDirectives()))),
-                Doc.HARD_LINE,
-                Doc.text("}"));
+            Doc.text("{"),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, moduleContents(declaration.getDirectives()))),
+            Doc.HARD_LINE,
+            Doc.text("}")
+        );
     }
 
     /**
@@ -110,8 +122,9 @@ final class ModuleBlockPrinter {
      */
     private Doc moduleDirectiveSeparator(ModuleDirective previous, ModuleDirective current) {
         boolean hasBlankLineBetween = previous.getRange()
-                .flatMap(previousRange -> current.getRange()
-                        .map(currentRange -> currentRange.begin.line > previousRange.end.line + 1))
+                .flatMap(previousRange -> current.getRange().map(
+                        currentRange -> currentRange.begin.line > previousRange.end.line + 1
+                ))
                 .orElse(false);
         return hasBlankLineBetween ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;
     }
@@ -125,7 +138,8 @@ final class ModuleBlockPrinter {
     private Doc recoveredModuleBlock(
             ModuleDeclaration declaration,
             RecoveredListPlanner.Plan<ModuleDirective> plan,
-            List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions) {
+            List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions
+    ) {
         List<Doc> contents = new ArrayList<>();
         EntryKind previousEntry = EntryKind.NONE;
         ModuleDirective previousDirective = null;
@@ -135,10 +149,11 @@ final class ModuleBlockPrinter {
                 case RecoveredListPlanner.ValidSibling<?> valid -> {
                     ModuleDirective currentDirective = (ModuleDirective) valid.sibling();
                     appendSeparatorBeforeRecoveredDirective(
-                            contents,
-                            previousEntry,
-                            previousDirective,
-                            currentDirective);
+                        contents,
+                        previousEntry,
+                        previousDirective,
+                        currentDirective
+                    );
                     contents.add(moduleDirective(currentDirective));
                     previousDirective = currentDirective;
                     previousEntry = EntryKind.VALID_DIRECTIVE;
@@ -149,8 +164,8 @@ final class ModuleBlockPrinter {
                         contents.add(rawGaps.raw(declaration, rawRegion, "moduleDirectiveList"));
                     }
                     previousEntry = rawRegion.trailingBreakReplaced()
-                            ? EntryKind.RAW_GAP_WITH_TRAILING_BREAK
-                            : EntryKind.RAW_GAP;
+                        ? EntryKind.RAW_GAP_WITH_TRAILING_BREAK
+                        : EntryKind.RAW_GAP;
                 }
             }
         }
@@ -176,8 +191,7 @@ final class ModuleBlockPrinter {
         if (recoveryPlan.isEmpty() || !hasRawGap(recoveryPlan.orElseThrow())) {
             return false;
         }
-        List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions =
-                rawGaps.rawGapRegions(recoveryPlan.orElseThrow());
+        List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions = rawGaps.rawGapRegions(recoveryPlan.orElseThrow());
         if (hasCommentOutsideRawGaps(declaration, rawGapRegions)) {
             return false;
         }
@@ -189,7 +203,8 @@ final class ModuleBlockPrinter {
             List<Doc> contents,
             EntryKind previousEntry,
             ModuleDirective previousDirective,
-            ModuleDirective currentDirective) {
+            ModuleDirective currentDirective
+    ) {
         if (contents.isEmpty()) {
             contents.add(Doc.HARD_LINE);
             return;
@@ -208,10 +223,11 @@ final class ModuleBlockPrinter {
             return Optional.empty();
         }
         RecoveredListPlanner.Plan<ModuleDirective> plan = recoveredListPlanner.plan(
-                declaration,
-                requireModuleBlockInteriorRegion(declaration),
-                declaration.getDirectives(),
-                directive -> directive.getParsed() == Node.Parsedness.PARSED);
+            declaration,
+            requireModuleBlockInteriorRegion(declaration),
+            declaration.getDirectives(),
+            directive -> directive.getParsed() == Node.Parsedness.PARSED
+        );
         if (!plan.isSafe()) {
             throw moduleDirectiveListRecoveryFailure(plan.unsafe().orElseThrow().reason());
         }
@@ -220,7 +236,8 @@ final class ModuleBlockPrinter {
 
     private List<RecoveredRawGapPrinter.RawGapRegion> recoverableRawGapRegions(
             ModuleDeclaration declaration,
-            RecoveredListPlanner.Plan<ModuleDirective> plan) {
+            RecoveredListPlanner.Plan<ModuleDirective> plan
+    ) {
         List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions = rawGaps.rawGapRegions(plan);
         rawGaps.requireRecoverableRawRegions(declaration, rawGapRegions);
         return rawGapRegions;
@@ -273,7 +290,8 @@ final class ModuleBlockPrinter {
         return token.getRange()
                 .map(sourceText::region)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "module body " + description + " is missing a source range"));
+                        "module body " + description + " is missing a source range"
+                ));
     }
 
     private static boolean hasRawGap(RecoveredListPlanner.Plan<ModuleDirective> plan) {
@@ -282,11 +300,13 @@ final class ModuleBlockPrinter {
 
     private boolean hasCommentOutsideRawGaps(
             ModuleDeclaration declaration,
-            List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions) {
+            List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions
+    ) {
         SourceRegion moduleRegion = declaration.getRange()
                 .map(sourceText::region)
                 .orElseThrow(() -> moduleDirectiveListRecoveryFailure("module declaration is missing a source range"));
-        List<SourceRegion> rawRegions = rawGaps.regions(rawGapRegions).stream()
+        List<SourceRegion> rawRegions = rawGaps.regions(rawGapRegions)
+                .stream()
                 .filter(region -> region.beginOffset() < region.endOffset())
                 .sorted((left, right) -> Integer.compare(left.beginOffset(), right.beginOffset()))
                 .toList();
@@ -326,12 +346,24 @@ final class ModuleBlockPrinter {
         Doc body = switch (directive) {
             case ModuleRequiresDirective requiresDirective -> moduleRequiresDirective(requiresDirective);
             case ModuleExportsDirective exportsDirective -> moduleAccessDirective(
-                    "exports", exportsDirective.getName(), "to", exportsDirective.getModuleNames());
+                "exports",
+                exportsDirective.getName(),
+                "to",
+                exportsDirective.getModuleNames()
+            );
             case ModuleOpensDirective opensDirective -> moduleAccessDirective(
-                    "opens", opensDirective.getName(), "to", opensDirective.getModuleNames());
+                "opens",
+                opensDirective.getName(),
+                "to",
+                opensDirective.getModuleNames()
+            );
             case ModuleUsesDirective usesDirective -> Doc.text("uses " + compact.apply(usesDirective.getName()) + ";");
             case ModuleProvidesDirective providesDirective -> moduleAccessDirective(
-                    "provides", providesDirective.getName(), "with", providesDirective.getWith());
+                "provides",
+                providesDirective.getName(),
+                "with",
+                providesDirective.getWith()
+            );
             default -> Doc.text(compact.apply(directive));
         };
         return Doc.concat(comments.leading(directive), body);
@@ -355,7 +387,8 @@ final class ModuleBlockPrinter {
             String keyword,
             Name name,
             String targetKeyword,
-            NodeList<Name> targets) {
+            NodeList<Name> targets
+    ) {
         String prefix = keyword + " " + compact.apply(name);
         if (targets.isEmpty()) {
             return Doc.text(prefix + ";");
@@ -370,16 +403,24 @@ final class ModuleBlockPrinter {
             return Doc.concat(Doc.text(prefix), Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(targetLine))));
         }
         return Doc.concat(
-                Doc.text(prefix),
-                Doc.indent(Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.text(targetKeyword),
-                        Doc.indent(Doc.concat(
-                                Doc.HARD_LINE,
-                                Doc.join(
-                                        Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                                        targets.stream().map(target -> Doc.text(compact.apply(target))).toList()),
-                                Doc.text(";"))))));
+            Doc.text(prefix),
+            Doc.indent(
+                Doc.concat(
+                    Doc.HARD_LINE,
+                    Doc.text(targetKeyword),
+                    Doc.indent(
+                        Doc.concat(
+                            Doc.HARD_LINE,
+                            Doc.join(
+                                Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                                targets.stream().map(target -> Doc.text(compact.apply(target))).toList()
+                            ),
+                            Doc.text(";")
+                        )
+                    )
+                )
+            )
+        );
     }
 
     private int currentIndentedWidth(String text) {
@@ -405,6 +446,6 @@ final class ModuleBlockPrinter {
         /**
          * The previous entry was raw source whose final line break moved to formatter-owned output.
          */
-        RAW_GAP_WITH_TRAILING_BREAK
+        RAW_GAP_WITH_TRAILING_BREAK,
     }
 }

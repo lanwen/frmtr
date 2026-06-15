@@ -20,49 +20,65 @@ import java.util.regex.Pattern;
  * summaries from the structured fields on {@link FormatterException}.
  */
 final class ParseErrorSourceContext {
+
     private static final int CONTEXT_LINES = 5;
+
     private static final int MAX_CONTEXT_LINE_LENGTH = 256;
+
     private static final int MAX_HEADER_LENGTH = 8192;
+
     private static final Pattern MESSAGE_POSITION = Pattern.compile("line (\\d+), column (\\d+)");
-    private static final Pattern ANNOTATION_HEADER =
-            Pattern.compile("\\B@interface\\s+([A-Za-z_$][\\w$]*)\\b");
-    private static final Pattern TYPE_HEADER =
-            Pattern.compile("\\b(class|interface|enum|record)\\s+([A-Za-z_$][\\w$]*)\\b");
-    private static final Pattern CALLABLE_HEADER =
-            Pattern.compile("\\b([A-Za-z_$][\\w$]*)\\s*\\([^{};]*\\)\\s*(?:throws\\s+[^{};]+)?$");
+
+    private static final Pattern ANNOTATION_HEADER = Pattern.compile("\\B@interface\\s+([A-Za-z_$][\\w$]*)\\b");
+
+    private static final Pattern TYPE_HEADER = Pattern.compile(
+        "\\b(class|interface|enum|record)\\s+([A-Za-z_$][\\w$]*)\\b"
+    );
+
+    private static final Pattern CALLABLE_HEADER = Pattern.compile(
+        "\\b([A-Za-z_$][\\w$]*)\\s*\\([^{};]*\\)\\s*(?:throws\\s+[^{};]+)?$"
+    );
+
     private static final Set<String> CONTROL_HEADERS = Set.of(
-            "assert",
-            "catch",
-            "do",
-            "else",
-            "finally",
-            "for",
-            "if",
-            "switch",
-            "synchronized",
-            "try",
-            "while");
+        "assert",
+        "catch",
+        "do",
+        "else",
+        "finally",
+        "for",
+        "if",
+        "switch",
+        "synchronized",
+        "try",
+        "while"
+    );
 
     private ParseErrorSourceContext() {}
 
     static List<FormatterException.SourceProblem> from(String source, List<Problem> problems) {
         if (problems.isEmpty()) {
-            return List.of(new FormatterException.SourceProblem(
+            return List.of(
+                new FormatterException.SourceProblem(
                     "unknown parse error",
                     Optional.empty(),
                     Optional.empty(),
-                    List.of()));
+                    List.of()
+                )
+            );
         }
         List<String> lines = source.lines().toList();
         return problems.stream()
-                .sorted(Comparator
-                        .comparingInt((Problem problem) -> problemPosition(problem)
+                .sorted(
+                    Comparator.comparingInt((Problem problem) -> problemPosition(problem)
                                 .map(position -> position.line)
-                                .orElse(Integer.MAX_VALUE))
-                        .thenComparingInt(problem -> problemPosition(problem)
-                                .map(position -> position.column)
-                                .orElse(Integer.MAX_VALUE))
-                        .thenComparing(problem -> Optional.ofNullable(problem.getVerboseMessage()).orElse("")))
+                                .orElse(Integer.MAX_VALUE)
+                    )
+                            .thenComparingInt(problem -> problemPosition(problem)
+                                        .map(position -> position.column)
+                                        .orElse(Integer.MAX_VALUE)
+                            )
+                            .thenComparing(problem -> Optional.ofNullable(problem.getVerboseMessage()).orElse(""))
+                )
                 .map(problem -> sourceProblem(source, lines, problem))
                 .toList();
     }
@@ -70,21 +86,28 @@ final class ParseErrorSourceContext {
     static List<FormatterException.SourceProblem> from(String source, TokenMgrException exception) {
         List<String> lines = source.lines().toList();
         Optional<Position> position = tokenManagerMessagePosition(exception.getMessage());
-        return List.of(new FormatterException.SourceProblem(
+        return List.of(
+            new FormatterException.SourceProblem(
                 problemMessage(exception),
                 position.map(ParseErrorSourceContext::sourceLocation),
                 position.flatMap(found -> enclosingUnitLine(source, found)),
-                position.map(found -> contextLines(lines, found)).orElseGet(List::of)));
+                position.map(found -> contextLines(lines, found)).orElseGet(List::of)
+            )
+        );
     }
 
     private static FormatterException.SourceProblem sourceProblem(
-            String source, List<String> lines, Problem problem) {
+            String source,
+            List<String> lines,
+            Problem problem
+    ) {
         Optional<Position> position = problemPosition(problem);
         return new FormatterException.SourceProblem(
-                problemMessage(problem),
-                position.map(ParseErrorSourceContext::sourceLocation),
-                position.flatMap(found -> enclosingUnitLine(source, found)),
-                position.map(found -> contextLines(lines, found)).orElseGet(List::of));
+            problemMessage(problem),
+            position.map(ParseErrorSourceContext::sourceLocation),
+            position.flatMap(found -> enclosingUnitLine(source, found)),
+            position.map(found -> contextLines(lines, found)).orElseGet(List::of)
+        );
     }
 
     private static String problemMessage(Problem problem) {
@@ -120,9 +143,7 @@ final class ParseErrorSourceContext {
         if (!matcher.find()) {
             return Optional.empty();
         }
-        Position position = new Position(
-                Integer.parseInt(matcher.group(1)),
-                Integer.parseInt(matcher.group(2)));
+        Position position = new Position(Integer.parseInt(matcher.group(1)), Integer.parseInt(matcher.group(2)));
         return position.valid() ? Optional.of(position) : Optional.empty();
     }
 
@@ -160,9 +181,10 @@ final class ParseErrorSourceContext {
             start = line.length() - MAX_CONTEXT_LINE_LENGTH;
         }
         return new FormatterException.SourceLine(
-                lineNumber,
-                start + 1,
-                line.substring(start, start + MAX_CONTEXT_LINE_LENGTH));
+            lineNumber,
+            start + 1,
+            line.substring(start, start + MAX_CONTEXT_LINE_LENGTH)
+        );
     }
 
     private static Optional<FormatterException.SourceLine> enclosingUnitLine(String source, Position position) {
@@ -174,8 +196,8 @@ final class ParseErrorSourceContext {
         for (int lineNumber = 1; lineNumber <= lines.size() && lineNumber <= position.line; lineNumber++) {
             String line = lines.get(lineNumber - 1);
             int limit = lineNumber == position.line
-                    ? Math.min(line.length(), Math.max(0, position.column - 1))
-                    : line.length();
+                ? Math.min(line.length(), Math.max(0, position.column - 1))
+                : line.length();
             LineScanResult result = scanLine(lineNumber, line, limit, state, escaped, header, openBlocks);
             state = result.state();
             escaped = result.escaped();
@@ -206,7 +228,8 @@ final class ParseErrorSourceContext {
             ScanState initialState,
             boolean initialEscaped,
             StringBuilder header,
-            List<OpenBlock> openBlocks) {
+            List<OpenBlock> openBlocks
+    ) {
         ScanState state = initialState;
         boolean escaped = initialEscaped;
         for (int index = 0; index < limit; index++) {
@@ -240,8 +263,12 @@ final class ParseErrorSourceContext {
                     }
                 }
                 case TEXT_BLOCK -> {
-                    if (current == '"' && index + 2 < limit && line.charAt(index + 1) == '"'
-                            && line.charAt(index + 2) == '"') {
+                    if (
+                        current == '"'
+                        && index + 2 < limit
+                        && line.charAt(index + 1) == '"'
+                        && line.charAt(index + 2) == '"'
+                    ) {
                         state = ScanState.CODE;
                         index += 2;
                     }
@@ -254,8 +281,12 @@ final class ParseErrorSourceContext {
                         state = ScanState.BLOCK_COMMENT;
                         index++;
                         appendHeader(header, ' ');
-                    } else if (current == '"' && index + 2 < limit && line.charAt(index + 1) == '"'
-                            && line.charAt(index + 2) == '"') {
+                    } else if (
+                        current == '"'
+                        && index + 2 < limit
+                        && line.charAt(index + 1) == '"'
+                        && line.charAt(index + 2) == '"'
+                    ) {
                         state = ScanState.TEXT_BLOCK;
                         index += 2;
                         appendHeader(header, ' ');
@@ -287,18 +318,22 @@ final class ParseErrorSourceContext {
     }
 
     private static Optional<FormatterException.SourceLine> sourceUnitLine(
-            String header, int lineNumber, String line, int braceColumn) {
+            String header,
+            int lineNumber,
+            String line,
+            int braceColumn
+    ) {
         String normalized = header.replaceAll("\\s+", " ").trim();
         return isSourceUnit(normalized)
-                ? Optional.of(sourceLine(lineNumber, line, braceColumn))
-                : Optional.empty();
+            ? Optional.of(sourceLine(lineNumber, line, braceColumn))
+            : Optional.empty();
     }
 
     private static boolean isSourceUnit(String header) {
-        return !header.isEmpty()
-                && (ANNOTATION_HEADER.matcher(header).find()
-                        || TYPE_HEADER.matcher(header).find()
-                        || isCallableUnit(header));
+        return (
+            !header.isEmpty()
+            && (ANNOTATION_HEADER.matcher(header).find() || TYPE_HEADER.matcher(header).find() || isCallableUnit(header))
+        );
     }
 
     private static boolean isCallableUnit(String header) {
@@ -345,7 +380,7 @@ final class ParseErrorSourceContext {
         /**
          * Ignores text inside a text block so multi-line literal braces do not affect block tracking.
          */
-        TEXT_BLOCK
+        TEXT_BLOCK,
     }
 
     private record OpenBlock(Optional<FormatterException.SourceLine> unitLine) {}

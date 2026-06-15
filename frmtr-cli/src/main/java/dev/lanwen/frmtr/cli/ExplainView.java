@@ -18,6 +18,7 @@ import java.util.List;
  * it merely presents the decisions the core already made.
  */
 final class ExplainView {
+
     /**
      * Applies a presentation role to a span of text. The CLI maps roles to ANSI styles; a plain renderer returns the
      * text unchanged.
@@ -37,10 +38,11 @@ final class ExplainView {
         LABEL,
         NUMBER,
         TREE,
-        FADE
+        FADE,
     }
 
     private final Styler styler;
+
     private final boolean verbose;
 
     ExplainView(Styler styler, boolean verbose) {
@@ -80,7 +82,8 @@ final class ExplainView {
         out.append(styler.style(Role.HEADING, "Why it wrapped")).append('\n');
 
         List<PrinterWrap> printerWraps = explanation.printerWraps();
-        List<GroupDecision> rendererBreaks = explanation.brokenGroups().stream()
+        List<GroupDecision> rendererBreaks = explanation.brokenGroups()
+                .stream()
                 .filter(decision -> !decision.forcedBreak())
                 .toList();
         boolean hasMeasuredReason = !printerWraps.isEmpty() || !rendererBreaks.isEmpty();
@@ -129,7 +132,8 @@ final class ExplainView {
      */
     private List<ForcedBreak> causalForcedBreaks(DocExplanation explanation, boolean hasMeasuredReason) {
         List<PrinterWrap> unclaimedWraps = new java.util.ArrayList<>(explanation.printerWraps());
-        return explanation.forcedBreaks().stream()
+        return explanation.forcedBreaks()
+                .stream()
                 .filter(forced -> !claimedByPrinterWrap(forced, unclaimedWraps))
                 .filter(forced -> !isStructuralBody(forced.label().orElse("")))
                 .filter(forced -> !(hasMeasuredReason && isPassThroughStatement(forced.label().orElse(""))))
@@ -162,9 +166,11 @@ final class ExplainView {
      * not a width decision. These always span lines, so surfacing them as a wrap reason is noise.
      */
     private boolean isStructuralBody(String label) {
-        return label.startsWith("java.bodyDeclaration:")
-                || label.equals("java.compilationUnit")
-                || label.equals("java.statement:BlockStmt");
+        return (
+            label.startsWith("java.bodyDeclaration:")
+            || label.equals("java.compilationUnit")
+            || label.equals("java.statement:BlockStmt")
+        );
     }
 
     /**
@@ -192,8 +198,12 @@ final class ExplainView {
                 .append(" available\n");
         if (wrap.segments() > 0) {
             out.append("    ")
-                    .append(styler.style(
-                            Role.FADE, "(" + wrap.segments() + " segments, one per line)"))
+                    .append(
+                        styler.style(
+                            Role.FADE,
+                            "(" + wrap.segments() + " segments, one per line)"
+                        )
+                    )
                     .append('\n');
         }
         if (verbose) {
@@ -229,9 +239,12 @@ final class ExplainView {
         out.append("  ")
                 .append(styler.style(Role.LABEL, friendlyLabel(label)))
                 .append(' ')
-                .append(styler.style(
+                .append(
+                    styler.style(
                         Role.FADE,
-                        "laid out across lines by rule (no width measurement)"))
+                        "laid out across lines by rule (no width measurement)"
+                    )
+                )
                 .append('\n');
         if (verbose) {
             out.append("    ").append(styler.style(Role.FADE, label)).append('\n');
@@ -265,8 +278,8 @@ final class ExplainView {
         out.append(styler.style(Role.HEADING, "Decision tree"))
                 .append('\n');
         List<Node> roots = explanation.tree().meaningful()
-                ? List.of(explanation.tree())
-                : explanation.tree().children();
+            ? List.of(explanation.tree())
+            : explanation.tree().children();
         if (roots.isEmpty()) {
             out.append("  ").append(styler.style(Role.FADE, "(no groups)")).append('\n');
             return;
@@ -316,11 +329,11 @@ final class ExplainView {
         if (node.decision().isPresent()) {
             GroupDecision decision = node.decision().get();
             String marker = decision.decision() == Decision.BREAK
-                    ? styler.style(Role.BREAK, "BREAK")
-                    : styler.style(Role.FLAT, "FLAT ");
+                ? styler.style(Role.BREAK, "BREAK")
+                : styler.style(Role.FLAT, "FLAT ");
             String math = decision.forcedBreak()
-                    ? styler.style(Role.FADE, "forced")
-                    : styler.style(
+                ? styler.style(Role.FADE, "forced")
+                : styler.style(
                             Role.FADE,
                             decision.flatWidth() + (decision.decision() == Decision.BREAK ? " > " : " <= ")
                                     + decision.available());
@@ -356,9 +369,12 @@ final class ExplainView {
                 .append(" wrapped across lines.\n");
         if (!verbose) {
             out.append("  ")
-                    .append(styler.style(
+                    .append(
+                        styler.style(
                             Role.FADE,
-                            "Run with --verbose for raw rule labels and every group in the tree."))
+                            "Run with --verbose for raw rule labels and every group in the tree."
+                        )
+                    )
                     .append('\n');
         }
     }

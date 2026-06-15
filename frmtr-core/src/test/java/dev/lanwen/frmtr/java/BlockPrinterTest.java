@@ -17,6 +17,7 @@ import dev.lanwen.frmtr.FormatterOptions;
 import org.junit.jupiter.api.Test;
 
 final class BlockPrinterTest {
+
     private static final String SOURCE = """
             class Demo {
                 void method() {
@@ -72,9 +73,11 @@ final class BlockPrinterTest {
     }
 
     private static CompilationUnit parse(String source) {
-        JavaParser parser = new JavaParser(new ParserConfiguration()
-                .setStoreTokens(true)
-                .setAttributeComments(true));
+        JavaParser parser = new JavaParser(
+            new ParserConfiguration()
+                    .setStoreTokens(true)
+                    .setAttributeComments(true)
+        );
         return parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
                 .getResult()
                 .orElseThrow();

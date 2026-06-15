@@ -18,4 +18,14 @@ class MethodChainSegmentArgumentsSample {
             return;
         }
     }
+
+    void inspectDecisionPath(DecisionReport report) {
+        assertThat(report.branchSelection().visibleNodes()).singleElement().satisfies(node -> assertThat(node.decision())
+            .isPresent());
+    }
+
+    void inspectConstructedDecision(DecisionReport report) {
+        assertThat(report.branchSelection().visibleNodes()).singleElement().satisfies(node -> new DecisionProbe(node.decision())
+            .isPresent());
+    }
 }

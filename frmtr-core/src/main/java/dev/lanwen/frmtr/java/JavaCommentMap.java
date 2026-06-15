@@ -23,14 +23,18 @@ import java.util.Optional;
  * {@link CommentTracker}. This map does not render comments, mutate claim state, or choose formatter layout.
  */
 final class JavaCommentMap {
+
     private final Map<Node, Optional<JavaCommentTrivia>> ownComments;
+
     private final Map<Node, List<JavaCommentTrivia>> orphanComments;
+
     private final Map<Node, List<JavaCommentTrivia>> containedComments;
 
     private JavaCommentMap(
             Map<Node, Optional<JavaCommentTrivia>> ownComments,
             Map<Node, List<JavaCommentTrivia>> orphanComments,
-            Map<Node, List<JavaCommentTrivia>> containedComments) {
+            Map<Node, List<JavaCommentTrivia>> containedComments
+    ) {
         this.ownComments = ownComments;
         this.orphanComments = orphanComments;
         this.containedComments = containedComments;
@@ -50,9 +54,10 @@ final class JavaCommentMap {
         Map<Comment, JavaCommentTrivia> trivia = new IdentityHashMap<>();
         recordNode(unit, ownComments, orphanComments, containedComments, trivia);
         return new JavaCommentMap(
-                Collections.unmodifiableMap(ownComments),
-                Collections.unmodifiableMap(orphanComments),
-                Collections.unmodifiableMap(containedComments));
+            Collections.unmodifiableMap(ownComments),
+            Collections.unmodifiableMap(orphanComments),
+            Collections.unmodifiableMap(containedComments)
+        );
     }
 
     /**
@@ -69,7 +74,8 @@ final class JavaCommentMap {
             Map<Node, Optional<JavaCommentTrivia>> ownComments,
             Map<Node, List<JavaCommentTrivia>> orphanComments,
             Map<Node, List<JavaCommentTrivia>> containedComments,
-            Map<Comment, JavaCommentTrivia> trivia) {
+            Map<Comment, JavaCommentTrivia> trivia
+    ) {
         Optional<JavaCommentTrivia> ownComment = node.getComment().map(comment -> trivia(trivia, comment));
         List<JavaCommentTrivia> ownOrphans = triviaList(node.getOrphanComments(), trivia);
 
@@ -81,8 +87,13 @@ final class JavaCommentMap {
             contained = new ArrayList<>(ownOrphans);
         }
         for (Node child : node.getChildNodes()) {
-            List<JavaCommentTrivia> childContained =
-                    recordNode(child, ownComments, orphanComments, containedComments, trivia);
+            List<JavaCommentTrivia> childContained = recordNode(
+                child,
+                ownComments,
+                orphanComments,
+                containedComments,
+                trivia
+            );
             Optional<JavaCommentTrivia> childOwnComment = ownComments.get(child);
             if (childOwnComment.isPresent()) {
                 contained = addTo(contained, childOwnComment.orElseThrow());
@@ -99,7 +110,8 @@ final class JavaCommentMap {
 
     private static List<JavaCommentTrivia> triviaList(
             List<? extends Comment> comments,
-            Map<Comment, JavaCommentTrivia> trivia) {
+            Map<Comment, JavaCommentTrivia> trivia
+    ) {
         if (comments.isEmpty()) {
             return List.of();
         }
@@ -118,7 +130,8 @@ final class JavaCommentMap {
 
     private static List<JavaCommentTrivia> addAllTo(
             List<JavaCommentTrivia> comments,
-            List<JavaCommentTrivia> moreComments) {
+            List<JavaCommentTrivia> moreComments
+    ) {
         List<JavaCommentTrivia> present = comments == null ? new ArrayList<>(moreComments.size()) : comments;
         present.addAll(moreComments);
         return present;

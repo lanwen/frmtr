@@ -29,17 +29,29 @@ import java.util.function.Function;
  * shapes; this helper only asks whether constructor arguments can use that lambda-specific form.
  */
 final class ObjectCreationPrinter {
+
     private final CommentTracker comments;
+
     private final ObjectCreationLayoutPolicy layoutPolicy;
+
     private final TypePrinter types;
+
     private final CommentedExpressionListPrinter commentedExpressionLists;
+
     private final JavaFormatRule<Expression> expressionRenderer;
+
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments;
+
     private final JavaFormatRule<BodyDeclaration<?>> bodyRenderer;
+
     private final Function<Node, String> compact;
+
     private final Function<List<? extends Node>, String> compactJoin;
+
     private final Function<Node, String> compactTypeLike;
+
     private final Function<Node, String> compactTypeLikeWithoutOwnComment;
+
     private final Function<Doc, String> commentText;
 
     ObjectCreationPrinter(
@@ -52,7 +64,8 @@ final class ObjectCreationPrinter {
             Function<List<? extends Node>, String> compactJoin,
             Function<Node, String> compactTypeLike,
             Function<Node, String> compactTypeLikeWithoutOwnComment,
-            Function<Doc, String> commentText) {
+            Function<Doc, String> commentText
+    ) {
         this.comments = context.comments;
         this.layoutPolicy = context.objectCreationLayoutPolicy;
         this.types = types;
@@ -109,19 +122,30 @@ final class ObjectCreationPrinter {
         if (huggableLambda.isPresent()) {
             return Doc.concat(huggableLambda.orElseThrow(), Doc.text(suffix));
         }
-        Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments());
+        Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(
+            prefix,
+            expression,
+            expression.getArguments()
+        );
         if (commentedArguments.isPresent()) {
             return Doc.concat(commentedArguments.orElseThrow(), Doc.text(suffix));
         }
         Doc call = Doc.concat(
-                Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(
-                        objectCreationLine(forceBreak),
-                        Doc.joinComma(expression.getArguments().stream()
+            Doc.text(prefix + "("),
+            Doc.indent(
+                Doc.concat(
+                    objectCreationLine(forceBreak),
+                    Doc.joinComma(
+                        expression.getArguments()
+                                .stream()
                                 .map(expressionRenderer::format)
-                                .toList()))),
-                objectCreationLine(forceBreak),
-                Doc.text(")" + suffix));
+                                .toList()
+                    )
+                )
+            ),
+            objectCreationLine(forceBreak),
+            Doc.text(")" + suffix)
+        );
         return forceBreak ? call : Doc.group(call);
     }
 
@@ -140,27 +164,42 @@ final class ObjectCreationPrinter {
         if (!layoutPolicy.shouldPreserveSourceMultilineArguments(expression)) {
             return Optional.empty();
         }
-        return Optional.of(Doc.concat(
+        return Optional.of(
+            Doc.concat(
                 Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(
+                Doc.indent(
+                    Doc.concat(
                         Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), expression.getArguments().stream()
-                                .map(expressionRenderer::format)
-                                .toList()))),
+                        Doc.join(
+                            Doc.concat(Doc.text(","), Doc.HARD_LINE),
+                            expression.getArguments()
+                                    .stream()
+                                    .map(expressionRenderer::format)
+                                    .toList()
+                        )
+                    )
+                ),
                 Doc.HARD_LINE,
-                Doc.text(")" + suffix)));
+                Doc.text(")" + suffix)
+            )
+        );
     }
 
     String objectCreationPrefix(ObjectCreationExpr expression) {
         Doc creationComment = comments.ownComment(expression, BlockComment.class::isInstance);
         Doc typeComment = comments.ownComment(expression.getType(), BlockComment.class::isInstance);
         String type = typeComment == Doc.EMPTY
-                ? compactTypeLike.apply(expression.getType())
-                : commentText.apply(typeComment) + " " + compactTypeLikeWithoutOwnComment.apply(expression.getType());
-        return expression.getScope().map(scope -> compact.apply(scope) + ".").orElse("")
-                + (creationComment == Doc.EMPTY ? "new " : commentText.apply(creationComment) + " new ")
-                + expression.getTypeArguments().map(typeArguments -> "<" + types.compactJoinTypeLike(typeArguments) + ">").orElse("")
-                + type;
+            ? compactTypeLike.apply(expression.getType())
+            : commentText.apply(typeComment) + " " + compactTypeLikeWithoutOwnComment.apply(expression.getType());
+        return (
+            expression.getScope().map(scope -> compact.apply(scope) + ".").orElse("")
+            + (creationComment == Doc.EMPTY ? "new " : commentText.apply(creationComment) + " new ")
+            + expression
+                    .getTypeArguments()
+                    .map(typeArguments -> "<" + types.compactJoinTypeLike(typeArguments) + ">")
+                    .orElse("")
+            + type
+        );
     }
 
     /**
@@ -170,14 +209,18 @@ final class ObjectCreationPrinter {
      * comments around {@code new} or the type do not get separated from the token they annotate.
      */
     private Optional<Doc> objectCreationWithBrokenType(ObjectCreationExpr expression) {
-        if (expression.getScope().isPresent()
-                || expression.getTypeArguments().isPresent()
-                || expression.getComment().filter(BlockComment.class::isInstance).isPresent()
-                || expression.getType().getComment().filter(BlockComment.class::isInstance).isPresent()
-                || !types.typeCanBreak(expression.getType())) {
+        if (
+            expression.getScope().isPresent()
+            || expression.getTypeArguments().isPresent()
+            || expression.getComment().filter(BlockComment.class::isInstance).isPresent()
+            || expression.getType().getComment().filter(BlockComment.class::isInstance).isPresent()
+            || !types.typeCanBreak(expression.getType())
+        ) {
             return Optional.empty();
         }
-        return Optional.of(Doc.group(Doc.concat(Doc.text("new "), types.typeBody(expression.getType()), Doc.text("()"))));
+        return Optional.of(
+            Doc.group(Doc.concat(Doc.text("new "), types.typeBody(expression.getType()), Doc.text("()")))
+        );
     }
 
     /**
@@ -196,11 +239,12 @@ final class ObjectCreationPrinter {
             return Doc.concat(header, Doc.text("{}"));
         }
         return Doc.concat(
-                header,
-                Doc.text("{"),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, anonymousClassMembers(declarations, members))),
-                Doc.HARD_LINE,
-                Doc.text("}"));
+            header,
+            Doc.text("{"),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, anonymousClassMembers(declarations, members))),
+            Doc.HARD_LINE,
+            Doc.text("}")
+        );
     }
 
     private Doc anonymousObjectCreationHeader(ObjectCreationExpr expression, String prefix) {
@@ -211,34 +255,51 @@ final class ObjectCreationPrinter {
         if (sourceMultilineArguments.isPresent()) {
             return sourceMultilineArguments.orElseThrow();
         }
-        Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments());
+        Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(
+            prefix,
+            expression,
+            expression.getArguments()
+        );
         if (commentedArguments.isPresent()) {
             return Doc.concat(commentedArguments.orElseThrow(), Doc.text(" "));
         }
-        return Doc.group(Doc.concat(
+        return Doc.group(
+            Doc.concat(
                 Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(
+                Doc.indent(
+                    Doc.concat(
                         Doc.SOFT_LINE,
-                        Doc.joinComma(anonymousArgumentDocs(expression)))),
+                        Doc.joinComma(anonymousArgumentDocs(expression))
+                    )
+                ),
                 Doc.SOFT_LINE,
-                Doc.text(") ")));
+                Doc.text(") ")
+            )
+        );
     }
 
     private Optional<Doc> anonymousSourceMultilineArguments(ObjectCreationExpr expression, String prefix) {
         if (!layoutPolicy.shouldPreserveAnonymousSourceMultilineArguments(expression)) {
             return Optional.empty();
         }
-        return Optional.of(Doc.concat(
+        return Optional.of(
+            Doc.concat(
                 Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(
+                Doc.indent(
+                    Doc.concat(
                         Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), anonymousArgumentDocs(expression)))),
+                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), anonymousArgumentDocs(expression))
+                    )
+                ),
                 Doc.HARD_LINE,
-                Doc.text(") ")));
+                Doc.text(") ")
+            )
+        );
     }
 
     private List<Doc> anonymousArgumentDocs(ObjectCreationExpr expression) {
-        return expression.getArguments().stream()
+        return expression.getArguments()
+                .stream()
                 .map(expressionRenderer::format)
                 .toList();
     }
@@ -255,7 +316,7 @@ final class ObjectCreationPrinter {
         for (int index = 0; index < members.size(); index++) {
             if (index > 0) {
                 boolean adjacentFields = declarations.get(index - 1) instanceof FieldDeclaration
-                        && declarations.get(index) instanceof FieldDeclaration;
+                    && declarations.get(index) instanceof FieldDeclaration;
                 docs.add(adjacentFields ? Doc.HARD_LINE : Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE));
             }
             docs.add(members.get(index));

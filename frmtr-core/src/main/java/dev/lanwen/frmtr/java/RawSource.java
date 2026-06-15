@@ -12,6 +12,7 @@ import java.util.regex.Pattern;
  * are attached to docs, or which Java syntax constructs are printable by structured formatter logic.
  */
 final class RawSource {
+
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
     private final FormatterOptions options;
@@ -61,7 +62,8 @@ final class RawSource {
         if (stripped.isEmpty()) {
             return "";
         }
-        String normalized = WHITESPACE.matcher(stripped).replaceAll(" ")
+        String normalized = WHITESPACE.matcher(stripped)
+                .replaceAll(" ")
                 .replaceAll("(?<![=!<>])\\s*=\\s*(?![=])", " = ");
         return WHITESPACE.matcher(normalized).replaceAll(" ");
     }

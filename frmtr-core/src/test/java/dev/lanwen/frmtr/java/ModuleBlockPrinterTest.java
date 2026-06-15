@@ -19,6 +19,7 @@ import dev.lanwen.frmtr.doc.DocRenderer;
 import org.junit.jupiter.api.Test;
 
 final class ModuleBlockPrinterTest {
+
     @Test
     void formatsValidModuleDirectiveSiblingsAroundRawRecoveredDirectiveGap() {
         String source = """
@@ -33,13 +34,15 @@ final class ModuleBlockPrinterTest {
 
         String formatted = printRecovered(unit, source);
 
-        assertThat(formatted).isEqualTo("""
+        assertThat(formatted).isEqualTo(
+            """
                 module demo {
                     requires before;
                     exports   broken.pkg   to   raw.Target; // keep raw
                     uses after.Service;
                 }
-                """);
+                """
+        );
     }
 
     @Test
@@ -61,13 +64,15 @@ final class ModuleBlockPrinterTest {
 
         String formatted = printRecovered(unit, source);
 
-        assertThat(formatted).isEqualTo("""
+        assertThat(formatted).isEqualTo(
+            """
                 module demo {
                     requires before;
                     exports   broken.pkg   to   raw.Target; // keep raw
                     uses after.Service;
                 }
-                """);
+                """
+        );
     }
 
     @Test
@@ -84,14 +89,16 @@ final class ModuleBlockPrinterTest {
 
         String formatted = printRecovered(unit, source);
 
-        assertThat(formatted).isEqualTo("""
+        assertThat(formatted).isEqualTo(
+            """
                 module demo /* header */ {
                   requires before;
                   exports broken.pkg
                     to raw.Target; // keep raw
                   uses after.Service;
                 }
-                """);
+                """
+        );
         assertThat(formatted)
                 .containsOnlyOnce("/* header */")
                 .containsOnlyOnce("// keep raw");
@@ -124,8 +131,9 @@ final class ModuleBlockPrinterTest {
     }
 
     private static String printRecovered(CompilationUnit unit, String source) {
-        return new DocRenderer(FormatterOptions.defaults())
-                .render(new JavaPrinter(FormatterOptions.defaults(), new SourceText(source), true).print(unit));
+        return new DocRenderer(FormatterOptions.defaults()).render(
+            new JavaPrinter(FormatterOptions.defaults(), new SourceText(source), true).print(unit)
+        );
     }
 
     private static ModuleDeclaration module(CompilationUnit unit) {
@@ -133,7 +141,9 @@ final class ModuleBlockPrinterTest {
     }
 
     private static <T extends ModuleDirective> T directive(CompilationUnit unit, Class<T> directiveType) {
-        return module(unit).getDirectives().stream()
+        return module(unit)
+                .getDirectives()
+                .stream()
                 .filter(directiveType::isInstance)
                 .map(directiveType::cast)
                 .findFirst()
@@ -141,10 +151,12 @@ final class ModuleBlockPrinterTest {
     }
 
     private static CompilationUnit parse(String source) {
-        JavaParser parser = new JavaParser(new ParserConfiguration()
-                .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
-                .setStoreTokens(true)
-                .setAttributeComments(true));
+        JavaParser parser = new JavaParser(
+            new ParserConfiguration()
+                    .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
+                    .setStoreTokens(true)
+                    .setAttributeComments(true)
+        );
         return parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
                 .getResult()
                 .orElseThrow();

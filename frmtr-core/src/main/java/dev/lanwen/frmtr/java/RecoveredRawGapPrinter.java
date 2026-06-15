@@ -21,13 +21,17 @@ import java.util.function.UnaryOperator;
  * what diagnostic label to use, and where each raw doc belongs in the surrounding formatted output.
  */
 final class RecoveredRawGapPrinter {
+
     private final SourceText sourceText;
+
     private final RecoveredSourceRegions recoveredSourceRegions;
+
     private final BiFunction<String, Throwable, FormatterException> recoveryFailure;
 
     RecoveredRawGapPrinter(
             JavaFormatContext context,
-            BiFunction<String, Throwable, FormatterException> recoveryFailure) {
+            BiFunction<String, Throwable, FormatterException> recoveryFailure
+    ) {
         this.sourceText = context.sourceText;
         this.recoveredSourceRegions = context.recoveredSourceRegions;
         this.recoveryFailure = Objects.requireNonNull(recoveryFailure, "recoveryFailure");
@@ -49,9 +53,11 @@ final class RecoveredRawGapPrinter {
      */
     <N extends Node> List<RawGapRegion> rawGapRegions(
             RecoveredListPlanner.Plan<N> plan,
-            UnaryOperator<SourceRegion> adjustRegion) {
+            UnaryOperator<SourceRegion> adjustRegion
+    ) {
         Objects.requireNonNull(adjustRegion, "adjustRegion");
-        return plan.entries().stream()
+        return plan.entries()
+                .stream()
                 .filter(RecoveredListPlanner.RawGap.class::isInstance)
                 .map(entry -> (RecoveredListPlanner.RawGap<?>) entry)
                 .map(entry -> rawGapRegion(adjustRegion.apply(entry.region())))
@@ -72,7 +78,8 @@ final class RecoveredRawGapPrinter {
      * raw doc claims comments through {@link #raw(Node, RawGapRegion, String)}.
      */
     void requireRecoverableRawRegions(Node owner, List<RawGapRegion> rawGapRegions) {
-        regions(rawGapRegions).stream()
+        regions(rawGapRegions)
+                .stream()
                 .filter(region -> region.beginOffset() < region.endOffset())
                 .forEach(region -> {
                     try {
@@ -118,15 +125,14 @@ final class RecoveredRawGapPrinter {
         if (lineBreakStart < 0) {
             return new RawGapRegion(region, false);
         }
-        return new RawGapRegion(
-                sourceText.region(region.beginOffset(), region.beginOffset() + lineBreakStart),
-                true);
+        return new RawGapRegion(sourceText.region(region.beginOffset(), region.beginOffset() + lineBreakStart), true);
     }
 
     private FormatterException recoveryFailure(RecoveredSourceRegions.CrossingCommentBoundaryException exception) {
         return Objects.requireNonNull(
-                recoveryFailure.apply(exception.getMessage(), exception),
-                "recoveryFailure result");
+            recoveryFailure.apply(exception.getMessage(), exception),
+            "recoveryFailure result"
+        );
     }
 
     private static int trailingLineBreakStart(String raw, int endExclusive) {

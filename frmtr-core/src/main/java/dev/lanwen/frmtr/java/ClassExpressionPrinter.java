@@ -1,5 +1,6 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.ClassExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
@@ -20,6 +21,7 @@ import java.util.function.Function;
  * type text as a callback and only decides how a selected {@link ClassExpr} is assembled.
  */
 final class ClassExpressionPrinter {
+
     private final Function<Type, String> compactTypeLike;
 
     ClassExpressionPrinter(Function<Type, String> compactTypeLike) {
@@ -48,11 +50,12 @@ final class ClassExpressionPrinter {
         for (int index = 0; index < segments.size(); index++) {
             TypeSegment segment = segments.get(index);
             if (index == 0) {
-                docs.add(Doc.text(segment.text()));
+                docs.add(segment.doc());
             } else if (segment.breakBefore()) {
-                docs.add(Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text("." + segment.text()))));
+                docs.add(Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text("."), segment.doc())));
             } else {
-                docs.add(Doc.text("." + segment.text()));
+                docs.add(Doc.text("."));
+                docs.add(segment.doc());
             }
         }
         return Doc.concat(docs);
@@ -61,23 +64,52 @@ final class ClassExpressionPrinter {
     private void collectSegments(ClassOrInterfaceType type, List<TypeSegment> segments) {
         type.getScope().ifPresent(scope -> collectSegments(scope, segments));
         boolean breakBefore = type.getScope().filter(scope -> startsOnLaterLine(scope, type)).isPresent();
-        segments.add(new TypeSegment(typeSegmentText(type), breakBefore));
+        segments.add(new TypeSegment(typeSegment(type), breakBefore));
     }
 
-    private String typeSegmentText(ClassOrInterfaceType type) {
-        return type.getNameAsString()
-                + type.getTypeArguments()
-                        .map(arguments -> "<" + arguments.stream()
-                                .map(compactTypeLike)
-                                .reduce((left, right) -> left + ", " + right)
-                                .orElse("") + ">")
-                        .orElse("");
+    private Doc typeSegment(ClassOrInterfaceType type) {
+        return Doc.concat(Doc.text(type.getNameAsString()), typeArguments(type));
+    }
+
+    private Doc typeArguments(ClassOrInterfaceType type) {
+        return type.getTypeArguments()
+                .map(arguments -> sourceMultiline(type)
+                        ? brokenTypeArguments(arguments)
+                        : Doc.text("<" + compactTypeArguments(arguments) + ">")
+                )
+                .orElse(Doc.EMPTY);
+    }
+
+    private Doc brokenTypeArguments(NodeList<Type> arguments) {
+        return Doc.concat(
+            Doc.text("<"),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, typeArgumentList(arguments))),
+            Doc.HARD_LINE,
+            Doc.text(">")
+        );
+    }
+
+    private Doc typeArgumentList(NodeList<Type> arguments) {
+        List<Doc> docs = new ArrayList<>();
+        for (int index = 0; index < arguments.size(); index++) {
+            Type argument = arguments.get(index);
+            docs.add(Doc.text(compactTypeLike.apply(argument) + (index == arguments.size() - 1 ? "" : ",")));
+            if (index < arguments.size() - 1) {
+                docs.add(Doc.HARD_LINE);
+            }
+        }
+        return Doc.concat(docs);
+    }
+
+    private String compactTypeArguments(NodeList<Type> arguments) {
+        return arguments.stream().map(compactTypeLike).reduce((left, right) -> left + ", " + right).orElse("");
     }
 
     private boolean startsOnLaterLine(ClassOrInterfaceType scope, ClassOrInterfaceType type) {
         return scope.getRange()
-                .flatMap(scopeRange -> type.getName().getRange()
-                        .map(nameRange -> scopeRange.end.line < nameRange.begin.line))
+                .flatMap(scopeRange -> type.getName().getRange().map(
+                        nameRange -> scopeRange.end.line < nameRange.begin.line
+                ))
                 .orElse(false);
     }
 
@@ -87,5 +119,5 @@ final class ClassExpressionPrinter {
                 .orElse(false);
     }
 
-    private record TypeSegment(String text, boolean breakBefore) {}
+    private record TypeSegment(Doc doc, boolean breakBefore) {}
 }

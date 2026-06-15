@@ -12,6 +12,7 @@ import java.util.List;
  * method fallback with a body.
  */
 final class CommentedInterfacePrinter {
+
     /**
      * Reports whether an interface header contains block comments that need the raw-source formatter.
      */
@@ -97,10 +98,11 @@ final class CommentedInterfacePrinter {
         List<String> clause = new ArrayList<>(clauseLeading);
         clause.addAll(tokens.subList(extendsIndex, tokens.size()));
         return String.join(
-                "\n",
-                CommentedTokenText.tokenLine(beforeExtends),
-                "  " + CommentedTokenText.tokenLine(clause),
-                CommentedTokenText.tokenLine(beforeBrace) + " {");
+            "\n",
+            CommentedTokenText.tokenLine(beforeExtends),
+            "  " + CommentedTokenText.tokenLine(clause),
+            CommentedTokenText.tokenLine(beforeBrace) + " {"
+        );
     }
 
     /**

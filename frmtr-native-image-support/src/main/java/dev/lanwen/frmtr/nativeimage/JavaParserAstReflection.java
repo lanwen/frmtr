@@ -7,10 +7,12 @@ import java.lang.reflect.Field;
 import java.util.List;
 
 final class JavaParserAstReflection {
+
     private JavaParserAstReflection() {}
 
     static List<Class<? extends Node>> nodeTypesFromMetaModel() {
-        return JavaParserMetaModel.getNodeMetaModels().stream()
+        return JavaParserMetaModel.getNodeMetaModels()
+                .stream()
                 .map(BaseNodeMetaModel::getType)
                 .toList();
     }

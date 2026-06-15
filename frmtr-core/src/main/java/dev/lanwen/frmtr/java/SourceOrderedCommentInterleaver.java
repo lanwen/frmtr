@@ -18,6 +18,7 @@ import java.util.Optional;
  * appropriate before comments or syntax siblings in that caller's grammar.
  */
 final class SourceOrderedCommentInterleaver<T extends Node> {
+
     private final CommentTracker comments;
 
     SourceOrderedCommentInterleaver(CommentTracker comments) {
@@ -31,7 +32,8 @@ final class SourceOrderedCommentInterleaver<T extends Node> {
             List<T> siblings,
             List<JavaCommentTrivia> orphanComments,
             SiblingRenderer<T> siblingRenderer,
-            Spacing<T> spacing) {
+            Spacing<T> spacing
+    ) {
         List<JavaCommentTrivia> orderedComments = orphanComments.stream()
                 .sorted(Comparator.comparingInt(comment -> comment.beginLine(Integer.MAX_VALUE)))
                 .toList();
@@ -43,8 +45,10 @@ final class SourceOrderedCommentInterleaver<T extends Node> {
         for (int index = 0; index < siblings.size(); index++) {
             T current = siblings.get(index);
             int currentBeginLine = spacing.beginLine(current);
-            while (orphanIndex < orderedComments.size()
-                    && orderedComments.get(orphanIndex).beginLine(Integer.MAX_VALUE) < currentBeginLine) {
+            while (
+                orphanIndex < orderedComments.size()
+                && orderedComments.get(orphanIndex).beginLine(Integer.MAX_VALUE) < currentBeginLine
+            ) {
                 previous = appendComment(contents, orderedComments.get(orphanIndex++), previous, spacing);
             }
             Optional<Doc> siblingDoc = siblingRenderer.render(previousSibling, current, index);
@@ -69,7 +73,8 @@ final class SourceOrderedCommentInterleaver<T extends Node> {
             List<Doc> contents,
             JavaCommentTrivia comment,
             PreviousEntry<T> previous,
-            Spacing<T> spacing) {
+            Spacing<T> spacing
+    ) {
         Doc commentDoc = comments.comment(comment);
         if (commentDoc == Doc.EMPTY) {
             return previous;

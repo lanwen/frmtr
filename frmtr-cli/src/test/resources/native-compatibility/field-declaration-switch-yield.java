@@ -1,4 +1,5 @@
 class NativeCompatibility {
+
     int first, second;
 
     Object map(int value) {

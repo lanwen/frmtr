@@ -135,12 +135,12 @@ final class SourceTextTest {
     private static CompilationUnit parse(String source) {
         JavaParser parser = new JavaParser(
             new ParserConfiguration()
-                .setStoreTokens(true)
-                .setAttributeComments(true)
+                    .setStoreTokens(true)
+                    .setAttributeComments(true)
         );
         return parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
-            .getResult()
-            .orElseThrow();
+                .getResult()
+                .orElseThrow();
     }
 
     private static FormatterOptions options(boolean preserveRawTrailingWhitespace) {

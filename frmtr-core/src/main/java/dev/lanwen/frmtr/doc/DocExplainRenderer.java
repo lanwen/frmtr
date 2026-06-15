@@ -21,7 +21,9 @@ import java.util.Optional;
  * decisions (text, color, depth limits) is left to callers via {@link DocExplanation}.
  */
 public final class DocExplainRenderer {
+
     private final FormatterOptions options;
+
     private final int lineWidth;
 
     public DocExplainRenderer(FormatterOptions options) {
@@ -43,11 +45,12 @@ public final class DocExplainRenderer {
         Trace trace = new Trace();
         Builder root = trace.render(doc, 0, Mode.BREAK, null);
         return new DocExplanation(
-                lineWidth,
-                List.copyOf(trace.decisions),
-                List.copyOf(trace.forcedBreaks),
-                List.copyOf(printerWraps),
-                root.freeze());
+            lineWidth,
+            List.copyOf(trace.decisions),
+            List.copyOf(trace.forcedBreaks),
+            List.copyOf(printerWraps),
+            root.freeze()
+        );
     }
 
     /**
@@ -59,8 +62,11 @@ public final class DocExplainRenderer {
      * drifts) and hard line breaks must accrue to whichever label node is currently in scope.
      */
     private final class Trace {
+
         private final List<GroupDecision> decisions = new ArrayList<>();
+
         private final List<ForcedBreak> forcedBreaks = new ArrayList<>();
+
         private int column;
 
         private Builder render(Doc doc, int indent, Mode mode, Builder enclosingLabel) {
@@ -110,12 +116,13 @@ public final class DocExplainRenderer {
                     Mode next = fits ? Mode.FLAT : Mode.BREAK;
                     Optional<String> label = enclosingLabel == null ? Optional.empty() : enclosingLabel.label;
                     GroupDecision decision = new GroupDecision(
-                            label,
-                            fits ? Decision.FLAT : Decision.BREAK,
-                            flatWidth,
-                            available,
-                            column,
-                            flatWidth == DocWidths.NO_FIT);
+                        label,
+                        fits ? Decision.FLAT : Decision.BREAK,
+                        flatWidth,
+                        available,
+                        column,
+                        flatWidth == DocWidths.NO_FIT
+                    );
                     decisions.add(decision);
                     Builder node = Builder.group(decision);
                     node.add(render(group.doc(), indent, next, enclosingLabel));
@@ -123,10 +130,11 @@ public final class DocExplainRenderer {
                 }
                 case Doc.IfBreak conditional -> {
                     return render(
-                            mode == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(),
-                            indent,
-                            mode,
-                            enclosingLabel);
+                        mode == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(),
+                        indent,
+                        mode,
+                        enclosingLabel
+                    );
                 }
                 case Doc.Label labeled -> {
                     Builder node = Builder.label(labeled.label());
@@ -155,7 +163,7 @@ public final class DocExplainRenderer {
 
     private enum Mode {
         FLAT,
-        BREAK
+        BREAK,
     }
 
     /**
@@ -164,9 +172,13 @@ public final class DocExplainRenderer {
      * freeze time so the model keeps only labels and group decisions.
      */
     private static final class Builder {
+
         private final Optional<String> label;
+
         private final Optional<GroupDecision> decision;
+
         private final List<Builder> children = new ArrayList<>();
+
         private int forcedLineBreaks;
 
         private Builder(Optional<String> label, Optional<GroupDecision> decision) {

@@ -15,6 +15,7 @@ import java.util.Optional;
  * layout used for methods whose signatures can be printed from the AST.
  */
 final class CommentedMethodSignaturePrinter {
+
     private final String indentUnit;
 
     CommentedMethodSignaturePrinter(FormatterOptions options) {
@@ -45,7 +46,10 @@ final class CommentedMethodSignaturePrinter {
         if (bodyStart < 0) {
             return false;
         }
-        String signature = signatureWithoutLeadingDeclarationAnnotations(declaration, rawMethod.substring(0, bodyStart));
+        String signature = signatureWithoutLeadingDeclarationAnnotations(
+            declaration,
+            rawMethod.substring(0, bodyStart)
+        );
         return signature.contains("//") || signature.contains("/*");
     }
 
@@ -59,7 +63,8 @@ final class CommentedMethodSignaturePrinter {
     private String signatureWithoutLeadingDeclarationAnnotations(MethodDeclaration declaration, String signature) {
         int declarationBeginLine = declaration.getRange().map(range -> range.begin.line).orElse(Integer.MIN_VALUE);
         int nameBeginLine = declaration.getName().getRange().map(range -> range.begin.line).orElse(Integer.MIN_VALUE);
-        int lastLeadingAnnotationLine = declaration.getAnnotations().stream()
+        int lastLeadingAnnotationLine = declaration.getAnnotations()
+                .stream()
                 .flatMap(annotation -> annotation.getRange().stream())
                 .filter(range -> range.end.line < nameBeginLine)
                 .mapToInt(range -> range.end.line)
@@ -78,10 +83,11 @@ final class CommentedMethodSignaturePrinter {
         // comments, and stopping at the first one would leave a leading `//` in the "signature", wrongly routing the
         // method through the raw fallback — which re-indents the preserved blank lines deeper on every pass and never
         // converges.
-        while (firstSignatureLine < lines.size()
-                && sourceLine < nameBeginLine
-                && (lines.get(firstSignatureLine).isBlank()
-                        || isCommentOnlyLine(lines.get(firstSignatureLine).strip()))) {
+        while (
+            firstSignatureLine < lines.size()
+            && sourceLine < nameBeginLine
+            && (lines.get(firstSignatureLine).isBlank() || isCommentOnlyLine(lines.get(firstSignatureLine).strip()))
+        ) {
             firstSignatureLine++;
             sourceLine++;
         }
@@ -118,9 +124,11 @@ final class CommentedMethodSignaturePrinter {
         // parentheses are otherwise empty: the line must be the block comment and nothing else. A leading block comment
         // followed by a real parameter (e.g. `( /* alpha */ String name )`) is a commented parameter, not an empty list,
         // and must keep its parentheses around the parameter rather than being hoisted to the prefix.
-        if (parameterLines.size() == 1
-                && isBlockCommentOnlyLine(parameterLines.getFirst())
-                && !parameters.contains("\n")) {
+        if (
+            parameterLines.size() == 1
+            && isBlockCommentOnlyLine(parameterLines.getFirst())
+            && !parameters.contains("\n")
+        ) {
             return formatMethodWithBody(prefix + " " + parameterLines.getFirst() + "()", List.of(), "", body);
         }
         List<String> leadingComments = new ArrayList<>();
@@ -156,7 +164,11 @@ final class CommentedMethodSignaturePrinter {
     }
 
     private String formatMethodWithBody(
-            String signature, List<String> suffixComments, String inlineOpeningComment, String body) {
+            String signature,
+            List<String> suffixComments,
+            String inlineOpeningComment,
+            String body
+    ) {
         List<String> lines = new ArrayList<>();
         if (suffixComments.isEmpty()) {
             if (body.isEmpty()) {
@@ -235,7 +247,11 @@ final class CommentedMethodSignaturePrinter {
      */
     private boolean isBlockCommentOnlyLine(String line) {
         String stripped = line.strip();
-        return stripped.startsWith("/*") && stripped.endsWith("*/") && stripped.indexOf("*/") == stripped.length() - 2;
+        return (
+            stripped.startsWith("/*")
+            && stripped.endsWith("*/")
+            && stripped.indexOf("*/") == stripped.length() - 2
+        );
     }
 
     private boolean containsLineComment(String line) {

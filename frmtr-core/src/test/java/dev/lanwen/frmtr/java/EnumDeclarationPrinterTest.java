@@ -21,6 +21,7 @@ import dev.lanwen.frmtr.doc.DocRenderer;
 import org.junit.jupiter.api.Test;
 
 final class EnumDeclarationPrinterTest {
+
     @Test
     void formatsValidEnumConstantSiblingsAroundRawRecoveredEnumConstantGap() {
         String source = """
@@ -44,7 +45,8 @@ final class EnumDeclarationPrinterTest {
 
         assertThat(EnumDeclarationPrinter.hasRecoverableEnumConstantListProblem(declaration)).isTrue();
         assertThat(JavaFormatter.isSupportedRecovery(recoveredStatement)).isTrue();
-        assertThat(formatted).isEqualTo("""
+        assertThat(formatted).isEqualTo(
+            """
                 enum Demo {
                     BEFORE,
                     BROKEN {
@@ -56,7 +58,8 @@ final class EnumDeclarationPrinterTest {
 
                     int value;
                 }
-                """);
+                """
+        );
     }
 
     @Test
@@ -80,8 +83,9 @@ final class EnumDeclarationPrinterTest {
 
         String formatted = printRecovered(unit, source);
 
-        assertThat(enumConstant(declaration, "BROKEN").getComment())
-                .hasValueSatisfying(comment -> assertThat(comment).isInstanceOf(BlockComment.class));
+        assertThat(enumConstant(declaration, "BROKEN").getComment()).hasValueSatisfying(
+            comment -> assertThat(comment).isInstanceOf(BlockComment.class)
+        );
         assertThat(formatted)
                 .isEqualTo(source)
                 .containsOnlyOnce("/* raw gap owns this */");
@@ -106,9 +110,12 @@ final class EnumDeclarationPrinterTest {
         assertThat(result.getResult().orElseThrow().findAll(EnumDeclaration.class)).isEmpty();
         assertThat(thrown).isInstanceOfSatisfying(FormatterException.class, exception -> {
             assertThat(exception).hasMessage("Unable to parse Java source");
-            assertThat(exception.sourceProblems()).first().satisfies(problem -> assertThat(problem.message())
-                    .contains("enum constant lists")
-                    .contains("Unsupported recovered node: CompilationUnit"));
+            assertThat(exception.sourceProblems())
+                    .first()
+                    .satisfies(problem -> assertThat(problem.message())
+                                .contains("enum constant lists")
+                                .contains("Unsupported recovered node: CompilationUnit")
+                    );
         });
     }
 
@@ -139,20 +146,23 @@ final class EnumDeclarationPrinterTest {
     }
 
     private static String printRecovered(CompilationUnit unit, String source) {
-        return new DocRenderer(FormatterOptions.defaults())
-                .render(new JavaPrinter(FormatterOptions.defaults(), new SourceText(source), true).print(unit));
+        return new DocRenderer(FormatterOptions.defaults()).render(
+            new JavaPrinter(FormatterOptions.defaults(), new SourceText(source), true).print(unit)
+        );
     }
 
     private static Statement recoveredStatement(EnumConstantDeclaration declaration) {
         assertThat(declaration.getParsed()).isEqualTo(Node.Parsedness.PARSED);
-        return declaration.findAll(Statement.class).stream()
+        return declaration.findAll(Statement.class)
+                .stream()
                 .filter(statement -> statement.getParsed() != Node.Parsedness.PARSED)
                 .findFirst()
                 .orElseThrow();
     }
 
     private static EnumConstantDeclaration enumConstant(EnumDeclaration declaration, String name) {
-        return declaration.getEntries().stream()
+        return declaration.getEntries()
+                .stream()
                 .filter(entry -> entry.getNameAsString().equals(name))
                 .findFirst()
                 .orElseThrow();
@@ -171,15 +181,18 @@ final class EnumDeclarationPrinterTest {
     }
 
     private static CompilationUnit parse(String source) {
-        return parser().parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
+        return parser()
+                .parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
                 .getResult()
                 .orElseThrow();
     }
 
     private static JavaParser parser() {
-        return new JavaParser(new ParserConfiguration()
-                .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
-                .setStoreTokens(true)
-                .setAttributeComments(true));
+        return new JavaParser(
+            new ParserConfiguration()
+                    .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
+                    .setStoreTokens(true)
+                    .setAttributeComments(true)
+        );
     }
 }

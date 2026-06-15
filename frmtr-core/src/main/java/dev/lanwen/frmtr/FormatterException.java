@@ -13,10 +13,12 @@ import java.util.Optional;
  * human summary.
  */
 public final class FormatterException extends RuntimeException {
+
     @Serial
     private static final long serialVersionUID = 1L;
 
     private final boolean internal;
+
     private final transient List<SourceProblem> sourceProblems;
 
     public FormatterException(String message) {
@@ -40,11 +42,13 @@ public final class FormatterException extends RuntimeException {
     public static FormatterException internal(Throwable cause) {
         Objects.requireNonNull(cause, "cause");
         return new FormatterException(
-                "Internal formatter error. This is a bug in frmtr or one of its parser dependencies: "
-                        + failureSummary(cause),
-                cause,
-                true,
-                List.of());
+            "Internal formatter error. This is a bug in frmtr or one of its parser dependencies: " + failureSummary(
+                cause
+            ),
+            cause,
+            true,
+            List.of()
+        );
     }
 
     public boolean internal() {
@@ -71,10 +75,11 @@ public final class FormatterException extends RuntimeException {
      * window intended for human diagnostics.
      */
     public record SourceProblem(
-            String message,
-            Optional<SourceLocation> location,
-            Optional<SourceLine> enclosingUnitLine,
-            List<SourceLine> contextLines) {
+        String message,
+        Optional<SourceLocation> location,
+        Optional<SourceLine> enclosingUnitLine,
+        List<SourceLine> contextLines
+    ) {
         public SourceProblem {
             Objects.requireNonNull(message, "message");
             Objects.requireNonNull(location, "location");

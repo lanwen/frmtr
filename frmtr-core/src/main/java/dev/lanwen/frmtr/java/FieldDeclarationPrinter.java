@@ -60,6 +60,7 @@ final class FieldDeclarationPrinter {
     FieldDeclarationPrinter(
             CommentTracker comments,
             RawSource rawSource,
+            SourceShape sourceShape,
             FormatterOptions options,
             LayoutWidth layoutWidth,
             Function<NodeWithAnnotations<?>, Doc> declarationAnnotations,
@@ -116,6 +117,7 @@ final class FieldDeclarationPrinter {
         this.initializers = new VariableInitializerLayout(
                 comments,
                 rawSource,
+                sourceShape,
                 options,
                 layoutWidth,
                 compactTypeLike,

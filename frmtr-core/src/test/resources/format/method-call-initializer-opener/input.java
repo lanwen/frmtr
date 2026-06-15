@@ -18,6 +18,12 @@ class MethodCallInitializerOpenerSample {
             cluster("cluster-alpha", primaryStub),
             cluster("cluster-beta", secondaryStub)
         );
+        DispatchRecipe transformed = withAuditMode(
+            "allow",
+            () -> new RouteTransformPipeline(List.of(new SegmentSortTransform())).transform(
+                plan
+            )
+        );
         var sampleNameWithEnoughLengthToForceTheReceiverCallOpenerOntoAContinuationLineWhenTheInitializerBreaks = receiver.call(Builders.<Result<AlphaBetaGammaDelta>>wrap(item -> {
             return item.compute(alpha(), beta(), gamma(), delta());
         }));

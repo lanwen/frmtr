@@ -431,7 +431,8 @@ final class MethodCallPrinter {
     Optional<Doc> sourceMultilineArguments(MethodCallExpr expression) {
         if (expression.getArguments().isEmpty()
                 || !expression.getAllContainedComments().isEmpty()
-                || hasHuggableExpressionLambdaArgument(expression)
+                || (hasHuggableExpressionLambdaArgument(expression)
+                        && sourceShape.expressionLambdaStartsOnSelectorLine(expression))
                 || !sourceShape.methodCallArgumentsSpanMultipleLines(expression)) {
             return Optional.empty();
         }
@@ -460,7 +461,7 @@ final class MethodCallPrinter {
                 || !expression.getAllContainedComments().isEmpty()
                 || sourceMultilineChainWithConditionalLambda(expression)
                 || sourceMultilineMethodCallScope(expression)
-                || !expressionLambdaStartsOnSelectorLine(expression)
+                || !sourceShape.expressionLambdaStartsOnSelectorLine(expression)
                 || !expressionLambdaSpansMultipleLines(expression)) {
             return Optional.empty();
         }
@@ -506,19 +507,6 @@ final class MethodCallPrinter {
         return expression.getRange()
                 .map(range -> Math.max(0, range.begin.column + 1) + firstLine.length())
                 .orElseGet(() -> currentIndentedWidth.applyAsInt(firstLine));
-    }
-
-    private boolean expressionLambdaStartsOnSelectorLine(MethodCallExpr expression) {
-        Optional<Integer> selectorLine = expression.getName().getRange().map(range -> range.begin.line);
-        if (selectorLine.isEmpty()) {
-            return false;
-        }
-        return expression.getArguments().stream()
-                .filter(LambdaExpr.class::isInstance)
-                .map(LambdaExpr.class::cast)
-                .filter(lambda -> lambda.getExpressionBody().isPresent())
-                .flatMap(lambda -> lambda.getRange().stream())
-                .anyMatch(range -> range.begin.line == selectorLine.orElseThrow());
     }
 
     private boolean hasHuggableExpressionLambdaArgument(MethodCallExpr expression) {

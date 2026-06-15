@@ -5,6 +5,7 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.stmt.TryStmt;
@@ -52,6 +53,22 @@ final class SourceShape {
                 expression.getName(),
                 expression.getArguments(),
                 expression.getRange());
+    }
+
+    /**
+     * Reports whether an expression-lambda argument starts on the same source line as the method-call selector.
+     */
+    boolean expressionLambdaStartsOnSelectorLine(MethodCallExpr expression) {
+        Optional<Integer> selectorLine = expression.getName().getRange().map(range -> range.begin.line);
+        if (selectorLine.isEmpty()) {
+            return false;
+        }
+        return expression.getArguments().stream()
+                .filter(LambdaExpr.class::isInstance)
+                .map(LambdaExpr.class::cast)
+                .filter(lambda -> lambda.getExpressionBody().isPresent())
+                .flatMap(lambda -> lambda.getRange().stream())
+                .anyMatch(range -> range.begin.line == selectorLine.orElseThrow());
     }
 
     /**

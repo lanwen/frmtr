@@ -47,6 +47,8 @@ final class VariableInitializerLayout {
 
     private final RawSource rawSource;
 
+    private final SourceShape sourceShape;
+
     private final FormatterOptions options;
 
     private final LayoutWidth layoutWidth;
@@ -130,6 +132,7 @@ final class VariableInitializerLayout {
     VariableInitializerLayout(
             CommentTracker comments,
             RawSource rawSource,
+            SourceShape sourceShape,
             FormatterOptions options,
             LayoutWidth layoutWidth,
             Function<Node, String> compactTypeLike,
@@ -173,6 +176,7 @@ final class VariableInitializerLayout {
     ) {
         this.comments = comments;
         this.rawSource = rawSource;
+        this.sourceShape = sourceShape;
         this.options = options;
         this.layoutWidth = layoutWidth;
         this.compactTypeLike = compactTypeLike;
@@ -870,9 +874,7 @@ final class VariableInitializerLayout {
         if (
             methodCall.getArguments().isEmpty()
             || !rawSource.rawWithoutOwnComment(methodCall).contains("\n")
-            || methodCall.getArguments()
-                    .stream()
-                    .anyMatch(argument -> rawSource.rawWithoutOwnComment(argument).contains("\n"))
+            || sourceShape.expressionLambdaStartsOnSelectorLine(methodCall)
             || methodCall.getScope().filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n")).isPresent()
         ) {
             return Optional.empty();

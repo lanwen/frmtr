@@ -689,7 +689,8 @@ final class MethodCallChainPrinter {
     }
 
     private Optional<Doc> groupedPromotedExpressionLambda(MethodCallExpr expression) {
-        if (!expressionLambdaStartsOnSelectorLine(expression) || !expressionLambdaSpansMultipleLines(expression)) {
+        if (!sourceShape.expressionLambdaStartsOnSelectorLine(expression)
+                || !expressionLambdaSpansMultipleLines(expression)) {
             return Optional.empty();
         }
         return expression.getScope()
@@ -718,7 +719,7 @@ final class MethodCallChainPrinter {
                     ));
         }
         if (
-            expressionLambdaStartsOnSelectorLine(expression)
+            sourceShape.expressionLambdaStartsOnSelectorLine(expression)
             && expressionLambdaSpansMultipleLines(expression)
             && expressionLambdaBodyOpenerOverflows(
                 root,
@@ -792,7 +793,7 @@ final class MethodCallChainPrinter {
         if (huggableLambda.isPresent()) {
             return Optional.of(Doc.concat(huggableLambda.orElseThrow(), finalSegmentSuffix.doc()));
         }
-        if (expressionLambdaStartsOnSelectorLine(call) && expressionLambdaSpansMultipleLines(call)) {
+        if (sourceShape.expressionLambdaStartsOnSelectorLine(call) && expressionLambdaSpansMultipleLines(call)) {
             Optional<ExpressionLambdaArgumentLayout.Plan> expressionLambdaPlan = expressionLambdaArgumentPlan.apply(
                 callPrefix,
                 call.getArguments()
@@ -1300,7 +1301,8 @@ final class MethodCallChainPrinter {
         if (commentedExpressionLambda.isPresent()) {
             return Doc.concat(segmentPrefix, commentedExpressionLambda.orElseThrow(), finalSegmentSuffix.doc());
         }
-        if (expressionLambdaStartsOnSelectorLine(expression) && expressionLambdaSpansMultipleLines(expression)) {
+        if (sourceShape.expressionLambdaStartsOnSelectorLine(expression)
+                && expressionLambdaSpansMultipleLines(expression)) {
             Optional<Doc> huggableExpressionLambda = huggableExpressionLambdaArguments.apply(
                 prefix,
                 expression.getArguments()
@@ -1457,20 +1459,6 @@ final class MethodCallChainPrinter {
                 Doc.text(")" + finalSegmentSuffix)
             )
         );
-    }
-
-    private boolean expressionLambdaStartsOnSelectorLine(MethodCallExpr expression) {
-        Optional<Integer> selectorLine = expression.getName().getRange().map(range -> range.begin.line);
-        if (selectorLine.isEmpty()) {
-            return false;
-        }
-        return expression.getArguments()
-                .stream()
-                .filter(LambdaExpr.class::isInstance)
-                .map(LambdaExpr.class::cast)
-                .filter(lambda -> lambda.getExpressionBody().isPresent())
-                .flatMap(lambda -> lambda.getRange().stream())
-                .anyMatch(range -> range.begin.line == selectorLine.orElseThrow());
     }
 
     private boolean expressionLambdaSpansMultipleLines(MethodCallExpr expression) {

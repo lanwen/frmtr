@@ -92,6 +92,7 @@ final class DeclarationPrinters {
         this.fields = new FieldDeclarationPrinter(
                 comments,
                 rawSource,
+                context.sourceShape,
                 options,
                 context.layoutWidth,
                 declarationPrefixes::declarationAnnotations,

@@ -130,10 +130,8 @@ final class CommentedExpressionListPrinter {
      * Reports source-line comments in argument gaps without consulting printed-comment state.
      */
     boolean hasLineComments(Node container, NodeList<Expression> arguments) {
-        return (
-            !arguments.isEmpty()
-            && argumentCommentGaps(container, arguments).stream().flatMap(List::stream).findAny().isPresent()
-        );
+        return !arguments.isEmpty()
+            && argumentCommentGaps(container, arguments).stream().flatMap(List::stream).findAny().isPresent();
     }
 
     private List<List<JavaCommentTrivia>> argumentCommentGaps(Node container, NodeList<Expression> arguments) {

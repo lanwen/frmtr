@@ -67,13 +67,11 @@ final class MethodReferencePrinter {
      * Prints only the suffix attached after a method-reference scope.
      */
     private String methodReferenceSuffix(MethodReferenceExpr expression) {
-        return (
-            "::"
+        return "::"
             + expression.getTypeArguments()
                     .map(typeArguments -> "<" + compactJoinTypeLike.apply(typeArguments) + ">")
                     .orElse("")
-            + expression.getIdentifier()
-        );
+            + expression.getIdentifier();
     }
 
     /**

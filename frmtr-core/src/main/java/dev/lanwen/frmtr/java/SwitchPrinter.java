@@ -574,10 +574,8 @@ final class SwitchPrinter {
      * Reports whether a record-pattern label needs its own wrapped pattern rendering.
      */
     private boolean switchLabelBreaks(Expression label) {
-        return (
-            label instanceof RecordPatternExpr
-            && currentIndentedWidth.applyAsInt("case " + switchLabelText(label) + " -> {}") > options.lineWidth()
-        );
+        return label instanceof RecordPatternExpr
+            && currentIndentedWidth.applyAsInt("case " + switchLabelText(label) + " -> {}") > options.lineWidth();
     }
 
     /**
@@ -841,10 +839,9 @@ final class SwitchPrinter {
         }
         try {
             SourceRegion statementRegion = sourceText.region(statement.getRange().orElseThrow());
-            return (
-                startsWithSwitchKeyword(sourceText.slice(statementRegion))
-                || isAfterSwitchKeywordTrivia(sourceText, statementRegion.beginOffset())
-            );
+            return startsWithSwitchKeyword(
+                sourceText.slice(statementRegion)
+            ) || isAfterSwitchKeywordTrivia(sourceText, statementRegion.beginOffset());
         } catch (IllegalArgumentException exception) {
             return false;
         }
@@ -860,10 +857,7 @@ final class SwitchPrinter {
             && owner.stream()
                     .filter(node -> node != owner)
                     .filter(node -> node.getParsed() != Node.Parsedness.PARSED)
-                    .allMatch(node -> nearestSwitchEntryListSibling(node)
-                                .filter(entries::contains)
-                                .isPresent()
-                    )
+                    .allMatch(node -> nearestSwitchEntryListSibling(node).filter(entries::contains).isPresent())
         );
     }
 
@@ -892,12 +886,10 @@ final class SwitchPrinter {
         String prefix = sourceText.slice(sourceText.region(0, statementBeginOffset));
         int cursor = skipBackwardTrivia(prefix, prefix.length());
         int switchBegin = cursor - "switch".length();
-        return (
-            switchBegin >= 0
+        return switchBegin >= 0
             && prefix.regionMatches(switchBegin, "switch", 0, "switch".length())
             && isKeywordBoundary(prefix, switchBegin - 1)
-            && isKeywordBoundary(prefix, cursor)
-        );
+            && isKeywordBoundary(prefix, cursor);
     }
 
     private static boolean startsWithSwitchKeyword(String source) {

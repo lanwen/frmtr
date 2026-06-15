@@ -32,11 +32,9 @@ final class ObjectCreationLayoutPolicy {
      * arguments before the source break is honored, so compact small constructors can still collapse when they fit.
      */
     boolean shouldPreserveSourceMultilineArguments(ObjectCreationExpr expression) {
-        return (
-            sourceShape.objectCreationArgumentsSpanMultipleLines(expression)
+        return sourceShape.objectCreationArgumentsSpanMultipleLines(expression)
             && expression.getAllContainedComments().isEmpty()
-            && (isTryResourceObjectCreation(expression) || !hasFlatArgumentCount(expression))
-        );
+            && (isTryResourceObjectCreation(expression) || !hasFlatArgumentCount(expression));
     }
 
     /**
@@ -54,13 +52,11 @@ final class ObjectCreationLayoutPolicy {
      * Reports whether a constructor root can stay compact when a surrounding method-call chain is forced to break.
      */
     boolean canKeepCompactChainRoot(ObjectCreationExpr expression, int compactWidth, int lineWidth) {
-        return (
-            hasFlatArgumentCount(expression)
+        return hasFlatArgumentCount(expression)
             && expression.getAnonymousClassBody().isEmpty()
             && expression.getAllContainedComments().isEmpty()
             && !sourceShape.objectCreationArgumentsSpanMultipleLines(expression)
-            && compactWidth <= lineWidth
-        );
+            && compactWidth <= lineWidth;
     }
 
     private boolean hasFlatArgumentCount(ObjectCreationExpr expression) {

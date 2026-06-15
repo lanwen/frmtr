@@ -184,10 +184,8 @@ final class EnclosedExpressionPrinter {
      * different nested layout.
      */
     private boolean conditionalConditionHasNestedBinary(ConditionalExpr expression) {
-        return (
-            expression.getCondition() instanceof BinaryExpr binaryExpr
-            && (binaryExpr.getLeft() instanceof BinaryExpr || binaryExpr.getRight() instanceof BinaryExpr)
-        );
+        return expression.getCondition() instanceof BinaryExpr binaryExpr
+            && (binaryExpr.getLeft() instanceof BinaryExpr || binaryExpr.getRight() instanceof BinaryExpr);
     }
 
     /**

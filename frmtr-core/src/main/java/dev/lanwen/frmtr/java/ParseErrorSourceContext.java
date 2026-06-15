@@ -332,7 +332,9 @@ final class ParseErrorSourceContext {
     private static boolean isSourceUnit(String header) {
         return (
             !header.isEmpty()
-            && (ANNOTATION_HEADER.matcher(header).find() || TYPE_HEADER.matcher(header).find() || isCallableUnit(header))
+            && (ANNOTATION_HEADER.matcher(header).find()
+                || TYPE_HEADER.matcher(header).find()
+                || isCallableUnit(header))
         );
     }
 

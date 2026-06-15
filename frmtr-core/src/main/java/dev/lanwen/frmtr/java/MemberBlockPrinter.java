@@ -391,10 +391,8 @@ final class MemberBlockPrinter {
     }
 
     private static boolean hasImmediateMemberListRecoveryProblem(Node owner, NodeList<BodyDeclaration<?>> members) {
-        return (
-            owner.getParsed() != Node.Parsedness.PARSED
-            || members.stream().anyMatch(member -> member.getParsed() != Node.Parsedness.PARSED)
-        );
+        return owner.getParsed() != Node.Parsedness.PARSED
+            || members.stream().anyMatch(member -> member.getParsed() != Node.Parsedness.PARSED);
     }
 
     private SourceRegion withoutOpeningBraceTrailingComment(

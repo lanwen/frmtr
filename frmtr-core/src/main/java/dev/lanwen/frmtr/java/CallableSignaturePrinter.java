@@ -357,13 +357,9 @@ final class CallableSignaturePrinter {
     }
 
     private boolean parameterAnnotationSourceBreaks(Parameter parameter) {
-        return (
-            parameter.getAnnotations()
-                    .stream()
-                    .flatMap(annotation -> annotation.getRange().stream())
-                    .anyMatch(range -> range.begin.line < range.end.line)
-            && currentIndentedWidth(parameterFlat(parameter)) > options.lineWidth()
-        );
+        return parameter.getAnnotations().stream().flatMap(annotation -> annotation.getRange().stream()).anyMatch(
+            range -> range.begin.line < range.end.line
+        ) && currentIndentedWidth(parameterFlat(parameter)) > options.lineWidth();
     }
 
     private String parameterFlat(Parameter parameter) {

@@ -281,16 +281,14 @@ public final class JavaFormatter {
     }
 
     private static boolean isSupportedRecovery(Node recoveredNode, Optional<SourceText> sourceText) {
-        return (
-            isSupportedSwitchEntryListRecovery(recoveredNode)
+        return isSupportedSwitchEntryListRecovery(recoveredNode)
             || isSupportedEnumConstantListRecovery(recoveredNode)
             || isSupportedAnnotationMemberListRecovery(recoveredNode)
             || isSupportedBlockStatementListRecovery(recoveredNode, sourceText)
             || isSupportedMemberDeclarationListRecovery(recoveredNode)
             || isSupportedImportDeclarationListRecovery(recoveredNode)
             || isSupportedTopLevelDeclarationListRecovery(recoveredNode)
-            || isSupportedModuleDirectiveListRecovery(recoveredNode)
-        );
+            || isSupportedModuleDirectiveListRecovery(recoveredNode);
     }
 
     private static boolean isSupportedSwitchEntryListRecovery(Node recoveredNode) {

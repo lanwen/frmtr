@@ -144,10 +144,10 @@ final class RecordDeclarationPrinter {
             return recordHeaderWidth(declaration, parameterHeader + " {}") > options.lineWidth();
         }
         String implementedTypes = compactJoinTypeLike.apply(declaration.getImplementedTypes());
-        return (
-            recordHeaderWidth(declaration, parameterHeader + " implements " + implementedTypes + " {}")
-            > options.lineWidth()
-        );
+        return recordHeaderWidth(
+            declaration,
+            parameterHeader + " implements " + implementedTypes + " {}"
+        ) > options.lineWidth();
     }
 
     /**

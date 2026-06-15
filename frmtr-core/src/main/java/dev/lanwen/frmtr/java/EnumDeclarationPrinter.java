@@ -319,11 +319,9 @@ final class EnumDeclarationPrinter {
                 .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(previous, comment));
         Optional<Comment> currentOwnComment = current.getComment()
                 .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(previous, comment));
-        return (
-            previousOwnComment.isPresent()
+        return previousOwnComment.isPresent()
             && currentOwnComment.isPresent()
-            && previousOwnComment.orElseThrow() == currentOwnComment.orElseThrow()
-        );
+            && previousOwnComment.orElseThrow() == currentOwnComment.orElseThrow();
     }
 
     /**

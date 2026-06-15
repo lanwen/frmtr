@@ -126,17 +126,14 @@ final class DeclarationPrefixPrinter {
         if (node.getModifiers().isEmpty()) {
             return "";
         }
-        return (
-            String.join(
-                " ",
-                node.getModifiers()
-                        .stream()
-                        .sorted(Comparator.comparingInt(this::modifierRank))
-                        .map(this::modifier)
-                        .toList()
-            )
-            + " "
-        );
+        return String.join(
+            " ",
+            node.getModifiers()
+                    .stream()
+                    .sorted(Comparator.comparingInt(this::modifierRank))
+                    .map(this::modifier)
+                    .toList()
+        ) + " ";
     }
 
     String modifier(Modifier modifier) {

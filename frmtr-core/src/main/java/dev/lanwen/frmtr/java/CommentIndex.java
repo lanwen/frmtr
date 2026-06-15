@@ -151,9 +151,7 @@ final class CommentIndex {
      */
     static boolean sameBeginLine(Node left, Node right) {
         return left.getRange()
-                .flatMap(leftRange -> right.getRange().map(
-                        rightRange -> leftRange.begin.line == rightRange.begin.line
-                ))
+                .flatMap(leftRange -> right.getRange().map(rightRange -> leftRange.begin.line == rightRange.begin.line))
                 .orElse(false);
     }
 

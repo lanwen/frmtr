@@ -247,11 +247,7 @@ final class CommentedMethodSignaturePrinter {
      */
     private boolean isBlockCommentOnlyLine(String line) {
         String stripped = line.strip();
-        return (
-            stripped.startsWith("/*")
-            && stripped.endsWith("*/")
-            && stripped.indexOf("*/") == stripped.length() - 2
-        );
+        return stripped.startsWith("/*") && stripped.endsWith("*/") && stripped.indexOf("*/") == stripped.length() - 2;
     }
 
     private boolean containsLineComment(String line) {

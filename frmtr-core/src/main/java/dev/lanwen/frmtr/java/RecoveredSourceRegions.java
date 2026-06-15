@@ -158,14 +158,12 @@ final class RecoveredSourceRegions {
         private static String message(SourceRegion region, List<Comment> crossingComments) {
             Comment first = crossingComments.getFirst();
             String range = first.getRange().map(Object::toString).orElse("unknown range");
-            return (
-                "Recovered source region "
+            return "Recovered source region "
                 + region.lineColumnLabel()
                 + (first.getRange().isPresent() ? " crosses " : " cannot safely account ")
                 + first.getClass().getSimpleName()
                 + " at "
-                + range
-            );
+                + range;
         }
     }
 }

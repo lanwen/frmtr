@@ -191,15 +191,13 @@ final class ObjectCreationPrinter {
         String type = typeComment == Doc.EMPTY
             ? compactTypeLike.apply(expression.getType())
             : commentText.apply(typeComment) + " " + compactTypeLikeWithoutOwnComment.apply(expression.getType());
-        return (
-            expression.getScope().map(scope -> compact.apply(scope) + ".").orElse("")
+        return expression.getScope().map(scope -> compact.apply(scope) + ".").orElse("")
             + (creationComment == Doc.EMPTY ? "new " : commentText.apply(creationComment) + " new ")
             + expression
                     .getTypeArguments()
                     .map(typeArguments -> "<" + types.compactJoinTypeLike(typeArguments) + ">")
                     .orElse("")
-            + type
-        );
+            + type;
     }
 
     /**

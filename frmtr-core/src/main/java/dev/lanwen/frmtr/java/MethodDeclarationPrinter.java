@@ -231,12 +231,10 @@ final class MethodDeclarationPrinter {
     }
 
     private boolean shouldBreakReturnType(MethodDeclaration declaration, String prefix) {
-        return (
-            declaration.getReceiverParameter().isEmpty()
+        return declaration.getReceiverParameter().isEmpty()
             && typeCanBreak.test(declaration.getType())
             && sourceShape.spansMultipleLines(declaration.getType())
-            && callableSignatures.parametersBreak(prefix, declaration, methodParameterSuffix(declaration))
-        );
+            && callableSignatures.parametersBreak(prefix, declaration, methodParameterSuffix(declaration));
     }
 
     private Doc returnType(MethodDeclaration declaration, String returnType, boolean breakReturnType) {

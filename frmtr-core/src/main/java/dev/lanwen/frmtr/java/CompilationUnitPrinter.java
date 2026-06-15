@@ -356,10 +356,9 @@ final class CompilationUnitPrinter {
     }
 
     private static boolean hasRecoverableTopLevelDeclarationListProblem(List<BodyDeclaration<?>> declarations) {
-        return (
-            declarations.stream().anyMatch(declaration -> declaration.getParsed() != Node.Parsedness.PARSED)
-            && declarations.stream().anyMatch(declaration -> declaration.getParsed() == Node.Parsedness.PARSED)
-        );
+        return declarations.stream().anyMatch(
+            declaration -> declaration.getParsed() != Node.Parsedness.PARSED
+        ) && declarations.stream().anyMatch(declaration -> declaration.getParsed() == Node.Parsedness.PARSED);
     }
 
     private static boolean hasRawGap(RecoveredListPlanner.Plan<?> plan) {
@@ -612,10 +611,9 @@ final class CompilationUnitPrinter {
     }
 
     static boolean hasRecoverableImportDeclarationListProblem(List<ImportDeclaration> declarations) {
-        return (
-            declarations.stream().anyMatch(declaration -> !isFullyParsed(declaration))
-            && declarations.stream().anyMatch(CompilationUnitPrinter::isFullyParsed)
-        );
+        return declarations.stream().anyMatch(
+            declaration -> !isFullyParsed(declaration)
+        ) && declarations.stream().anyMatch(CompilationUnitPrinter::isFullyParsed);
     }
 
     private static boolean isFullyParsed(Node node) {

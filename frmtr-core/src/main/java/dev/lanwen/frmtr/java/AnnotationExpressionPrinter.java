@@ -220,22 +220,18 @@ final class AnnotationExpressionPrinter {
      */
     String annotationFlatText(AnnotationExpr annotation) {
         if (annotation instanceof NormalAnnotationExpr normalAnnotation) {
-            return (
-                "@"
+            return "@"
                 + compact.apply(normalAnnotation.getName())
                 + "("
                 + compactJoinAnnotationPairs(normalAnnotation.getPairs())
-                + ")"
-            );
+                + ")";
         }
         if (annotation instanceof SingleMemberAnnotationExpr singleMemberAnnotation) {
-            return (
-                "@"
+            return "@"
                 + compact.apply(singleMemberAnnotation.getName())
                 + "("
                 + compactAnnotationValue(singleMemberAnnotation.getMemberValue())
-                + ")"
-            );
+                + ")";
         }
         return "@" + compact.apply(annotation.getName());
     }
@@ -336,10 +332,9 @@ final class AnnotationExpressionPrinter {
     }
 
     private boolean annotationArrayAnnotationLineOverflows(AnnotationExpr annotation) {
-        return (
-            currentIndentedWidth.applyAsInt(options.indentUnit() + compactAnnotationValue(annotation) + ",")
-            > options.lineWidth()
-        );
+        return currentIndentedWidth.applyAsInt(
+            options.indentUnit() + compactAnnotationValue(annotation) + ","
+        ) > options.lineWidth();
     }
 
     private Doc brokenAnnotationArrayValue(AnnotationExpr annotation) {
@@ -408,10 +403,9 @@ final class AnnotationExpressionPrinter {
     }
 
     private boolean annotationValueHasLineComments(Expression value) {
-        return (
-            commentPlacement.hasContainedLineComments(value)
-            || commentPlacement.leadingComment(value).filter(JavaCommentTrivia::isLine).isPresent()
-        );
+        return commentPlacement.hasContainedLineComments(
+            value
+        ) || commentPlacement.leadingComment(value).filter(JavaCommentTrivia::isLine).isPresent();
     }
 
     private boolean sourceMultilineAnnotation(AnnotationExpr annotation) {

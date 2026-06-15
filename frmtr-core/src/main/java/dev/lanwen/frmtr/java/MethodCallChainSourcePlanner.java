@@ -214,10 +214,8 @@ final class MethodCallChainSourcePlanner {
     }
 
     boolean rootObjectCreationNeedsBreak(MethodCallChainAnalysis analysis) {
-        return (
-            analysis.root() instanceof ObjectCreationExpr objectCreation
-            && !sourceCompactConstructorRoot(objectCreation)
-        );
+        return analysis.root() instanceof ObjectCreationExpr objectCreation
+            && !sourceCompactConstructorRoot(objectCreation);
     }
 
     boolean rootIsFieldAccess(MethodCallExpr expression) {
@@ -242,10 +240,9 @@ final class MethodCallChainSourcePlanner {
             return startsWithUppercase(root.asNameExpr().getNameAsString());
         }
         if (root instanceof FieldAccessExpr fieldAccess) {
-            return (
-                startsWithUppercase(fieldAccess.getNameAsString())
-                || fieldAccessRootName(fieldAccess).map(this::startsWithUppercase).orElse(false)
-            );
+            return startsWithUppercase(
+                fieldAccess.getNameAsString()
+            ) || fieldAccessRootName(fieldAccess).map(this::startsWithUppercase).orElse(false);
         }
         return false;
     }
@@ -307,7 +304,8 @@ final class MethodCallChainSourcePlanner {
             !calls.isEmpty()
             && typeLikeChainRoot(root)
             && calls.getFirst().getArguments().isEmpty()
-            && (calls.getFirst().getNameAsString().equals("builder") || calls.getFirst().getNameAsString().equals("newBuilder"))
+            && (calls.getFirst().getNameAsString().equals("builder")
+                || calls.getFirst().getNameAsString().equals("newBuilder"))
         );
     }
 
@@ -330,12 +328,10 @@ final class MethodCallChainSourcePlanner {
             List<MethodCallExpr> calls,
             MethodCallChainAnalysis analysis
     ) {
-        return (
-            promotesFirstCall(root)
+        return promotesFirstCall(root)
             && calls.size() > 1
             && !analysis.firstCallHasArgumentGapComment()
-            && analysis.laterCallsHaveArgumentGapComment()
-        );
+            && analysis.laterCallsHaveArgumentGapComment();
     }
 
     private boolean shouldPromoteFirstCallForTrailingComments(

@@ -243,10 +243,8 @@ final class RecoveredListPlannerTest {
     }
 
     private static boolean fieldNamed(BodyDeclaration<?> member, String name) {
-        return (
-            member instanceof FieldDeclaration field
-            && field.getVariables().stream().anyMatch(variable -> variable.getNameAsString().equals(name))
-        );
+        return member instanceof FieldDeclaration field
+            && field.getVariables().stream().anyMatch(variable -> variable.getNameAsString().equals(name));
     }
 
     private static SourceRegion classBodyRegion(String source) {

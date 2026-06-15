@@ -189,10 +189,8 @@ final class TypePrinter {
      * Reports whether a type can use the shared generic-body renderer.
      */
     boolean typeCanBreak(Type type) {
-        return (
-            type instanceof ClassOrInterfaceType classOrInterfaceType
-            && hasNonEmptyTypeArguments(classOrInterfaceType)
-        );
+        return type instanceof ClassOrInterfaceType classOrInterfaceType
+            && hasNonEmptyTypeArguments(classOrInterfaceType);
     }
 
     /**

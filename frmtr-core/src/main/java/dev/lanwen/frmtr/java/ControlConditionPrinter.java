@@ -226,13 +226,11 @@ final class ControlConditionPrinter {
     }
 
     private String methodCallPrefix(MethodCallExpr expression) {
-        return (
-            expression.getScope().map(scope -> compact.apply(scope) + ".").orElse("")
+        return expression.getScope().map(scope -> compact.apply(scope) + ".").orElse("")
             + expression.getTypeArguments()
                     .map(typeArguments -> "<" + compactJoin.apply(typeArguments) + ">")
                     .orElse("")
-            + expression.getNameAsString()
-        );
+            + expression.getNameAsString();
     }
 
     private Doc brokenCondition(Expression expression) {
@@ -282,11 +280,10 @@ final class ControlConditionPrinter {
         while (expression instanceof EnclosedExpr enclosedExpr) {
             expression = enclosedExpr.getInner();
         }
-        return (
-            expression instanceof BinaryExpr binaryExpr
-            && (binaryExpr.getOperator() == BinaryExpr.Operator.AND || binaryExpr.getOperator() == BinaryExpr.Operator.OR)
-            && rawSource.rawWithoutOwnComment(condition).contains("\n")
-        );
+        return expression instanceof BinaryExpr binaryExpr
+            && (binaryExpr.getOperator() == BinaryExpr.Operator.AND
+                || binaryExpr.getOperator() == BinaryExpr.Operator.OR)
+            && rawSource.rawWithoutOwnComment(condition).contains("\n");
     }
 
     private Doc trailingBlockCommentBeforeCloseParen(Expression condition) {
@@ -294,10 +291,7 @@ final class ControlConditionPrinter {
                 .stream()
                 .flatMap(parent -> parent.getAllContainedComments().stream())
                 .filter(BlockComment.class::isInstance)
-                .filter(comment -> comment.getCommentedNode()
-                            .map(BlockStmt.class::isInstance)
-                            .orElse(false)
-                )
+                .filter(comment -> comment.getCommentedNode().map(BlockStmt.class::isInstance).orElse(false))
                 .filter(comment -> CommentIndex.startsImmediatelyAfterNodeOnSameLine(condition, comment))
                 .findFirst()
                 .map(comments::comment)

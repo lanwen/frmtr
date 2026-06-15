@@ -142,11 +142,9 @@ final class ArrayExpressionPrinter {
     }
 
     String arrayCreationPrefix(ArrayCreationExpr expression) {
-        return (
-            "new "
+        return "new "
             + compactTypeLike.apply(expression.getElementType())
-            + compactJoinArrayLevels(expression.getLevels())
-        );
+            + compactJoinArrayLevels(expression.getLevels());
     }
 
     private Optional<String> compactArrayInitializer(ArrayInitializerExpr initializer) {
@@ -241,11 +239,9 @@ final class ArrayExpressionPrinter {
      * Reports whether an array creation type owns a generic type-argument break before its array-level suffixes.
      */
     boolean arrayCreationTypeBreaks(ArrayCreationExpr expression) {
-        return (
-            expression.getElementType().isClassOrInterfaceType()
+        return expression.getElementType().isClassOrInterfaceType()
             && expression.getElementType().asClassOrInterfaceType().getTypeArguments().isPresent()
-            && !expression.getLevels().isEmpty()
-        );
+            && !expression.getLevels().isEmpty();
     }
 
     Doc arrayInitializer(ArrayInitializerExpr expression) {
@@ -343,10 +339,7 @@ final class ArrayExpressionPrinter {
 
     private String compactJoinArrayLevels(NodeList<ArrayCreationLevel> levels) {
         return levels.stream()
-                .map(level -> level.getDimension()
-                            .map(dimension -> "[" + compact.apply(dimension) + "]")
-                            .orElse("[]")
-                )
+                .map(level -> level.getDimension().map(dimension -> "[" + compact.apply(dimension) + "]").orElse("[]"))
                 .reduce(String::concat)
                 .orElse("");
     }

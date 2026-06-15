@@ -533,13 +533,10 @@ final class VariableInitializerLayout {
             BinaryExpr binaryExpr
     ) {
         String firstOperand = binaryInitializerFirstOperandLine(binaryExpr);
-        return (
-            layoutWidth.variableInitializer(
-                variable,
-                declarationPrefix + variable.getNameAsString() + " = " + firstOperand
-            )
-            <= options.lineWidth()
-        );
+        return layoutWidth.variableInitializer(
+            variable,
+            declarationPrefix + variable.getNameAsString() + " = " + firstOperand
+        ) <= options.lineWidth();
     }
 
     private String binaryInitializerFirstOperandLine(BinaryExpr binaryExpr) {
@@ -672,13 +669,11 @@ final class VariableInitializerLayout {
      * its own argument or anonymous-body layout.
      */
     private boolean compactObjectCreationArrayValue(Expression value) {
-        return (
-            value instanceof ObjectCreationExpr objectCreation
+        return value instanceof ObjectCreationExpr objectCreation
             && objectCreation.getScope().isEmpty()
             && objectCreation.getTypeArguments().isEmpty()
             && objectCreation.getArguments().isEmpty()
-            && objectCreation.getAnonymousClassBody().isEmpty()
-        );
+            && objectCreation.getAnonymousClassBody().isEmpty();
     }
 
     /**
@@ -911,11 +906,9 @@ final class VariableInitializerLayout {
     }
 
     private boolean methodCallHasOwnComment(MethodCallExpr methodCall) {
-        return (
-            methodCall.getComment().isPresent()
+        return methodCall.getComment().isPresent()
             || methodCall.getName().getComment().isPresent()
-            || methodCall.getScope().flatMap(Expression::getComment).isPresent()
-        );
+            || methodCall.getScope().flatMap(Expression::getComment).isPresent();
     }
 
     /**
@@ -1006,10 +999,8 @@ final class VariableInitializerLayout {
     }
 
     private boolean parenthesizedConditionalConditionOpenerFits(String flatName, ConditionalExpr initializer) {
-        return (
-            initializer.getCondition() instanceof EnclosedExpr
-            && layoutWidth.currentIndented(flatName + " = (") <= options.lineWidth()
-        );
+        return initializer.getCondition() instanceof EnclosedExpr
+            && layoutWidth.currentIndented(flatName + " = (") <= options.lineWidth();
     }
 
     /**
@@ -1035,7 +1026,7 @@ final class VariableInitializerLayout {
         String lambdaPrefix = parameters + " ->";
         if (
             layoutWidth.currentIndented(flatName + " = " + lambdaPrefix + " " + bodyFirstLine)
-            <= options.lineWidth()
+                <= options.lineWidth()
         ) {
             return Optional.of(Doc.concat(Doc.text(name + " = " + lambdaPrefix + " "), body));
         }
@@ -1140,10 +1131,8 @@ final class VariableInitializerLayout {
     }
 
     private boolean castTypeNeedsBreak(String flatName, Type type) {
-        return (
-            castTypeCanBreak(type)
-            && layoutWidth.currentIndented(flatName + " = (" + compactTypeLike.apply(type) + ")") > options.lineWidth()
-        );
+        return castTypeCanBreak(type)
+            && layoutWidth.currentIndented(flatName + " = (" + compactTypeLike.apply(type) + ")") > options.lineWidth();
     }
 
     private boolean castTypeOpenerFitsOnEqualsLine(String flatName, Type type) {

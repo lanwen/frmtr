@@ -201,17 +201,13 @@ final class ConditionalExpressionPrinter {
      * assignment instead.
      */
     boolean shouldBreakBeforeConditionalInitializer(ConditionalExpr initializer) {
-        return (
-            initializer.getCondition() instanceof BinaryExpr
-            && (initializer.getThenExpr() instanceof BinaryExpr || initializer.getElseExpr() instanceof BinaryExpr)
-        );
+        return initializer.getCondition() instanceof BinaryExpr
+            && (initializer.getThenExpr() instanceof BinaryExpr || initializer.getElseExpr() instanceof BinaryExpr);
     }
 
     private boolean shouldBreakBeforeConditionalAssignment(ConditionalExpr conditionalExpr) {
-        return (
-            conditionalExpr.getCondition() instanceof BinaryExpr binaryExpr
-            && binaryExpr.findAll(MethodCallExpr.class).stream().findAny().isPresent()
-        );
+        return conditionalExpr.getCondition() instanceof BinaryExpr binaryExpr
+            && binaryExpr.findAll(MethodCallExpr.class).stream().findAny().isPresent();
     }
 
     Doc conditionalExpression(ConditionalExpr expression) {
@@ -378,10 +374,11 @@ final class ConditionalExpressionPrinter {
     }
 
     private boolean conditionalQuestionCommentTrailsCondition(ConditionalExpr expression, Comment comment) {
-        return (
-            commentAppearsAfterOperator(expression, comment, "?")
-            && CommentIndex.startsAfterNodeOnSameLine(expression.getCondition(), comment)
-        );
+        return commentAppearsAfterOperator(
+            expression,
+            comment,
+            "?"
+        ) && CommentIndex.startsAfterNodeOnSameLine(expression.getCondition(), comment);
     }
 
     /**

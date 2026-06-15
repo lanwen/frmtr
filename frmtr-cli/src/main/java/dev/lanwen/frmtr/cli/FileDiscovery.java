@@ -33,14 +33,13 @@ final class FileDiscovery {
         Set<Path> ignoredFiles = new LinkedHashSet<>();
         Set<Path> excludedFiles = new LinkedHashSet<>();
         List<String> missingFileSelectors = new ArrayList<>();
-        GitIgnoreMatcher ignores = new GitIgnoreMatcher(root);
         ExcludeMatcher excludes = new ExcludeMatcher(root, selectors(excludeArgs));
         for (String selector : selectors(selectorArgs)) {
             if (missingExplicitJavaFileSelector(selector)) {
                 missingFileSelectors.add(selector);
                 continue;
             }
-            Selection selection = discoverSelector(selector, ignores, excludes);
+            Selection selection = discoverSelector(selector, excludes);
             files.addAll(selection.files());
             ignoredFiles.addAll(selection.ignoredFiles());
             excludedFiles.addAll(selection.excludedFiles());
@@ -53,19 +52,18 @@ final class FileDiscovery {
         );
     }
 
-    private Selection discoverSelector(
-            String selector, GitIgnoreMatcher ignores, ExcludeMatcher excludes
-    ) throws IOException {
+    private Selection discoverSelector(String selector, ExcludeMatcher excludes) throws IOException {
         if (hasGlobSyntax(selector)) {
-            return discoverGlob(selector, ignores, excludes);
+            return discoverGlob(selector, excludes);
         }
 
         Path path = root.resolve(selector).normalize();
         if (Files.isDirectory(path)) {
-            return discoverDirectory(path, ignores, excludes);
+            return discoverDirectory(path, ignoresForDirectorySelector(path), excludes);
         }
         if (Files.isRegularFile(path) && isJavaFile(path)) {
             Path normalized = path.toAbsolutePath().normalize();
+            GitIgnoreMatcher ignores = ignoresForFileSelector(normalized);
             if (excludes.matches(normalized)) {
                 return new Selection(List.of(), List.of(), List.of(normalized));
             }
@@ -77,19 +75,35 @@ final class FileDiscovery {
         return new Selection(List.of(), List.of(), List.of());
     }
 
+    private GitIgnoreMatcher ignoresForDirectorySelector(Path directory) {
+        Path absolute = directory.toAbsolutePath().normalize();
+        if (absolute.startsWith(root)) {
+            return new GitIgnoreMatcher(root);
+        }
+        return new GitIgnoreMatcher(absolute);
+    }
+
+    private GitIgnoreMatcher ignoresForFileSelector(Path file) {
+        Path absolute = file.toAbsolutePath().normalize();
+        if (absolute.startsWith(root)) {
+            return new GitIgnoreMatcher(root);
+        }
+        Path parent = absolute.getParent();
+        return new GitIgnoreMatcher(parent == null ? absolute : parent);
+    }
+
     private Selection discoverDirectory(
             Path directory, GitIgnoreMatcher ignores, ExcludeMatcher excludes
     ) throws IOException {
         return discoverCandidates(directory, path -> true, ignores, excludes);
     }
 
-    private Selection discoverGlob(
-            String selector, GitIgnoreMatcher ignores, ExcludeMatcher excludes
-    ) throws IOException {
+    private Selection discoverGlob(String selector, ExcludeMatcher excludes) throws IOException {
         Path base = globBase(selector);
         if (!Files.exists(base)) {
             return new Selection(List.of(), List.of(), List.of());
         }
+        GitIgnoreMatcher ignores = ignoresForDirectorySelector(base);
         List<PathMatcher> matchers = globMatchers(selector);
         return discoverCandidates(base, path -> matches(matchers, path), ignores, excludes);
     }

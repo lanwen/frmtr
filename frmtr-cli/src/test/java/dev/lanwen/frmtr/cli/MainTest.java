@@ -1000,6 +1000,63 @@ final class MainTest {
     }
 
     @Test
+    void absoluteExternalDirectorySelectorLoadsExternalGitignore(@TempDir Path dir) throws IOException {
+        Path cwd = dir.resolve("frmtr");
+        Path external = dir.resolve("external");
+        write(external.resolve(".gitignore"), "build/\n");
+        write(external.resolve("build/Ignored.java"), "class Ignored{int value;}");
+        write(external.resolve("src/Kept.java"), "class Kept{int value;}");
+
+        Result result = run(cwd, null, "--write", external.toString());
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.out()).isEqualTo("Processed 2 files: 1 formatted, 1 ignored.\n");
+        assertThat(result.err()).isEmpty();
+        assertThat(Files.readString(external.resolve("build/Ignored.java"))).isEqualTo("class Ignored{int value;}");
+        assertThat(Files.readString(external.resolve("src/Kept.java"))).isEqualTo(
+            """
+                class Kept {
+
+                    int value;
+                }
+                """
+        );
+    }
+
+    @Test
+    void absoluteExternalExcludeTakesPrecedenceOverExternalGitignore(@TempDir Path dir) throws IOException {
+        Path cwd = dir.resolve("frmtr");
+        Path external = dir.resolve("external");
+        write(
+            external.resolve(".gitignore"),
+            """
+                build/
+                cache/
+                """
+        );
+        write(external.resolve("build/Excluded.java"), "class Excluded{int value;}");
+        write(external.resolve("cache/Ignored.java"), "class Ignored{int value;}");
+        write(external.resolve("src/Kept.java"), "class Kept{int value;}");
+
+        Result result =
+            run(cwd, null, "--write", "--exclude", external.resolve("build").toString(), external.toString());
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.out()).isEqualTo("Processed 3 files: 1 formatted, 1 ignored, 1 excluded.\n");
+        assertThat(result.err()).isEmpty();
+        assertThat(Files.readString(external.resolve("build/Excluded.java"))).isEqualTo("class Excluded{int value;}");
+        assertThat(Files.readString(external.resolve("cache/Ignored.java"))).isEqualTo("class Ignored{int value;}");
+        assertThat(Files.readString(external.resolve("src/Kept.java"))).isEqualTo(
+            """
+                class Kept {
+
+                    int value;
+                }
+                """
+        );
+    }
+
+    @Test
     void explicitFileSelectorLoadsSameDirectoryGitignore(@TempDir Path dir) throws IOException {
         write(dir.resolve("src/.gitignore"), "Ignored.java\n");
         write(dir.resolve("src/Ignored.java"), "class Ignored{int value;}");

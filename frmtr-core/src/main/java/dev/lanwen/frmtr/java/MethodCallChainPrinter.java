@@ -519,6 +519,15 @@ final class MethodCallChainPrinter {
                     return compactRootWithBrokenSegment;
                 }
             }
+            Optional<Doc> expressionLambdaRoot = expressionLambdaRootWithSingleSegment(
+                methodRoot,
+                calls.getFirst(),
+                finalSegmentSuffix,
+                lineBudget
+            );
+            if (expressionLambdaRoot.isPresent()) {
+                return expressionLambdaRoot;
+            }
             if (compactRootFinalSegmentLineOverflows(methodRoot, calls.getFirst(), finalSegmentSuffix, lineBudget)) {
                 Optional<Doc> compactRootWithBrokenSegment = compactRootWithBrokenFinalSegment(
                     methodRoot,
@@ -1295,6 +1304,9 @@ final class MethodCallChainPrinter {
 
     private Optional<String> methodCallRootFirstLine(MethodCallExpr methodRoot) {
         String prefix = calls.methodCallPrefix(methodRoot);
+        if (hasSingleExpressionLambdaArgument(methodRoot)) {
+            return Optional.of(prefix + "(");
+        }
         if (sourceShape.methodCallArgumentsSpanMultipleLines(methodRoot)) {
             return Optional.of(prefix + "(");
         }
@@ -1302,6 +1314,44 @@ final class MethodCallChainPrinter {
             return huggableBlockLambdaFirstLine.apply(prefix, methodRoot.getArguments());
         }
         return Optional.empty();
+    }
+
+    private Optional<Doc> expressionLambdaRootWithSingleSegment(
+            MethodCallExpr methodRoot,
+            MethodCallExpr call,
+            MethodCallChainTail finalSegmentSuffix,
+            LayoutWidth.LineBudget lineBudget
+    ) {
+        if (
+            !hasSingleExpressionLambdaArgument(methodRoot)
+            || !methodRoot.getAllContainedComments().isEmpty()
+            || !methodCallSegmentHasNoOwnContainedComments(call)
+            || methodCallSegmentHasComment(call)
+            || methodCallSegmentHasBlockLambdaArgument(call)
+        ) {
+            return Optional.empty();
+        }
+        String prefix = calls.methodCallPrefix(methodRoot);
+        if (layoutWidth.line(lineBudget, prefix + "(") > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(
+            Doc.concat(
+                Doc.text(prefix + "("),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, expressionRenderer.apply(methodRoot.getArgument(0)))),
+                Doc.HARD_LINE,
+                Doc.text(")"),
+                methodCallChainSegmentAttachedToRootClose(call, finalSegmentSuffix)
+            )
+        );
+    }
+
+    private boolean hasSingleExpressionLambdaArgument(MethodCallExpr expression) {
+        return expression.getArguments().size() == 1
+            && expression.getArgument(0) instanceof LambdaExpr lambdaExpr
+            && lambdaExpr.getExpressionBody().isPresent()
+            && lambdaExpr.getAllContainedComments().isEmpty()
+            && !sourceShape.methodCallArgumentsSpanMultipleLines(expression);
     }
 
     private boolean methodCallSegmentHasComment(MethodCallExpr expression) {

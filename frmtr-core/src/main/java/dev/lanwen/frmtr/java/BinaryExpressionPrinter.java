@@ -144,7 +144,7 @@ final class BinaryExpressionPrinter {
                     + binaryExpr.getOperator().asString()
                     + " "
                     + compact.apply(operands.getLast())
-               ) <= options.lineWidth()
+            ) <= options.lineWidth()
         ) {
             return Doc.concat(
                 brokenMethodCallRenderer.apply(methodCall),
@@ -252,11 +252,8 @@ final class BinaryExpressionPrinter {
     }
 
     private String methodCallBinaryClosingLine(BinaryExpressionLine binaryLine, BinaryExpr binaryOperand) {
-        return " ".repeat(binaryLine.leadingOperatorWidth())
-            + ") "
-            + binaryOperand.getOperator().asString()
-            + " "
-            + compact.apply(binaryOperand.getRight());
+        String padding = binaryLine.hasFollowingOperand() ? " ".repeat(binaryLine.leadingOperatorWidth()) : "";
+        return padding + ") " + binaryOperand.getOperator().asString() + " " + compact.apply(binaryOperand.getRight());
     }
 
     private BinaryExpressionLine binaryExpressionLine(
@@ -265,9 +262,19 @@ final class BinaryExpressionPrinter {
             int operandCount
     ) {
         if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.START) {
-            return new BinaryExpressionLine(operator, index == 0 ? "" : operator.asString() + " ", "");
+            return new BinaryExpressionLine(
+                operator,
+                index == 0 ? "" : operator.asString() + " ",
+                "",
+                index < operandCount - 1
+            );
         }
-        return new BinaryExpressionLine(operator, "", index < operandCount - 1 ? " " + operator.asString() : "");
+        return new BinaryExpressionLine(
+            operator,
+            "",
+            index < operandCount - 1 ? " " + operator.asString() : "",
+            index < operandCount - 1
+        );
     }
 
     /**
@@ -304,10 +311,18 @@ final class BinaryExpressionPrinter {
 
         private final String trailingOperator;
 
-        private BinaryExpressionLine(BinaryExpr.Operator operator, String leadingOperator, String trailingOperator) {
+        private final boolean followingOperand;
+
+        private BinaryExpressionLine(
+                BinaryExpr.Operator operator,
+                String leadingOperator,
+                String trailingOperator,
+                boolean followingOperand
+        ) {
             this.operator = operator;
             this.leadingOperator = leadingOperator;
             this.trailingOperator = trailingOperator;
+            this.followingOperand = followingOperand;
         }
 
         BinaryExpr.Operator operator() {
@@ -320,6 +335,10 @@ final class BinaryExpressionPrinter {
 
         int leadingOperatorWidth() {
             return leadingOperator.length();
+        }
+
+        boolean hasFollowingOperand() {
+            return followingOperand;
         }
 
         boolean hasTrailingOperator() {

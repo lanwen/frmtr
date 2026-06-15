@@ -18,6 +18,35 @@ class BinaryMethodCallOperandSample {
                 );
     }
 
+    boolean arrayRouteOverflows(RoutePair pair, Options options) {
+        if (
+            pair.value() instanceof ArrayValue arrayValue
+            && currentIndentedWidth.applyAsInt(
+                pair.name()
+                    + " = "
+                    + compactArrayValue(arrayValue)
+            ) > options.lineWidth()
+        ) {
+            return true;
+        }
+        return false;
+    }
+
+    boolean arrayRouteOverflowsWithAnotherAnd(RoutePair pair, Options options) {
+        if (
+            pair.value() instanceof ArrayValue arrayValue
+            && currentIndentedWidth.applyAsInt(
+                pair.name()
+                    + " = "
+                    + compactArrayValue(arrayValue)
+               ) > options.lineWidth()
+            && pair.name().length() > 0
+        ) {
+            return true;
+        }
+        return false;
+    }
+
     String selectorPrefix(RouteAssemblyStep routeAssemblyStep, RouteTextFormatter routeTextFormatter) {
         return (
             routeAssemblyStep.context().map(routeContext -> routeTextFormatter.compact(routeContext) + ".").orElse("")
@@ -44,7 +73,7 @@ class BinaryMethodCallOperandSample {
                     + routePlan.selectedOperator().displayText()
                     + " "
                     + segmentBudget.remainingSegmentExpression()
-               ) <= options.lineWidth()
+            ) <= options.lineWidth()
         );
     }
 

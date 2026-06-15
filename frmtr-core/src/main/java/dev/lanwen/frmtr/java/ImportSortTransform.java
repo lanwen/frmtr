@@ -27,9 +27,9 @@ final class ImportSortTransform implements JavaFormatTransform {
      * canonicalizing it on both sides is sound; a dropped or duplicated import survives that canonicalization and is
      * still reported as a real difference.
      */
-    static final Comparator<ImportDeclaration> FORMATTER_IMPORT_ORDER =
-        Comparator.comparing((ImportDeclaration declaration) -> !declaration.isStatic())
-                .thenComparing(ImportDeclaration::getNameAsString);
+    static final Comparator<ImportDeclaration> FORMATTER_IMPORT_ORDER = Comparator.comparing(
+        (ImportDeclaration declaration) -> !declaration.isStatic()
+    ).thenComparing(ImportDeclaration::getNameAsString);
 
     /**
      * Reorders imports in place without cloning JavaParser nodes.

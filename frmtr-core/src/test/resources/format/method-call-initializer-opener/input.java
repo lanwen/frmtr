@@ -1,4 +1,8 @@
 class MethodCallInitializerOpenerSample {
+    static final Comparator<RouteDeclaration> ROUTE_ORDER =
+        Comparator.comparing((RouteDeclaration declaration) -> !declaration.isRemote())
+                .thenComparing(RouteDeclaration::routeName);
+
     void configure(Receiver receiver) {
         var sample = receiver.call(Builders.<Result<AlphaBetaGammaDelta>>wrap(item -> {
             return item.compute(alpha(), beta(), gamma(), delta());

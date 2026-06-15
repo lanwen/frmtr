@@ -1,21 +1,18 @@
 package dev.lanwen.frmtr.cli;
 
 import java.io.IOException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystems;
-import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
-import java.nio.file.SimpleFileVisitor;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import org.eclipse.jgit.ignore.IgnoreNode;
@@ -59,12 +56,12 @@ final class FileDiscovery {
         }
 
         Path path = root.resolve(selector).normalize();
-        if (Files.isDirectory(path)) {
+        if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
             return discoverDirectory(selectorScope(path), excludes);
         }
         if (Files.isRegularFile(path) && isJavaFile(path)) {
             Path normalized = path.toAbsolutePath().normalize();
-            GitIgnoreMatcher ignores = selectorScope(normalized).ignores();
+            GitIgnoreContext ignores = selectorScope(normalized).ignoreContextForFile(normalized);
             if (excludes.matches(normalized)) {
                 return new Selection(List.of(), List.of(), List.of(normalized));
             }
@@ -150,7 +147,7 @@ final class FileDiscovery {
 
     private Selection discoverGlob(String selector, ExcludeMatcher excludes) throws IOException {
         Path base = globBase(selector);
-        if (!Files.exists(base)) {
+        if (!Files.isDirectory(base, LinkOption.NOFOLLOW_LINKS)) {
             return new Selection(List.of(), List.of(), List.of());
         }
         SelectorScope scope = selectorScope(base);
@@ -162,32 +159,35 @@ final class FileDiscovery {
             SelectorScope scope, Predicate<Path> candidateMatches, ExcludeMatcher excludes
     ) throws IOException {
         SelectionBuilder selection = new SelectionBuilder();
-        GitIgnoreMatcher ignores = scope.ignores();
-        Files.walkFileTree(
-            scope.traversalBase(),
-            new SimpleFileVisitor<>() {
-                @Override
-                public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attrs)
-                    throws IOException {
-                    ignores.loadRulesForDirectoryContents(directory);
-                    return FileVisitResult.CONTINUE;
-                }
-
-                @Override
-                public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
-                    if (Files.isRegularFile(file) && isJavaFile(file) && candidateMatches.test(file)) {
-                        selectCandidate(file.toAbsolutePath().normalize(), ignores, excludes, selection);
-                    }
-                    return FileVisitResult.CONTINUE;
-                }
-            }
-        );
+        discoverCandidatesInDirectory(scope.directoryContext(), candidateMatches, excludes, selection);
         return selection.toSelection();
     }
 
-    private static void selectCandidate(
-            Path candidate, GitIgnoreMatcher ignores, ExcludeMatcher excludes, SelectionBuilder selection
+    private static void discoverCandidatesInDirectory(
+            DirectoryContext context,
+            Predicate<Path> candidateMatches,
+            ExcludeMatcher excludes,
+            SelectionBuilder selection
     ) throws IOException {
+        try (DirectoryStream<Path> entries = Files.newDirectoryStream(context.directory())) {
+            for (Path entry : entries) {
+                if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
+                    discoverCandidatesInDirectory(
+                        context.forChildDirectory(entry),
+                        candidateMatches,
+                        excludes,
+                        selection
+                    );
+                } else if (Files.isRegularFile(entry) && isJavaFile(entry) && candidateMatches.test(entry)) {
+                    selectCandidate(entry.toAbsolutePath().normalize(), context.ignores(), excludes, selection);
+                }
+            }
+        }
+    }
+
+    private static void selectCandidate(
+            Path candidate, GitIgnoreContext ignores, ExcludeMatcher excludes, SelectionBuilder selection
+    ) {
         if (excludes.matches(candidate)) {
             selection.addExcluded(candidate);
         } else if (ignores.isIgnored(candidate, EntryKind.FILE)) {
@@ -370,8 +370,30 @@ final class FileDiscovery {
             matchRoot = matchRoot.toAbsolutePath().normalize();
         }
 
-        private GitIgnoreMatcher ignores() {
-            return new GitIgnoreMatcher(ignoreRoot);
+        private DirectoryContext directoryContext() throws IOException {
+            return new DirectoryContext(
+                traversalBase,
+                GitIgnoreContext.forDirectoryContents(ignoreRoot, traversalBase)
+            );
+        }
+
+        private GitIgnoreContext ignoreContextForFile(Path file) throws IOException {
+            Path parent = file.toAbsolutePath().normalize().getParent();
+            if (parent == null) {
+                return GitIgnoreContext.empty(ignoreRoot);
+            }
+            return GitIgnoreContext.forDirectoryContents(ignoreRoot, parent);
+        }
+    }
+
+    private record DirectoryContext(Path directory, GitIgnoreContext ignores) {
+        private DirectoryContext {
+            directory = directory.toAbsolutePath().normalize();
+        }
+
+        private DirectoryContext forChildDirectory(Path childDirectory) throws IOException {
+            Path absolute = childDirectory.toAbsolutePath().normalize();
+            return new DirectoryContext(absolute, ignores.forChildDirectoryContents(absolute));
         }
     }
 
@@ -431,24 +453,47 @@ final class FileDiscovery {
         }
     }
 
-    private static final class GitIgnoreMatcher {
-
-        private final Path root;
-
-        private final Map<Path, IgnoreRules> rulesByDirectory = new HashMap<>();
-
-        private final Set<Path> loadedDirectories = new HashSet<>();
-
-        GitIgnoreMatcher(Path root) {
-            this.root = root.toAbsolutePath().normalize();
+    private record GitIgnoreContext(Path root, List<IgnoreRules> rules) {
+        private GitIgnoreContext {
+            root = root.toAbsolutePath().normalize();
+            rules = List.copyOf(rules);
         }
 
-        void loadRulesForDirectoryContents(Path directory) throws IOException {
+        private static GitIgnoreContext empty(Path root) {
+            return new GitIgnoreContext(root, List.of());
+        }
+
+        private static GitIgnoreContext forDirectoryContents(Path root, Path directory) throws IOException {
+            GitIgnoreContext context = empty(root);
             Path absolute = directory.toAbsolutePath().normalize();
-            loadRulesThrough(absolute);
+            if (!absolute.startsWith(context.root)) {
+                return context;
+            }
+            for (Path current : context.directoriesThrough(absolute)) {
+                context = context.appendDirectoryRules(current);
+            }
+            return context;
         }
 
-        boolean isIgnored(Path path, EntryKind kind) throws IOException {
+        private GitIgnoreContext forChildDirectoryContents(Path childDirectory) throws IOException {
+            Path absolute = childDirectory.toAbsolutePath().normalize();
+            if (!absolute.startsWith(root)) {
+                return this;
+            }
+            return appendDirectoryRules(absolute);
+        }
+
+        private GitIgnoreContext appendDirectoryRules(Path directory) throws IOException {
+            Optional<IgnoreRules> directoryRules = readRules(directory);
+            if (directoryRules.isEmpty()) {
+                return this;
+            }
+            List<IgnoreRules> nextRules = new ArrayList<>(rules);
+            nextRules.add(directoryRules.orElseThrow());
+            return new GitIgnoreContext(root, nextRules);
+        }
+
+        boolean isIgnored(Path path, EntryKind kind) {
             Path absolute = path.toAbsolutePath().normalize();
             if (!absolute.startsWith(root)) {
                 return false;
@@ -467,7 +512,7 @@ final class FileDiscovery {
             return result == MatchResult.IGNORED;
         }
 
-        private MatchResult update(MatchResult result, Path absolute, EntryKind kind) throws IOException {
+        private MatchResult update(MatchResult result, Path absolute, EntryKind kind) {
             for (IgnoreRules rule : rulesFor(absolute, kind)) {
                 String relative = slash(rule.directory().relativize(absolute));
                 if (relative.isEmpty()) {
@@ -481,7 +526,7 @@ final class FileDiscovery {
             return result;
         }
 
-        private List<IgnoreRules> rulesFor(Path absolute, EntryKind kind) throws IOException {
+        private List<IgnoreRules> rulesFor(Path absolute, EntryKind kind) {
             Path lastRuleDirectory = switch (kind) {
                 case FILE -> absolute.getParent();
                 case DIRECTORY -> absolute.getParent();
@@ -489,23 +534,9 @@ final class FileDiscovery {
             if (lastRuleDirectory == null || !lastRuleDirectory.startsWith(root)) {
                 return List.of();
             }
-            List<Path> directories = directoriesThrough(lastRuleDirectory);
-            for (Path directory : directories) {
-                loadRules(directory);
-            }
-            return directories.stream()
-                    .map(rulesByDirectory::get)
-                    .filter(rule -> rule != null)
+            return rules.stream()
+                    .filter(rule -> lastRuleDirectory.startsWith(rule.directory()))
                     .toList();
-        }
-
-        private void loadRulesThrough(Path directory) throws IOException {
-            if (!directory.startsWith(root)) {
-                return;
-            }
-            for (Path current : directoriesThrough(directory)) {
-                loadRules(current);
-            }
         }
 
         private List<Path> directoriesThrough(Path directory) {
@@ -520,20 +551,16 @@ final class FileDiscovery {
             return directories;
         }
 
-        private void loadRules(Path directory) throws IOException {
-            Path absolute = directory.toAbsolutePath().normalize();
-            if (!loadedDirectories.add(absolute)) {
-                return;
-            }
-            Path ignoreFile = absolute.resolve(".gitignore");
+        private Optional<IgnoreRules> readRules(Path directory) throws IOException {
+            Path ignoreFile = directory.resolve(".gitignore");
             if (!Files.isRegularFile(ignoreFile)) {
-                return;
+                return Optional.empty();
             }
             IgnoreNode node = new IgnoreNode();
             try (var input = Files.newInputStream(ignoreFile)) {
                 node.parse(input);
             }
-            rulesByDirectory.put(absolute, new IgnoreRules(absolute, node));
+            return Optional.of(new IgnoreRules(directory, node));
         }
 
         private static String slash(Path path) {

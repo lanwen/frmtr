@@ -173,6 +173,36 @@ final class FileDiscoveryTest {
     }
 
     @Test
+    void selectedSymlinkDirectoryIsNotTraversed(@TempDir Path dir) throws IOException {
+        Path target = dir.resolve("target");
+        Path hidden = target.resolve("Hidden.java");
+        Path selected = dir.resolve("selected");
+        write(hidden, "class Hidden{int value;}");
+        Files.createSymbolicLink(selected, target);
+
+        FileDiscovery.Result result = discover(dir, List.of("selected"), List.of());
+
+        assertThat(result.files()).isEmpty();
+        assertThat(result.ignoredFiles()).isEmpty();
+        assertThat(result.excludedFiles()).isEmpty();
+    }
+
+    @Test
+    void symlinkedJavaFileUnderSelectedDirectoryIsSelected(@TempDir Path dir) throws IOException {
+        Path target = dir.resolve("target/Linked.java");
+        Path link = dir.resolve("selected/Linked.java");
+        write(target, "class Linked{int value;}");
+        Files.createDirectories(link.getParent());
+        Files.createSymbolicLink(link, target);
+
+        FileDiscovery.Result result = discover(dir, List.of("selected"), List.of());
+
+        assertThat(result.files()).containsExactly(absolute(link));
+        assertThat(result.ignoredFiles()).isEmpty();
+        assertThat(result.excludedFiles()).isEmpty();
+    }
+
+    @Test
     void directorySelectorLoadsNestedGitignoreRulesWithDirectoryLocalScope(@TempDir Path dir) throws IOException {
         Path drop = dir.resolve("selected/nested/Drop.java");
         Path keep = dir.resolve("selected/nested/Keep.java");
@@ -192,6 +222,46 @@ final class FileDiscoveryTest {
 
         assertThat(result.files()).containsExactlyInAnyOrder(absolute(keep), absolute(deepDrop));
         assertThat(result.ignoredFiles()).containsExactly(absolute(drop));
+        assertThat(result.excludedFiles()).isEmpty();
+    }
+
+    @Test
+    void nestedGitignoreRulesDoNotLeakIntoSiblingDirectoryContexts(@TempDir Path dir) throws IOException {
+        Path leftDrop = dir.resolve("src/left/Drop.java");
+        Path rightKeep = dir.resolve("src/right/Keep.java");
+        write(dir.resolve("src/left/.gitignore"), "*.java\n");
+        write(leftDrop, "class Drop{int value;}");
+        write(rightKeep, "class Keep{int value;}");
+
+        FileDiscovery.Result result = discover(dir, List.of("src"), List.of());
+
+        assertThat(result.files()).containsExactly(absolute(rightKeep));
+        assertThat(result.ignoredFiles()).containsExactly(absolute(leftDrop));
+        assertThat(result.excludedFiles()).isEmpty();
+    }
+
+    @Test
+    void selectedSiblingSubtreesInheritParentGitignoreRules(@TempDir Path dir) throws IOException {
+        Path oneDrop = dir.resolve("src/one/Drop.java");
+        Path oneKeep = dir.resolve("src/one/Keep.java");
+        Path twoDrop = dir.resolve("src/two/Drop.java");
+        Path twoKeep = dir.resolve("src/two/Keep.java");
+        write(
+            dir.resolve("src/.gitignore"),
+            """
+                /one/Drop.java
+                /two/Drop.java
+                """
+        );
+        write(oneDrop, "class Drop{int value;}");
+        write(oneKeep, "class Keep{int value;}");
+        write(twoDrop, "class Drop{int value;}");
+        write(twoKeep, "class Keep{int value;}");
+
+        FileDiscovery.Result result = discover(dir, List.of("src/one", "src/two"), List.of());
+
+        assertThat(result.files()).containsExactlyInAnyOrder(absolute(oneKeep), absolute(twoKeep));
+        assertThat(result.ignoredFiles()).containsExactlyInAnyOrder(absolute(oneDrop), absolute(twoDrop));
         assertThat(result.excludedFiles()).isEmpty();
     }
 

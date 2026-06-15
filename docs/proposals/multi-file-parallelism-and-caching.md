@@ -11,6 +11,11 @@ Status: Proposed
 `@CacheableTask`, and use **no** `InputChanges` / `@Incremental` wiring — so every invocation
 re-reads and re-formats every source file in the source set, even when nothing changed.
 
+The generated-file hang finding makes this more than a throughput problem. `check` and `write`
+currently build the complete `FormatRunResult` before CLI or Gradle callers print any per-file
+status, diagnostics, or summary output. A single pathological generated file can therefore make the
+run look silent or stuck even if earlier files were already processed.
+
 This proposal adds two independent, composable speedups, building on the lazy-discovery work in
 `cli-discovery-lazy-ignore.md` (which made *finding* files cheap; this makes *processing* them
 cheap):
@@ -49,18 +54,26 @@ return new FormatRunResult(selectedFiles(displayRoot, files).stream()
   (`UNCHANGED` / `CHANGED` / `WRITTEN` / `WRITTEN_PARTIALLY` / `FAILED`). Per-file failures are
   captured into the result (not thrown), so one bad file never aborts the run.
 - This is a plain sequential `Stream` — **not** `.parallel()`. One CPU core does all formatting.
+- `FormatRunResult` is materialized only after every selected file returns. Because callers print
+  after `check(...)` / `write(...)` return, the runner currently offers no in-flight progress signal.
+  The recent generated-file hang evidence exposed this directly: one file stuck inside formatting
+  blocks all visible status output for the run.
 
 ### The CLI drives it (and `printFiles` is its own sequential loop)
 
 `frmtr-cli/.../Main.java`:
 
 - `checkFiles(...)` → `FormatterRunner.check(...)`, then iterates `run.results()` to print.
-- `writeFiles(...)` → `FormatterRunner.write(...)`.
+- `writeFiles(...)` → `FormatterRunner.write(...)`, then prints failures and the final summary.
 - `printFiles(...)` does **not** go through the runner — it has its own
   `for (int i = 0; i < files.size(); i++)` loop calling `Frmtr.format` and printing as it goes,
   using the index for `==> path <==` headers and blank-line separators.
 - Discovery (`FileDiscovery`) already returns files in sorted, de-duplicated order; the lazy-ignore
   proposal preserved that.
+
+`checkFiles(...)` and `writeFiles(...)` therefore have worse responsiveness than `printFiles(...)`:
+they do not emit anything until the whole run finishes. `printFiles(...)` at least prints each file
+after formatting it, but it is still sequential and a pathological file blocks all later output.
 
 ### The Gradle plugin reformats unchanged files every run
 
@@ -125,15 +138,16 @@ Keep `FormatterRunner`'s public surface (`check` / `write`, returning `FormatRun
 Internally, replace the sequential `stream().map(...)` with a bounded parallel map that preserves
 order.
 
-**Thread pool sizing.** Use a fixed pool sized to
+**Thread pool sizing.** Use a fixed, bounded pool sized to
 `Math.max(1, Runtime.getRuntime().availableProcessors())`, capped (e.g. `min(cores, files.size())`)
 so tiny runs don't spin up idle threads. The work is CPU-bound (parse + render dominate; I/O per
 file is a single read/write), so an unbounded `parallelStream` on the common ForkJoinPool is
 discouraged — it would contend with, and be contended by, other JVM work (especially inside Gradle
-workers). Prefer an explicit `ExecutorService` owned by the call and shut down in a `finally`, or
-submit the parallel stream inside a dedicated `ForkJoinPool` to avoid leaking onto the common pool.
-A configurable override (CLI flag / Gradle `frmtr { java { maxParallelism = N } }`) is a follow-up,
-not required for v1.
+workers). Prefer an explicit `ExecutorService` owned by the call and shut down in a `finally`, with
+completion collected through `ExecutorCompletionService`, `Future`s, or `CompletableFuture`s into
+index-addressed result slots. A dedicated `ForkJoinPool` is acceptable only if it is still bounded
+and scoped to the run. A configurable override (CLI flag / Gradle
+`frmtr { java { maxParallelism = N } }`) is a follow-up, not required for v1.
 
 **Ordering / output determinism.** Results MUST come back in the same order as the already-sorted
 input list. The map is *embarrassingly parallel but order-preserving*: collect into an
@@ -142,6 +156,23 @@ index-addressed array (`results[i] = process(files.get(i))`) or use an ordered s
 completion order. Because each `FormatFileResult` is fully computed (including its rendered diff
 text) before assembly, no formatting output interleaves. `FormatRunResult` itself is already an
 immutable record built from a final list, so once assembled it is safe to read from one thread.
+
+**Progress vs. result output.** Do not print status lines, diffs, or formatted source directly from
+worker threads. The ordered `FormatRunResult` remains the final truth. If v1 is expected to address
+the generated-file "silent hang" behavior, add an explicit progress path alongside the ordered
+result path:
+
+- CLI progress should be a side channel (stderr and preferably interactive/TTY-oriented), not mixed
+  into stdout status/diff/formatted-source output that scripts may consume.
+- Gradle progress should use Gradle logging/progress APIs rather than worker-thread `println`s.
+- Completion can be tracked in completion order for counters such as `37/500 files processed`, while
+  final result printing stays in deterministic input order.
+- If the implementation instead streams result output in input order as each contiguous prefix
+  completes, document that a slow first file can still block visible results even while later worker
+  tasks finish.
+
+Without this progress path, bounded parallelism is still valuable for throughput, but it must not be
+claimed to fix a true single-file hang that prevents the run from returning.
 
 **`Main.printFiles` (CLI print mode).** This path prints *as it formats* and uses the loop index for
 headers/separators. Two safe options: (1) refactor it to format in parallel into an ordered
@@ -234,6 +265,9 @@ declare inputs/outputs correctly and let Gradle's build cache be the content-add
   assembly, so no diff fragments interleave across threads.
 - **CLI/Gradle printing happens after assembly** (except print mode, addressed in (a)), so console
   output ordering is unaffected by scheduling.
+- **Progress output is separate from result output.** Progress counters or "currently processing"
+  diagnostics may be completion-ordered and ephemeral, but status lines, diffs, formatted source,
+  and summaries must remain deterministic and script-compatible.
 - **Write safety.** Distinct, normalized, de-duplicated paths mean concurrent `Files.writeString`
   calls never target the same file.
 - **Gradle incremental subset must not change reported semantics** for the *changed* files;
@@ -245,6 +279,10 @@ declare inputs/outputs correctly and let Gradle's build cache be the content-add
 - **Nondeterministic logs / interleaving.** If any future code logs from within the per-file task,
   ordering could leak nondeterminism into output. Mitigation: keep all rendering inside the
   per-file result object; print only after the ordered assembly.
+- **Progress output can accidentally become API output.** The generated-file hang evidence argues
+  for visible progress, but CLI stdout already carries status lines, diffs, and formatted source.
+  Mitigation: keep progress on stderr / Gradle progress APIs, make it clearly non-result output,
+  and test that stdout remains byte-stable.
 - **Cache invalidation correctness (the classic hard problem).** The cache key MUST capture
   everything that affects output. `options` is safe (record `equals`). The dangerous dimension is
   **formatter-version**: a behavior change that does *not* bump the key produces stale "skips" and
@@ -274,12 +312,19 @@ and CI regression gates exist to validate. Specifically:
 
 - **Cold-run wall-clock on a large repo** (sequential vs parallel), reported as speedup and
   scaling vs core count. Expect near-linear up to memory/I/O limits on CPU-bound formatting.
+- **Time to first visible progress** on a synthetic slow/generated-file repro: current behavior emits
+  no per-file progress until the slow file returns; the proposed progress path should show completed
+  counts or active-file diagnostics while other worker tasks continue. If the first implementation
+  has no progress path, record this explicitly and measure only throughput.
 - **Warm-run wall-clock and `% files skipped`** for Gradle `frmtrJavaCheck`/`frmtrJavaFormat`:
   - first run (cold cache): 0% skipped;
   - re-run with no changes: ~100% skipped → task `UP-TO-DATE`/`FROM-CACHE`, near-instant;
   - re-run with one changed file: only that file processed (incremental subset of 1).
 - **Determinism check:** parallel output is byte-identical to sequential output across repeated runs
   on the corpus (a golden-stability assertion, not just a timing number).
+- **Progress-output compatibility:** CLI stdout remains byte-identical to the sequential baseline
+  for `check`, `write`, and `print`; any progress appears only on the intended side channel. Gradle
+  logs remain ordered enough to diagnose changed/failed files without diff interleaving.
 - **No regression** on small runs: parallel overhead must not make a 1–5 file run slower (hence the
   `min(cores, files)` cap).
 
@@ -309,6 +354,8 @@ Use the same measurement hygiene `cli-discovery-lazy-ignore.md` established — 
 - Do not introduce a persistent CLI results cache in v1 (respect `cli-discovery-lazy-ignore.md`).
 - Do not change formatter output, `FormatRunResult` shape, CLI output formats, exit codes, or
   summary semantics for processed files.
+- Do not add a per-file timeout as a substitute for diagnosing formatter hangs. Progress makes the
+  run observable; core hangs still need root-cause fixes.
 - Do not change `FileDiscovery` or the plugin's source-set selection logic.
 - Do not add user-facing parallelism/version-key configuration in v1 beyond safe defaults
   (follow-up).

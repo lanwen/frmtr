@@ -182,6 +182,9 @@ single `measureFlat` function.
 > (pure function of `(source, options)`; fresh `JavaFormatContext` per call, no shared mutable
 > state). Recommends order-preserving bounded-pool parallelism + making Gradle's build cache the
 > content-addressed store; a persistent CLI cache stays out of scope per the lazy-ignore non-goal.
+> Generated-file hang evidence adds a progress-output constraint: throughput parallelism should not
+> be claimed to fix silent hangs unless CLI/Gradle get a deterministic result path plus separate
+> progress side channel.
 
 The tooling runner formats files sequentially and the Gradle plugin reformats unchanged files.
 Format independent files on a thread pool and skip files whose `(content-hash, options,

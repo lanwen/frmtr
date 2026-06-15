@@ -381,7 +381,6 @@ final class MainTest {
                 .contains("\u001B[33m1 would change\u001B[0m")
                 .contains("\u001B[31m1 failed\u001B[0m");
         assertThat(stripAnsi(result.out())).endsWith("Checked 3 files: 1 unchanged, 1 would change, 1 failed.\n");
-        assertThat(result.err()).isEmpty();
     }
 
     @Test
@@ -482,7 +481,8 @@ final class MainTest {
                 Checked 2 files: 1 unchanged, 1 would change.
                 """
         );
-        assertThat(result.err()).isEmpty();
+        assertThat(result.err()).startsWith("Processed [0/2 files, 0 would change, 0 failed].\n");
+        assertThat(result.out()).doesNotContain("Processed [");
     }
 
     @Test
@@ -588,7 +588,8 @@ final class MainTest {
 
         assertThat(result.exitCode()).isZero();
         assertThat(result.out()).isEqualTo("Processed 2 files: 2 formatted.\n");
-        assertThat(result.err()).isEmpty();
+        assertThat(result.err()).startsWith("Processed [0/2 files, 0 formatted, 0 failed].\n");
+        assertThat(result.out()).doesNotContain("Processed [");
         assertThat(Files.readString(dir.resolve("src/Main.java"))).isEqualTo(
             """
                 class Main {
@@ -695,7 +696,6 @@ final class MainTest {
                 Checked 2 files: 1 unchanged, 1 would change.
                 """
         );
-        assertThat(result.err()).isEmpty();
     }
 
     @Test
@@ -739,7 +739,6 @@ final class MainTest {
         int diffIndex = result.out().indexOf("diff --git origin frmtr\n");
         assertThat(formattedIndex).isLessThan(changedIndex);
         assertThat(changedIndex).isLessThan(diffIndex);
-        assertThat(result.err()).isEmpty();
     }
 
     @Test
@@ -774,7 +773,6 @@ final class MainTest {
         int summaryIndex = result.out().indexOf("Checked 2 files: 1 would change, 1 failed.\n");
         assertThat(diffIndex).isLessThan(failureIndex);
         assertThat(failureIndex).isLessThan(summaryIndex);
-        assertThat(result.err()).isEmpty();
     }
 
     @Test

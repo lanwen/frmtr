@@ -167,6 +167,9 @@ the existing document view and its layout decisions without letting the CLI own 
 - Multi-file `check` and `write` runs process selected files on an explicit fixed-size worker pool capped by available
   processors and file count. Results are collected into input-order slots before the `FormatRunResult` is exposed, so CLI
   and Gradle output remains deterministic even when files finish out of order.
+- Runner progress is a side-channel callback that emits mandatory started, running, and finished snapshots from the
+  coordinator thread. The tooling layer reports counters and active display paths only; adapters own presentation details
+  such as stderr routing, spinners, and mode-specific labels.
 - `UnifiedDiffRenderer` renders the same patch-like unified diff format for CLI and Gradle check output, using `origin`
   and `frmtr` as diff-side labels because adapters already print the file path on the surrounding status line. It also
   owns an opt-in terminal decoration mode that marks nearby hunk source columns with a dotted line-width guide without
@@ -267,6 +270,10 @@ The CLI is an adapter over the public formatter API:
   already formatted, `✗` means formatting would change, and `!` means parsing or reading failed. Non-stacktrace file-run
   failures are printed on stdout immediately after the failed file status line, and file check runs end with a concise
   stdout summary counting unchanged, would-change, and failed files.
+- Multi-file `--check` and `--write` runs render runner progress to stderr, including the initial `0/N` snapshot,
+  current counters, and one active display path when the runner reports active work. Check progress labels changed files
+  as `would change`; write progress labels them as `formatted`. stdout remains reserved for formatted source, check
+  status/diffs/summary, and write summaries.
 - `--diff`: in check mode, print patch-like unified diffs for sources marked `✗`; passed sources and parse/read
   failures do not produce diff blocks. With no selectors or `--stdin`, `--diff` implies check mode. Diff output uses
   `origin` and `frmtr` labels instead of repeating the file path, and failure diagnostics follow their file status lines

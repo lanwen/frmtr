@@ -9,6 +9,7 @@ import dev.lanwen.frmtr.tooling.DiagnosticStyle;
 import dev.lanwen.frmtr.tooling.DiagnosticText;
 import dev.lanwen.frmtr.tooling.FormatFileResult;
 import dev.lanwen.frmtr.tooling.FormatFileStatus;
+import dev.lanwen.frmtr.tooling.FormatRunProgress;
 import dev.lanwen.frmtr.tooling.FormatRunResult;
 import dev.lanwen.frmtr.tooling.FormatterFailureRenderer;
 import dev.lanwen.frmtr.tooling.FormatterRunFailureRenderer;
@@ -344,7 +345,7 @@ public final class Main implements Callable<Integer> {
             options,
             diff || renderLineWidth,
             diffMode(),
-            state -> {}
+            progressRenderer(files.size(), "would change")
         );
         for (FormatFileResult result : run.results()) {
             out.println(statusLine(statusMarker(result.status()), result.displayPath()));
@@ -370,11 +371,23 @@ public final class Main implements Callable<Integer> {
     }
 
     private int writeFiles(List<Path> files, FormatterOptions options, long ignored, long excluded) {
-        FormatRunResult run = FormatterRunner.write(workingDirectory, files, options, state -> {});
+        FormatRunResult run = FormatterRunner.write(
+            workingDirectory,
+            files,
+            options,
+            progressRenderer(files.size(), "formatted")
+        );
         printRunFailures(run);
         printWriteSummary(run, ignored, excluded);
         out.flush();
         return run.hasFailures() ? 2 : 0;
+    }
+
+    private FormatRunProgress progressRenderer(int fileCount, String changedLabel) {
+        if (fileCount <= 1) {
+            return state -> {};
+        }
+        return new CliProgressRenderer(err, changedLabel);
     }
 
     private int printFiles(List<Path> files, FormatterOptions options, long ignored, long excluded) {

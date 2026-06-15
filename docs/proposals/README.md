@@ -174,17 +174,16 @@ single `measureFlat` function.
 - **Effort:** contained to `DocRenderer`.
 
 ### M3. Multi-file parallelism + content-addressed caching
-**Status:** 🟢 In progress — runner-level bounded parallelism landed; Gradle incremental/cache work remains · _focused proposal:_ [multi-file-parallelism-and-caching.md](multi-file-parallelism-and-caching.md)
+**Status:** 🟢 In progress — runner-level bounded parallelism and CLI progress landed; Gradle incremental/cache work remains · _focused proposal:_ [multi-file-parallelism-and-caching.md](multi-file-parallelism-and-caching.md)
 
 > **Implementation state:** `FormatterRunner` now uses order-preserving bounded-pool parallelism
 > for `check` and `write`. The Gradle tasks still declare `@InputFiles` but no outputs /
 > `@CacheableTask` / `InputChanges`, so they reformat the whole source set every run. `Frmtr.format`
 > is **definitively thread-safe** (pure function of `(source, options)`; fresh `JavaFormatContext`
-> per call, no shared mutable state). The remaining recommendation is making Gradle's build cache
-> the content-addressed store; a persistent CLI cache stays out of scope per the lazy-ignore
-> non-goal. Generated-file hang evidence still adds a progress-output constraint: throughput
-> parallelism should not be claimed to fix silent hangs unless CLI/Gradle get a deterministic result
-> path plus separate progress side channel.
+> per call, no shared mutable state). The CLI now renders progress on a separate side channel while
+> preserving deterministic final result output. The remaining recommendation is making Gradle's build
+> cache the content-addressed store; a persistent CLI cache stays out of scope per the lazy-ignore
+> non-goal, and Gradle-native progress/logging remains a separate follow-up if needed.
 
 The tooling runner now formats independent files on a bounded thread pool, while the Gradle plugin
 still reformats unchanged files. Finish this item by skipping files whose `(content-hash, options,

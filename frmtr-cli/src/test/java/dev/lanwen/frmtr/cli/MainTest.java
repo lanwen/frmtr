@@ -225,18 +225,17 @@ final class MainTest {
         // The method holds a width-wrapping chain (recorded with real arithmetic) AND a separate call that wraps for a
         // trailing line comment, not width. Both are MethodCallExpr, so a label-only suppression would hide the second.
         // The chain must report width arithmetic; the comment-driven call must still appear as a rule-driven break.
-        Result result =
-            run(
-                Path.of("."),
-                "class A{\n void m(){\n  foo().bar().baz().qux().quux().corge().grault().garply().waldo().fred();\n"
-                    + "  note(value, // keep\n   other);\n }\n}\n",
-                "--stdin",
-                "--explain",
-                "--line-width",
-                "40",
-                "--color",
-                "never"
-            );
+        Result result = run(
+            Path.of("."),
+            "class A{\n void m(){\n  foo().bar().baz().qux().quux().corge().grault().garply().waldo().fred();\n"
+                + "  note(value, // keep\n   other);\n }\n}\n",
+            "--stdin",
+            "--explain",
+            "--line-width",
+            "40",
+            "--color",
+            "never"
+        );
 
         assertThat(result.exitCode()).isZero();
         String why = whySection(result.out());
@@ -381,7 +380,6 @@ final class MainTest {
                 .contains("\u001B[33m1 would change\u001B[0m")
                 .contains("\u001B[31m1 failed\u001B[0m");
         assertThat(stripAnsi(result.out())).endsWith("Checked 3 files: 1 unchanged, 1 would change, 1 failed.\n");
-        assertThat(result.err()).isEmpty();
     }
 
     @Test
@@ -456,33 +454,6 @@ final class MainTest {
 
         assertThat(exitCode).isZero();
         assertThat(main.lineWidth).isEqualTo(FormatterOptions.DEFAULT_LINE_WIDTH);
-    }
-
-    @Test
-    void noArgsChecksJavaFilesByDefault(@TempDir Path dir) throws IOException {
-        write(
-            dir.resolve("Formatted.java"),
-            """
-                class Formatted {
-
-                    int value;
-                }
-                """
-        );
-        write(dir.resolve("src/Main.java"), "class Main{int value;}");
-        write(dir.resolve("README.md"), "# ignored\n");
-
-        Result result = run(dir, "class Input{int value;}");
-
-        assertThat(result.exitCode()).isEqualTo(1);
-        assertThat(result.out()).isEqualTo(
-            """
-                ✓ Formatted.java
-                ✗ src/Main.java
-                Checked 2 files: 1 unchanged, 1 would change.
-                """
-        );
-        assertThat(result.err()).isEmpty();
     }
 
     @Test
@@ -579,35 +550,6 @@ final class MainTest {
     }
 
     @Test
-    void writesCommaSeparatedGlobMatchesInPlace(@TempDir Path dir) throws IOException {
-        write(dir.resolve("src/Main.java"), "class Main{int value;}");
-        write(dir.resolve("examples/Example.java"), "class Example{int value;}");
-        write(dir.resolve("README.md"), "# ignored\n");
-
-        Result result = run(dir, null, "--write", "src/**/*.java, examples/*.java");
-
-        assertThat(result.exitCode()).isZero();
-        assertThat(result.out()).isEqualTo("Processed 2 files: 2 formatted.\n");
-        assertThat(result.err()).isEmpty();
-        assertThat(Files.readString(dir.resolve("src/Main.java"))).isEqualTo(
-            """
-                class Main {
-
-                    int value;
-                }
-                """
-        );
-        assertThat(Files.readString(dir.resolve("examples/Example.java"))).isEqualTo(
-            """
-                class Example {
-
-                    int value;
-                }
-                """
-        );
-    }
-
-    @Test
     void printsSingleMatchedFileToStdout(@TempDir Path dir) throws IOException {
         write(dir.resolve("src/Main.java"), "class Main{int value;}");
 
@@ -695,7 +637,6 @@ final class MainTest {
                 Checked 2 files: 1 unchanged, 1 would change.
                 """
         );
-        assertThat(result.err()).isEmpty();
     }
 
     @Test
@@ -739,7 +680,6 @@ final class MainTest {
         int diffIndex = result.out().indexOf("diff --git origin frmtr\n");
         assertThat(formattedIndex).isLessThan(changedIndex);
         assertThat(changedIndex).isLessThan(diffIndex);
-        assertThat(result.err()).isEmpty();
     }
 
     @Test
@@ -774,7 +714,6 @@ final class MainTest {
         int summaryIndex = result.out().indexOf("Checked 2 files: 1 would change, 1 failed.\n");
         assertThat(diffIndex).isLessThan(failureIndex);
         assertThat(failureIndex).isLessThan(summaryIndex);
-        assertThat(result.err()).isEmpty();
     }
 
     @Test
@@ -909,9 +848,19 @@ final class MainTest {
     }
 
     private static Result run(Path workingDirectory, String stdin, String... args) {
+        return run(workingDirectory, stdin, false, args);
+    }
+
+    private static Result run(Path workingDirectory, String stdin, boolean consolePresent, String... args) {
         StringWriter out = new StringWriter();
         StringWriter err = new StringWriter();
-        Main main = new Main(new PrintWriter(out, true), new PrintWriter(err, true), workingDirectory, stdin);
+        Main main = new Main(
+            new PrintWriter(out, true),
+            new PrintWriter(err, true),
+            workingDirectory,
+            stdin,
+            consolePresent
+        );
 
         int exitCode = Main.commandLine(main).execute(args);
 

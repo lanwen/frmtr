@@ -33,7 +33,8 @@ public abstract class FrmtrJavaCheckTask extends AbstractFrmtrJavaTask {
             displayRoot(),
             selectedFiles(),
             formatterOptions(),
-            printDiffs.get()
+            printDiffs.get(),
+            state -> {}
         );
         run.changedResults().forEach(this::printChanged);
         printFailures(run);

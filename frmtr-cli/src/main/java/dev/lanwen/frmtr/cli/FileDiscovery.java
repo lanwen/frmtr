@@ -1,6 +1,7 @@
 package dev.lanwen.frmtr.cli;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -14,16 +15,42 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import org.eclipse.jgit.ignore.IgnoreNode;
 import org.eclipse.jgit.ignore.IgnoreNode.MatchResult;
 
 final class FileDiscovery {
 
+    private static final int DIRECTORY_QUEUE_CAPACITY_PER_WORKER = 32;
+
     private final Path root;
 
+    private final int directoryWorkerCount;
+
+    private final int directoryQueueCapacity;
+
     FileDiscovery(Path root) {
+        this(root, Runtime.getRuntime().availableProcessors());
+    }
+
+    private FileDiscovery(Path root, int directoryWorkers) {
+        this(root, directoryWorkers, Math.max(1, directoryWorkers * DIRECTORY_QUEUE_CAPACITY_PER_WORKER));
+    }
+
+    FileDiscovery(Path root, int directoryWorkers, int directoryQueueCapacity) {
         this.root = root.toAbsolutePath().normalize();
+        int maxWorkers = Math.max(1, Runtime.getRuntime().availableProcessors());
+        this.directoryWorkerCount = Math.max(1, Math.min(directoryWorkers, maxWorkers));
+        this.directoryQueueCapacity = Math.max(1, directoryQueueCapacity);
     }
 
     Result discover(List<String> selectorArgs, List<String> excludeArgs) throws IOException {
@@ -158,26 +185,39 @@ final class FileDiscovery {
     private Selection discoverCandidates(
             SelectorScope scope, Predicate<Path> candidateMatches, ExcludeMatcher excludes
     ) throws IOException {
-        SelectionBuilder selection = new SelectionBuilder();
-        discoverCandidatesInDirectory(scope.directoryContext(), candidateMatches, excludes, selection);
-        return selection.toSelection();
+        int workerCount = directoryWorkerCount;
+        DirectoryWorkQueue queue = new DirectoryWorkQueue(scope.directoryContext(), directoryQueueCapacity);
+        ExecutorService executor = Executors.newFixedThreadPool(workerCount);
+        try {
+            ExecutorCompletionService<SelectionBuilder> completion = new ExecutorCompletionService<>(executor);
+            for (int worker = 0; worker < workerCount; worker++) {
+                completion.submit(() -> queue.collect(candidateMatches, excludes));
+            }
+
+            SelectionBuilder selection = new SelectionBuilder();
+            for (int worker = 0; worker < workerCount; worker++) {
+                selection.addAll(awaitSelection(completion.take()));
+            }
+            return selection.toSelection();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted during file discovery", exception);
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     private static void discoverCandidatesInDirectory(
             DirectoryContext context,
             Predicate<Path> candidateMatches,
             ExcludeMatcher excludes,
-            SelectionBuilder selection
+            SelectionBuilder selection,
+            DirectoryWorkQueue queue
     ) throws IOException {
         try (DirectoryStream<Path> entries = Files.newDirectoryStream(context.directory())) {
             for (Path entry : entries) {
                 if (Files.isDirectory(entry, LinkOption.NOFOLLOW_LINKS)) {
-                    discoverCandidatesInDirectory(
-                        context.forChildDirectory(entry),
-                        candidateMatches,
-                        excludes,
-                        selection
-                    );
+                    queue.enqueueOrRun(context.forChildDirectory(entry), candidateMatches, excludes, selection);
                 } else if (Files.isRegularFile(entry) && isJavaFile(entry) && candidateMatches.test(entry)) {
                     selectCandidate(entry.toAbsolutePath().normalize(), context.ignores(), excludes, selection);
                 }
@@ -194,6 +234,115 @@ final class FileDiscovery {
             selection.addIgnored(candidate);
         } else {
             selection.add(candidate);
+        }
+    }
+
+    private static SelectionBuilder awaitSelection(Future<SelectionBuilder> future) throws IOException {
+        try {
+            return future.get();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted during file discovery", exception);
+        } catch (ExecutionException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof IOException ioException) {
+                throw ioException;
+            }
+            if (cause instanceof UncheckedIOException uncheckedIOException) {
+                throw uncheckedIOException.getCause();
+            }
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new IOException("File discovery failed", cause);
+        }
+    }
+
+    private static final class DirectoryWorkQueue {
+
+        private final ArrayBlockingQueue<DirectoryContext> directories;
+
+        private final AtomicInteger pendingDirectories = new AtomicInteger(1);
+
+        private final AtomicReference<IOException> failure = new AtomicReference<>();
+
+        DirectoryWorkQueue(DirectoryContext rootContext, int queueCapacity) {
+            this.directories = new ArrayBlockingQueue<>(queueCapacity);
+            this.directories.add(rootContext);
+        }
+
+        SelectionBuilder collect(Predicate<Path> candidateMatches, ExcludeMatcher excludes) throws IOException {
+            SelectionBuilder selection = new SelectionBuilder();
+            while (true) {
+                throwIfFailed();
+                DirectoryContext context = nextDirectory();
+                if (context == null) {
+                    return selection;
+                }
+                try {
+                    discoverCandidatesInDirectory(context, candidateMatches, excludes, selection, this);
+                } catch (IOException exception) {
+                    fail(exception);
+                    throw exception;
+                } finally {
+                    pendingDirectories.decrementAndGet();
+                }
+            }
+        }
+
+        void enqueueOrRun(
+                DirectoryContext context,
+                Predicate<Path> candidateMatches,
+                ExcludeMatcher excludes,
+                SelectionBuilder selection
+        ) throws IOException {
+            throwIfFailed();
+            pendingDirectories.incrementAndGet();
+            if (directories.offer(context)) {
+                return;
+            }
+            try {
+                discoverCandidatesInDirectory(context, candidateMatches, excludes, selection, this);
+            } catch (IOException exception) {
+                fail(exception);
+                throw exception;
+            } finally {
+                pendingDirectories.decrementAndGet();
+            }
+        }
+
+        private DirectoryContext nextDirectory() throws IOException {
+            while (true) {
+                throwIfFailed();
+                if (pendingDirectories.get() == 0) {
+                    return null;
+                }
+                try {
+                    DirectoryContext directory = directories.poll(50, TimeUnit.MILLISECONDS);
+                    if (directory != null) {
+                        return directory;
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    IOException ioException = new IOException("Interrupted during file discovery", exception);
+                    fail(ioException);
+                    throw ioException;
+                }
+            }
+        }
+
+        private void throwIfFailed() throws IOException {
+            IOException exception = failure.get();
+            if (exception != null) {
+                throw exception;
+            }
+        }
+
+        private void fail(IOException exception) {
+            failure.compareAndSet(null, exception);
         }
     }
 
@@ -215,6 +364,12 @@ final class FileDiscovery {
 
         void addExcluded(Path path) {
             excludedFiles.add(path);
+        }
+
+        void addAll(SelectionBuilder selection) {
+            files.addAll(selection.files);
+            ignoredFiles.addAll(selection.ignoredFiles);
+            excludedFiles.addAll(selection.excludedFiles);
         }
 
         Selection toSelection() {

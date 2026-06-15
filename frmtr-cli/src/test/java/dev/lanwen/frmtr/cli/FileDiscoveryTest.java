@@ -300,9 +300,44 @@ final class FileDiscoveryTest {
         assertThat(result.excludedFiles()).containsExactly(absolute(generated));
     }
 
+    @Test
+    void directoryTraversalReturnsSortedSelectionsWhenSharedQueueSaturates(@TempDir Path dir) throws IOException {
+        Path zebra = dir.resolve("src/z/Zebra.java");
+        Path alpha = dir.resolve("src/a/Alpha.java");
+        Path middle = dir.resolve("src/m/Middle.java");
+        Path ignoredZebra = dir.resolve("ignored/z/Zebra.java");
+        Path ignoredAlpha = dir.resolve("ignored/a/Alpha.java");
+        Path excludedZebra = dir.resolve("generated/z/Zebra.java");
+        Path excludedAlpha = dir.resolve("generated/a/Alpha.java");
+        write(dir.resolve(".gitignore"), "ignored/\n");
+        write(zebra, "class Zebra{int value;}");
+        write(alpha, "class Alpha{int value;}");
+        write(middle, "class Middle{int value;}");
+        write(ignoredZebra, "class Zebra{int value;}");
+        write(ignoredAlpha, "class Alpha{int value;}");
+        write(excludedZebra, "class Zebra{int value;}");
+        write(excludedAlpha, "class Alpha{int value;}");
+
+        FileDiscovery.Result result = discoverWithBounds(dir, List.of("."), List.of("generated"), 1, 1);
+
+        assertThat(result.files()).containsExactly(absolute(alpha), absolute(middle), absolute(zebra));
+        assertThat(result.ignoredFiles()).containsExactly(absolute(ignoredAlpha), absolute(ignoredZebra));
+        assertThat(result.excludedFiles()).containsExactly(absolute(excludedAlpha), absolute(excludedZebra));
+    }
+
     private static FileDiscovery.Result discover(Path root, List<String> selectors, List<String> excludes)
         throws IOException {
         return new FileDiscovery(root).discover(selectors, excludes);
+    }
+
+    private static FileDiscovery.Result discoverWithBounds(
+            Path root,
+            List<String> selectors,
+            List<String> excludes,
+            int directoryWorkers,
+            int directoryQueueCapacity
+    ) throws IOException {
+        return new FileDiscovery(root, directoryWorkers, directoryQueueCapacity).discover(selectors, excludes);
     }
 
     private static Path absolute(Path path) {

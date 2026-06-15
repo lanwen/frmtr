@@ -326,7 +326,9 @@ The CLI is an adapter over the public formatter API:
 - Selectors and `--exclude` patterns may be repeated, comma-separated, files, directories, or glob patterns. Directory
   excludes apply recursively.
 - Directory and glob traversal formats `.java` files, skips unknown extensions silently, respects `.gitignore`, and
-  removes files matched by `--exclude`.
+  removes files matched by `--exclude`. CLI discovery uses selector-scoped, context-carrying directory jobs on a
+  per-discovery bounded executor with a bounded shared directory queue, then sorts selected, ignored, and excluded paths
+  so results stay deterministic regardless of worker completion order.
 - Missing explicit `.java` file selectors are tool errors reported on stderr with exit code 2. Empty glob or directory
   matches are not tool errors, but the CLI reports `No Java files matched.` on stderr instead of exiting silently.
 - Multiple matched files without `--write` or `--check` are printed to stdout with filename headers. Because stdout is

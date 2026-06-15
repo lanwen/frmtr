@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 
 final class CliProgressRendererTest {
 
+    private static final String CLEAR_PREVIOUS_LINE = "\u001B[1A\u001B[2K";
+
     @Test
     void rendersStartedRunningAndFinishedCheckProgress() {
         StringWriter output = new StringWriter();
@@ -32,8 +34,10 @@ final class CliProgressRendererTest {
         assertThat(output.toString()).isEqualTo(
             """
                 Processed [0/823 files, 0 would change, 0 failed].
+                \u001B[1A\u001B[2K\
                 Processed [240/823 files, 7 would change, 0 failed].
                 (⠋) src/generated/Huge.java
+                \u001B[1A\u001B[2K\u001B[1A\u001B[2K\
                 Processed [823/823 files, 9 would change, 1 failed].
                 """
         );
@@ -50,6 +54,7 @@ final class CliProgressRendererTest {
         assertThat(output.toString()).isEqualTo(
             """
                 Processed [0/12 files, 0 formatted, 0 failed].
+                \u001B[1A\u001B[2K\
                 Processed [12/12 files, 5 formatted, 2 failed].
                 """
         );
@@ -67,9 +72,38 @@ final class CliProgressRendererTest {
             """
                 Processed [0/3 files, 0 would change, 0 failed].
                 (⠋) src/A.java
+                \u001B[1A\u001B[2K\u001B[1A\u001B[2K\
                 Processed [1/3 files, 1 would change, 0 failed].
                 (⠙) src/B.java
                 """
         );
+    }
+
+    @Test
+    void replacesDiscoveryStatusWithRunProgress() {
+        StringWriter output = new StringWriter();
+        CliProgressRenderer renderer = new CliProgressRenderer(new PrintWriter(output, true), "would change");
+
+        renderer.discovering();
+        renderer.progress(ProgressSnapshot.started(5, 2));
+
+        assertThat(output.toString()).isEqualTo(
+            """
+                Discovering Java files...
+                \u001B[1A\u001B[2K\
+                Processed [0/5 files, 0 would change, 0 failed].
+                """
+        );
+    }
+
+    @Test
+    void clearsDiscoveryStatusWhenNoProgressWillFollow() {
+        StringWriter output = new StringWriter();
+        CliProgressRenderer renderer = new CliProgressRenderer(new PrintWriter(output, true), "would change");
+
+        renderer.discovering();
+        renderer.clear();
+
+        assertThat(output.toString()).isEqualTo("Discovering Java files...\n" + CLEAR_PREVIOUS_LINE);
     }
 }

@@ -7,6 +7,10 @@ import java.util.List;
 
 final class CliProgressRenderer implements FormatRunProgress {
 
+    private static final String CLEAR_LINE = "\u001B[2K";
+
+    private static final String CURSOR_UP = "\u001B[1A";
+
     private static final List<String> SPINNER = List.of(
         "⠋",
         "⠙",
@@ -26,14 +30,27 @@ final class CliProgressRenderer implements FormatRunProgress {
 
     private int spinnerIndex;
 
+    private int renderedLines;
+
     CliProgressRenderer(PrintWriter err, String changedLabel) {
         this.err = err;
         this.changedLabel = changedLabel;
     }
 
+    void discovering() {
+        render(List.of("Discovering Java files..."));
+    }
+
+    void clear() {
+        clearPreviousRender();
+        renderedLines = 0;
+        err.flush();
+    }
+
     @Override
     public void progress(ProgressSnapshot snapshot) {
-        err.println(
+        List<String> lines = new java.util.ArrayList<>();
+        lines.add(
             "Processed ["
                 + snapshot.processedFiles()
                 + "/"
@@ -47,9 +64,25 @@ final class CliProgressRenderer implements FormatRunProgress {
                 + " failed]."
         );
         if (!snapshot.activeDisplayPaths().isEmpty()) {
-            err.println("(" + nextSpinner() + ") " + snapshot.activeDisplayPaths().getFirst());
+            lines.add("(" + nextSpinner() + ") " + snapshot.activeDisplayPaths().getFirst());
         }
+        render(lines);
+    }
+
+    private void render(List<String> lines) {
+        clearPreviousRender();
+        for (String line : lines) {
+            err.println(line);
+        }
+        renderedLines = lines.size();
         err.flush();
+    }
+
+    private void clearPreviousRender() {
+        for (int line = 0; line < renderedLines; line++) {
+            err.print(CURSOR_UP);
+            err.print(CLEAR_LINE);
+        }
     }
 
     private String nextSpinner() {

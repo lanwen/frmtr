@@ -18,6 +18,8 @@ final class MainTest {
 
     private static final Pattern ANSI_ESCAPE = Pattern.compile("\\u001B\\[[;\\d]*m");
 
+    private static final String CLEAR_PREVIOUS_LINE = "\u001B[1A\u001B[2K";
+
     @Test
     void formatsStdinToStdoutWithStdinOption() {
         StringWriter out = new StringWriter();
@@ -471,7 +473,7 @@ final class MainTest {
         write(dir.resolve("src/Main.java"), "class Main{int value;}");
         write(dir.resolve("README.md"), "# ignored\n");
 
-        Result result = run(dir, "class Input{int value;}");
+        Result result = runWithTerminalProgress(dir, "class Input{int value;}");
 
         assertThat(result.exitCode()).isEqualTo(1);
         assertThat(result.out()).isEqualTo(
@@ -481,7 +483,11 @@ final class MainTest {
                 Checked 2 files: 1 unchanged, 1 would change.
                 """
         );
-        assertThat(result.err()).startsWith("Processed [0/2 files, 0 would change, 0 failed].\n");
+        assertThat(result.err()).startsWith(
+            "Discovering Java files...\n"
+                + CLEAR_PREVIOUS_LINE
+                + "Processed [0/2 files, 0 would change, 0 failed].\n"
+        );
         assertThat(result.out()).doesNotContain("Processed [");
     }
 
@@ -584,11 +590,15 @@ final class MainTest {
         write(dir.resolve("examples/Example.java"), "class Example{int value;}");
         write(dir.resolve("README.md"), "# ignored\n");
 
-        Result result = run(dir, null, "--write", "src/**/*.java, examples/*.java");
+        Result result = runWithTerminalProgress(dir, null, "--write", "src/**/*.java, examples/*.java");
 
         assertThat(result.exitCode()).isZero();
         assertThat(result.out()).isEqualTo("Processed 2 files: 2 formatted.\n");
-        assertThat(result.err()).startsWith("Processed [0/2 files, 0 formatted, 0 failed].\n");
+        assertThat(result.err()).startsWith(
+            "Discovering Java files...\n"
+                + CLEAR_PREVIOUS_LINE
+                + "Processed [0/2 files, 0 formatted, 0 failed].\n"
+        );
         assertThat(result.out()).doesNotContain("Processed [");
         assertThat(Files.readString(dir.resolve("src/Main.java"))).isEqualTo(
             """
@@ -907,9 +917,23 @@ final class MainTest {
     }
 
     private static Result run(Path workingDirectory, String stdin, String... args) {
+        return run(workingDirectory, stdin, false, args);
+    }
+
+    private static Result runWithTerminalProgress(Path workingDirectory, String stdin, String... args) {
+        return run(workingDirectory, stdin, true, args);
+    }
+
+    private static Result run(Path workingDirectory, String stdin, boolean terminalProgress, String... args) {
         StringWriter out = new StringWriter();
         StringWriter err = new StringWriter();
-        Main main = new Main(new PrintWriter(out, true), new PrintWriter(err, true), workingDirectory, stdin);
+        Main main = new Main(
+            new PrintWriter(out, true),
+            new PrintWriter(err, true),
+            workingDirectory,
+            stdin,
+            terminalProgress
+        );
 
         int exitCode = Main.commandLine(main).execute(args);
 

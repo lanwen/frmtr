@@ -270,10 +270,11 @@ The CLI is an adapter over the public formatter API:
   already formatted, `✗` means formatting would change, and `!` means parsing or reading failed. Non-stacktrace file-run
   failures are printed on stdout immediately after the failed file status line, and file check runs end with a concise
   stdout summary counting unchanged, would-change, and failed files.
-- Multi-file `--check` and `--write` runs render runner progress to stderr, including the initial `0/N` snapshot,
-  current counters, and one active display path when the runner reports active work. Check progress labels changed files
-  as `would change`; write progress labels them as `formatted`. stdout remains reserved for formatted source, check
-  status/diffs/summary, and write summaries.
+- Terminal multi-file `--check` and `--write` runs render progress to stderr as an in-place status. The CLI emits an
+  immediate `Discovering Java files...` status before selector traversal when discovery may walk directories or globs,
+  then replaces it with the runner's initial `0/N` snapshot, current counters, and one active display path when the
+  runner reports active work. Check progress labels changed files as `would change`; write progress labels them as
+  `formatted`. stdout remains reserved for formatted source, check status/diffs/summary, and write summaries.
 - `--diff`: in check mode, print patch-like unified diffs for sources marked `✗`; passed sources and parse/read
   failures do not produce diff blocks. With no selectors or `--stdin`, `--diff` implies check mode. Diff output uses
   `origin` and `frmtr` labels instead of repeating the file path, and failure diagnostics follow their file status lines

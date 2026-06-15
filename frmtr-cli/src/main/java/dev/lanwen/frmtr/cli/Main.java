@@ -131,6 +131,8 @@ public final class Main implements Callable<Integer> {
 
     private final Path workingDirectory;
 
+    private final boolean terminalProgress;
+
     private String stdin;
 
     public Main() {
@@ -138,18 +140,24 @@ public final class Main implements Callable<Integer> {
             new PrintWriter(new java.io.OutputStreamWriter(System.out, StandardCharsets.UTF_8), true),
             new PrintWriter(new java.io.OutputStreamWriter(System.err, StandardCharsets.UTF_8), true),
             Path.of("."),
-            null
+            null,
+            System.console() != null
         );
     }
 
     Main(PrintWriter out, PrintWriter err, String stdin) {
-        this(out, err, Path.of("."), stdin);
+        this(out, err, Path.of("."), stdin, false);
     }
 
     Main(PrintWriter out, PrintWriter err, Path workingDirectory, String stdin) {
+        this(out, err, workingDirectory, stdin, false);
+    }
+
+    Main(PrintWriter out, PrintWriter err, Path workingDirectory, String stdin, boolean terminalProgress) {
         this.out = out;
         this.err = err;
         this.workingDirectory = workingDirectory.toAbsolutePath().normalize();
+        this.terminalProgress = terminalProgress;
         this.stdin = stdin;
     }
 
@@ -201,13 +209,20 @@ public final class Main implements Callable<Integer> {
             return 2;
         }
         FormatterOptions options = formatterOptions();
+        CliProgressRenderer progress = progressRendererBeforeDiscovery(
+            effectiveCheck || write,
+            effectiveCheck ? "would change" : "formatted",
+            usingDefaultSelectors ? DEFAULT_SELECTORS : selectors
+        );
         FileDiscovery.Result discovery = new FileDiscovery(workingDirectory)
                 .discover(usingDefaultSelectors ? DEFAULT_SELECTORS : selectors, excludes);
         if (discovery.hasMissingFileSelectors()) {
+            clearProgress(progress);
             return printMissingFileSelectors(discovery.missingFileSelectors());
         }
         List<Path> files = discovery.files();
         if (files.isEmpty()) {
+            clearProgress(progress);
             if (write && discovery.skippedCount() > 0) {
                 printWriteSummary(new FormatRunResult(List.of()), discovery.ignoredCount(), discovery.excludedCount());
                 return 0;
@@ -223,11 +238,12 @@ public final class Main implements Callable<Integer> {
             return noFilesMatched();
         }
         if (effectiveCheck) {
-            return checkFiles(files, options, discovery.excludedCount());
+            return checkFiles(files, options, discovery.excludedCount(), progress);
         }
         if (write) {
-            return writeFiles(files, options, discovery.ignoredCount(), discovery.excludedCount());
+            return writeFiles(files, options, discovery.ignoredCount(), discovery.excludedCount(), progress);
         }
+        clearProgress(progress);
         return printFiles(files, options, discovery.ignoredCount(), discovery.excludedCount());
     }
 
@@ -338,14 +354,19 @@ public final class Main implements Callable<Integer> {
         }
     }
 
-    private int checkFiles(List<Path> files, FormatterOptions options, long excluded) {
+    private int checkFiles(
+            List<Path> files,
+            FormatterOptions options,
+            long excluded,
+            CliProgressRenderer progress
+    ) {
         FormatRunResult run = FormatterRunner.check(
             workingDirectory,
             files,
             options,
             diff || renderLineWidth,
             diffMode(),
-            progressRenderer(files.size(), "would change")
+            progressRenderer(files.size(), "would change", progress)
         );
         for (FormatFileResult result : run.results()) {
             out.println(statusLine(statusMarker(result.status()), result.displayPath()));
@@ -370,12 +391,18 @@ public final class Main implements Callable<Integer> {
         return renderLineWidth ? RenderMode.LINE_WIDTH_RULER : RenderMode.PATCH;
     }
 
-    private int writeFiles(List<Path> files, FormatterOptions options, long ignored, long excluded) {
+    private int writeFiles(
+            List<Path> files,
+            FormatterOptions options,
+            long ignored,
+            long excluded,
+            CliProgressRenderer progress
+    ) {
         FormatRunResult run = FormatterRunner.write(
             workingDirectory,
             files,
             options,
-            progressRenderer(files.size(), "formatted")
+            progressRenderer(files.size(), "formatted", progress)
         );
         printRunFailures(run);
         printWriteSummary(run, ignored, excluded);
@@ -383,11 +410,55 @@ public final class Main implements Callable<Integer> {
         return run.hasFailures() ? 2 : 0;
     }
 
-    private FormatRunProgress progressRenderer(int fileCount, String changedLabel) {
+    private CliProgressRenderer progressRendererBeforeDiscovery(
+            boolean enabled,
+            String changedLabel,
+            List<String> selectorArgs
+    ) {
+        if (!terminalProgress || !enabled || !selectorsNeedTraversal(selectorArgs)) {
+            return null;
+        }
+        CliProgressRenderer renderer = new CliProgressRenderer(err, changedLabel);
+        renderer.discovering();
+        return renderer;
+    }
+
+    private boolean selectorsNeedTraversal(List<String> selectorArgs) {
+        for (String arg : selectorArgs) {
+            for (String selector : arg.split(",")) {
+                String trimmed = selector.trim();
+                if (!trimmed.isEmpty() && (!trimmed.endsWith(".java") || hasGlobSyntax(trimmed))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean hasGlobSyntax(String selector) {
+        for (char glob : new char[] {'*', '?', '[', '{'}) {
+            if (selector.indexOf(glob) >= 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void clearProgress(CliProgressRenderer progress) {
+        if (progress != null) {
+            progress.clear();
+        }
+    }
+
+    private FormatRunProgress progressRenderer(int fileCount, String changedLabel, CliProgressRenderer progress) {
         if (fileCount <= 1) {
+            clearProgress(progress);
             return state -> {};
         }
-        return new CliProgressRenderer(err, changedLabel);
+        if (!terminalProgress) {
+            return state -> {};
+        }
+        return progress == null ? new CliProgressRenderer(err, changedLabel) : progress;
     }
 
     private int printFiles(List<Path> files, FormatterOptions options, long ignored, long excluded) {

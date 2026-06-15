@@ -262,6 +262,16 @@ final class JavaCommentPlacementPolicy {
     }
 
     /**
+     * Finds the nearest unattached line comment that source placed after {@code node} on the same line.
+     *
+     * <p>The parent walk follows JavaParser's containment hierarchy from nearest to farthest owner, preserving the old
+     * "first recoverable same-line comment" behavior while using the run's cached contained-comment map.
+     */
+    Optional<JavaCommentTrivia> unattachedTrailingLineComment(Node node) {
+        return unattachedTrailingComment(node, JavaCommentTrivia::isLine);
+    }
+
+    /**
      * Finds the nearest unattached block comment that source placed after {@code node} on the same line.
      *
      * <p>The parent walk follows JavaParser's containment hierarchy from nearest to farthest owner, preserving the old
@@ -269,11 +279,18 @@ final class JavaCommentPlacementPolicy {
      * central policy.
      */
     Optional<JavaCommentTrivia> unattachedTrailingBlockComment(Node node) {
+        return unattachedTrailingComment(node, JavaCommentTrivia::isBlock);
+    }
+
+    private Optional<JavaCommentTrivia> unattachedTrailingComment(
+            Node node,
+            Predicate<JavaCommentTrivia> commentKind
+    ) {
         Optional<Node> parent = node.getParentNode();
         while (parent.isPresent()) {
             Optional<JavaCommentTrivia> trailing = containedComments(parent.orElseThrow())
                     .stream()
-                    .filter(JavaCommentTrivia::isBlock)
+                    .filter(commentKind)
                     .filter(comment -> comment.comment().getCommentedNode().isEmpty())
                     .filter(comment -> comment.startsAfterNodeOnSameLine(node))
                     .findFirst();

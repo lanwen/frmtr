@@ -1346,7 +1346,9 @@ final class StatementPrinter {
      * node. The raw fallback keeps the same inline placement used by the empty statement fixtures.
      */
     private String trailingEmptyBodyBlockComment(Node node) {
-        Doc unattached = unattachedTrailingBlockComment(node);
+        Doc unattached = commentPlacement.unattachedTrailingBlockComment(node)
+                .map(comments::comment)
+                .orElse(Doc.EMPTY);
         if (unattached != Doc.EMPTY) {
             return " " + commentText(unattached);
         }
@@ -1360,41 +1362,7 @@ final class StatementPrinter {
     }
 
     private Doc unattachedTrailingLineComment(Node node) {
-        Optional<Node> parent = node.getParentNode();
-        while (parent.isPresent()) {
-            Optional<Doc> trailing = parent.orElseThrow()
-                    .getAllContainedComments()
-                    .stream()
-                    .filter(LineComment.class::isInstance)
-                    .filter(comment -> comment.getCommentedNode().isEmpty())
-                    .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(node, comment))
-                    .findFirst()
-                    .map(comments::comment);
-            if (trailing.isPresent()) {
-                return trailing.orElseThrow();
-            }
-            parent = parent.orElseThrow().getParentNode();
-        }
-        return Doc.EMPTY;
-    }
-
-    private Doc unattachedTrailingBlockComment(Node node) {
-        Optional<Node> parent = node.getParentNode();
-        while (parent.isPresent()) {
-            Optional<Doc> trailing = parent.orElseThrow()
-                    .getAllContainedComments()
-                    .stream()
-                    .filter(BlockComment.class::isInstance)
-                    .filter(comment -> comment.getCommentedNode().isEmpty())
-                    .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(node, comment))
-                    .findFirst()
-                    .map(comments::comment);
-            if (trailing.isPresent()) {
-                return trailing.orElseThrow();
-            }
-            parent = parent.orElseThrow().getParentNode();
-        }
-        return Doc.EMPTY;
+        return commentPlacement.unattachedTrailingLineComment(node).map(comments::comment).orElse(Doc.EMPTY);
     }
 
     private String forHeaderExpression(Expression expression) {

@@ -63,13 +63,18 @@ return new FormatRunResult(selectedFiles(displayRoot, files).stream()
 
 `frmtr-cli/.../Main.java`:
 
-- `checkFiles(...)` → `FormatterRunner.check(...)`, then iterates `run.results()` to print.
-- `writeFiles(...)` → `FormatterRunner.write(...)`, then prints failures and the final summary.
+- `checkFiles(...)` → `FormatterRunner.check(...)`, then iterates `run.results()` to print status
+  lines and optional diffs. Non-stacktrace diagnostics for failed checked files currently go to
+  **stdout** beside status output; stacktraces are deferred to the run-failure path on stderr.
+- `writeFiles(...)` → `FormatterRunner.write(...)`, then prints failures to **stderr** and the final
+  summary to stdout.
 - `printFiles(...)` does **not** go through the runner — it has its own
   `for (int i = 0; i < files.size(); i++)` loop calling `Frmtr.format` and printing as it goes,
-  using the index for `==> path <==` headers and blank-line separators.
+  using the index for `==> path <==` headers and blank-line separators. Formatted source goes to
+  stdout; failures and the summary go to stderr.
 - Discovery (`FileDiscovery`) already returns files in sorted, de-duplicated order; the lazy-ignore
-  proposal preserved that.
+  proposal preserved that. Discovery counters (`ignored`, `excluded`) stay outside the runner: check
+  summaries report excluded files only, while write/print summaries report ignored and excluded.
 
 `checkFiles(...)` and `writeFiles(...)` therefore have worse responsiveness than `printFiles(...)`:
 they do not emit anything until the whole run finishes. `printFiles(...)` at least prints each file
@@ -175,16 +180,28 @@ Without this progress path, bounded parallelism is still valuable for throughput
 claimed to fix a true single-file hang that prevents the run from returning.
 
 **`Main.printFiles` (CLI print mode).** This path prints *as it formats* and uses the loop index for
-headers/separators. Two safe options: (1) refactor it to format in parallel into an ordered
-`FormatFileResult[]`, then print sequentially in index order; or (2) leave print mode sequential in
-v1 (it is the least common mode and stdout interleaving is the trickiest). Recommend (1) for
-consistency, but it is explicitly a smaller, separable change than the runner.
+headers/separators. It cannot reuse `FormatFileResult` as-is because that result carries status,
+diff text, and failure, but not formatted source. Two safe options:
+
+1. Add a print-specific result type that carries either the formatted source or the failure, collect
+   those results in input order, then emit stdout/stderr sequentially. This preserves the exact
+   `==> path <==` headers, blank-line separators, failure reporting, and summary, but can hold many
+   formatted files in memory at once.
+2. Leave print mode sequential in v1. It is the least common mode and its stdout stream is the most
+   sensitive API surface.
+
+Recommendation: leave print mode sequential for the first runner-parallelism change unless the work
+also adds a bounded ordered-drain design. A bounded drain may emit the contiguous completed prefix
+from index `0..n`, but it must document that a slow earlier file still blocks later stdout output
+even if later worker tasks finish.
 
 **Per-file error handling.** Unchanged semantics: each task catches `FormatterException | IOException`
 and returns a `FAILED` (or `WRITTEN_PARTIALLY`) `FormatFileResult` — exactly as `checkFile` /
 `writeFile` do today. One failing file must never poison sibling tasks or the pool. Unexpected
 `RuntimeException`/`Error` are already normalized to `FormatterException.internal` inside
-`Frmtr.format`. The executor must be shut down even on early exit.
+`Frmtr.format`. The executor must be shut down even on early exit. Preserve the existing status
+semantics: `WRITTEN_PARTIALLY` is both changed and failed, check mode returns `2` if any result
+failed and `1` only for clean "would change" results, and write/print return `2` for any failure.
 
 ### (b) Content-addressed CLI results cache — discussed, recommended OUT of scope for v1
 
@@ -218,9 +235,11 @@ This is where the content-addressed idea pays off durably, because Gradle alread
 content hashing, an incremental input change set, and a (optionally remote) build cache. We just
 have to declare the tasks correctly.
 
-**Make both tasks cacheable and declare outputs.**
+**Declare outputs only where the task semantics are cacheable.**
 
-- Annotate the tasks with `@CacheableTask`.
+- Annotate `frmtrJavaCheck` with `@CacheableTask` once it has a deterministic success marker output.
+  Keep `frmtrJavaFormat` non-cacheable in v1 unless its in-place source mutation is redesigned around
+  a safe output model.
 - `getSourceFiles()` already has `@PathSensitive(PathSensitivity.RELATIVE)` — correct for
   relocatability (cache entries don't depend on absolute checkout paths). Keep it.
 - The current `@Internal projectDirectory` is used only to compute display paths; keep it
@@ -230,7 +249,9 @@ have to declare the tasks correctly.
   artifact today, so declare a small `@OutputFile` "verification marker" (a stamp written on
   success). With inputs unchanged and the marker present, Gradle marks the task `UP-TO-DATE`; with
   build cache enabled, the marker is restored `FROM-CACHE`. This is the standard pattern for
-  verification tasks (mirrors how `test` uses its results dir).
+  verification tasks (mirrors how `test` uses its results dir). Because Gradle does not cache failed
+  task executions, a check run that finds unformatted files or formatter failures must not write the
+  success marker and will still re-run until it passes.
 - **Format task** rewrites sources in place — its inputs *are* its outputs. Declaring source files
   as `@OutputFiles` as well makes the task up-to-date when the (already-formatted) sources are
   unchanged, so a warm `frmtrFormat` becomes a no-op. In-place mutation is awkward for the *remote*
@@ -241,10 +262,12 @@ have to declare the tasks correctly.
 **Incremental task action via `InputChanges`.** Inject `InputChanges` and annotate
 `getSourceFiles()` with `@Incremental`. In the action, ask
 `inputChanges.getFileChanges(getSourceFiles())` for added/modified files and pass **only those**
-to `FormatterRunner` when the run is incremental. On a non-incremental run (first run, or an
-`@Input` like `lineWidth` changed), process everything — a change to formatting options correctly
-busts the whole task because options are tracked `@Input`s and feed the cache key. This makes
-"one file changed" cost one file, not the whole module.
+to `FormatterRunner` when the run is incremental. Removed files should be ignored for formatting
+work but still allow the task marker/snapshot to update. On a non-incremental run (first run, or an
+`@Input` like `lineWidth`, `javaLanguageLevel`, `includes`, or `excludes` changed), process
+everything — a change to formatting options correctly busts the whole task because options are
+tracked `@Input`s and feed the cache key. This makes "one file changed" cost one file, not the whole
+module.
 
 **Relationship to the content-addressed key.** With these annotations, Gradle's own input
 fingerprint *is* `(content-hash of sources, @Input options, task classpath)`. The
@@ -262,12 +285,18 @@ declare inputs/outputs correctly and let Gradle's build cache be the content-add
   into index-addressed slots, so `FormatRunResult.results()` is identical to the sequential output
   byte-for-byte.
 - **Diffs are precomputed.** Each `FormatFileResult` carries its fully-rendered `diffText` before
-  assembly, so no diff fragments interleave across threads.
+  assembly, so no diff fragments interleave across threads. The runner should continue returning
+  plain diff text; CLI colorization, including `--render-line-width` ruler coloring, stays in
+  `Main` after ordered assembly.
 - **CLI/Gradle printing happens after assembly** (except print mode, addressed in (a)), so console
   output ordering is unaffected by scheduling.
 - **Progress output is separate from result output.** Progress counters or "currently processing"
   diagnostics may be completion-ordered and ephemeral, but status lines, diffs, formatted source,
   and summaries must remain deterministic and script-compatible.
+- **Discovery counters remain discovery-owned.** Ignored/excluded files are not processed by the
+  runner and must not be counted as worker successes, failures, or progress completions. Preserve the
+  current summary split: check reports processed selected files plus excluded count; write/print
+  report selected + ignored + excluded.
 - **Write safety.** Distinct, normalized, de-duplicated paths mean concurrent `Files.writeString`
   calls never target the same file.
 - **Gradle incremental subset must not change reported semantics** for the *changed* files;
@@ -283,18 +312,27 @@ declare inputs/outputs correctly and let Gradle's build cache be the content-add
   for visible progress, but CLI stdout already carries status lines, diffs, and formatted source.
   Mitigation: keep progress on stderr / Gradle progress APIs, make it clearly non-result output,
   and test that stdout remains byte-stable.
+- **Print-mode memory pressure.** Parallelizing print mode by collecting all formatted source before
+  printing can retain much more text than check/write, especially for generated files. Mitigation:
+  keep print sequential in v1 or implement a bounded ordered drain instead of an unbounded
+  all-results buffer.
 - **Cache invalidation correctness (the classic hard problem).** The cache key MUST capture
   everything that affects output. `options` is safe (record `equals`). The dangerous dimension is
   **formatter-version**: a behavior change that does *not* bump the key produces stale "skips" and
   silently wrong (un-reformatted) files. Mitigation: tie the key to build commit and/or an explicit
   algorithm-version `@Input`, and bump it on any output-affecting change; cover with a test that a
   version bump re-processes files.
+- **Failed check runs are not cache hits.** `frmtrJavaCheck` can be cacheable only for successful
+  verification. If it finds unformatted files, Gradle fails the task and will not restore that
+  failed result from cache on the next run. This is correct, but warm-run success metrics must be
+  measured on already-formatted inputs.
 - **In-place format outputs == inputs** complicates remote build-cache for `frmtrJavaFormat`.
   Mitigation: ship `frmtrJavaCheck` as fully cacheable first; keep `frmtrJavaFormat` incremental
   but not remotely cached in v1.
 - **Thread-pool placement inside Gradle workers.** Using the common ForkJoinPool could contend with
-  Gradle's own parallelism. Mitigation: own an explicit, bounded `ExecutorService` per run and shut
-  it down.
+  Gradle's own parallelism, and one pool per parallel Gradle task can multiply total threads.
+  Mitigation: own an explicit, bounded `ExecutorService` per run, keep the default conservative
+  inside Gradle, and shut it down.
 - **Hashing overhead.** For the CLI (if a cache were added) and even for Gradle's fingerprinting,
   hashing every file has a cost; it only wins on high warm-hit-rate workloads. Gradle already pays
   this and amortizes it, which is another reason to lean on Gradle rather than a bespoke CLI store.
@@ -325,6 +363,8 @@ and CI regression gates exist to validate. Specifically:
 - **Progress-output compatibility:** CLI stdout remains byte-identical to the sequential baseline
   for `check`, `write`, and `print`; any progress appears only on the intended side channel. Gradle
   logs remain ordered enough to diagnose changed/failed files without diff interleaving.
+- **Failure compatibility:** exit codes and failure streams remain byte-compatible for check/write/
+  print, including `--stacktrace`, `WRITTEN_PARTIALLY`, and check-mode failed-file diagnostics.
 - **No regression** on small runs: parallel overhead must not make a 1–5 file run slower (hence the
   `min(cores, files)` cap).
 

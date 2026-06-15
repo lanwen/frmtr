@@ -11,6 +11,8 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.expr.BinaryExpr;
+import com.github.javaparser.ast.stmt.ExpressionStmt;
+import com.github.javaparser.ast.stmt.IfStmt;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -80,6 +82,58 @@ final class JavaCommentPlacementPolicyTest {
         assertThat(policy.commentsStartingOnEndLine(binary.getLeft(), comments))
                 .extracting(comment -> comment.comment().getContent().strip())
                 .containsExactly("keep with left");
+    }
+
+    @Test
+    void findsNearestUnattachedTrailingLineCommentWhileWalkingParents() {
+        CompilationUnit unit = parse(
+            """
+                class Demo {
+                    void run(boolean enabled, boolean selected) {
+                        if (enabled) {
+                            if (selected) {
+                                call();
+                            } // inner branch
+                        } // outer branch
+                    }
+                }
+                """
+        );
+        List<IfStmt> branches = unit.findAll(IfStmt.class);
+        IfStmt outerBranch = branches.get(0);
+        IfStmt innerBranch = branches.get(1);
+        JavaCommentPlacementPolicy policy = startedPolicy(unit);
+
+        assertThat(policy.unattachedTrailingLineComment(innerBranch).map(JavaCommentPlacementPolicyTest::commentText)).hasValue(
+            "inner branch"
+        );
+        assertThat(policy.unattachedTrailingLineComment(outerBranch).map(JavaCommentPlacementPolicyTest::commentText)).hasValue(
+            "outer branch"
+        );
+    }
+
+    @Test
+    void excludesOwnTrailingLineCommentsFromUnattachedTrailingLookup() {
+        CompilationUnit unit = parse(
+            """
+                class Demo {
+                    void run() {
+                        call(); // own statement
+                    }
+                }
+                """
+        );
+        ExpressionStmt statement = unit.findFirst(ExpressionStmt.class).orElseThrow();
+        JavaCommentPlacementPolicy policy = startedPolicy(unit);
+
+        assertThat(policy.trailingLineComment(statement).map(JavaCommentPlacementPolicyTest::commentText)).hasValue(
+            "own statement"
+        );
+        assertThat(policy.unattachedTrailingLineComment(statement)).isEmpty();
+    }
+
+    private static String commentText(JavaCommentTrivia comment) {
+        return comment.comment().getContent().strip();
     }
 
     private static JavaCommentPlacementPolicy startedPolicy(CompilationUnit unit) {

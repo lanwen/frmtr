@@ -15,6 +15,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Predicate;
 import org.eclipse.jgit.ignore.IgnoreNode;
@@ -59,15 +60,15 @@ final class FileDiscovery {
 
         Path path = root.resolve(selector).normalize();
         if (Files.isDirectory(path)) {
-            return discoverDirectory(path, ignoresForDirectorySelector(path), excludes);
+            return discoverDirectory(selectorScope(path), excludes);
         }
         if (Files.isRegularFile(path) && isJavaFile(path)) {
             Path normalized = path.toAbsolutePath().normalize();
-            GitIgnoreMatcher ignores = ignoresForFileSelector(normalized);
+            GitIgnoreMatcher ignores = selectorScope(normalized).ignores();
             if (excludes.matches(normalized)) {
                 return new Selection(List.of(), List.of(), List.of(normalized));
             }
-            if (ignores.isIgnored(path, EntryKind.FILE)) {
+            if (ignores.isIgnored(normalized, EntryKind.FILE)) {
                 return new Selection(List.of(), List.of(normalized), List.of());
             }
             return new Selection(List.of(normalized), List.of(), List.of());
@@ -75,27 +76,76 @@ final class FileDiscovery {
         return new Selection(List.of(), List.of(), List.of());
     }
 
-    private GitIgnoreMatcher ignoresForDirectorySelector(Path directory) {
-        Path absolute = directory.toAbsolutePath().normalize();
-        if (absolute.startsWith(root)) {
-            return new GitIgnoreMatcher(root);
-        }
-        return new GitIgnoreMatcher(absolute);
+    private SelectorScope selectorScope(Path traversalBase) {
+        Path absolute = traversalBase.toAbsolutePath().normalize();
+        Path ignoreRoot = ignoreRootFor(absolute);
+        Path matchRoot = absolute.startsWith(root) ? root : ignoreRoot;
+        return new SelectorScope(absolute, ignoreRoot, matchRoot);
     }
 
-    private GitIgnoreMatcher ignoresForFileSelector(Path file) {
-        Path absolute = file.toAbsolutePath().normalize();
-        if (absolute.startsWith(root)) {
-            return new GitIgnoreMatcher(root);
+    private Path ignoreRootFor(Path traversalBase) {
+        Path anchor = ignoreAnchor(traversalBase);
+        if (anchor.startsWith(root)) {
+            return root;
         }
-        Path parent = absolute.getParent();
-        return new GitIgnoreMatcher(parent == null ? absolute : parent);
+        Path gitRoot = gitRootFor(anchor);
+        if (gitRoot != null) {
+            return gitRoot;
+        }
+        return highestGitignoreAncestor(anchor);
     }
 
-    private Selection discoverDirectory(
-            Path directory, GitIgnoreMatcher ignores, ExcludeMatcher excludes
-    ) throws IOException {
-        return discoverCandidates(directory, path -> true, ignores, excludes);
+    private static Path ignoreAnchor(Path traversalBase) {
+        if (Files.isRegularFile(traversalBase)) {
+            Path parent = traversalBase.getParent();
+            return parent == null ? traversalBase : parent;
+        }
+        return traversalBase;
+    }
+
+    private static Path gitRootFor(Path path) {
+        Path current = path;
+        while (current != null) {
+            Path gitDirectory = current.resolve(".git");
+            if (Files.isDirectory(gitDirectory) || Files.isRegularFile(gitDirectory)) {
+                return current;
+            }
+            current = current.getParent();
+        }
+        return null;
+    }
+
+    private Path highestGitignoreAncestor(Path path) {
+        Path boundary = commonAncestor(root, path);
+        Path current = path;
+        Path gitignoreRoot = null;
+        while (current != null && !current.equals(boundary)) {
+            if (Files.isRegularFile(current.resolve(".gitignore"))) {
+                gitignoreRoot = current;
+            }
+            current = current.getParent();
+        }
+        return gitignoreRoot == null ? path : gitignoreRoot;
+    }
+
+    private static Path commonAncestor(Path first, Path second) {
+        if (!Objects.equals(first.getRoot(), second.getRoot())) {
+            return null;
+        }
+        Path common = first.getRoot();
+        int parts = Math.min(first.getNameCount(), second.getNameCount());
+        for (int index = 0; index < parts; index++) {
+            Path firstPart = first.getName(index);
+            if (!firstPart.equals(second.getName(index))) {
+                break;
+            }
+            common = common == null ? firstPart : common.resolve(firstPart);
+        }
+        return common;
+    }
+
+    private Selection discoverDirectory(SelectorScope scope, ExcludeMatcher excludes) throws IOException {
+        return discoverCandidates(scope, path -> true, excludes);
     }
 
     private Selection discoverGlob(String selector, ExcludeMatcher excludes) throws IOException {
@@ -103,17 +153,18 @@ final class FileDiscovery {
         if (!Files.exists(base)) {
             return new Selection(List.of(), List.of(), List.of());
         }
-        GitIgnoreMatcher ignores = ignoresForDirectorySelector(base);
-        List<PathMatcher> matchers = globMatchers(selector);
-        return discoverCandidates(base, path -> matches(matchers, path), ignores, excludes);
+        SelectorScope scope = selectorScope(base);
+        List<PathMatcher> matchers = globMatchers(selector, scope.matchRoot());
+        return discoverCandidates(scope, path -> matches(scope.matchRoot(), matchers, path), excludes);
     }
 
     private Selection discoverCandidates(
-            Path base, Predicate<Path> candidateMatches, GitIgnoreMatcher ignores, ExcludeMatcher excludes
+            SelectorScope scope, Predicate<Path> candidateMatches, ExcludeMatcher excludes
     ) throws IOException {
         SelectionBuilder selection = new SelectionBuilder();
+        GitIgnoreMatcher ignores = scope.ignores();
         Files.walkFileTree(
-            base,
+            scope.traversalBase(),
             new SimpleFileVisitor<>() {
                 @Override
                 public FileVisitResult preVisitDirectory(Path directory, BasicFileAttributes attrs)
@@ -171,11 +222,14 @@ final class FileDiscovery {
         }
     }
 
-    private boolean matches(List<PathMatcher> matchers, Path path) {
-        Path relative = root.relativize(path.toAbsolutePath().normalize());
+    private static boolean matches(Path matchRoot, List<PathMatcher> matchers, Path path) {
+        Path absolute = path.toAbsolutePath().normalize();
+        Path relative = absolute.startsWith(matchRoot) ? matchRoot.relativize(absolute) : absolute;
         return matchers
                 .stream()
-                .anyMatch(matcher -> matcher.matches(relative) || matcher.matches(Path.of(".").resolve(relative)));
+                .anyMatch(matcher -> matcher.matches(relative)
+                    || matcher.matches(Path.of(".").resolve(relative))
+                    || matcher.matches(absolute));
     }
 
     private Path globBase(String selector) {
@@ -224,8 +278,15 @@ final class FileDiscovery {
         return selector.replace('\\', '/');
     }
 
+    private static List<PathMatcher> globMatchers(String selector, Path matchRoot) {
+        return pathMatchers(globPattern(selector, matchRoot));
+    }
+
     private static List<PathMatcher> globMatchers(String selector) {
-        String normalized = normalizeSelector(selector);
+        return pathMatchers(normalizeSelector(selector));
+    }
+
+    private static List<PathMatcher> pathMatchers(String normalized) {
         List<String> patterns = new ArrayList<>();
         patterns.add(normalized);
         if (normalized.contains("**/")) {
@@ -235,6 +296,21 @@ final class FileDiscovery {
                 .distinct()
                 .map(pattern -> FileSystems.getDefault().getPathMatcher("glob:" + pattern))
                 .toList();
+    }
+
+    private static String globPattern(String selector, Path matchRoot) {
+        Path selectorPath = Path.of(selector);
+        if (selectorPath.isAbsolute()) {
+            Path absolute = selectorPath.toAbsolutePath().normalize();
+            if (absolute.startsWith(matchRoot)) {
+                return slash(matchRoot.relativize(absolute));
+            }
+        }
+        return normalizeSelector(selector);
+    }
+
+    private static String slash(Path path) {
+        return path.toString().replace('\\', '/');
     }
 
     private static boolean isJavaFile(Path path) {
@@ -284,6 +360,18 @@ final class FileDiscovery {
             files = List.copyOf(files);
             ignoredFiles = List.copyOf(ignoredFiles);
             excludedFiles = List.copyOf(excludedFiles);
+        }
+    }
+
+    private record SelectorScope(Path traversalBase, Path ignoreRoot, Path matchRoot) {
+        private SelectorScope {
+            traversalBase = traversalBase.toAbsolutePath().normalize();
+            ignoreRoot = ignoreRoot.toAbsolutePath().normalize();
+            matchRoot = matchRoot.toAbsolutePath().normalize();
+        }
+
+        private GitIgnoreMatcher ignores() {
+            return new GitIgnoreMatcher(ignoreRoot);
         }
     }
 
@@ -449,7 +537,7 @@ final class FileDiscovery {
         }
 
         private static String slash(Path path) {
-            return path.toString().replace('\\', '/');
+            return FileDiscovery.slash(path);
         }
 
         private record IgnoreRules(Path directory, IgnoreNode ignoreNode) {}

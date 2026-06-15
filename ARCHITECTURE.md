@@ -270,10 +270,12 @@ The CLI is an adapter over the public formatter API:
   already formatted, `✗` means formatting would change, and `!` means parsing or reading failed. Non-stacktrace file-run
   failures are printed on stdout immediately after the failed file status line, and file check runs end with a concise
   stdout summary counting unchanged, would-change, and failed files.
-- Terminal multi-file `--check` and `--write` runs render progress to stderr as an in-place status. The CLI emits an
-  immediate `Discovering Java files...` status before selector traversal when discovery may walk directories or globs,
-  then replaces it with the runner's initial `0/N` snapshot, current counters, and one active display path when the
-  runner reports active work. Check progress labels changed files as `would change`; write progress labels them as
+- Multi-file `--check` and `--write` runs can render progress to stderr as an in-place status. `--progress=auto` enables
+  progress when the CLI process has an attached console, `--progress=always` forces it for captured launchers such as
+  Gradle `JavaExec`, and `--progress=never` keeps stderr append-only for logs and scripts. When progress is enabled, the
+  CLI emits an immediate `Discovering Java files...` status before selector traversal when discovery may walk directories
+  or globs, then replaces it with the runner's initial `0/N` snapshot, current counters, and one active display path when
+  the runner reports active work. Check progress labels changed files as `would change`; write progress labels them as
   `formatted`. stdout remains reserved for formatted source, check status/diffs/summary, and write summaries.
 - `--diff`: in check mode, print patch-like unified diffs for sources marked `✗`; passed sources and parse/read
   failures do not produce diff blocks. With no selectors or `--stdin`, `--diff` implies check mode. Diff output uses
@@ -290,6 +292,8 @@ The CLI is an adapter over the public formatter API:
   scripts, or patch consumers. Colorization happens after adapter diff and diagnostic rendering, so formatted source
   stdout and `:frmtr-tooling` diff and diagnostic strings remain uncolored. Diagnostic semantic spans come from
   `:frmtr-tooling`; the CLI only maps those roles to terminal colors.
+- `--progress`: controls stderr progress rendering independently of `--color`, so callers can force ANSI progress
+  repainting for interactive build-tool launches without forcing colored status or diff output.
 - `--write`: rewrite files in place, group file-run failures on stderr by display path, and print a concise stdout
   processed summary counting formatted, failed, ignored, excluded, and unchanged files. Ignored files are `.java` files
   excluded by `.gitignore` during selector discovery; excluded files are `.java` files matched by `--exclude`.

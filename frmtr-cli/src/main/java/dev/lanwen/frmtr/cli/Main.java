@@ -94,6 +94,15 @@ public final class Main implements Callable<Integer> {
     ColorMode colorMode;
 
     @Option(
+        names = "--progress",
+        paramLabel = "auto|always|never",
+        description = "Render multi-file check/write progress to stderr. Defaults to ${DEFAULT-VALUE}.",
+        defaultValue = "auto",
+        converter = ProgressModeConverter.class
+    )
+    ProgressMode progressMode;
+
+    @Option(
         names = "--line-width",
         description = "Target line width.",
         defaultValue = ""
@@ -131,7 +140,7 @@ public final class Main implements Callable<Integer> {
 
     private final Path workingDirectory;
 
-    private final boolean terminalProgress;
+    private final boolean consolePresent;
 
     private String stdin;
 
@@ -153,11 +162,11 @@ public final class Main implements Callable<Integer> {
         this(out, err, workingDirectory, stdin, false);
     }
 
-    Main(PrintWriter out, PrintWriter err, Path workingDirectory, String stdin, boolean terminalProgress) {
+    Main(PrintWriter out, PrintWriter err, Path workingDirectory, String stdin, boolean consolePresent) {
         this.out = out;
         this.err = err;
         this.workingDirectory = workingDirectory.toAbsolutePath().normalize();
-        this.terminalProgress = terminalProgress;
+        this.consolePresent = consolePresent;
         this.stdin = stdin;
     }
 
@@ -174,7 +183,9 @@ public final class Main implements Callable<Integer> {
     }
 
     private static int handleExecutionException(
-            Exception exception, CommandLine commandLine, CommandLine.ParseResult parseResult
+            Exception exception,
+            CommandLine commandLine,
+            CommandLine.ParseResult parseResult
     ) {
         Main main = commandLine.getCommand();
         main.printFailure("frmtr", exception);
@@ -415,7 +426,7 @@ public final class Main implements Callable<Integer> {
             String changedLabel,
             List<String> selectorArgs
     ) {
-        if (!terminalProgress || !enabled || !selectorsNeedTraversal(selectorArgs)) {
+        if (!progressEnabled() || !enabled || !selectorsNeedTraversal(selectorArgs)) {
             return null;
         }
         CliProgressRenderer renderer = new CliProgressRenderer(err, changedLabel);
@@ -455,10 +466,14 @@ public final class Main implements Callable<Integer> {
             clearProgress(progress);
             return state -> {};
         }
-        if (!terminalProgress) {
+        if (!progressEnabled()) {
             return state -> {};
         }
         return progress == null ? new CliProgressRenderer(err, changedLabel) : progress;
+    }
+
+    private boolean progressEnabled() {
+        return progressMode.enabled(consolePresent);
     }
 
     private int printFiles(List<Path> files, FormatterOptions options, long ignored, long excluded) {
@@ -731,10 +746,10 @@ public final class Main implements Callable<Integer> {
         }
         if (stacktrace) {
             run
-                .failedResults()
-                .forEach(result -> result.failureException().ifPresent(
+                  .failedResults()
+                  .forEach(result -> result.failureException().ifPresent(
                           exception -> printFailure(result.displayPath().toString(), exception)
-                ));
+                  ));
             return;
         }
         err.println(colorizeDiagnostic(FormatterRunFailureRenderer.renderDiagnostic(run)));
@@ -815,6 +830,40 @@ public final class Main implements Callable<Integer> {
         public ColorMode convert(String value) {
             String normalized = value.trim().toUpperCase().replace('-', '_');
             return ColorMode.valueOf(normalized);
+        }
+    }
+
+    enum ProgressMode {
+        /**
+         * Enables progress only when the CLI process has an attached console, keeping captured output stable by default.
+         */
+        AUTO,
+
+        /**
+         * Forces progress rendering even when process output is captured by a launcher or build tool.
+         */
+        ALWAYS,
+
+        /**
+         * Disables progress rendering so stderr stays plain and append-only for logs and scripts.
+         */
+        NEVER;
+
+        boolean enabled(boolean consolePresent) {
+            return switch (this) {
+                case AUTO -> consolePresent;
+                case ALWAYS -> true;
+                case NEVER -> false;
+            };
+        }
+    }
+
+    static final class ProgressModeConverter implements CommandLine.ITypeConverter<ProgressMode> {
+
+        @Override
+        public ProgressMode convert(String value) {
+            String normalized = value.trim().toUpperCase().replace('-', '_');
+            return ProgressMode.valueOf(normalized);
         }
     }
 

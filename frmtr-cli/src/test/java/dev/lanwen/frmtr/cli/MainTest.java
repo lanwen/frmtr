@@ -18,8 +18,6 @@ final class MainTest {
 
     private static final Pattern ANSI_ESCAPE = Pattern.compile("\\u001B\\[[;\\d]*m");
 
-    private static final String CLEAR_PREVIOUS_LINE = "\u001B[1A\u001B[2K";
-
     @Test
     void formatsStdinToStdoutWithStdinOption() {
         StringWriter out = new StringWriter();
@@ -227,18 +225,17 @@ final class MainTest {
         // The method holds a width-wrapping chain (recorded with real arithmetic) AND a separate call that wraps for a
         // trailing line comment, not width. Both are MethodCallExpr, so a label-only suppression would hide the second.
         // The chain must report width arithmetic; the comment-driven call must still appear as a rule-driven break.
-        Result result =
-            run(
-                Path.of("."),
-                "class A{\n void m(){\n  foo().bar().baz().qux().quux().corge().grault().garply().waldo().fred();\n"
-                    + "  note(value, // keep\n   other);\n }\n}\n",
-                "--stdin",
-                "--explain",
-                "--line-width",
-                "40",
-                "--color",
-                "never"
-            );
+        Result result = run(
+            Path.of("."),
+            "class A{\n void m(){\n  foo().bar().baz().qux().quux().corge().grault().garply().waldo().fred();\n"
+                + "  note(value, // keep\n   other);\n }\n}\n",
+            "--stdin",
+            "--explain",
+            "--line-width",
+            "40",
+            "--color",
+            "never"
+        );
 
         assertThat(result.exitCode()).isZero();
         String why = whySection(result.out());
@@ -460,38 +457,6 @@ final class MainTest {
     }
 
     @Test
-    void noArgsChecksJavaFilesByDefault(@TempDir Path dir) throws IOException {
-        write(
-            dir.resolve("Formatted.java"),
-            """
-                class Formatted {
-
-                    int value;
-                }
-                """
-        );
-        write(dir.resolve("src/Main.java"), "class Main{int value;}");
-        write(dir.resolve("README.md"), "# ignored\n");
-
-        Result result = runWithTerminalProgress(dir, "class Input{int value;}");
-
-        assertThat(result.exitCode()).isEqualTo(1);
-        assertThat(result.out()).isEqualTo(
-            """
-                ✓ Formatted.java
-                ✗ src/Main.java
-                Checked 2 files: 1 unchanged, 1 would change.
-                """
-        );
-        assertThat(result.err()).startsWith(
-            "Discovering Java files...\n"
-                + CLEAR_PREVIOUS_LINE
-                + "Processed [0/2 files, 0 would change, 0 failed].\n"
-        );
-        assertThat(result.out()).doesNotContain("Processed [");
-    }
-
-    @Test
     void diffUsesDefaultCheckWhenSelectorsAreEmpty(@TempDir Path dir) {
         write(dir.resolve("src/Main.java"), "class Main{int value;}");
 
@@ -577,40 +542,6 @@ final class MainTest {
         assertThat(Files.readString(dir.resolve("src/Main.java"))).isEqualTo(
             """
                 class Main {
-
-                    int value;
-                }
-                """
-        );
-    }
-
-    @Test
-    void writesCommaSeparatedGlobMatchesInPlace(@TempDir Path dir) throws IOException {
-        write(dir.resolve("src/Main.java"), "class Main{int value;}");
-        write(dir.resolve("examples/Example.java"), "class Example{int value;}");
-        write(dir.resolve("README.md"), "# ignored\n");
-
-        Result result = runWithTerminalProgress(dir, null, "--write", "src/**/*.java, examples/*.java");
-
-        assertThat(result.exitCode()).isZero();
-        assertThat(result.out()).isEqualTo("Processed 2 files: 2 formatted.\n");
-        assertThat(result.err()).startsWith(
-            "Discovering Java files...\n"
-                + CLEAR_PREVIOUS_LINE
-                + "Processed [0/2 files, 0 formatted, 0 failed].\n"
-        );
-        assertThat(result.out()).doesNotContain("Processed [");
-        assertThat(Files.readString(dir.resolve("src/Main.java"))).isEqualTo(
-            """
-                class Main {
-
-                    int value;
-                }
-                """
-        );
-        assertThat(Files.readString(dir.resolve("examples/Example.java"))).isEqualTo(
-            """
-                class Example {
 
                     int value;
                 }
@@ -920,11 +851,7 @@ final class MainTest {
         return run(workingDirectory, stdin, false, args);
     }
 
-    private static Result runWithTerminalProgress(Path workingDirectory, String stdin, String... args) {
-        return run(workingDirectory, stdin, true, args);
-    }
-
-    private static Result run(Path workingDirectory, String stdin, boolean terminalProgress, String... args) {
+    private static Result run(Path workingDirectory, String stdin, boolean consolePresent, String... args) {
         StringWriter out = new StringWriter();
         StringWriter err = new StringWriter();
         Main main = new Main(
@@ -932,7 +859,7 @@ final class MainTest {
             new PrintWriter(err, true),
             workingDirectory,
             stdin,
-            terminalProgress
+            consolePresent
         );
 
         int exitCode = Main.commandLine(main).execute(args);

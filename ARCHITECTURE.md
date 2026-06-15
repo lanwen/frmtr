@@ -42,8 +42,12 @@ Java-producing modules also share Maven publication metadata. The root build app
 javadoc jars to Java subprojects, then configures generated POMs with the MIT license, project URL, GitHub SCM, issue
 tracker, developer identity, and module descriptions. Non-plugin JVM modules publish a `mavenJava` publication from the
 Java component; `:frmtr-gradle-plugin` lets Gradle's plugin development and Plugin Publish plugins own the plugin and
-marker publications while inheriting the same POM metadata. The static `:site` module is documentation-only and is not
-published as a Maven artifact.
+marker publications while inheriting the same POM metadata. Every Java subproject jar also embeds the root MIT license
+as `META-INF/LICENSE` so binary, sources, and javadoc artifacts carry the license text with the published files. The
+static `:site` module is documentation-only and is not published as a Maven artifact.
+
+The Gradle plugin publication declares Plugin Portal compatibility metadata. It currently marks configuration-cache
+support as unsupported until the plugin tasks have a dedicated configuration-cache validation gate.
 
 `:frmtr-cli` generates a small `BuildInfo` source file during compilation. It embeds the project version, current Git
 commit SHA, and build timestamp so JVM and native CLI binaries report the same build identity through `--version`.

@@ -1,3 +1,5 @@
+import org.gradle.plugin.compatibility.compatibility
+
 plugins {
     `java-gradle-plugin`
     jacoco
@@ -21,6 +23,11 @@ gradlePlugin {
             displayName = "frmtr Gradle plugin"
             description = "Formats Java source with frmtr."
             tags.set(listOf("formatter", "formatting", "java"))
+            compatibility {
+                features {
+                    configurationCache = false
+                }
+            }
         }
     }
 }

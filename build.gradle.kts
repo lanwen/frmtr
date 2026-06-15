@@ -75,6 +75,12 @@ subprojects {
             withJavadocJar()
         }
 
+        tasks.withType<Jar>().configureEach {
+            from(rootProject.layout.projectDirectory.file("LICENSE")) {
+                into("META-INF")
+            }
+        }
+
         dependencies {
             add("testImplementation", libs.assertj.core)
             add("testImplementation", libs.junit.jupiter)

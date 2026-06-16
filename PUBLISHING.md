@@ -27,6 +27,22 @@ op run --env-file ./publish.env -- ./gradlew publish
 
 Add the Central snapshot repository to plugin resolution:
 
+```groovy
+// settings.gradle
+pluginManagement {
+    repositories {
+        maven {
+            url = uri("https://central.sonatype.com/repository/maven-snapshots/")
+            mavenContent {
+                snapshotsOnly()
+            }
+        }
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+```
+
 ```kotlin
 // settings.gradle.kts
 pluginManagement {

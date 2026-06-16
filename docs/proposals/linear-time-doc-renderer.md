@@ -1,15 +1,15 @@
 # Linear-time renderer via width memoization and bounded `fits`
 
-Status: Proposed — its S5 sub-step (the `fits`/`flatWidth` unification, section (a)) has **landed on
-`main` in `6e4f600a`**; the memoization (b) and bounded lookahead (c) remain proposed.
+Status: In progress — its S5 sub-step (the `fits`/`flatWidth` unification, section (a)) has **landed
+on `main` in `6e4f600a`**; the M2 implementation now adds the memoization (b) and bounded lookahead
+(c) in the current change, pending review and merge.
 
 (Roadmap M2; absorbs S5 — "Collapse `fits` and `flatWidth` into one function.")
 
-> **Update (S5 landed, `6e4f600a`):** `DocRenderer` now has a single `measureFlat(doc, mode)`
-> measurement function with a `NO_FIT` sentinel, and `fits(doc, remaining)` is a thin wrapper over
-> it (the dead `indent` parameter was dropped). Section (a) below describes what was implemented;
-> sections (b) and (c) are the remaining M2 work and now build on `measureFlat` rather than on the
-> two former switches.
+> **Update (M2 implementation pending merge):** `DocWidths` now owns a per-render measurement context
+> with bounded `fits` and memoized flat-width measurement. Bounded fits stops once overflow or a hard
+> line proves the group cannot fit; memoized widths are scoped to one render/explain pass so stale
+> state cannot leak across renders.
 
 ## Summary
 

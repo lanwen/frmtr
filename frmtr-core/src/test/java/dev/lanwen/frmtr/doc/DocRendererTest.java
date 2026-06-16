@@ -108,4 +108,77 @@ final class DocRendererTest {
         assertThat(renderer.render(doc)).isEqualTo("very-long-prefix flat");
         assertThat(narrowRenderer.render(doc)).isEqualTo("very-long-prefix broken");
     }
+
+    @Test
+    void stopsFitBeforeUnreachableFlatOnlySuffixAfterOverflow() {
+        Doc unreachableFlatSuffix = Doc.text("unused");
+        for (int i = 0; i < 50_000; i++) {
+            unreachableFlatSuffix = Doc.label("unused-flat-suffix", unreachableFlatSuffix);
+        }
+        Doc doc = Doc.group(Doc.group(Doc.concat(
+            Doc.text("overflow-overflow-overflow"),
+            Doc.flatOnly(unreachableFlatSuffix)
+        )));
+
+        String rendered = new DocRenderer(
+            TestFormatterOptions.forLayout(
+                20,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                false
+            )
+        ).render(doc);
+
+        assertThat(rendered).isEqualTo("overflow-overflow-overflow");
+    }
+
+    @Test
+    void reusesRendererWithoutLeakingBoundedWidthCacheAcrossRenders() {
+        Doc shared = Doc.group(Doc.concat(
+            Doc.text("prefix"),
+            Doc.flatOnly(Doc.text("-flat")),
+            Doc.breakOnly(Doc.text("-broken"))
+        ));
+        DocRenderer renderer = new DocRenderer(
+            TestFormatterOptions.forLayout(
+                20,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                false
+            )
+        );
+        Doc firstRenderConsumesColumnsBeforeSharedNode = Doc.concat(Doc.text("occupied-x"), shared);
+
+        assertThat(renderer.render(firstRenderConsumesColumnsBeforeSharedNode))
+                .isEqualTo("occupied-xprefix-broken");
+        assertThat(renderer.render(shared)).isEqualTo("prefix-flat");
+    }
+
+    @Test
+    void doesNotCachePartialOverflowForSameNodeInsideOneRender() {
+        Doc shared = Doc.group(Doc.concat(
+            Doc.text("prefix"),
+            Doc.flatOnly(Doc.text("-flat")),
+            Doc.breakOnly(Doc.text("-broken"))
+        ));
+        Doc doc = Doc.concat(Doc.text("occupied-x"), shared, Doc.HARD_LINE, shared);
+
+        String rendered = new DocRenderer(
+            TestFormatterOptions.forLayout(
+                20,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                false
+            )
+        ).render(doc);
+
+        assertThat(rendered).isEqualTo(
+            """
+                occupied-xprefix-broken
+                prefix-flat"""
+        );
+    }
 }

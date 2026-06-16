@@ -67,6 +67,8 @@ public final class DocExplainRenderer {
 
         private final List<ForcedBreak> forcedBreaks = new ArrayList<>();
 
+        private final DocWidths.Measurement widths = DocWidths.measurement();
+
         private int column;
 
         private Builder render(Doc doc, int indent, Mode mode, Builder enclosingLabel) {
@@ -108,11 +110,8 @@ public final class DocExplainRenderer {
                 }
                 case Doc.Group group -> {
                     int available = lineWidth - column;
-                    int flatWidth = DocWidths.flatWidth(group.doc());
-                    // Reuse the single measured flat width instead of re-walking via DocWidths.fits: a group fits only
-                    // when it is breakable-free (finite width) and no wider than the columns left. This stays in lockstep
-                    // with DocRenderer's own fit rule while avoiding a second traversal of the same subtree.
-                    boolean fits = flatWidth != DocWidths.NO_FIT && flatWidth <= available;
+                    boolean fits = widths.fits(group.doc(), available);
+                    int flatWidth = widths.flatWidth(group.doc());
                     Mode next = fits ? Mode.FLAT : Mode.BREAK;
                     Optional<String> label = enclosingLabel == null ? Optional.empty() : enclosingLabel.label;
                     GroupDecision decision = new GroupDecision(

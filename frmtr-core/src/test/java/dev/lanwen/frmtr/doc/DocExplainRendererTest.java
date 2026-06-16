@@ -102,6 +102,20 @@ final class DocExplainRendererTest {
     }
 
     @Test
+    void measuresIfBreakFlatBranchForGroupWidth() {
+        Doc doc = Doc.group(Doc.concat(
+            Doc.text("prefix"),
+            Doc.ifBreak(Doc.text("-broken-branch"), Doc.text("-flat"))
+        ));
+
+        DocExplanation explanation = explain(80, doc);
+
+        GroupDecision decision = explanation.decisions().getFirst();
+        assertThat(decision.decision()).isEqualTo(Decision.FLAT);
+        assertThat(decision.flatWidth()).isEqualTo("prefix-flat".length());
+    }
+
+    @Test
     void carriesPrinterWrapsThroughUntouchedForCallerMerge() {
         Doc doc = Doc.label("java.statement:ExpressionStmt", Doc.text("x"));
         PrinterWrap wrap = new PrinterWrap(

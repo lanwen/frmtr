@@ -17,7 +17,8 @@ public final class DocRenderer {
     public String render(Doc doc) {
         out.setLength(0);
         column = 0;
-        render(doc, 0, Mode.BREAK);
+        DocWidths.Measurement widths = DocWidths.measurement();
+        render(doc, 0, Mode.BREAK, widths);
         String rendered = out.toString();
         if (options.trailingNewline() && !rendered.endsWith(options.lineEnding().value())) {
             rendered += options.lineEnding().value();
@@ -25,10 +26,10 @@ public final class DocRenderer {
         return rendered;
     }
 
-    private void render(Doc doc, int indent, Mode mode) {
+    private void render(Doc doc, int indent, Mode mode, DocWidths.Measurement widths) {
         switch (doc) {
             case Doc.Text text -> append(text.value());
-            case Doc.Concat concat -> concat.docs().forEach(child -> render(child, indent, mode));
+            case Doc.Concat concat -> concat.docs().forEach(child -> render(child, indent, mode, widths));
             case Doc.Line _ -> {
                 if (mode == Mode.FLAT) {
                     append(" ");
@@ -42,17 +43,18 @@ public final class DocRenderer {
                 }
             }
             case Doc.HardLine _ -> newline(indent);
-            case Doc.Indent indented -> render(indented.doc(), indent + 1, mode);
+            case Doc.Indent indented -> render(indented.doc(), indent + 1, mode, widths);
             case Doc.Group group -> {
-                Mode next = DocWidths.fits(group.doc(), options.lineWidth() - column) ? Mode.FLAT : Mode.BREAK;
-                render(group.doc(), indent, next);
+                Mode next = widths.fits(group.doc(), options.lineWidth() - column) ? Mode.FLAT : Mode.BREAK;
+                render(group.doc(), indent, next, widths);
             }
             case Doc.IfBreak conditional -> render(
                 mode == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(),
                 indent,
-                mode
+                mode,
+                widths
             );
-            case Doc.Label label -> render(label.doc(), indent, mode);
+            case Doc.Label label -> render(label.doc(), indent, mode, widths);
         }
     }
 

@@ -155,14 +155,15 @@ whether parsing or rendering dominates, which directs further optimization.
 - **Effort:** medium. Methodology-heavy, low risk. (No dedicated investigation doc — execute directly.)
 
 ### M2. Linear-time renderer (width memoization + bounded `fits`)
-**Status:** 🟣 Investigating · _focused proposal:_ [linear-time-doc-renderer.md](linear-time-doc-renderer.md)
+**Status:** 🟢 In progress · _focused proposal:_ [linear-time-doc-renderer.md](linear-time-doc-renderer.md)
 
 > **Investigation finding:** `render`'s `Group` case fires one `fits` per group, and `fits` calls
 > the unbounded `flatWidth` on every `Concat` child → overlapping subtrees re-measured with no
 > cache or early stop. Recommends an `IdentityHashMap<Doc, Integer>` memo held by the renderer
 > instance (records can't carry lazy fields), FLAT-mode-keyed (because `IfBreak` makes width
 > mode-dependent), plus bounded `fits`. Absorbs **S5** — whose unification step is **already landed**
-(`6e4f600a`), leaving M2 to add only the memoization and bounded lookahead.
+(`6e4f600a`); the current M2 implementation adds the memoization and bounded lookahead pending
+review and merge.
 
 `DocRenderer` re-walks subtrees to measure width, so nested groups degrade toward O(n²). `Doc` nodes
 are immutable records, so flat-width can be precomputed bottom-up once and `fits` can short-circuit

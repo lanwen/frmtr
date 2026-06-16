@@ -226,7 +226,10 @@ final class FileDiscovery {
     }
 
     private static void selectCandidate(
-            Path candidate, GitIgnoreContext ignores, ExcludeMatcher excludes, SelectionBuilder selection
+            Path candidate,
+            GitIgnoreContext ignores,
+            ExcludeMatcher excludes,
+            SelectionBuilder selection
     ) {
         if (excludes.matches(candidate)) {
             selection.addExcluded(candidate);
@@ -383,8 +386,9 @@ final class FileDiscovery {
         return matchers
                 .stream()
                 .anyMatch(matcher -> matcher.matches(relative)
-                    || matcher.matches(Path.of(".").resolve(relative))
-                    || matcher.matches(absolute));
+                        || matcher.matches(Path.of(".").resolve(relative))
+                        || matcher.matches(absolute)
+                );
     }
 
     private Path globBase(String selector) {
@@ -473,11 +477,9 @@ final class FileDiscovery {
     }
 
     private boolean missingExplicitJavaFileSelector(String selector) {
-        return (
-            !hasGlobSyntax(selector)
+        return !hasGlobSyntax(selector)
             && selector.endsWith(".java")
-            && Files.notExists(root.resolve(selector).normalize())
-        );
+            && Files.notExists(root.resolve(selector).normalize());
     }
 
     record Result(

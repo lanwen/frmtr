@@ -353,6 +353,12 @@ final class MethodCallChainPrinter {
         boolean rootObjectCreationNeedsBreak = methodChainPlanner.rootObjectCreationNeedsBreak(analysis);
         boolean sourceMultilineArguments = chainHasSourceMultilineArguments(analysis);
         if (
+            !breakMode.isForced()
+            && finalBlockLambdaSegmentCanStayCompact(expression, lineBudget)
+        ) {
+            return Optional.empty();
+        }
+        if (
             (!breakMode.isForced()
                 && !analysis.hasComments()
                 && !analysis.hasBlockLambdaArgument()
@@ -591,6 +597,19 @@ final class MethodCallChainPrinter {
         return methodCallSegmentHasBlockLambdaArgument(methodRoot)
             && !methodCallSegmentHasLeadingLineComment(methodRoot)
             && !methodCallSegmentHasNameComment(methodRoot);
+    }
+
+    private boolean finalBlockLambdaSegmentCanStayCompact(
+            MethodCallExpr expression,
+            LayoutWidth.LineBudget lineBudget
+    ) {
+        if (!methodCallSegmentHasBlockLambdaArgument(expression) || methodCallSegmentHasComment(expression)) {
+            return false;
+        }
+        String callPrefix = calls.methodCallPrefix(expression);
+        return huggableBlockLambdaFirstLine.apply(callPrefix, expression.getArguments())
+                .filter(firstLine -> layoutWidth.line(lineBudget, firstLine) <= options.lineWidth())
+                .isPresent();
     }
 
     private boolean compactRootFinalSegmentLineOverflows(

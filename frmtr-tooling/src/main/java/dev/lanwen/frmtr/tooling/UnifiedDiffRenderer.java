@@ -42,13 +42,8 @@ public final class UnifiedDiffRenderer {
     }
 
     public static String render(
-            Path displayPath,
-            String original,
-            String formatted,
-            int lineWidth,
-            RenderMode renderMode
-    )
-        throws IOException {
+            Path displayPath, String original, String formatted, int lineWidth, RenderMode renderMode
+    ) throws IOException {
         String diff = renderPatch(displayPath, original, formatted);
         return switch (Objects.requireNonNull(renderMode, "renderMode")) {
             case PATCH -> diff;
@@ -175,8 +170,7 @@ public final class UnifiedDiffRenderer {
         if (overflow <= 0) {
             return prefix + source + " ".repeat(lineWidth - source.length()) + LINE_WIDTH_MARKER;
         }
-        return (
-            prefix
+        return prefix
             + source.substring(0, lineWidth)
             + LINE_WIDTH_MARKER
             + source.substring(lineWidth)
@@ -184,8 +178,7 @@ public final class UnifiedDiffRenderer {
             + " ".repeat(lineWidth + 1)
             + LINE_WIDTH_MARKER
             + "+"
-            + overflow
-        );
+            + overflow;
     }
 
     private static void appendHunkHeader(StringBuilder decorated, String line, int lineWidth) {

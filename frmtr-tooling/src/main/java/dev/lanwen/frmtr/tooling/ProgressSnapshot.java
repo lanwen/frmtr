@@ -8,8 +8,7 @@ import java.util.Objects;
  * Immutable progress state emitted by the formatter runner coordinator.
  */
 public sealed interface ProgressSnapshot
-        permits ProgressSnapshot.Started, ProgressSnapshot.Running, ProgressSnapshot.Finished {
-
+    permits ProgressSnapshot.Started, ProgressSnapshot.Running, ProgressSnapshot.Finished {
     static Started started(int totalFiles, int workerCount) {
         return new Started(totalFiles, workerCount);
     }
@@ -46,7 +45,6 @@ public sealed interface ProgressSnapshot
     }
 
     record Started(int totalFiles, int workerCount) implements ProgressSnapshot {
-
         public Started {
             validateTotalAndWorkerCount(totalFiles, workerCount);
         }
@@ -80,7 +78,6 @@ public sealed interface ProgressSnapshot
         int workerCount,
         List<Path> activeDisplayPaths
     ) implements ProgressSnapshot {
-
         public Running {
             validateCounters(totalFiles, processedFiles, changedFiles, failedFiles, workerCount);
             activeDisplayPaths = copyActiveDisplayPaths(activeDisplayPaths);
@@ -100,7 +97,6 @@ public sealed interface ProgressSnapshot
     }
 
     record Finished(int totalFiles, int changedFiles, int failedFiles, int workerCount) implements ProgressSnapshot {
-
         public Finished {
             validateCounters(totalFiles, totalFiles, changedFiles, failedFiles, workerCount);
         }

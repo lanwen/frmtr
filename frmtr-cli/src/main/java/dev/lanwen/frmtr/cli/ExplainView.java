@@ -166,11 +166,9 @@ final class ExplainView {
      * not a width decision. These always span lines, so surfacing them as a wrap reason is noise.
      */
     private boolean isStructuralBody(String label) {
-        return (
-            label.startsWith("java.bodyDeclaration:")
+        return label.startsWith("java.bodyDeclaration:")
             || label.equals("java.compilationUnit")
-            || label.equals("java.statement:BlockStmt")
-        );
+            || label.equals("java.statement:BlockStmt");
     }
 
     /**
@@ -342,9 +340,9 @@ final class ExplainView {
         String label = styler.style(Role.LABEL, node.label().orElse("group"));
         if (node.forcedLineBreaks() > 0) {
             return label
-            + "  "
-            + styler.style(Role.BREAK, "BREAK")
-            + styler.style(Role.FADE, " forced " + node.forcedLineBreaks());
+                + "  "
+                + styler.style(Role.BREAK, "BREAK")
+                + styler.style(Role.FADE, " forced " + node.forcedLineBreaks());
         }
         return label;
     }

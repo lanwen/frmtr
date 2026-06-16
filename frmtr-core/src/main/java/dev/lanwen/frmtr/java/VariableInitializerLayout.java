@@ -406,6 +406,14 @@ final class VariableInitializerLayout {
             if (compactObjectCreationChain.isPresent()) {
                 return compactObjectCreationChain.orElseThrow();
             }
+            Optional<Doc> sourceMultilineBlockLambdaCall = variableWithSourceMultilineBlockLambdaInitializer(
+                name,
+                declarationPrefix + variable.getNameAsString(),
+                methodCall
+            );
+            if (sourceMultilineBlockLambdaCall.isPresent()) {
+                return sourceMultilineBlockLambdaCall.orElseThrow();
+            }
             Optional<Doc> forcedChain = forcedMethodCallChain.apply(methodCall);
             if (forcedChain.isPresent()) {
                 return variableWithMethodCallChain(
@@ -813,13 +821,25 @@ final class VariableInitializerLayout {
         if (
             methodCall.getArguments().isEmpty()
             || (!allowNestedComments && !methodCall.getAllContainedComments().isEmpty())
-            || methodCallChainIsSourceMultiline.test(methodCall)
             || methodCallHasOwnComment(methodCall)
             || methodCall.getScope().filter(shouldPrintScopeAsDoc).isPresent()
         ) {
             return Optional.empty();
         }
         String callPrefix = methodCallPrefix.apply(methodCall);
+        Optional<Doc> blockLambdaCall = variableWithHuggableBlockLambdaArguments(
+            name,
+            flatName,
+            methodCall,
+            callPrefix
+        );
+        if (
+            methodCallChainIsSourceMultiline.test(methodCall)
+            && blockLambdaCall.isEmpty()
+            && !methodCallHasBlockLambdaArgument(methodCall)
+        ) {
+            return Optional.empty();
+        }
         String firstLine = flatName + " = " + callPrefix + "(";
         if (layoutWidth.currentIndented(firstLine) > options.lineWidth()) {
             return Optional.empty();
@@ -827,12 +847,6 @@ final class VariableInitializerLayout {
         if (!methodCall.getAllContainedComments().isEmpty()) {
             return Optional.of(Doc.concat(Doc.text(name + " = "), this.methodCall.apply(methodCall)));
         }
-        Optional<Doc> blockLambdaCall = variableWithHuggableBlockLambdaArguments(
-            name,
-            flatName,
-            methodCall,
-            callPrefix
-        );
         if (blockLambdaCall.isPresent()) {
             return blockLambdaCall;
         }
@@ -911,6 +925,14 @@ final class VariableInitializerLayout {
             || methodCall.getScope().flatMap(Expression::getComment).isPresent();
     }
 
+    private boolean methodCallHasBlockLambdaArgument(MethodCallExpr methodCall) {
+        return methodCall.getArguments()
+                .stream()
+                .anyMatch(argument -> argument instanceof LambdaExpr lambdaExpr
+                        && lambdaExpr.getBody().isBlockStmt()
+                );
+    }
+
     /**
      * Keeps block-lambda method-call initializers on the assignment line until the lambda opener no longer fits.
      *
@@ -930,6 +952,27 @@ final class VariableInitializerLayout {
                     firstLine -> layoutWidth.currentIndented(flatName + " = " + firstLine)
                 )
                 .map(call -> Doc.concat(Doc.text(name + " = "), call));
+    }
+
+    /**
+     * Lets a source-multiline receiver chain collapse back to the direct block-lambda call shape when the assignment
+     * line through the call opener still fits.
+     */
+    private Optional<Doc> variableWithSourceMultilineBlockLambdaInitializer(
+            String name,
+            String flatName,
+            MethodCallExpr methodCall
+    ) {
+        if (
+            !methodCallChainIsSourceMultiline.test(methodCall)
+            || methodCall.getArguments().isEmpty()
+            || !methodCallHasBlockLambdaArgument(methodCall)
+            || methodCallHasOwnComment(methodCall)
+            || methodCall.getScope().filter(shouldPrintScopeAsDoc).isPresent()
+        ) {
+            return Optional.empty();
+        }
+        return variableWithBrokenMethodCallArguments(name, flatName, methodCall, false);
     }
 
     /**

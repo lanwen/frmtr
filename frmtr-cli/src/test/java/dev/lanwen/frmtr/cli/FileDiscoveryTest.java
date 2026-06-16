@@ -325,17 +325,14 @@ final class FileDiscoveryTest {
         assertThat(result.excludedFiles()).containsExactly(absolute(excludedAlpha), absolute(excludedZebra));
     }
 
-    private static FileDiscovery.Result discover(Path root, List<String> selectors, List<String> excludes)
-        throws IOException {
+    private static FileDiscovery.Result discover(
+            Path root, List<String> selectors, List<String> excludes
+    ) throws IOException {
         return new FileDiscovery(root).discover(selectors, excludes);
     }
 
     private static FileDiscovery.Result discoverWithBounds(
-            Path root,
-            List<String> selectors,
-            List<String> excludes,
-            int directoryWorkers,
-            int directoryQueueCapacity
+            Path root, List<String> selectors, List<String> excludes, int directoryWorkers, int directoryQueueCapacity
     ) throws IOException {
         return new FileDiscovery(root, directoryWorkers, directoryQueueCapacity).discover(selectors, excludes);
     }

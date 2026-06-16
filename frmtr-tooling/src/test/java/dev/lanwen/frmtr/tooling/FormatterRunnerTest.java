@@ -84,7 +84,12 @@ final class FormatterRunnerTest {
         Path changed = write(dir.resolve("src/Changed.java"), "class Changed{int value;}");
         Path broken = write(dir.resolve("src/Broken.java"), "class {");
 
-        FormatRunResult run = FormatterRunner.write(dir, List.of(changed, broken), FormatterOptions.defaults(), state -> {});
+        FormatRunResult run = FormatterRunner.write(
+            dir,
+            List.of(changed, broken),
+            FormatterOptions.defaults(),
+            state -> {}
+        );
         List<FormatFileResult> results = run.results();
 
         assertThat(results)
@@ -158,7 +163,11 @@ final class FormatterRunnerTest {
 
         assertThat(run.results())
                 .extracting(FormatFileResult::displayPath)
-                .containsExactly(Path.of("src/Broken.java"), Path.of("src/Changed.java"), Path.of("src/Unchanged.java"));
+                .containsExactly(
+                    Path.of("src/Broken.java"),
+                    Path.of("src/Changed.java"),
+                    Path.of("src/Unchanged.java")
+                );
         assertThat(callbackThreads).containsOnly(callingThread);
         assertProgressLifecycle(run, snapshots, 3);
     }
@@ -196,13 +205,13 @@ final class FormatterRunnerTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("active files");
         assertThatThrownBy(() -> ProgressSnapshot.running(
-                    2,
-                    1,
-                    1,
-                    0,
-                    2,
-                    List.of(Path.of("src/A.java"), Path.of("src/B.java"))
-                ))
+                2,
+                1,
+                1,
+                0,
+                2,
+                List.of(Path.of("src/A.java"), Path.of("src/B.java"))
+        ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("remaining files");
         assertThatThrownBy(() -> ProgressSnapshot.finished(1, 2, 0, 1))
@@ -225,11 +234,17 @@ final class FormatterRunnerTest {
                     ProgressSnapshot::workerCount,
                     ProgressSnapshot::activeFiles
                 )
-                .containsExactly(expectedTotal, 0, 0, 0, expectedTotal == 0 ? 0 : snapshots.getFirst().workerCount(), 0);
+                .containsExactly(
+                    expectedTotal,
+                    0,
+                    0,
+                    0,
+                    expectedTotal == 0 ? 0 : snapshots.getFirst().workerCount(),
+                    0
+                );
         assertThat(snapshots.getFirst()).isInstanceOf(ProgressSnapshot.Started.class);
         assertThat(snapshots.getLast()).isInstanceOf(ProgressSnapshot.Finished.class);
-        assertThat(snapshots.subList(1, snapshots.size() - 1))
-                .allMatch(ProgressSnapshot.Running.class::isInstance);
+        assertThat(snapshots.subList(1, snapshots.size() - 1)).allMatch(ProgressSnapshot.Running.class::isInstance);
 
         int workerCount = snapshots.getFirst().workerCount();
         assertThat(workerCount).isEqualTo(expectedTotal == 0 ? 0 : snapshots.getLast().workerCount());
@@ -247,7 +262,10 @@ final class FormatterRunnerTest {
 
             if (snapshot instanceof ProgressSnapshot.Running) {
                 assertThat(snapshot.processedFiles()).isLessThan(expectedTotal);
-                assertThat(snapshot.activeFiles()).isBetween(1, Math.min(workerCount, expectedTotal - snapshot.processedFiles()));
+                assertThat(snapshot.activeFiles()).isBetween(
+                    1,
+                    Math.min(workerCount, expectedTotal - snapshot.processedFiles())
+                );
                 assertThat(snapshot.activeDisplayPaths()).allMatch(Predicate.not(Path::isAbsolute));
             } else {
                 assertThat(snapshot.activeDisplayPaths()).isEmpty();

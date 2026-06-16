@@ -5,6 +5,5 @@ package dev.lanwen.frmtr.tooling;
  */
 @FunctionalInterface
 public interface FormatRunProgress {
-
     void progress(ProgressSnapshot state);
 }

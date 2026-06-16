@@ -27,11 +27,9 @@ public record FormatFileResult(
     }
 
     public boolean changed() {
-        return (
-            status == FormatFileStatus.CHANGED
+        return status == FormatFileStatus.CHANGED
             || status == FormatFileStatus.WRITTEN
-            || status == FormatFileStatus.WRITTEN_PARTIALLY
-        );
+            || status == FormatFileStatus.WRITTEN_PARTIALLY;
     }
 
     public boolean failed() {

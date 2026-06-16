@@ -3,10 +3,10 @@ import org.gradle.api.publish.maven.MavenPublication
 
 plugins {
     base
+    alias(libs.plugins.jreleaser)
 }
 
 group = "dev.lanwen.frmtr"
-version = "0.1.0-SNAPSHOT"
 
 val projectUrl = "https://github.com/lanwen/frmtr"
 val projectDescriptions =
@@ -20,6 +20,7 @@ val projectDescriptions =
 val centralMavenJavaProjects = setOf(":frmtr-core", ":frmtr-tooling")
 val centralSnapshotProjects = centralMavenJavaProjects + ":frmtr-gradle-plugin"
 val isSnapshotVersion = version.toString().endsWith("-SNAPSHOT")
+val jreleaserStagingRepositoryName = "jreleaserStaging"
 
 val frmtrCli = project(":frmtr-cli")
 val frmtrCliRuntimeClasspath = frmtrCli.provider {
@@ -59,6 +60,21 @@ tasks.register("siteBuild") {
     group = "documentation"
     description = "Builds the static onboarding site with JBake."
     dependsOn(":site:bake")
+}
+
+tasks.register("stageCentralRelease") {
+    group = "publishing"
+    description = "Stages Maven Central release artifacts for JReleaser."
+    dependsOn(
+        centralMavenJavaProjects.map {
+            "$it:publishMavenJavaPublicationToJreleaserStagingRepository"
+        })
+}
+
+jreleaser {
+    configFile.set(layout.projectDirectory.file("jreleaser.yml"))
+    dependsOnAssemble.set(false)
+    gitRootSearch.set(true)
 }
 
 subprojects {
@@ -156,14 +172,23 @@ subprojects {
                             username =
                                 providers
                                     .gradleProperty("centralPortalUsername")
-                                    .orElse(providers.environmentVariable("CENTRAL_PORTAL_USERNAME"))
+                                    .orElse(providers.environmentVariable("JRELEASER_MAVENCENTRAL_USERNAME"))
                                     .orNull
                             password =
                                 providers
                                     .gradleProperty("centralPortalPassword")
-                                    .orElse(providers.environmentVariable("CENTRAL_PORTAL_PASSWORD"))
+                                    .orElse(providers.environmentVariable("JRELEASER_MAVENCENTRAL_PASSWORD"))
                                     .orNull
                         }
+                    }
+                }
+            }
+
+            if (publishesMavenJavaPublication) {
+                repositories {
+                    maven {
+                        name = jreleaserStagingRepositoryName
+                        url = rootProject.layout.buildDirectory.dir("staging-deploy").get().asFile.toURI()
                     }
                 }
             }

@@ -7,6 +7,7 @@ graalvm-native-buildtools = "0.11.5"
 gradle-plugin-publish = "2.1.1"
 graalvm-nativeimage = "25.0.3"
 jbake = "2.7.0"
+jreleaser = "1.24.0"
 picocli = "4.7.7"
 slf4j = "2.0.17"
 
@@ -25,3 +26,4 @@ slf4j-nop = { module = "org.slf4j:slf4j-nop", version.ref = "slf4j" }
 [plugins]
 graalvm-native = { id = "org.graalvm.buildtools.native", version.ref = "graalvm-native-buildtools" }
 gradle-plugin-publish = { id = "com.gradle.plugin-publish", version.ref = "gradle-plugin-publish" }
+jreleaser = { id = "org.jreleaser", version.ref = "jreleaser" }

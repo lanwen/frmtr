@@ -1,0 +1,39 @@
+project:
+  name: frmtr
+  description: Java formatter.
+  longDescription: Java formatter.
+  authors:
+    - lanwen
+  license: MIT
+  links:
+    homepage: https://github.com/lanwen/frmtr
+  languages:
+    java:
+      groupId: dev.lanwen.frmtr
+      version: 25
+
+signing:
+  pgp:
+    active: RELEASE
+    armored: true
+    verify: false
+
+release:
+  github:
+    owner: lanwen
+    name: frmtr
+    branch: main
+    skipTag: true
+    skipRelease: true
+    uploadAssets: NEVER
+
+deploy:
+  maven:
+    mavenCentral:
+      sonatype:
+        active: RELEASE
+        url: https://central.sonatype.com/api/v1/publisher
+        namespace: dev.lanwen.frmtr
+        applyMavenCentralRules: true
+        stagingRepositories:
+          - build/staging-deploy

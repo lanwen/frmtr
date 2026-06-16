@@ -1,13 +1,37 @@
 # frmtr
 
-`frmtr` is a fast, opinionated Java formatter built on JavaParser.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Java](https://img.shields.io/badge/Java-25-orange.svg)](https://openjdk.org/projects/jdk/25/)
+[![Build: Gradle](https://img.shields.io/badge/build-Gradle-02303A.svg?logo=gradle)](build.gradle.kts)
+
+`frmtr` is a fast (supposed to be), opinionated Java formatter built on JavaParser.
 
 The formatter parses Java source, adapts the parsed tree into formatter-owned syntax views, prints a compact document IR, and renders that IR with width-aware line breaking.
 
+## Installation
+
+`frmtr` is pre-release software; install it by building from source.
+
+Prerequisites:
+
+- JDK 25 (the build toolchain targets Java 25). The repo ships an `.sdkmanrc`, so `sdk env install && sdk env use` provisions a matching JDK via [SDKMAN](https://sdkman.io/).
+- No global Gradle install required — use the bundled `./gradlew` wrapper.
+
 ```bash
 ./gradlew build
+```
+
+For a standalone executable, see [Native Binary](#native-binary) below.
+
+## Usage
+
+Build the project and check formatting over a source tree:
+
+```bash
 ./gradlew :frmtr-cli:run --args='--check frmtr-core/src/main/java'
 ```
+
+The sections below cover the Gradle plugin, the CLI, the documentation site, and native binaries in detail.
 
 ## Gradle Plugin
 

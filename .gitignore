@@ -1,6 +1,14 @@
 .gradle/
 build/
 out/
+bin/
 *.class
 *.log
 .DS_Store
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/

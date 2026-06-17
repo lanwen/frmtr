@@ -4,6 +4,14 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "**/*.gradle.kts"
+      - "**/*.java"
+      - "gradle/**"
+      - "gradle.properties"
+      - "gradlew"
+      - "gradlew.bat"
+      - "settings.gradle.kts"
   workflow_dispatch:
 
 permissions:

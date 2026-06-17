@@ -79,6 +79,9 @@ The main envelope and dispatcher boundaries are:
   rendering back to existing owners.
 - `ExpressionRuleEnvelope`: applies the outer expression entry gate, including clone-before-own-comment-removal
   rendering for callers that have already claimed an attached comment.
+- `ExpressionTail` and `ExpressionTailRenderer`: carry caller-owned semicolon, comma, or empty tails through expression
+  rendering so terminators and separators are emitted before trailing `//` comments instead of being stranded after
+  them.
 - `ExpressionDispatcher`: narrows broad `Expression` AST kinds and delegates to specialized expression printers or
   compact fallback text.
 - `BodyDeclarationRuleEnvelope`: applies the outer body-declaration pragma, raw, and leading-comment gate before

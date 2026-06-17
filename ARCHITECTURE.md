@@ -266,6 +266,8 @@ instead of rebuilding partial lambda text independently. Broken expression-lambd
 lambda arguments keep an over-wide binary's method-call operand attached to the lambda opener when splitting that call is
 enough, keep a compact binary tail on the call's closing line when it fits, then fall back to the shared binary
 continuation renderer so the body cannot stay flat past the configured line width.
+Tail ownership is now broader than method-chain final segments: expression contexts thread statement terminators,
+array/list commas, and variable-initializer tails through expression rendering before trailing line comments are placed.
 
 ## CLI
 

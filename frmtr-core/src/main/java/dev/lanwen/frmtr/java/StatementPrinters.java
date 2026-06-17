@@ -64,7 +64,7 @@ final class StatementPrinters {
         this.switches = new SwitchPrinter(
             context,
             this::statement,
-            expressions::expression,
+            expressions::expressionWithTail,
             this::block,
             blocks::statementSeparator,
             controlConditions::controlCondition,
@@ -85,6 +85,7 @@ final class StatementPrinters {
             blocks::blockWithLeading,
             declarations::body,
             expressions::expression,
+            expressions::expressionWithTail,
             expressions::assignmentStatement,
             expressions::returnStatement,
             expressions::objectCreationWithSuffix,
@@ -98,7 +99,11 @@ final class StatementPrinters {
             expressions::huggableBlockLambdaArguments,
             expressions::sourceMultilineMethodCallStatement,
             expressions::forcedMethodCallChain,
-            expressions::forcedMethodCallChainWithSemicolon,
+            (methodCall, lineBudget) -> expressions.forcedMethodCallWithTail(
+                methodCall,
+                ExpressionTail.SEMICOLON,
+                lineBudget
+            ),
             expressions::brokenMethodCall,
             expressions::methodCallChainHasComments,
             expressions::methodCallChainHasFinalTrailingLineComment,

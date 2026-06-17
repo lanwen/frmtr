@@ -9,6 +9,8 @@ import com.github.javaparser.ast.expr.ArrayCreationExpr;
 import com.github.javaparser.ast.expr.ArrayInitializerExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
@@ -43,6 +45,10 @@ final class ArrayExpressionPrinter {
 
     private final BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix;
 
+    private final BiFunction<MethodCallExpr, ExpressionTail, Doc> methodCallWithTail;
+
+    private final BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix;
+
     private final Function<Node, String> compactTypeLike;
 
     private final Function<Node, String> compact;
@@ -54,6 +60,8 @@ final class ArrayExpressionPrinter {
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
             BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix,
+            BiFunction<MethodCallExpr, ExpressionTail, Doc> methodCallWithTail,
+            BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
             Function<Node, String> compactTypeLike,
             Function<Node, String> compact,
             ToIntFunction<String> currentIndentedWidth
@@ -62,6 +70,8 @@ final class ArrayExpressionPrinter {
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.brokenEnclosedForSuffix = brokenEnclosedForSuffix;
+        this.methodCallWithTail = methodCallWithTail;
+        this.objectCreationWithSuffix = objectCreationWithSuffix;
         this.compactTypeLike = compactTypeLike;
         this.compact = compact;
         this.currentIndentedWidth = currentIndentedWidth;
@@ -273,7 +283,7 @@ final class ArrayExpressionPrinter {
         for (int i = 0; i < expression.getValues().size(); i++) {
             Expression value = expression.getValues().get(i);
             Expression next = i + 1 < expression.getValues().size() ? expression.getValues().get(i + 1) : null;
-            values.add(Doc.concat(arrayInitializerValue(value, next, forceNestedArrayRows), Doc.text(",")));
+            values.add(arrayInitializerValue(value, next, forceNestedArrayRows, ","));
         }
         return Doc.concat(
             Doc.text("{"),
@@ -290,7 +300,7 @@ final class ArrayExpressionPrinter {
      * value but physically placed after the current value stays on the current line. That source-position check
      * preserves trailing block comments between comma-separated values.
      */
-    private Doc arrayInitializerValue(Expression value, Expression next, boolean forceNestedArrayRows) {
+    private Doc arrayInitializerValue(Expression value, Expression next, boolean forceNestedArrayRows, String suffix) {
         List<Doc> parts = new ArrayList<>();
         Doc leadingComment = comments.ownComment(
             value,
@@ -301,24 +311,39 @@ final class ArrayExpressionPrinter {
             parts.add(leadingComment);
             parts.add(Doc.text(" "));
         }
+        Doc trailingComment = trailingBlockComment(value, next);
+        boolean suffixAppended = false;
         if (forceNestedArrayRows && value instanceof ArrayInitializerExpr nestedArrayInitializer) {
             parts.add(arrayInitializer(nestedArrayInitializer, true));
+        } else if (trailingComment == Doc.EMPTY && value instanceof MethodCallExpr methodCall) {
+            parts.add(methodCallWithTail.apply(methodCall, ExpressionTail.of(suffix)));
+            suffixAppended = true;
+        } else if (trailingComment == Doc.EMPTY && value instanceof ObjectCreationExpr objectCreation) {
+            parts.add(objectCreationWithSuffix.apply(objectCreation, suffix));
+            suffixAppended = true;
         } else {
             parts.add(expressionRenderer.format(value));
         }
-        if (next != null) {
-            Doc trailingComment = next.getComment()
-                    .filter(BlockComment.class::isInstance)
-                    .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(value, comment))
-                    .filter(comment -> CommentIndex.startsBeforeBeginLine(comment, next))
-                    .map(comments::comment)
-                    .orElse(Doc.EMPTY);
-            if (trailingComment != Doc.EMPTY) {
-                parts.add(Doc.text(" "));
-                parts.add(trailingComment);
-            }
+        if (trailingComment != Doc.EMPTY) {
+            parts.add(Doc.text(" "));
+            parts.add(trailingComment);
+        }
+        if (!suffixAppended) {
+            parts.add(Doc.text(suffix));
         }
         return Doc.concat(parts);
+    }
+
+    private Doc trailingBlockComment(Expression value, Expression next) {
+        if (next == null) {
+            return Doc.EMPTY;
+        }
+        return next.getComment()
+                .filter(BlockComment.class::isInstance)
+                .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(value, comment))
+                .filter(comment -> CommentIndex.startsBeforeBeginLine(comment, next))
+                .map(comments::comment)
+                .orElse(Doc.EMPTY);
     }
 
     private boolean nestedArrayRowsShouldBreak(ArrayInitializerExpr expression) {

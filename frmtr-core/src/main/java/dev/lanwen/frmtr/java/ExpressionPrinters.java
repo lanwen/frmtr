@@ -172,15 +172,6 @@ final class ExpressionPrinters {
             lambdas::parenthesizedLambdaBreak,
             conditionals::conditionalExpression
         );
-        this.arrays = new ArrayExpressionPrinter(
-            comments,
-            options,
-            this::expression,
-            enclosedExpressions::brokenEnclosedForSuffix,
-            compactSource::compactTypeLike,
-            compactSource::compact,
-            this::currentIndentedWidth
-        );
         this.objectCreations = new ObjectCreationPrinter(
             context,
             types,
@@ -229,10 +220,24 @@ final class ExpressionPrinters {
             this::continuationStatementWidth,
             this::blockStatementWidth
         );
+        this.arrays = new ArrayExpressionPrinter(
+            comments,
+            options,
+            this::expression,
+            enclosedExpressions::brokenEnclosedForSuffix,
+            (methodCall, tail) -> expressionWithTail(methodCall, tail),
+            objectCreations::objectCreationWithSuffix,
+            compactSource::compactTypeLike,
+            compactSource::compact,
+            this::currentIndentedWidth
+        );
         this.enclosedSuffixes = new EnclosedSuffixDispatcher(methodCalls, methodReferences);
         this.assignments = new AssignmentExpressionPrinter(
             options,
+            comments,
+            commentPlacementPolicy,
             this::expression,
+            this::expressionWithTail,
             compactSource::compact,
             this::blockStatementWidth,
             enclosedSuffixes::suffixedEnclosedExpression,
@@ -270,6 +275,7 @@ final class ExpressionPrinters {
             context.layoutWidth,
             context.objectCreationLayoutPolicy,
             this::expression,
+            this::expressionWithTail,
             lambdas::brokenExpressionLambda,
             compactSource::compact,
             this::currentIndentedWidth,
@@ -282,6 +288,7 @@ final class ExpressionPrinters {
             methodCalls::brokenMethodCallWithClosingLine,
             methodCalls::methodCallPrefix,
             methodCalls::methodCallChainIsSourceMultiline,
+            methodCalls::methodCallChainHasFinalTrailingLineComment,
             objectCreations::brokenObjectCreation,
             objectCreations::objectCreationWithSuffix,
             conditionals::conditionalExpression,
@@ -292,6 +299,38 @@ final class ExpressionPrinters {
 
     Doc expression(Expression expression) {
         return expressionRules.expression(expression);
+    }
+
+    Doc expressionWithTail(Expression expression, ExpressionTail tail) {
+        return expressionWithTail(expression, tail, LayoutWidth.LineBudget.CURRENT);
+    }
+
+    Doc expressionWithTail(
+            Expression expression,
+            ExpressionTail tail,
+            LayoutWidth.LineBudget lineBudget
+    ) {
+        if (tail.isEmpty()) {
+            return expression(expression);
+        }
+        if (expression instanceof MethodCallExpr methodCall) {
+            return Doc.label(
+                "java.expression:" + expression.getClass().getSimpleName(),
+                methodCalls.methodCallWithTail(methodCall, tail, lineBudget)
+            );
+        }
+        if (expression instanceof ObjectCreationExpr objectCreation) {
+            return objectCreations.objectCreationWithSuffix(objectCreation, tail.text());
+        }
+        return tail.appendTo(expression(expression));
+    }
+
+    Doc forcedMethodCallWithTail(
+            MethodCallExpr expression,
+            ExpressionTail tail,
+            LayoutWidth.LineBudget lineBudget
+    ) {
+        return methodCalls.forcedMethodCallWithTail(expression, tail, lineBudget);
     }
 
     Doc expressionWithoutOwnComment(Expression expression) {
@@ -386,17 +425,6 @@ final class ExpressionPrinters {
 
     Optional<Doc> forcedMethodCallChain(MethodCallExpr expression, LayoutWidth.LineBudget lineBudget) {
         return methodCalls.forcedMethodCallChain(expression, lineBudget);
-    }
-
-    Optional<Doc> forcedMethodCallChainWithSemicolon(MethodCallExpr expression) {
-        return methodCalls.forcedMethodCallChainWithSemicolon(expression);
-    }
-
-    Optional<Doc> forcedMethodCallChainWithSemicolon(
-            MethodCallExpr expression,
-            LayoutWidth.LineBudget lineBudget
-    ) {
-        return methodCalls.forcedMethodCallChainWithSemicolon(expression, lineBudget);
     }
 
     boolean methodCallChainHasComments(MethodCallExpr expression) {

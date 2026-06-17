@@ -7,8 +7,11 @@ import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.stmt.ExpressionStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -33,7 +36,13 @@ final class AssignmentExpressionPrinter {
 
     private final FormatterOptions options;
 
+    private final CommentTracker comments;
+
+    private final JavaCommentPlacementPolicy commentPlacement;
+
     private final Function<Expression, Doc> expression;
+
+    private final ExpressionTailRenderer expressionWithTail;
 
     private final Function<Node, String> compact;
 
@@ -55,7 +64,10 @@ final class AssignmentExpressionPrinter {
 
     AssignmentExpressionPrinter(
             FormatterOptions options,
+            CommentTracker comments,
+            JavaCommentPlacementPolicy commentPlacement,
             Function<Expression, Doc> expression,
+            ExpressionTailRenderer expressionWithTail,
             Function<Node, String> compact,
             ToIntFunction<String> blockStatementWidth,
             BiFunction<Expression, Boolean, Optional<Doc>> suffixedEnclosedExpression,
@@ -67,7 +79,10 @@ final class AssignmentExpressionPrinter {
             BiFunction<AssignExpr, ConditionalExpr, Optional<Doc>> conditionalAssignment
     ) {
         this.options = options;
+        this.comments = comments;
+        this.commentPlacement = commentPlacement;
         this.expression = expression;
+        this.expressionWithTail = expressionWithTail;
         this.compact = compact;
         this.blockStatementWidth = blockStatementWidth;
         this.suffixedEnclosedExpression = suffixedEnclosedExpression;
@@ -100,6 +115,21 @@ final class AssignmentExpressionPrinter {
     Doc assignmentStatement(AssignExpr expression) {
         String flat = compact.apply(expression);
         if (
+            expression.getValue() instanceof MethodCallExpr methodCall
+            && methodCallNeedsStatementTerminatorTail(expression, methodCall)
+        ) {
+            return Doc.concat(
+                this.expression.apply(expression.getTarget()),
+                Doc.text(" " + expression.getOperator().asString() + " "),
+                expressionWithTail.render(methodCall, ExpressionTail.SEMICOLON, LayoutWidth.LineBudget.BLOCK),
+                assignmentValueTailLineComment(expression, methodCall)
+                        .map(comments::comment)
+                        .filter(comment -> comment != Doc.EMPTY)
+                        .map(comment -> Doc.concat(Doc.text(" "), comment))
+                        .orElse(Doc.EMPTY)
+            );
+        }
+        if (
             blockStatementWidth.applyAsInt(flat + ";") > options.lineWidth()
             && expression.getValue() instanceof MethodCallExpr methodCall
         ) {
@@ -109,6 +139,84 @@ final class AssignmentExpressionPrinter {
             }
         }
         return Doc.concat(assignment(expression), Doc.text(";"));
+    }
+
+    private boolean methodCallNeedsStatementTerminatorTail(AssignExpr expression, MethodCallExpr methodCall) {
+        return !methodCallFinalTrailingLineComments(methodCall).isEmpty()
+            || assignmentValueTailLineComment(expression, methodCall).isPresent();
+    }
+
+    private List<JavaCommentTrivia> methodCallFinalTrailingLineComments(MethodCallExpr expression) {
+        List<JavaCommentTrivia> sourceComments = new ArrayList<>();
+        commentPlacement.trailingLineComment(expression).ifPresent(sourceComments::add);
+        commentPlacement.containedComments(expression)
+                .stream()
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.startsAfterNodeOnSameLine(expression))
+                .filter(
+                    comment -> sourceComments.stream().noneMatch(existing -> existing.comment() == comment.comment())
+                )
+                .forEach(sourceComments::add);
+        return sourceComments;
+    }
+
+    private Optional<JavaCommentTrivia> assignmentValueTailLineComment(
+            AssignExpr expression,
+            MethodCallExpr methodCall
+    ) {
+        return assignmentValueTailLineCommentCandidates(expression)
+                .stream()
+                .filter(comment -> comment.startsAfterNodeOnSameLine(methodCall))
+                .filter(comment -> commentStartsBeforeStatementSemicolon(comment, expression))
+                .findFirst();
+    }
+
+    private List<JavaCommentTrivia> assignmentValueTailLineCommentCandidates(AssignExpr expression) {
+        List<JavaCommentTrivia> candidates = new ArrayList<>();
+        commentPlacement.trailingLineComment(expression).ifPresent(candidates::add);
+        commentPlacement.containedComments(expression)
+                .stream()
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> candidates.stream().noneMatch(existing -> existing.comment() == comment.comment()))
+                .forEach(candidates::add);
+        return candidates;
+    }
+
+    private boolean commentStartsBeforeStatementSemicolon(JavaCommentTrivia comment, AssignExpr expression) {
+        return semicolonOwner(expression)
+                .map(owner -> commentStartsBeforeFinalSemicolonInRawOwner(comment, owner))
+                .orElse(false);
+    }
+
+    private boolean commentStartsBeforeFinalSemicolonInRawOwner(JavaCommentTrivia comment, Node owner) {
+        String rawOwner = owner.getTokenRange().map(Object::toString).orElseGet(owner::toString);
+        int commentIndex = commentIndex(rawOwner, comment);
+        int semicolonIndex = rawOwner.lastIndexOf(';');
+        return commentIndex >= 0 && semicolonIndex >= 0 && commentIndex < semicolonIndex;
+    }
+
+    private int commentIndex(String rawOwner, JavaCommentTrivia comment) {
+        List<String> spellings = List.of(
+            comment.comment().toString(),
+            "//" + comment.comment().getContent(),
+            "// " + comment.comment().getContent()
+        );
+        return spellings.stream()
+                .mapToInt(rawOwner::indexOf)
+                .filter(index -> index >= 0)
+                .findFirst()
+                .orElse(-1);
+    }
+
+    private Optional<Node> semicolonOwner(AssignExpr expression) {
+        Node current = expression;
+        while (current.getParentNode().isPresent()) {
+            current = current.getParentNode().orElseThrow();
+            if (current instanceof ExpressionStmt) {
+                return Optional.of(current);
+            }
+        }
+        return Optional.empty();
     }
 
     /**

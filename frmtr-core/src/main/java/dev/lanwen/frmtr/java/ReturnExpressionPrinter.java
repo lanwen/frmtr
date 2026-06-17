@@ -38,6 +38,8 @@ final class ReturnExpressionPrinter {
 
     private final Function<Expression, Doc> expression;
 
+    private final ExpressionTailRenderer expressionWithTail;
+
     private final Function<LambdaExpr, Doc> brokenLambdaExpression;
 
     private final Function<Expression, String> compact;
@@ -66,6 +68,8 @@ final class ReturnExpressionPrinter {
 
     private final Predicate<MethodCallExpr> methodCallChainIsSourceMultiline;
 
+    private final Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment;
+
     private final Function<ObjectCreationExpr, Doc> brokenObjectCreation;
 
     private final BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix;
@@ -81,6 +85,7 @@ final class ReturnExpressionPrinter {
             LayoutWidth layoutWidth,
             ObjectCreationLayoutPolicy objectCreationLayoutPolicy,
             Function<Expression, Doc> expression,
+            ExpressionTailRenderer expressionWithTail,
             Function<LambdaExpr, Doc> brokenLambdaExpression,
             Function<Expression, String> compact,
             ToIntFunction<String> currentIndentedWidth,
@@ -93,6 +98,7 @@ final class ReturnExpressionPrinter {
             BiFunction<MethodCallExpr, String, Doc> brokenMethodCallWithClosingLine,
             Function<MethodCallExpr, String> methodCallPrefix,
             Predicate<MethodCallExpr> methodCallChainIsSourceMultiline,
+            Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment,
             Function<ObjectCreationExpr, Doc> brokenObjectCreation,
             BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
             BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression,
@@ -103,6 +109,7 @@ final class ReturnExpressionPrinter {
         this.layoutWidth = layoutWidth;
         this.objectCreationLayoutPolicy = objectCreationLayoutPolicy;
         this.expression = expression;
+        this.expressionWithTail = expressionWithTail;
         this.brokenLambdaExpression = brokenLambdaExpression;
         this.compact = compact;
         this.currentIndentedWidth = currentIndentedWidth;
@@ -115,6 +122,7 @@ final class ReturnExpressionPrinter {
         this.brokenMethodCallWithClosingLine = brokenMethodCallWithClosingLine;
         this.methodCallPrefix = methodCallPrefix;
         this.methodCallChainIsSourceMultiline = methodCallChainIsSourceMultiline;
+        this.methodCallChainHasFinalTrailingLineComment = methodCallChainHasFinalTrailingLineComment;
         this.brokenObjectCreation = brokenObjectCreation;
         this.objectCreationWithSuffix = objectCreationWithSuffix;
         this.conditionalExpression = conditionalExpression;
@@ -129,6 +137,15 @@ final class ReturnExpressionPrinter {
     Doc returnStatement(Expression expression, LayoutWidth.LineBudget lineBudget) {
         if (expression instanceof ObjectCreationExpr objectCreation) {
             return Doc.concat(Doc.text("return "), objectCreationWithSuffix.apply(objectCreation, ";"));
+        }
+        if (
+            expression instanceof MethodCallExpr methodCall
+            && methodCallChainHasFinalTrailingLineComment.test(methodCall)
+        ) {
+            return Doc.concat(
+                Doc.text("return "),
+                expressionWithTail.render(methodCall, ExpressionTail.SEMICOLON, lineBudget)
+            );
         }
         return Doc.concat(Doc.text("return "), returnExpression(expression, lineBudget), Doc.text(";"));
     }

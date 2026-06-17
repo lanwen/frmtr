@@ -51,6 +51,8 @@ final class MethodCallPrinter {
 
     private final FormatterOptions options;
 
+    private final LayoutWidth layoutWidth;
+
     private final CompactSourceText compactSource;
 
     private final CommentedExpressionListPrinter commentedExpressionLists;
@@ -115,6 +117,7 @@ final class MethodCallPrinter {
         this.commentPlacement = context.commentPlacementPolicy;
         this.sourceShape = context.sourceShape;
         this.options = context.options;
+        this.layoutWidth = context.layoutWidth;
         this.compactSource = context.compactSource;
         this.commentedExpressionLists = new CommentedExpressionListPrinter(context, expressionRenderer);
         this.methodChains = new MethodCallChainPrinter(
@@ -155,6 +158,29 @@ final class MethodCallPrinter {
 
     Doc brokenMethodCall(MethodCallExpr expression) {
         return methodCall(expression, MethodCallBreakMode.FORCED);
+    }
+
+    Doc methodCallWithTail(MethodCallExpr expression, ExpressionTail tail) {
+        return methodCallWithTail(expression, tail, LayoutWidth.LineBudget.CURRENT);
+    }
+
+    Doc methodCallWithTail(
+            MethodCallExpr expression,
+            ExpressionTail tail,
+            LayoutWidth.LineBudget lineBudget
+    ) {
+        MethodCallBreakMode breakMode = methodCallWithTailOverflows(expression, tail, lineBudget)
+            ? MethodCallBreakMode.FORCED
+            : MethodCallBreakMode.AUTO;
+        return methodCallWithTail(expression, tail, breakMode, lineBudget);
+    }
+
+    Doc forcedMethodCallWithTail(
+            MethodCallExpr expression,
+            ExpressionTail tail,
+            LayoutWidth.LineBudget lineBudget
+    ) {
+        return methodCallWithTail(expression, tail, MethodCallBreakMode.FORCED, lineBudget);
     }
 
     Doc brokenMethodCallWithClosingLine(MethodCallExpr expression, String closingLine) {
@@ -286,6 +312,71 @@ final class MethodCallPrinter {
         return Doc.group(call);
     }
 
+    private Doc methodCallWithTail(
+            MethodCallExpr expression,
+            ExpressionTail tail,
+            MethodCallBreakMode breakMode,
+            LayoutWidth.LineBudget lineBudget
+    ) {
+        if (tail.isEmpty()) {
+            return methodCall(expression, breakMode);
+        }
+        Optional<Doc> chain = methodCallChain(expression, breakMode, tail.text(), lineBudget);
+        if (chain.isPresent()) {
+            return chain.orElseThrow();
+        }
+        if (finalTrailingLineComments(expression).isEmpty()) {
+            Optional<Doc> unsuffixedChain = methodCallChain(expression, breakMode, "", lineBudget);
+            if (unsuffixedChain.isPresent()) {
+                return tail.appendTo(unsuffixedChain.orElseThrow());
+            }
+        }
+        return appendTailBeforeFinalTrailingLineComment(methodCall(expression, breakMode), expression, tail);
+    }
+
+    private boolean methodCallWithTailOverflows(
+            MethodCallExpr expression,
+            ExpressionTail tail,
+            LayoutWidth.LineBudget lineBudget
+    ) {
+        return layoutWidth.line(lineBudget, compactSource.compact(expression) + tail.text()) > options.lineWidth();
+    }
+
+    private Doc appendTailBeforeFinalTrailingLineComment(
+            Doc call,
+            MethodCallExpr expression,
+            ExpressionTail tail
+    ) {
+        Doc trailingComment = finalTrailingLineComment(expression);
+        if (trailingComment == Doc.EMPTY) {
+            return tail.appendTo(call);
+        }
+        return Doc.concat(call, tail.doc(), Doc.text(" "), trailingComment);
+    }
+
+    private Doc finalTrailingLineComment(MethodCallExpr expression) {
+        List<Doc> sourceComments = finalTrailingLineComments(expression)
+                .stream()
+                .map(comments::comment)
+                .filter(comment -> comment != Doc.EMPTY)
+                .toList();
+        return sourceComments.isEmpty() ? Doc.EMPTY : Doc.join(Doc.text(" "), sourceComments);
+    }
+
+    private List<JavaCommentTrivia> finalTrailingLineComments(MethodCallExpr expression) {
+        List<JavaCommentTrivia> sourceComments = new ArrayList<>();
+        commentPlacement.trailingLineComment(expression).ifPresent(sourceComments::add);
+        commentPlacement.containedComments(expression)
+                .stream()
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.startsAfterNodeOnSameLine(expression))
+                .filter(
+                    comment -> sourceComments.stream().noneMatch(existing -> existing.comment() == comment.comment())
+                )
+                .forEach(sourceComments::add);
+        return sourceComments;
+    }
+
     /**
      * Records the argument list's flat-width decision when a forced call breaks because its single-line form overflowed
      * the budget, so explain can report the real arithmetic instead of an opaque forced break.
@@ -409,17 +500,6 @@ final class MethodCallPrinter {
         return methodChains.forcedMethodCallChain(expression, lineBudget);
     }
 
-    Optional<Doc> forcedMethodCallChainWithSemicolon(MethodCallExpr expression) {
-        return methodChains.forcedMethodCallChainWithSemicolon(expression);
-    }
-
-    Optional<Doc> forcedMethodCallChainWithSemicolon(
-            MethodCallExpr expression,
-            LayoutWidth.LineBudget lineBudget
-    ) {
-        return methodChains.forcedMethodCallChainWithSemicolon(expression, lineBudget);
-    }
-
     Optional<Doc> compactRootWithBrokenFinalChainSegment(MethodCallExpr expression) {
         return methodChains.compactRootWithBrokenFinalChainSegment(expression);
     }
@@ -448,6 +528,15 @@ final class MethodCallPrinter {
             String finalSegmentSuffix
     ) {
         return methodChains.methodCallChain(expression, breakMode, finalSegmentSuffix);
+    }
+
+    Optional<Doc> methodCallChain(
+            MethodCallExpr expression,
+            MethodCallBreakMode breakMode,
+            String finalSegmentSuffix,
+            LayoutWidth.LineBudget lineBudget
+    ) {
+        return methodChains.methodCallChain(expression, breakMode, finalSegmentSuffix, lineBudget);
     }
 
     Optional<Doc> mixedFieldMethodCallChain(MethodCallExpr expression) {
@@ -780,7 +869,7 @@ final class MethodCallPrinter {
             if (chain.isPresent()) {
                 return chain.orElseThrow();
             }
-            return Doc.concat(expressionRenderer.apply(methodCall), Doc.text(suffix));
+            return methodCallWithTail(methodCall, ExpressionTail.of(suffix));
         }
         if (argument instanceof ObjectCreationExpr objectCreation && !suffix.isEmpty()) {
             return objectCreationWithSuffix.apply(objectCreation, suffix);

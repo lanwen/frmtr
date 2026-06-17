@@ -2,6 +2,7 @@ package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
@@ -23,6 +24,7 @@ import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.IntersectionType;
 import com.github.javaparser.ast.type.Type;
+import com.github.javaparser.ast.stmt.ExpressionStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
@@ -44,6 +46,8 @@ import java.util.function.Predicate;
 final class VariableInitializerLayout {
 
     private final CommentTracker comments;
+
+    private final JavaCommentPlacementPolicy commentPlacement;
 
     private final RawSource rawSource;
 
@@ -85,7 +89,7 @@ final class VariableInitializerLayout {
 
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain;
 
-    private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainWithSemicolon;
+    private final Function<MethodCallExpr, Doc> methodCallWithSemicolon;
 
     private final Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment;
 
@@ -131,6 +135,7 @@ final class VariableInitializerLayout {
 
     VariableInitializerLayout(
             CommentTracker comments,
+            JavaCommentPlacementPolicy commentPlacement,
             RawSource rawSource,
             SourceShape sourceShape,
             FormatterOptions options,
@@ -151,7 +156,7 @@ final class VariableInitializerLayout {
             Function<MethodCallExpr, Doc> brokenMethodCall,
             Function<MethodCallExpr, Optional<Doc>> mixedFieldMethodCallChain,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain,
-            Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainWithSemicolon,
+            Function<MethodCallExpr, Doc> methodCallWithSemicolon,
             Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment,
             Function<MethodCallExpr, Optional<Expression>> mixedFieldMethodCallRoot,
             Function<MethodCallExpr, String> methodCallChainFirstLine,
@@ -175,6 +180,7 @@ final class VariableInitializerLayout {
             Function<LambdaExpr, Doc> lambdaExpression
     ) {
         this.comments = comments;
+        this.commentPlacement = commentPlacement;
         this.rawSource = rawSource;
         this.sourceShape = sourceShape;
         this.options = options;
@@ -195,7 +201,7 @@ final class VariableInitializerLayout {
         this.brokenMethodCall = brokenMethodCall;
         this.mixedFieldMethodCallChain = mixedFieldMethodCallChain;
         this.forcedMethodCallChain = forcedMethodCallChain;
-        this.forcedMethodCallChainWithSemicolon = forcedMethodCallChainWithSemicolon;
+        this.methodCallWithSemicolon = methodCallWithSemicolon;
         this.methodCallChainHasFinalTrailingLineComment = methodCallChainHasFinalTrailingLineComment;
         this.mixedFieldMethodCallRoot = mixedFieldMethodCallRoot;
         this.methodCallChainFirstLine = methodCallChainFirstLine;
@@ -222,23 +228,132 @@ final class VariableInitializerLayout {
     Doc variableWithStatementTerminator(VariableDeclarator variable, String declarationPrefix) {
         if (
             variable.getInitializer().orElse(null) instanceof MethodCallExpr methodCall
-            && methodCallChainHasFinalTrailingLineComment.test(methodCall)
+            && methodCallNeedsStatementTerminatorTail(variable, methodCall)
         ) {
-            Optional<Doc> chain = forcedMethodCallChainWithSemicolon.apply(methodCall);
-            if (chain.isPresent()) {
-                return variableWithMethodCallChain(
-                    variableName(variable),
-                    declarationPrefix + variable.getNameAsString(),
-                    methodCall,
-                    methodCallChainFirstLine.apply(methodCall),
-                    chain.orElseThrow()
-                );
-            }
+            Doc variableInitializerTailComment = initializerTailLineComment(variable, methodCall)
+                    .map(comments::comment)
+                    .orElse(Doc.EMPTY);
+            Doc declaration = variableWithMethodCallChain(
+                variableName(variable),
+                declarationPrefix + variable.getNameAsString(),
+                methodCall,
+                methodCallChainFirstLine.apply(methodCall),
+                methodCallWithSemicolon.apply(methodCall)
+            );
+            return Doc.concat(declaration, trailingLineComment(variableInitializerTailComment));
         }
+        if (
+            variable.getInitializer().orElse(null) instanceof MethodCallExpr methodCall
+            && methodCallChainIsSourceMultiline.test(methodCall)
+            && !methodCallFinalTrailingLineComments(methodCall).isEmpty()
+        ) {
+            return variableWithMethodCallChain(
+                variableName(variable),
+                declarationPrefix + variable.getNameAsString(),
+                methodCall,
+                methodCallChainFirstLine.apply(methodCall),
+                methodCallWithSemicolon.apply(methodCall)
+            );
+        }
+        Doc trailingLineComment = comments.trailingLineComment(variable);
         Doc declaration = variable.getInitializer()
                 .map(initializer -> variableWithInitializer(variable, initializer, declarationPrefix))
                 .orElseGet(() -> Doc.text(variableName(variable)));
-        return Doc.concat(declaration, Doc.text(";"));
+        return Doc.concat(declaration, Doc.text(";"), trailingLineComment(trailingLineComment));
+    }
+
+    private boolean methodCallNeedsStatementTerminatorTail(VariableDeclarator variable, MethodCallExpr methodCall) {
+        return methodCallHasPreSemicolonTailLineComment(variable, methodCall)
+            || initializerTailLineComment(variable, methodCall).isPresent();
+    }
+
+    private boolean methodCallHasPreSemicolonTailLineComment(
+            VariableDeclarator variable,
+            MethodCallExpr methodCall
+    ) {
+        return methodCallFinalTrailingLineComments(methodCall)
+                .stream()
+                .anyMatch(comment -> commentStartsBeforeDeclarationSemicolon(comment, variable));
+    }
+
+    private List<JavaCommentTrivia> methodCallFinalTrailingLineComments(MethodCallExpr expression) {
+        List<JavaCommentTrivia> sourceComments = new ArrayList<>();
+        commentPlacement.trailingLineComment(expression).ifPresent(sourceComments::add);
+        commentPlacement.containedComments(expression)
+                .stream()
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.startsAfterNodeOnSameLine(expression))
+                .filter(
+                    comment -> sourceComments.stream().noneMatch(existing -> existing.comment() == comment.comment())
+                )
+                .forEach(sourceComments::add);
+        return sourceComments;
+    }
+
+    private Optional<JavaCommentTrivia> initializerTailLineComment(
+            VariableDeclarator variable,
+            Expression initializer
+    ) {
+        return initializerTailLineCommentCandidates(variable)
+                .stream()
+                .filter(comment -> comment.startsAfterNodeOnSameLine(initializer))
+                .filter(comment -> commentStartsBeforeDeclarationSemicolon(comment, variable))
+                .findFirst();
+    }
+
+    private List<JavaCommentTrivia> initializerTailLineCommentCandidates(VariableDeclarator variable) {
+        List<JavaCommentTrivia> candidates = new ArrayList<>();
+        commentPlacement.trailingLineComment(variable).ifPresent(candidates::add);
+        commentPlacement.containedComments(variable)
+                .stream()
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> candidates.stream().noneMatch(existing -> existing.comment() == comment.comment()))
+                .forEach(candidates::add);
+        return candidates;
+    }
+
+    private boolean commentStartsBeforeDeclarationSemicolon(
+            JavaCommentTrivia comment,
+            VariableDeclarator variable
+    ) {
+        return semicolonOwner(variable)
+                .map(owner -> commentStartsBeforeFinalSemicolonInRawOwner(comment, owner))
+                .orElse(false);
+    }
+
+    private boolean commentStartsBeforeFinalSemicolonInRawOwner(JavaCommentTrivia comment, Node owner) {
+        String rawOwner = rawSource.raw(owner);
+        int commentIndex = commentIndex(rawOwner, comment);
+        int semicolonIndex = rawOwner.lastIndexOf(';');
+        return commentIndex >= 0 && semicolonIndex >= 0 && commentIndex < semicolonIndex;
+    }
+
+    private int commentIndex(String rawOwner, JavaCommentTrivia comment) {
+        List<String> spellings = List.of(
+            comment.comment().toString(),
+            "//" + comment.comment().getContent(),
+            "// " + comment.comment().getContent()
+        );
+        return spellings.stream()
+                .mapToInt(rawOwner::indexOf)
+                .filter(index -> index >= 0)
+                .findFirst()
+                .orElse(-1);
+    }
+
+    private Optional<Node> semicolonOwner(VariableDeclarator variable) {
+        Node current = variable;
+        while (current.getParentNode().isPresent()) {
+            current = current.getParentNode().orElseThrow();
+            if (current instanceof FieldDeclaration || current instanceof ExpressionStmt) {
+                return Optional.of(current);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Doc trailingLineComment(Doc comment) {
+        return comment == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), comment);
     }
 
     /**

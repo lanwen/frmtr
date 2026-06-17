@@ -97,6 +97,8 @@ final class StatementPrinter {
 
     private final JavaFormatRule<Expression> expressionRenderer;
 
+    private final ExpressionTailRenderer expressionWithTailRenderer;
+
     private final Function<AssignExpr, Doc> assignmentStatementRenderer;
 
     private final BiFunction<Expression, LayoutWidth.LineBudget, Doc> returnStatementRenderer;
@@ -126,8 +128,8 @@ final class StatementPrinter {
     private final BiFunction<
         MethodCallExpr,
         LayoutWidth.LineBudget,
-        Optional<Doc>
-    > forcedMethodCallChainWithSemicolonRenderer;
+        Doc
+    > forcedMethodCallWithSemicolonRenderer;
 
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
 
@@ -164,6 +166,7 @@ final class StatementPrinter {
             BiFunction<BlockStmt, Doc, Doc> blockWithLeadingRenderer,
             JavaFormatRule<BodyDeclaration<?>> bodyRenderer,
             JavaFormatRule<Expression> expressionRenderer,
+            ExpressionTailRenderer expressionWithTailRenderer,
             Function<AssignExpr, Doc> assignmentStatementRenderer,
             BiFunction<Expression, LayoutWidth.LineBudget, Doc> returnStatementRenderer,
             BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
@@ -177,7 +180,7 @@ final class StatementPrinter {
             HuggableArgumentsRenderer huggableBlockLambdaArguments,
             BiFunction<MethodCallExpr, ExpressionStmt, Optional<Doc>> sourceMultilineMethodCallStatementRenderer,
             BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Optional<Doc>> forcedMethodCallChainRenderer,
-            BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Optional<Doc>> forcedMethodCallChainWithSemicolonRenderer,
+            BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Doc> forcedMethodCallWithSemicolonRenderer,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
             Predicate<MethodCallExpr> methodCallChainHasComments,
             Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment,
@@ -202,6 +205,7 @@ final class StatementPrinter {
         this.blockWithLeadingRenderer = blockWithLeadingRenderer;
         this.bodyRenderer = bodyRenderer;
         this.expressionRenderer = expressionRenderer;
+        this.expressionWithTailRenderer = expressionWithTailRenderer;
         this.assignmentStatementRenderer = assignmentStatementRenderer;
         this.returnStatementRenderer = returnStatementRenderer;
         this.objectCreationWithSuffix = objectCreationWithSuffix;
@@ -215,7 +219,7 @@ final class StatementPrinter {
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.sourceMultilineMethodCallStatementRenderer = sourceMultilineMethodCallStatementRenderer;
         this.forcedMethodCallChainRenderer = forcedMethodCallChainRenderer;
-        this.forcedMethodCallChainWithSemicolonRenderer = forcedMethodCallChainWithSemicolonRenderer;
+        this.forcedMethodCallWithSemicolonRenderer = forcedMethodCallWithSemicolonRenderer;
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
         this.methodCallChainHasComments = methodCallChainHasComments;
         this.methodCallChainHasFinalTrailingLineComment = methodCallChainHasFinalTrailingLineComment;
@@ -332,7 +336,10 @@ final class StatementPrinter {
         if (thrown instanceof ObjectCreationExpr objectCreation) {
             return Doc.concat(Doc.text("throw "), objectCreationWithSuffix.apply(objectCreation, ";"));
         }
-        return Doc.concat(Doc.text("throw "), expressionRenderer.format(thrown), Doc.text(";"));
+        return Doc.concat(
+            Doc.text("throw "),
+            expressionWithTailRenderer.render(thrown, ExpressionTail.SEMICOLON, LayoutWidth.LineBudget.BLOCK)
+        );
     }
 
     private Doc labeledStatement(LabeledStmt statement) {
@@ -429,7 +436,14 @@ final class StatementPrinter {
         if (compact.apply(statement.getExpression()).equals("()")) {
             return Doc.text("yield();");
         }
-        return Doc.concat(Doc.text("yield "), expressionRenderer.format(statement.getExpression()), Doc.text(";"));
+        return Doc.concat(
+            Doc.text("yield "),
+            expressionWithTailRenderer.render(
+                statement.getExpression(),
+                ExpressionTail.SEMICOLON,
+                LayoutWidth.LineBudget.BLOCK
+            )
+        );
     }
 
     private Doc explicitConstructorInvocation(ExplicitConstructorInvocationStmt statement) {
@@ -470,28 +484,23 @@ final class StatementPrinter {
         Expression expression = statement.getExpression();
         Doc trailing = expressionStatementTrailingComment(statement);
         if (expression instanceof VariableDeclarationExpr variableDeclaration) {
-            return variableDeclarationStatementRenderer.format(variableDeclaration);
+            return Doc.concat(
+                variableDeclarationStatementRenderer.format(variableDeclaration),
+                variableDeclarationTrailingComment(variableDeclaration),
+                trailing
+            );
         }
         if (expression instanceof MethodCallExpr methodCall) {
+            if (methodCallChainHasFinalTrailingLineComment.test(methodCall)) {
+                return Doc.concat(forcedMethodCallWithSemicolonRenderer.apply(methodCall, lineBudget), trailing);
+            }
             if (!methodCallChainIsSourceMultiline.test(methodCall)) {
                 Optional<Doc> sourceMultilineCall = sourceMultilineMethodCallStatementRenderer.apply(
                     methodCall,
                     statement
                 );
                 if (sourceMultilineCall.isPresent()) {
-                    return Doc.concat(sourceMultilineCall.orElseThrow(), Doc.text(";"), trailing);
-                }
-            } else if (methodCallChainHasFinalTrailingLineComment.test(methodCall)) {
-                // A source-multiline chain whose final segment carries a trailing line comment must keep the statement
-                // semicolon before that comment. Appending Doc.text(";") after the rendered chain would put the ; after
-                // a // comment (`.collect(x) // note;`), commenting the semicolon out and producing non-reparseable
-                // output. The with-semicolon renderer threads the ; into the final segment, before the comment.
-                Optional<Doc> chainWithSemicolon = forcedMethodCallChainWithSemicolonRenderer.apply(
-                    methodCall,
-                    lineBudget
-                );
-                if (chainWithSemicolon.isPresent()) {
-                    return Doc.concat(chainWithSemicolon.orElseThrow(), trailing);
+                    return Doc.concat(sourceMultilineCall.orElseThrow(), ExpressionTail.SEMICOLON.doc(), trailing);
                 }
             }
             if (methodCallStatementWidth(methodCall, lineBudget) > options.lineWidth()) {
@@ -500,20 +509,10 @@ final class StatementPrinter {
                     || methodCallChainRootIsObjectCreation.test(methodCall)
                     || !methodCallChainRootIsFieldAccess.test(methodCall);
                 if (chainBreak) {
-                    Optional<Doc> chainWithSemicolon = forcedMethodCallChainWithSemicolonRenderer.apply(
-                        methodCall,
-                        lineBudget
-                    );
-                    if (chainWithSemicolon.isPresent()) {
-                        return Doc.concat(chainWithSemicolon.orElseThrow(), trailing);
-                    }
+                    return Doc.concat(forcedMethodCallWithSemicolonRenderer.apply(methodCall, lineBudget), trailing);
                 }
                 return Doc.concat(
-                    chainBreak
-                        ? forcedMethodCallChainRenderer.apply(methodCall, lineBudget)
-                                        .orElseGet(() -> brokenMethodCallRenderer.apply(methodCall))
-                        : brokenMethodCallRenderer.apply(methodCall),
-                    Doc.text(";"),
+                    forcedMethodCallWithSemicolonRenderer.apply(methodCall, lineBudget),
                     trailing
                 );
             }
@@ -521,7 +520,7 @@ final class StatementPrinter {
         if (expression instanceof AssignExpr assignExpr) {
             return Doc.concat(assignmentStatementRenderer.apply(assignExpr), trailing);
         }
-        return Doc.concat(expressionRenderer.format(expression), Doc.text(";"), trailing);
+        return Doc.concat(expressionWithTailRenderer.render(expression, ExpressionTail.SEMICOLON, lineBudget), trailing);
     }
 
     private Doc expressionStatementTrailingComment(ExpressionStmt statement) {
@@ -532,6 +531,11 @@ final class StatementPrinter {
         return conditionalElseStatementTrailingComment(statement)
                 .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
                 .orElse(Doc.EMPTY);
+    }
+
+    private Doc variableDeclarationTrailingComment(VariableDeclarationExpr declaration) {
+        Doc declarationTrailing = comments.trailingLineComment(declaration);
+        return declarationTrailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), declarationTrailing);
     }
 
     private int methodCallStatementWidth(MethodCallExpr methodCall, LayoutWidth.LineBudget lineBudget) {

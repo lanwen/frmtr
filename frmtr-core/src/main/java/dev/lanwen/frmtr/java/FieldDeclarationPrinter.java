@@ -68,6 +68,7 @@ final class FieldDeclarationPrinter {
 
     FieldDeclarationPrinter(
             CommentTracker comments,
+            JavaCommentPlacementPolicy commentPlacement,
             RawSource rawSource,
             SourceShape sourceShape,
             FormatterOptions options,
@@ -93,7 +94,7 @@ final class FieldDeclarationPrinter {
             Function<MethodCallExpr, Doc> brokenMethodCall,
             Function<MethodCallExpr, Optional<Doc>> mixedFieldMethodCallChain,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain,
-            Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainWithSemicolon,
+            Function<MethodCallExpr, Doc> methodCallWithSemicolon,
             Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment,
             Function<MethodCallExpr, Optional<Expression>> mixedFieldMethodCallRoot,
             Function<MethodCallExpr, String> methodCallChainFirstLine,
@@ -126,6 +127,7 @@ final class FieldDeclarationPrinter {
         this.typeCanBreak = typeCanBreak;
         this.initializers = new VariableInitializerLayout(
             comments,
+            commentPlacement,
             rawSource,
             sourceShape,
             options,
@@ -146,7 +148,7 @@ final class FieldDeclarationPrinter {
             brokenMethodCall,
             mixedFieldMethodCallChain,
             forcedMethodCallChain,
-            forcedMethodCallChainWithSemicolon,
+            methodCallWithSemicolon,
             methodCallChainHasFinalTrailingLineComment,
             mixedFieldMethodCallRoot,
             methodCallChainFirstLine,

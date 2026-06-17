@@ -137,17 +137,6 @@ final class MethodCallChainPrinter {
         return methodCallChain(expression, MethodCallBreakMode.FORCED, MethodCallChainTail.EMPTY, lineBudget);
     }
 
-    Optional<Doc> forcedMethodCallChainWithSemicolon(MethodCallExpr expression) {
-        return forcedMethodCallChainWithSemicolon(expression, LayoutWidth.LineBudget.CURRENT);
-    }
-
-    Optional<Doc> forcedMethodCallChainWithSemicolon(
-            MethodCallExpr expression,
-            LayoutWidth.LineBudget lineBudget
-    ) {
-        return methodCallChain(expression, MethodCallBreakMode.FORCED, MethodCallChainTail.of(";"), lineBudget);
-    }
-
     Optional<Doc> compactRootWithBrokenFinalChainSegment(MethodCallExpr expression) {
         return compactRootWithBrokenFinalChainSegment(expression, LayoutWidth.LineBudget.CURRENT);
     }
@@ -326,7 +315,7 @@ final class MethodCallChainPrinter {
         );
     }
 
-    private Optional<Doc> methodCallChain(
+    Optional<Doc> methodCallChain(
             MethodCallExpr expression,
             MethodCallBreakMode breakMode,
             String finalSegmentSuffix,

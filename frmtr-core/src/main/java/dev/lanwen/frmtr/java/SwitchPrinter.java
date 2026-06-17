@@ -65,7 +65,7 @@ final class SwitchPrinter {
 
     private final JavaFormatRule<Statement> statementRenderer;
 
-    private final JavaFormatRule<Expression> expressionRenderer;
+    private final ExpressionTailRenderer expressionWithTailRenderer;
 
     private final JavaFormatRule<BlockStmt> blockRenderer;
 
@@ -143,7 +143,7 @@ final class SwitchPrinter {
     SwitchPrinter(
             JavaFormatContext context,
             JavaFormatRule<Statement> statementRenderer,
-            JavaFormatRule<Expression> expressionRenderer,
+            ExpressionTailRenderer expressionWithTailRenderer,
             JavaFormatRule<BlockStmt> blockRenderer,
             BiFunction<Statement, Statement, Doc> statementSeparator,
             Function<Expression, Doc> controlConditionRenderer,
@@ -160,7 +160,7 @@ final class SwitchPrinter {
         this.rawGaps = new RecoveredRawGapPrinter(context, SwitchPrinter::switchEntryListRecoveryFailure);
         this.recoverParseProblems = context.recoverParseProblems;
         this.statementRenderer = statementRenderer;
-        this.expressionRenderer = expressionRenderer;
+        this.expressionWithTailRenderer = expressionWithTailRenderer;
         this.blockRenderer = blockRenderer;
         this.statementSeparator = statementSeparator;
         this.controlConditionRenderer = controlConditionRenderer;
@@ -762,7 +762,7 @@ final class SwitchPrinter {
             return switchRuleBlock(statement.asBlockStmt());
         }
         if (statement instanceof ExpressionStmt expressionStmt) {
-            return Doc.concat(expressionRenderer.format(expressionStmt.getExpression()), Doc.text(";"));
+            return expressionWithTailRenderer.render(expressionStmt.getExpression(), ExpressionTail.SEMICOLON);
         }
         return Doc.concat(statementRenderer.format(statement));
     }

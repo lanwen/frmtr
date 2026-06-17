@@ -116,6 +116,7 @@ final class DeclarationPrinters {
         );
         this.fields = new FieldDeclarationPrinter(
             comments,
+            commentPlacementPolicy,
             rawSource,
             context.sourceShape,
             options,
@@ -141,7 +142,7 @@ final class DeclarationPrinters {
             expressions::brokenMethodCall,
             expressions::mixedFieldMethodCallChain,
             expressions::forcedMethodCallChain,
-            expressions::forcedMethodCallChainWithSemicolon,
+            methodCall -> expressions.expressionWithTail(methodCall, ExpressionTail.SEMICOLON),
             expressions::methodCallChainHasFinalTrailingLineComment,
             expressions::mixedFieldMethodCallRoot,
             expressions::methodCallChainFirstLine,

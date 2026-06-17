@@ -88,10 +88,10 @@ LSP `FormattingOptions` carries `tabSize`, `insertSpaces`, and optionally
 | (no LSP equivalent)         | `lambdaArrowParens`, `binaryOperatorPosition`, `javaLanguageLevel` — server config |
 | (always)                    | `parseErrorBehavior = RECOVER` (editors send dirty buffers) |
 
-Note `Main.formatterOptions()` today hardcodes `SPACE`, `DEFAULT_INDENT_WIDTH`, and `LF` and only
-exposes `--line-width`, `--java-level`, `--parse-error-behavior`. The LSP server should drive
+The CLI starts from `FormatterOptions.defaults()`, exposes only `--line-width`, `--java-level`, and
+`--parse-error-behavior`, and applies line width only when supplied. The LSP server should drive
 `FormatterOptions` from the request's `FormattingOptions` plus a workspace config block, so it is
-strictly more configurable than the CLI here — no core change needed for the mapping itself.
+more configurable than the CLI here — no core change needed for the mapping itself.
 
 ### Recovery already targets editor flows — but recovers a bounded node set
 

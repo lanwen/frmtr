@@ -75,7 +75,6 @@ frmtr {
     java {
         include("**/*.java")
         exclude("**/generated/**")
-        lineWidth = 120
         languageLevel = FrmtrJavaLanguageLevel.LATEST_AVAILABLE
     }
     check {

@@ -1,16 +1,19 @@
 # Multi-file parallelism and content-addressed caching
 
-Status: Partially implemented — runner-level bounded parallelism and CLI progress reporting landed;
-Gradle incremental/cache work and any Gradle-native progress/logging follow-up remain proposed.
+Status: Partially implemented — runner-level bounded parallelism, CLI progress reporting, and
+Gradle incremental/cache behavior landed; any Gradle-native progress/logging follow-up remains
+proposed.
 
 ## Summary
 
 `frmtr` originally formatted files one at a time. The first implementation slice replaced the shared
 tooling runner's sequential `stream().map(...)` with bounded, order-preserving parallel processing
-for `check` and `write`. The Gradle plugin still compounds unchanged-file work: its `frmtrJavaCheck`
-/ `frmtrJavaFormat` tasks declare `@InputFiles` but **no outputs**, are **not** `@CacheableTask`,
-and use **no** `InputChanges` / `@Incremental` wiring — so every invocation re-reads and
-re-formats every source file in the source set, even when nothing changed.
+for `check` and `write`. The Gradle plugin now avoids compounding unchanged-file work:
+`frmtrJavaCheck` has a deterministic success marker, is `@CacheableTask`, and uses `InputChanges`
+on Gradle's `@SkipWhenEmpty` source file input so changed-source runs process only added or
+modified files. `frmtrJavaFormat` remains deliberately
+non-cacheable because it mutates source files in place and does not declare a synthetic marker
+output.
 
 The generated-file hang finding makes this more than a throughput problem. `check` and `write` still
 preserve ordered final status, diagnostics, diffs, and summary output, but the CLI now also renders a
@@ -26,16 +29,17 @@ cheap):
    thread-safety analysis), so the per-file work can run on a bounded thread pool while results stay
    deterministically ordered.
 2. **Skip-unchanged caching**, keyed by `(content-hash, options, formatter-version)`:
-   - In **Gradle**, the idiomatic and durable form — make the tasks `@CacheableTask`, declare proper
-     outputs, and use incremental inputs so unchanged files are skipped and warm re-runs are
-     `UP-TO-DATE` / `FROM-CACHE`.
+   - In **Gradle**, the idiomatic and durable form is now implemented for verification: declare a
+     cacheable check task with a deterministic marker output and use incremental inputs so unchanged
+     files are skipped and warm re-runs are `UP-TO-DATE` / `FROM-CACHE`. The mutating format task
+     stays non-cacheable and does not declare a synthetic output marker.
    - In the **CLI**, a results cache is discussed but recommended **out of scope** for now, to
      respect the explicit non-goal in `cli-discovery-lazy-ignore.md`: *"Do not introduce a
      persistent discovery cache across CLI invocations."* Parallelism alone is the CLI win.
 
 On a monorepo the implemented runner slice turns cold multi-file runs from sequential into
-core-parallel. The remaining Gradle slice would turn a warm `check` from "re-format everything" into
-"skip everything."
+core-parallel, and the implemented Gradle slice turns a warm successful `check` from "re-format
+everything" into `UP-TO-DATE` or `FROM-CACHE`.
 
 ## Original sequential behavior (grounded)
 
@@ -83,27 +87,30 @@ return new FormatRunResult(selectedFiles(displayRoot, files).stream()
 they do not emit anything until the whole run finishes. `printFiles(...)` at least prints each file
 after formatting it, but it is still sequential and a pathological file blocks all later output.
 
-### The Gradle plugin reformats unchanged files every run
+### The Gradle plugin uses native incremental and cache state
 
 `frmtr-gradle-plugin/src/main/java/dev/lanwen/frmtr/gradle/`:
 
-- `AbstractFrmtrJavaTask` declares inputs only:
+- `AbstractFrmtrJavaTask` declares Gradle-native incremental inputs:
   - `@SkipWhenEmpty @InputFiles @PathSensitive(RELATIVE)` `getSourceFiles()`
   - `@Input` for `includes`, `excludes`, `lineWidth`, `javaLanguageLevel`
   - `@Internal` `projectDirectory`
-- **No** `@OutputFiles` / `@OutputDirectory`; **no** `@CacheableTask`; **no** `InputChanges`.
-  Grepping the plugin source for `CacheableTask`, `InputChanges`, `@Incremental`, `getOutputs`,
-  `@OutputFiles` returns nothing.
-- `FrmtrJavaFormatTask.format()` calls `FormatterRunner.write(displayRoot(), selectedFiles(), ...)`
-  over the **whole** source set every time.
-- `FrmtrJavaCheckTask.checkFormatting()` calls `FormatterRunner.check(...)` over the whole source
-  set and, having no declared outputs, can never be `UP-TO-DATE`: Gradle re-runs it on every
-  `check`. `frmtrCheck` is wired into the lifecycle `check` task via `dependsOn`.
+- `FrmtrJavaCheckTask` is `@CacheableTask` and declares an `@OutputFile` success marker under the
+  project's build directory. The marker is cleared when the task executes and written only after a
+  successful check with no formatter failures and no unformatted files. Successful checks can
+  therefore be `UP-TO-DATE` or restored `FROM-CACHE` with `--build-cache`.
+- `FrmtrJavaFormatTask` remains `@DisableCachingByDefault` because it rewrites sources in place.
+  It does not declare a marker output or use Gradle's incremental task API, so Gradle still executes
+  the mutating task instead of restoring or skipping source rewrites through synthetic output state.
+- The check task action accepts `InputChanges`: non-incremental runs process the whole selected
+  source set, while incremental runs pass only added/modified file changes to `FormatterRunner` and
+  ignore removed files for formatting work.
+- `frmtrCheck` is wired into the lifecycle `check` task via `dependsOn`.
 - `FrmtrGradlePlugin.configureJava(...)` registers both tasks and feeds them a lazily-computed
   `sourceFiles` provider derived from `sourceSet.getAllJava()` (build dir excluded).
 
-So on a 5,000-file module where one file changed, today's `frmtrJavaCheck` re-reads and
-re-formats all 5,000.
+So on a 5,000-file module where one source file changed after a successful run, `frmtrJavaCheck`
+processes the changed source file instead of re-reading and re-formatting all 5,000.
 
 ## Thread-safety analysis: is `Frmtr.format` safe to call concurrently? — **Yes.**
 
@@ -229,41 +236,37 @@ cache location, eviction, and corruption handling, and must explicitly revisit t
 non-goal. (An in-memory per-process cache would be pointless: a single CLI run visits each path
 once.)
 
-### (c) Gradle incremental inputs + `@CacheableTask` + build-cache relocatability — proposed-new
+### (c) Gradle incremental inputs + `@CacheableTask` + build-cache relocatability — implemented
 
 This is where the content-addressed idea pays off durably, because Gradle already implements
 content hashing, an incremental input change set, and a (optionally remote) build cache. We just
-have to declare the tasks correctly.
+have to declare the tasks correctly. The implemented Gradle slice follows this design.
 
 **Declare outputs only where the task semantics are cacheable.**
 
-- Annotate `frmtrJavaCheck` with `@CacheableTask` once it has a deterministic success marker output.
-  Keep `frmtrJavaFormat` non-cacheable in v1 unless its in-place source mutation is redesigned around
-  a safe output model.
+- `frmtrJavaCheck` is annotated with `@CacheableTask` and has a deterministic success marker output.
+  `frmtrJavaFormat` stays non-cacheable unless its in-place source mutation is redesigned around a
+  safe output model.
 - `getSourceFiles()` already has `@PathSensitive(PathSensitivity.RELATIVE)` — correct for
   relocatability (cache entries don't depend on absolute checkout paths). Keep it.
 - The current `@Internal projectDirectory` is used only to compute display paths; keep it
   `@Internal` so it does not break relocatability. Display-path differences must not be part of the
   cache key.
-- **Check task** needs an output so it can be `UP-TO-DATE`/`FROM-CACHE`. It produces no file
-  artifact today, so declare a small `@OutputFile` "verification marker" (a stamp written on
-  success). With inputs unchanged and the marker present, Gradle marks the task `UP-TO-DATE`; with
-  build cache enabled, the marker is restored `FROM-CACHE`. This is the standard pattern for
-  verification tasks (mirrors how `test` uses its results dir). Because Gradle does not cache failed
-  task executions, a check run that finds unformatted files or formatter failures must not write the
-  success marker and will still re-run until it passes.
-- **Format task** rewrites sources in place — its inputs *are* its outputs. Declaring source files
-  as `@OutputFiles` as well makes the task up-to-date when the (already-formatted) sources are
-  unchanged, so a warm `frmtrFormat` becomes a no-op. In-place mutation is awkward for the *remote*
-  build cache (outputs == inputs), so a conservative v1 can make `frmtrJavaFormat` incremental and
-  up-to-date-aware via a stamp/snapshot but **not** remotely cacheable, while `frmtrJavaCheck` is
-  fully `@CacheableTask`.
+- **Check task** declares a small `@OutputFile` verification marker written on success. With inputs
+  unchanged and the marker present, Gradle marks the task `UP-TO-DATE`; with build cache enabled,
+  the marker is restored `FROM-CACHE`. This is the standard pattern for verification tasks (mirrors
+  how `test` uses its results dir). Because Gradle does not cache failed task executions, a check
+  run that finds unformatted files or formatter failures does not write the success marker and will
+  still re-run until it passes.
+- **Format task** rewrites sources in place, so it is not remotely cacheable and does not declare a
+  synthetic output marker. The implemented conservative model leaves `frmtrJavaFormat` as a
+  non-cacheable mutating task while `frmtrJavaCheck` is fully `@CacheableTask`.
 
-**Incremental task action via `InputChanges`.** Inject `InputChanges` and annotate
-`getSourceFiles()` with `@Incremental`. In the action, ask
-`inputChanges.getFileChanges(getSourceFiles())` for added/modified files and pass **only those**
-to `FormatterRunner` when the run is incremental. Removed files should be ignored for formatting
-work but still allow the task marker/snapshot to update. On a non-incremental run (first run, or an
+**Incremental check action via `InputChanges`.** The check task action injects `InputChanges` and
+uses `getSourceFiles()` as the incremental file input. In the action, it asks
+`inputChanges.getFileChanges(getSourceFiles())` for added/modified files and passes **only those**
+to `FormatterRunner` when the run is incremental. Removed files are ignored for formatting work but
+still allow the task marker/snapshot to update. On a non-incremental run (first run, or an
 `@Input` like `lineWidth`, `javaLanguageLevel`, `includes`, or `excludes` changed), process
 everything — a change to formatting options correctly busts the whole task because options are
 tracked `@Input`s and feed the cache key. This makes "one file changed" cost one file, not the whole
@@ -328,8 +331,8 @@ declare inputs/outputs correctly and let Gradle's build cache be the content-add
   failed result from cache on the next run. This is correct, but warm-run success metrics must be
   measured on already-formatted inputs.
 - **In-place format outputs == inputs** complicates remote build-cache for `frmtrJavaFormat`.
-  Mitigation: ship `frmtrJavaCheck` as fully cacheable first; keep `frmtrJavaFormat` incremental
-  but not remotely cached in v1.
+  Mitigation: `frmtrJavaCheck` is fully cacheable; `frmtrJavaFormat` remains non-cacheable and does
+  not use a synthetic marker to model source mutation.
 - **Thread-pool placement inside Gradle workers.** Using the common ForkJoinPool could contend with
   Gradle's own parallelism, and one pool per parallel Gradle task can multiply total threads.
   Mitigation: own an explicit, bounded `ExecutorService` per run, keep the default conservative
@@ -391,8 +394,7 @@ Use the same measurement hygiene `cli-discovery-lazy-ignore.md` established — 
 
 ## Non-goals
 
-- Do not implement Gradle incremental/cache work or Gradle-native progress/logging in the
-  runner-parallelism slice.
+- Do not implement Gradle-native progress/logging in the Gradle incremental/cache slice.
 - Do not introduce a persistent CLI results cache in v1 (respect `cli-discovery-lazy-ignore.md`).
 - Do not change formatter output, `FormatRunResult` shape, CLI output formats, exit codes, or
   summary semantics for processed files.

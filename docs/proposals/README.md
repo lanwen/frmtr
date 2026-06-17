@@ -192,21 +192,23 @@ profiling proves it is worthwhile.
   contract.
 
 ### M3. Multi-file parallelism + content-addressed caching
-**Status:** 🟢 In progress — runner-level bounded parallelism and CLI progress landed; Gradle incremental/cache work remains · _focused proposal:_ [multi-file-parallelism-and-caching.md](multi-file-parallelism-and-caching.md)
+**Status:** 🟢 In progress — runner-level bounded parallelism, CLI progress, and Gradle incremental/cache behavior landed; Gradle-native progress/logging remains · _focused proposal:_ [multi-file-parallelism-and-caching.md](multi-file-parallelism-and-caching.md)
 
 > **Implementation state:** `FormatterRunner` now uses order-preserving bounded-pool parallelism
-> for `check` and `write`. The Gradle tasks still declare `@InputFiles` but no outputs /
-> `@CacheableTask` / `InputChanges`, so they reformat the whole source set every run. `Frmtr.format`
-> is **definitively thread-safe** (pure function of `(source, options)`; fresh `JavaFormatContext`
-> per call, no shared mutable state). The CLI now renders progress on a separate side channel while
-> preserving deterministic final result output. The remaining recommendation is making Gradle's build
-> cache the content-addressed store; a persistent CLI cache stays out of scope per the lazy-ignore
-> non-goal, and Gradle-native progress/logging remains a separate follow-up if needed.
+> for `check` and `write`. `frmtrJavaCheck` is cacheable through Gradle's native build cache via a
+> deterministic success marker and uses Gradle incremental inputs so changed-source runs process
+> only added/modified files. `frmtrJavaFormat` remains deliberately non-cacheable because it mutates
+> source files in place and does not declare a synthetic marker output.
+> `Frmtr.format` is **definitively thread-safe** (pure function of `(source, options)`; fresh
+> `JavaFormatContext` per call, no shared mutable state). The CLI now renders progress on a separate
+> side channel while preserving deterministic final result output. Persistent CLI caching stays out
+> of scope per the lazy-ignore non-goal, and Gradle-native progress/logging remains a separate
+> follow-up if needed.
 
-The tooling runner now formats independent files on a bounded thread pool, while the Gradle plugin
-still reformats unchanged files. Finish this item by skipping files whose `(content-hash, options,
-formatter-version)` is unchanged via Gradle incremental inputs/build-cache. On a monorepo this is
-the difference between "fast" and "instant on re-run."
+The tooling runner now formats independent files on a bounded thread pool, and the Gradle check task
+now leans on Gradle's input snapshots and build cache to avoid reprocessing unchanged files.
+Remaining M3 work is limited to measurement/reporting discipline and any Gradle-native
+progress/logging that proves necessary.
 
 - **Serves:** fastest (real-world), user-friendly.
 - **Effort:** medium.

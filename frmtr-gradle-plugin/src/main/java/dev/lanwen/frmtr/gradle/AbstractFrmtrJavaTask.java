@@ -3,14 +3,21 @@ package dev.lanwen.frmtr.gradle;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.tooling.FormatRunResult;
 import dev.lanwen.frmtr.tooling.FormatterRunFailureRenderer;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
+import java.util.stream.StreamSupport;
 import javax.inject.Inject;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.DirectoryProperty;
+import org.gradle.api.file.FileType;
+import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.ListProperty;
 import org.gradle.api.provider.Property;
@@ -20,7 +27,9 @@ import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.SkipWhenEmpty;
+import org.gradle.work.ChangeType;
 import org.gradle.work.DisableCachingByDefault;
+import org.gradle.work.InputChanges;
 
 @DisableCachingByDefault(
     because = "Concrete frmtr tasks define whether their source-processing action is cacheable."
@@ -105,6 +114,48 @@ public abstract class AbstractFrmtrJavaTask extends DefaultTask {
                 .distinct()
                 .sorted(Comparator.comparing(path -> displayPath(root, path).toString()))
                 .toList();
+    }
+
+    protected List<Path> selectedFiles(InputChanges inputChanges) {
+        if (!inputChanges.isIncremental()) {
+            return selectedFiles();
+        }
+
+        Path root = displayRoot().toAbsolutePath().normalize();
+        return StreamSupport.stream(inputChanges.getFileChanges(sourceFiles).spliterator(), false)
+                .filter(change -> change.getChangeType() != ChangeType.REMOVED)
+                .filter(change -> change.getFileType() == FileType.FILE)
+                .map(change -> change.getFile().toPath().toAbsolutePath().normalize())
+                .distinct()
+                .sorted(Comparator.comparing(path -> displayPath(root, path).toString()))
+                .toList();
+    }
+
+    protected void logSelectedFiles(String action, InputChanges inputChanges, List<Path> files) {
+        String mode = inputChanges.isIncremental() ? "incremental" : "full";
+        Path root = displayRoot().toAbsolutePath().normalize();
+        List<String> displayPaths = files.stream()
+                .map(path -> displayPath(root, path).toString())
+                .toList();
+        getLogger().info("frmtr {} {} run selected {} Java file(s): {}", action, mode, files.size(), displayPaths);
+    }
+
+    protected void clearMarker(RegularFileProperty marker) {
+        try {
+            Files.deleteIfExists(marker.get().getAsFile().toPath());
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
+        }
+    }
+
+    protected void writeMarker(RegularFileProperty marker, String content) {
+        Path markerPath = marker.get().getAsFile().toPath();
+        try {
+            Files.createDirectories(markerPath.getParent());
+            Files.writeString(markerPath, content, StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
+        }
     }
 
     protected void printFailures(FormatRunResult run) {

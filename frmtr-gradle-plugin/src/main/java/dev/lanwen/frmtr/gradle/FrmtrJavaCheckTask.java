@@ -3,16 +3,23 @@ package dev.lanwen.frmtr.gradle;
 import dev.lanwen.frmtr.tooling.FormatFileResult;
 import dev.lanwen.frmtr.tooling.FormatRunResult;
 import dev.lanwen.frmtr.tooling.FormatterRunner;
+import java.nio.file.Path;
+import java.util.List;
 import javax.inject.Inject;
 import org.gradle.api.GradleException;
+import org.gradle.api.file.RegularFileProperty;
 import org.gradle.api.model.ObjectFactory;
 import org.gradle.api.provider.Property;
+import org.gradle.api.tasks.CacheableTask;
 import org.gradle.api.tasks.Input;
+import org.gradle.api.tasks.OutputFile;
 import org.gradle.api.tasks.TaskAction;
-import org.gradle.work.DisableCachingByDefault;
+import org.gradle.work.InputChanges;
 
-@DisableCachingByDefault(because = "Formatting checks produce diagnostics instead of reusable task outputs.")
+@CacheableTask
 public abstract class FrmtrJavaCheckTask extends AbstractFrmtrJavaTask {
+
+    private static final String SUCCESS_MARKER = "frmtr-java-check-success\n";
 
     private final Property<Boolean> printDiffs;
 
@@ -27,11 +34,17 @@ public abstract class FrmtrJavaCheckTask extends AbstractFrmtrJavaTask {
         return printDiffs;
     }
 
+    @OutputFile
+    public abstract RegularFileProperty getSuccessMarker();
+
     @TaskAction
-    public void checkFormatting() {
+    public void checkFormatting(InputChanges inputChanges) {
+        clearMarker(getSuccessMarker());
+        List<Path> files = selectedFiles(inputChanges);
+        logSelectedFiles("check", inputChanges, files);
         FormatRunResult run = FormatterRunner.check(
             displayRoot(),
-            selectedFiles(),
+            files,
             formatterOptions(),
             printDiffs.get(),
             state -> {}
@@ -49,6 +62,8 @@ public abstract class FrmtrJavaCheckTask extends AbstractFrmtrJavaTask {
                         .formatted(run.changedCount())
             );
         }
+
+        writeMarker(getSuccessMarker(), SUCCESS_MARKER);
     }
 
     private void printChanged(FormatFileResult result) {

@@ -17,7 +17,9 @@ The test suite covers:
 - `:frmtr-gradle-plugin`: TestKit functional coverage for task registration, zero-configuration Java defaults, `check`
   lifecycle wiring, no-op non-Java projects, root-project aggregation into Java subprojects, inherited module
   configuration overrides, module opt-out, Gradle and source-set source filters, build-directory exclusion, check diff
-  output, Java language-level inference, and explicit Gradle language-level overrides.
+  output, Java language-level inference, explicit Gradle language-level overrides, Gradle build-cache restore for
+  successful checks, warm check up-to-date behavior, check incremental source-change handling, and format's
+  non-cacheable in-place rewrite behavior.
 - `:frmtr-native-image-support`: JavaParser metamodel coverage for native-image reflection registration, including
   known-risk AST fields used by field and variable declarations.
 - `:frmtr-cli:nativeTest`: native-image compatibility coverage for JavaParser reflection-sensitive syntax. It is explicit

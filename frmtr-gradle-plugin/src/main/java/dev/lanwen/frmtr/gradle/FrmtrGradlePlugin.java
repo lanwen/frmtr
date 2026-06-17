@@ -121,6 +121,7 @@ public final class FrmtrGradlePlugin implements Plugin<Project> {
                 task.getJavaLanguageLevel().set(languageLevel);
                 task.getPrintDiffs().set(extension.getCheck().getPrint().getDiffs());
                 task.getProjectDirectory().set(project.getLayout().getProjectDirectory());
+                task.getSuccessMarker().set(project.getLayout().getBuildDirectory().file("frmtr/java-check.success"));
             }
         );
 

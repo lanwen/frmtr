@@ -85,6 +85,164 @@ final class FrmtrGradlePluginFunctionalTest {
     }
 
     @Test
+    void successfulJavaCheckIsUpToDateOnWarmRerun() {
+        writeSettings();
+        writeBuildFile(
+            """
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+                """
+        );
+        write("src/main/java/demo/Main.java", formattedSource("Main"));
+
+        BuildResult first = gradle("frmtrJavaCheck").build();
+        BuildResult second = gradle("frmtrJavaCheck").build();
+
+        assertThat(first.task(":frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+        assertThat(second.task(":frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.UP_TO_DATE);
+    }
+
+    @Test
+    void successfulJavaCheckCanBeRestoredFromBuildCache() {
+        writeSettingsWithLocalBuildCache();
+        writeBuildFile(
+            """
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+                """
+        );
+        write("src/main/java/demo/Main.java", formattedSource("Main"));
+
+        BuildResult first = gradle("frmtrJavaCheck", "--build-cache").build();
+        BuildResult restored = gradle("clean", "frmtrJavaCheck", "--build-cache").build();
+
+        assertThat(first.task(":frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+        assertThat(restored.task(":frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.FROM_CACHE);
+    }
+
+    @Test
+    void incrementalJavaCheckProcessesOnlyChangedSourceFiles() {
+        writeSettings();
+        writeBuildFile(
+            """
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+                """
+        );
+        write("src/main/java/demo/Changed.java", formattedSource("Changed"));
+        write("src/main/java/demo/Unchanged.java", formattedSource("Unchanged"));
+        gradle("frmtrJavaCheck").build();
+
+        write("src/main/java/demo/Changed.java", formattedSourceWithField("Changed"));
+
+        BuildResult incremental = gradle("frmtrJavaCheck", "--info").build();
+
+        assertThat(incremental.task(":frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+        assertThat(incremental.getOutput())
+                .contains(
+                    "frmtr check incremental run selected 1 Java file(s): [src/main/java/demo/Changed.java]"
+                )
+                .doesNotContain(
+                    "frmtr check incremental run selected 1 Java file(s): [src/main/java/demo/Unchanged.java]"
+                );
+    }
+
+    @Test
+    void incrementalJavaCheckIgnoresRemovedSourceFiles() {
+        writeSettings();
+        writeBuildFile(
+            """
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+                """
+        );
+        write("src/main/java/demo/Deleted.java", formattedSource("Deleted"));
+        write("src/main/java/demo/Kept.java", formattedSource("Kept"));
+        gradle("frmtrJavaCheck").build();
+
+        delete("src/main/java/demo/Deleted.java");
+
+        BuildResult removed = gradle("frmtrJavaCheck", "--info").build();
+        BuildResult warm = gradle("frmtrJavaCheck").build();
+
+        assertThat(removed.task(":frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+        assertThat(removed.getOutput())
+                .contains("frmtr check incremental run selected 0 Java file(s): []");
+        assertThat(warm.task(":frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.UP_TO_DATE);
+    }
+
+    @Test
+    void javaCheckOptionChangeInvalidatesUpToDateStateAndChecksAllSources() {
+        writeSettings();
+        writeBuildFile(
+            """
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+                """
+        );
+        write("src/main/java/demo/First.java", formattedSource("First"));
+        write("src/main/java/demo/Second.java", formattedSource("Second"));
+        gradle("frmtrJavaCheck").build();
+        assertThat(gradle("frmtrJavaCheck").build().task(":frmtrJavaCheck").getOutcome())
+                .isEqualTo(TaskOutcome.UP_TO_DATE);
+
+        writeBuildFile(
+            """
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+
+                frmtr {
+                    java {
+                        lineWidth.set(100)
+                    }
+                }
+                """
+        );
+
+        BuildResult invalidated = gradle("frmtrJavaCheck", "--info").build();
+
+        assertThat(invalidated.task(":frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+        assertThat(invalidated.getOutput())
+                .contains(
+                    "frmtr check full run selected 2 Java file(s): "
+                            + "[src/main/java/demo/First.java, src/main/java/demo/Second.java]"
+                );
+    }
+
+    @Test
+    void javaFormatRemainsNonCacheableForInPlaceSourceRewrites() {
+        writeSettingsWithLocalBuildCache();
+        writeBuildFile(
+            """
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+                """
+        );
+        write("src/main/java/demo/Main.java", "package demo; class Main{int value;}");
+
+        BuildResult first = gradle("frmtrJavaFormat", "--build-cache").build();
+        BuildResult second = gradle("frmtrJavaFormat", "--build-cache").build();
+
+        assertThat(first.task(":frmtrJavaFormat").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+        assertThat(read("src/main/java/demo/Main.java")).isEqualTo(formattedSourceWithField("Main"));
+        assertThat(second.task(":frmtrJavaFormat").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+    }
+
+    @Test
     void wiresFrmtrCheckIntoGradleCheckLifecycle() {
         writeSettings();
         writeBuildFile(
@@ -419,6 +577,21 @@ final class FrmtrGradlePluginFunctionalTest {
         writeSettings(new String[0]);
     }
 
+    private void writeSettingsWithLocalBuildCache() {
+        write(
+            "settings.gradle.kts",
+            """
+                rootProject.name = "fixture"
+
+                buildCache {
+                    local {
+                        directory = file("local-build-cache")
+                    }
+                }
+                """
+        );
+    }
+
     private void writeSettings(String... projects) {
         StringBuilder settings = new StringBuilder("rootProject.name = \"fixture\"\n");
         for (String project : projects) {
@@ -447,6 +620,33 @@ final class FrmtrGradlePluginFunctionalTest {
         } catch (IOException exception) {
             throw new UncheckedIOException(exception);
         }
+    }
+
+    private void delete(String path) {
+        try {
+            Files.delete(projectDir.resolve(path));
+        } catch (IOException exception) {
+            throw new UncheckedIOException(exception);
+        }
+    }
+
+    private static String formattedSource(String className) {
+        return """
+                package demo;
+
+                class %s {}
+                """.formatted(className);
+    }
+
+    private static String formattedSourceWithField(String className) {
+        return """
+                package demo;
+
+                class %s {
+
+                    int value;
+                }
+                """.formatted(className);
     }
 
     private static String switchExpressionYieldSource() {

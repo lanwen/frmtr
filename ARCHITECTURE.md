@@ -194,6 +194,12 @@ the existing document view and its layout decisions without letting the CLI own 
 The runner owns deterministic path ordering and de-duplication for file lists supplied by adapters. Source discovery
 remains adapter-specific: the CLI uses selectors and `.gitignore`; the Gradle plugin builds one canonical file collection
 from Java source sets and Gradle-style source filters, then uses that same collection for task inputs and task actions.
+The Gradle Java tasks declare those source files as relative-path-sensitive incremental inputs, using Gradle's
+`@SkipWhenEmpty` file-input semantics so empty Java source sets still report `NO_SOURCE`. `frmtrJavaCheck` is a cacheable
+verification task with a deterministic success marker output, so successful checks can be `UP-TO-DATE` or restored
+`FROM-CACHE` through Gradle's native build cache. `frmtrJavaFormat` remains non-cacheable because it rewrites source
+files in place. It does not declare a synthetic output marker or claim build-cache/up-to-date behavior for source
+mutation.
 
 ## Java Formatter
 

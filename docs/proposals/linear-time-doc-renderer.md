@@ -10,6 +10,12 @@ on `main` in `6e4f600a`**; M2 adds the memoization (b) and bounded lookahead (c)
 > line proves the group cannot fit; memoized widths are scoped to one render/explain pass so stale
 > state cannot leak across renders.
 
+> **Implemented performance note:** a local 50-pass no-diff macro run on a project with ~600 files
+> showed the implemented M2 branch slower than `main` in central tendency (`main`: mean 3.342s /
+> median 3.140s / p95 5.440s; M2: mean 3.718s / median 3.540s / p95 5.320s). The p95 numbers were
+> noise-equivalent, but the mean/median regression is enough to track an explicit follow-up: keep the
+> single measurement walker and per-render cache boundary, but reduce the implementation overhead.
+
 ## Summary
 
 `DocRenderer` decides whether each `Group` renders flat or broken by measuring the flat width of its
@@ -391,6 +397,28 @@ maintainer-facing IR cleanup (S5). The average-case wall-clock win on typical ha
 be modest if parsing dominates — that is an acceptable and expected outcome, and M1 should report it
 honestly rather than the proposal over-claiming a headline speedup. The asymptotic guarantee and the
 single-`switch` contract are the durable wins; the throughput delta is whatever M1 measures.
+
+## Follow-up: reduce implemented measurement overhead
+
+The current implementation preserves the important maintainability property: `fits` and `flatWidth`
+route through one canonical per-variant `Doc` measurement walker. Do not undo that by reintroducing
+parallel switches. The next optimization should instead make the shared walker cheaper on normal
+documents:
+
+1. Replace per-node `Budget` / `MeasureResult` record traffic with primitive sentinel returns. Keep a
+   single `measure(Doc, remaining)` switch that returns a finite width, `NO_FIT` for forced breaks,
+   or an overflow sentinel for bounded failures.
+2. Fast-path cached complete widths before bounded descent, so a subtree already measured in full can
+   answer `fits` from an integer comparison.
+3. Keep overflow-bound caching as a later option only if allocation/JFR evidence still shows repeated
+   bounded overflow work after the primitive sentinel cleanup; it complicates cache semantics and is
+   not needed to preserve the one-switch contract.
+4. Consider small renderer hot-path cleanup, such as replacing `Concat` `forEach` rendering with an
+   indexed loop, only after the measurement overhead is addressed.
+
+Proof for this follow-up should include focused `DocWidths` helper tests, the existing fixture suite
+for byte-identical behavior, allocation evidence around `DocWidths.Measurement`, and a repeated
+a project with ~600 files no-diff macro run reported against the same `main` baseline.
 
 ## Scope and non-goals
 

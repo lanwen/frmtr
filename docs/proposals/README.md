@@ -164,6 +164,11 @@ whether parsing or rendering dominates, which directs further optimization.
 > mode-dependent), plus bounded `fits`. Absorbs **S5** — whose unification step is **already landed**
 (`6e4f600a`); M2 adds the memoization and bounded lookahead.
 
+> **Follow-up finding:** a local 50-pass no-diff macro run on a project with ~600 files showed the
+> implemented M2 branch slower than `main` in central tendency (`main`: mean 3.342s / median 3.140s /
+> p95 5.440s; M2: mean 3.718s / median 3.540s / p95 5.320s). Keep the single measurement walker
+> maintainability gain, but add a follow-up to reduce the implementation overhead.
+
 `DocRenderer` re-walks subtrees to measure width, so nested groups degrade toward O(n²). `Doc` nodes
 are immutable records, so flat-width can be precomputed bottom-up once and `fits` can short-circuit
 at the first hard line / when remaining < 0 (bounded lookahead). O(n²) → O(n·w). The
@@ -172,6 +177,19 @@ single `measureFlat` function.
 
 - **Serves:** fastest, maintainer-friendly.
 - **Effort:** contained to `DocRenderer`.
+
+### M2a. Reduce implemented renderer measurement overhead
+**Status:** 🔵 Proposed
+
+M2 preserved the single width-authority contract but added runtime overhead on a real macro corpus.
+Optimize `DocWidths.Measurement` without reintroducing separate `fits` and `flatWidth` switches:
+replace per-node `Budget` / `MeasureResult` record traffic with primitive sentinel returns, fast-path
+cached complete widths, and only consider more complex overflow-bound caching after allocation
+profiling proves it is worthwhile.
+
+- **Serves:** fastest, maintainer-friendly.
+- **Effort:** small-medium; must preserve byte-identical output and the one-switch Doc measurement
+  contract.
 
 ### M3. Multi-file parallelism + content-addressed caching
 **Status:** 🟢 In progress — runner-level bounded parallelism and CLI progress landed; Gradle incremental/cache work remains · _focused proposal:_ [multi-file-parallelism-and-caching.md](multi-file-parallelism-and-caching.md)

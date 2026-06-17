@@ -3,11 +3,13 @@ import org.gradle.api.publish.maven.MavenPublication
 
 plugins {
     base
+    `java-base`
     alias(libs.plugins.jreleaser)
 }
 
 group = "dev.lanwen.frmtr"
 
+val runtimeJavaVersion = JavaLanguageVersion.of(21)
 val projectUrl = "https://github.com/lanwen/frmtr"
 val projectDescriptions =
     mapOf(
@@ -30,6 +32,9 @@ val frmtrCliRuntimeClasspath = frmtrCli.provider {
         .get()
         .runtimeClasspath
 }
+val runtimeJavaLauncher = javaToolchains.launcherFor {
+    languageVersion = runtimeJavaVersion
+}
 
 val frmtrSelfFixtureCorpora =
     listOf("frmtr-core/src/test/resources/format", "frmtr-core/src/test/resources/unsupported")
@@ -37,6 +42,7 @@ val frmtrSelfFixtureCorpora =
 fun TaskContainer.registerFrmtrCliTask(name: String, configure: JavaExec.() -> Unit) = register<JavaExec>(name) {
     group = "formatting"
     mainClass = "dev.lanwen.frmtr.cli.Main"
+    javaLauncher = runtimeJavaLauncher
     workingDir = rootProject.projectDir
     classpath(frmtrCliRuntimeClasspath)
     configure()
@@ -90,7 +96,7 @@ subprojects {
 
         configure<JavaPluginExtension> {
             toolchain {
-                languageVersion = JavaLanguageVersion.of(25)
+                languageVersion = runtimeJavaVersion
             }
 
             withSourcesJar()
@@ -111,6 +117,7 @@ subprojects {
 
         tasks.withType<JavaCompile>().configureEach {
             options.encoding = "UTF-8"
+            options.release = 21
             options.compilerArgs.add("-Xlint:all")
         }
 

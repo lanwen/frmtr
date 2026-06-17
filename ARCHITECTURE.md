@@ -44,6 +44,12 @@ Root build logic applies shared Java conventions, test dependencies, JaCoCo wiri
 packaging, and version propagation to Java subprojects. The version catalog owns external dependency and plugin
 versions. Those values are intentionally not repeated here unless they explain a module boundary.
 
+All Java subprojects compile their JVM bytecode with a Java 21 toolchain and `--release 21`. That includes the core
+library, shared tooling, Gradle plugin, JVM CLI, and native-image support metadata module, so published artifacts and
+the JVM CLI runtime stay loadable by Java 21 Gradle daemons. Native executable construction is the only Java 25 build
+path: `:frmtr-cli:nativeCompile` invokes GraalVM native-image through a native-image-capable JDK 25 launcher while
+consuming the same Java 21 CLI bytecode.
+
 The root also owns repo-local helper tasks that run the current CLI over this checkout and exclude formatter fixture
 corpora that contain formatter-sensitive or intentionally invalid Java samples.
 
@@ -273,13 +279,13 @@ Explain mode is also an adapter surface over core diagnostics. `JavaFormatter.ex
 layout-decision data; the CLI maps those decisions to terminal text in `ExplainView`, validates that explain receives
 one source, and preserves the formatted output byte-for-byte with a normal format run.
 
-The CLI module owns application packaging and Gradle `run` wiring. The `run` task uses the root project as its working
-directory and forwards `System.in` so selectors, default discovery, and stdin mode behave like the native binary during
-local development.
+The CLI module owns application packaging and Gradle `run` wiring. The `run` task launches with the Java 21 toolchain,
+uses the root project as its working directory, and forwards `System.in` so selectors, default discovery, and stdin mode
+behave like the native binary during local development.
 
 The root build exposes `frmtrSelfCheck` and `frmtrSelfFormat` as shared `JavaExec` wrappers over the current
-`:frmtr-cli` runtime classpath. They provide a one-invocation dogfood path for the formatter engine, tooling runner, and
-CLI over this checkout while excluding `frmtr-core/src/test/resources/format` and
+`:frmtr-cli` runtime classpath. They also launch with the Java 21 toolchain, providing a one-invocation dogfood path for
+the formatter engine, tooling runner, and CLI over this checkout while excluding `frmtr-core/src/test/resources/format` and
 `frmtr-core/src/test/resources/unsupported`, whose fixture corpora contain formatter-sensitive or intentionally invalid
 Java samples. `frmtrSelfCheck` enables CLI unified diffs so reviewers can inspect drift directly from the check output.
 Gradle plugin behavior remains covered by
@@ -322,7 +328,8 @@ metadata generation is disabled because the CLI does not require dynamic proxy e
 `proxy-config.json` files discovered under `META-INF/native-image`.
 
 Build host and container choices are operational details owned by the README, Dockerfile, and Gradle native-image
-configuration. Architecturally, native-image targets the build operating system and toolchain.
+configuration. Architecturally, native-image targets the build operating system and uses a native-image-capable JDK 25
+launcher; it does not raise the bytecode level of the JVM artifacts consumed by the image.
 
 ## Tests
 

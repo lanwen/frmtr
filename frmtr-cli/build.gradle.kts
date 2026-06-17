@@ -10,6 +10,14 @@ application {
     mainClass = "dev.lanwen.frmtr.cli.Main"
 }
 
+val runtimeJavaLauncher = javaToolchains.launcherFor {
+    languageVersion = JavaLanguageVersion.of(21)
+}
+val nativeImageJavaLauncher = javaToolchains.launcherFor {
+    languageVersion = JavaLanguageVersion.of(25)
+    nativeImageCapable.set(true)
+}
+
 val generateBuildInfo by tasks.registering {
     val outputDir = layout.buildDirectory.dir("generated/sources/build-info/java")
     outputs.dir(outputDir)
@@ -73,12 +81,18 @@ tasks.named<JavaCompile>("compileJava") {
 }
 
 tasks.named<JavaExec>("run") {
+    javaLauncher = runtimeJavaLauncher
     workingDir = rootProject.projectDir
     standardInput = System.`in`
 }
 
 graalvmNative {
+    toolchainDetection.set(true)
     binaries {
+        configureEach {
+            javaLauncher.set(nativeImageJavaLauncher)
+        }
+
         named("main") {
             imageName = "frmtr"
             mainClass = "dev.lanwen.frmtr.cli.Main"

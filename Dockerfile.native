@@ -5,7 +5,9 @@ WORKDIR /workspace
 COPY gradle ./gradle
 COPY gradlew settings.gradle.kts build.gradle.kts ./
 COPY frmtr-core ./frmtr-core
+COPY frmtr-tooling ./frmtr-tooling
 COPY frmtr-cli ./frmtr-cli
+COPY frmtr-native-image-support ./frmtr-native-image-support
 
 RUN ./gradlew --no-daemon :frmtr-cli:nativeCompile
 

@@ -1,7 +1,7 @@
 # frmtr
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Java](https://img.shields.io/badge/Java-25-orange.svg)](https://openjdk.org/projects/jdk/25/)
+[![Java](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/projects/jdk/21/)
 [![Build: Gradle](https://img.shields.io/badge/build-Gradle-02303A.svg?logo=gradle)](build.gradle.kts)
 
 `frmtr` is a fast (supposed to be), opinionated Java formatter built on JavaParser.
@@ -14,7 +14,10 @@ The formatter parses Java source, adapts the parsed tree into formatter-owned sy
 
 Prerequisites:
 
-- JDK 25 (the build toolchain targets Java 25). The repo ships an `.sdkmanrc`, so `sdk env install && sdk env use` provisions a matching JDK via [SDKMAN](https://sdkman.io/).
+- JDK 21 for JVM runtime artifacts and tests. The Gradle build compiles published/runtime Java artifacts with
+  `--release 21` so the Gradle plugin and JVM CLI can run in Java 21 builds.
+- GraalVM/JDK 25 with `native-image` for `:frmtr-cli:nativeCompile`. The repo ships an `.sdkmanrc` pinned to
+  GraalVM 25 for that native build path, and Gradle selects a Java 21 toolchain separately for JVM bytecode.
 - No global Gradle install required — use the bundled `./gradlew` wrapper.
 
 ```bash
@@ -234,7 +237,7 @@ On Linux, run the exported binary directly:
 ./build/native-linux/frmtr --help
 ```
 
-On macOS, Docker still produces a Linux binary. Copy it to a Linux host or verify it inside a Linux container. To build a local macOS binary, use SDKMAN-managed GraalVM:
+On macOS, Docker still produces a Linux binary. Copy it to a Linux host or verify it inside a Linux container. To build a local macOS binary, use SDKMAN-managed GraalVM 25:
 
 ```bash
 sdk env install
@@ -242,6 +245,9 @@ sdk env use
 ./gradlew :frmtr-cli:nativeCompile
 ./frmtr-cli/build/native/nativeCompile/frmtr --help
 ```
+
+`nativeCompile` invokes `native-image` with a native-image-capable Java 25 launcher while the CLI classes on its
+classpath remain Java 21 bytecode.
 
 ## License
 

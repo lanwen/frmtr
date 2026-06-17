@@ -243,6 +243,74 @@ final class FrmtrGradlePluginFunctionalTest {
     }
 
     @Test
+    void zeroConfigurationLeavesLineWidthUnsetOnFormatterTasks() {
+        writeSettings();
+        writeBuildFile(
+            """
+                import dev.lanwen.frmtr.gradle.FrmtrJavaCheckTask
+                import dev.lanwen.frmtr.gradle.FrmtrJavaFormatTask
+
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+
+                tasks.register("printFrmtrLineWidthState") {
+                    doLast {
+                        val check = tasks.named<FrmtrJavaCheckTask>("frmtrJavaCheck").get()
+                        val format = tasks.named<FrmtrJavaFormatTask>("frmtrJavaFormat").get()
+                        println("checkLineWidthPresent=${check.lineWidth.isPresent}")
+                        println("formatLineWidthPresent=${format.lineWidth.isPresent}")
+                    }
+                }
+                """
+        );
+
+        BuildResult result = gradle("printFrmtrLineWidthState").build();
+
+        assertThat(result.getOutput())
+                .contains("checkLineWidthPresent=false")
+                .contains("formatLineWidthPresent=false");
+    }
+
+    @Test
+    void explicitDefaultLineWidthRemainsExplicitOnFormatterTasks() {
+        writeSettings();
+        writeBuildFile(
+            """
+                import dev.lanwen.frmtr.gradle.FrmtrJavaCheckTask
+                import dev.lanwen.frmtr.gradle.FrmtrJavaFormatTask
+
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+
+                frmtr {
+                    java {
+                        lineWidth = 120
+                    }
+                }
+
+                tasks.register("printFrmtrLineWidthState") {
+                    doLast {
+                        val check = tasks.named<FrmtrJavaCheckTask>("frmtrJavaCheck").get()
+                        val format = tasks.named<FrmtrJavaFormatTask>("frmtrJavaFormat").get()
+                        println("checkLineWidth=${check.lineWidth.orNull}")
+                        println("formatLineWidth=${format.lineWidth.orNull}")
+                    }
+                }
+                """
+        );
+
+        BuildResult result = gradle("printFrmtrLineWidthState").build();
+
+        assertThat(result.getOutput())
+                .contains("checkLineWidth=120")
+                .contains("formatLineWidth=120");
+    }
+
+    @Test
     void wiresFrmtrCheckIntoGradleCheckLifecycle() {
         writeSettings();
         writeBuildFile(

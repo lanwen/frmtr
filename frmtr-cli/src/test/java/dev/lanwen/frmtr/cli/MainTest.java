@@ -443,9 +443,10 @@ final class MainTest {
     }
 
     @Test
-    void lineWidthOptionDefaultsToCoreFormatterDefault() {
+    void omittedLineWidthUsesCoreFormatterDefaultWithoutMaterializingAdapterValue() {
+        StringWriter out = new StringWriter();
         Main main = new Main(
-            new PrintWriter(new StringWriter(), true),
+            new PrintWriter(out, true),
             new PrintWriter(new StringWriter(), true),
             "class Demo{int value;}"
         );
@@ -453,6 +454,38 @@ final class MainTest {
         int exitCode = Main.commandLine(main).execute("--stdin");
 
         assertThat(exitCode).isZero();
+        assertThat(out.toString()).isEqualTo(
+            """
+                class Demo {
+
+                    int value;
+                }
+                """
+        );
+        assertThat(main.lineWidth).isNull();
+    }
+
+    @Test
+    void explicitDefaultLineWidthRemainsExplicit() {
+        StringWriter out = new StringWriter();
+        Main main = new Main(
+            new PrintWriter(out, true),
+            new PrintWriter(new StringWriter(), true),
+            "class Demo{int value;}"
+        );
+
+        int exitCode = Main.commandLine(main)
+                .execute("--stdin", "--line-width", Integer.toString(FormatterOptions.DEFAULT_LINE_WIDTH));
+
+        assertThat(exitCode).isZero();
+        assertThat(out.toString()).isEqualTo(
+            """
+                class Demo {
+
+                    int value;
+                }
+                """
+        );
         assertThat(main.lineWidth).isEqualTo(FormatterOptions.DEFAULT_LINE_WIDTH);
     }
 

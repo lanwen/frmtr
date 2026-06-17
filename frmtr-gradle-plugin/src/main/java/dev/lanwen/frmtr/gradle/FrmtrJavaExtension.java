@@ -1,6 +1,5 @@
 package dev.lanwen.frmtr.gradle;
 
-import dev.lanwen.frmtr.FormatterOptions;
 import java.util.Arrays;
 import java.util.List;
 import javax.inject.Inject;
@@ -22,7 +21,7 @@ public abstract class FrmtrJavaExtension {
     public FrmtrJavaExtension(ObjectFactory objects) {
         this.includes = objects.listProperty(String.class).convention(List.of());
         this.excludes = objects.listProperty(String.class).convention(List.of());
-        this.lineWidth = objects.property(Integer.class).convention(FormatterOptions.DEFAULT_LINE_WIDTH);
+        this.lineWidth = objects.property(Integer.class);
         this.languageLevel = objects.property(FrmtrJavaLanguageLevel.class).convention(FrmtrJavaLanguageLevel.AUTO);
     }
 

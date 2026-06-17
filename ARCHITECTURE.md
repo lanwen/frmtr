@@ -214,8 +214,9 @@ existing options value.
 
 Current public formatter policy includes:
 
-- `FormatterOptions.lineWidth`: the public target maximum rendered column width. The default is 120 columns, and the CLI
-  and Gradle adapters use the same core default unless users override it.
+- `FormatterOptions.lineWidth`: the public target maximum rendered column width. The default is 120 columns. The CLI
+  and Gradle adapters start from `FormatterOptions.defaults()` and only apply a line-width override when users provide
+  one, so adapter configuration can distinguish an explicit value from the core default.
 - `FormatterOptions.JavaLanguageLevel`: the public parser-level setting. `LATEST_AVAILABLE` maps to JavaParser's
   bleeding-edge parser mode, while `UNSET` deliberately selects JavaParser raw mode.
 - `FormatterOptions.ParseErrorBehavior`: the public parse-problem policy. The default is `RECOVER`; `FAIL` preserves

@@ -104,11 +104,9 @@ public final class Main implements Callable<Integer> {
 
     @Option(
         names = "--line-width",
-        description = "Target line width.",
-        defaultValue = ""
-            + FormatterOptions.DEFAULT_LINE_WIDTH
+        description = "Target line width. Defaults to the formatter default."
     )
-    int lineWidth;
+    Integer lineWidth;
 
     @Option(
         names = "--java-level",
@@ -259,14 +257,13 @@ public final class Main implements Callable<Integer> {
     }
 
     private FormatterOptions formatterOptions() {
-        return FormatterOptions.withJavaLanguageLevel(
-            lineWidth,
-            FormatterOptions.IndentStyle.SPACE,
-            FormatterOptions.DEFAULT_INDENT_WIDTH,
-            FormatterOptions.LineEnding.LF,
-            true,
-            javaLanguageLevel
-        ).withParseErrorBehavior(parseErrorBehavior);
+        FormatterOptions options = FormatterOptions.defaults()
+                .withJavaLanguageLevel(javaLanguageLevel)
+                .withParseErrorBehavior(parseErrorBehavior);
+        if (lineWidth != null) {
+            options = options.withLineWidth(lineWidth);
+        }
+        return options;
     }
 
     private int runExplain() {

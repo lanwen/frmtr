@@ -24,6 +24,7 @@ import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.InputFiles;
 import org.gradle.api.tasks.Internal;
+import org.gradle.api.tasks.Optional;
 import org.gradle.api.tasks.PathSensitive;
 import org.gradle.api.tasks.PathSensitivity;
 import org.gradle.api.tasks.SkipWhenEmpty;
@@ -53,7 +54,7 @@ public abstract class AbstractFrmtrJavaTask extends DefaultTask {
         this.sourceFiles = objects.fileCollection();
         this.includes = objects.listProperty(String.class).convention(List.of());
         this.excludes = objects.listProperty(String.class).convention(List.of());
-        this.lineWidth = objects.property(Integer.class).convention(FormatterOptions.DEFAULT_LINE_WIDTH);
+        this.lineWidth = objects.property(Integer.class);
         this.javaLanguageLevel = objects.property(FormatterOptions.JavaLanguageLevel.class)
                 .convention(FormatterOptions.JavaLanguageLevel.LATEST_AVAILABLE);
         this.projectDirectory = objects.directoryProperty();
@@ -77,6 +78,7 @@ public abstract class AbstractFrmtrJavaTask extends DefaultTask {
     }
 
     @Input
+    @Optional
     public Property<Integer> getLineWidth() {
         return lineWidth;
     }
@@ -92,14 +94,11 @@ public abstract class AbstractFrmtrJavaTask extends DefaultTask {
     }
 
     protected FormatterOptions formatterOptions() {
-        return FormatterOptions.withJavaLanguageLevel(
-            lineWidth.get(),
-            FormatterOptions.IndentStyle.SPACE,
-            FormatterOptions.DEFAULT_INDENT_WIDTH,
-            FormatterOptions.LineEnding.LF,
-            true,
-            javaLanguageLevel.get()
-        );
+        FormatterOptions options = FormatterOptions.defaults().withJavaLanguageLevel(javaLanguageLevel.get());
+        if (lineWidth.isPresent()) {
+            options = options.withLineWidth(lineWidth.get());
+        }
+        return options;
     }
 
     protected Path displayRoot() {

@@ -188,7 +188,7 @@ final class FieldDeclarationPrinter {
                 Doc variables = Doc.joinComma(
                     declaration.getVariables()
                             .stream()
-                            .map(variable -> variable(variable, ""))
+                            .map(variable -> variableDoc(variable, "", isLastVariable(declaration, variable)))
                             .toList()
                 );
                 docs.add(
@@ -201,7 +201,6 @@ final class FieldDeclarationPrinter {
                         )
                     )
                 );
-                docs.add(Doc.text(";"));
                 return Doc.concat(docs);
             }
             docs.add(Doc.text(flatType));
@@ -212,12 +211,15 @@ final class FieldDeclarationPrinter {
                 Doc.joinComma(
                     declaration.getVariables()
                             .stream()
-                            .map(variable -> variable(variable, variableDeclarationPrefix))
+                            .map(variable -> variableDoc(
+                                    variable,
+                                    variableDeclarationPrefix,
+                                    isLastVariable(declaration, variable)
+                            ))
                             .toList()
                 )
             )
         );
-        docs.add(Doc.text(";"));
         return Doc.concat(docs);
     }
 
@@ -258,6 +260,16 @@ final class FieldDeclarationPrinter {
 
     Doc variableWithStatementTerminator(VariableDeclarator variable, String declarationPrefix) {
         return initializers.variableWithStatementTerminator(variable, declarationPrefix);
+    }
+
+    private Doc variableDoc(VariableDeclarator variable, String declarationPrefix, boolean statementTerminator) {
+        return statementTerminator
+            ? variableWithStatementTerminator(variable, declarationPrefix)
+            : variable(variable, declarationPrefix);
+    }
+
+    private boolean isLastVariable(FieldDeclaration declaration, VariableDeclarator variable) {
+        return declaration.getVariables().getLast().filter(last -> last == variable).isPresent();
     }
 
     @FunctionalInterface

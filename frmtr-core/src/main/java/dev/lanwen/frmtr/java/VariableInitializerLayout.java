@@ -15,7 +15,6 @@ import com.github.javaparser.ast.expr.CastExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
-import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
@@ -35,6 +34,7 @@ import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.ToIntFunction;
 
 /**
  * Chooses variable initializer layout after a declaration printer has selected a variable declarator.
@@ -88,7 +88,7 @@ final class VariableInitializerLayout {
 
     private final Function<MethodCallExpr, Optional<Doc>> mixedFieldMethodCallChain;
 
-    private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain;
+    private final BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> forcedMethodCallChain;
 
     private final Function<MethodCallExpr, Doc> methodCallWithSemicolon;
 
@@ -102,9 +102,7 @@ final class VariableInitializerLayout {
 
     private final Predicate<MethodCallExpr> methodCallChainIsSourceMultiline;
 
-    private final Predicate<MethodCallExpr> methodCallChainHasSingleCall;
-
-    private final Predicate<MethodCallExpr> methodCallChainRootObjectCreationArgumentsSpanMultipleLines;
+    private final Function<MethodCallExpr, MethodCallChainSourcePlanner.InitializerChainShape> methodCallChainInitializerShape;
 
     private final Function<Type, Doc> castType;
 
@@ -160,15 +158,14 @@ final class VariableInitializerLayout {
             Function<MethodCallExpr, Doc> methodCall,
             Function<MethodCallExpr, Doc> brokenMethodCall,
             Function<MethodCallExpr, Optional<Doc>> mixedFieldMethodCallChain,
-            Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain,
+            BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> forcedMethodCallChain,
             Function<MethodCallExpr, Doc> methodCallWithSemicolon,
             Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment,
             Function<MethodCallExpr, Optional<Expression>> mixedFieldMethodCallRoot,
             Function<MethodCallExpr, String> methodCallChainFirstLine,
             Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation,
             Predicate<MethodCallExpr> methodCallChainIsSourceMultiline,
-            Predicate<MethodCallExpr> methodCallChainHasSingleCall,
-            Predicate<MethodCallExpr> methodCallChainRootObjectCreationArgumentsSpanMultipleLines,
+            Function<MethodCallExpr, MethodCallChainSourcePlanner.InitializerChainShape> methodCallChainInitializerShape,
             Function<Type, Doc> castType,
             Function<ConditionalExpr, Doc> brokenConditionalExpression,
             Predicate<ConditionalExpr> shouldBreakBeforeConditionalInitializer,
@@ -214,8 +211,7 @@ final class VariableInitializerLayout {
         this.methodCallChainFirstLine = methodCallChainFirstLine;
         this.methodCallChainRootIsObjectCreation = methodCallChainRootIsObjectCreation;
         this.methodCallChainIsSourceMultiline = methodCallChainIsSourceMultiline;
-        this.methodCallChainHasSingleCall = methodCallChainHasSingleCall;
-        this.methodCallChainRootObjectCreationArgumentsSpanMultipleLines = methodCallChainRootObjectCreationArgumentsSpanMultipleLines;
+        this.methodCallChainInitializerShape = methodCallChainInitializerShape;
         this.castType = castType;
         this.brokenConditionalExpression = brokenConditionalExpression;
         this.shouldBreakBeforeConditionalInitializer = shouldBreakBeforeConditionalInitializer;
@@ -469,22 +465,16 @@ final class VariableInitializerLayout {
             }
             if (
                 initializer instanceof MethodCallExpr methodCall
-                && sourceSpansMultipleLines(methodCall)
-                && (
-                    hasTypeLikeMethodCallChainRoot(methodCall)
-                    || (methodCallChainRootIsObjectCreation.test(methodCall)
-                        && methodCallChainRootObjectCreationArgumentsSpanMultipleLines.test(methodCall))
-                )
+                && methodCallChainInitializerShape.apply(methodCall).shouldForceSourceMultilineInitializerChain()
             ) {
-                Optional<Doc> forcedChain = forcedMethodCallChain.apply(methodCall);
+                Optional<Doc> forcedChain = variableWithForcedMethodCallChain(
+                    variable,
+                    name,
+                    declarationPrefix + variable.getNameAsString(),
+                    methodCall
+                );
                 if (forcedChain.isPresent()) {
-                    return variableWithMethodCallChain(
-                        name,
-                        declarationPrefix + variable.getNameAsString(),
-                        methodCall,
-                        methodCallChainFirstLine.apply(methodCall),
-                        forcedChain.orElseThrow()
-                    );
+                    return forcedChain.orElseThrow();
                 }
             }
             if (initializer instanceof BinaryExpr binaryExpr) {
@@ -515,6 +505,21 @@ final class VariableInitializerLayout {
         if (
             layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
             && initializer instanceof MethodCallExpr methodCall
+            && initializerHasOwnBreak(initializer)
+        ) {
+            Optional<Doc> forcedChain = variableWithForcedMethodCallChain(
+                variable,
+                name,
+                declarationPrefix + variable.getNameAsString(),
+                methodCall
+            );
+            if (forcedChain.isPresent()) {
+                return forcedChain.orElseThrow();
+            }
+        }
+        if (
+            layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+            && initializer instanceof MethodCallExpr methodCall
             && !initializerHasOwnBreak(initializer)
         ) {
             Optional<Doc> compactObjectCreationChain = variableWithCompactObjectCreationChain(
@@ -524,6 +529,19 @@ final class VariableInitializerLayout {
             );
             if (compactObjectCreationChain.isPresent()) {
                 return compactObjectCreationChain.orElseThrow();
+            }
+            MethodCallChainSourcePlanner.InitializerChainShape initializerChainShape =
+                methodCallChainInitializerShape.apply(methodCall);
+            if (initializerChainShape.shouldForceWideInitializerChain()) {
+                Optional<Doc> forcedChain = variableWithForcedMethodCallChain(
+                    variable,
+                    name,
+                    declarationPrefix + variable.getNameAsString(),
+                    methodCall
+                );
+                if (forcedChain.isPresent()) {
+                    return forcedChain.orElseThrow();
+                }
             }
             Optional<Doc> sourceMultilineCall = variableWithSourceMultilineMethodCallInitializer(
                 variable,
@@ -564,15 +582,14 @@ final class VariableInitializerLayout {
             if (sourceMultilineBlockLambdaCall.isPresent()) {
                 return sourceMultilineBlockLambdaCall.orElseThrow();
             }
-            Optional<Doc> forcedChain = forcedMethodCallChain.apply(methodCall);
+            Optional<Doc> forcedChain = variableWithForcedMethodCallChain(
+                variable,
+                name,
+                declarationPrefix + variable.getNameAsString(),
+                methodCall
+            );
             if (forcedChain.isPresent()) {
-                return variableWithMethodCallChain(
-                    name,
-                    declarationPrefix + variable.getNameAsString(),
-                    methodCall,
-                    methodCallChainFirstLine.apply(methodCall),
-                    forcedChain.orElseThrow()
-                );
+                return forcedChain.orElseThrow();
             }
             Optional<Doc> mixedChain = mixedFieldMethodCallChain.apply(methodCall);
             if (mixedChain.isPresent()) {
@@ -628,6 +645,7 @@ final class VariableInitializerLayout {
             && !initializerHasOwnBreak(initializer)
         ) {
             Optional<Doc> expressionLambdaInitializer = variableWithExpressionLambdaInitializer(
+                variable,
                 name,
                 declarationPrefix + variable.getNameAsString(),
                 lambdaExpr
@@ -676,7 +694,7 @@ final class VariableInitializerLayout {
         ) {
             return Doc.concat(
                 Doc.text(name + " ="),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, brokenInitializer(initializer)))
+                Doc.indent(Doc.concat(Doc.HARD_LINE, brokenInitializer(variable, initializer)))
             );
         }
         return Doc.concat(Doc.text(name + " = "), expression.apply(initializer));
@@ -725,16 +743,13 @@ final class VariableInitializerLayout {
         boolean initializerStartsOnContinuationLine = initializerStartsOnContinuationLine(variable, methodCall);
         boolean chainSpansMultipleSourceLines = methodCallChainIsSourceMultiline.test(methodCall)
             || rawSource.rawWithoutOwnComment(methodCall).contains("\n");
-        boolean sourceMultilineChain = chainSpansMultipleSourceLines || initializerStartsOnContinuationLine;
-        boolean singleCallChain = methodCallChainHasSingleCall.test(methodCall);
+        MethodCallChainSourcePlanner.InitializerChainShape chainShape = methodCallChainInitializerShape.apply(methodCall);
         if (
-            !methodCallChainRootIsObjectCreation.test(methodCall)
-            || (chainSpansMultipleSourceLines && !singleCallChain)
-            || (!sourceMultilineChain && singleCallChain && !methodCall.getArguments().isEmpty())
-            || (!initializerStartsOnContinuationLine
-                && sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
-                && singleCallChain)
-            || methodCallChainRootObjectCreationArgumentsSpanMultipleLines.test(methodCall)
+            !chainShape.canUseCompactObjectCreationInitializer(
+                initializerStartsOnContinuationLine,
+                chainSpansMultipleSourceLines,
+                sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+            )
             || !methodCall.getAllContainedComments().isEmpty()
             || commentPlacement.trailingLineComment(variable).isPresent()
             || layoutWidth.continuationStatement(compact.apply(methodCall) + ";") > options.lineWidth()
@@ -757,41 +772,6 @@ final class VariableInitializerLayout {
                             initializerRange.begin.line > nameRange.end.line
                 ))
                 .orElse(false);
-    }
-
-    private boolean hasTypeLikeMethodCallChainRoot(MethodCallExpr expression) {
-        MethodCallExpr root = expression;
-        while (root.getScope().filter(MethodCallExpr.class::isInstance).isPresent()) {
-            root = root.getScope().filter(MethodCallExpr.class::isInstance).map(MethodCallExpr.class::cast).orElseThrow();
-        }
-        return root.getScope().filter(this::scopeLooksTypeLike).isPresent();
-    }
-
-    private boolean scopeLooksTypeLike(Expression scope) {
-        if (scope.isNameExpr()) {
-            return startsWithUppercase(scope.asNameExpr().getNameAsString());
-        }
-        if (scope instanceof FieldAccessExpr fieldAccess) {
-            return startsWithUppercase(
-                fieldAccess.getNameAsString()
-            ) || fieldAccessRootName(fieldAccess).map(this::startsWithUppercase).orElse(false);
-        }
-        return false;
-    }
-
-    private Optional<String> fieldAccessRootName(FieldAccessExpr fieldAccess) {
-        Expression scope = fieldAccess.getScope();
-        if (scope.isNameExpr()) {
-            return Optional.of(scope.asNameExpr().getNameAsString());
-        }
-        if (scope instanceof FieldAccessExpr innerFieldAccess) {
-            return fieldAccessRootName(innerFieldAccess);
-        }
-        return Optional.empty();
-    }
-
-    private boolean startsWithUppercase(String value) {
-        return !value.isEmpty() && Character.isUpperCase(value.charAt(0));
     }
 
     /**
@@ -1091,9 +1071,11 @@ final class VariableInitializerLayout {
             String flatName,
             MethodCallExpr methodCall
     ) {
+        MethodCallChainSourcePlanner.InitializerChainShape chainShape = methodCallChainInitializerShape.apply(methodCall);
         if (
             methodCall.getArguments().isEmpty()
             || !rawSource.rawWithoutOwnComment(methodCall).contains("\n")
+            || !chainShape.canUseDirectSourceMultilineInitializer()
             || sourceShape.expressionLambdaStartsOnSelectorLine(methodCall)
             || methodCall.getScope().filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n")).isPresent()
             || (methodCallChainRootIsObjectCreation.test(methodCall)
@@ -1107,6 +1089,21 @@ final class VariableInitializerLayout {
             return Optional.empty();
         }
         return Optional.of(Doc.concat(Doc.text(name + " = "), this.methodCall.apply(methodCall)));
+    }
+
+    private Optional<Doc> variableWithForcedMethodCallChain(
+            VariableDeclarator variable,
+            String name,
+            String flatName,
+            MethodCallExpr methodCall
+    ) {
+        return forcedMethodCallChain(variable, methodCall, flatName).map(chain -> variableWithMethodCallChain(
+                name,
+                flatName,
+                methodCall,
+                methodCallChainFirstLine.apply(methodCall),
+                chain
+        ));
     }
 
     /**
@@ -1264,6 +1261,7 @@ final class VariableInitializerLayout {
      * Keeps expression-lambda initializers attached to {@code =} and {@code ->} while the opener fits.
      */
     private Optional<Doc> variableWithExpressionLambdaInitializer(
+            VariableDeclarator variable,
             String name,
             String flatName,
             LambdaExpr lambdaExpr
@@ -1278,9 +1276,12 @@ final class VariableInitializerLayout {
         ) {
             return Optional.empty();
         }
-        Doc body = forcedMethodCallChain.apply(methodCall).orElseGet(() -> expression.apply(methodCall));
         String bodyFirstLine = methodCallChainFirstLine.apply(methodCall);
         String lambdaPrefix = parameters + " ->";
+        Doc body = forcedMethodCallChain.apply(
+            methodCall,
+            firstLineWidth(variable, flatName + " = " + lambdaPrefix + " ")
+        ).orElseGet(() -> expression.apply(methodCall));
         if (
             layoutWidth.currentIndented(flatName + " = " + lambdaPrefix + " " + bodyFirstLine)
                 <= options.lineWidth()
@@ -1296,6 +1297,18 @@ final class VariableInitializerLayout {
             );
         }
         return Optional.empty();
+    }
+
+    private Optional<Doc> forcedMethodCallChain(
+            VariableDeclarator variable,
+            MethodCallExpr methodCall,
+            String flatName
+    ) {
+        return forcedMethodCallChain.apply(methodCall, firstLineWidth(variable, flatName + " = "));
+    }
+
+    private ToIntFunction<String> firstLineWidth(VariableDeclarator variable, String prefix) {
+        return text -> layoutWidth.variableInitializer(variable, prefix + text);
     }
 
     /**
@@ -1421,9 +1434,11 @@ final class VariableInitializerLayout {
     /**
      * Uses the shared method-chain break as the last initializer fallback before normal expression rendering.
      */
-    private Doc brokenInitializer(Expression initializer) {
+    private Doc brokenInitializer(VariableDeclarator variable, Expression initializer) {
         if (initializer instanceof MethodCallExpr methodCall) {
-            return forcedMethodCallChain.apply(methodCall).orElseGet(() -> expression.apply(initializer));
+            return forcedMethodCallChain
+                    .apply(methodCall, text -> layoutWidth.variableInitializer(variable, text))
+                    .orElseGet(() -> expression.apply(initializer));
         }
         return expression.apply(initializer);
     }

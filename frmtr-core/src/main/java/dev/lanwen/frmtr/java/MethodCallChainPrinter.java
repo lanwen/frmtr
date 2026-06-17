@@ -134,7 +134,28 @@ final class MethodCallChainPrinter {
     }
 
     Optional<Doc> forcedMethodCallChain(MethodCallExpr expression, LayoutWidth.LineBudget lineBudget) {
-        return methodCallChain(expression, MethodCallBreakMode.FORCED, MethodCallChainTail.EMPTY, lineBudget);
+        return forcedMethodCallChain(expression, lineBudget, lineWidth(lineBudget));
+    }
+
+    Optional<Doc> forcedMethodCallChain(
+            MethodCallExpr expression,
+            ToIntFunction<String> firstLineWidth
+    ) {
+        return forcedMethodCallChain(expression, LayoutWidth.LineBudget.CURRENT, firstLineWidth);
+    }
+
+    private Optional<Doc> forcedMethodCallChain(
+            MethodCallExpr expression,
+            LayoutWidth.LineBudget lineBudget,
+            ToIntFunction<String> firstLineWidth
+    ) {
+        return methodCallChain(
+            expression,
+            MethodCallBreakMode.FORCED,
+            MethodCallChainTail.EMPTY,
+            lineBudget,
+            firstLineWidth
+        );
     }
 
     Optional<Doc> compactRootWithBrokenFinalChainSegment(MethodCallExpr expression) {
@@ -324,6 +345,22 @@ final class MethodCallChainPrinter {
         return methodCallChain(expression, breakMode, MethodCallChainTail.of(finalSegmentSuffix), lineBudget);
     }
 
+    Optional<Doc> methodCallChain(
+            MethodCallExpr expression,
+            MethodCallBreakMode breakMode,
+            String finalSegmentSuffix,
+            LayoutWidth.LineBudget lineBudget,
+            ToIntFunction<String> firstLineWidth
+    ) {
+        return methodCallChain(
+            expression,
+            breakMode,
+            MethodCallChainTail.of(finalSegmentSuffix),
+            lineBudget,
+            firstLineWidth
+        );
+    }
+
     private Optional<Doc> methodCallChain(
             MethodCallExpr expression,
             MethodCallBreakMode breakMode,
@@ -337,6 +374,16 @@ final class MethodCallChainPrinter {
             MethodCallBreakMode breakMode,
             MethodCallChainTail finalSegmentSuffix,
             LayoutWidth.LineBudget lineBudget
+    ) {
+        return methodCallChain(expression, breakMode, finalSegmentSuffix, lineBudget, lineWidth(lineBudget));
+    }
+
+    private Optional<Doc> methodCallChain(
+            MethodCallExpr expression,
+            MethodCallBreakMode breakMode,
+            MethodCallChainTail finalSegmentSuffix,
+            LayoutWidth.LineBudget lineBudget,
+            ToIntFunction<String> firstLineWidth
     ) {
         MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
         boolean rootObjectCreationNeedsBreak = methodChainPlanner.rootObjectCreationNeedsBreak(analysis);
@@ -433,7 +480,7 @@ final class MethodCallChainPrinter {
         chainPlan = promoteFirstBlockLambdaCallWithLambdaBodyComments(analysis, chainPlan).orElse(chainPlan);
         root = chainPlan.root();
         calls = chainPlan.calls();
-        Doc rootDoc = methodCallChainRootDoc(chainPlan);
+        Doc rootDoc = methodCallChainRootDoc(chainPlan, firstLineWidth);
         boolean firstSegmentAttachedToRoot = false;
         if (canAttachFirstSegmentToSimpleRoot(chainPlan, calls, analysis)) {
             MethodCallExpr firstCall = calls.getFirst();
@@ -483,59 +530,15 @@ final class MethodCallChainPrinter {
             root instanceof ObjectCreationExpr objectCreation
             && calls.size() == 1
         ) {
-            if (analysis.sourceMultilineChain() && methodCallSegmentHasLeadingLineComment(calls.getFirst())) {
-                return Optional.of(
-                    Doc.concat(
-                        brokenObjectCreationRenderer.apply(objectCreation),
-                        chainContinuation(methodCallChainSegment(calls.getFirst(), Optional.empty(), finalSegmentSuffix))
-                    )
-                );
-            }
-            if (analysis.sourceMultilineChain() && !finalTrailingLineComments(calls.getFirst()).isEmpty()) {
-                return Optional.of(
-                    Doc.concat(
-                        rootDoc,
-                        chainContinuation(methodCallChainSegment(calls.getFirst(), Optional.empty(), finalSegmentSuffix))
-                    )
-                );
-            }
-            ToIntFunction<String> compactSegmentWidth = objectRootSegmentWidth(
+            return Optional.of(objectRootSingleSegmentChain(
                 objectCreation,
-                chainPlan.rootRendering(),
-                lineBudget
-            );
-            Optional<Doc> compactAttachedSegment = compactAttachedObjectRootSingleSegment(
                 rootDoc,
                 calls.getFirst(),
                 finalSegmentSuffix,
-                compactSegmentWidth,
-                analysis.sourceMultilineChain()
-            );
-            if (compactAttachedSegment.isPresent()) {
-                return compactAttachedSegment;
-            }
-            Doc attachedSegment = methodCallChainSegment(
-                calls.getFirst(),
-                Optional.empty(),
-                finalSegmentSuffix,
-                compactSegmentWidth
-            );
-            if (
-                objectRootUsesCompactLine(objectCreation, chainPlan.rootRendering())
-                && calls.getFirst().getArguments().isEmpty()
-                && compactSegmentWidth.applyAsInt(
-                    compactMethodCallChainSegment(calls.getFirst()) + finalSegmentSuffix.text()
-                )
-                    > options.lineWidth()
-            ) {
-                return Optional.of(Doc.concat(rootDoc, chainContinuation(attachedSegment)));
-            }
-            return Optional.of(
-                Doc.concat(
-                    rootDoc,
-                    attachedSegment
-                )
-            );
+                chainPlan.rootRendering(),
+                analysis.sourceMultilineChain(),
+                lineBudget
+            ));
         }
         if (
             root instanceof MethodCallExpr methodRoot
@@ -830,28 +833,45 @@ final class MethodCallChainPrinter {
                 );
     }
 
-    private Doc methodCallChainRootDoc(MethodCallChainSourcePlanner.MethodCallChainPlan chainPlan) {
+    private Doc methodCallChainRootDoc(
+            MethodCallChainSourcePlanner.MethodCallChainPlan chainPlan,
+            ToIntFunction<String> firstLineWidth
+    ) {
         return switch (chainPlan.rootRendering()) {
             case INLINE_PROMOTED_METHOD_CALL -> chainPlan.root() instanceof MethodCallExpr methodCall
-                ? promotedMethodCallRoot(methodCall)
+                ? promotedMethodCallRoot(methodCall, firstLineWidth)
                 : expressionRenderer.apply(chainPlan.root());
             case GROUPED_PROMOTED_METHOD_CALL -> chainPlan.root() instanceof MethodCallExpr methodCall
                 ? groupedPromotedMethodCall(methodCall)
                 : expressionRenderer.apply(chainPlan.root());
             case BROKEN_OBJECT_CREATION -> brokenObjectCreationRenderer.apply((ObjectCreationExpr) chainPlan.root());
-            case EXPRESSION_RENDERER -> expressionRenderedChainRoot(chainPlan.root());
+            case EXPRESSION_RENDERER -> expressionRenderedChainRoot(chainPlan.root(), firstLineWidth);
         };
     }
 
-    private Doc expressionRenderedChainRoot(Expression root) {
+    private Doc expressionRenderedChainRoot(
+            Expression root,
+            ToIntFunction<String> firstLineWidth
+    ) {
         if (
             root instanceof MethodCallExpr methodCall
             && methodCall.getArguments().size() > 1
-            && currentIndentedWidth.applyAsInt(compactSourceWidthText(methodCall)) > options.lineWidth()
+            && (
+                firstLineWidth.applyAsInt(compactSourceWidthText(methodCall))
+                    > options.lineWidth()
+                || (sourceMultilineTypeLikeRoot(methodCall)
+                    && firstLineWidth.applyAsInt(compactSource.compact(methodCall))
+                        > options.lineWidth())
+            )
         ) {
             return calls.brokenMethodCall(methodCall);
         }
         return expressionRenderer.apply(root);
+    }
+
+    private boolean sourceMultilineTypeLikeRoot(MethodCallExpr methodCall) {
+        return methodChainPlanner.methodCallHasTypeLikeScope(methodCall)
+            && rawSource.rawWithoutOwnComment(methodCall).contains("\n");
     }
 
     private Doc singleSegmentMethodRootDoc(MethodCallExpr methodRoot) {
@@ -879,7 +899,7 @@ final class MethodCallChainPrinter {
                 .filter(MethodCallExpr.class::isInstance)
                 .map(MethodCallExpr.class::cast)
                 .filter(call -> call.getArguments().size() > 1)
-                .filter(call -> call.getScope().filter(this::scopeLooksTypeLike).isPresent())
+                .filter(call -> call.getScope().filter(methodChainPlanner::promotesFirstCall).isPresent())
                 .filter(call -> currentIndentedWidth.applyAsInt(compactSourceWidthText(call)) > options.lineWidth());
         if (scopedCall.isEmpty()) {
             return Optional.empty();
@@ -1387,14 +1407,8 @@ final class MethodCallChainPrinter {
         );
     }
 
-    boolean methodCallChainHasSingleCall(MethodCallExpr expression) {
-        return methodCallChainAnalysis(expression).calls().size() == 1;
-    }
-
-    boolean methodCallChainRootObjectCreationArgumentsSpanMultipleLines(MethodCallExpr expression) {
-        MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
-        return analysis.root() instanceof ObjectCreationExpr objectCreation
-            && sourceShape.objectCreationArgumentsSpanMultipleLines(objectCreation);
+    MethodCallChainSourcePlanner.InitializerChainShape methodCallChainInitializerShape(MethodCallExpr expression) {
+        return methodChainPlanner.initializerShape(methodCallChainAnalysis(expression));
     }
 
     private MethodCallChainSourcePlanner.MethodCallChainAnalysis methodCallChainAnalysis(MethodCallExpr expression) {
@@ -1451,7 +1465,7 @@ final class MethodCallChainPrinter {
         if (sourceShape.methodCallArgumentsSpanMultipleLines(methodRoot)) {
             return Optional.of(prefix + "(");
         }
-        if (promotedRootArgumentsShouldBreak(methodRoot)) {
+        if (promotedRootArgumentsShouldBreak(methodRoot, lineWidth(LayoutWidth.LineBudget.CURRENT))) {
             return Optional.of(prefix + "(");
         }
         if (currentIndentedWidth.applyAsInt(compactSource.compact(methodRoot)) > options.lineWidth()) {
@@ -1593,40 +1607,45 @@ final class MethodCallChainPrinter {
         return Doc.concat(scope, Doc.text("." + typeArguments + expression.getNameAsString() + arguments));
     }
 
-    private Doc promotedMethodCallRoot(MethodCallExpr expression) {
+    private Doc promotedMethodCallRoot(
+            MethodCallExpr expression,
+            ToIntFunction<String> firstLineWidth
+    ) {
         Optional<Doc> sourceMultilineArguments = calls.sourceMultilineArguments(expression);
         if (sourceMultilineArguments.isPresent()) {
             return sourceMultilineArguments.orElseThrow();
         }
-        if (promotedRootArgumentsShouldBreak(expression)) {
+        if (promotedRootArgumentsShouldBreak(expression, firstLineWidth)) {
             return brokenPromotedMethodCallRoot(expression);
         }
         return inlineMethodCall(expression);
     }
 
-    private boolean promotedRootArgumentsShouldBreak(MethodCallExpr expression) {
+    private boolean promotedRootArgumentsShouldBreak(
+            MethodCallExpr expression,
+            ToIntFunction<String> firstLineWidth
+    ) {
         if (expression.getArguments().size() <= 1) {
             return false;
         }
         String compact = compactSource.compact(expression);
         return currentIndentedWidth.applyAsInt(compact) > options.lineWidth()
             || rootLineWidth(expression, compact) > options.lineWidth()
-            || sourceContinuedPromotedRootHasWideArguments(expression, compact);
+            || (methodChainPlanner.methodCallStartsAfterScopeLine(expression)
+                && selectorLineWidth(expression, compact) > options.lineWidth())
+            || ((sourceMultilineTypeLikeRoot(expression) || methodChainPlanner.methodCallStartsAfterScopeLine(expression))
+                && firstLineWidth.applyAsInt(compact) > options.lineWidth());
     }
 
-    private boolean sourceContinuedPromotedRootHasWideArguments(MethodCallExpr expression, String compact) {
-        return expression.getScope()
-                .filter(scope -> selectorStartsAfterPreviousSegmentLine(scope, expression))
-                .filter(ignored -> compact.length() > options.lineWidth() - options.indentUnit().length() * 9)
-                .isPresent();
+    private ToIntFunction<String> lineWidth(LayoutWidth.LineBudget lineBudget) {
+        return text -> layoutWidth.line(lineBudget, text);
     }
 
-    private boolean selectorStartsAfterPreviousSegmentLine(Node previous, MethodCallExpr call) {
-        return previous.getRange()
-                .flatMap(previousRange -> call.getName().getRange().map(
-                        nameRange -> nameRange.begin.line > previousRange.end.line
-                ))
-                .orElse(false);
+    private int selectorLineWidth(MethodCallExpr expression, String text) {
+        return expression.getName()
+                .getRange()
+                .map(range -> Math.max(0, range.begin.column - 1) + text.length())
+                .orElseGet(() -> currentIndentedWidth.applyAsInt(text));
     }
 
     private Doc brokenPromotedMethodCallRoot(MethodCallExpr expression) {
@@ -1729,6 +1748,59 @@ final class MethodCallChainPrinter {
             return Optional.empty();
         }
         return Optional.of(Doc.concat(rootDoc, Doc.text(segment)));
+    }
+
+    private Doc objectRootSingleSegmentChain(
+            ObjectCreationExpr objectCreation,
+            Doc rootDoc,
+            MethodCallExpr call,
+            MethodCallChainTail finalSegmentSuffix,
+            MethodCallChainSourcePlanner.ChainRootRendering rootRendering,
+            boolean sourceMultilineChain,
+            LayoutWidth.LineBudget lineBudget
+    ) {
+        if (sourceMultilineChain && methodCallSegmentHasLeadingLineComment(call)) {
+            return Doc.concat(
+                brokenObjectCreationRenderer.apply(objectCreation),
+                chainContinuation(methodCallChainSegment(call, Optional.empty(), finalSegmentSuffix))
+            );
+        }
+        if (sourceMultilineChain && !finalTrailingLineComments(call).isEmpty()) {
+            return Doc.concat(
+                rootDoc,
+                chainContinuation(methodCallChainSegment(call, Optional.empty(), finalSegmentSuffix))
+            );
+        }
+        ToIntFunction<String> compactSegmentWidth = objectRootSegmentWidth(
+            objectCreation,
+            rootRendering,
+            lineBudget
+        );
+        Optional<Doc> compactAttachedSegment = compactAttachedObjectRootSingleSegment(
+            rootDoc,
+            call,
+            finalSegmentSuffix,
+            compactSegmentWidth,
+            sourceMultilineChain
+        );
+        if (compactAttachedSegment.isPresent()) {
+            return compactAttachedSegment.orElseThrow();
+        }
+        Doc attachedSegment = methodCallChainSegment(
+            call,
+            Optional.empty(),
+            finalSegmentSuffix,
+            compactSegmentWidth
+        );
+        if (
+            objectRootUsesCompactLine(objectCreation, rootRendering)
+            && call.getArguments().isEmpty()
+            && compactSegmentWidth.applyAsInt(compactMethodCallChainSegment(call) + finalSegmentSuffix.text())
+                > options.lineWidth()
+        ) {
+            return Doc.concat(rootDoc, chainContinuation(attachedSegment));
+        }
+        return Doc.concat(rootDoc, attachedSegment);
     }
 
     private Doc methodCallChainSegment(
@@ -1853,41 +1925,13 @@ final class MethodCallChainPrinter {
         ) {
             return true;
         }
-        return overwideTypeLikeScopeSegment(
-            expression
-        ) && compactSegmentWidth.applyAsInt(compactSegment) > options.lineWidth();
+        return overwideTypeLikeScopeSegment(expression)
+            && compactSegmentWidth.applyAsInt(compactSegment) > options.lineWidth();
     }
 
     private boolean overwideTypeLikeScopeSegment(MethodCallExpr expression) {
         return expression.getArguments().size() > 1
-            && expression.getScope().filter(this::scopeLooksTypeLike).isPresent();
-    }
-
-    private boolean scopeLooksTypeLike(Expression scope) {
-        if (scope.isNameExpr()) {
-            return startsWithUppercase(scope.asNameExpr().getNameAsString());
-        }
-        if (scope instanceof FieldAccessExpr fieldAccess) {
-            return startsWithUppercase(
-                fieldAccess.getNameAsString()
-            ) || fieldAccessRootName(fieldAccess).map(this::startsWithUppercase).orElse(false);
-        }
-        return false;
-    }
-
-    private Optional<String> fieldAccessRootName(FieldAccessExpr fieldAccess) {
-        Expression scope = fieldAccess.getScope();
-        if (scope.isNameExpr()) {
-            return Optional.of(scope.asNameExpr().getNameAsString());
-        }
-        if (scope instanceof FieldAccessExpr innerFieldAccess) {
-            return fieldAccessRootName(innerFieldAccess);
-        }
-        return Optional.empty();
-    }
-
-    private boolean startsWithUppercase(String value) {
-        return !value.isEmpty() && Character.isUpperCase(value.charAt(0));
+            && expression.getScope().filter(methodChainPlanner::promotesFirstCall).isPresent();
     }
 
     private Doc brokenMethodCallSegment(

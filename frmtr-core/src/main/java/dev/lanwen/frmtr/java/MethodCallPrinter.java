@@ -500,6 +500,13 @@ final class MethodCallPrinter {
         return methodChains.forcedMethodCallChain(expression, lineBudget);
     }
 
+    Optional<Doc> forcedMethodCallChain(
+            MethodCallExpr expression,
+            ToIntFunction<String> firstLineWidth
+    ) {
+        return methodChains.forcedMethodCallChain(expression, firstLineWidth);
+    }
+
     Optional<Doc> compactRootWithBrokenFinalChainSegment(MethodCallExpr expression) {
         return methodChains.compactRootWithBrokenFinalChainSegment(expression);
     }
@@ -539,6 +546,22 @@ final class MethodCallPrinter {
         return methodChains.methodCallChain(expression, breakMode, finalSegmentSuffix, lineBudget);
     }
 
+    Optional<Doc> methodCallChain(
+            MethodCallExpr expression,
+            MethodCallBreakMode breakMode,
+            String finalSegmentSuffix,
+            LayoutWidth.LineBudget lineBudget,
+            ToIntFunction<String> firstLineWidth
+    ) {
+        return methodChains.methodCallChain(
+            expression,
+            breakMode,
+            finalSegmentSuffix,
+            lineBudget,
+            firstLineWidth
+        );
+    }
+
     Optional<Doc> mixedFieldMethodCallChain(MethodCallExpr expression) {
         return methodChains.mixedFieldMethodCallChain(expression);
     }
@@ -559,12 +582,8 @@ final class MethodCallPrinter {
         return methodChains.methodCallChainIsSourceMultiline(expression);
     }
 
-    boolean methodCallChainHasSingleCall(MethodCallExpr expression) {
-        return methodChains.methodCallChainHasSingleCall(expression);
-    }
-
-    boolean methodCallChainRootObjectCreationArgumentsSpanMultipleLines(MethodCallExpr expression) {
-        return methodChains.methodCallChainRootObjectCreationArgumentsSpanMultipleLines(expression);
+    MethodCallChainSourcePlanner.InitializerChainShape methodCallChainInitializerShape(MethodCallExpr expression) {
+        return methodChains.methodCallChainInitializerShape(expression);
     }
 
     boolean methodCallChainRootIsObjectCreation(MethodCallExpr expression) {
@@ -1060,14 +1079,17 @@ final class MethodCallPrinter {
             return Optional.empty();
         }
         if (methodCallChainIsSourceMultiline(methodCall)) {
-            String firstLine = compactSource.compact(assignExpr.getTarget())
+            String assignmentPrefix = compactSource.compact(assignExpr.getTarget())
                 + " "
                 + assignExpr.getOperator().asString()
-                + " "
-                + methodCallChainFirstLine(methodCall);
-            Optional<Doc> chain = blockStatementWidth.applyAsInt(firstLine + ";") <= options.lineWidth()
-                ? methodCallChain(methodCall, MethodCallBreakMode.FORCED, finalSegmentSuffix)
-                : Optional.empty();
+                + " ";
+            Optional<Doc> chain = methodCallChain(
+                methodCall,
+                MethodCallBreakMode.FORCED,
+                finalSegmentSuffix,
+                LayoutWidth.LineBudget.BLOCK,
+                text -> blockStatementWidth.applyAsInt(assignmentPrefix + text)
+            );
             if (chain.isPresent()) {
                 return Optional.of(
                     Doc.concat(

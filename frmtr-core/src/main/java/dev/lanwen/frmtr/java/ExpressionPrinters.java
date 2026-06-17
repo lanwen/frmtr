@@ -428,6 +428,13 @@ final class ExpressionPrinters {
         return methodCalls.forcedMethodCallChain(expression, lineBudget);
     }
 
+    Optional<Doc> forcedMethodCallChain(
+            MethodCallExpr expression,
+            ToIntFunction<String> firstLineWidth
+    ) {
+        return methodCalls.forcedMethodCallChain(expression, firstLineWidth);
+    }
+
     boolean methodCallChainHasComments(MethodCallExpr expression) {
         return methodCalls.methodCallChainHasComments(expression);
     }
@@ -440,12 +447,8 @@ final class ExpressionPrinters {
         return methodCalls.methodCallChainIsSourceMultiline(expression);
     }
 
-    boolean methodCallChainHasSingleCall(MethodCallExpr expression) {
-        return methodCalls.methodCallChainHasSingleCall(expression);
-    }
-
-    boolean methodCallChainRootObjectCreationArgumentsSpanMultipleLines(MethodCallExpr expression) {
-        return methodCalls.methodCallChainRootObjectCreationArgumentsSpanMultipleLines(expression);
+    MethodCallChainSourcePlanner.InitializerChainShape methodCallChainInitializerShape(MethodCallExpr expression) {
+        return methodCalls.methodCallChainInitializerShape(expression);
     }
 
     boolean methodCallChainRootIsObjectCreation(MethodCallExpr expression) {

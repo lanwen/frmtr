@@ -91,6 +91,26 @@ class SourceMultilineMethodRootChainInitializer {
         );
     }
 
+    void sourceNestedBuilderShortRootState(ContainerProbe container) {
+        Client client = Client.create(
+            Settings.create(
+                ManagedChannelBuilder.forAddress(container.getHost(), container.getEmulatorGrpcPort())
+                        .usePlaintext()
+                        .build()
+            )
+        );
+    }
+
+    void firstPassNestedBuilderShortRootState(ContainerProbe container) {
+        Client client = Client.create(
+            Settings.create(
+                ManagedChannelBuilder.forAddress(container.getHost(), container.getEmulatorGrpcPort())
+                        .usePlaintext()
+                        .build()
+            )
+        );
+    }
+
     Stream<StoreAdapter> sourceStaticRootState(Object testInstance) {
         return ReflectionSupport.findFields(
             testInstance.getClass(),

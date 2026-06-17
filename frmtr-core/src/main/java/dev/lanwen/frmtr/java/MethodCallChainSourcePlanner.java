@@ -30,6 +30,8 @@ final class MethodCallChainSourcePlanner {
 
     private final CompactSourceText compactSource;
 
+    private final SourceShape sourceShape;
+
     private final FormatterOptions options;
 
     private final ToIntFunction<String> currentIndentedWidth;
@@ -37,6 +39,7 @@ final class MethodCallChainSourcePlanner {
     MethodCallChainSourcePlanner(JavaFormatContext context, ToIntFunction<String> currentIndentedWidth) {
         this.objectCreationLayoutPolicy = context.objectCreationLayoutPolicy;
         this.compactSource = context.compactSource;
+        this.sourceShape = context.sourceShape;
         this.options = context.options;
         this.currentIndentedWidth = currentIndentedWidth;
     }
@@ -88,10 +91,54 @@ final class MethodCallChainSourcePlanner {
         int firstCommentedSegment,
         boolean firstCallHasArgumentGapComment,
         boolean laterCallsHaveArgumentGapComment,
-        boolean hasTrailingLineComments
+        boolean hasTrailingLineComments,
+        boolean expressionSpansMultipleSourceLines
     ) {
         MethodCallChainAnalysis {
             calls = List.copyOf(calls);
+        }
+    }
+
+    /**
+     * Summarizes method-chain facts used by variable initializer layout.
+     *
+     * <p>Initializer layout decides where {@code =} and the continuation line go, but it should not rediscover chain
+     * roots or classify type-like/static roots. This record keeps those source-shape facts with the chain planner while
+     * still letting the declaration-specific layout apply its own comment and width checks.
+     */
+    record InitializerChainShape(
+        boolean typeLikeRoot,
+        boolean rootIsObjectCreation,
+        boolean sourceMultilineChain,
+        boolean singleCall,
+        boolean tailHasArguments,
+        boolean rootObjectCreationArgumentsSpanMultipleLines,
+        boolean expressionSpansMultipleSourceLines
+    ) {
+        boolean shouldForceSourceMultilineInitializerChain() {
+            return expressionSpansMultipleSourceLines
+                && (typeLikeRoot || rootObjectCreationArgumentsSpanMultipleLines);
+        }
+
+        boolean shouldForceWideInitializerChain() {
+            return typeLikeRoot;
+        }
+
+        boolean canUseDirectSourceMultilineInitializer() {
+            return !typeLikeRoot;
+        }
+
+        boolean canUseCompactObjectCreationInitializer(
+                boolean initializerStartsOnContinuationLine,
+                boolean chainSpansMultipleSourceLines,
+                boolean tailArgumentsSpanMultipleSourceLines
+        ) {
+            boolean sourceMultilineInitializer = chainSpansMultipleSourceLines || initializerStartsOnContinuationLine;
+            return rootIsObjectCreation
+                && !(chainSpansMultipleSourceLines && !singleCall)
+                && !(!sourceMultilineInitializer && singleCall && tailHasArguments)
+                && !(!initializerStartsOnContinuationLine && tailArgumentsSpanMultipleSourceLines && singleCall)
+                && !rootObjectCreationArgumentsSpanMultipleLines;
         }
     }
 
@@ -134,7 +181,8 @@ final class MethodCallChainSourcePlanner {
             firstCommentedSegment,
             firstCallHasArgumentGapComment,
             laterCallsHaveArgumentGapComment,
-            hasTrailingLineComments
+            hasTrailingLineComments,
+            sourceSpansMultipleLines(expression)
         );
     }
 
@@ -222,6 +270,32 @@ final class MethodCallChainSourcePlanner {
         return methodCallChainRoot(expression, new ArrayList<>()) instanceof FieldAccessExpr;
     }
 
+    InitializerChainShape initializerShape(MethodCallChainAnalysis analysis) {
+        boolean rootObjectCreationArgumentsSpanMultipleLines = analysis.root() instanceof ObjectCreationExpr objectCreation
+            && sourceShape.objectCreationArgumentsSpanMultipleLines(objectCreation);
+        MethodCallExpr tail = analysis.calls().isEmpty() && analysis.root() instanceof MethodCallExpr methodRoot
+            ? methodRoot
+            : analysis.calls().getLast();
+        return new InitializerChainShape(
+            hasTypeLikeChainRoot(analysis),
+            analysis.root() instanceof ObjectCreationExpr,
+            analysis.sourceMultilineChain(),
+            analysis.calls().size() == 1,
+            !tail.getArguments().isEmpty(),
+            rootObjectCreationArgumentsSpanMultipleLines,
+            analysis.expressionSpansMultipleSourceLines()
+        );
+    }
+
+    private boolean hasTypeLikeChainRoot(MethodCallChainAnalysis analysis) {
+        return promotesFirstCall(analysis.root())
+            || analysis.calls()
+                    .stream()
+                    .map(MethodCallExpr::getScope)
+                    .flatMap(Optional::stream)
+                    .anyMatch(this::promotesFirstCall);
+    }
+
     Expression methodCallChainRoot(MethodCallExpr expression, List<MethodCallExpr> calls) {
         if (expression.getScope().orElse(null) instanceof MethodCallExpr methodCallExpr) {
             Expression root = methodCallChainRoot(methodCallExpr, calls);
@@ -261,12 +335,22 @@ final class MethodCallChainSourcePlanner {
         return false;
     }
 
-    private boolean selectorStartsAfterPreviousSegmentLine(Node previous, MethodCallExpr call) {
+    boolean selectorStartsAfterPreviousSegmentLine(Node previous, MethodCallExpr call) {
         return previous.getRange()
                 .flatMap(previousRange -> call.getName().getRange().map(
                         nameRange -> nameRange.begin.line > previousRange.end.line
                 ))
                 .orElse(false);
+    }
+
+    boolean methodCallStartsAfterScopeLine(MethodCallExpr call) {
+        return call.getScope()
+                .map(scope -> selectorStartsAfterPreviousSegmentLine(scope, call))
+                .orElse(false);
+    }
+
+    boolean methodCallHasTypeLikeScope(MethodCallExpr call) {
+        return call.getScope().filter(this::promotesFirstCall).isPresent();
     }
 
     private boolean sourceMultilinePromotedMethodRoot(MethodCallExpr methodRoot) {
@@ -321,6 +405,12 @@ final class MethodCallChainSourcePlanner {
 
     private boolean startsWithUppercase(String name) {
         return !name.isEmpty() && Character.isUpperCase(name.charAt(0));
+    }
+
+    private boolean sourceSpansMultipleLines(Node node) {
+        return node.getRange()
+                .map(range -> range.begin.line < range.end.line)
+                .orElse(false);
     }
 
     private boolean shouldPromoteFirstCallForArgumentComments(

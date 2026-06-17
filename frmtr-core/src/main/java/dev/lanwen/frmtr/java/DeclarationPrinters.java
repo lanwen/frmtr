@@ -148,6 +148,8 @@ final class DeclarationPrinters {
             expressions::methodCallChainFirstLine,
             expressions::methodCallChainRootIsObjectCreation,
             expressions::methodCallChainIsSourceMultiline,
+            expressions::methodCallChainHasSingleCall,
+            expressions::methodCallChainRootObjectCreationArgumentsSpanMultipleLines,
             expressions::castType,
             conditional -> expressions.conditionalExpression(conditional, true),
             expressions::shouldBreakBeforeConditionalInitializer,

@@ -222,6 +222,7 @@ final class ExpressionPrinters {
         );
         this.arrays = new ArrayExpressionPrinter(
             comments,
+            commentPlacementPolicy,
             options,
             this::expression,
             enclosedExpressions::brokenEnclosedForSuffix,
@@ -437,6 +438,14 @@ final class ExpressionPrinters {
 
     boolean methodCallChainIsSourceMultiline(MethodCallExpr expression) {
         return methodCalls.methodCallChainIsSourceMultiline(expression);
+    }
+
+    boolean methodCallChainHasSingleCall(MethodCallExpr expression) {
+        return methodCalls.methodCallChainHasSingleCall(expression);
+    }
+
+    boolean methodCallChainRootObjectCreationArgumentsSpanMultipleLines(MethodCallExpr expression) {
+        return methodCalls.methodCallChainRootObjectCreationArgumentsSpanMultipleLines(expression);
     }
 
     boolean methodCallChainRootIsObjectCreation(MethodCallExpr expression) {

@@ -200,7 +200,11 @@ final class ReturnExpressionPrinter {
     }
 
     private int returnLineWidth(Expression expression, String line, LayoutWidth.LineBudget lineBudget) {
-        return layoutWidth.line(lineBudget, line);
+        int budgetWidth = layoutWidth.line(lineBudget, line);
+        int sourceColumnWidth = expression.getRange()
+                .map(range -> Math.max(0, range.begin.column - 1 - "return ".length()) + line.length())
+                .orElse(0);
+        return Math.max(budgetWidth, sourceColumnWidth);
     }
 
     /**

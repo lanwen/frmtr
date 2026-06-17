@@ -123,6 +123,16 @@ final class ControlConditionPrinter {
         }
         String flat = compact.apply(expression);
         int flatWidth = ifConditionLineWidth(expression, "if (" + flat + ") {}");
+        if (
+            expression instanceof MethodCallExpr methodCall
+            && methodCall.getArguments().size() > 1
+            && flatWidth > options.lineWidth() - options.indentUnit().length()
+        ) {
+            Optional<Doc> brokenMethodCall = brokenMethodCallCondition(methodCall);
+            if (brokenMethodCall.isPresent()) {
+                return brokenMethodCall.orElseThrow();
+            }
+        }
         if (flatWidth <= options.lineWidth()) {
             if (expressionHasParenthesizedNestedBinary.test(expression)) {
                 return Doc.concat(Doc.text("("), expressionRenderer.apply(expression), Doc.text(")"));
@@ -191,9 +201,10 @@ final class ControlConditionPrinter {
     }
 
     private int ifConditionLineWidth(Expression expression, String line) {
-        return expression.getRange()
+        int sourceWidth = expression.getRange()
                 .map(range -> Math.max(0, range.begin.column - "if (".length() + 1) + line.length())
                 .orElseGet(() -> blockStatementWidth.applyAsInt(line));
+        return Math.max(sourceWidth, currentIndentedWidth.applyAsInt(line));
     }
 
     private Optional<Doc> brokenMethodCallCondition(MethodCallExpr expression) {

@@ -7,6 +7,27 @@ class MethodArgumentCommentSample {
         );
     }
 
+    void mergeServices(List<String> services, Map<String, Integer> scalingPreferences) {
+        String serviceNameArgs = Stream
+            .concat(
+                services.stream(), // services selected directly
+                scalingPreferences.keySet().stream() // services selected by scaling
+            )
+            .distinct()
+            .collect(Collectors.joining(" "));
+    }
+
+    void firstPassMergeServices(List<String> services, Map<String, Integer> scalingPreferences) {
+        String serviceNameArgs = Stream.concat(
+            services.stream(), // services selected directly
+            scalingPreferences
+                    .keySet()
+                    .stream() // services selected by scaling
+        )
+                .distinct()
+                .collect(Collectors.joining(" "));
+    }
+
     void saveRows(RowRepository repository, ParcelRoute route, ParcelOwner owner) {
         repository.saveAll(
             Entries.of(

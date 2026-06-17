@@ -77,8 +77,11 @@ final class BlockPrinter {
         if (recoveryPlan.isPresent() && hasRawGap(recoveryPlan.orElseThrow())) {
             return recoveredBlock(block, List.of(), recoveryPlan.orElseThrow());
         }
-        if (block.getStatements().isEmpty() && !commentPlacement.hasOrphanComments(block)) {
-            return Doc.text("{}");
+        if (block.getStatements().isEmpty()) {
+            Optional<Doc> emptyBlockComments = emptyBlockCommentContent(block);
+            return emptyBlockComments
+                    .map(comment -> statementBlock(List.of(comment)))
+                    .orElseGet(() -> Doc.text("{}"));
         }
         List<Doc> statements = blockContents(block, statementRenderer);
         if (statements.isEmpty()) {
@@ -99,18 +102,18 @@ final class BlockPrinter {
             List<Doc> leadingDocs = leadingInside == Doc.EMPTY ? List.of() : List.of(leadingInside);
             return recoveredBlock(block, leadingDocs, recoveryPlan.orElseThrow());
         }
-        if (
-            block.getStatements().isEmpty()
-            && !commentPlacement.hasOrphanComments(block)
-            && leadingInside == Doc.EMPTY
-        ) {
+        Optional<Doc> emptyBlockComments = block.getStatements().isEmpty()
+            ? emptyBlockCommentContent(block)
+            : Optional.empty();
+        if (block.getStatements().isEmpty() && emptyBlockComments.isEmpty() && leadingInside == Doc.EMPTY) {
             return Doc.text("{}");
         }
         List<Doc> statements = new ArrayList<>();
         if (leadingInside != Doc.EMPTY) {
             statements.add(leadingInside);
         }
-        List<Doc> contents = blockContents(block);
+        List<Doc> contents =
+            block.getStatements().isEmpty() ? emptyBlockComments.stream().toList() : blockContents(block);
         if (!statements.isEmpty() && !contents.isEmpty()) {
             statements.add(Doc.HARD_LINE);
         }
@@ -405,6 +408,21 @@ final class BlockPrinter {
     private Optional<Doc> blockEmptyStatementComment(EmptyStmt statement) {
         Doc lineComment = comments.ownTriviaComment(statement, JavaCommentTrivia::isLine);
         return lineComment == Doc.EMPTY ? Optional.empty() : Optional.of(lineComment);
+    }
+
+    private Optional<Doc> emptyBlockCommentContent(BlockStmt block) {
+        List<Doc> blockComments = new ArrayList<>();
+        blockComments.addAll(emptyBlockCommentDocs(commentPlacement.orphanComments(block)));
+        blockComments.addAll(emptyBlockCommentDocs(commentPlacement.containedComments(block)));
+        List<Doc> visibleComments = blockComments.stream().filter(comment -> comment != Doc.EMPTY).toList();
+        return visibleComments.isEmpty() ? Optional.empty() : Optional.of(Doc.join(Doc.HARD_LINE, visibleComments));
+    }
+
+    private List<Doc> emptyBlockCommentDocs(List<JavaCommentTrivia> sourceComments) {
+        return sourceComments.stream()
+                .sorted((left, right) -> CommentIndex.sourceOrderComparator().compare(left.comment(), right.comment()))
+                .map(comments::comment)
+                .toList();
     }
 
     /**

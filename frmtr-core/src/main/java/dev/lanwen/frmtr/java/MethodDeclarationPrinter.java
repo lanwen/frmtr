@@ -180,7 +180,6 @@ final class MethodDeclarationPrinter {
         }
         return commentPlacement.containedComments(declaration)
                 .stream()
-                .filter(JavaCommentTrivia::isLine)
                 .filter(comment -> comment.beginLine(Integer.MIN_VALUE) > lastAnnotationLine.orElseThrow())
                 .filter(comment -> comment.endLine(Integer.MAX_VALUE) < nameLine.orElseThrow());
     }
@@ -202,12 +201,16 @@ final class MethodDeclarationPrinter {
      */
     private String methodParameterSuffix(MethodDeclaration declaration) {
         String suffix = declaration.getBody()
-                .map(body -> body.getStatements().isEmpty() && body.getOrphanComments().isEmpty() ? " {}" : " {")
+                .map(body -> body.getStatements().isEmpty() && !blockHasVisibleComments(body) ? " {}" : " {")
                 .orElse(";");
         if (declaration.getThrownExceptions().isEmpty()) {
             return suffix;
         }
         return " throws " + compactJoin(declaration.getThrownExceptions()) + suffix;
+    }
+
+    private boolean blockHasVisibleComments(BlockStmt body) {
+        return !body.getOrphanComments().isEmpty() || !commentPlacement.containedComments(body).isEmpty();
     }
 
     private Doc parameters(

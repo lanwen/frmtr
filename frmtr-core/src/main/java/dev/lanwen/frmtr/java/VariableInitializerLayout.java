@@ -15,16 +15,17 @@ import com.github.javaparser.ast.expr.CastExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
+import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.IntersectionType;
 import com.github.javaparser.ast.type.Type;
-import com.github.javaparser.ast.stmt.ExpressionStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
@@ -101,6 +102,10 @@ final class VariableInitializerLayout {
 
     private final Predicate<MethodCallExpr> methodCallChainIsSourceMultiline;
 
+    private final Predicate<MethodCallExpr> methodCallChainHasSingleCall;
+
+    private final Predicate<MethodCallExpr> methodCallChainRootObjectCreationArgumentsSpanMultipleLines;
+
     private final Function<Type, Doc> castType;
 
     private final Function<ConditionalExpr, Doc> brokenConditionalExpression;
@@ -162,6 +167,8 @@ final class VariableInitializerLayout {
             Function<MethodCallExpr, String> methodCallChainFirstLine,
             Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation,
             Predicate<MethodCallExpr> methodCallChainIsSourceMultiline,
+            Predicate<MethodCallExpr> methodCallChainHasSingleCall,
+            Predicate<MethodCallExpr> methodCallChainRootObjectCreationArgumentsSpanMultipleLines,
             Function<Type, Doc> castType,
             Function<ConditionalExpr, Doc> brokenConditionalExpression,
             Predicate<ConditionalExpr> shouldBreakBeforeConditionalInitializer,
@@ -207,6 +214,8 @@ final class VariableInitializerLayout {
         this.methodCallChainFirstLine = methodCallChainFirstLine;
         this.methodCallChainRootIsObjectCreation = methodCallChainRootIsObjectCreation;
         this.methodCallChainIsSourceMultiline = methodCallChainIsSourceMultiline;
+        this.methodCallChainHasSingleCall = methodCallChainHasSingleCall;
+        this.methodCallChainRootObjectCreationArgumentsSpanMultipleLines = methodCallChainRootObjectCreationArgumentsSpanMultipleLines;
         this.castType = castType;
         this.brokenConditionalExpression = brokenConditionalExpression;
         this.shouldBreakBeforeConditionalInitializer = shouldBreakBeforeConditionalInitializer;
@@ -263,8 +272,10 @@ final class VariableInitializerLayout {
     }
 
     private boolean methodCallNeedsStatementTerminatorTail(VariableDeclarator variable, MethodCallExpr methodCall) {
-        return methodCallHasPreSemicolonTailLineComment(variable, methodCall)
-            || initializerTailLineComment(variable, methodCall).isPresent();
+        return methodCallHasPreSemicolonTailLineComment(
+            variable,
+            methodCall
+        ) || initializerTailLineComment(variable, methodCall).isPresent();
     }
 
     private boolean methodCallHasPreSemicolonTailLineComment(
@@ -456,6 +467,26 @@ final class VariableInitializerLayout {
                     return objectCreation.orElseThrow();
                 }
             }
+            if (
+                initializer instanceof MethodCallExpr methodCall
+                && sourceSpansMultipleLines(methodCall)
+                && (
+                    hasTypeLikeMethodCallChainRoot(methodCall)
+                    || (methodCallChainRootIsObjectCreation.test(methodCall)
+                        && methodCallChainRootObjectCreationArgumentsSpanMultipleLines.test(methodCall))
+                )
+            ) {
+                Optional<Doc> forcedChain = forcedMethodCallChain.apply(methodCall);
+                if (forcedChain.isPresent()) {
+                    return variableWithMethodCallChain(
+                        name,
+                        declarationPrefix + variable.getNameAsString(),
+                        methodCall,
+                        methodCallChainFirstLine.apply(methodCall),
+                        forcedChain.orElseThrow()
+                    );
+                }
+            }
             if (initializer instanceof BinaryExpr binaryExpr) {
                 if (binaryInitializerCanKeepFirstOperandWithEquals(variable, declarationPrefix, binaryExpr)) {
                     return Doc.concat(
@@ -486,6 +517,14 @@ final class VariableInitializerLayout {
             && initializer instanceof MethodCallExpr methodCall
             && !initializerHasOwnBreak(initializer)
         ) {
+            Optional<Doc> compactObjectCreationChain = variableWithCompactObjectCreationChain(
+                variable,
+                name,
+                methodCall
+            );
+            if (compactObjectCreationChain.isPresent()) {
+                return compactObjectCreationChain.orElseThrow();
+            }
             Optional<Doc> sourceMultilineCall = variableWithSourceMultilineMethodCallInitializer(
                 variable,
                 name,
@@ -516,10 +555,6 @@ final class VariableInitializerLayout {
                 if (directCall.isPresent()) {
                     return directCall.orElseThrow();
                 }
-            }
-            Optional<Doc> compactObjectCreationChain = variableWithCompactObjectCreationChain(name, methodCall);
-            if (compactObjectCreationChain.isPresent()) {
-                return compactObjectCreationChain.orElseThrow();
             }
             Optional<Doc> sourceMultilineBlockLambdaCall = variableWithSourceMultilineBlockLambdaInitializer(
                 name,
@@ -682,10 +717,26 @@ final class VariableInitializerLayout {
      * Keeps a compact object-creation method chain on the continuation line when the opener cannot stay with
      * {@code =}, but the whole chain fits after the break.
      */
-    private Optional<Doc> variableWithCompactObjectCreationChain(String name, MethodCallExpr methodCall) {
+    private Optional<Doc> variableWithCompactObjectCreationChain(
+            VariableDeclarator variable,
+            String name,
+            MethodCallExpr methodCall
+    ) {
+        boolean initializerStartsOnContinuationLine = initializerStartsOnContinuationLine(variable, methodCall);
+        boolean chainSpansMultipleSourceLines = methodCallChainIsSourceMultiline.test(methodCall)
+            || rawSource.rawWithoutOwnComment(methodCall).contains("\n");
+        boolean sourceMultilineChain = chainSpansMultipleSourceLines || initializerStartsOnContinuationLine;
+        boolean singleCallChain = methodCallChainHasSingleCall.test(methodCall);
         if (
             !methodCallChainRootIsObjectCreation.test(methodCall)
-            || methodCallChainIsSourceMultiline.test(methodCall)
+            || (chainSpansMultipleSourceLines && !singleCallChain)
+            || (!sourceMultilineChain && singleCallChain && !methodCall.getArguments().isEmpty())
+            || (!initializerStartsOnContinuationLine
+                && sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+                && singleCallChain)
+            || methodCallChainRootObjectCreationArgumentsSpanMultipleLines.test(methodCall)
+            || !methodCall.getAllContainedComments().isEmpty()
+            || commentPlacement.trailingLineComment(variable).isPresent()
             || layoutWidth.continuationStatement(compact.apply(methodCall) + ";") > options.lineWidth()
         ) {
             return Optional.empty();
@@ -696,6 +747,51 @@ final class VariableInitializerLayout {
                 Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(compact.apply(methodCall))))
             )
         );
+    }
+
+    private boolean initializerStartsOnContinuationLine(VariableDeclarator variable, Expression initializer) {
+        return variable.getName()
+                .getRange()
+                .flatMap(nameRange -> initializer.getRange().map(
+                        initializerRange ->
+                            initializerRange.begin.line > nameRange.end.line
+                ))
+                .orElse(false);
+    }
+
+    private boolean hasTypeLikeMethodCallChainRoot(MethodCallExpr expression) {
+        MethodCallExpr root = expression;
+        while (root.getScope().filter(MethodCallExpr.class::isInstance).isPresent()) {
+            root = root.getScope().filter(MethodCallExpr.class::isInstance).map(MethodCallExpr.class::cast).orElseThrow();
+        }
+        return root.getScope().filter(this::scopeLooksTypeLike).isPresent();
+    }
+
+    private boolean scopeLooksTypeLike(Expression scope) {
+        if (scope.isNameExpr()) {
+            return startsWithUppercase(scope.asNameExpr().getNameAsString());
+        }
+        if (scope instanceof FieldAccessExpr fieldAccess) {
+            return startsWithUppercase(
+                fieldAccess.getNameAsString()
+            ) || fieldAccessRootName(fieldAccess).map(this::startsWithUppercase).orElse(false);
+        }
+        return false;
+    }
+
+    private Optional<String> fieldAccessRootName(FieldAccessExpr fieldAccess) {
+        Expression scope = fieldAccess.getScope();
+        if (scope.isNameExpr()) {
+            return Optional.of(scope.asNameExpr().getNameAsString());
+        }
+        if (scope instanceof FieldAccessExpr innerFieldAccess) {
+            return fieldAccessRootName(innerFieldAccess);
+        }
+        return Optional.empty();
+    }
+
+    private boolean startsWithUppercase(String value) {
+        return !value.isEmpty() && Character.isUpperCase(value.charAt(0));
     }
 
     /**
@@ -1000,6 +1096,9 @@ final class VariableInitializerLayout {
             || !rawSource.rawWithoutOwnComment(methodCall).contains("\n")
             || sourceShape.expressionLambdaStartsOnSelectorLine(methodCall)
             || methodCall.getScope().filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n")).isPresent()
+            || (methodCallChainRootIsObjectCreation.test(methodCall)
+                && layoutWidth.variableInitializer(variable, flatName + " = " + compact.apply(methodCall) + ";")
+                    > options.lineWidth())
         ) {
             return Optional.empty();
         }

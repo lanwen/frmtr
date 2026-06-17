@@ -2,6 +2,8 @@ package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.comments.Comment;
+import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import dev.lanwen.frmtr.doc.Doc;
@@ -160,10 +162,40 @@ final class CommentedExpressionListPrinter {
      * statement printers need to keep that comment at the completed-call boundary.
      */
     private List<JavaCommentTrivia> trailingArgumentComments(Node container, Expression argument) {
-        return commentPlacement.lineCommentsAfterLast(container, argument)
+        List<JavaCommentTrivia> sourceComments = new ArrayList<>(commentPlacement.lineCommentsAfterLast(
+            container,
+            argument
+        ));
+        commentPlacement.trailingLineComment(argument)
+                .filter(comment -> sourceComments.stream().noneMatch(existing -> existing.comment() == comment.comment()))
+                .ifPresent(sourceComments::add);
+        commentPlacement.containedComments(argument)
                 .stream()
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.startsOnEndLine(argument) || comment.startsAfterNodeOnSameLine(argument))
+                .filter(comment -> sourceComments.stream().noneMatch(existing -> existing.comment() == comment.comment()))
+                .forEach(sourceComments::add);
+        int argumentEndLine = CommentIndex.endLine(argument, Integer.MIN_VALUE);
+        argument.getAllContainedComments()
+                .stream()
+                .filter(LineComment.class::isInstance)
+                .map(JavaCommentTrivia::from)
+                .filter(comment -> comment.beginLine(Integer.MAX_VALUE) == argumentEndLine)
+                .filter(comment -> sourceComments.stream().noneMatch(existing -> existing.comment() == comment.comment()))
+                .forEach(sourceComments::add);
+        return sourceComments
+                .stream()
+                .filter(comment -> !startsInsideOtherDirectChild(container, argument, comment))
                 .filter(comment -> !comment.startsAfterNodeOnSameLine(container))
                 .toList();
+    }
+
+    private boolean startsInsideOtherDirectChild(Node container, Expression argument, JavaCommentTrivia comment) {
+        return container.getChildNodes()
+                .stream()
+                .filter(child -> !(child instanceof Comment))
+                .filter(child -> child != argument)
+                .anyMatch(comment::startsInsideLineRange);
     }
 
     private Node argumentListAnchor(Node container) {

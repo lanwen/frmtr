@@ -86,12 +86,19 @@ final class CommentedMethodSignaturePrinter {
         while (
             firstSignatureLine < lines.size()
             && sourceLine < nameBeginLine
-            && (lines.get(firstSignatureLine).isBlank() || isCommentOnlyLine(lines.get(firstSignatureLine).strip()))
+            && leadingAnnotationGapLine(lines.get(firstSignatureLine).strip())
         ) {
             firstSignatureLine++;
             sourceLine++;
         }
         return String.join("\n", lines.subList(firstSignatureLine, lines.size()));
+    }
+
+    private boolean leadingAnnotationGapLine(String line) {
+        if (line.isBlank() || isCommentOnlyLine(line)) {
+            return true;
+        }
+        return line.startsWith("/*") || line.startsWith("*") || line.endsWith("*/");
     }
 
     private boolean canFormatCommentedMethodSignatureFromRaw(MethodDeclaration declaration) {

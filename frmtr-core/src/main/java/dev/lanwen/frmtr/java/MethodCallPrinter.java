@@ -559,6 +559,14 @@ final class MethodCallPrinter {
         return methodChains.methodCallChainIsSourceMultiline(expression);
     }
 
+    boolean methodCallChainHasSingleCall(MethodCallExpr expression) {
+        return methodChains.methodCallChainHasSingleCall(expression);
+    }
+
+    boolean methodCallChainRootObjectCreationArgumentsSpanMultipleLines(MethodCallExpr expression) {
+        return methodChains.methodCallChainRootObjectCreationArgumentsSpanMultipleLines(expression);
+    }
+
     boolean methodCallChainRootIsObjectCreation(MethodCallExpr expression) {
         return methodChains.methodCallChainRootIsObjectCreation(expression);
     }
@@ -829,7 +837,7 @@ final class MethodCallPrinter {
         for (int index = 0; index < arguments.size(); index++) {
             Expression argument = arguments.get(index);
             boolean last = index == arguments.size() - 1;
-            docs.add(methodCallArgumentDoc(argument, last ? "" : ","));
+            docs.add(methodCallArgumentDoc(argument, last ? "" : ",", last && line == Doc.HARD_LINE));
             if (!last) {
                 docs.add(argumentConsumesSuffix(argument) ? line : Doc.concat(Doc.text(","), line));
             }
@@ -852,11 +860,19 @@ final class MethodCallPrinter {
      * helper owns the continuation lines so breakable arguments do not collapse back onto an over-wide argument line.
      */
     private Doc methodCallArgumentDoc(Expression argument) {
-        return methodCallArgumentDoc(argument, "");
+        return methodCallArgumentDoc(argument, "", false);
     }
 
     private Doc methodCallArgumentDoc(Expression argument, String suffix) {
-        if (argument instanceof MethodCallExpr methodCall && !suffix.isEmpty()) {
+        return methodCallArgumentDoc(argument, suffix, false);
+    }
+
+    private Doc methodCallArgumentDoc(Expression argument, String suffix, boolean allowSuffixlessTrailingComment) {
+        if (
+            argument instanceof MethodCallExpr methodCall
+            && (!suffix.isEmpty()
+                || (allowSuffixlessTrailingComment && !methodCallArgumentTrailingLineComments(methodCall).isEmpty()))
+        ) {
             Optional<Doc> textBlockChain = textBlockRootChainArgumentWithSuffix(methodCall, suffix);
             if (textBlockChain.isPresent()) {
                 return textBlockChain.orElseThrow();
@@ -865,6 +881,8 @@ final class MethodCallPrinter {
             if (compact.isPresent()) {
                 return compact.orElseThrow();
             }
+        }
+        if (argument instanceof MethodCallExpr methodCall && !suffix.isEmpty()) {
             Optional<Doc> chain = methodCallChain(methodCall, MethodCallBreakMode.FORCED, suffix);
             if (chain.isPresent()) {
                 return chain.orElseThrow();

@@ -39,6 +39,8 @@ final class ArrayExpressionPrinter {
 
     private final CommentTracker comments;
 
+    private final JavaCommentPlacementPolicy commentPlacement;
+
     private final FormatterOptions options;
 
     private final JavaFormatRule<Expression> expressionRenderer;
@@ -57,6 +59,7 @@ final class ArrayExpressionPrinter {
 
     ArrayExpressionPrinter(
             CommentTracker comments,
+            JavaCommentPlacementPolicy commentPlacement,
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
             BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix,
@@ -67,6 +70,7 @@ final class ArrayExpressionPrinter {
             ToIntFunction<String> currentIndentedWidth
     ) {
         this.comments = comments;
+        this.commentPlacement = commentPlacement;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.brokenEnclosedForSuffix = brokenEnclosedForSuffix;
@@ -266,7 +270,8 @@ final class ArrayExpressionPrinter {
      * renderer.
      */
     Doc arrayInitializer(ArrayInitializerExpr expression, boolean forceBreak) {
-        List<Doc> comments = this.comments.orphanCommentStatements(expression);
+        List<Doc> comments =
+            expression.getValues().isEmpty() ? this.comments.orphanCommentStatements(expression) : List.of();
         if (expression.getValues().isEmpty() && comments.isEmpty()) {
             return Doc.text("{}");
         }
@@ -280,10 +285,18 @@ final class ArrayExpressionPrinter {
         }
         boolean forceNestedArrayRows = nestedArrayRowsShouldBreak(expression);
         List<Doc> values = new ArrayList<>(comments);
+        if (!expression.getValues().isEmpty()) {
+            addLineCommentDocs(
+                values,
+                commentPlacement.lineCommentsBeforeFirst(expression, expression.getValues().get(0))
+            );
+        }
         for (int i = 0; i < expression.getValues().size(); i++) {
             Expression value = expression.getValues().get(i);
             Expression next = i + 1 < expression.getValues().size() ? expression.getValues().get(i + 1) : null;
-            values.add(arrayInitializerValue(value, next, forceNestedArrayRows, ","));
+            ArrayInitializerValue valueLines = arrayInitializerValueLine(value, next, forceNestedArrayRows, ",");
+            values.add(valueLines.line());
+            values.addAll(valueLines.trailingCommentLines());
         }
         return Doc.concat(
             Doc.text("{"),
@@ -300,7 +313,12 @@ final class ArrayExpressionPrinter {
      * value but physically placed after the current value stays on the current line. That source-position check
      * preserves trailing block comments between comma-separated values.
      */
-    private Doc arrayInitializerValue(Expression value, Expression next, boolean forceNestedArrayRows, String suffix) {
+    private Doc arrayInitializerValueExpression(
+            Expression value,
+            Expression next,
+            boolean forceNestedArrayRows,
+            String suffix
+    ) {
         List<Doc> parts = new ArrayList<>();
         Doc leadingComment = comments.ownComment(
             value,
@@ -332,6 +350,61 @@ final class ArrayExpressionPrinter {
             parts.add(Doc.text(suffix));
         }
         return Doc.concat(parts);
+    }
+
+    private ArrayInitializerValue arrayInitializerValueLine(
+            Expression value,
+            Expression next,
+            boolean forceNestedArrayRows,
+            String suffix,
+            List<JavaCommentTrivia> trailingLineComments
+    ) {
+        Doc valueDoc = arrayInitializerValueExpression(value, next, forceNestedArrayRows, "");
+        boolean suffixAppended = false;
+        List<Doc> trailingCommentLines = new ArrayList<>();
+        for (JavaCommentTrivia comment : trailingLineComments) {
+            Doc commentDoc = comments.comment(comment);
+            if (commentDoc == Doc.EMPTY) {
+                continue;
+            }
+            if (
+                comment.startsOnEndLine(value)
+                || comment.startsAfterNodeOnSameLine(value)
+                || valueContainsComment(value, comment)
+            ) {
+                valueDoc = Doc.concat(valueDoc, Doc.text(suffix), Doc.text(" "), commentDoc);
+                suffixAppended = true;
+            } else {
+                trailingCommentLines.add(commentDoc);
+            }
+        }
+        if (!suffixAppended) {
+            valueDoc = Doc.concat(valueDoc, Doc.text(suffix));
+        }
+        return new ArrayInitializerValue(valueDoc, trailingCommentLines);
+    }
+
+    private ArrayInitializerValue arrayInitializerValueLine(
+            Expression value,
+            Expression next,
+            boolean forceNestedArrayRows,
+            String suffix
+    ) {
+        List<JavaCommentTrivia> trailingLineComments = next == null
+            ? commentPlacement.lineCommentsAfterLast(value.getParentNode().orElseThrow(), value)
+            : commentPlacement.lineCommentsBetween(value.getParentNode().orElseThrow(), value, next);
+        return arrayInitializerValueLine(value, next, forceNestedArrayRows, suffix, trailingLineComments);
+    }
+
+    private void addLineCommentDocs(List<Doc> docs, List<JavaCommentTrivia> sourceComments) {
+        sourceComments.stream()
+                .map(comments::comment)
+                .filter(comment -> comment != Doc.EMPTY)
+                .forEach(docs::add);
+    }
+
+    private boolean valueContainsComment(Expression value, JavaCommentTrivia comment) {
+        return value.getAllContainedComments().stream().anyMatch(contained -> contained == comment.comment());
     }
 
     private Doc trailingBlockComment(Expression value, Expression next) {
@@ -368,4 +441,6 @@ final class ArrayExpressionPrinter {
                 .reduce(String::concat)
                 .orElse("");
     }
+
+    private record ArrayInitializerValue(Doc line, List<Doc> trailingCommentLines) {}
 }

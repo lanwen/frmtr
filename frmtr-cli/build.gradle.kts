@@ -80,8 +80,8 @@ tasks.named<JavaExec>("run") {
 graalvmNative {
     binaries {
         named("main") {
-            imageName.set("frmtr")
-            mainClass.set("dev.lanwen.frmtr.cli.Main")
+            imageName = "frmtr"
+            mainClass = "dev.lanwen.frmtr.cli.Main"
         }
     }
 }

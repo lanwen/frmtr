@@ -13,8 +13,8 @@ dependencies {
 }
 
 gradlePlugin {
-    website.set("https://github.com/lanwen/frmtr")
-    vcsUrl.set("https://github.com/lanwen/frmtr.git")
+    website = "https://github.com/lanwen/frmtr"
+    vcsUrl = "https://github.com/lanwen/frmtr.git"
 
     plugins {
         create("frmtr") {
@@ -22,7 +22,7 @@ gradlePlugin {
             implementationClass = "dev.lanwen.frmtr.gradle.FrmtrGradlePlugin"
             displayName = "frmtr Gradle plugin"
             description = "Formats Java source with frmtr."
-            tags.set(listOf("formatter", "formatting", "java"))
+            tags = listOf("formatter", "formatting", "java")
             compatibility {
                 features {
                     configurationCache = false

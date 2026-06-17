@@ -19,7 +19,7 @@ val bake by tasks.registering(JavaExec::class) {
     group = "documentation"
     description = "Builds the JBake static site."
     classpath(files(logbackConfigDir), jbake)
-    mainClass.set("org.jbake.launcher.Main")
+    mainClass = "org.jbake.launcher.Main"
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     args("-b", jbakeSourceDir.asFile.absolutePath, jbakeOutputDir.get().asFile.absolutePath)
 

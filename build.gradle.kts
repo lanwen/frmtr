@@ -36,7 +36,7 @@ val frmtrSelfFixtureCorpora =
 
 fun TaskContainer.registerFrmtrCliTask(name: String, configure: JavaExec.() -> Unit) = register<JavaExec>(name) {
     group = "formatting"
-    mainClass.set("dev.lanwen.frmtr.cli.Main")
+    mainClass = "dev.lanwen.frmtr.cli.Main"
     workingDir = rootProject.projectDir
     classpath(frmtrCliRuntimeClasspath)
     configure()
@@ -72,9 +72,9 @@ tasks.register("stageCentralRelease") {
 }
 
 jreleaser {
-    configFile.set(layout.projectDirectory.file("jreleaser.yml"))
-    dependsOnAssemble.set(false)
-    gitRootSearch.set(true)
+    configFile = layout.projectDirectory.file("jreleaser.yml")
+    dependsOnAssemble = false
+    gitRootSearch = true
 }
 
 subprojects {
@@ -128,36 +128,36 @@ subprojects {
 
                 withType<MavenPublication>().configureEach {
                     pom {
-                        name.set("frmtr ${project.name.removePrefix("frmtr-")}")
-                        description.set(project.description)
-                        url.set(projectUrl)
-                        inceptionYear.set("2026")
+                        name = "frmtr ${project.name.removePrefix("frmtr-")}"
+                        description = project.description
+                        url = projectUrl
+                        inceptionYear = "2026"
 
                         licenses {
                             license {
-                                name.set("MIT License")
-                                url.set("https://opensource.org/license/mit/")
-                                distribution.set("repo")
+                                name = "MIT License"
+                                url = "https://opensource.org/license/mit/"
+                                distribution = "repo"
                             }
                         }
 
                         developers {
                             developer {
-                                id.set("lanwen")
-                                name.set("lanwen")
-                                url.set("https://github.com/lanwen")
+                                id = "lanwen"
+                                name = "lanwen"
+                                url = "https://github.com/lanwen"
                             }
                         }
 
                         scm {
-                            connection.set("scm:git:https://github.com/lanwen/frmtr.git")
-                            developerConnection.set("scm:git:ssh://git@github.com/lanwen/frmtr.git")
-                            url.set(projectUrl)
+                            connection = "scm:git:https://github.com/lanwen/frmtr.git"
+                            developerConnection = "scm:git:ssh://git@github.com/lanwen/frmtr.git"
+                            url = projectUrl
                         }
 
                         issueManagement {
-                            system.set("GitHub Issues")
-                            url.set("$projectUrl/issues")
+                            system = "GitHub Issues"
+                            url = "$projectUrl/issues"
                         }
                     }
                 }

@@ -144,7 +144,7 @@ final class FrmtrGradlePluginFunctionalTest {
                 frmtr {
                     check {
                         print {
-                            diffs.set(false)
+                            diffs = false
                         }
                     }
                 }
@@ -168,7 +168,7 @@ final class FrmtrGradlePluginFunctionalTest {
                 frmtr {
                     check {
                         print {
-                            diffs.set(true)
+                            diffs = true
                         }
                     }
                 }
@@ -334,7 +334,7 @@ final class FrmtrGradlePluginFunctionalTest {
                 frmtr {
                     check {
                         print {
-                            diffs.set(false)
+                            diffs = false
                         }
                     }
                 }
@@ -395,7 +395,7 @@ final class FrmtrGradlePluginFunctionalTest {
 
                 frmtr {
                     java {
-                        languageLevel.set(FrmtrJavaLanguageLevel.LATEST_AVAILABLE)
+                        languageLevel = FrmtrJavaLanguageLevel.LATEST_AVAILABLE
                     }
                 }
                 """

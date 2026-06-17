@@ -72,12 +72,12 @@ frmtr {
     java {
         include("**/*.java")
         exclude("**/generated/**")
-        lineWidth.set(120)
-        languageLevel.set(FrmtrJavaLanguageLevel.LATEST_AVAILABLE)
+        lineWidth = 120
+        languageLevel = FrmtrJavaLanguageLevel.LATEST_AVAILABLE
     }
     check {
         print {
-            diffs.set(true)
+            diffs = true
         }
     }
 }
@@ -109,13 +109,18 @@ for the same bake task.
 
 ## CLI
 
-Check all Java files under the current directory:
+Run the CLI from this checkout with `./gradlew :frmtr-cli:run --args='...'`. When using a standalone binary, replace
+that prefix with `frmtr`.
+
+### CLI Recipes
+
+Check all Java files under the current directory. With no selectors, the CLI checks `./**/*.java`:
 
 ```bash
 ./gradlew :frmtr-cli:run
 ```
 
-Format stdin to stdout:
+Read Java source from stdin and write formatted source to stdout:
 
 ```bash
 ./gradlew :frmtr-cli:run --args='--stdin' < Example.java
@@ -133,11 +138,52 @@ Exclude generated or fixture sources from a broad selector:
 ./gradlew :frmtr-cli:run --args='--check --exclude "src/generated,fixtures/**/*.java" .'
 ```
 
-Selectors and `--exclude` patterns can be repeated, comma-separated, files, directories, or glob patterns. Directory excludes apply recursively. The CLI formats `.java` files, skips unknown extensions silently, and respects `.gitignore`. Missing explicit `.java` file selectors are reported as tool errors; empty glob or directory matches report that no Java files matched without failing the run.
+### File Selection
 
-With no selectors, the CLI uses `./**/*.java` and checks formatting by default. Pass `--stdin` to read Java source from stdin and write formatted source to stdout, or combine `--stdin` with `--check` or `--diff` to compare piped source against formatter output.
+- Selectors and `--exclude` patterns can be repeated or comma-separated.
+- Selectors can be files, directories, or glob patterns.
+- Directory excludes apply recursively.
+- The CLI formats `.java` files, skips unknown extensions silently, and respects `.gitignore`.
+- Missing explicit `.java` file selectors are reported as tool errors.
+- Empty glob or directory matches report that no Java files matched without failing the run.
 
-`--check` prints `✓` for files that are already formatted, `✗` for files that need formatting, and `!` for files that failed to parse or could not be read, followed by a concise summary. Check-mode failure diagnostics are printed immediately after the failed file's `!` status line, so they stay grouped with that file when `--diff` output is present. `--write` ends with a processed summary that counts files formatted, failed, ignored by `.gitignore`, and excluded by `--exclude`. Multi-file check and write progress is rendered to stderr as an in-place status when `--progress=auto` detects a console or `--progress=always` is set: traversal starts with `Discovering Java files...`, then processing starts at `Processed [0/N files, 0 would change, 0 failed].` for check mode or `Processed [0/N files, 0 formatted, 0 failed].` for write mode. Use `--progress=never` to keep stderr append-only for logs and scripts. stdout remains reserved for status, diffs, formatted source, and final summaries. For multi-file runs, `--check` and `--write` continue after formatter failures and render outlined diagnostics with line-numbered JavaParser source context when available. Add `--diff` to render unified diffs with `origin` and `frmtr` side labels for files marked `✗`, or `--render-line-width` to print terminal-only diff output with a dotted width guide near the configured line width. Use `--color=auto|always|never` to control ANSI coloring for status markers and diff output; formatted source output stays plain. Use `--stacktrace` when debugging formatter or I/O failures.
+### Run Modes
+
+| Mode | Behavior |
+| --- | --- |
+| `--check` | Checks formatting without changing files. This is the default mode. |
+| `--write` | Formats files in place and prints a processed summary. |
+| `--stdin` | Reads Java source from stdin and writes formatted source to stdout. |
+| `--stdin --check` | Compares piped source against formatter output. |
+| `--stdin --diff` | Prints a unified diff between piped source and formatter output. |
+
+For multi-file runs, `--check` and `--write` continue after formatter failures and render outlined diagnostics with
+line-numbered JavaParser source context when available.
+
+### Check Output
+
+Check mode prints one marker per processed file, followed by a concise summary:
+
+| Marker | Meaning |
+| --- | --- |
+| `✓` | The file is already formatted. |
+| `✗` | The file needs formatting. |
+| `!` | The file failed to parse or could not be read. |
+
+Failure diagnostics are printed immediately after the failed file's `!` status line, so they stay grouped with that file
+when `--diff` output is present.
+
+`--write` ends with a processed summary that counts files formatted, failed, ignored by `.gitignore`, and excluded by
+`--exclude`.
+
+### Diffs and Rendering
+
+- `--diff` renders unified diffs for files marked `✗`, with `origin` and `frmtr` side labels.
+- `--render-line-width` prints terminal-only diff output with a dotted width guide near the configured line width.
+- `--color=auto|always|never` controls ANSI coloring for status markers and diff output; formatted source output stays
+  plain.
+
+### Progress and Streams
 
 Live progress includes a counter line and, while files are active, one active display path:
 
@@ -146,11 +192,31 @@ Processed [240/823 files, 7 would change, 0 failed].
 (⠋) src/generated/Huge.java
 ```
 
-`--explain` is a diagnostic mode that helps you understand *why* a file is laid out the way it is. Run it on one file (or `--stdin`) and it prints the formatted result plus a "why it wrapped" report: each wrapped construct named the way you read it (method chain, argument list, ternary, if condition), the real `flat width N > W available` arithmetic behind the break, and a pruned decision tree of the rules involved. Add `-v`/`--verbose` for raw rule labels and every group in the tree. It is its own mode (not combined with `--check`/`--write`/`--diff`) and never changes the formatted output — it only observes the render.
+Multi-file check and write progress is rendered to stderr as an in-place status when `--progress=auto` detects a console
+or `--progress=always` is set. Traversal starts with `Discovering Java files...`, then processing starts at
+`Processed [0/N files, 0 would change, 0 failed].` for check mode or
+`Processed [0/N files, 0 formatted, 0 failed].` for write mode.
 
-Use `--java-level` to choose the parser language level. The default is `LATEST_AVAILABLE`, which uses JavaParser's bleeding-edge parser mode. Use `UNSET` for JavaParser raw mode, or a release value such as `17`, `JAVA_21`, or `JAVA_25` when you need a strict release gate.
+Use `--progress=never` to keep stderr append-only for logs and scripts. stdout remains reserved for status, diffs,
+formatted source, and final summaries.
 
-The formatter-wide default line width is 120 columns. Use `--line-width` in the CLI or `frmtr { java { lineWidth.set(...) } }` in Gradle to override it.
+### Diagnostics and Configuration
+
+`--explain` helps you understand *why* a file is laid out the way it is. Run it on one file or `--stdin`; it prints the
+formatted result plus a "why it wrapped" report with readable construct names, the real
+`flat width N > W available` arithmetic behind each break, and a pruned decision tree of the rules involved.
+
+Add `-v`/`--verbose` for raw rule labels and every group in the tree. `--explain` is its own mode, cannot be combined
+with `--check`, `--write`, or `--diff`, and never changes the formatted output; it only observes the render.
+
+Use `--stacktrace` when debugging formatter or I/O failures.
+
+Use `--java-level` to choose the parser language level. The default is `LATEST_AVAILABLE`, which uses JavaParser's
+bleeding-edge parser mode. Use `UNSET` for JavaParser raw mode, or a release value such as `17`, `JAVA_21`, or
+`JAVA_25` when you need a strict release gate.
+
+The formatter-wide default line width is 120 columns. Use `--line-width` in the CLI or
+`frmtr { java { lineWidth = ... } }` in Gradle to override it.
 
 ## Native Binary
 

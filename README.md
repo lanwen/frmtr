@@ -58,12 +58,17 @@ Available tasks:
 - `frmtrJavaCheck`: checks Java source-set files.
 - `frmtrJavaFormat`: formats Java source-set files.
 
+In a multi-project build, apply the plugin to the root project to register frmtr in Java subprojects too. Root
+`frmtrCheck` and `frmtrFormat` aggregate Java-capable modules, and each module can override inherited root
+configuration with its own `frmtr {}` block. Use `frmtr { enabled = false }` in a module to opt it out.
+
 Optional configuration narrows Java source-set selection and check output:
 
 ```kotlin
 import dev.lanwen.frmtr.gradle.FrmtrJavaLanguageLevel
 
 frmtr {
+    enabled = true
     java {
         include("**/*.java")
         exclude("**/generated/**")

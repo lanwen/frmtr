@@ -104,6 +104,120 @@ final class FrmtrGradlePluginFunctionalTest {
     }
 
     @Test
+    void rootPluginAggregatesJavaSubprojectTasks() {
+        writeSettings("api", "docs");
+        writeBuildFile(
+            """
+                plugins {
+                    id("dev.lanwen.frmtr")
+                }
+                """
+        );
+        write(
+            "api/build.gradle.kts",
+            """
+                plugins {
+                    java
+                }
+                """
+        );
+        write("docs/build.gradle.kts", "");
+        write("api/src/main/java/demo/Api.java", "package demo; class Api{int value;}");
+
+        BuildResult result = gradle("frmtrCheck").buildAndFail();
+
+        assertThat(result.task(":api:frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.FAILED);
+        assertThat(result.getOutput())
+                .contains("✗ src/main/java/demo/Api.java")
+                .contains("frmtr found 1 unformatted Java file(s)");
+    }
+
+    @Test
+    void subprojectFrmtrBlockOverridesRootConventions() {
+        writeSettings("api", "service");
+        writeBuildFile(
+            """
+                plugins {
+                    id("dev.lanwen.frmtr")
+                }
+
+                frmtr {
+                    check {
+                        print {
+                            diffs.set(false)
+                        }
+                    }
+                }
+                """
+        );
+        write(
+            "api/build.gradle.kts",
+            """
+                plugins {
+                    java
+                }
+                """
+        );
+        write(
+            "service/build.gradle.kts",
+            """
+                plugins {
+                    java
+                }
+
+                frmtr {
+                    check {
+                        print {
+                            diffs.set(true)
+                        }
+                    }
+                }
+                """
+        );
+        write("api/src/main/java/demo/Api.java", "package demo; class Api{int value;}");
+        write("service/src/main/java/demo/Service.java", "package demo; class Service{int value;}");
+
+        BuildResult inheritedRootConfig = gradle(":api:frmtrCheck").buildAndFail();
+        BuildResult overriddenModuleConfig = gradle(":service:frmtrCheck").buildAndFail();
+
+        assertThat(inheritedRootConfig.getOutput())
+                .contains("✗ src/main/java/demo/Api.java")
+                .doesNotContain("diff --git");
+        assertThat(overriddenModuleConfig.getOutput())
+                .contains("✗ src/main/java/demo/Service.java")
+                .contains("diff --git origin frmtr");
+    }
+
+    @Test
+    void subprojectCanDisableFrmtrInheritedFromRootPlugin() {
+        writeSettings("api");
+        writeBuildFile(
+            """
+                plugins {
+                    id("dev.lanwen.frmtr")
+                }
+                """
+        );
+        write(
+            "api/build.gradle.kts",
+            """
+                plugins {
+                    java
+                }
+
+                frmtr {
+                    enabled = false
+                }
+                """
+        );
+        write("api/src/main/java/demo/Api.java", "package demo; class Api{int value;}");
+
+        BuildResult result = gradle("frmtrCheck").build();
+
+        assertThat(result.task(":api:frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.SKIPPED);
+    }
+
+    @Test
     void javaFiltersUseSourceRootRelativeGradlePatterns() {
         writeSettings();
         writeBuildFile(
@@ -302,9 +416,15 @@ final class FrmtrGradlePluginFunctionalTest {
     }
 
     private void writeSettings() {
-        write("settings.gradle.kts", """
-                rootProject.name = "fixture"
-                """);
+        writeSettings(new String[0]);
+    }
+
+    private void writeSettings(String... projects) {
+        StringBuilder settings = new StringBuilder("rootProject.name = \"fixture\"\n");
+        for (String project : projects) {
+            settings.append("include(\"").append(project).append("\")\n");
+        }
+        write("settings.gradle.kts", settings.toString());
     }
 
     private void writeBuildFile(String content) {

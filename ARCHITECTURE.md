@@ -364,16 +364,19 @@ The Gradle plugin ID is `dev.lanwen.frmtr`. Applying it creates project-local ag
 - `frmtrFormat`: mutating formatter task aggregate, never wired into lifecycle tasks.
 - `frmtrCheck`: verification aggregate wired into Gradle's `check` lifecycle.
 
-When the Gradle Java plugin is present, Java formatting is enabled by convention without requiring a `frmtr {}` block.
-The plugin registers:
+When applied to the root project of a multi-project build, the plugin recursively applies itself to child projects so
+each module gets its own `frmtr` extension and aggregate tasks. Root aggregate tasks depend on Java-capable child
+aggregate tasks, so `./gradlew frmtrCheck` and `./gradlew frmtrFormat` cover Java modules from the root. Child project
+extension values inherit parent conventions until the child sets its own `frmtr {}` value. `frmtr { enabled = false }`
+disables that project's Java formatter tasks while still allowing aggregate tasks to collect enabled children.
+
+When the Gradle Java plugin is present in a project, Java formatting is enabled by convention without requiring a
+`frmtr {}` block. The plugin registers:
 
 - `frmtrJavaFormat`: formats selected Java source-set files in place.
 - `frmtrJavaCheck`: checks selected Java source-set files, suppresses unchanged-file output by default, prints `✗`
   status lines, groups failed files by display path, and prints unified diffs with `origin` and `frmtr` side labels for
   changed files by default.
-
-The plugin is project-local. Applying it to a root project does not automatically reach into subprojects; users should
-apply it in each project or through a convention plugin.
 
 Default Java source selection covers all Java source sets, de-duplicates files by normalized path, and excludes files
 under the project's Gradle build directory. `frmtr { java { include(...) exclude(...) } }` narrows source-set selection

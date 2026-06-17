@@ -25,6 +25,7 @@ public final class FrmtrGradlePlugin implements Plugin<Project> {
     public void apply(Project project) {
         project.getPluginManager().apply(LifecycleBasePlugin.class);
         FrmtrExtension extension = project.getExtensions().create("frmtr", FrmtrExtension.class);
+        inheritParentConventions(project, extension);
 
         TaskProvider<Task> format = project.getTasks().register("frmtrFormat", task -> {
             task.setGroup("formatting");
@@ -37,6 +38,45 @@ public final class FrmtrGradlePlugin implements Plugin<Project> {
         project.getTasks().named(LifecycleBasePlugin.CHECK_TASK_NAME).configure(task -> task.dependsOn(check));
 
         project.getPlugins().withType(JavaPlugin.class, plugin -> configureJava(project, extension, format, check));
+
+        if (project == project.getRootProject()) {
+            configureSubprojects(project, format, check);
+        }
+    }
+
+    private static void inheritParentConventions(Project project, FrmtrExtension extension) {
+        Project parent = project.getParent();
+        if (parent == null) {
+            return;
+        }
+        FrmtrExtension parentExtension = parent.getExtensions().findByType(FrmtrExtension.class);
+        if (parentExtension == null) {
+            return;
+        }
+
+        extension.getEnabled().convention(parentExtension.getEnabled());
+        extension.getJava().getIncludes().convention(parentExtension.getJava().getIncludes());
+        extension.getJava().getExcludes().convention(parentExtension.getJava().getExcludes());
+        extension.getJava().getLineWidth().convention(parentExtension.getJava().getLineWidth());
+        extension.getJava().getLanguageLevel().convention(parentExtension.getJava().getLanguageLevel());
+        extension.getCheck().getPrint().getDiffs().convention(parentExtension.getCheck().getPrint().getDiffs());
+    }
+
+    private static void configureSubprojects(
+            Project project,
+            TaskProvider<Task> rootFormat,
+            TaskProvider<Task> rootCheck
+    ) {
+        for (Project subproject : project.getChildProjects().values()) {
+            subproject.getPluginManager().apply(FrmtrGradlePlugin.class);
+            subproject
+                    .getPlugins()
+                    .withType(JavaPlugin.class, plugin -> {
+                        rootFormat.configure(task -> task.dependsOn(subproject.getTasks().named("frmtrFormat")));
+                        rootCheck.configure(task -> task.dependsOn(subproject.getTasks().named("frmtrCheck")));
+                    });
+            configureSubprojects(subproject, rootFormat, rootCheck);
+        }
     }
 
     private static void configureJava(
@@ -57,6 +97,7 @@ public final class FrmtrGradlePlugin implements Plugin<Project> {
             task -> {
                 task.setGroup("formatting");
                 task.setDescription("Formats Java source files with frmtr.");
+                task.onlyIf("frmtr is enabled", ignored -> extension.getEnabled().get());
                 task.getSourceFiles().from(sourceFiles);
                 task.getIncludes().set(extension.getJava().getIncludes());
                 task.getExcludes().set(extension.getJava().getExcludes());
@@ -72,6 +113,7 @@ public final class FrmtrGradlePlugin implements Plugin<Project> {
             task -> {
                 task.setGroup(LifecycleBasePlugin.VERIFICATION_GROUP);
                 task.setDescription("Checks Java source files are formatted with frmtr.");
+                task.onlyIf("frmtr is enabled", ignored -> extension.getEnabled().get());
                 task.getSourceFiles().from(sourceFiles);
                 task.getIncludes().set(extension.getJava().getIncludes());
                 task.getExcludes().set(extension.getJava().getExcludes());

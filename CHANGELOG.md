@@ -10,5 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Open-source community files: GitHub issue/PR templates.
+- Gradle plugin root-project registration for Java subprojects, inherited module configuration, and module-level
+  `frmtr { enabled = false }` opt-out.
 
 [Unreleased]: https://github.com/lanwen/frmtr/commits/main

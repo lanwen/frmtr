@@ -58,6 +58,9 @@ Available tasks:
 - `frmtrJavaCheck`: checks Java source-set files.
 - `frmtrJavaFormat`: formats Java source-set files.
 
+`frmtrJavaCheck` is cacheable and uses Gradle incremental source changes. `frmtrJavaFormat` remains
+non-cacheable because it rewrites source files in place.
+
 In a multi-project build, apply the plugin to the root project to register frmtr in Java subprojects too. Root
 `frmtrCheck` and `frmtrFormat` aggregate Java-capable modules, and each module can override inherited root
 configuration with its own `frmtr {}` block. Use `frmtr { enabled = false }` in a module to opt it out.

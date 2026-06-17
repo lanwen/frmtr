@@ -1,12 +1,11 @@
 # Linear-time renderer via width memoization and bounded `fits`
 
-Status: In progress — its S5 sub-step (the `fits`/`flatWidth` unification, section (a)) has **landed
-on `main` in `6e4f600a`**; the M2 implementation now adds the memoization (b) and bounded lookahead
-(c) in the current change, pending review and merge.
+Status: Implemented — its S5 sub-step (the `fits`/`flatWidth` unification, section (a)) has **landed
+on `main` in `6e4f600a`**; M2 adds the memoization (b) and bounded lookahead (c).
 
 (Roadmap M2; absorbs S5 — "Collapse `fits` and `flatWidth` into one function.")
 
-> **Update (M2 implementation pending merge):** `DocWidths` now owns a per-render measurement context
+> **Implementation state:** `DocWidths` now owns a per-render measurement context
 > with bounded `fits` and memoized flat-width measurement. Bounded fits stops once overflow or a hard
 > line proves the group cannot fit; memoized widths are scoped to one render/explain pass so stale
 > state cannot leak across renders.
@@ -173,7 +172,7 @@ The constant factor is also higher than necessary: every `Group` measurement doe
 Three changes, layered. (a) and (b) are the S5 + memoization core; (c) is the bounded-lookahead
 optimization that makes the asymptotics hold.
 
-### (a) Unify `fits` and `flatWidth` into one measurement function [proposed-new]
+### (a) Unify `fits` and `flatWidth` into one measurement function [implemented]
 
 `fits` and `flatWidth` answer the same question with different return types. Fold them into one
 internal cost-walker whose currency is "columns remaining" and whose only outcomes are *fits within
@@ -182,7 +181,7 @@ function that consumes a remaining budget and reports how much budget is left (o
 "definitely does not fit flat"):
 
 ```java
-// proposed-new — replaces both fits(...) and flatWidth(...)
+// implemented — replaces the previous separate fits(...) and flatWidth(...) walkers
 // Returns the budget remaining after laying `doc` out flat starting from `remaining`.
 // A negative result means "overflowed or contains a hard line": does NOT fit flat.
 private int measureFlat(Doc doc, int remaining, Mode mode) {
@@ -215,7 +214,7 @@ private int measureFlat(Doc doc, int remaining, Mode mode) {
 Then the two former entry points become one-liners over the same walker:
 
 ```java
-// proposed-new
+// implemented
 private boolean fits(Doc doc, int remaining) {
     return measureFlat(doc, remaining, Mode.FLAT) >= 0;
 }
@@ -238,7 +237,7 @@ Notes:
 - This is the S5 deliverable: one `switch` over `Doc`, so a new IR variant (B2) is added in exactly
   one place.
 
-### (b) Memoize flat width on the immutable `Doc` [proposed-new]
+### (b) Memoize flat width on the immutable `Doc` [implemented]
 
 Because `Doc` records are immutable and flat width is a pure function of the node, the *unbounded*
 flat width of any node can be cached and reused across every `fits` that crosses it. Three options:
@@ -283,7 +282,7 @@ Option (iii) is simplest and matches today's behavior, since `fits` is only ever
 fitting; document this assumption explicitly and add a test that an `IfBreak` inside a measured group
 still produces identical output.
 
-### (c) Bounded `fits` lookahead [proposed-new]
+### (c) Bounded `fits` lookahead [implemented]
 
 The `measureFlat` walker in (a) already encodes the bound: it threads the *remaining* budget through
 the walk and returns early the instant `remaining < 0` (the guard at the top, plus the `break` in the

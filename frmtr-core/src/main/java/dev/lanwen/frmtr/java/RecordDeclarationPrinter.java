@@ -325,7 +325,8 @@ final class RecordDeclarationPrinter {
         if (recordComponentAnnotationsStartOnDifferentLines(parameter)) {
             return true;
         }
-        if (recordComponentHasSourceMultilineAnnotation(parameter)) {
+        if (recordComponentHasSourceMultilineAnnotation(parameter)
+            || recordComponentHasWidthDrivenMultilineAnnotation(parameter)) {
             return false;
         }
         return currentIndentedWidth.applyAsInt(recordComponentFlat(parameter)) > options.lineWidth();
@@ -364,6 +365,13 @@ final class RecordDeclarationPrinter {
                 .stream()
                 .flatMap(annotation -> annotation.getRange().stream())
                 .anyMatch(range -> range.begin.line < range.end.line);
+    }
+
+    private boolean recordComponentHasWidthDrivenMultilineAnnotation(Parameter parameter) {
+        return parameter.getAnnotations()
+                .stream()
+                .map(compact)
+                .anyMatch(annotation -> currentIndentedWidth.applyAsInt(annotation) > options.lineWidth());
     }
 
     private Doc recordComponentTrailingLineComment(Parameter parameter) {

@@ -672,15 +672,14 @@ final class StatementPrinter {
     }
 
     /**
-     * Keeps one multiline method-call resource attached to {@code try (} so the resource initializer owns the break.
+     * Keeps one method-call resource attached to {@code try (} so the resource initializer owns the break.
      */
     private Optional<Doc> attachedSingleMethodCallResource(
             TryStmt statement,
             SourceShape.TryResourcesShape resourceShape
     ) {
         if (
-            !resourceShape.spansMultipleLines()
-            || resourceShape.trailingSemicolon()
+            resourceShape.trailingSemicolon()
             || tryResourcesHaveLeadingComments(statement)
             || statement.getResources().size() != 1
             || !(statement.getResources().get(0) instanceof VariableDeclarationExpr declaration)

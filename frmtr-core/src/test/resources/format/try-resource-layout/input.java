@@ -23,6 +23,49 @@ class TryResourceLayoutSample {
             load(routeStream);
         }
     }
+
+    void singleFlatMethodCallResource(ResourceCatalog catalog, RouteContext context, AuditTrail auditTrail) {
+        try (RouteLease lease = catalog.openManagedRouteLease(context.primaryTenant(), context.regionCatalog(), auditTrail.currentBatch(), catalog.defaultRetryPolicy(), context.ownerIdentity())) {
+            verify(lease);
+        }
+    }
+
+    void singleSourceMultilineMethodCallResource(ResourceCatalog catalog, RouteContext context, AuditTrail auditTrail) {
+        try (
+            RouteLease lease = catalog.openManagedRouteLease(
+                context.primaryTenant(),
+                context.regionCatalog(),
+                auditTrail.currentBatch(),
+                catalog.defaultRetryPolicy(),
+                context.ownerIdentity()
+            )
+        ) {
+            verify(lease);
+        }
+    }
+
+    void multipleResourceMethodCallInitializer(ResourceCatalog catalog, RouteContext context, AuditTrail auditTrail) {
+        try (
+            RouteLease lease = catalog.openManagedRouteLease(
+                context.primaryTenant(),
+                context.regionCatalog(),
+                auditTrail.currentBatch(),
+                catalog.defaultRetryPolicy()
+            );
+            ScopeToken token = context.scopeToken()
+        ) {
+            verify(lease, token);
+        }
+    }
+
+    void expressionStyleResource(RouteLease lease, ScopeToken token) {
+        try (lease) {
+            verify(lease);
+        }
+        try (lease; token) {
+            verify(lease, token);
+        }
+    }
 }
 
 

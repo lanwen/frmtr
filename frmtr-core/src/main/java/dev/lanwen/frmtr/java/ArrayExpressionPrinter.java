@@ -359,8 +359,7 @@ final class ArrayExpressionPrinter {
             String suffix,
             List<JavaCommentTrivia> trailingLineComments
     ) {
-        Doc valueDoc = arrayInitializerValueExpression(value, next, forceNestedArrayRows, "");
-        boolean suffixAppended = false;
+        Doc valueDoc = arrayInitializerValueExpression(value, next, forceNestedArrayRows, suffix);
         List<Doc> trailingCommentLines = new ArrayList<>();
         for (JavaCommentTrivia comment : trailingLineComments) {
             Doc commentDoc = comments.comment(comment);
@@ -372,14 +371,10 @@ final class ArrayExpressionPrinter {
                 || comment.startsAfterNodeOnSameLine(value)
                 || valueContainsComment(value, comment)
             ) {
-                valueDoc = Doc.concat(valueDoc, Doc.text(suffix), Doc.text(" "), commentDoc);
-                suffixAppended = true;
+                valueDoc = Doc.concat(valueDoc, Doc.text(" "), commentDoc);
             } else {
                 trailingCommentLines.add(commentDoc);
             }
-        }
-        if (!suffixAppended) {
-            valueDoc = Doc.concat(valueDoc, Doc.text(suffix));
         }
         return new ArrayInitializerValue(valueDoc, trailingCommentLines);
     }

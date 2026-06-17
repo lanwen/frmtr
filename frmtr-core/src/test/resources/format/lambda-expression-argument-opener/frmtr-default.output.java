@@ -339,4 +339,42 @@ final class LambdaExpressionArgumentOpener {
                             .orElseThrow()
                 );
     }
+
+    AuditTrail keepsFlatScopedCallBodyStable(AuditTrail auditTrail, Segment segment, Defaults defaults) {
+        return auditTrail.record(
+            segment.primaryKey(),
+            segment.fallbackKey(),
+            entry -> entry.routingContext().resolvedPolicy().composeWindowSelection(
+                defaults.policyGroup(),
+                entry.lastVisibleWindow(),
+                segment.ownerGroup(),
+                defaults.clock()
+            )
+        );
+    }
+
+    MatchPlan keepsFlatLogicalLambdaBodyStable(MatchPlan plan, Boundary boundary, Event event) {
+        return plan.select(event.kind(), row ->
+            (row.owner().equals(event.owner()) && row.createdAt().isAfter(boundary.openedAt()))
+                || (row.priority() == Priority.FALLBACK && row.createdAt().isBefore(boundary.closedAt()))
+        );
+    }
+
+    DraftPlan keepsFlatMethodCallArgumentBodyStable(DraftPlan plan, Window window, Cursor cursor, String label) {
+        return plan.map(window.id(), cursor.next(), slot -> buildProjectionEnvelope(
+                slot.currentVersion(),
+                window.ownerKey(),
+                cursor.traceToken(),
+                label,
+                slot.expiryPolicy()
+        ));
+    }
+
+    RoutePlan keepsNestedLambdaArgumentBodyStable(RoutePlan plan, MarkerIndex markerIndex, String routeKey) {
+        return plan.rewrite(routeKey, candidate -> markerIndex.find(
+                candidate.ownerKey(),
+                marker -> marker.visibleTo(candidate.viewer()) && marker.routeKey().equals(routeKey),
+                candidate.defaultMarker()
+        ));
+    }
 }

@@ -35,9 +35,9 @@ public final class DocDebugRenderer {
                 appendLine(out, depth, "Concat");
                 concat.docs().forEach(child -> render(child, out, depth + 1));
             }
-            case Doc.Line _ -> appendLine(out, depth, "Line");
-            case Doc.SoftLine _ -> appendLine(out, depth, "SoftLine");
-            case Doc.HardLine _ -> appendLine(out, depth, "HardLine");
+            case Doc.Line ignored -> appendLine(out, depth, "Line");
+            case Doc.SoftLine ignored -> appendLine(out, depth, "SoftLine");
+            case Doc.HardLine ignored -> appendLine(out, depth, "HardLine");
             case Doc.Indent indented -> {
                 appendLine(out, depth, "Indent");
                 render(indented.doc(), out, depth + 1);

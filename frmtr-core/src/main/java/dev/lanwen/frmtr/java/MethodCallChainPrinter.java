@@ -1255,7 +1255,7 @@ final class MethodCallChainPrinter {
 
     private PaddedDoc linePadded(Doc doc, String padding, boolean lineStart) {
         return switch (doc) {
-            case Doc.Text _ -> new PaddedDoc(lineStart ? Doc.concat(Doc.text(padding), doc) : doc, false);
+            case Doc.Text ignored -> new PaddedDoc(lineStart ? Doc.concat(Doc.text(padding), doc) : doc, false);
             case Doc.Concat concat -> {
                 List<Doc> children = new ArrayList<>();
                 boolean nextLineStart = lineStart;
@@ -1266,9 +1266,9 @@ final class MethodCallChainPrinter {
                 }
                 yield new PaddedDoc(Doc.concat(children), nextLineStart);
             }
-            case Doc.Line _ -> new PaddedDoc(Doc.concat(Doc.LINE, Doc.ifBreak(Doc.text(padding), Doc.EMPTY)), false);
-            case Doc.SoftLine _ -> new PaddedDoc(Doc.concat(Doc.SOFT_LINE, Doc.breakOnly(Doc.text(padding))), false);
-            case Doc.HardLine _ -> new PaddedDoc(Doc.concat(Doc.HARD_LINE, Doc.text(padding)), false);
+            case Doc.Line ignored -> new PaddedDoc(Doc.concat(Doc.LINE, Doc.ifBreak(Doc.text(padding), Doc.EMPTY)), false);
+            case Doc.SoftLine ignored -> new PaddedDoc(Doc.concat(Doc.SOFT_LINE, Doc.breakOnly(Doc.text(padding))), false);
+            case Doc.HardLine ignored -> new PaddedDoc(Doc.concat(Doc.HARD_LINE, Doc.text(padding)), false);
             case Doc.Indent indented -> {
                 PaddedDoc padded = linePadded(indented.doc(), padding, lineStart);
                 yield new PaddedDoc(Doc.indent(padded.doc()), padded.lineStart());

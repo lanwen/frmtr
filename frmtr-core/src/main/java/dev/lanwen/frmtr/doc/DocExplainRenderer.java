@@ -84,7 +84,7 @@ public final class DocExplainRenderer {
                     }
                     return structural;
                 }
-                case Doc.Line _ -> {
+                case Doc.Line ignored -> {
                     if (mode == Mode.FLAT) {
                         advance(" ");
                     } else {
@@ -92,13 +92,13 @@ public final class DocExplainRenderer {
                     }
                     return Builder.leaf();
                 }
-                case Doc.SoftLine _ -> {
+                case Doc.SoftLine ignored -> {
                     if (mode == Mode.BREAK) {
                         newline(indent);
                     }
                     return Builder.leaf();
                 }
-                case Doc.HardLine _ -> {
+                case Doc.HardLine ignored -> {
                     newline(indent);
                     if (enclosingLabel != null) {
                         enclosingLabel.forcedLineBreaks++;

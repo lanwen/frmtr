@@ -30,19 +30,19 @@ public final class DocRenderer {
         switch (doc) {
             case Doc.Text text -> append(text.value());
             case Doc.Concat concat -> concat.docs().forEach(child -> render(child, indent, mode, widths));
-            case Doc.Line _ -> {
+            case Doc.Line ignored -> {
                 if (mode == Mode.FLAT) {
                     append(" ");
                 } else {
                     newline(indent);
                 }
             }
-            case Doc.SoftLine _ -> {
+            case Doc.SoftLine ignored -> {
                 if (mode == Mode.BREAK) {
                     newline(indent);
                 }
             }
-            case Doc.HardLine _ -> newline(indent);
+            case Doc.HardLine ignored -> newline(indent);
             case Doc.Indent indented -> render(indented.doc(), indent + 1, mode, widths);
             case Doc.Group group -> {
                 Mode next = widths.fits(group.doc(), options.lineWidth() - column) ? Mode.FLAT : Mode.BREAK;

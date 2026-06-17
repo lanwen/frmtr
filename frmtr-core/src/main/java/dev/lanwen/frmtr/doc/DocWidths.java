@@ -79,9 +79,9 @@ final class DocWidths {
             MeasureResult measured = switch (doc) {
                 case Doc.Text text -> MeasureResult.complete(text.value().length());
                 case Doc.Concat concat -> measureConcat(concat, budget);
-                case Doc.Line _ -> MeasureResult.complete(1);
-                case Doc.SoftLine _ -> MeasureResult.complete(0);
-                case Doc.HardLine _ -> MeasureResult.hardLine();
+                case Doc.Line ignored -> MeasureResult.complete(1);
+                case Doc.SoftLine ignored -> MeasureResult.complete(0);
+                case Doc.HardLine ignored -> MeasureResult.hardLine();
                 case Doc.Indent indented -> measure(indented.doc(), budget);
                 case Doc.Group group -> measure(group.doc(), budget);
                 case Doc.IfBreak conditional -> measure(conditional.flatDoc(), budget);

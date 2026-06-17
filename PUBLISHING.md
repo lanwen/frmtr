@@ -13,6 +13,11 @@ Dry-run locally first:
 
 ### Snapshots
 
+GitHub Actions publishes snapshots from `.github/workflows/snapshots.yml` on every push to `main` while the root version
+ends in `-SNAPSHOT`. Configure the `snapshots` environment secrets `JRELEASER_MAVENCENTRAL_USERNAME` and
+`JRELEASER_MAVENCENTRAL_PASSWORD`; the workflow runs `./gradlew check publishAllPublicationsToCentralPortalSnapshotsRepository`
+before uploading artifacts to Central Portal snapshots.
+
 Preview what would run:
 
 ```bash

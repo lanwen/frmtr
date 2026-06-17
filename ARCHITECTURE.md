@@ -55,6 +55,9 @@ build-time companion for native-image builds. Every Java subproject jar also emb
 The Gradle plugin publication declares Plugin Portal compatibility metadata. It currently marks configuration-cache
 support as unsupported until the plugin tasks have a dedicated configuration-cache validation gate.
 
+The `Snapshots` GitHub Actions workflow publishes Maven Central snapshots from `main` when the root version remains a
+`-SNAPSHOT`, reusing the same Central Portal credentials and Gradle publication tasks as local snapshot publishing.
+
 `:frmtr-cli` generates a small `BuildInfo` source file during compilation. It embeds the project version, current Git
 commit SHA, and build timestamp so JVM and native CLI binaries report the same build identity through `--version`.
 

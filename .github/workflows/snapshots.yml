@@ -1,0 +1,39 @@
+name: Snapshots
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish Maven Central snapshots
+    runs-on: ubuntu-latest
+    environment: snapshots
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Set up Java
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+
+      - name: Read project version
+        id: version
+        run: echo "version=$(grep '^version=' gradle.properties | cut -d= -f2-)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish snapshots
+        if: ${{ endsWith(steps.version.outputs.version, '-SNAPSHOT') }}
+        env:
+          JRELEASER_MAVENCENTRAL_USERNAME: ${{ secrets.JRELEASER_MAVENCENTRAL_USERNAME }}
+          JRELEASER_MAVENCENTRAL_PASSWORD: ${{ secrets.JRELEASER_MAVENCENTRAL_PASSWORD }}
+        run: ./gradlew check publishAllPublicationsToCentralPortalSnapshotsRepository

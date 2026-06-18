@@ -34,11 +34,15 @@ final class ObjectCreationPrinter {
 
     private final ObjectCreationLayoutPolicy layoutPolicy;
 
+    private final SourceShape sourceShape;
+
     private final TypePrinter types;
 
     private final CommentedExpressionListPrinter commentedExpressionLists;
 
     private final JavaFormatRule<Expression> expressionRenderer;
+
+    private final Function<Expression, Optional<Doc>> brokenArgumentRenderer;
 
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments;
 
@@ -58,6 +62,7 @@ final class ObjectCreationPrinter {
             JavaFormatContext context,
             TypePrinter types,
             JavaFormatRule<Expression> expressionRenderer,
+            Function<Expression, Optional<Doc>> brokenArgumentRenderer,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,
             JavaFormatRule<BodyDeclaration<?>> bodyRenderer,
             Function<Node, String> compact,
@@ -68,9 +73,11 @@ final class ObjectCreationPrinter {
     ) {
         this.comments = context.comments;
         this.layoutPolicy = context.objectCreationLayoutPolicy;
+        this.sourceShape = context.sourceShape;
         this.types = types;
         this.commentedExpressionLists = new CommentedExpressionListPrinter(context, expressionRenderer::format);
         this.expressionRenderer = expressionRenderer;
+        this.brokenArgumentRenderer = brokenArgumentRenderer;
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.bodyRenderer = bodyRenderer;
         this.compact = compact;
@@ -172,10 +179,7 @@ final class ObjectCreationPrinter {
                         Doc.HARD_LINE,
                         Doc.join(
                             Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                            expression.getArguments()
-                                    .stream()
-                                    .map(expressionRenderer::format)
-                                    .toList()
+                            sourceMultilineArgumentDocs(expression)
                         )
                     )
                 ),
@@ -267,7 +271,7 @@ final class ObjectCreationPrinter {
                 Doc.indent(
                     Doc.concat(
                         Doc.SOFT_LINE,
-                        Doc.joinComma(anonymousArgumentDocs(expression))
+                        Doc.joinComma(expressionArgumentDocs(expression))
                     )
                 ),
                 Doc.SOFT_LINE,
@@ -286,7 +290,7 @@ final class ObjectCreationPrinter {
                 Doc.indent(
                     Doc.concat(
                         Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), anonymousArgumentDocs(expression))
+                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), sourceMultilineArgumentDocs(expression))
                     )
                 ),
                 Doc.HARD_LINE,
@@ -295,11 +299,28 @@ final class ObjectCreationPrinter {
         );
     }
 
-    private List<Doc> anonymousArgumentDocs(ObjectCreationExpr expression) {
+    private List<Doc> expressionArgumentDocs(ObjectCreationExpr expression) {
         return expression.getArguments()
                 .stream()
                 .map(expressionRenderer::format)
                 .toList();
+    }
+
+    private List<Doc> sourceMultilineArgumentDocs(ObjectCreationExpr expression) {
+        return expression.getArguments()
+                .stream()
+                .map(this::sourceMultilineArgument)
+                .toList();
+    }
+
+    private Doc sourceMultilineArgument(Expression argument) {
+        if (argument.getAllContainedComments().isEmpty() && sourceShape.spansMultipleLines(argument)) {
+            Optional<Doc> brokenArgument = brokenArgumentRenderer.apply(argument);
+            if (brokenArgument.isPresent()) {
+                return brokenArgument.orElseThrow();
+            }
+        }
+        return expressionRenderer.format(argument);
     }
 
     /**

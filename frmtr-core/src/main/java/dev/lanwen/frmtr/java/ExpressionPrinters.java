@@ -176,6 +176,7 @@ final class ExpressionPrinters {
             context,
             types,
             this::expression,
+            this::brokenArgument,
             lambdas::huggableBlockLambdaArguments,
             bodyRenderer,
             compactSource::compact,
@@ -215,7 +216,7 @@ final class ExpressionPrinters {
             lambdas::huggableMethodCallExpressionLambdaArguments,
             lambdas::huggableExpressionLambdaArgumentPlan,
             textBlocks::renderUnformattedTextBlock,
-            this::brokenMethodCallArgument,
+            this::brokenArgument,
             this::currentIndentedWidth,
             this::continuationStatementWidth,
             this::blockStatementWidth
@@ -394,7 +395,7 @@ final class ExpressionPrinters {
         return methodCalls.methodCallArgumentList(arguments, line);
     }
 
-    private Optional<Doc> brokenMethodCallArgument(Expression expression) {
+    private Optional<Doc> brokenArgument(Expression expression) {
         if (expression instanceof BinaryExpr binaryExpr) {
             return Optional.of(binaries.nestedLines(binaryExpr, true));
         }

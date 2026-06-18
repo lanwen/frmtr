@@ -59,6 +59,8 @@ public final class MetricSource {
     @StableApi
     String markedMetric;
 
+    public MetricSource(final @LocalizedText String sourceName, @StableApi final String regionName) {}
+
     @StableApi
     @AuditVisible
     protected static final synchronized @LocalizedText String computeMetric() {
@@ -66,6 +68,8 @@ public final class MetricSource {
     }
 
     public @StableApi @AuditVisible void publishAnnotatedEvent() {}
+
+    public void publishParameter(final @StableApi String eventName, @AuditVisible final String accountName) {}
 
     @StableApi
     void markerMethod() {}

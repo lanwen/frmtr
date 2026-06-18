@@ -1,5 +1,6 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.Range;
 import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
@@ -13,6 +14,7 @@ import com.github.javaparser.ast.type.TypeParameter;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
@@ -301,12 +303,7 @@ final class CallableSignaturePrinter {
         if (!parameter.isVarArgs() && typeCanBreak.test(parameter.getType())) {
             List<Doc> parts = new ArrayList<>();
             parameterLeadingBlockComment(parameter).ifPresent(parts::add);
-            parts.add(parameterAnnotationPrefix(parameter));
-            parameter.getModifiers()
-                    .stream()
-                    .map(modifier)
-                    .map(text -> Doc.text(text + " "))
-                    .forEach(parts::add);
+            parts.add(parameterModifierAnnotationPrefix(parameter));
             parts.add(typeBody.apply(parameter.getType()));
             parts.add(Doc.text(" " + parameter.getNameAsString() + parameterTrailingBlockCommentText(parameter)));
             return Doc.group(
@@ -317,8 +314,8 @@ final class CallableSignaturePrinter {
         }
         List<Doc> prefix = new ArrayList<>();
         parameterLeadingBlockComment(parameter).ifPresent(prefix::add);
-        prefix.add(parameterAnnotationPrefix(parameter));
-        prefix.add(Doc.text(parameterTailText(parameter) + parameterTrailingBlockCommentText(parameter)));
+        prefix.add(parameterModifierAnnotationPrefix(parameter));
+        prefix.add(Doc.text(parameterTypeAndNameText(parameter) + parameterTrailingBlockCommentText(parameter)));
         return Doc.concat(prefix);
     }
 
@@ -330,48 +327,88 @@ final class CallableSignaturePrinter {
         return Optional.of(Doc.text(commentText.apply(leadingBlockComment) + " "));
     }
 
-    private Doc parameterAnnotationPrefix(Parameter parameter) {
-        if (parameter.getAnnotations().isEmpty()) {
+    private Doc parameterModifierAnnotationPrefix(Parameter parameter) {
+        List<ParameterPrefixPart> parts = parameterPrefixParts(parameter);
+        if (parts.isEmpty()) {
             return Doc.EMPTY;
         }
-        if (!parameterAnnotationSourceBreaks(parameter)) {
-            return Doc.text(
-                parameter.getAnnotations()
-                        .stream()
-                        .map(annotationFlatText)
-                        .reduce((left, right) -> left + " " + right)
-                        .orElse("")
-                    + " "
-            );
+        if (!parameterAnnotationSourceBreaks(parameter, parts)) {
+            return Doc.text(parameterPrefixText(parts));
         }
         return Doc.concat(
             Doc.join(
                 Doc.text(" "),
-                parameter.getAnnotations()
-                        .stream()
-                        .map(annotation::format)
-                        .toList()
+                parts.stream().map(this::parameterPrefixPartDoc).toList()
             ),
             Doc.text(" ")
         );
     }
 
-    private boolean parameterAnnotationSourceBreaks(Parameter parameter) {
+    private List<ParameterPrefixPart> parameterPrefixParts(Parameter parameter) {
+        List<ParameterPrefixPart> parts = new ArrayList<>();
+        int fallbackOrder = 0;
+        for (AnnotationExpr annotationExpr : parameter.getAnnotations()) {
+            String text = annotationFlatText.apply(annotationExpr);
+            parts.add(new ParameterPrefixPart(
+                annotationExpr.getRange(),
+                fallbackOrder++,
+                text,
+                Optional.of(annotationExpr)
+            ));
+        }
+        for (Modifier modifierNode : parameter.getModifiers()) {
+            String text = modifier.apply(modifierNode);
+            parts.add(new ParameterPrefixPart(
+                modifierNode.getRange(),
+                fallbackOrder++,
+                text,
+                Optional.empty()
+            ));
+        }
+        parts.sort(Comparator
+                .comparingInt((ParameterPrefixPart part) -> rangeBeginLine(part.range()))
+                .thenComparingInt(part -> rangeBeginColumn(part.range()))
+                .thenComparingInt(ParameterPrefixPart::fallbackOrder)
+        );
+        return parts;
+    }
+
+    private Doc parameterPrefixPartDoc(ParameterPrefixPart part) {
+        return part.annotation().map(annotation::format).orElseGet(() -> Doc.text(part.flatText()));
+    }
+
+    private int rangeBeginLine(Optional<Range> range) {
+        return range.map(value -> value.begin.line).orElse(Integer.MAX_VALUE);
+    }
+
+    private int rangeBeginColumn(Optional<Range> range) {
+        return range.map(value -> value.begin.column).orElse(Integer.MAX_VALUE);
+    }
+
+    private String parameterPrefixText(List<ParameterPrefixPart> parts) {
+        return parts.stream()
+                .map(ParameterPrefixPart::flatText)
+                .reduce((left, right) -> left + " " + right)
+                .map(text -> text + " ")
+                .orElse("");
+    }
+
+    private boolean parameterAnnotationSourceBreaks(Parameter parameter, List<ParameterPrefixPart> parts) {
         return parameter.getAnnotations().stream().flatMap(annotation -> annotation.getRange().stream()).anyMatch(
             range -> range.begin.line < range.end.line
-        ) && currentIndentedWidth(parameterFlat(parameter)) > options.lineWidth();
+        ) && currentIndentedWidth(parameterFlat(parameter, parts)) > options.lineWidth();
     }
 
     private String parameterFlat(Parameter parameter) {
-        List<String> parts = new ArrayList<>();
-        parameter.getAnnotations().stream().map(annotationFlatText).forEach(parts::add);
-        parts.add(parameterTailText(parameter));
-        return String.join(" ", parts);
+        return parameterFlat(parameter, parameterPrefixParts(parameter));
     }
 
-    private String parameterTailText(Parameter parameter) {
+    private String parameterFlat(Parameter parameter, List<ParameterPrefixPart> parts) {
+        return parameterPrefixText(parts) + parameterTypeAndNameText(parameter);
+    }
+
+    private String parameterTypeAndNameText(Parameter parameter) {
         List<String> parts = new ArrayList<>();
-        parameter.getModifiers().stream().map(modifier).forEach(parts::add);
         String type = compact.apply(parameter.getType());
         if (parameter.isVarArgs()) {
             String varargsAnnotations = compactJoin(parameter.getVarArgsAnnotations());
@@ -433,4 +470,11 @@ final class CallableSignaturePrinter {
     private String compactJoin(List<? extends Node> nodes) {
         return nodes.stream().map(compact).reduce((left, right) -> left + ", " + right).orElse("");
     }
+
+    private record ParameterPrefixPart(
+        Optional<Range> range,
+        int fallbackOrder,
+        String flatText,
+        Optional<AnnotationExpr> annotation
+    ) {}
 }

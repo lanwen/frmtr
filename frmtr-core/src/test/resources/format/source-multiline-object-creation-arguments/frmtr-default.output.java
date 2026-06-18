@@ -42,6 +42,19 @@ class SourceMultilineObjectCreationArgumentsSample {
         );
     }
 
+    void reject(PhraseRequest request, Throwable cause) {
+        throw new PhrasePolicyException(
+            "Access phrase must include entries from three of the following four groups:\n"
+                + " - Latin uppercase letters (A through Z)\n"
+                + " - Latin lowercase letters (a through z)\n"
+                + " - Base ten digits (0 through 9)\n"
+                + " - Non alphabetic marks (!, $, #, %, and similar)",
+            request.accountBoundary(),
+            request.traceId(),
+            cause
+        );
+    }
+
     Object listener(LeaseMonitor monitor, LeaseCallbacks callbacks, RetryBudget retryBudget) {
         return new LeaseLifecycleCoordinator(
             monitor.primaryQueue(),
@@ -49,6 +62,15 @@ class SourceMultilineObjectCreationArgumentsSample {
             callbacks.auditSink(),
             retryBudget.currentWindow()
         ) {
+            @Override
+            void started(LeaseContext context) {
+                context.markReady();
+            }
+        };
+    }
+
+    Object conciseListener(LeaseMonitor monitor) {
+        return new LeaseLifecycleCoordinator("ready:" + monitor.primaryQueue()) {
             @Override
             void started(LeaseContext context) {
                 context.markReady();

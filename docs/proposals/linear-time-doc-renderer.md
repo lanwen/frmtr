@@ -398,33 +398,26 @@ be modest if parsing dominates — that is an acceptable and expected outcome, a
 honestly rather than the proposal over-claiming a headline speedup. The asymptotic guarantee and the
 single-`switch` contract are the durable wins; the throughput delta is whatever M1 measures.
 
-## Follow-up: reduce implemented measurement overhead
+## Implemented follow-up: reduce measurement overhead
 
-The current implementation preserves the important maintainability property: `fits` and `flatWidth`
-route through one canonical per-variant `Doc` measurement walker. Do not undo that by reintroducing
-parallel switches. The next optimization should instead make the shared walker cheaper on normal
-documents:
+M2a is implemented in `dc9bd4c`. `DocWidths.Measurement` preserves the important maintainability
+property: `fits` and `flatWidth` route through one canonical per-variant `Doc` measurement walker.
+The implementation makes that shared walker cheaper on normal documents by replacing per-node
+`Budget` / `MeasureResult` record traffic with primitive sentinel returns and fast-pathing cached
+complete widths before bounded descent.
 
-1. Replace per-node `Budget` / `MeasureResult` record traffic with primitive sentinel returns. Keep a
-   single `measure(Doc, remaining)` switch that returns a finite width, `NO_FIT` for forced breaks,
-   or an overflow sentinel for bounded failures.
-2. Fast-path cached complete widths before bounded descent, so a subtree already measured in full can
-   answer `fits` from an integer comparison.
-3. Keep overflow-bound caching as a later option only if allocation/JFR evidence still shows repeated
-   bounded overflow work after the primitive sentinel cleanup; it complicates cache semantics and is
-   not needed to preserve the one-switch contract.
-4. Consider small renderer hot-path cleanup, such as replacing `Concat` `forEach` rendering with an
-   indexed loop, only after the measurement overhead is addressed.
-
-Proof for this follow-up should include focused `DocWidths` helper tests, the existing fixture suite
-for byte-identical behavior, allocation evidence around `DocWidths.Measurement`, and a repeated
-a project with ~600 files no-diff macro run reported against the same `main` baseline.
+Future work, if any, should be evidence-driven: gather allocation/JFR evidence around
+`DocWidths.Measurement`, repeat the ~600-file no-diff macro run against the same `main` baseline, and
+only add overflow-bound caching if repeated bounded overflow work still shows up. More advanced
+overflow-bound caching complicates cache semantics and is not needed to preserve the one-switch
+contract.
 
 ## Scope and non-goals
 
-- Contained to `frmtr-core/src/main/java/dev/lanwen/frmtr/doc/DocRenderer.java`, with at most a small
-  internal cache; **no change to the `Doc` IR** under the recommended option.
-- Absorbs S5: `fits` and `flatWidth` are unified here, so S5 needs no separate doc.
-- Do not change formatter output, options, or the `Doc` public API.
-- Do not implement the M1 harness here — depend on it for validation.
-- This is a proposal: no source edits, no builds, no benchmarks are run as part of it.
+- The implemented boundary is `DocWidths` for width measurement and bounded `fits`, with
+  `DocRenderer` consuming that measurement result to choose flat or broken rendering.
+- The `Doc` IR and public API are unchanged.
+- Absorbs S5: `fits` and `flatWidth` are unified through the `DocWidths` measurement path, so S5
+  needs no separate doc.
+- Remaining non-goals: changing formatter output/options, changing the `Doc` public API, or
+  implementing the M1 benchmark harness here.

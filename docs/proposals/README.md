@@ -18,9 +18,10 @@ investigation link out to a focused proposal in this directory.
 | ✅ Done | Landed on `main`. |
 | ⚪ Deferred | Intentionally parked. |
 
-**Overall status:** 🔵 Proposed — this roadmap is a starting point for discussion. Two items have
-landed (**S5** and **S3**, ✅); the rest is unscheduled. Focused investigation docs (linked below)
-have been drafted to de-risk the highest-leverage items before any implementation.
+**Overall status:** Active roadmap — several focused slices are implemented (**S3**, **S5**,
+**M2**, **M2a**), **B3** and **M3** are in progress, and the remaining items stay proposed,
+investigating, accepted, or deferred as marked below. Focused investigation docs (linked below)
+continue to de-risk the highest-leverage items before broader implementation.
 
 ### Relationship to existing proposals in this directory
 
@@ -179,12 +180,12 @@ single `measureFlat` function.
 - **Effort:** contained to `DocRenderer`.
 
 ### M2a. Reduce implemented renderer measurement overhead
-**Status:** 🔵 Proposed
+**Status:** 🟢 Implemented in `dc9bd4c`
 
 M2 preserved the single width-authority contract but added runtime overhead on a real macro corpus.
-Optimize `DocWidths.Measurement` without reintroducing separate `fits` and `flatWidth` switches:
-replace per-node `Budget` / `MeasureResult` record traffic with primitive sentinel returns, fast-path
-cached complete widths, and only consider more complex overflow-bound caching after allocation
+`DocWidths.Measurement` now uses primitive sentinel returns instead of per-node `Budget` /
+`MeasureResult` record traffic, fast-paths cached complete widths, and preserves the one-switch Doc
+measurement contract. More complex overflow-bound caching remains a later option only if allocation
 profiling proves it is worthwhile.
 
 - **Serves:** fastest, maintainer-friendly.

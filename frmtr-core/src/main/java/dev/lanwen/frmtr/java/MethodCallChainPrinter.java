@@ -144,6 +144,129 @@ final class MethodCallChainPrinter {
         return forcedMethodCallChain(expression, LayoutWidth.LineBudget.CURRENT, firstLineWidth);
     }
 
+    Optional<Doc> packedMethodCallChain(
+            MethodCallExpr expression,
+            ToIntFunction<String> firstLineWidth
+    ) {
+        return packedCompactMethodCallChain(
+            expression,
+            firstLineWidth,
+            continuationStatementWidth,
+            true
+        )
+                .map(this::packedMethodCallChainDoc)
+                .or(() -> packedBrokenObjectRootChain(expression, firstLineWidth));
+    }
+
+    private Optional<PackedMethodCallChainText> packedCompactMethodCallChain(
+            MethodCallExpr expression,
+            ToIntFunction<String> firstLineWidth,
+            ToIntFunction<String> continuationWidth,
+            boolean reserveFinalTerminator
+    ) {
+        if (!expression.getAllContainedComments().isEmpty()) {
+            return Optional.empty();
+        }
+        List<String> segments = new ArrayList<>();
+        Optional<String> root = compactMethodCallChainRoot(expression, segments);
+        if (root.isEmpty() || segments.isEmpty()) {
+            return Optional.empty();
+        }
+        String firstLine = root.orElseThrow();
+        if (firstLineWidth.applyAsInt(firstLine) > options.lineWidth()) {
+            return Optional.empty();
+        }
+        int splitIndex = 0;
+        for (int index = 0; index < segments.size(); index++) {
+            String candidate = firstLine + segments.get(index);
+            String widthText = packedChainWidthText(candidate, index + 1 == segments.size(), reserveFinalTerminator);
+            if (firstLineWidth.applyAsInt(widthText) > options.lineWidth()) {
+                break;
+            }
+            firstLine = candidate;
+            splitIndex = index + 1;
+        }
+        if (splitIndex >= segments.size()) {
+            return Optional.empty();
+        }
+        List<String> remaining = segments.subList(splitIndex, segments.size());
+        for (int index = 0; index < remaining.size(); index++) {
+            boolean finalSegment = splitIndex + index + 1 == segments.size();
+            String widthText = packedChainWidthText(remaining.get(index), finalSegment, reserveFinalTerminator);
+            if (continuationWidth.applyAsInt(widthText) > options.lineWidth()) {
+                return Optional.empty();
+            }
+        }
+        return Optional.of(new PackedMethodCallChainText(firstLine, remaining));
+    }
+
+    private String packedChainWidthText(String text, boolean finalSegment, boolean reserveFinalTerminator) {
+        return finalSegment && reserveFinalTerminator ? text + ";" : text;
+    }
+
+    private Doc packedMethodCallChainDoc(PackedMethodCallChainText chain) {
+        return Doc.concat(
+            Doc.text(chain.firstLine()),
+            chainContinuation(Doc.join(Doc.HARD_LINE, chain.remainingSegments().stream().map(Doc::text).toList()))
+        );
+    }
+
+    private Optional<Doc> packedBrokenObjectRootChain(
+            MethodCallExpr expression,
+            ToIntFunction<String> firstLineWidth
+    ) {
+        MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
+        if (
+            analysis.hasComments()
+            || analysis.hasBlockLambdaArgument()
+            || !(analysis.root() instanceof ObjectCreationExpr objectCreation)
+            || analysis.calls().isEmpty()
+            || objectCreation.getArguments().isEmpty()
+            || objectCreation.getAnonymousClassBody().isPresent()
+            || sourceShape.objectCreationArgumentsSpanMultipleLines(objectCreation)
+            || analysis.calls().stream().anyMatch(call -> !compactMethodCallChainSegmentCanStayFlat(call))
+            || firstLineWidth.applyAsInt(compactSource.compact(objectCreation)) <= options.lineWidth()
+            || firstLineWidth.applyAsInt(objectCreationPrefix.apply(objectCreation) + "(") > options.lineWidth()
+        ) {
+            return Optional.empty();
+        }
+        Doc rootDoc = brokenObjectCreationRenderer.apply(objectCreation);
+        List<MethodCallExpr> calls = analysis.calls();
+        if (calls.size() == 1) {
+            return Optional.of(objectRootSingleSegmentChain(
+                objectCreation,
+                rootDoc,
+                calls.getFirst(),
+                MethodCallChainTail.EMPTY,
+                MethodCallChainSourcePlanner.ChainRootRendering.BROKEN_OBJECT_CREATION,
+                analysis.sourceMultilineChain(),
+                LayoutWidth.LineBudget.CURRENT
+            ));
+        }
+        Doc firstSegment = methodCallChainSegment(
+            calls.getFirst(),
+            Optional.of(calls.get(1)),
+            MethodCallChainTail.EMPTY,
+            segment -> layoutWidth.line(LayoutWidth.LineBudget.CURRENT, ")" + segment)
+        );
+        return Optional.of(
+            Doc.concat(
+                rootDoc,
+                firstSegment,
+                chainContinuation(Doc.join(
+                    Doc.HARD_LINE,
+                    methodCallChainSegments(calls.subList(1, calls.size()), MethodCallChainTail.EMPTY)
+                ))
+            )
+        );
+    }
+
+    private record PackedMethodCallChainText(String firstLine, List<String> remainingSegments) {
+        PackedMethodCallChainText {
+            remainingSegments = List.copyOf(remainingSegments);
+        }
+    }
+
     private Optional<Doc> forcedMethodCallChain(
             MethodCallExpr expression,
             LayoutWidth.LineBudget lineBudget,
@@ -199,49 +322,12 @@ final class MethodCallChainPrinter {
             MethodCallExpr expression,
             ToIntFunction<String> bodyLineWidth
     ) {
-        if (!expression.getAllContainedComments().isEmpty()) {
-            return Optional.empty();
-        }
-        List<String> segments = new ArrayList<>();
-        Optional<String> root = compactMethodCallChainRoot(expression, segments);
-        if (root.isEmpty() || segments.isEmpty()) {
-            return Optional.empty();
-        }
-        String fullChain = root.orElseThrow() + String.join("", segments);
-        if (bodyLineWidth.applyAsInt(firstLine + " " + fullChain) <= options.lineWidth()) {
-            return Optional.empty();
-        }
-        String firstBodyLine = root.orElseThrow();
-        int splitIndex = 0;
-        for (int index = 0; index < segments.size(); index++) {
-            String candidate = firstBodyLine + segments.get(index);
-            if (bodyLineWidth.applyAsInt(firstLine + " " + candidate) > options.lineWidth()) {
-                break;
-            }
-            firstBodyLine = candidate;
-            splitIndex = index + 1;
-        }
-        if (
-            bodyLineWidth.applyAsInt(firstLine + " " + firstBodyLine) > options.lineWidth()
-            || splitIndex >= segments.size()
-        ) {
-            return Optional.empty();
-        }
-        if (segments.subList(splitIndex, segments.size()).stream().anyMatch(
-                segment -> packedExpressionLambdaBodyLineWidth(segment) > options.lineWidth()
-            )) {
-            return Optional.empty();
-        }
-        List<Doc> remainingSegments = segments.subList(splitIndex, segments.size())
-                .stream()
-                .map(Doc::text)
-                .toList();
-        return Optional.of(
-            Doc.concat(
-                Doc.text(firstBodyLine),
-                chainContinuation(Doc.join(Doc.HARD_LINE, remainingSegments))
-            )
-        );
+        return packedCompactMethodCallChain(
+            expression,
+            text -> bodyLineWidth.applyAsInt(firstLine + " " + text),
+            this::packedExpressionLambdaBodyLineWidth,
+            false
+        ).map(this::packedMethodCallChainDoc);
     }
 
     private Optional<String> compactMethodCallChainRoot(MethodCallExpr expression, List<String> segments) {
@@ -263,6 +349,10 @@ final class MethodCallChainPrinter {
         }
         segments.add(compactMethodCallChainSegment(expression));
         return Optional.of(compactSource.compact(scoped));
+    }
+
+    Optional<String> compactMethodCallChainRoot(MethodCallExpr expression) {
+        return compactMethodCallChainRoot(expression, new ArrayList<>());
     }
 
     private boolean compactMethodCallChainSegmentCanStayFlat(MethodCallExpr expression) {

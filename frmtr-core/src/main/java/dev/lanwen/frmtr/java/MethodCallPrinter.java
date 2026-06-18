@@ -507,6 +507,17 @@ final class MethodCallPrinter {
         return methodChains.forcedMethodCallChain(expression, firstLineWidth);
     }
 
+    Optional<Doc> packedMethodCallChain(
+            MethodCallExpr expression,
+            ToIntFunction<String> firstLineWidth
+    ) {
+        return methodChains.packedMethodCallChain(expression, firstLineWidth);
+    }
+
+    Optional<String> compactMethodCallChainRoot(MethodCallExpr expression) {
+        return methodChains.compactMethodCallChainRoot(expression);
+    }
+
     Optional<Doc> compactRootWithBrokenFinalChainSegment(MethodCallExpr expression) {
         return methodChains.compactRootWithBrokenFinalChainSegment(expression);
     }

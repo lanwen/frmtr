@@ -1,10 +1,11 @@
 class SourceMultilineObjectChainInitializer {
 
-    public CatalogContainer containerWithMultipleLabels =
-        new CatalogContainer(ArtifactName.parse("runner:3.17")).withLabels(labelMap);
+    public CatalogContainer containerWithMultipleLabels = new CatalogContainer(ArtifactName.parse("runner:3.17"))
+            .withLabels(labelMap);
 
-    public CatalogContainer firstPassContainerWithMultipleLabels =
-        new CatalogContainer(ArtifactName.parse("runner:3.17")).withLabels(labelMap);
+    public CatalogContainer firstPassContainerWithMultipleLabels = new CatalogContainer(
+        ArtifactName.parse("runner:3.17")
+    ).withLabels(labelMap);
 
     public CatalogContainer sourceContainerWithFile = new CatalogContainer(
         ArtifactName.parse("runner:3.17")
@@ -56,6 +57,14 @@ class SourceMultilineObjectChainInitializer {
             extensionContext(DisabledWithoutCatalog.class)
         );
         sink(result);
+    }
+
+    void constructorChainArgumentBreak() {
+        SignalContainer signal = new SignalContainer("registry.example.internal/signal-router:2.14.7").withEnv(
+            "ANONYMOUS_LOGIN",
+            "true"
+        );
+        sink(signal);
     }
 
     // sampleRule {

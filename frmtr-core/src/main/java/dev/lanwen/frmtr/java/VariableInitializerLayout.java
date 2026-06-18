@@ -90,6 +90,10 @@ final class VariableInitializerLayout {
 
     private final BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> forcedMethodCallChain;
 
+    private final BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> packedMethodCallChain;
+
+    private final Function<MethodCallExpr, Optional<String>> compactMethodCallChainRoot;
+
     private final Function<MethodCallExpr, Doc> methodCallWithSemicolon;
 
     private final Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment;
@@ -159,6 +163,8 @@ final class VariableInitializerLayout {
             Function<MethodCallExpr, Doc> brokenMethodCall,
             Function<MethodCallExpr, Optional<Doc>> mixedFieldMethodCallChain,
             BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> forcedMethodCallChain,
+            BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> packedMethodCallChain,
+            Function<MethodCallExpr, Optional<String>> compactMethodCallChainRoot,
             Function<MethodCallExpr, Doc> methodCallWithSemicolon,
             Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment,
             Function<MethodCallExpr, Optional<Expression>> mixedFieldMethodCallRoot,
@@ -205,6 +211,8 @@ final class VariableInitializerLayout {
         this.brokenMethodCall = brokenMethodCall;
         this.mixedFieldMethodCallChain = mixedFieldMethodCallChain;
         this.forcedMethodCallChain = forcedMethodCallChain;
+        this.packedMethodCallChain = packedMethodCallChain;
+        this.compactMethodCallChainRoot = compactMethodCallChainRoot;
         this.methodCallWithSemicolon = methodCallWithSemicolon;
         this.methodCallChainHasFinalTrailingLineComment = methodCallChainHasFinalTrailingLineComment;
         this.mixedFieldMethodCallRoot = mixedFieldMethodCallRoot;
@@ -522,6 +530,26 @@ final class VariableInitializerLayout {
             && initializer instanceof MethodCallExpr methodCall
             && !initializerHasOwnBreak(initializer)
         ) {
+            if (methodCallChainRootIsObjectCreation.test(methodCall)) {
+                Optional<Doc> directObjectCreationCall = variableWithBrokenMethodCallArguments(
+                    name,
+                    declarationPrefix + variable.getNameAsString(),
+                    methodCall,
+                    false
+                );
+                if (directObjectCreationCall.isPresent()) {
+                    return directObjectCreationCall.orElseThrow();
+                }
+            }
+            Optional<Doc> packedObjectCreationChain = variableWithPackedMethodCallChain(
+                variable,
+                name,
+                declarationPrefix + variable.getNameAsString(),
+                methodCall
+            );
+            if (packedObjectCreationChain.isPresent()) {
+                return packedObjectCreationChain.orElseThrow();
+            }
             Optional<Doc> compactObjectCreationChain = variableWithCompactObjectCreationChain(
                 variable,
                 name,
@@ -551,17 +579,6 @@ final class VariableInitializerLayout {
             );
             if (sourceMultilineCall.isPresent()) {
                 return sourceMultilineCall.orElseThrow();
-            }
-            if (methodCallChainRootIsObjectCreation.test(methodCall)) {
-                Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
-                    name,
-                    declarationPrefix + variable.getNameAsString(),
-                    methodCall,
-                    false
-                );
-                if (directCall.isPresent()) {
-                    return directCall.orElseThrow();
-                }
             }
             if (methodCallHasAttachableScope(methodCall)) {
                 Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
@@ -762,6 +779,50 @@ final class VariableInitializerLayout {
                 Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(compact.apply(methodCall))))
             )
         );
+    }
+
+    private Optional<Doc> variableWithPackedMethodCallChain(
+            VariableDeclarator variable,
+            String name,
+            String flatName,
+            MethodCallExpr methodCall
+    ) {
+        boolean initializerStartsOnContinuationLine = initializerStartsOnContinuationLine(variable, methodCall);
+        boolean chainSpansMultipleSourceLines = methodCallChainIsSourceMultiline.test(methodCall)
+            || rawSource.rawWithoutOwnComment(methodCall).contains("\n");
+        MethodCallChainSourcePlanner.InitializerChainShape chainShape = methodCallChainInitializerShape.apply(methodCall);
+        if (
+            !methodCallChainRootIsObjectCreation.test(methodCall)
+            || !(
+                chainShape.canUseCompactObjectCreationInitializer(
+                    initializerStartsOnContinuationLine,
+                    chainSpansMultipleSourceLines,
+                    sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+                )
+                || sourceFirstLineKeepsChainAfterRoot(methodCall)
+            )
+            || (
+                !methodCall.getArguments().isEmpty()
+                && layoutWidth.variableInitializer(variable, flatName + " = " + methodCallPrefix.apply(methodCall) + "(")
+                    <= options.lineWidth()
+            )
+        ) {
+            return Optional.empty();
+        }
+        return packedMethodCallChain
+                .apply(methodCall, text -> layoutWidth.variableInitializer(variable, flatName + " = " + text))
+                .map(chain -> Doc.concat(Doc.text(name + " = "), chain));
+    }
+
+    private boolean sourceFirstLineKeepsChainAfterRoot(MethodCallExpr methodCall) {
+        return compactMethodCallChainRoot.apply(methodCall)
+                .flatMap(rootFirstLine -> rawSource.rawWithoutOwnComment(methodCall)
+                        .lines()
+                        .findFirst()
+                        .map(String::strip)
+                        .filter(firstSourceLine -> firstSourceLine.startsWith(rootFirstLine))
+                        .filter(firstSourceLine -> firstSourceLine.length() > rootFirstLine.length()))
+                .isPresent();
     }
 
     private boolean initializerStartsOnContinuationLine(VariableDeclarator variable, Expression initializer) {

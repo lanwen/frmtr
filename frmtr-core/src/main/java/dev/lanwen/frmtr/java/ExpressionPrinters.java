@@ -435,6 +435,17 @@ final class ExpressionPrinters {
         return methodCalls.forcedMethodCallChain(expression, firstLineWidth);
     }
 
+    Optional<Doc> packedMethodCallChain(
+            MethodCallExpr expression,
+            ToIntFunction<String> firstLineWidth
+    ) {
+        return methodCalls.packedMethodCallChain(expression, firstLineWidth);
+    }
+
+    Optional<String> compactMethodCallChainRoot(MethodCallExpr expression) {
+        return methodCalls.compactMethodCallChainRoot(expression);
+    }
+
     boolean methodCallChainHasComments(MethodCallExpr expression) {
         return methodCalls.methodCallChainHasComments(expression);
     }

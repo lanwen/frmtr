@@ -142,6 +142,8 @@ final class DeclarationPrinters {
             expressions::brokenMethodCall,
             expressions::mixedFieldMethodCallChain,
             expressions::forcedMethodCallChain,
+            expressions::packedMethodCallChain,
+            expressions::compactMethodCallChainRoot,
             methodCall -> expressions.expressionWithTail(methodCall, ExpressionTail.SEMICOLON),
             expressions::methodCallChainHasFinalTrailingLineComment,
             expressions::mixedFieldMethodCallRoot,

@@ -63,6 +63,11 @@ class SourceMultilineObjectChainInitializer {
         sink(result);
     }
 
+    void constructorChainArgumentBreak() {
+        SignalContainer signal = new SignalContainer("registry.example.internal/signal-router:2.14.7").withEnv("ANONYMOUS_LOGIN", "true");
+        sink(signal);
+    }
+
     // sampleRule {
     public BrowserClient sourceBrowser = new BrowserClient("browser/standalone-stable:4.13.0")
         // marker }

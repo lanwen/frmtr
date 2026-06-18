@@ -117,6 +117,35 @@ public class TryCatch {
     }
   }
 
+  void finalCatchParameters(MessageBrokerFixture broker) {
+    try {
+      broker.start();
+    } catch (final Exception exception) {
+      broker.record(exception);
+    }
+
+    try {
+      broker.awaitReady();
+    } catch (final InterruptedException | IOException exception) {
+      broker.record(exception);
+    }
+  }
+
+  void nestedWideMultiCatch(SecureGatewayFixture gateway) {
+    gateway.configure(() -> {
+      try {
+        gateway.open();
+      } catch (
+        KeyManagementException
+        | UnrecoverableKeyException
+        | NoSuchAlgorithmException
+        | KeyStoreException exception
+      ) {
+        gateway.record(exception);
+      }
+    });
+  }
+
   void resourceTry() {
     try (Resource resource = new Resource()) {
         return reader.readLine();

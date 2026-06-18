@@ -91,6 +91,7 @@ final class StatementPrinters {
             expressions::objectCreationWithSuffix,
             declarations::variableDeclaration,
             declarations::variableDeclarationStatement,
+            declarations::parameterText,
             compactSource::compact,
             compactSource::compactWithoutOwnComment,
             compactSource::compactJoin,

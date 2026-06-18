@@ -399,7 +399,10 @@ final class CallableSignaturePrinter {
         ) && currentIndentedWidth(parameterFlat(parameter, parts)) > options.lineWidth();
     }
 
-    private String parameterFlat(Parameter parameter) {
+    /**
+     * Builds compact ordinary parameter text with source-ordered modifiers and annotations.
+     */
+    String parameterFlat(Parameter parameter) {
         return parameterFlat(parameter, parameterPrefixParts(parameter));
     }
 

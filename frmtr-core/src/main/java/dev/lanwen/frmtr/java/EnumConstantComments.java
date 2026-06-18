@@ -1,0 +1,147 @@
+package dev.lanwen.frmtr.java;
+
+import com.github.javaparser.ast.body.EnumConstantDeclaration;
+import com.github.javaparser.ast.body.EnumDeclaration;
+import com.github.javaparser.ast.comments.Comment;
+import dev.lanwen.frmtr.doc.Doc;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Resolves comments that visually belong to enum constants before the enum printer chooses separators.
+ *
+ * <p>This helper owns enum-constant comment ownership: leading comments attached to a constant, same-line trailing
+ * comments attached to the constant or its neighbor, contained comments on the constant's end line, and parent orphan
+ * comments that should trail a constant instead of moving into the enum body. It intentionally does not decide enum
+ * entry ordering, blank-line preservation, raw recovery, or whether the last trailing comment must be hoisted past the
+ * list terminator; callers use the returned {@link Tail} values for those enum-list decisions.
+ */
+final class EnumConstantComments {
+
+    private final CommentTracker comments;
+
+    private final JavaCommentPlacementPolicy commentPlacement;
+
+    EnumConstantComments(CommentTracker comments, JavaCommentPlacementPolicy commentPlacement) {
+        this.comments = comments;
+        this.commentPlacement = commentPlacement;
+    }
+
+    /**
+     * Resolves each constant's trailing comment once so rendering and separator ownership share one source decision.
+     */
+    List<Tail> tails(EnumDeclaration owner) {
+        List<EnumConstantDeclaration> entries = owner.getEntries();
+        List<Tail> tails = new ArrayList<>(entries.size());
+        for (int i = 0; i < entries.size(); i++) {
+            EnumConstantDeclaration next = i + 1 < entries.size() ? entries.get(i + 1) : null;
+            tails.add(tail(owner, entries.get(i), next));
+        }
+        return tails;
+    }
+
+    /**
+     * Returns the leading comment only when it starts before the constant rather than trailing another constant.
+     */
+    Doc leading(EnumConstantDeclaration declaration) {
+        Doc leading = comments.ownComment(
+            declaration,
+            comment -> CommentIndex.startsBeforeBeginLine(comment, declaration)
+        );
+        return leading == Doc.EMPTY ? Doc.EMPTY : Doc.concat(leading, Doc.HARD_LINE);
+    }
+
+    /**
+     * Finds comments written after a constant but attached by JavaParser to either the next constant or the enum body.
+     */
+    Tail tail(
+            EnumDeclaration owner,
+            EnumConstantDeclaration declaration,
+            EnumConstantDeclaration next
+    ) {
+        Doc ownTrailing = declaration.getComment()
+                .filter(comment -> trailsConstant(declaration, comment, next))
+                .map(comments::comment)
+                .orElse(Doc.EMPTY);
+        if (ownTrailing != Doc.EMPTY) {
+            return new Tail(ownTrailing);
+        }
+        Doc containedTrailing = Doc.concat(
+            declaration.getAllContainedComments()
+                    .stream()
+                    .filter(comment -> CommentIndex.startsOnEndLine(declaration, comment))
+                    .map(comments::comment)
+                    .filter(comment -> comment != Doc.EMPTY)
+                    .toList()
+        );
+        if (containedTrailing != Doc.EMPTY) {
+            return new Tail(containedTrailing);
+        }
+        Doc rangeTrailing = rangeTrailing(owner, declaration, next);
+        if (rangeTrailing != Doc.EMPTY) {
+            return new Tail(rangeTrailing);
+        }
+        if (next != null) {
+            Doc nextTrailing = next.getComment()
+                    .filter(comment -> trailsConstant(declaration, comment, next))
+                    .map(comments::comment)
+                    .orElse(Doc.EMPTY);
+            if (nextTrailing != Doc.EMPTY) {
+                return new Tail(nextTrailing);
+            }
+        }
+        if (owner == null) {
+            return Tail.EMPTY;
+        }
+        return new Tail(
+            Doc.concat(
+                comments.orphanCommentStatements(owner, comment -> CommentIndex.startsOnEndLine(declaration, comment))
+            )
+        );
+    }
+
+    private Doc rangeTrailing(
+            EnumDeclaration owner,
+            EnumConstantDeclaration declaration,
+            EnumConstantDeclaration next
+    ) {
+        if (owner == null || next == null) {
+            return Doc.EMPTY;
+        }
+        return Doc.concat(
+            commentPlacement.lineCommentsBetween(owner, declaration, next)
+                    .stream()
+                    .filter(comment -> comment.startsOnEndLine(declaration))
+                    .map(comments::comment)
+                    .filter(comment -> comment != Doc.EMPTY)
+                    .toList()
+        );
+    }
+
+    private static boolean trailsConstant(
+            EnumConstantDeclaration declaration,
+            Comment comment,
+            EnumConstantDeclaration next
+    ) {
+        if (!CommentIndex.startsAfterNodeOnSameLine(declaration, comment)) {
+            return false;
+        }
+        return next == null || !CommentIndex.startsAfterNodeOnSameLine(next, comment);
+    }
+
+    record Tail(Doc comment) {
+        private static final Tail EMPTY = new Tail(Doc.EMPTY);
+
+        boolean hasComment() {
+            return comment != Doc.EMPTY;
+        }
+
+        boolean ownsInlineComma() {
+            return hasComment();
+        }
+
+        Doc inline() {
+            return hasComment() ? Doc.concat(Doc.text(", "), comment) : Doc.EMPTY;
+        }
+    }
+}

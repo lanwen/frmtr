@@ -7,7 +7,6 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
-import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
@@ -46,6 +45,8 @@ final class EnumDeclarationPrinter {
     private final CommentTracker comments;
 
     private final JavaCommentPlacementPolicy commentPlacement;
+
+    private final EnumConstantComments enumConstantComments;
 
     private final RawSource rawSource;
 
@@ -108,6 +109,7 @@ final class EnumDeclarationPrinter {
     ) {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
+        this.enumConstantComments = new EnumConstantComments(context.comments, context.commentPlacementPolicy);
         this.rawSource = context.rawSource;
         this.options = context.options;
         this.sourceText = context.sourceText;
@@ -252,24 +254,23 @@ final class EnumDeclarationPrinter {
     private EnumEntryList formattedEnumEntryList(EnumDeclaration declaration) {
         List<EnumConstantDeclaration> entries = declaration.getEntries();
         int lastIndex = entries.size() - 1;
-        EnumConstantDeclaration last = entries.get(lastIndex);
-        Doc lastTrailingComment = enumConstantTrailingComment(declaration, last, null);
+        List<EnumConstantComments.Tail> tails = enumConstantComments.tails(declaration);
+        EnumConstantComments.Tail lastTail = tails.get(lastIndex);
 
         List<Doc> entryDocs = new ArrayList<>();
         for (int i = 0; i < entries.size(); i++) {
             EnumConstantDeclaration entry = entries.get(i);
-            EnumConstantDeclaration next = i + 1 < entries.size() ? entries.get(i + 1) : null;
-            if (i == lastIndex && lastTrailingComment != Doc.EMPTY) {
+            EnumConstantComments.Tail tail = tails.get(i);
+            if (i == lastIndex && tail.hasComment()) {
                 entryDocs.add(enumConstantWithoutTrailingComment(entry));
             } else {
-                entryDocs.add(enumConstant(declaration, entry, next));
+                entryDocs.add(enumConstant(entry, tail));
             }
         }
-        boolean lastTrailingCommentHoisted = lastTrailingComment != Doc.EMPTY;
         return new EnumEntryList(
-            enumEntryList(declaration, entryDocs, lastTrailingCommentHoisted),
+            enumEntryList(declaration, entryDocs, tails),
             false,
-            lastTrailingComment
+            lastTail.comment()
         );
     }
 
@@ -277,27 +278,21 @@ final class EnumDeclarationPrinter {
      * Interleaves printed constants with source-sensitive separators.
      *
      * <p>The inter-constant separator is normally suppressed when the previous constant already carries an inline
-     * {@code , // comment} tail, because {@link #enumConstant} emits that comma itself. That assumption breaks for exactly
-     * one boundary: when the last constant's trailing comment is hoisted past the list terminator
-     * ({@code lastTrailingCommentHoisted}) and that hoisted comment is the same node javaparser also attached to the
-     * previous constant (see {@link #previousSharesHoistedComment}). The hoist consumes the shared comment for the last
-     * constant, so the previous constant renders bare — suppressing the separator there would drop the only comma before
-     * the last constant and emit non-reparseable output. That boundary therefore keeps its normal {@code ,} separator.
-     * When the previous constant owns a distinct trailing comment it still renders its own inline comma, so the
-     * suppression must stay to avoid emitting a doubled {@code ,}.
+     * {@code , // comment} tail, because {@link #enumConstant} emits that comma itself. The caller passes the already
+     * resolved tail for each printed constant, so separator ownership and rendered comment text come from the same source
+     * decision instead of repeating comment-placement predicates.
      */
-    private Doc enumEntryList(EnumDeclaration declaration, List<Doc> entries, boolean lastTrailingCommentHoisted) {
-        int lastIndex = entries.size() - 1;
+    private Doc enumEntryList(
+            EnumDeclaration declaration,
+            List<Doc> entries,
+            List<EnumConstantComments.Tail> tails
+    ) {
         List<Doc> docs = new ArrayList<>();
         for (int i = 0; i < entries.size(); i++) {
             if (i > 0) {
                 EnumConstantDeclaration previous = declaration.getEntries().get(i - 1);
                 EnumConstantDeclaration current = declaration.getEntries().get(i);
-                boolean intoHoistedSharedComment = i == lastIndex
-                    && lastTrailingCommentHoisted
-                    && previousSharesHoistedComment(previous, current);
-                boolean previousOwnsTrailingComma = !intoHoistedSharedComment
-                    && enumConstantHasTrailingComment(declaration, previous, current);
+                boolean previousOwnsTrailingComma = tails.get(i - 1).ownsInlineComma();
                 List<JavaCommentTrivia> gapComments = commentPlacement.standaloneLineCommentsBetween(
                     declaration,
                     previous,
@@ -309,29 +304,6 @@ final class EnumDeclarationPrinter {
             docs.add(entries.get(i));
         }
         return Doc.concat(docs);
-    }
-
-    /**
-     * Reports whether {@code previous} and the hoisted last constant {@code current} share the same trailing comment node.
-     *
-     * <p>When the last two constants end on one physical line with a single {@code //} comment, javaparser attaches that
-     * one comment object to both constants. The last constant's hoist consumes it, so {@code previous} renders bare and
-     * its inter-constant {@code ,} must be re-supplied. This is identity-based on purpose: when each constant carries its
-     * own distinct trailing comment — for example {@code HEART /*..*}{@code /, SPADE /*..*}{@code /} collapsed onto one
-     * line — {@code previous} still renders its own inline comma and must keep the suppressed separator to avoid a doubled
-     * {@code ,}.
-     */
-    private boolean previousSharesHoistedComment(
-            EnumConstantDeclaration previous,
-            EnumConstantDeclaration current
-    ) {
-        Optional<Comment> previousOwnComment = previous.getComment()
-                .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(previous, comment));
-        Optional<Comment> currentOwnComment = current.getComment()
-                .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(previous, comment));
-        return previousOwnComment.isPresent()
-            && currentOwnComment.isPresent()
-            && previousOwnComment.orElseThrow() == currentOwnComment.orElseThrow();
     }
 
     /**
@@ -760,13 +732,16 @@ final class EnumDeclarationPrinter {
             EnumConstantDeclaration declaration,
             EnumConstantDeclaration next
     ) {
-        Doc trailing = enumConstantTrailingComment(owner, declaration, next);
+        return enumConstant(declaration, enumConstantComments.tail(owner, declaration, next));
+    }
+
+    private Doc enumConstant(EnumConstantDeclaration declaration, EnumConstantComments.Tail tail) {
         return Doc.concat(
-            comments.leading(declaration),
+            enumConstantComments.leading(declaration),
             enumConstantAnnotations(declaration),
             Doc.text(declaration.getNameAsString()),
             enumConstantArguments(declaration),
-            trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(", "), trailing)
+            tail.inline()
         );
     }
 
@@ -781,7 +756,7 @@ final class EnumDeclarationPrinter {
      */
     private Doc enumConstantWithoutTrailingComment(EnumConstantDeclaration declaration) {
         return Doc.concat(
-            comments.leading(declaration),
+            enumConstantComments.leading(declaration),
             enumConstantAnnotations(declaration),
             Doc.text(declaration.getNameAsString()),
             enumConstantArguments(declaration)
@@ -841,82 +816,6 @@ final class EnumDeclarationPrinter {
      */
     private boolean enumConstantArgumentNeedsDoc(Expression expression) {
         return expression instanceof LambdaExpr || expression.findFirst(LambdaExpr.class).isPresent();
-    }
-
-    /**
-     * Finds comments written after a constant but attached by JavaParser to either the next constant or the enum body.
-     */
-    private Doc enumConstantTrailingComment(
-            EnumDeclaration owner,
-            EnumConstantDeclaration declaration,
-            EnumConstantDeclaration next
-    ) {
-        Doc ownTrailing = declaration.getComment()
-                .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(declaration, comment))
-                .map(comments::comment)
-                .orElse(Doc.EMPTY);
-        if (ownTrailing != Doc.EMPTY) {
-            return ownTrailing;
-        }
-        Doc containedTrailing = Doc.concat(
-            declaration.getAllContainedComments()
-                    .stream()
-                    .filter(comment -> CommentIndex.startsOnEndLine(declaration, comment))
-                    .map(comments::comment)
-                    .filter(comment -> comment != Doc.EMPTY)
-                    .toList()
-        );
-        if (containedTrailing != Doc.EMPTY) {
-            return containedTrailing;
-        }
-        if (next != null) {
-            Doc nextTrailing = next.getComment()
-                    .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(declaration, comment))
-                    .map(comments::comment)
-                    .orElse(Doc.EMPTY);
-            if (nextTrailing != Doc.EMPTY) {
-                return nextTrailing;
-            }
-        }
-        if (owner == null) {
-            return Doc.EMPTY;
-        }
-        return Doc.concat(
-            comments.orphanCommentStatements(owner, comment -> CommentIndex.startsOnEndLine(declaration, comment))
-        );
-    }
-
-    private boolean enumConstantHasTrailingComment(
-            EnumDeclaration owner,
-            EnumConstantDeclaration declaration,
-            EnumConstantDeclaration next
-    ) {
-        if (
-            declaration.getComment()
-                    .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(declaration, comment))
-                    .isPresent()
-        ) {
-            return true;
-        }
-        if (
-            next != null
-            && next.getComment()
-                    .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(declaration, comment))
-                    .isPresent()
-        ) {
-            return true;
-        }
-        if (declaration.getAllContainedComments().stream().anyMatch(
-                comment -> CommentIndex.startsOnEndLine(declaration, comment)
-            )) {
-            return true;
-        }
-        return (
-            owner != null
-            && owner.getOrphanComments()
-                    .stream()
-                    .anyMatch(comment -> CommentIndex.startsOnEndLine(declaration, comment))
-        );
     }
 
     static boolean hasRecoverableEnumConstantListProblem(EnumDeclaration declaration) {

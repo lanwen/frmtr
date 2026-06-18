@@ -79,21 +79,37 @@ final class LayoutWidth {
     }
 
     /**
+     * Measures a line emitted at the node's rendered indentation.
+     *
+     * <p>Statement fragments that render beside a preceding token, such as {@code } catch (...)}, need the indentation
+     * of their source node rather than one of the fixed root budgets. Counting enclosing blocks and types mirrors the
+     * indentation that the block and member printers add around the line.
+     */
+    int nodeLine(Node node, String text) {
+        return Math.max(1, renderedIndentLevels(node)) * options.indentUnit().length() + text.stripLeading().length();
+    }
+
+    /**
      * Measures a variable initializer at the variable's actual nesting depth.
      *
      * <p>Field and local-variable initializer fallbacks need the enclosing type/block depth, not just the root printer's
      * baseline, because the decision is made before the surrounding declaration has been rendered.
      */
     int variableInitializer(VariableDeclarator variable, String text) {
+        return Math.max(1, renderedIndentLevels(variable)) * options.indentUnit().length()
+            + text.stripLeading().length();
+    }
+
+    private int renderedIndentLevels(Node node) {
         int indentLevels = 0;
-        Optional<Node> parent = variable.getParentNode();
+        Optional<Node> parent = node.getParentNode();
         while (parent.isPresent()) {
-            Node node = parent.orElseThrow();
-            if (node instanceof TypeDeclaration<?> || node instanceof BlockStmt) {
+            Node current = parent.orElseThrow();
+            if (current instanceof TypeDeclaration<?> || current instanceof BlockStmt) {
                 indentLevels++;
             }
-            parent = node.getParentNode();
+            parent = current.getParentNode();
         }
-        return Math.max(1, indentLevels) * options.indentUnit().length() + text.stripLeading().length();
+        return indentLevels;
     }
 }

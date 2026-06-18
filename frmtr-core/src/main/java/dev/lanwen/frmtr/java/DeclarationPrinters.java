@@ -2,6 +2,7 @@ package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.BodyDeclaration;
+import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.stmt.BlockStmt;
@@ -323,6 +324,10 @@ final class DeclarationPrinters {
 
     String modifiers(NodeWithModifiers<?> node) {
         return declarationPrefixes.modifiers(node);
+    }
+
+    String parameterText(Parameter parameter) {
+        return callableSignatures.parameterFlat(parameter);
     }
 
     private int currentIndentedWidth(String text) {

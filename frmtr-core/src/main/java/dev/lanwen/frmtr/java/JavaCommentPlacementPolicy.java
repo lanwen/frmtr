@@ -6,7 +6,11 @@ import com.github.javaparser.ast.comments.Comment;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
 
@@ -26,6 +30,9 @@ final class JavaCommentPlacementPolicy {
 
     private JavaCommentMap commentMap;
 
+    private final Map<Node, Map<Integer, List<JavaCommentTrivia>>> containedCommentsByBeginLine =
+        new IdentityHashMap<>();
+
     /**
      * Initializes the policy once for a single {@link JavaPrinter#print(CompilationUnit)} run.
      *
@@ -37,6 +44,7 @@ final class JavaCommentPlacementPolicy {
             throw new IllegalStateException("Java comment placement policy is already initialized for this print run");
         }
         commentMap = JavaCommentMap.from(unit);
+        containedCommentsByBeginLine.clear();
     }
 
     /**
@@ -297,8 +305,9 @@ final class JavaCommentPlacementPolicy {
             Predicate<JavaCommentTrivia> commentKind
     ) {
         Optional<Node> parent = node.getParentNode();
+        int nodeEndLine = CommentIndex.endLine(node, Integer.MIN_VALUE);
         while (parent.isPresent()) {
-            Optional<JavaCommentTrivia> trailing = containedComments(parent.orElseThrow())
+            Optional<JavaCommentTrivia> trailing = containedCommentsStartingOnLine(parent.orElseThrow(), nodeEndLine)
                     .stream()
                     .filter(commentKind)
                     .filter(comment -> comment.comment().getCommentedNode().isEmpty())
@@ -310,6 +319,26 @@ final class JavaCommentPlacementPolicy {
             parent = parent.orElseThrow().getParentNode();
         }
         return Optional.empty();
+    }
+
+    private List<JavaCommentTrivia> containedCommentsStartingOnLine(Node node, int line) {
+        if (line == Integer.MIN_VALUE) {
+            return List.of();
+        }
+        return containedCommentsByBeginLine.computeIfAbsent(node, this::containedCommentsByLine)
+                .getOrDefault(line, List.of());
+    }
+
+    private Map<Integer, List<JavaCommentTrivia>> containedCommentsByLine(Node node) {
+        Map<Integer, List<JavaCommentTrivia>> byLine = new HashMap<>();
+        for (JavaCommentTrivia comment : containedComments(node)) {
+            int beginLine = comment.beginLine(Integer.MIN_VALUE);
+            if (beginLine != Integer.MIN_VALUE) {
+                byLine.computeIfAbsent(beginLine, ignored -> new ArrayList<>()).add(comment);
+            }
+        }
+        byLine.replaceAll((ignored, comments) -> List.copyOf(comments));
+        return byLine.isEmpty() ? Map.of() : Collections.unmodifiableMap(byLine);
     }
 
     /**

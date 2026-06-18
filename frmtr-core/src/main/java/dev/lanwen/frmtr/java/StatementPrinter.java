@@ -109,6 +109,8 @@ final class StatementPrinter {
 
     private final JavaFormatRule<VariableDeclarationExpr> variableDeclarationStatementRenderer;
 
+    private final Function<Parameter, String> parameterText;
+
     private final Function<Node, String> compact;
 
     private final Function<Node, String> compactWithoutOwnComment;
@@ -172,6 +174,7 @@ final class StatementPrinter {
             BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
             JavaFormatRule<VariableDeclarationExpr> variableDeclarationRenderer,
             JavaFormatRule<VariableDeclarationExpr> variableDeclarationStatementRenderer,
+            Function<Parameter, String> parameterText,
             Function<Node, String> compact,
             Function<Node, String> compactWithoutOwnComment,
             Function<List<? extends Node>, String> compactJoin,
@@ -211,6 +214,7 @@ final class StatementPrinter {
         this.objectCreationWithSuffix = objectCreationWithSuffix;
         this.variableDeclarationRenderer = variableDeclarationRenderer;
         this.variableDeclarationStatementRenderer = variableDeclarationStatementRenderer;
+        this.parameterText = parameterText;
         this.compact = compact;
         this.compactWithoutOwnComment = compactWithoutOwnComment;
         this.compactJoin = compactJoin;
@@ -904,25 +908,29 @@ final class StatementPrinter {
             && leadingInside == Doc.EMPTY;
         return Doc.concat(
             Doc.text("catch ("),
-            catchParameter(clause.getParameter()),
+            catchParameter(clause),
             Doc.text(") "),
             compactEmptyBody ? Doc.text("{}") : tryBlock(clause.getBody(), leadingInside)
         );
     }
 
-    private Doc catchParameter(Parameter parameter) {
-        if (parameterHasComments(parameter) && compact.apply(parameter).contains("|")) {
-            return commentedCatchParameter(parameter);
+    private Doc catchParameter(CatchClause clause) {
+        Parameter parameter = clause.getParameter();
+        String flat = parameterText.apply(parameter);
+        if (parameterHasComments(parameter) && flat.contains("|")) {
+            return commentedCatchParameter(parameter, flat);
         }
-        String flat = compactCatchParameter(parameter);
         if (
             !flat.contains("|")
-            || currentIndentedWidth.applyAsInt("catch (" + flat + ") {}") <= options.lineWidth()
+            || layoutWidth.nodeLine(clause, "} catch (" + flat + ") {}") <= options.lineWidth()
         ) {
             return Doc.text(flat);
         }
-        String type = compactTypeLike.apply(parameter.getType());
-        List<String> parts = List.of(type.split("\\s*\\|\\s*"));
+        return brokenCatchParameter(parameter, flat);
+    }
+
+    private Doc brokenCatchParameter(Parameter parameter, String flat) {
+        List<String> parts = List.of(catchParameterTypeText(parameter, flat).split("\\s*\\|\\s*"));
         List<Doc> lines = new ArrayList<>();
         for (int i = 0; i < parts.size(); i++) {
             String prefix = i == 0 ? "" : "| ";
@@ -932,8 +940,12 @@ final class StatementPrinter {
         return Doc.concat(Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, lines))), Doc.HARD_LINE);
     }
 
-    private String compactCatchParameter(Parameter parameter) {
-        return compactTypeLike.apply(parameter.getType()) + " " + parameter.getNameAsString();
+    private String catchParameterTypeText(Parameter parameter, String flat) {
+        String name = parameter.getNameAsString();
+        if (flat.endsWith(" " + name)) {
+            return flat.substring(0, flat.length() - name.length()).stripTrailing();
+        }
+        return compactTypeLike.apply(parameter.getType());
     }
 
     private boolean parameterHasComments(Parameter parameter) {
@@ -941,11 +953,8 @@ final class StatementPrinter {
             || !parameter.getAllContainedComments().isEmpty();
     }
 
-    private Doc commentedCatchParameter(Parameter parameter) {
-        String rawType = parameter.getType()
-                .getTokenRange()
-                .map(Object::toString)
-                .orElseGet(() -> compactTypeLike.apply(parameter.getType()));
+    private Doc commentedCatchParameter(Parameter parameter, String flat) {
+        String rawType = catchParameterTypeText(parameter, flat);
         List<String> parts = List.of(rawType.split("\\s*\\|\\s*"));
         Doc leading = comments.ownComment(parameter, BlockComment.class::isInstance);
         List<Doc> lines = new ArrayList<>();

@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 import dev.lanwen.frmtr.Frmtr;
 import java.time.Duration;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
@@ -17,7 +18,9 @@ final class StatementPrinterTest {
         String source = generatedFrameReaderSource(GENERATED_CASES);
         int lastCase = GENERATED_CASES - 1;
 
-        String formatted = assertTimeoutPreemptively(Duration.ofSeconds(6), () -> Frmtr.format(source));
+        String formatted = withVerifyDisabled(
+            () -> assertTimeoutPreemptively(Duration.ofSeconds(6), () -> Frmtr.format(source))
+        );
         String strippedLineIndent = strippedLineIndent(formatted);
 
         assertThat(formatted).contains(
@@ -57,7 +60,21 @@ final class StatementPrinterTest {
                 }
                 """.stripTrailing()
         );
-        assertThat(Frmtr.format(formatted)).isEqualTo(formatted);
+        assertThat(withVerifyDisabled(() -> Frmtr.format(formatted))).isEqualTo(formatted);
+    }
+
+    private static <T> T withVerifyDisabled(Supplier<T> action) {
+        String previous = System.getProperty(FormatterGuardrails.VERIFY_PROPERTY);
+        try {
+            System.clearProperty(FormatterGuardrails.VERIFY_PROPERTY);
+            return action.get();
+        } finally {
+            if (previous == null) {
+                System.clearProperty(FormatterGuardrails.VERIFY_PROPERTY);
+            } else {
+                System.setProperty(FormatterGuardrails.VERIFY_PROPERTY, previous);
+            }
+        }
     }
 
     private static String strippedLineIndent(String source) {

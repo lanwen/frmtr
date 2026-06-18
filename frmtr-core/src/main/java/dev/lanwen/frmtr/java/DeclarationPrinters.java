@@ -255,6 +255,7 @@ final class DeclarationPrinters {
             compactSource::compactJoin,
             expressions::expression,
             this::currentIndentedWidth,
+            (members, owner) -> memberBlocks.memberBlock(members, owner, this::body),
             this::body
         );
         this.records = new RecordDeclarationPrinter(

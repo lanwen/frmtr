@@ -539,6 +539,10 @@ final class MethodCallChainPrinter {
         }
         if (calls.size() == 1 && root instanceof MethodCallExpr methodRoot) {
             Doc rootDoc = singleSegmentMethodRootDoc(methodRoot);
+            Doc rootTrailingComment = rootTrailingLineCommentBeforeFirstSegment(methodRoot, calls);
+            if (rootTrailingComment != Doc.EMPTY) {
+                rootDoc = Doc.concat(rootDoc, Doc.text(" "), rootTrailingComment);
+            }
             return Optional.of(
                 Doc.concat(
                     rootDoc,
@@ -2361,8 +2365,13 @@ final class MethodCallChainPrinter {
     }
 
     private List<JavaCommentTrivia> trailingLineCommentsBeforeNextSegment(Node previous, MethodCallExpr next) {
-        return lineCommentCandidatesBeforeNextSegment(next)
+        List<JavaCommentTrivia> candidates = new ArrayList<>();
+        commentPlacement.trailingLineComment(previous).ifPresent(candidates::add);
+        candidates.addAll(commentPlacement.containedComments(previous));
+        candidates.addAll(lineCommentCandidatesBeforeNextSegment(next));
+        return candidates
                 .stream()
+                .distinct()
                 .filter(comment -> comment.startsAfterNodeOnSameLine(previous))
                 .filter(comment -> comment.startsBeforeBeginLine(next.getName()))
                 .toList();

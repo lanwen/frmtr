@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.ToIntFunction;
 
@@ -76,6 +77,8 @@ final class EnumDeclarationPrinter {
 
     private final ToIntFunction<String> currentIndentedWidth;
 
+    private final BiFunction<NodeList<BodyDeclaration<?>>, Node, Doc> memberBlockRenderer;
+
     private final Function<BodyDeclaration<?>, Doc> memberRenderer;
 
     /**
@@ -105,6 +108,7 @@ final class EnumDeclarationPrinter {
             Function<List<? extends Node>, String> compactJoin,
             Function<Expression, Doc> expression,
             ToIntFunction<String> currentIndentedWidth,
+            BiFunction<NodeList<BodyDeclaration<?>>, Node, Doc> memberBlockRenderer,
             Function<BodyDeclaration<?>, Doc> memberRenderer
     ) {
         this.comments = context.comments;
@@ -124,6 +128,7 @@ final class EnumDeclarationPrinter {
         this.compactJoin = compactJoin;
         this.expression = expression;
         this.currentIndentedWidth = currentIndentedWidth;
+        this.memberBlockRenderer = memberBlockRenderer;
         this.memberRenderer = memberRenderer;
     }
 
@@ -741,6 +746,7 @@ final class EnumDeclarationPrinter {
             enumConstantAnnotations(declaration),
             Doc.text(declaration.getNameAsString()),
             enumConstantArguments(declaration),
+            enumConstantClassBody(declaration),
             tail.inline()
         );
     }
@@ -759,8 +765,53 @@ final class EnumDeclarationPrinter {
             enumConstantComments.leading(declaration),
             enumConstantAnnotations(declaration),
             Doc.text(declaration.getNameAsString()),
-            enumConstantArguments(declaration)
+            enumConstantArguments(declaration),
+            enumConstantClassBody(declaration)
         );
+    }
+
+    private Doc enumConstantClassBody(EnumConstantDeclaration declaration) {
+        if (!hasExplicitEnumConstantClassBody(declaration)) {
+            return Doc.EMPTY;
+        }
+        return Doc.concat(Doc.text(" "), memberBlockRenderer.apply(declaration.getClassBody(), declaration));
+    }
+
+    private boolean hasExplicitEnumConstantClassBody(EnumConstantDeclaration declaration) {
+        SourceRegion nameRegion = declaration.getName()
+                .getRange()
+                .map(sourceText::region)
+                .orElseThrow(() -> new IllegalArgumentException("enum constant name is missing a source range"));
+        return declaration.getTokenRange().map(tokenRange -> {
+            boolean afterName = false;
+            int parenDepth = 0;
+            for (JavaToken token : tokenRange) {
+                if (!afterName) {
+                    afterName = tokenMatchesRegion(token, nameRegion);
+                    continue;
+                }
+                if (token.getKind() == GeneratedJavaParserConstants.LPAREN) {
+                    parenDepth++;
+                    continue;
+                }
+                if (token.getKind() == GeneratedJavaParserConstants.RPAREN && parenDepth > 0) {
+                    parenDepth--;
+                    continue;
+                }
+                if (token.getKind() == GeneratedJavaParserConstants.LBRACE && parenDepth == 0) {
+                    return true;
+                }
+            }
+            return false;
+        }).orElse(false);
+    }
+
+    private boolean tokenMatchesRegion(JavaToken token, SourceRegion expected) {
+        return token.getRange()
+                .map(sourceText::region)
+                .map(region -> region.beginOffset() == expected.beginOffset()
+                    && region.endOffset() == expected.endOffset())
+                .orElse(false);
     }
 
     private Doc enumConstantAnnotations(EnumConstantDeclaration declaration) {

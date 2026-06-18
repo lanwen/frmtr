@@ -7,6 +7,17 @@ class MethodCallInitializerOpenerSample {
     static final Comparator<RouteStep> STEP_ORDER = Comparator.comparing(RouteStep::localFirst) // prefer local entries
             .thenComparing(RouteStep::stableName); // keep exported plans deterministic
 
+    Stream<RouteCandidate> sortedCandidates(ClassLoader... loaders) {
+        return Stream.of(loaders)
+                .flatMap(loader -> candidatesOn(loader))
+                .filter(Objects::nonNull)
+                .sorted(
+                    Comparator.comparing(RouteCandidate::localFirst) // prefer local routes first
+                            .thenComparing(RouteCandidate::stableName) // keep exported routes deterministic
+                )
+                .distinct();
+    }
+
     void configure(Receiver receiver) {
         var sample = receiver.call(
             Builders.<Result<AlphaBetaGammaDelta>>wrap(item -> {

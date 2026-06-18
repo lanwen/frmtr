@@ -57,4 +57,11 @@ class CommentBugFixExamples {
             // a
         );
     }
+
+    /**
+     *   /* Malformed Javadoc: nested block opener keeps this doc comment intentionally broken.
+     */
+    String documentedSocketPath() {
+        return null;
+    }
 }

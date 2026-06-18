@@ -932,6 +932,12 @@ final class MethodCallPrinter {
         if (argument instanceof ObjectCreationExpr objectCreation && !suffix.isEmpty()) {
             return objectCreationWithSuffix.apply(objectCreation, suffix);
         }
+        if (argument instanceof MethodCallExpr methodCall && !methodCall.getAllContainedComments().isEmpty()) {
+            Optional<Doc> chain = methodCallChain(methodCall, MethodCallBreakMode.FORCED, suffix);
+            if (chain.isPresent()) {
+                return chain.orElseThrow();
+            }
+        }
         return breakableArguments.argument(argument, suffix);
     }
 

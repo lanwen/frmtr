@@ -102,9 +102,21 @@ final class CommentedExpressionListPrinter {
 
     private Doc argumentLine(Expression argument, List<JavaCommentTrivia> trailingComments) {
         if (argument instanceof MethodCallExpr methodCall && hasInlineTrailingComment(argument, trailingComments)) {
+            if (hasContainedCommentOutsideTrailingComments(argument, trailingComments)) {
+                return expressionRenderer.apply(argument);
+            }
             return Doc.text(compactSource.commentFree(methodCall));
         }
         return expressionRenderer.apply(argument);
+    }
+
+    private boolean hasContainedCommentOutsideTrailingComments(
+            Expression argument,
+            List<JavaCommentTrivia> trailingComments
+    ) {
+        return argument.getAllContainedComments()
+                .stream()
+                .anyMatch(contained -> trailingComments.stream().noneMatch(comment -> comment.comment() == contained));
     }
 
     private boolean hasInlineTrailingComment(Expression argument, List<JavaCommentTrivia> trailingComments) {

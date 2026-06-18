@@ -1,3 +1,4 @@
+import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
 
@@ -18,6 +19,45 @@ class DataLossCases {
         PAID, // Requires a configured payment method
         PARTNER, // Paid plan with externally managed billing
         ANNUAL, // Annual paid plan below enterprise tier
+    }
+
+    enum CaptureMode {
+        SNAPSHOT("snapshot") {
+            @Override
+            String encode(Recorder recorder, String source) throws IOException {
+                String output = "/tmp/capture.snapshot";
+                recorder.exec("encoder", "-i", source, output);
+                return output;
+            }
+        },
+        ARCHIVE("archive") {
+            @Override
+            String encode(Recorder recorder, String source) throws IOException {
+                String output = "/tmp/capture.archive";
+                recorder.exec(
+                    "encoder",
+                    "-i",
+                    source,
+                    "-codec",
+                    "copy",
+                    output
+                );
+                return output;
+            }
+        };
+
+        abstract String encode(Recorder recorder, String source) throws IOException;
+    }
+
+    enum OverrideShape {
+        EMPTY {},
+        COMMENT_ONLY {
+            // Explicit body marker without members.
+        }
+    }
+
+    enum OverrideTailComment {
+        TRAILING_BODY {} // Keep this tail note.
     }
 
     record Payload(
@@ -50,6 +90,9 @@ class DataLossCases {
 
 class Api {}
 class Auth {}
+class Recorder {
+    void exec(String... command) {}
+}
 class Zone {
     Zone(Api api, Auth auth, String name) {}
     Zone withProperty(String key, String value) { return this; }

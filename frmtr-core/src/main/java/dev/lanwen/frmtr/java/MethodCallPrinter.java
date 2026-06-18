@@ -67,6 +67,8 @@ final class MethodCallPrinter {
 
     private final Function<Expression, Optional<Doc>> brokenArgumentExpressionRenderer;
 
+    private final BreakableArgumentExpressionPrinter breakableArguments;
+
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments;
 
     private final BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument;
@@ -141,6 +143,14 @@ final class MethodCallPrinter {
         this.brokenEnclosedForSuffix = brokenEnclosedForSuffix;
         this.objectCreationWithSuffix = objectCreationWithSuffix;
         this.brokenArgumentExpressionRenderer = brokenArgumentExpressionRenderer;
+        this.breakableArguments = new BreakableArgumentExpressionPrinter(
+            context.sourceShape,
+            context.options,
+            expressionRenderer,
+            brokenArgumentExpressionRenderer,
+            compactSource::compact,
+            continuationStatementWidth
+        );
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.commentedExpressionLambdaArgument = commentedExpressionLambdaArgument;
         this.huggableExpressionLambdaArguments = huggableExpressionLambdaArguments;
@@ -922,17 +932,7 @@ final class MethodCallPrinter {
         if (argument instanceof ObjectCreationExpr objectCreation && !suffix.isEmpty()) {
             return objectCreationWithSuffix.apply(objectCreation, suffix);
         }
-        if (argument.getAllContainedComments().isEmpty()) {
-            Optional<Doc> brokenArgument = brokenArgumentExpressionRenderer.apply(argument);
-            if (
-                brokenArgument.isPresent()
-                && (sourceShape.spansMultipleLines(argument)
-                    || continuationStatementWidth.applyAsInt(compactSource.compact(argument) + suffix) > options.lineWidth())
-            ) {
-                return Doc.ifBreak(brokenArgument.orElseThrow(), expressionRenderer.apply(argument));
-            }
-        }
-        return expressionRenderer.apply(argument);
+        return breakableArguments.argument(argument, suffix);
     }
 
     private Optional<Doc> textBlockRootChainArgumentWithSuffix(MethodCallExpr expression, String suffix) {

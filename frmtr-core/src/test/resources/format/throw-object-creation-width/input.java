@@ -16,4 +16,16 @@ class ThrowObjectCreationWidthSample {
             "Unsupported route parse-error recovery reached member formatter: " + routeNode.getClass().getSimpleName()
         );
     }
+
+    void failWhenRoutesAreMissing(Set<String> missingRoutes) {
+        if (!missingRoutes.isEmpty()) {
+            throw new IllegalStateException(
+                "Routes named " +
+                missingRoutes +
+                " are not present, but checks were registered " +
+                "for them. Please verify that the scenario " +
+                "contains those route declarations."
+            );
+        }
+    }
 }

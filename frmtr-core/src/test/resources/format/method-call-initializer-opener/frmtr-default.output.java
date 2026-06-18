@@ -4,6 +4,9 @@ class MethodCallInitializerOpenerSample {
         (RouteDeclaration declaration) -> !declaration.isRemote()
     ).thenComparing(RouteDeclaration::routeName);
 
+    static final Comparator<RouteStep> STEP_ORDER = Comparator.comparing(RouteStep::localFirst) // prefer local entries
+            .thenComparing(RouteStep::stableName); // keep exported plans deterministic
+
     void configure(Receiver receiver) {
         var sample = receiver.call(
             Builders.<Result<AlphaBetaGammaDelta>>wrap(item -> {

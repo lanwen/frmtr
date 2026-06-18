@@ -42,7 +42,7 @@ final class ObjectCreationPrinter {
 
     private final JavaFormatRule<Expression> expressionRenderer;
 
-    private final Function<Expression, Optional<Doc>> brokenArgumentRenderer;
+    private final BreakableArgumentExpressionPrinter breakableArguments;
 
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments;
 
@@ -77,7 +77,14 @@ final class ObjectCreationPrinter {
         this.types = types;
         this.commentedExpressionLists = new CommentedExpressionListPrinter(context, expressionRenderer::format);
         this.expressionRenderer = expressionRenderer;
-        this.brokenArgumentRenderer = brokenArgumentRenderer;
+        this.breakableArguments = new BreakableArgumentExpressionPrinter(
+            context.sourceShape,
+            context.options,
+            expressionRenderer::format,
+            brokenArgumentRenderer,
+            compact::apply,
+            context.layoutWidth::continuationStatement
+        );
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.bodyRenderer = bodyRenderer;
         this.compact = compact;
@@ -145,7 +152,7 @@ final class ObjectCreationPrinter {
                     Doc.joinComma(
                         expression.getArguments()
                                 .stream()
-                                .map(expressionRenderer::format)
+                                .map(breakableArguments::argument)
                                 .toList()
                     )
                 )
@@ -302,25 +309,15 @@ final class ObjectCreationPrinter {
     private List<Doc> expressionArgumentDocs(ObjectCreationExpr expression) {
         return expression.getArguments()
                 .stream()
-                .map(expressionRenderer::format)
+                .map(breakableArguments::argument)
                 .toList();
     }
 
     private List<Doc> sourceMultilineArgumentDocs(ObjectCreationExpr expression) {
         return expression.getArguments()
                 .stream()
-                .map(this::sourceMultilineArgument)
+                .map(breakableArguments::sourceMultilineArgument)
                 .toList();
-    }
-
-    private Doc sourceMultilineArgument(Expression argument) {
-        if (argument.getAllContainedComments().isEmpty() && sourceShape.spansMultipleLines(argument)) {
-            Optional<Doc> brokenArgument = brokenArgumentRenderer.apply(argument);
-            if (brokenArgument.isPresent()) {
-                return brokenArgument.orElseThrow();
-            }
-        }
-        return expressionRenderer.format(argument);
     }
 
     /**

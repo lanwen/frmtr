@@ -638,15 +638,19 @@ final class StatementPrinter {
         if (trailingSemicolon) {
             flatResources += ";";
         }
+        List<JavaCommentTrivia> trailingResourceComments = tryResourceTrailingComments(statement);
         String flat = "try (" + flatResources + ")";
         if (
             !resourceShape.spansMultipleLines()
             && !tryResourcesHaveLeadingComments(statement)
+            && trailingResourceComments.isEmpty()
             && currentIndentedWidth.applyAsInt(flat + " {}") <= options.lineWidth()
         ) {
             return Doc.text(" (" + flatResources + ")");
         }
-        Optional<Doc> attachedMethodCallResource = attachedSingleMethodCallResource(statement, resourceShape);
+        Optional<Doc> attachedMethodCallResource = trailingResourceComments.isEmpty()
+            ? attachedSingleMethodCallResource(statement, resourceShape)
+            : Optional.empty();
         if (attachedMethodCallResource.isPresent()) {
             return Doc.concat(
                 Doc.text(" ("),
@@ -663,7 +667,8 @@ final class StatementPrinter {
                         Doc.concat(Doc.text(";"), Doc.HARD_LINE),
                         statement.getResources().stream().map(this::tryResource).toList()
                     ),
-                    trailingSemicolon ? Doc.text(";") : Doc.EMPTY
+                    trailingSemicolon ? Doc.text(";") : Doc.EMPTY,
+                    tryResourceTrailingCommentsDoc(trailingResourceComments)
                 )
             ),
             Doc.HARD_LINE,
@@ -747,6 +752,27 @@ final class StatementPrinter {
             body = Doc.text(compact.apply(resource));
         }
         return Doc.concat(leading, body);
+    }
+
+    private List<JavaCommentTrivia> tryResourceTrailingComments(TryStmt statement) {
+        if (statement.getResources().isEmpty()) {
+            return List.of();
+        }
+        return commentPlacement.lineCommentsBetween(
+            statement,
+            statement.getResources().getLast().orElseThrow(),
+            statement.getTryBlock()
+        );
+    }
+
+    private Doc tryResourceTrailingCommentsDoc(List<JavaCommentTrivia> trailingResourceComments) {
+        return Doc.concat(
+            trailingResourceComments.stream()
+                    .map(comments::comment)
+                    .filter(doc -> doc != Doc.EMPTY)
+                    .map(doc -> Doc.concat(Doc.HARD_LINE, doc))
+                    .toList()
+        );
     }
 
     private boolean tryResourcesHaveLeadingComments(TryStmt statement) {

@@ -13,6 +13,15 @@ class TryResourceCommentSample {
             zone.start();
         }
     }
+
+    void sentinelFence() {
+        try ( // resource scope {
+            ManagedResource resource = new ManagedResource("sample")
+            // }
+        ) {
+            resource.start();
+        }
+    }
 }
 
 class Network {}
@@ -23,6 +32,12 @@ class Auth {}
 
 class Service implements AutoCloseable {
     Service(Network network, Database database) {}
+    public void close() {}
+}
+
+class ManagedResource implements AutoCloseable {
+    ManagedResource(String name) {}
+    void start() {}
     public void close() {}
 }
 

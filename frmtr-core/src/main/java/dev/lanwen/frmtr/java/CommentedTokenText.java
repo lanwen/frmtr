@@ -42,6 +42,11 @@ final class CommentedTokenText {
                 tokens.add(line.substring(cursor).stripTrailing());
                 break;
             }
+            if (line.startsWith("...", cursor)) {
+                tokens.add("...");
+                cursor += 3;
+                continue;
+            }
             if (COMMENTED_TOKEN_PUNCTUATION.indexOf(current) >= 0) {
                 tokens.add(String.valueOf(current));
                 cursor++;
@@ -165,12 +170,21 @@ final class CommentedTokenText {
                 out.append('.');
                 continue;
             }
-            if (!out.isEmpty() && out.charAt(out.length() - 1) != ' ' && out.charAt(out.length() - 1) != '.') {
+            if (token.equals("...")) {
+                stripTrailingSpace(out);
+                out.append("...");
+                continue;
+            }
+            if (!out.isEmpty() && out.charAt(out.length() - 1) != ' ' && needsSpaceBeforeToken(out)) {
                 out.append(' ');
             }
             out.append(token);
         }
         return out.toString().strip();
+    }
+
+    private static boolean needsSpaceBeforeToken(StringBuilder out) {
+        return out.charAt(out.length() - 1) != '.' || out.toString().endsWith("...");
     }
 
     private static void stripTrailingSpace(StringBuilder out) {

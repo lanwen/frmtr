@@ -2,10 +2,12 @@ package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.Range;
 import com.github.javaparser.ast.Modifier;
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -19,25 +21,35 @@ import java.util.function.Function;
  * prefix policy, while their broader declaration printers still own keyword, type, parameter, throws, and body layout.
  *
  * <p>Annotation expression layout stays with {@link AnnotationExpressionPrinter}; callers provide both rendered
- * annotation docs and compact annotation text as callbacks. This helper intentionally leaves declaration header
- * assembly, member sequencing, expression dispatch, and source-comment attachment to the caller.
+ * annotation docs and compact annotation text as callbacks. Comments that sit between annotation nodes are kept here
+ * because this is the shared source-order boundary for declaration-leading annotation stacks. This helper intentionally
+ * leaves declaration header assembly, member sequencing, expression dispatch, and non-prefix source-comment attachment
+ * to the caller.
  */
 final class DeclarationPrefixPrinter {
+
+    private final CommentTracker comments;
+
+    private final JavaCommentPlacementPolicy commentPlacement;
 
     private final JavaFormatRule<AnnotationExpr> annotationRenderer;
 
     private final Function<AnnotationExpr, String> annotationFlatText;
 
     DeclarationPrefixPrinter(
+            CommentTracker comments,
+            JavaCommentPlacementPolicy commentPlacement,
             JavaFormatRule<AnnotationExpr> annotationRenderer,
             Function<AnnotationExpr, String> annotationFlatText
     ) {
+        this.comments = comments;
+        this.commentPlacement = commentPlacement;
         this.annotationRenderer = annotationRenderer;
         this.annotationFlatText = annotationFlatText;
     }
 
     Doc annotations(NodeWithAnnotations<?> node) {
-        return annotations(node.getAnnotations());
+        return annotations(node, node.getAnnotations());
     }
 
     Doc declarationAnnotations(NodeWithAnnotations<?> node) {
@@ -45,6 +57,7 @@ final class DeclarationPrefixPrinter {
             return annotations(node);
         }
         return annotations(
+            node,
             node.getAnnotations()
                     .stream()
                     .filter(annotation -> !afterAllModifiers(annotation, nodeWithModifiers))
@@ -61,15 +74,50 @@ final class DeclarationPrefixPrinter {
                 .anyMatch(annotation -> !afterAllModifiers(annotation, nodeWithModifiers));
     }
 
-    private Doc annotations(List<AnnotationExpr> annotations) {
+    private Doc annotations(NodeWithAnnotations<?> node, List<AnnotationExpr> annotations) {
         if (annotations.isEmpty()) {
             return Doc.EMPTY;
         }
+        List<Doc> docs = new ArrayList<>();
+        for (int index = 0; index < annotations.size(); index++) {
+            AnnotationExpr annotation = annotations.get(index);
+            docs.add(annotationRenderer.format(annotation));
+            docs.add(Doc.HARD_LINE);
+            if (index + 1 < annotations.size() && node instanceof Node owner) {
+                docs.add(interAnnotationComments(owner, annotation, annotations.get(index + 1)));
+            }
+        }
+        return Doc.concat(docs);
+    }
+
+    private Doc interAnnotationComments(Node owner, AnnotationExpr previous, AnnotationExpr next) {
+        Optional<Range> previousRange = previous.getRange();
+        Optional<Range> nextRange = next.getRange();
+        if (previousRange.isEmpty() || nextRange.isEmpty()) {
+            return Doc.EMPTY;
+        }
         return Doc.concat(
-            annotations.stream()
-                    .map(annotation -> Doc.concat(annotationRenderer.format(annotation), Doc.HARD_LINE))
+            commentPlacement.containedComments(owner)
+                    .stream()
+                    .filter(comment -> comment.comment()
+                                .getRange()
+                                .filter(range -> startsAfter(range, previousRange.orElseThrow())
+                                        && endsBefore(range, nextRange.orElseThrow()))
+                                .isPresent()
+                    )
+                    .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
+                    .map(comments::comment)
+                    .filter(comment -> comment != Doc.EMPTY)
+                    .map(comment -> Doc.concat(comment, Doc.HARD_LINE))
                     .toList()
         );
+    }
+
+    private boolean endsBefore(Range commentRange, Range annotationRange) {
+        if (commentRange.end.line != annotationRange.begin.line) {
+            return commentRange.end.line < annotationRange.begin.line;
+        }
+        return commentRange.end.column < annotationRange.begin.column;
     }
 
     String inlineAnnotations(NodeWithAnnotations<?> node) {

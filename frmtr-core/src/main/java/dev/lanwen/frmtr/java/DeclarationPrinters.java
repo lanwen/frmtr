@@ -79,6 +79,8 @@ final class DeclarationPrinters {
         CompactSourceText compactSource = context.compactSource;
         CommentPlacement commentPlacement = context.commentPlacement;
         this.declarationPrefixes = new DeclarationPrefixPrinter(
+            comments,
+            commentPlacementPolicy,
             expressions::annotation,
             expressions::annotationFlatText
         );

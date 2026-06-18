@@ -37,4 +37,14 @@ public class MethodParameterLists {
 
 	void variableArityParameters(byte[]... payloadChunks) {}
 
+  public static void renderMessage(
+      boolean enabled,
+      /*
+       * TODO(catalog): Remove nullable templates after generated plans
+       * use the shared message fallback instead of absent values.
+       */
+      @Nullable String messageTemplate,
+      @Nullable Object @Nullable ... messageArguments) {
+  }
+
 }

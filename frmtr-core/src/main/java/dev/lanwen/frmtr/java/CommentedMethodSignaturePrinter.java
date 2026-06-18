@@ -155,19 +155,57 @@ final class CommentedMethodSignaturePrinter {
             }
             return formatMethodWithBody(prefix + "()", parameterLines, inlineOpeningLineComment, body);
         }
-        String parameter = CommentedTokenText.tokenLine(CommentedTokenText.tokens(String.join(" ", parameterParts)));
+        List<String> formattedParameterLines = formattedParameterLines(parameterParts);
         // Comment-only lines at the edges of the parameter list stay outside the rebuilt parameter text so leading and
         // trailing comments keep their original side of the parameter declaration.
-        if (leadingComments.isEmpty() && !containsLineComment(parameter)) {
+        if (
+            leadingComments.isEmpty()
+            && formattedParameterLines.size() == 1
+            && !containsLineComment(formattedParameterLines.getFirst())
+        ) {
             List<String> suffixComments = new ArrayList<>(trailingComments);
-            return formatMethodWithBody(prefix + "(" + parameter + ")", suffixComments, "", body);
+            return formatMethodWithBody(
+                prefix + "(" + formattedParameterLines.getFirst() + ")",
+                suffixComments,
+                "",
+                body
+            );
         }
         List<String> lines = new ArrayList<>();
         lines.add(prefix + "(");
         leadingComments.forEach(comment -> lines.add("  " + comment));
-        lines.add("  " + parameter);
+        formattedParameterLines.forEach(parameterLine -> lines.add("  " + parameterLine));
         lines.add(")");
         return formatMethodWithBody(String.join("\n", lines), trailingComments, "", body);
+    }
+
+    private List<String> formattedParameterLines(List<String> parameterParts) {
+        List<String> lines = new ArrayList<>();
+        StringBuilder parameter = new StringBuilder();
+        for (String part : parameterParts) {
+            if (isCommentOnlyLine(part)) {
+                flushParameterLine(parameter, lines);
+                lines.add(part);
+                continue;
+            }
+            if (!parameter.isEmpty()) {
+                parameter.append(' ');
+            }
+            parameter.append(part);
+            if (part.endsWith(",")) {
+                flushParameterLine(parameter, lines);
+            }
+        }
+        flushParameterLine(parameter, lines);
+        return lines;
+    }
+
+    private void flushParameterLine(StringBuilder parameter, List<String> lines) {
+        if (parameter.isEmpty()) {
+            return;
+        }
+        lines.add(CommentedTokenText.tokenLine(CommentedTokenText.tokens(parameter.toString())));
+        parameter.setLength(0);
     }
 
     private String formatMethodWithBody(
@@ -243,7 +281,10 @@ final class CommentedMethodSignaturePrinter {
     }
 
     private boolean isCommentOnlyLine(String line) {
-        return line.startsWith("//") || line.startsWith("/*") && line.endsWith("*/");
+        if (line.startsWith("//") || line.startsWith("*")) {
+            return true;
+        }
+        return line.startsWith("/*") && (!line.contains("*/") || line.endsWith("*/"));
     }
 
     /**

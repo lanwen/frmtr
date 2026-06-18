@@ -12,6 +12,11 @@ public class MarkerAnnotations {
     @MarkerAnnotation
     SomeService service;
 
+    @CatalogFixture("field cache")
+    // Field cache remains visible to generated binders.
+    @SuppressWarnings("FixtureFieldName")
+    RoutingService routingService;
+
     @SingleMemberAnnotation2(name = "Quarterly reconciliation job", date = "01/01/2018")
     @SingleMemberAnnotation1(name = "Thorben von Hacht", date = "01/01/2018")
     @NormalAnnotation("scheduled")
@@ -34,4 +39,9 @@ public class MarkerAnnotations {
     public void arrayInitializerWithKey() {
         System.out.println("element value array initializer with key");
     }
+
+    @CatalogFixture("batch verifier")
+    // Batch verifier keeps adapter metadata for archived schedules.
+    @SuppressWarnings("FixtureLegacyName")
+    void scheduledOnly() {}
 }

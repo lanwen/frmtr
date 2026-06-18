@@ -153,6 +153,16 @@ final class JavaCommentPlacementPolicy {
     }
 
     /**
+     * Finds standalone line comments between two neighboring nodes, excluding comments trailing {@code previous}.
+     */
+    List<JavaCommentTrivia> standaloneLineCommentsBetween(Node container, Node previous, Node next) {
+        return lineCommentsBetween(container, previous, next)
+                .stream()
+                .filter(comment -> !comment.startsOnEndLine(previous))
+                .toList();
+    }
+
+    /**
      * Finds line comments after an opening delimiter and before the first child node in {@code container}.
      */
     List<JavaCommentTrivia> lineCommentsBeforeFirst(Node container, Node first) {

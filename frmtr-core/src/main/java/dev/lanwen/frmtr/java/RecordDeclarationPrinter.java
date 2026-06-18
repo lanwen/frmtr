@@ -234,9 +234,8 @@ final class RecordDeclarationPrinter {
             Parameter previous,
             Parameter next
     ) {
-        return commentPlacement.lineCommentsBetween(declaration, previous, next)
+        return commentPlacement.standaloneLineCommentsBetween(declaration, previous, next)
                 .stream()
-                .filter(comment -> !comment.startsOnEndLine(previous))
                 .map(comments::comment)
                 .filter(comment -> comment != Doc.EMPTY)
                 .toList();

@@ -85,6 +85,25 @@ final class JavaCommentPlacementPolicyTest {
     }
 
     @Test
+    void findsStandaloneLineCommentsBetweenNeighboringNodes() {
+        CompilationUnit unit = parse(
+            """
+                class Demo {
+                    int first; // trailing first
+                    // standalone between fields
+                    int second;
+                }
+                """
+        );
+        ClassOrInterfaceDeclaration type = unit.findFirst(ClassOrInterfaceDeclaration.class).orElseThrow();
+        JavaCommentPlacementPolicy policy = startedPolicy(unit);
+
+        assertThat(policy.standaloneLineCommentsBetween(type, type.getMembers().get(0), type.getMembers().get(1)))
+                .extracting(comment -> comment.comment().getContent().strip())
+                .containsExactly("standalone between fields");
+    }
+
+    @Test
     void findsNearestUnattachedTrailingLineCommentWhileWalkingParents() {
         CompilationUnit unit = parse(
             """

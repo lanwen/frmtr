@@ -92,6 +92,46 @@ final class EnumDeclarationPrinterTest {
     }
 
     @Test
+    void keepsStandaloneGapCommentBetweenValidRecoveredEnumConstants() {
+        String source = """
+                enum Demo {
+                    BEFORE,
+                    // valid gap comment
+                    AFTER,
+                    BROKEN {
+                        void m() {
+                            var x = ; // keep raw
+                        }
+                    };
+
+                    int value;
+                }
+                """;
+        CompilationUnit unit = recoveredParseResult(source);
+        EnumDeclaration declaration = onlyEnum(unit);
+
+        String formatted = Frmtr.format(source);
+
+        assertThat(EnumDeclarationPrinter.hasRecoverableEnumConstantListProblem(declaration)).isTrue();
+        assertThat(formatted).isEqualTo(
+            """
+                enum Demo {
+                    BEFORE,
+                    // valid gap comment
+                    AFTER,
+                    BROKEN {
+                        void m() {
+                            var x = ; // keep raw
+                        }
+                    };
+
+                    int value;
+                }
+                """
+        );
+    }
+
+    @Test
     void rejectsMalformedEnumConstantArgumentsWhenJavaParserCollapsesCompilationUnit() {
         String source = """
                 enum Demo {

@@ -19,6 +19,7 @@ import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.function.Function;
 import java.util.function.ToIntFunction;
 
@@ -43,6 +44,8 @@ final class EnumDeclarationPrinter {
         "Unable to recover Java parse error inside enum constant list: ";
 
     private final CommentTracker comments;
+
+    private final JavaCommentPlacementPolicy commentPlacement;
 
     private final RawSource rawSource;
 
@@ -104,6 +107,7 @@ final class EnumDeclarationPrinter {
             Function<BodyDeclaration<?>, Doc> memberRenderer
     ) {
         this.comments = context.comments;
+        this.commentPlacement = context.commentPlacementPolicy;
         this.rawSource = context.rawSource;
         this.options = context.options;
         this.sourceText = context.sourceText;
@@ -211,7 +215,7 @@ final class EnumDeclarationPrinter {
         }
         if (!members.isEmpty()) {
             if (!contents.isEmpty()) {
-                contents.add(enumMemberSeparator(declaration));
+                contents.add(enumMemberSeparator(declaration, bodyComments));
             }
             contents.add(Doc.join(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE), members));
         }
@@ -294,7 +298,13 @@ final class EnumDeclarationPrinter {
                     && previousSharesHoistedComment(previous, current);
                 boolean previousOwnsTrailingComma = !intoHoistedSharedComment
                     && enumConstantHasTrailingComment(declaration, previous, current);
-                docs.add(enumEntrySeparator(previous, current, previousOwnsTrailingComma));
+                List<JavaCommentTrivia> gapComments = commentPlacement.standaloneLineCommentsBetween(
+                    declaration,
+                    previous,
+                    current
+                );
+                docs.add(enumEntrySeparator(previous, current, previousOwnsTrailingComma, gapComments));
+                docs.add(enumCommentLines(gapComments));
             }
             docs.add(entries.get(i));
         }
@@ -348,7 +358,13 @@ final class EnumDeclarationPrinter {
             switch (entry) {
                 case RecoveredListPlanner.ValidSibling<?> valid -> {
                     EnumConstantDeclaration currentEntry = (EnumConstantDeclaration) valid.sibling();
-                    appendSeparatorBeforeRecoveredEnumConstant(docs, previousValid, currentEntry, previousEntry);
+                    appendSeparatorBeforeRecoveredEnumConstant(
+                        docs,
+                        declaration,
+                        previousValid,
+                        currentEntry,
+                        previousEntry
+                    );
                     docs.add(
                         enumConstant(
                             declaration,
@@ -392,12 +408,31 @@ final class EnumDeclarationPrinter {
 
     private void appendSeparatorBeforeRecoveredEnumConstant(
             List<Doc> docs,
+            EnumDeclaration declaration,
             EnumConstantDeclaration previousValid,
             EnumConstantDeclaration currentEntry,
             EntryKind previousEntry
     ) {
         if (previousValid != null) {
-            docs.add(enumEntrySeparator(previousValid, currentEntry, false));
+            List<JavaCommentTrivia> gapComments = commentPlacement.standaloneLineCommentsBetween(
+                declaration,
+                previousValid,
+                currentEntry
+            );
+            List<RecoveredSourceLineComment> recoveredGapComments = gapComments.isEmpty()
+                ? recoveredSourceLineCommentsBetween(previousValid, currentEntry)
+                : List.of();
+            docs.add(
+                enumEntrySeparator(
+                    previousValid,
+                    currentEntry,
+                    false,
+                    gapComments,
+                    recoveredGapComments.stream().mapToInt(RecoveredSourceLineComment::line).min()
+                )
+            );
+            docs.add(enumCommentLines(gapComments));
+            docs.add(recoveredEnumCommentLines(recoveredGapComments));
             return;
         }
         if (previousEntry == EntryKind.RAW_GAP_WITH_TRAILING_BREAK) {
@@ -430,17 +465,67 @@ final class EnumDeclarationPrinter {
     private Doc enumEntrySeparator(
             EnumConstantDeclaration previous,
             EnumConstantDeclaration current,
-            boolean previousOwnsTrailingComma
+            boolean previousOwnsTrailingComma,
+            List<JavaCommentTrivia> gapComments
+    ) {
+        return enumEntrySeparator(previous, current, previousOwnsTrailingComma, gapComments, OptionalInt.empty());
+    }
+
+    private Doc enumEntrySeparator(
+            EnumConstantDeclaration previous,
+            EnumConstantDeclaration current,
+            boolean previousOwnsTrailingComma,
+            List<JavaCommentTrivia> gapComments,
+            OptionalInt recoveredGapBeginLine
     ) {
         boolean hasBlankLineBetween = previous.getRange()
                 .flatMap(previousRange -> current.getRange().map(
-                        currentRange -> enumEntryBeginLine(current, currentRange.begin.line) > previousRange.end.line + 1
+                        currentRange -> enumEntryBeginLine(
+                                previous,
+                                current,
+                                currentRange.begin.line,
+                                gapComments,
+                                recoveredGapBeginLine
+                            ) > previousRange.end.line + 1
                 ))
                 .orElse(false);
         Doc separator = previousOwnsTrailingComma ? Doc.EMPTY : Doc.text(",");
         return hasBlankLineBetween
             ? Doc.concat(separator, Doc.HARD_LINE, Doc.HARD_LINE)
             : Doc.concat(separator, Doc.HARD_LINE);
+    }
+
+    /**
+     * Uses gap comments as the next entry's source start when they visually belong between enum constants.
+     *
+     * <p>JavaParser can leave a line comment before a commented-out constant as an enum-body orphan. Treating that
+     * orphan as the first gap line keeps blank-line preservation local to the constant list instead of moving the
+     * comment down to body members.
+     */
+    private int enumEntryBeginLine(
+            EnumConstantDeclaration previous,
+            EnumConstantDeclaration current,
+            int fallback,
+            List<JavaCommentTrivia> gapComments
+    ) {
+        return enumEntryBeginLine(previous, current, fallback, gapComments, OptionalInt.empty());
+    }
+
+    private int enumEntryBeginLine(
+            EnumConstantDeclaration previous,
+            EnumConstantDeclaration current,
+            int fallback,
+            List<JavaCommentTrivia> gapComments,
+            OptionalInt recoveredGapBeginLine
+    ) {
+        int firstTriviaLine = gapComments.stream()
+                .filter(comment -> !comment.startsOnEndLine(previous))
+                .mapToInt(comment -> comment.beginLine(Integer.MAX_VALUE))
+                .min()
+                .orElse(Integer.MAX_VALUE);
+        int firstRecoveredLine = recoveredGapBeginLine.orElse(Integer.MAX_VALUE);
+        int currentLine = enumEntryBeginLine(current, fallback);
+        return Math.min(Math.min(firstTriviaLine, firstRecoveredLine), currentLine);
     }
 
     /**
@@ -451,6 +536,61 @@ final class EnumDeclarationPrinter {
                 .flatMap(Node::getRange)
                 .map(range -> range.begin.line)
                 .orElse(fallback);
+    }
+
+    /**
+     * Renders claimed enum-constant gap comments as standalone lines before the next constant.
+     */
+    private Doc enumCommentLines(List<JavaCommentTrivia> comments) {
+        List<Doc> commentDocs = comments.stream()
+                .map(this.comments::comment)
+                .filter(doc -> doc != Doc.EMPTY)
+                .toList();
+        return commentDocs.isEmpty()
+            ? Doc.EMPTY
+            : Doc.concat(Doc.join(Doc.HARD_LINE, commentDocs), Doc.HARD_LINE);
+    }
+
+    /**
+     * Finds standalone line comments between recovered enum constants when JavaParser dropped them from the comment map.
+     */
+    private List<RecoveredSourceLineComment> recoveredSourceLineCommentsBetween(
+            EnumConstantDeclaration previous,
+            EnumConstantDeclaration current
+    ) {
+        return previous.getRange()
+                .flatMap(previousRange -> current.getRange().map(
+                        currentRange -> recoveredSourceLineComments(
+                            sourceText.sliceBetween(previousRange, currentRange),
+                            previousRange.end.line
+                        )
+                ))
+                .orElseGet(List::of);
+    }
+
+    private List<RecoveredSourceLineComment> recoveredSourceLineComments(String rawGap, int firstLine) {
+        String[] lines = rawGap.split("\\R", -1);
+        List<RecoveredSourceLineComment> comments = new ArrayList<>();
+        for (int index = 0; index < lines.length; index++) {
+            String line = lines[index].strip();
+            if (line.startsWith("//")) {
+                comments.add(new RecoveredSourceLineComment(firstLine + index, line));
+            }
+        }
+        return comments;
+    }
+
+    private Doc recoveredEnumCommentLines(List<RecoveredSourceLineComment> comments) {
+        if (comments.isEmpty()) {
+            return Doc.EMPTY;
+        }
+        return Doc.concat(
+            Doc.join(
+                Doc.HARD_LINE,
+                comments.stream().map(comment -> Doc.text(comment.text())).toList()
+            ),
+            Doc.HARD_LINE
+        );
     }
 
     private SourceRegion requireEnumConstantListRegion(EnumDeclaration declaration) {
@@ -543,8 +683,8 @@ final class EnumDeclarationPrinter {
      * <p>A semicolon written after body comments already acts as the source separator. Otherwise the formatter preserves
      * whether the source had a blank line before the first member.
      */
-    private Doc enumMemberSeparator(EnumDeclaration declaration) {
-        if (declaration.getOrphanComments().isEmpty() || declaration.getMembers().isEmpty()) {
+    private Doc enumMemberSeparator(EnumDeclaration declaration, List<Doc> bodyComments) {
+        if (bodyComments.isEmpty() || declaration.getMembers().isEmpty()) {
             return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
         }
         if (enumSemicolonFollowsBodyComments(declaration)) {
@@ -851,4 +991,6 @@ final class EnumDeclarationPrinter {
             doc = Doc.concat(doc);
         }
     }
+
+    private record RecoveredSourceLineComment(int line, String text) {}
 }

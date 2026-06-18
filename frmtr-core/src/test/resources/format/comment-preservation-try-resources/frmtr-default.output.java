@@ -17,7 +17,18 @@ class TryResourceCommentSample {
 
     void sentinelFence() {
         try ( // resource scope {
-            ManagedResource resource = new ManagedResource("sample")
+            ManagedResource resource = new ManagedResource("sample");
+            // }
+            ManagedResource companion = new ManagedResource("companion")
+        ) {
+            resource.start();
+            companion.start();
+        }
+    }
+
+    void singleResourceSentinelFence() {
+        try ( // single resource scope {
+            ManagedResource resource = new ManagedResource("single");
             // }
         ) {
             resource.start();

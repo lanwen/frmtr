@@ -666,10 +666,7 @@ final class StatementPrinter {
             Doc.indent(
                 Doc.concat(
                     Doc.HARD_LINE,
-                    Doc.join(
-                        Doc.concat(Doc.text(";"), Doc.HARD_LINE),
-                        statement.getResources().stream().map(this::tryResource).toList()
-                    ),
+                    tryResourceLines(statement),
                     trailingSemicolon ? Doc.text(";") : Doc.EMPTY,
                     tryResourceTrailingCommentsDoc(trailingResourceComments)
                 )
@@ -755,6 +752,30 @@ final class StatementPrinter {
             body = Doc.text(compact.apply(resource));
         }
         return Doc.concat(leading, body);
+    }
+
+    private Doc tryResourceLines(TryStmt statement) {
+        NodeList<Expression> resources = statement.getResources();
+        List<Doc> lines = new ArrayList<>();
+        for (int index = 0; index < resources.size(); index++) {
+            Expression resource = resources.get(index);
+            Doc resourceLine = tryResource(resource);
+            if (index + 1 < resources.size()) {
+                lines.add(Doc.concat(resourceLine, Doc.text(";")));
+                lines.addAll(tryResourceGapComments(statement, resource, resources.get(index + 1)));
+            } else {
+                lines.add(resourceLine);
+            }
+        }
+        return Doc.join(Doc.HARD_LINE, lines);
+    }
+
+    private List<Doc> tryResourceGapComments(TryStmt statement, Expression previous, Expression next) {
+        return commentPlacement.lineCommentsBetween(statement, previous, next)
+                .stream()
+                .map(comments::comment)
+                .filter(doc -> doc != Doc.EMPTY)
+                .toList();
     }
 
     private List<JavaCommentTrivia> tryResourceOpenerComments(TryStmt statement) {

@@ -16,8 +16,7 @@ class TryResourceCommentSample {
     }
 
     void sentinelFence() {
-        try (
-            // resource scope {
+        try ( // resource scope {
             ManagedResource resource = new ManagedResource("sample")
             // }
         ) {

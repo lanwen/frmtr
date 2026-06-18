@@ -638,10 +638,12 @@ final class StatementPrinter {
         if (trailingSemicolon) {
             flatResources += ";";
         }
+        List<JavaCommentTrivia> openerComments = tryResourceOpenerComments(statement);
         List<JavaCommentTrivia> trailingResourceComments = tryResourceTrailingComments(statement);
         String flat = "try (" + flatResources + ")";
         if (
             !resourceShape.spansMultipleLines()
+            && openerComments.isEmpty()
             && !tryResourcesHaveLeadingComments(statement)
             && trailingResourceComments.isEmpty()
             && currentIndentedWidth.applyAsInt(flat + " {}") <= options.lineWidth()
@@ -660,6 +662,7 @@ final class StatementPrinter {
         }
         return Doc.concat(
             Doc.text(" ("),
+            tryResourceOpenerCommentsDoc(openerComments),
             Doc.indent(
                 Doc.concat(
                     Doc.HARD_LINE,
@@ -752,6 +755,26 @@ final class StatementPrinter {
             body = Doc.text(compact.apply(resource));
         }
         return Doc.concat(leading, body);
+    }
+
+    private List<JavaCommentTrivia> tryResourceOpenerComments(TryStmt statement) {
+        if (statement.getResources().isEmpty()) {
+            return List.of();
+        }
+        return commentPlacement.lineCommentsBeforeFirst(statement, statement.getResources().getFirst().orElseThrow())
+                .stream()
+                .filter(comment -> comment.startsOnBeginLine(statement))
+                .toList();
+    }
+
+    private Doc tryResourceOpenerCommentsDoc(List<JavaCommentTrivia> openerComments) {
+        return Doc.concat(
+            openerComments.stream()
+                    .map(comments::comment)
+                    .filter(doc -> doc != Doc.EMPTY)
+                    .map(doc -> Doc.concat(Doc.text(" "), doc))
+                    .toList()
+        );
     }
 
     private List<JavaCommentTrivia> tryResourceTrailingComments(TryStmt statement) {

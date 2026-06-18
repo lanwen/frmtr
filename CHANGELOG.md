@@ -18,4 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Published JVM runtime artifacts now target Java 21 while native CLI builds continue to use GraalVM/JDK 25.
 
+### Fixed
+
+- Preserved broken wrapping for over-wide nested string-concatenation arguments in method calls.
+
 [Unreleased]: https://github.com/lanwen/frmtr/commits/main

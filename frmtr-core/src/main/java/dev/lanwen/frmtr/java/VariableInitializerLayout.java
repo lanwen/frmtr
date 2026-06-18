@@ -132,6 +132,8 @@ final class VariableInitializerLayout {
 
     private final Function<MethodCallExpr, String> methodCallPrefix;
 
+    private final BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList;
+
     private final FieldDeclarationPrinter.HuggableArgumentsRenderer huggableBlockLambdaArguments;
 
     private final Function<LambdaExpr, String> lambdaParameters;
@@ -184,6 +186,7 @@ final class VariableInitializerLayout {
             Function<ClassOrInterfaceType, Doc> brokenClassOrInterfaceType,
             Predicate<Expression> shouldPrintScopeAsDoc,
             Function<MethodCallExpr, String> methodCallPrefix,
+            BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList,
             FieldDeclarationPrinter.HuggableArgumentsRenderer huggableBlockLambdaArguments,
             Function<LambdaExpr, String> lambdaParameters,
             BiPredicate<LambdaExpr, String> lambdaParametersShouldBreak,
@@ -232,6 +235,7 @@ final class VariableInitializerLayout {
         this.brokenClassOrInterfaceType = brokenClassOrInterfaceType;
         this.shouldPrintScopeAsDoc = shouldPrintScopeAsDoc;
         this.methodCallPrefix = methodCallPrefix;
+        this.methodCallArgumentList = methodCallArgumentList;
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.lambdaParameters = lambdaParameters;
         this.lambdaParametersShouldBreak = lambdaParametersShouldBreak;
@@ -1108,13 +1112,7 @@ final class VariableInitializerLayout {
                 Doc.indent(
                     Doc.concat(
                         Doc.HARD_LINE,
-                        Doc.join(
-                            Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                            methodCall.getArguments()
-                                    .stream()
-                                    .map(expression)
-                                    .toList()
-                        )
+                        methodCallArgumentList.apply(methodCall.getArguments(), Doc.HARD_LINE)
                     )
                 ),
                 Doc.HARD_LINE,

@@ -120,8 +120,11 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
   bodies, parenthesized lambdas, broken logical bodies, and lambda arguments that can be hugged by method calls or object
   creation. `ExpressionLambdaArgumentLayout` owns the call-argument side of expression lambdas: shared eligibility,
   first-line/body-opener planning, and packed method-call or constructor bodies for call and chain printers.
-- `MethodCallPrinter`: ordinary method-call argument dispatch, empty argument comments, commented argument-gap fallback
-  lists, text-block arguments, over-wide binary arguments, and suffixes on enclosed scopes. `MethodCallChainPrinter`
+- `MethodCallPrinter`: ordinary method-call argument-list rendering, empty argument comments, commented argument-gap
+  fallback lists, text-block arguments, over-wide binary arguments, and suffixes on enclosed scopes.
+  `BreakableArgumentExpressionPrinter` owns the shared break policy for method-call arguments whose expression form must
+  stay broken, including over-wide or source-multiline binary string concatenations reused by initializer and
+  try-resource opener paths. `MethodCallChainPrinter`
   owns chain doc assembly: chain comments including same-line comments between chained calls and leading line-comment
   clusters before chained segments, source-multiline single-object-creation call statements, field-root fluent-chain
   preservation for already-multiline statement chains, compact-root plus broken-final-segment calls, root promotion, and
@@ -169,8 +172,9 @@ Declaration and type printers own Java declaration grammar after `BodyDeclaratio
 - `FieldDeclarationPrinter` and `VariableDeclarationPrinter`: field and local variable declaration layout, declaration
   prefixes, local-only declaration-prefix decisions, and handoff to `VariableInitializerLayout`.
   `VariableInitializerLayout` owns shared initializer policy including equals-line cast type-body breaks, direct
-  block-lambda openers, object-creation-root method-call opener grouping, switch-expression body preservation, huggable
-  block-lambda method-call initializers, comments around `=`, and initializer-specific width fallbacks.
+  block-lambda openers, object-creation-root method-call opener grouping through the canonical method-call argument-list
+  renderer, switch-expression body preservation, huggable block-lambda method-call initializers, comments around `=`, and
+  initializer-specific width fallbacks.
 - `ConstructorDeclarationPrinter`, `MethodDeclarationPrinter`, `InitializerDeclarationPrinter`,
   `CallableSignaturePrinter`, and `ThrowsClausePrinter`: callable headers, signatures, throws-clause placement,
   callable parameter annotation prefixes, body-versus-semicolon suffixes, and initializer bodies.
@@ -206,8 +210,11 @@ printing, return expressions, and method-call chain planning keep their surround
 `MethodCallChainSourcePlanner` owns method-call chain source-shape planning before `MethodCallChainPrinter` assembles
 docs: structural root collection, selector-line preservation, source-multiline chain signals for statement routing,
 type-like and builder-root promotion, and delegation to `ObjectCreationLayoutPolicy` for constructor-root compactness
-before broken chains. `MethodCallPrinter` keeps ordinary argument rendering and delegates chain root, comment, and
-final-tail assembly to `MethodCallChainPrinter`.
+before broken chains. `MethodCallPrinter` keeps the canonical method-call argument-list renderer used by direct calls,
+initializer method-call openers, and try-resource method-call openers, while delegating chain root, comment, and
+final-tail assembly to `MethodCallChainPrinter`. `BreakableArgumentExpressionPrinter` keeps the argument-expression
+break policy reusable across those entry points so over-wide or source-multiline binary string concatenations do not get
+collapsed by a surrounding argument-list fit.
 
 `CommentedModulePrinter`, `CommentedMethodSignaturePrinter`, and `CommentedInterfacePrinter` own raw-source escape
 hatches for module declarations, method signatures, interface headers, and abstract method signatures whose inline

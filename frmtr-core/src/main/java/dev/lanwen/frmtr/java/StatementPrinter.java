@@ -153,6 +153,8 @@ final class StatementPrinter {
 
     private final Function<Node, Doc> sameLineBlockCommentBeforeNode;
 
+    private final BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList;
+
     private final ToIntFunction<String> currentIndentedWidth;
 
     StatementPrinter(
@@ -194,6 +196,7 @@ final class StatementPrinter {
             Function<Expression, Doc> controlConditionRenderer,
             Function<Expression, String> compactWithOwnBlockComment,
             Function<Node, Doc> sameLineBlockCommentBeforeNode,
+            BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList,
             ToIntFunction<String> currentIndentedWidth
     ) {
         this.comments = comments;
@@ -234,6 +237,7 @@ final class StatementPrinter {
         this.controlConditionRenderer = controlConditionRenderer;
         this.compactWithOwnBlockComment = compactWithOwnBlockComment;
         this.sameLineBlockCommentBeforeNode = sameLineBlockCommentBeforeNode;
+        this.methodCallArgumentList = methodCallArgumentList;
         this.currentIndentedWidth = currentIndentedWidth;
     }
 
@@ -725,10 +729,7 @@ final class StatementPrinter {
                     Doc.indent(
                         Doc.concat(
                             Doc.HARD_LINE,
-                            Doc.join(
-                                Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                                methodCall.getArguments().stream().map(expressionRenderer::format).toList()
-                            )
+                            methodCallArgumentList.apply(methodCall.getArguments(), Doc.HARD_LINE)
                         )
                     )
                 ),

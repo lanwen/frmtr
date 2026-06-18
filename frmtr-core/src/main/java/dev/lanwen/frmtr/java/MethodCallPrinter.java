@@ -877,7 +877,12 @@ final class MethodCallPrinter {
         for (int index = 0; index < arguments.size(); index++) {
             Expression argument = arguments.get(index);
             boolean last = index == arguments.size() - 1;
-            docs.add(methodCallArgumentDoc(argument, last ? "" : ",", last && line == Doc.HARD_LINE));
+            docs.add(methodCallArgumentDoc(
+                argument,
+                last ? "" : ",",
+                last && line == Doc.HARD_LINE,
+                line == Doc.HARD_LINE
+            ));
             if (!last) {
                 docs.add(argumentConsumesSuffix(argument) ? line : Doc.concat(Doc.text(","), line));
             }
@@ -900,14 +905,19 @@ final class MethodCallPrinter {
      * helper owns the continuation lines so breakable arguments do not collapse back onto an over-wide argument line.
      */
     private Doc methodCallArgumentDoc(Expression argument) {
-        return methodCallArgumentDoc(argument, "", false);
+        return methodCallArgumentDoc(argument, "", false, false);
     }
 
     private Doc methodCallArgumentDoc(Expression argument, String suffix) {
-        return methodCallArgumentDoc(argument, suffix, false);
+        return methodCallArgumentDoc(argument, suffix, false, false);
     }
 
-    private Doc methodCallArgumentDoc(Expression argument, String suffix, boolean allowSuffixlessTrailingComment) {
+    private Doc methodCallArgumentDoc(
+            Expression argument,
+            String suffix,
+            boolean allowSuffixlessTrailingComment,
+            boolean sourceMultilineList
+    ) {
         if (
             argument instanceof MethodCallExpr methodCall
             && (!suffix.isEmpty()
@@ -937,6 +947,9 @@ final class MethodCallPrinter {
             if (chain.isPresent()) {
                 return chain.orElseThrow();
             }
+        }
+        if (sourceMultilineList) {
+            return breakableArguments.sourceMultilineArgument(argument, suffix);
         }
         return breakableArguments.argument(argument, suffix);
     }

@@ -71,11 +71,20 @@ final class BreakableArgumentExpressionPrinter {
     }
 
     Doc sourceMultilineArgument(Expression argument) {
+        return sourceMultilineArgument(argument, "");
+    }
+
+    Doc sourceMultilineArgument(Expression argument, String suffix) {
+        Doc flat = expressionRenderer.apply(argument);
         Optional<Doc> broken = brokenArgument(argument);
-        if (broken.isPresent() && sourceShape.spansMultipleLines(argument)) {
+        if (
+            broken.isPresent()
+            && (sourceShape.spansMultipleLines(argument)
+                || continuationStatementWidth.applyAsInt(compact.apply(argument) + suffix) > options.lineWidth())
+        ) {
             return broken.orElseThrow();
         }
-        return expressionRenderer.apply(argument);
+        return flat;
     }
 
     private Optional<Doc> brokenArgument(Expression argument) {

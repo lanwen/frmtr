@@ -164,6 +164,7 @@ final class DeclarationPrinters {
             types::brokenClassOrInterfaceType,
             expressions::shouldPrintScopeAsDoc,
             expressions::methodCallPrefix,
+            expressions::methodCallArgumentList,
             expressions::huggableBlockLambdaArguments,
             expressions::lambdaParameters,
             expressions::lambdaParametersShouldBreak,

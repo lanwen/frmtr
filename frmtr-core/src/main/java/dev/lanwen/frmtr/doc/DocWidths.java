@@ -18,6 +18,11 @@ final class DocWidths {
     /** Sentinel flat width signalling that a document contains a forced break and cannot fit on one line. */
     static final int NO_FIT = Integer.MIN_VALUE;
 
+    /** Internal sentinel for bounded measurements that stopped after overflow before finding a complete width. */
+    private static final int OVERFLOW = Integer.MIN_VALUE + 1;
+
+    private static final int UNBOUNDED = Integer.MAX_VALUE;
+
     private DocWidths() {}
 
     static Measurement measurement() {
@@ -60,98 +65,75 @@ final class DocWidths {
         private Measurement() {}
 
         boolean fits(Doc doc, int remaining) {
-            return remaining >= 0 && measure(doc, Budget.bounded(remaining)).fitsWithin(remaining);
-        }
-
-        int flatWidth(Doc doc) {
-            MeasureResult measured = measure(doc, Budget.unbounded());
-            return measured.forcedBreak() ? NO_FIT : measured.width();
-        }
-
-        private MeasureResult measure(Doc doc, Budget budget) {
-            if (budget.overflowed()) {
-                return MeasureResult.overflow();
+            if (remaining < 0) {
+                return false;
             }
             Integer cached = flatWidths.get(doc);
             if (cached != null) {
-                return cached == NO_FIT ? MeasureResult.hardLine() : MeasureResult.complete(cached);
+                return fitsWidth(cached, remaining);
             }
-            MeasureResult measured = switch (doc) {
-                case Doc.Text text -> MeasureResult.complete(text.value().length());
-                case Doc.Concat concat -> measureConcat(concat, budget);
-                case Doc.Line ignored -> MeasureResult.complete(1);
-                case Doc.SoftLine ignored -> MeasureResult.complete(0);
-                case Doc.HardLine ignored -> MeasureResult.hardLine();
-                case Doc.Indent indented -> measure(indented.doc(), budget);
-                case Doc.Group group -> measure(group.doc(), budget);
-                case Doc.IfBreak conditional -> measure(conditional.flatDoc(), budget);
-                case Doc.Label label -> measure(label.doc(), budget);
+            int measured = measure(doc, remaining);
+            return fitsWidth(measured, remaining);
+        }
+
+        int flatWidth(Doc doc) {
+            return measure(doc, UNBOUNDED);
+        }
+
+        private int measure(Doc doc, int remaining) {
+            if (remaining < 0) {
+                return OVERFLOW;
+            }
+            Integer cached = flatWidths.get(doc);
+            if (cached != null) {
+                return cached;
+            }
+            int measured = switch (doc) {
+                case Doc.Text text -> text.value().length();
+                case Doc.Concat concat -> measureConcat(concat, remaining);
+                case Doc.Line ignored -> 1;
+                case Doc.SoftLine ignored -> 0;
+                case Doc.HardLine ignored -> NO_FIT;
+                case Doc.Indent indented -> measure(indented.doc(), remaining);
+                case Doc.Group group -> measure(group.doc(), remaining);
+                case Doc.IfBreak conditional -> measure(conditional.flatDoc(), remaining);
+                case Doc.Label label -> measure(label.doc(), remaining);
             };
-            if (measured.complete()) {
-                flatWidths.put(doc, measured.forcedBreak() ? NO_FIT : measured.width());
+            if (measured != OVERFLOW) {
+                flatWidths.put(doc, measured);
             }
             return measured;
         }
 
-        private MeasureResult measureConcat(Doc.Concat concat, Budget budget) {
+        private int measureConcat(Doc.Concat concat, int remaining) {
             int total = 0;
             for (int i = 0; i < concat.docs().size(); i++) {
                 Doc child = concat.docs().get(i);
-                MeasureResult measured = measure(child, budget.after(total));
-                if (measured.forcedBreak()) {
-                    return MeasureResult.hardLine();
+                int measured = measure(child, remainingAfter(remaining, total));
+                if (measured == NO_FIT) {
+                    return NO_FIT;
                 }
-                if (!measured.complete()) {
-                    return MeasureResult.overflow();
+                if (measured == OVERFLOW) {
+                    return OVERFLOW;
                 }
-                total += measured.width();
-                if (budget.exceededBy(total) && i < concat.docs().size() - 1) {
-                    return MeasureResult.overflow();
+                total += measured;
+                if (exceeds(remaining, total) && i < concat.docs().size() - 1) {
+                    return OVERFLOW;
                 }
             }
-            return MeasureResult.complete(total);
-        }
-    }
-
-    private record Budget(boolean bounded, int remaining) {
-
-        private static Budget bounded(int remaining) {
-            return new Budget(true, remaining);
+            return total;
         }
 
-        private static Budget unbounded() {
-            return new Budget(false, Integer.MAX_VALUE);
+        private int remainingAfter(int remaining, int used) {
+            return remaining == UNBOUNDED ? UNBOUNDED : remaining - used;
         }
 
-        private Budget after(int used) {
-            return bounded ? bounded(remaining - used) : this;
+        private boolean exceeds(int remaining, int width) {
+            return remaining != UNBOUNDED && width > remaining;
         }
 
-        private boolean exceededBy(int width) {
-            return bounded && width > remaining;
-        }
-
-        private boolean overflowed() {
-            return bounded && remaining < 0;
-        }
-    }
-
-    private record MeasureResult(int width, boolean complete, boolean forcedBreak) {
-
-        private static MeasureResult complete(int width) {
-            return new MeasureResult(width, true, false);
-        }
-
-        private static MeasureResult overflow() {
-            return new MeasureResult(0, false, false);
-        }
-
-        private static MeasureResult hardLine() {
-            return new MeasureResult(NO_FIT, true, true);
-        }
-
-        private boolean fitsWithin(int remaining) {
-            return complete && !forcedBreak && width <= remaining;
+        private boolean fitsWidth(int measured, int remaining) {
+            return measured >= 0 && measured <= remaining;
         }
     }
 }

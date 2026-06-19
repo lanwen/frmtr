@@ -1,4 +1,13 @@
 class MethodCallBinaryArgumentSample {
+    static class RouteConversionFailure extends RuntimeException {
+        RouteConversionFailure(Object value, Class<?> requiredType, Throwable cause) {
+            super("Failed to adapt route payload of type '" + TypeNames.describe(value) + "'" +
+                (requiredType != null ? " to target type '" + TypeNames.name(requiredType) + "'" : "") +
+                (cause != null ? "; " + cause.getMessage() : ""),
+                cause);
+        }
+    }
+
     void configure(OpaqueContainer<?> container) {
         container
             .withCommand("run")

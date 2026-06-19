@@ -474,12 +474,7 @@ final class StatementPrinter {
                 Doc.indent(
                     Doc.concat(
                         Doc.SOFT_LINE,
-                        Doc.joinComma(
-                            statement.getArguments()
-                                    .stream()
-                                    .map(expressionRenderer::format)
-                                    .toList()
-                        )
+                        methodCallArgumentList.apply(statement.getArguments(), Doc.LINE)
                     )
                 ),
                 Doc.SOFT_LINE,

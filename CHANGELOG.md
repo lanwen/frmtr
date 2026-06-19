@@ -23,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Preserved JSpecify/type-use annotation placement on arrays, multidimensional arrays, wildcard bounds, and varargs.
+- Kept explicit constructor invocation arguments (`this(...)` / `super(...)`) width-aware through the shared
+  argument-list path.
 - Preserved broken wrapping for over-wide nested string-concatenation arguments in method calls.
 
 [Unreleased]: https://github.com/lanwen/frmtr/commits/main

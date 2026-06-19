@@ -406,11 +406,14 @@ The implementation makes that shared walker cheaper on normal documents by repla
 `Budget` / `MeasureResult` record traffic with primitive sentinel returns and fast-pathing cached
 complete widths before bounded descent.
 
-Future work, if any, should be evidence-driven: gather allocation/JFR evidence around
-`DocWidths.Measurement`, repeat the ~600-file no-diff macro run against the same `main` baseline, and
-only add overflow-bound caching if repeated bounded overflow work still shows up. More advanced
-overflow-bound caching complicates cache semantics and is not needed to preserve the one-switch
-contract.
+Follow-up measurement is now captured in
+[`performance-followups-from-jfr.md`](performance-followups-from-jfr.md): paired macro timing did not
+show a reliable whole-CLI speedup from M2a, while denser allocation sampling confirmed that the
+targeted `DocWidths$Budget` / `DocWidths$MeasureResult` allocation signal disappeared. Future
+renderer work should be evidence-driven: only add overflow-bound caching if repeated bounded overflow
+work still shows up after the broader raw-source, comment-query, parser-lifecycle, and startup
+investigations are separated. More advanced overflow-bound caching complicates cache semantics and is
+not needed to preserve the one-switch contract.
 
 ## Scope and non-goals
 

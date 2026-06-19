@@ -134,7 +134,7 @@ is why an earlier change silently dropped enum separators undetected. Add three 
 
 1. A debug/CI mode that **re-parses output and asserts AST equivalence** (modulo trivia).
 2. A property test: `format(format(x)) == format(x)` over generated and real inputs.
-3. A **corpus harness** that formats large OSS codebases (JDK, Spring, Guava, …) in CI and checks
+3. A **corpus harness** that formats large, pinned real-world Java corpora in CI and checks
    parse-stability + idempotence + AST-equivalence.
 
 - **Serves:** correctness, plus the confidence to do B1/B2 aggressively.
@@ -145,15 +145,24 @@ is why an earlier change silently dropped enum separators undetected. Add three 
 ## 🟧 Middle
 
 ### M1. A benchmark discipline (JMH + macro + competitive diff)
-**Status:** 🔵 Proposed
+**Status:** 🟣 Investigating · _focused proposal:_ [performance-followups-from-jfr.md](performance-followups-from-jfr.md)
 
-No benchmarks exist; "fastest" cannot be claimed without them. Add JMH microbenchmarks (render-only,
-full pipeline), a macro run over the B3 corpus, CI regression gates, and published head-to-head
-numbers + output diffs vs google-java-format / palantir-java-format / Spotless. This also reveals
-whether parsing or rendering dominates, which directs further optimization.
+No benchmark discipline exists; "fastest" cannot be claimed without one. Add JMH microbenchmarks
+(render-only, full pipeline), a macro run over the B3 corpus, CI regression gates, and published
+head-to-head numbers + output diffs against other Java formatters. This also reveals whether parsing
+or rendering dominates, which directs further optimization.
+
+> **M2a follow-up finding:** paired macro checks over an anonymized 631-file external corpus did not
+> show a whole-CLI win from M2a (paired mean delta `+0.18s`, median delta `-0.09s`, M2a faster in
+> `10/20` pairs). Denser JFR allocation sampling did confirm the targeted cleanup:
+> `DocWidths$Budget` (`19` samples / `6496.3 kB`) and `DocWidths$MeasureResult` (`20` samples /
+> `7193.9 kB`) appeared on main and disappeared on M2a. The same JFR pass produced a focused
+> performance backlog: raw-source whitespace churn, comment-query indexing, worker-local
+> formatter/parser reuse, stream-heavy method-chain analysis, startup separation, and discovery
+> isolation.
 
 - **Serves:** "fastest" credibility, maintainer-friendly.
-- **Effort:** medium. Methodology-heavy, low risk. (No dedicated investigation doc — execute directly.)
+- **Effort:** medium. Methodology-heavy, low risk.
 
 ### M2. Linear-time renderer (width memoization + bounded `fits`)
 **Status:** 🟢 Implemented · _focused proposal:_ [linear-time-doc-renderer.md](linear-time-doc-renderer.md)
@@ -188,6 +197,9 @@ M2 preserved the single width-authority contract but added runtime overhead on a
 measurement contract. More complex overflow-bound caching remains a later option only if allocation
 profiling proves it is worthwhile.
 
+- **Measurement note:** paired macro timing did not show a reliable whole-CLI speedup. The change is
+  best treated as an internal allocation and maintainability cleanup; the broader JFR-derived backlog
+  is tracked in [performance-followups-from-jfr.md](performance-followups-from-jfr.md).
 - **Serves:** fastest, maintainer-friendly.
 - **Effort:** small-medium; must preserve byte-identical output and the one-switch Doc measurement
   contract.
@@ -313,6 +325,7 @@ Drafted for this roadmap:
 | B1 | Centralize source-shape coupling | [source-shape-policy-consolidation.md](source-shape-policy-consolidation.md) |
 | B2 | Enrich the Doc IR | [doc-ir-combinators.md](doc-ir-combinators.md) |
 | B3 | Correctness safety net | [semantic-preservation-safety-net.md](semantic-preservation-safety-net.md) |
+| M1 / M2a follow-up | Performance follow-ups from JFR sampling | [performance-followups-from-jfr.md](performance-followups-from-jfr.md) |
 | M2 | Linear-time renderer | [linear-time-doc-renderer.md](linear-time-doc-renderer.md) |
 | M3 | Parallelism + caching | [multi-file-parallelism-and-caching.md](multi-file-parallelism-and-caching.md) |
 | M4 | LSP / editor integration | [lsp-editor-integration.md](lsp-editor-integration.md) |
@@ -325,7 +338,7 @@ Pre-existing, related:
 | Comment containment index | [comment-containment-index.md](comment-containment-index.md) | B1/B2 surface, perf |
 | Lazy `.gitignore` discovery | [cli-discovery-lazy-ignore.md](cli-discovery-lazy-ignore.md) | M3 (delivered part) |
 
-> Items without a dedicated doc — **M1** (benchmark discipline, methodology-heavy and low-risk) and
-> the smalls **S1–S5** (self-contained) — are specified inline above and can be picked up directly.
+> Items without a dedicated doc — the smalls **S1–S5** (self-contained) — are specified inline above
+> and can be picked up directly.
 > **S5** (the recommended prerequisite for **M2** and **B2**) is ✅ **done** — landed on `main` in
 > `6e4f600a`.

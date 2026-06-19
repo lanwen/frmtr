@@ -81,9 +81,9 @@ public class Lambda {
 
         final List<Integer> values = Stream.of(1, 2)
                 .map((
-                        veryLongCustomerFilterParameter,
-                        veryLongCustomerFilterParameter,
-                        truncatedCustomerFilterParam
+                    veryLongCustomerFilterParameter,
+                    veryLongCustomerFilterParameter,
+                    truncatedCustomerFilterParam
                 ) -> {
                     // testing method
                     return n * 2;
@@ -144,16 +144,15 @@ public class Lambda {
     private static <T extends Group> Function<Constructor<?>, T> createInstance(
             Group entity
     ) {
-        return ctor ->
-            Try.of(a, () -> {
-                @SuppressWarnings("unchecked")
-                var ng = (T) ctor.newInstance(
-                    entity.getId(),
-                    entity.getSystemGenerated(),
-                    entity.getVersionKey()
-                );
-                return ng;
-            }).getOrElseThrow(ex -> new RuntimeException(ex));
+        return ctor -> Try.of(a, () -> {
+            @SuppressWarnings("unchecked")
+            var ng = (T) ctor.newInstance(
+                entity.getId(),
+                entity.getSystemGenerated(),
+                entity.getVersionKey()
+            );
+            return ng;
+        }).getOrElseThrow(ex -> new RuntimeException(ex));
     }
 
     void singleLambdaWithBlockLastArgument() {
@@ -224,8 +223,8 @@ public class Lambda {
         });
 
         largeCustomerBatch(
-            (billingAccountRecord, customerSegmentRecord, deliveryWindowRecord) ->
-                eligibilityRuleSet.calculateDiscounts()
+            (billingAccountRecord, customerSegmentRecord, deliveryWindowRecord) -> eligibilityRuleSet
+                    .calculateDiscounts()
         );
 
         a.b(
@@ -367,13 +366,13 @@ public class Lambda {
 
         largeCustomerBatch(
             /* comment */
-            (billingAccountRecord, customerSegmentRecord, deliveryWindowRecord) ->
-                eligibilityRuleSet.calculateDiscounts()
+            (billingAccountRecord, customerSegmentRecord, deliveryWindowRecord) -> eligibilityRuleSet
+                    .calculateDiscounts()
         );
 
         largeCustomerBatch(
-            /* comment */ (billingAccountRecord, customerSegmentRecord, deliveryWindowRecord) ->
-                eligibilityRuleSet.calculateDiscounts()
+            /* comment */ (billingAccountRecord, customerSegmentRecord, deliveryWindowRecord) -> eligibilityRuleSet
+                    .calculateDiscounts()
         );
 
         a.b(

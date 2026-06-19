@@ -261,8 +261,7 @@ final class LambdaExpressionArgumentOpener {
             Source.LOCAL,
             principal,
             null
-        ))
-                .expectSubscription();
+        )).expectSubscription();
     }
 
     WindowRange keepsExceptionSupplierConstructorOpener(List<LedgerEntry> ledgerEntries) {
@@ -317,8 +316,8 @@ final class LambdaExpressionArgumentOpener {
                             .map(accountingWindow -> {
                                 return projectedRows
                                         .stream()
-                                        .filter(projectedWindowUsage -> projectedWindowUsage.accountingWindow()
-                                                .equals(accountingWindow)
+                                        .filter(
+                                            projectedWindowUsage -> projectedWindowUsage.accountingWindow().equals(accountingWindow)
                                         )
                                         .findFirst()
                                         .orElseGet(() -> ProjectedWindowUsageSnapshot.builder().tenantId(tenantId)

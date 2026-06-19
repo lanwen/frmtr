@@ -26,13 +26,13 @@ public class MethodParameterLists {
 
     void lastParameterDotDotDot(String message, String... labels) {}
 
-    void variableArityParameters(Object @Nullable... errorMessageArgs) {}
+    void variableArityParameters(Object @Nullable ... errorMessageArgs) {}
 
-    void variableArityParameters(Object[] @Nullable... errorMessageArgs) {}
+    void variableArityParameters(Object[] @Nullable ... errorMessageArgs) {}
 
-    void variableArityParameters(byte[] @Nullable... errorMessageArgs) {}
+    void variableArityParameters(byte[] @Nullable ... errorMessageArgs) {}
 
-    void variableArityParameters(byte @Nullable... errorMessageArgs) {}
+    void variableArityParameters(byte @Nullable ... errorMessageArgs) {}
 
     void variableArityParameters(final String... names) {}
 
@@ -49,6 +49,6 @@ public class MethodParameterLists {
       * use the shared message fallback instead of absent values.
       */
       @Nullable String messageTemplate,
-      @Nullable Object @Nullable... messageArguments
+      @Nullable Object @Nullable ... messageArguments
     ) {}
 }

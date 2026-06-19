@@ -159,7 +159,8 @@ final class CommentedTokenText {
      */
     static String tokenLine(List<String> tokens) {
         StringBuilder out = new StringBuilder();
-        for (String token : tokens) {
+        for (int i = 0; i < tokens.size(); i++) {
+            String token = tokens.get(i);
             if (token.equals(",")) {
                 stripTrailingSpace(out);
                 out.append(", ");
@@ -171,7 +172,11 @@ final class CommentedTokenText {
                 continue;
             }
             if (token.equals("...")) {
-                stripTrailingSpace(out);
+                if (previousSourceTokenStartsWithAnnotation(tokens, i)) {
+                    out.append(' ');
+                } else {
+                    stripTrailingSpace(out);
+                }
                 out.append("...");
                 continue;
             }
@@ -191,5 +196,9 @@ final class CommentedTokenText {
         while (!out.isEmpty() && out.charAt(out.length() - 1) == ' ') {
             out.deleteCharAt(out.length() - 1);
         }
+    }
+
+    private static boolean previousSourceTokenStartsWithAnnotation(List<String> tokens, int index) {
+        return index > 0 && tokens.get(index - 1).startsWith("@");
     }
 }

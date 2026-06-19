@@ -38,7 +38,7 @@ final class CommentedMethodSignaturePrinter {
         if (!canFormatCommentedMethodSignatureFromRaw(declaration)) {
             return Optional.empty();
         }
-        return Optional.of(indentEmbeddedLines(formatCommentedMethod(rawMethod)));
+        return Optional.of(indentEmbeddedLines(formatCommentedMethod(declaration, rawMethod)));
     }
 
     private boolean hasCommentedMethodSignature(MethodDeclaration declaration, String rawMethod) {
@@ -46,10 +46,10 @@ final class CommentedMethodSignaturePrinter {
         if (bodyStart < 0) {
             return false;
         }
-        String signature = signatureWithoutLeadingDeclarationAnnotations(
+        String signature = splitLeadingDeclarationAnnotations(
             declaration,
             rawMethod.substring(0, bodyStart)
-        );
+        ).signatureText();
         return signature.contains("//") || signature.contains("/*");
     }
 
@@ -60,7 +60,7 @@ final class CommentedMethodSignaturePrinter {
      * comments, it flattens annotations, method header, and body text together instead of letting the structured
      * declaration printers keep each boundary.
      */
-    private String signatureWithoutLeadingDeclarationAnnotations(MethodDeclaration declaration, String signature) {
+    private SignaturePrefix splitLeadingDeclarationAnnotations(MethodDeclaration declaration, String text) {
         int declarationBeginLine = declaration.getRange().map(range -> range.begin.line).orElse(Integer.MIN_VALUE);
         int nameBeginLine = declaration.getName().getRange().map(range -> range.begin.line).orElse(Integer.MIN_VALUE);
         int lastLeadingAnnotationLine = declaration.getAnnotations()
@@ -71,9 +71,9 @@ final class CommentedMethodSignaturePrinter {
                 .max()
                 .orElse(Integer.MIN_VALUE);
         if (lastLeadingAnnotationLine < declarationBeginLine) {
-            return signature;
+            return new SignaturePrefix("", text);
         }
-        List<String> lines = signature.lines().toList();
+        List<String> lines = text.lines().toList();
         int linesToDrop = Math.min(lines.size(), lastLeadingAnnotationLine - declarationBeginLine + 1);
         int firstSignatureLine = linesToDrop;
         int sourceLine = declarationBeginLine + firstSignatureLine;
@@ -91,7 +91,10 @@ final class CommentedMethodSignaturePrinter {
             firstSignatureLine++;
             sourceLine++;
         }
-        return String.join("\n", lines.subList(firstSignatureLine, lines.size()));
+        return new SignaturePrefix(
+            String.join("\n", lines.subList(0, firstSignatureLine)),
+            String.join("\n", lines.subList(firstSignatureLine, lines.size()))
+        );
     }
 
     private boolean leadingAnnotationGapLine(String line) {
@@ -105,6 +108,21 @@ final class CommentedMethodSignaturePrinter {
         return declaration.getBody().map(body -> body.getStatements().size() <= 1).orElse(false);
     }
 
+    private String formatCommentedMethod(MethodDeclaration declaration, String rawMethod) {
+        SignaturePrefix signature = splitLeadingDeclarationAnnotations(declaration, rawMethod.strip());
+        if (signature.leadingText().isEmpty()) {
+            return formatCommentedMethod(signature.signatureText());
+        }
+        List<String> formatted = new ArrayList<>();
+        signature.leadingText()
+                .lines()
+                .map(String::strip)
+                .filter(line -> !line.isEmpty())
+                .forEach(formatted::add);
+        formatted.add(formatCommentedMethod(signature.signatureText()));
+        return String.join("\n", formatted);
+    }
+
     private String formatCommentedMethod(String rawMethod) {
         String method = rawMethod.strip();
         int bodyStart = method.indexOf('{');
@@ -113,12 +131,12 @@ final class CommentedMethodSignaturePrinter {
             return method;
         }
         String signature = method.substring(0, bodyStart).stripTrailing();
-        String body = method.substring(bodyStart + 1, bodyEnd).strip();
-        int open = signature.indexOf('(');
         int close = signature.lastIndexOf(')');
+        int open = matchingOpenParenthesis(signature, close);
         if (open < 0 || close < open) {
             return method;
         }
+        String body = method.substring(bodyStart + 1, bodyEnd);
         String prefix = CommentedTokenText.tokenLine(CommentedTokenText.tokens(signature.substring(0, open)));
         String parameters = signature.substring(open + 1, close);
         List<String> parameterLines = nonBlankLines(parameters);
@@ -216,7 +234,7 @@ final class CommentedMethodSignaturePrinter {
     ) {
         List<String> lines = new ArrayList<>();
         if (suffixComments.isEmpty()) {
-            if (body.isEmpty()) {
+            if (bodyIsEmpty(body)) {
                 lines.add(signature + " {}");
             } else if (inlineOpeningComment.isEmpty()) {
                 lines.add(signature + " {");
@@ -231,7 +249,7 @@ final class CommentedMethodSignaturePrinter {
         }
         lines.add(signature + " " + suffixComments.getFirst());
         lines.addAll(suffixComments.subList(1, suffixComments.size()));
-        if (body.isEmpty()) {
+        if (bodyIsEmpty(body)) {
             lines.add("{}");
         } else {
             lines.add("{");
@@ -242,7 +260,7 @@ final class CommentedMethodSignaturePrinter {
     }
 
     private String formatMethodWithInlineOpeningComment(String signature, String comment, String body) {
-        if (body.isEmpty()) {
+        if (bodyIsEmpty(body)) {
             return signature + " {} " + comment;
         }
         List<String> lines = new ArrayList<>();
@@ -252,12 +270,59 @@ final class CommentedMethodSignaturePrinter {
         return String.join("\n", lines);
     }
 
+    private boolean bodyIsEmpty(String body) {
+        return body.strip().isEmpty();
+    }
+
     private List<String> formatMethodBodyLines(String body) {
-        return body.lines()
-                .map(String::strip)
+        List<String> lines = body.lines().toList();
+        int start = firstNonBlankLine(lines);
+        int end = lastNonBlankLine(lines);
+        if (start > end) {
+            return List.of();
+        }
+        List<String> bodyLines = lines.subList(start, end + 1);
+        int commonIndent = bodyLines.stream()
+                .filter(line -> !line.isBlank())
+                .mapToInt(this::leadingWhitespace)
+                .min()
+                .orElse(0);
+        return bodyLines.stream()
+                .map(line -> removeCommonIndent(line, commonIndent).stripTrailing())
                 .filter(line -> !line.isEmpty())
                 .map(line -> "  " + line)
                 .toList();
+    }
+
+    private int firstNonBlankLine(List<String> lines) {
+        for (int i = 0; i < lines.size(); i++) {
+            if (!lines.get(i).isBlank()) {
+                return i;
+            }
+        }
+        return lines.size();
+    }
+
+    private int lastNonBlankLine(List<String> lines) {
+        for (int i = lines.size() - 1; i >= 0; i--) {
+            if (!lines.get(i).isBlank()) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private int leadingWhitespace(String line) {
+        int cursor = 0;
+        while (cursor < line.length() && Character.isWhitespace(line.charAt(cursor))) {
+            cursor++;
+        }
+        return cursor;
+    }
+
+    private String removeCommonIndent(String line, int commonIndent) {
+        int removable = Math.min(commonIndent, leadingWhitespace(line));
+        return line.substring(removable);
     }
 
     private List<String> nonBlankLines(String text) {
@@ -322,4 +387,25 @@ final class CommentedMethodSignaturePrinter {
         }
         return String.join("\n", indented);
     }
+
+    private int matchingOpenParenthesis(String signature, int close) {
+        if (close < 0 || close >= signature.length()) {
+            return -1;
+        }
+        int depth = 0;
+        for (int i = close; i >= 0; i--) {
+            char current = signature.charAt(i);
+            if (current == ')') {
+                depth++;
+            } else if (current == '(') {
+                depth--;
+                if (depth == 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    private record SignaturePrefix(String leadingText, String signatureText) {}
 }

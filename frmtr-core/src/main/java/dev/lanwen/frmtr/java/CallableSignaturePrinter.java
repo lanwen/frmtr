@@ -415,7 +415,7 @@ final class CallableSignaturePrinter {
         String type = compact.apply(parameter.getType());
         if (parameter.isVarArgs()) {
             String varargsAnnotations = compactJoin(parameter.getVarArgsAnnotations());
-            type += varargsAnnotations.isEmpty() ? "..." : " " + varargsAnnotations + "...";
+            type += varargsAnnotations.isEmpty() ? "..." : " " + varargsAnnotations + " ...";
         }
         parts.add(type);
         parts.add(parameter.getNameAsString());

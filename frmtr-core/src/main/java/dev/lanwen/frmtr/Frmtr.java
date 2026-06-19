@@ -1,7 +1,5 @@
 package dev.lanwen.frmtr;
 
-import dev.lanwen.frmtr.java.JavaFormatter;
-
 public final class Frmtr {
 
     private Frmtr() {}
@@ -11,13 +9,7 @@ public final class Frmtr {
     }
 
     public static String format(String source, FormatterOptions options) {
-        try {
-            return new JavaFormatter(options).format(source);
-        } catch (FormatterException exception) {
-            throw exception;
-        } catch (RuntimeException | LinkageError | AssertionError exception) {
-            throw FormatterException.internal(exception);
-        }
+        return session(options).format(source);
     }
 
     public static String debugDoc(String source) {
@@ -37,13 +29,7 @@ public final class Frmtr {
      * #debugDoc(String, FormatterOptions)}, this always builds the document even under a require-pragma gate.
      */
     public static ExplainResult explain(String source, FormatterOptions options) {
-        try {
-            return new JavaFormatter(options).explain(source);
-        } catch (FormatterException exception) {
-            throw exception;
-        } catch (RuntimeException | LinkageError | AssertionError exception) {
-            throw FormatterException.internal(exception);
-        }
+        return session(options).explain(source);
     }
 
     /**
@@ -53,12 +39,26 @@ public final class Frmtr {
      * source output.
      */
     public static String debugDoc(String source, FormatterOptions options) {
-        try {
-            return new JavaFormatter(options).debugDoc(source);
-        } catch (FormatterException exception) {
-            throw exception;
-        } catch (RuntimeException | LinkageError | AssertionError exception) {
-            throw FormatterException.internal(exception);
-        }
+        return session(options).debugDoc(source);
+    }
+
+    /**
+     * Creates a reusable sequential formatter session with the default formatter policy.
+     *
+     * <p>Use one session at a time from one thread only. The session owns a reusable JavaParser instance, which is not
+     * thread-safe.
+     */
+    public static FrmtrSession session() {
+        return FrmtrSession.create();
+    }
+
+    /**
+     * Creates a reusable sequential formatter session with the supplied formatter policy.
+     *
+     * <p>Use one session at a time from one thread only. The session owns a reusable JavaParser instance, which is not
+     * thread-safe.
+     */
+    public static FrmtrSession session(FormatterOptions options) {
+        return FrmtrSession.create(options);
     }
 }

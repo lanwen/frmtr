@@ -2,7 +2,7 @@ package dev.lanwen.frmtr.tooling;
 
 import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
-import dev.lanwen.frmtr.Frmtr;
+import dev.lanwen.frmtr.FrmtrSession;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -23,7 +23,9 @@ import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 public final class FormatterRunner {
 
@@ -51,7 +53,8 @@ public final class FormatterRunner {
             formatSelectedFiles(
                 displayRoot,
                 files,
-                file -> checkFile(displayRoot, file, options, includeDiffs, diffRenderMode),
+                (formatter, file) -> checkFile(displayRoot, file, formatter, options, includeDiffs, diffRenderMode),
+                options,
                 progress
             )
         );
@@ -67,7 +70,8 @@ public final class FormatterRunner {
             formatSelectedFiles(
                 displayRoot,
                 files,
-                file -> writeFile(displayRoot, file, options),
+                (formatter, file) -> writeFile(displayRoot, file, formatter),
+                options,
                 progress
             )
         );
@@ -76,16 +80,19 @@ public final class FormatterRunner {
     private static List<FormatFileResult> formatSelectedFiles(
             Path displayRoot,
             List<Path> files,
-            Function<Path, FormatFileResult> formatter,
+            BiFunction<Supplier<FrmtrSession>, Path, FormatFileResult> formatter,
+            FormatterOptions options,
             FormatRunProgress progress
     ) {
         Objects.requireNonNull(progress, "progress");
         List<Path> selected = selectedFiles(displayRoot, files);
+        ThreadLocal<FrmtrSession> workerSession = ThreadLocal.withInitial(() -> FrmtrSession.create(options));
+        Supplier<FrmtrSession> formatterSession = workerSession::get;
         return mapInInputOrder(
             displayRoot,
             selected,
             workerCount(selected.size()),
-            formatter,
+            file -> formatter.apply(formatterSession, file),
             progress
         );
     }
@@ -234,6 +241,7 @@ public final class FormatterRunner {
     private static FormatFileResult checkFile(
             Path displayRoot,
             Path file,
+            Supplier<FrmtrSession> formatter,
             FormatterOptions options,
             boolean includeDiffs,
             UnifiedDiffRenderer.RenderMode diffRenderMode
@@ -241,7 +249,7 @@ public final class FormatterRunner {
         Path displayPath = displayPath(displayRoot, file);
         try {
             String original = Files.readString(file, StandardCharsets.UTF_8);
-            String formatted = Frmtr.format(original, options);
+            String formatted = formatter.get().format(original);
             if (formatted.equals(original)) {
                 return new FormatFileResult(file, displayPath, FormatFileStatus.UNCHANGED, "", null);
             }
@@ -254,11 +262,11 @@ public final class FormatterRunner {
         }
     }
 
-    private static FormatFileResult writeFile(Path displayRoot, Path file, FormatterOptions options) {
+    private static FormatFileResult writeFile(Path displayRoot, Path file, Supplier<FrmtrSession> formatter) {
         Path displayPath = displayPath(displayRoot, file);
         try {
             String original = Files.readString(file, StandardCharsets.UTF_8);
-            String formatted = Frmtr.format(original, options);
+            String formatted = formatter.get().format(original);
             if (formatted.equals(original)) {
                 return new FormatFileResult(file, displayPath, FormatFileStatus.UNCHANGED, "", null);
             }

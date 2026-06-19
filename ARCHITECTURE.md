@@ -96,7 +96,7 @@ site/src/jbake
 
 Single-source formatting starts at `Frmtr.format(...)`.
 
-1. `Frmtr` applies default or caller-provided `FormatterOptions`.
+1. `Frmtr` applies default or caller-provided `FormatterOptions`, then uses a one-shot `FrmtrSession` for the call.
 2. If `FormatterOptions.requirePragma` is enabled, `JavaFormatter` first checks the leading Javadoc comment for a
    recognized opt-in marker. The public marker is `@format`; source without an opt-in marker is returned unchanged.
 3. `JavaFormatter` parses source with JavaParser using stored tokens and attributed comments, then wraps the raw parser
@@ -177,6 +177,9 @@ the existing document view and its layout decisions without letting the CLI own 
 - Multi-file `check` and `write` runs process selected files on an explicit fixed-size worker pool capped by available
   processors and file count. Results are collected into input-order slots before the `FormatRunResult` is exposed, so
   CLI and Gradle output remains deterministic even when files finish out of order.
+- Each file-runner worker owns one `FrmtrSession` for the run's `FormatterOptions` and reuses it sequentially for files
+  assigned to that worker. Formatter sessions are never shared across worker threads because their JavaParser instance
+  is reusable only by one thread at a time.
 - Runner progress is a side-channel callback that emits mandatory started, running, and finished snapshots from the
   coordinator thread. The tooling layer reports counters and active display paths only; adapters own presentation
   details such as stderr routing, spinners, and mode-specific labels.
@@ -203,7 +206,8 @@ collection from Java source sets and Gradle-style source filters.
 
 `JavaFormatter` owns JavaParser configuration, pragma gating, parse-error handling, and the declared transform stage
 between parsing and printing. It enables token storage and comment attribution because formatter rules need
-syntax-adjacent trivia.
+syntax-adjacent trivia. Public `FrmtrSession` instances wrap one `JavaFormatter` for sequential reuse when a caller
+formats multiple sources with identical options; sessions are explicitly not thread-safe.
 
 `FormatterOptions` is the core policy boundary. It exposes one canonical record constructor for fully specified
 configuration, `defaults()` for the standard formatter policy, and focused withers for changing one policy from an

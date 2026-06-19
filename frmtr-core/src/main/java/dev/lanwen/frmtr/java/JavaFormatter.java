@@ -34,6 +34,13 @@ import dev.lanwen.frmtr.doc.DocRenderer;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * JavaParser-backed formatter engine for one formatter policy.
+ *
+ * <p>This type owns a JavaParser instance so parser configuration and parser allocation can be reused across sequential
+ * formatting calls. JavaParser is stateful and not thread-safe; callers that format concurrently must create one
+ * formatter, or a public {@code FrmtrSession}, per worker thread.
+ */
 public final class JavaFormatter {
 
     private static final JavaTransformPipeline TRANSFORMS = new JavaTransformPipeline(

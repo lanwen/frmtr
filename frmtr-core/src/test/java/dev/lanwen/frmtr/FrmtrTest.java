@@ -68,6 +68,53 @@ final class FrmtrTest {
     }
 
     @Test
+    void reusableSessionFormatsSequentialSourcesWithOneOptionsValue() {
+        FrmtrSession session = Frmtr.session(FormatterOptions.defaults().withLineWidth(24));
+
+        String first = session.format("class First{int value;}");
+        String second = session.format(
+            "class Second{void call(){target.first().second().third();}}"
+        );
+
+        assertThat(first).isEqualTo(
+            """
+                class First {
+
+                    int value;
+                }
+                """
+        );
+        assertThat(second).contains(
+            """
+                    void call() {
+                        target
+                                .first()
+                                .second()
+                                .third();
+                    }
+                """
+        );
+    }
+
+    @Test
+    void reusableSessionContinuesAfterParseFailure() {
+        FrmtrSession session = Frmtr.session();
+
+        assertThatThrownBy(() -> session.format("class {"))
+                .isInstanceOf(FormatterException.class)
+                .hasMessage("Unable to parse Java source");
+
+        assertThat(session.format("class Recovered{int value;}")).isEqualTo(
+            """
+                class Recovered {
+
+                    int value;
+                }
+                """
+        );
+    }
+
+    @Test
     void debugDocIncludesFormatterRuleLabels() {
         String rendered = Frmtr.debugDoc("class Demo{void method(){call(value);}}");
 

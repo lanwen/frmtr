@@ -154,9 +154,6 @@ final class CompactSourceText {
         if (node instanceof ClassOrInterfaceType type) {
             return compactClassOrInterfaceType(type);
         }
-        if (node instanceof Type type && !type.getAnnotations().isEmpty()) {
-            return compactTypeAnnotations(type) + compact(node);
-        }
         return compact(node);
     }
 
@@ -167,10 +164,10 @@ final class CompactSourceText {
         String typeArguments = type.getTypeArguments()
                 .map(arguments -> "<" + compactJoinTypeLike(arguments) + ">")
                 .orElse("");
-        return scope + compactTypeAnnotations(type) + type.getNameAsString() + typeArguments;
+        return scope + compactClassOrInterfaceTypeAnnotations(type) + type.getNameAsString() + typeArguments;
     }
 
-    private String compactTypeAnnotations(Type type) {
+    private String compactClassOrInterfaceTypeAnnotations(ClassOrInterfaceType type) {
         if (type.getAnnotations().isEmpty()) {
             return "";
         }

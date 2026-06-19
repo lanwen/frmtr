@@ -281,10 +281,18 @@ final class CommentedMethodSignaturePrinter {
     }
 
     private boolean isCommentOnlyLine(String line) {
-        if (line.startsWith("//") || line.startsWith("*")) {
+        if (line.startsWith("//")) {
             return true;
         }
-        return line.startsWith("/*") && (!line.contains("*/") || line.endsWith("*/"));
+        if (line.startsWith("/*")) {
+            int close = line.indexOf("*/");
+            return close < 0 || close == line.length() - 2;
+        }
+        if (line.startsWith("*")) {
+            int close = line.indexOf("*/");
+            return close < 0 || close == line.length() - 2;
+        }
+        return false;
     }
 
     /**

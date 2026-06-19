@@ -11,7 +11,10 @@ public class Cast {
         consume((Readable & Auditable) candidate);
         consume((Readable & Auditable & Versioned) candidate);
         consume(
-            (VeryLongReadableProjectionType & VeryLongAuditableProjectionType & VeryLongVersionedProjectionType) candidate
+            (VeryLongReadableProjectionType
+                    & VeryLongAuditableProjectionType
+                    & VeryLongVersionedProjectionType
+            ) candidate
         );
         consume(
             (VeryLongReadableProjectionType & VeryLongAuditableProjectionType & VeryLongVersionedProjectionType) (sourceValue, value) -> sourceValue + value

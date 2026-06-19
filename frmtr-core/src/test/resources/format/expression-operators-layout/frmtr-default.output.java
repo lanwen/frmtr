@@ -107,7 +107,14 @@ public class ExpressionOperatorSamples {
         ) {
         }
 
-        switch (statusCode != 42 && 42/42 || statusCode & 42 && statusCode > 42 || statusCode < 42 && statusCode == 42) {
+        switch (
+            statusCode != 42
+            && 42/42
+            || statusCode & 42
+            && statusCode > 42
+            || statusCode < 42
+            && statusCode == 42
+        ) {
         }
 
         switch (statusCode != 42) {
@@ -126,7 +133,14 @@ public class ExpressionOperatorSamples {
             || (statusCode == 42 && statusCode == 42)
         ) {}
 
-        while (statusCode != 42 && 42/42 || statusCode & 42 && statusCode > 42 || statusCode < 42 && statusCode == 42) {}
+        while (
+            statusCode != 42
+            && 42/42
+            || statusCode & 42
+            && statusCode > 42
+            || statusCode < 42
+            && statusCode == 42
+        ) {}
 
         while (statusCode != 42) {}
 
@@ -144,7 +158,14 @@ public class ExpressionOperatorSamples {
 
         do {
             System.out.println("Formatter input is ready!");
-        } while (statusCode != 42 && 42/42 || statusCode & 42 && statusCode > 42 || statusCode < 42 && statusCode == 42);
+        } while (
+            statusCode != 42
+            && 42/42
+            || statusCode & 42
+            && statusCode > 42
+            || statusCode < 42
+            && statusCode == 42
+        );
 
         do {
             System.out.println("Formatter input is ready!");
@@ -164,7 +185,14 @@ public class ExpressionOperatorSamples {
             System.out.println("Formatter input is ready!");
         }
 
-        synchronized (statusCode != 42 && 42/42 || statusCode & 42 && statusCode > 42 || statusCode < 42 && statusCode == 42) {
+        synchronized (
+            statusCode != 42
+            && 42/42
+            || statusCode & 42
+            && statusCode > 42
+            || statusCode < 42
+            && statusCode == 42
+        ) {
             System.out.println("Formatter input is ready!");
         }
 
@@ -178,7 +206,9 @@ public class ExpressionOperatorSamples {
     }
 
     public void longFullyQualifiedName() {
-        com.me.very.very.very.very.very.very.very.very.very.very.very.very.very.longg.fully.qualified.name.FullyQualifiedName.builder().build();
+        com.me.very.very.very.very.very.very.very.very.very.very.very.very.very.longg.fully.qualified.name
+                .FullyQualifiedName.builder()
+                .build();
 
         com.FullyQualifiedName.builder();
     }

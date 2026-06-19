@@ -256,7 +256,12 @@ final class LambdaExpressionArgumentOpener {
     }
 
     StepProbe keepsMethodCallLambdaBodyPacked(StepProbe probe, SessionReader sessionReader, Principal principal) {
-        return probe.withVirtualTime(() -> sessionReader.findSessions(principal.groupId(), Source.LOCAL, principal, null))
+        return probe.withVirtualTime(() -> sessionReader.findSessions(
+            principal.groupId(),
+            Source.LOCAL,
+            principal,
+            null
+        ))
                 .expectSubscription();
     }
 
@@ -312,8 +317,8 @@ final class LambdaExpressionArgumentOpener {
                             .map(accountingWindow -> {
                                 return projectedRows
                                         .stream()
-                                        .filter(
-                                            projectedWindowUsage -> projectedWindowUsage.accountingWindow().equals(accountingWindow)
+                                        .filter(projectedWindowUsage -> projectedWindowUsage.accountingWindow()
+                                                .equals(accountingWindow)
                                         )
                                         .findFirst()
                                         .orElseGet(() -> ProjectedWindowUsageSnapshot.builder().tenantId(tenantId)

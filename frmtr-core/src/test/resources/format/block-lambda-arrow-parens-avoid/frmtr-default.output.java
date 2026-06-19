@@ -80,7 +80,11 @@ public class Lambda {
                 .collect(Collectors.toList());
 
         final List<Integer> values = Stream.of(1, 2)
-                .map((veryLongCustomerFilterParameter, veryLongCustomerFilterParameter, truncatedCustomerFilterParam) -> {
+                .map((
+                        veryLongCustomerFilterParameter,
+                        veryLongCustomerFilterParameter,
+                        truncatedCustomerFilterParam
+                ) -> {
                     // testing method
                     return n * 2;
                 })

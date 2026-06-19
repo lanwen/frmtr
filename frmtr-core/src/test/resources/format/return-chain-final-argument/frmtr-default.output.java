@@ -14,9 +14,10 @@ class ReturnChainFinalArgumentSample {
         final AggregateWaitStrategy waitStrategy = waitStrategies.computeIfAbsent(
             serviceName,
             ignored -> {
-                return new AggregateWaitAllStrategy(AggregateWaitAllStrategy.Mode.WITH_MAXIMUM_OUTER_TIMEOUT).withStartupTimeout(
-                    startupTimeout
-                );
+                return new AggregateWaitAllStrategy(AggregateWaitAllStrategy.Mode.WITH_MAXIMUM_OUTER_TIMEOUT)
+                    .withStartupTimeout(
+                        startupTimeout
+                    );
             }
         );
         sink(waitStrategy);
@@ -30,9 +31,10 @@ class ReturnChainFinalArgumentSample {
         final AggregateWaitStrategy waitStrategy = waitStrategies.computeIfAbsent(
             serviceName,
             ignored -> {
-                return new AggregateWaitAllStrategy(AggregateWaitAllStrategy.Mode.WITH_MAXIMUM_OUTER_TIMEOUT).withStartupTimeout(
-                    startupTimeout
-                );
+                return new AggregateWaitAllStrategy(AggregateWaitAllStrategy.Mode.WITH_MAXIMUM_OUTER_TIMEOUT)
+                    .withStartupTimeout(
+                        startupTimeout
+                    );
             }
         );
         sink(waitStrategy);

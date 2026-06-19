@@ -265,7 +265,8 @@ stream routing, terminal presentation, application packaging, and process exit m
 
 CLI behavior should not own formatting policy. New formatting behavior belongs in the API and Java formatter pipeline
 first, then the CLI may expose it by translating arguments into `FormatterOptions` or by selecting tooling-runner
-presentation.
+presentation. The CLI currently exposes formatter policy for line width, indentation width, parser language level, and
+parse-error behavior.
 
 Selector discovery is CLI-local because it depends on command-line concepts: default selectors, explicit files,
 directories, globs, comma-separated selector groups, `.gitignore`, and CLI excludes. Discovery uses selector-scoped,

@@ -223,6 +223,9 @@ bleeding-edge parser mode. Use `UNSET` for JavaParser raw mode, or a release val
 The formatter-wide default line width is 120 columns. Use `--line-width` in the CLI or
 `frmtr { java { lineWidth = ... } }` in Gradle to override it.
 
+The formatter-wide default indentation is four spaces. Use `--indent-width` in the CLI to choose a different number of
+spaces per indentation level.
+
 ## Native Binary
 
 The default native binary build is Linux via Docker:

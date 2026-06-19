@@ -109,6 +109,12 @@ public final class Main implements Callable<Integer> {
     Integer lineWidth;
 
     @Option(
+        names = "--indent-width",
+        description = "Spaces per indentation level. Defaults to the formatter default."
+    )
+    Integer indentWidth;
+
+    @Option(
         names = "--java-level",
         description = "Java parser language level. Use LATEST_AVAILABLE by default or UNSET for raw parser mode.",
         defaultValue = "LATEST_AVAILABLE",
@@ -262,6 +268,9 @@ public final class Main implements Callable<Integer> {
                 .withParseErrorBehavior(parseErrorBehavior);
         if (lineWidth != null) {
             options = options.withLineWidth(lineWidth);
+        }
+        if (indentWidth != null) {
+            options = options.withIndentWidth(indentWidth);
         }
         return options;
     }

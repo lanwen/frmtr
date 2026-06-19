@@ -490,6 +490,29 @@ final class MainTest {
     }
 
     @Test
+    void indentWidthFormatsStdinWithConfiguredSpaceIndentation() {
+        StringWriter out = new StringWriter();
+        Main main = new Main(
+            new PrintWriter(out, true),
+            new PrintWriter(new StringWriter(), true),
+            "class Demo{int value;}"
+        );
+
+        int exitCode = Main.commandLine(main).execute("--stdin", "--indent-width", "2");
+
+        assertThat(exitCode).isZero();
+        assertThat(out.toString()).isEqualTo(
+            """
+                class Demo {
+
+                  int value;
+                }
+                """
+        );
+        assertThat(main.indentWidth).isEqualTo(2);
+    }
+
+    @Test
     void diffUsesDefaultCheckWhenSelectorsAreEmpty(@TempDir Path dir) {
         write(dir.resolve("src/Main.java"), "class Main{int value;}");
 

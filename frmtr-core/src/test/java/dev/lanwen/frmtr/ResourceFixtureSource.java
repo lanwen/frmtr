@@ -96,11 +96,49 @@ public @interface ResourceFixtureSource {
             }
         }
 
+        /**
+         * Discovers formatter output resource paths recognized by the normal format fixture conventions for {@code
+         * glob}. This lets fixture-level audits validate companion metadata against the same resource root, input glob,
+         * and {@code frmtr-<variant>.output.java} filename contract used by the {@link FormatFixture} argument source.
+         */
+        public static List<String> outputResources(String glob) {
+            try {
+                return outputResources(matchedResources(glob, ResourceFixtureSource.class.getClassLoader())).toList();
+            } catch (IOException | URISyntaxException exception) {
+                throw new IllegalStateException(
+                    "Unable to discover formatter output resources for glob `%s`.".formatted(glob),
+                    exception
+                );
+            }
+        }
+
         private static Stream<FixtureInput> fixtureInputs(MatchedResources resources) {
             return resources.inputs()
                     .stream()
                     .map(input -> new FixtureInput(fixtureName(resources, input.getParent()), readString(input)))
                     .sorted(Comparator.comparing(FixtureInput::name));
+        }
+
+        private static Stream<String> outputResources(MatchedResources resources) {
+            return resources.inputs()
+                    .stream()
+                    .flatMap(input -> outputResources(resources, input.getParent()))
+                    .sorted();
+        }
+
+        private static Stream<String> outputResources(MatchedResources resources, Path directory) {
+            try (var stream = Files.list(directory)) {
+                return stream.filter(Files::isRegularFile)
+                        .filter(output -> OUTPUT_FILE.matcher(output.getFileName().toString()).matches())
+                        .map(output -> resourcePath(resources.rootName(), resources.root(), output)
+                                .toString()
+                                .replace(File.separatorChar, '/')
+                        )
+                        .toList()
+                        .stream();
+            } catch (IOException exception) {
+                throw new IllegalStateException("Unable to discover formatter outputs in " + directory, exception);
+            }
         }
 
         private Stream<FormatFixture> formatFixtures(MatchedResources resources) {
@@ -115,7 +153,7 @@ public @interface ResourceFixtureSource {
             String fixtureName = fixtureName(resources, directory);
             try (var stream = Files.list(directory)) {
                 List<FormatFixture> fixtures = stream.filter(Files::isRegularFile)
-                        .flatMap(output -> formatFixture(fixtureName, input, output))
+                        .flatMap(output -> formatFixture(fixtureName, resources, input, output))
                         .toList();
                 if (fixtures.isEmpty()) {
                     throw new IllegalStateException(
@@ -129,7 +167,12 @@ public @interface ResourceFixtureSource {
             }
         }
 
-        private Stream<FormatFixture> formatFixture(String fixtureName, Path input, Path output) {
+        private Stream<FormatFixture> formatFixture(
+                String fixtureName,
+                MatchedResources resources,
+                Path input,
+                Path output
+        ) {
             String fileName = output.getFileName().toString();
             var outputFile = OUTPUT_FILE.matcher(fileName);
             if (outputFile.matches()) {
@@ -141,7 +184,10 @@ public @interface ResourceFixtureSource {
                         fixtureName + " @ " + variant,
                         readString(input),
                         readString(output),
-                        options
+                        options,
+                        resourcePath(resources.rootName(), resources.root(), output)
+                                .toString()
+                                .replace(File.separatorChar, '/')
                     )
                 );
             }

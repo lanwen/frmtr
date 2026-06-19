@@ -64,6 +64,21 @@ that differ from `FormatterOptions.defaults()`, such as `line-width=40`. Adding 
 adding the directory-local `input.java`, matching `frmtr-*.output.java` files, and sidecars for non-default variants, not
 registering the fixture in a Java list.
 
+`FrmtrTest` also runs a suspicious line-width audit over every formatted fixture output using that fixture variant's
+actual `line-width` option. The audit is intentionally narrower than "no line may exceed the configured width": it
+flags over-width lines only when the non-comment, non-literal code still contains obvious breakable Java syntax such as
+binary or ternary operators, comma-heavy call/declaration shapes, chains/calls, throws lists, lambdas, or cast-like
+constructs. It deliberately ignores text block contents, `@formatter:off` ranges, explicit
+`frmtr-ignore-start`/`frmtr-ignore-end` ranges, and the pragma line for single-node `frmtr-ignore`; it does not infer the
+extent of a single ignored AST node from rendered brace depth.
+
+Current accepted or intentionally raw-preserved suspicious lines are recorded in
+`frmtr-core/src/test/resources/format/suspicious-line-width-allowlist.tsv`. Each row is keyed by output resource, line
+number, and the SHA-256 of the exact physical line, with a required reason. Add a row only when the line is a genuine
+known acceptance rather than a formatter regression. If a fixture output changes so a row is no longer matched by a
+current suspicious finding for that output resource, the audit fails as a stale approval; remove or update the row in
+the same change as the fixture behavior update.
+
 Unsupported syntax fixtures live under top-level `unsupported/**` and are discovered by
 `@ResourceFixtureSource(glob = "unsupported/**/input.java")`. They must include `input.java` plus `error.txt`, and assert
 the expected formatter error for inputs the bundled JavaParser dependency cannot parse.

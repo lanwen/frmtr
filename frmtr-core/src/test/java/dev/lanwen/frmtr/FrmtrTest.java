@@ -29,6 +29,7 @@ final class FrmtrTest {
         String formatted = Frmtr.format(fixture.source(), fixture.options());
 
         assertThat(formatted).isEqualTo(fixture.expected());
+        SuspiciousLineWidthAudit.assertNoUnexpectedFindings(fixture, formatted);
         assertThat(Frmtr.format(formatted, fixture.options())).isEqualTo(formatted);
         if (latestJavaParses(fixture.expected())) {
             assertThatCode(() -> assertLatestJavaParses(formatted)).doesNotThrowAnyException();

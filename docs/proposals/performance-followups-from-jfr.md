@@ -213,7 +213,7 @@ Sub-questions:
 
 ## Investigation lane 3: worker-local formatter/parser reuse
 
-**Priority:** high. **Confidence:** medium.
+**Status:** narrow reuse slice landed. **Priority:** high. **Confidence:** medium.
 
 ### Signal
 
@@ -227,35 +227,44 @@ language-level validation, JavaParser tokenization/lookahead, `Token.newToken`, 
 Can file-oriented runners reuse one formatter/parser per worker thread for identical
 `FormatterOptions` while keeping public `Frmtr.format(...)` pure and thread-safe?
 
+The current implementation landed that narrow slice: `FrmtrSession` exposes a public sequential
+session API for callers that intentionally reuse formatter state, and the file-oriented runner keeps
+session reuse worker-local. The static `Frmtr.format(...)` entry points remain pure one-shot calls.
+
 ### Code area
 
 - `Frmtr.format`
+- `FrmtrSession`
 - `JavaFormatter`
 - `FormatterRunner`
 
-### Proposed experiment
+### Landed slice
 
-1. Keep public `Frmtr.format(...)` unchanged.
-2. Add an internal runner path that constructs one `JavaFormatter` per worker thread and reuses it
-   for that worker's files.
-3. Do not share a `JavaFormatter` across threads unless JavaParser thread-safety is proven.
-4. Run the fixture suite, runner tests, and paired macro timing.
-5. Add JFR comparison focused on parser setup and token/range allocation.
+1. Kept public `Frmtr.format(...)` unchanged as a one-shot static API.
+2. Added `FrmtrSession` as an explicit sequential reuse API.
+3. Updated the file-oriented runner to reuse one session per worker for that worker's files.
+4. Kept formatter/session instances worker-local rather than shared across threads.
+
+### Remaining follow-up
+
+1. Run paired macro timing on a large external Java corpus.
+2. Add JFR comparison focused on parser setup and token/range allocation.
+3. Use those measurements to decide whether additional parser/session reuse work is justified.
 
 ### Success metrics
 
 - No behavior/output changes.
 - Runner parallelism remains deterministic and order-preserving.
 - Parser setup samples decrease in the file-runner path.
-- Macro timing improves or at least parser setup allocation drops enough to justify the extra runner
-  surface.
+- Macro timing improves or at least parser setup allocation drops enough to justify any additional
+  runner or API surface.
 
 ### Risks
 
-- Reusing parser objects may retain state in JavaParser internals. The first implementation should
-  be worker-local, not global.
-- The public API currently advertises simple static entry points; an optimization should not force
-  users into stateful formatter objects unless there is a clear public API decision.
+- Reusing parser objects may retain state in JavaParser internals. Reuse should remain sequential or
+  worker-local unless JavaParser thread-safety is proven.
+- The public API now includes both static one-shot entry points and explicit sequential sessions;
+  future optimization should preserve that distinction.
 - Verify-mode reparse uses the same parser configuration and must stay semantically equivalent.
 
 ## Investigation lane 4: method-chain and comment-analysis stream flattening
@@ -384,7 +393,7 @@ After formatter-owned hot paths improve, does discovery become material again on
 
 1. **Raw-source whitespace churn**: highest-confidence formatter-owned allocation/CPU target.
 2. **Comment-query indexing**: likely large, but should be split by query family.
-3. **Worker-local formatter/parser reuse**: promising, but needs thread-safety discipline.
+3. **Worker-local formatter/parser reuse**: narrow session reuse landed; measure before widening it.
 4. **Method-chain/comment stream flattening**: useful after the source-shape/comment policy surface
    is clearer.
 5. **Startup split**: run in parallel with performance claims so macro numbers are interpretable.

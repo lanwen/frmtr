@@ -159,7 +159,9 @@ or rendering dominates, which directs further optimization.
 > `7193.9 kB`) appeared on main and disappeared on M2a. The same JFR pass produced a focused
 > performance backlog: raw-source whitespace churn, comment-query indexing, worker-local
 > formatter/parser reuse, stream-heavy method-chain analysis, startup separation, and discovery
-> isolation.
+> isolation. The narrow formatter/parser reuse slice has since landed as public sequential
+> `FrmtrSession` reuse plus worker-local reuse in the file-oriented runner; remaining work is
+> measurement and any broader follow-up justified by that evidence.
 
 - **Serves:** "fastest" credibility, maintainer-friendly.
 - **Effort:** medium. Methodology-heavy, low risk.
@@ -213,10 +215,11 @@ profiling proves it is worthwhile.
 > only added/modified files. `frmtrJavaFormat` remains deliberately non-cacheable because it mutates
 > source files in place and does not declare a synthetic marker output.
 > `Frmtr.format` is **definitively thread-safe** (pure function of `(source, options)`; fresh
-> `JavaFormatContext` per call, no shared mutable state). The CLI now renders progress on a separate
-> side channel while preserving deterministic final result output. Persistent CLI caching stays out
-> of scope per the lazy-ignore non-goal, and Gradle-native progress/logging remains a separate
-> follow-up if needed.
+> `JavaFormatContext` per call, no shared mutable state), while `FrmtrSession` provides explicit
+> sequential reuse and the file-oriented runner reuses sessions per worker. The CLI now renders
+> progress on a separate side channel while preserving deterministic final result output. Persistent
+> CLI caching stays out of scope per the lazy-ignore non-goal, and Gradle-native progress/logging
+> remains a separate follow-up if needed.
 
 The tooling runner now formats independent files on a bounded thread pool, and the Gradle check task
 now leans on Gradle's input snapshots and build cache to avoid reprocessing unchanged files.

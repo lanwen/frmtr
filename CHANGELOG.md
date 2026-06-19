@@ -13,10 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Gradle plugin root-project registration for Java subprojects, inherited module configuration, and module-level
   `frmtr { enabled = false }` opt-out.
 - Gradle check build caching and incremental source selection for `frmtrJavaCheck`.
+- Public `FrmtrSession` API for sequential callers that want to reuse formatter state across multiple source strings.
 
 ### Changed
 
 - Published JVM runtime artifacts now target Java 21 while native CLI builds continue to use GraalVM/JDK 25.
+- File-oriented runner formatting now reuses formatter sessions per worker instead of constructing a fresh formatter for
+  every file.
 
 ### Fixed
 

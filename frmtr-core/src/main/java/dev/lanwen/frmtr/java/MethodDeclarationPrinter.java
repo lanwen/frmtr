@@ -1,7 +1,9 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.Range;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.AnnotationExpr;
@@ -59,6 +61,8 @@ final class MethodDeclarationPrinter {
 
     private final Function<NodeWithAnnotations<?>, String> inlineAnnotations;
 
+    private final Function<Doc, String> commentText;
+
     private final Function<Node, String> compact;
 
     private final Function<Type, Doc> typeBody;
@@ -83,6 +87,7 @@ final class MethodDeclarationPrinter {
             Function<NodeWithModifiers<?>, String> modifiers,
             Function<NodeList<TypeParameter>, String> flatTypeParameters,
             Function<NodeWithAnnotations<?>, String> inlineAnnotations,
+            Function<Doc, String> commentText,
             Function<Node, String> compact,
             Function<Type, Doc> typeBody,
             Function<ClassOrInterfaceType, Doc> brokenClassOrInterfaceType,
@@ -101,6 +106,7 @@ final class MethodDeclarationPrinter {
         this.modifiers = modifiers;
         this.flatTypeParameters = flatTypeParameters;
         this.inlineAnnotations = inlineAnnotations;
+        this.commentText = commentText;
         this.compact = compact;
         this.typeBody = typeBody;
         this.brokenClassOrInterfaceType = brokenClassOrInterfaceType;
@@ -124,6 +130,13 @@ final class MethodDeclarationPrinter {
         docs.add(annotationMethodGapComments(declaration));
         String prefix = modifiers.apply(declaration);
         docs.add(Doc.text(prefix));
+        Optional<Doc> inlineHeaderComment = inlineHeaderCommentAfterModifiers(declaration);
+        if (inlineHeaderComment.isPresent()) {
+            Doc comment = inlineHeaderComment.orElseThrow();
+            docs.add(comment);
+            docs.add(Doc.text(" "));
+            prefix += commentText.apply(comment) + " ";
+        }
         if (!declaration.getTypeParameters().isEmpty()) {
             String typeParameters = flatTypeParameters.apply(declaration.getTypeParameters()) + " ";
             prefix += typeParameters;
@@ -154,6 +167,61 @@ final class MethodDeclarationPrinter {
         }
         docs.add(declaration.getBody().map(body -> Doc.concat(Doc.text(" "), block.apply(body))).orElse(Doc.text(";")));
         return Doc.concat(docs);
+    }
+
+    /**
+     * Preserves same-line block comments written between modifiers and the method return type.
+     *
+     * <p>Commented signatures with small bodies use the raw fallback, but larger bodies stay on the structured method
+     * path. This slot keeps source shapes such as {@code public /* note *&#47; Result value()} without making the raw
+     * fallback format arbitrary method bodies.
+     */
+    private Optional<Doc> inlineHeaderCommentAfterModifiers(MethodDeclaration declaration) {
+        return commentPlacement.containedComments(declaration)
+                .stream()
+                .filter(JavaCommentTrivia::isBlock)
+                .filter(comment -> betweenModifiersAndNextHeaderToken(comment, declaration))
+                .findFirst()
+                .map(comments::comment)
+                .filter(comment -> comment != Doc.EMPTY);
+    }
+
+    private boolean betweenModifiersAndNextHeaderToken(JavaCommentTrivia comment, MethodDeclaration declaration) {
+        Optional<Range> commentRange = comment.comment().getRange();
+        Optional<Range> nextTokenRange = nextHeaderTokenAfterModifiers(declaration);
+        if (commentRange.isEmpty() || nextTokenRange.isEmpty()) {
+            return false;
+        }
+        Range commentPosition = commentRange.orElseThrow();
+        Range nextTokenPosition = nextTokenRange.orElseThrow();
+        if (
+            commentPosition.begin.line != nextTokenPosition.begin.line
+            || commentPosition.end.line != nextTokenPosition.begin.line
+        ) {
+            return false;
+        }
+        if (commentPosition.end.column >= nextTokenPosition.begin.column) {
+            return false;
+        }
+        return commentPosition.begin.column > sameLineModifierEndColumn(declaration, nextTokenPosition.begin.line);
+    }
+
+    private Optional<Range> nextHeaderTokenAfterModifiers(MethodDeclaration declaration) {
+        if (!declaration.getTypeParameters().isEmpty()) {
+            return declaration.getTypeParameters().get(0).getRange();
+        }
+        return declaration.getType().getRange();
+    }
+
+    private int sameLineModifierEndColumn(MethodDeclaration declaration, int line) {
+        return declaration.getModifiers()
+                .stream()
+                .map(Modifier::getRange)
+                .flatMap(Optional::stream)
+                .filter(range -> range.end.line == line)
+                .mapToInt(range -> range.end.column)
+                .max()
+                .orElse(Integer.MIN_VALUE);
     }
 
     private Doc annotationMethodGapComments(MethodDeclaration declaration) {

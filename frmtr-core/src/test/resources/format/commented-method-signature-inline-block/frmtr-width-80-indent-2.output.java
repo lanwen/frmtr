@@ -1,12 +1,15 @@
-class SignatureComments {
+class SignatureComments<K, V> {
 
   @Override
   public /* NOTE(planner): stable */ String toString() {
     return displayName;
   }
 
-  public /* NOTE(planner): stable */ ImmutableList<Value> get(Key key) {
-    return valuesByKey.get(key);
+  @Override
+  public /* NOTE(planner): stable */ ImmutableList<V> get(K key) {
+    // This cast is safe as the constructor controls the map.
+    ImmutableList<V> list = (ImmutableList<V>) valuesByKey.get(key);
+    return list == null ? ImmutableList.of() : list;
   }
 
   @Override

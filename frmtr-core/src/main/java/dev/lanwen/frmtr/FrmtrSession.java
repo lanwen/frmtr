@@ -19,13 +19,6 @@ public final class FrmtrSession {
     }
 
     /**
-     * Creates a reusable sequential session with the default formatter policy.
-     */
-    public static FrmtrSession create() {
-        return create(FormatterOptions.defaults());
-    }
-
-    /**
      * Creates a reusable sequential session with the supplied formatter policy.
      */
     public static FrmtrSession create(FormatterOptions options) {

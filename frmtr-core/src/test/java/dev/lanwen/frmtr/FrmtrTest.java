@@ -98,7 +98,7 @@ final class FrmtrTest {
 
     @Test
     void reusableSessionContinuesAfterParseFailure() {
-        FrmtrSession session = Frmtr.session();
+        FrmtrSession session = Frmtr.session(FormatterOptions.defaults());
 
         assertThatThrownBy(() -> session.format("class {"))
                 .isInstanceOf(FormatterException.class)

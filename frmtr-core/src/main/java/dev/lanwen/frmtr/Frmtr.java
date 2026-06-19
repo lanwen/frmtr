@@ -43,16 +43,6 @@ public final class Frmtr {
     }
 
     /**
-     * Creates a reusable sequential formatter session with the default formatter policy.
-     *
-     * <p>Use one session at a time from one thread only. The session owns a reusable JavaParser instance, which is not
-     * thread-safe.
-     */
-    public static FrmtrSession session() {
-        return FrmtrSession.create();
-    }
-
-    /**
      * Creates a reusable sequential formatter session with the supplied formatter policy.
      *
      * <p>Use one session at a time from one thread only. The session owns a reusable JavaParser instance, which is not

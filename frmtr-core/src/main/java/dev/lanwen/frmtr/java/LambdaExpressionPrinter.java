@@ -34,16 +34,8 @@ import java.util.function.ToIntFunction;
  * <p>{@link JavaPrinter} still owns broad expression dispatch, enclosed-expression suffix decisions, raw source
  * helpers, range predicates, and binary-expression policy. {@link ObjectCreationPrinter} owns constructor layout, and
  * {@link MethodCallPrinter} still owns call and chain layout. This helper receives those decisions as callbacks and
- * only chooses the lambda-specific structure.
- * Representative fixture pairs for this boundary include
- * {@code frmtr-core/src/test/resources/format/block-lambda-arrow-parens-always/input.java} with
- * {@code frmtr-core/src/test/resources/format/block-lambda-arrow-parens-always/frmtr-default.output.java},
- * {@code frmtr-core/src/test/resources/format/block-lambda-arrow-parens-avoid/input.java} with
- * {@code frmtr-core/src/test/resources/format/block-lambda-arrow-parens-avoid/frmtr-default.output.java},
- * {@code frmtr-core/src/test/resources/format/method-chain-member-access/input.java} with
- * {@code frmtr-core/src/test/resources/format/method-chain-member-access/frmtr-default.output.java}, and
- * {@code frmtr-core/src/test/resources/format/variable-declarations/input.java} with
- * {@code frmtr-core/src/test/resources/format/variable-declarations/frmtr-default.output.java}.
+ * only chooses the lambda-specific structure. Representative coverage lives in the block-lambda, method-chain, and
+ * variable-declaration formatter fixtures.
  */
 final class LambdaExpressionPrinter {
 
@@ -242,6 +234,14 @@ final class LambdaExpressionPrinter {
                 .flatMap(methodCall -> expressionLambdaArguments.methodCallBodyWithOpener(parameters, methodCall));
         if (methodCallBodyWithOpener.isPresent()) {
             return methodCallBodyWithOpener.orElseThrow();
+        }
+        Optional<Doc> methodCallBodyWithHeader = parametersHaveComments
+            ? Optional.empty()
+            : expressionBody.filter(MethodCallExpr.class::isInstance)
+                    .map(MethodCallExpr.class::cast)
+                    .flatMap(methodCall -> expressionLambdaArguments.methodCallBodyWithHeader(parameters, methodCall));
+        if (methodCallBodyWithHeader.isPresent()) {
+            return methodCallBodyWithHeader.orElseThrow();
         }
         Optional<Doc> sourceMultilineMethodCallBody = expressionBody.flatMap(
             body -> lambdaBodyHeaders.sourceMultilineMethodCallBodyWithHeader(expression, parameters, body)

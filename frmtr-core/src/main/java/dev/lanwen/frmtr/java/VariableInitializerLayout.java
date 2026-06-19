@@ -62,6 +62,8 @@ final class VariableInitializerLayout {
 
     private final Function<Node, String> compact;
 
+    private final ConditionalExpressionLineProjection conditionalProjection;
+
     private final Function<Node, String> compactWithoutOwnComment;
 
     private final Function<List<? extends Node>, String> compactJoin;
@@ -200,6 +202,7 @@ final class VariableInitializerLayout {
         this.layoutWidth = layoutWidth;
         this.compactTypeLike = compactTypeLike;
         this.compact = compact;
+        this.conditionalProjection = new ConditionalExpressionLineProjection(compact::apply);
         this.compactWithoutOwnComment = compactWithoutOwnComment;
         this.compactJoin = compactJoin;
         this.expression = expression;
@@ -444,10 +447,31 @@ final class VariableInitializerLayout {
                 Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLinesWithComments.apply(binaryExpr)))
             );
         }
+        if (
+            initializer instanceof ConditionalExpr conditionalExpr
+            && conditionalInitializerLineOverflows(variable, declarationPrefix, conditionalExpr)
+            && !initializerHasOwnBreak(initializer)
+        ) {
+            return conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr);
+        }
+        if (initializer instanceof MethodCallExpr methodCall && methodCallHasBlockLambdaArgument(methodCall)) {
+            Optional<Doc> receiverBreakCall = variableWithReceiverBreakBeforeOverWidthHuggableBlockLambdaArguments(
+                variable,
+                name,
+                declarationPrefix + variable.getNameAsString(),
+                methodCall
+            );
+            if (receiverBreakCall.isPresent()) {
+                return receiverBreakCall.orElseThrow();
+            }
+        }
         if (layoutWidth.blockStatement(flat) > options.lineWidth()) {
             Optional<Doc> suffixedEnclosedInitializer = suffixedEnclosedExpression.apply(initializer, true);
             if (suffixedEnclosedInitializer.isPresent()) {
                 return Doc.concat(Doc.text(name + " = "), suffixedEnclosedInitializer.orElseThrow());
+            }
+            if (initializer instanceof ConditionalExpr conditionalExpr && !initializerHasOwnBreak(initializer)) {
+                return conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr);
             }
             if (
                 initializer instanceof ArrayAccessExpr arrayAccessExpr
@@ -536,6 +560,7 @@ final class VariableInitializerLayout {
         ) {
             if (methodCallChainRootIsObjectCreation.test(methodCall)) {
                 Optional<Doc> directObjectCreationCall = variableWithBrokenMethodCallArguments(
+                    variable,
                     name,
                     declarationPrefix + variable.getNameAsString(),
                     methodCall,
@@ -586,6 +611,7 @@ final class VariableInitializerLayout {
             }
             if (methodCallHasAttachableScope(methodCall)) {
                 Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
+                    variable,
                     name,
                     declarationPrefix + variable.getNameAsString(),
                     methodCall,
@@ -596,6 +622,7 @@ final class VariableInitializerLayout {
                 }
             }
             Optional<Doc> sourceMultilineBlockLambdaCall = variableWithSourceMultilineBlockLambdaInitializer(
+                variable,
                 name,
                 declarationPrefix + variable.getNameAsString(),
                 methodCall
@@ -623,6 +650,7 @@ final class VariableInitializerLayout {
                 );
             }
             Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
+                variable,
                 name,
                 declarationPrefix + variable.getNameAsString(),
                 methodCall,
@@ -719,6 +747,19 @@ final class VariableInitializerLayout {
             );
         }
         return Doc.concat(Doc.text(name + " = "), expression.apply(initializer));
+    }
+
+    private boolean conditionalInitializerLineOverflows(
+            VariableDeclarator variable,
+            String declarationPrefix,
+            ConditionalExpr initializer
+    ) {
+        String line = declarationPrefix
+            + variable.getNameAsString()
+            + " = "
+            + conditionalProjection.line(initializer)
+            + ";";
+        return layoutWidth.variableInitializer(variable, line) > options.lineWidth();
     }
 
     /**
@@ -1069,6 +1110,7 @@ final class VariableInitializerLayout {
      * Breaks a method-call initializer at its arguments when the call prefix still fits on the assignment line.
      */
     private Optional<Doc> variableWithBrokenMethodCallArguments(
+            VariableDeclarator variable,
             String name,
             String flatName,
             MethodCallExpr methodCall,
@@ -1084,11 +1126,23 @@ final class VariableInitializerLayout {
         }
         String callPrefix = methodCallPrefix.apply(methodCall);
         Optional<Doc> blockLambdaCall = variableWithHuggableBlockLambdaArguments(
+            variable,
             name,
             flatName,
             methodCall,
             callPrefix
         );
+        if (blockLambdaCall.isEmpty() && methodCallHasBlockLambdaArgument(methodCall)) {
+            Optional<Doc> brokenReceiverCall = variableWithReceiverBreakBeforeHuggableBlockLambdaArguments(
+                variable,
+                name,
+                flatName,
+                methodCall
+            );
+            if (brokenReceiverCall.isPresent()) {
+                return brokenReceiverCall;
+            }
+        }
         if (
             methodCallChainIsSourceMultiline.test(methodCall)
             && blockLambdaCall.isEmpty()
@@ -1210,6 +1264,7 @@ final class VariableInitializerLayout {
      * branch only wins when the assignment line through the lambda opener fits after the declaration prefix.
      */
     private Optional<Doc> variableWithHuggableBlockLambdaArguments(
+            VariableDeclarator variable,
             String name,
             String flatName,
             MethodCallExpr methodCall,
@@ -1219,9 +1274,70 @@ final class VariableInitializerLayout {
                 .render(
                     callPrefix,
                     methodCall.getArguments(),
-                    firstLine -> layoutWidth.currentIndented(flatName + " = " + firstLine)
+                    firstLine -> layoutWidth.variableInitializer(variable, flatName + " = " + firstLine)
                 )
                 .map(call -> Doc.concat(Doc.text(name + " = "), call));
+    }
+
+    private Optional<Doc> variableWithReceiverBreakBeforeOverWidthHuggableBlockLambdaArguments(
+            VariableDeclarator variable,
+            String name,
+            String flatName,
+            MethodCallExpr methodCall
+    ) {
+        String callPrefix = methodCallPrefix.apply(methodCall);
+        if (
+            variableWithHuggableBlockLambdaArguments(variable, name, flatName, methodCall, callPrefix)
+                    .isPresent()
+        ) {
+            return Optional.empty();
+        }
+        return variableWithReceiverBreakBeforeHuggableBlockLambdaArguments(variable, name, flatName, methodCall);
+    }
+
+    private Optional<Doc> variableWithReceiverBreakBeforeHuggableBlockLambdaArguments(
+            VariableDeclarator variable,
+            String name,
+            String flatName,
+            MethodCallExpr methodCall
+    ) {
+        Optional<Expression> scope = methodCall.getScope();
+        if (
+            scope.isEmpty()
+            || scope.filter(Expression::isMethodCallExpr).isPresent()
+            || scope.filter(expression -> !expression.getAllContainedComments().isEmpty()).isPresent()
+            || scope.filter(shouldPrintScopeAsDoc).isPresent()
+            || scope.filter(expression -> rawSource.rawWithoutOwnComment(expression).contains("\n")).isPresent()
+        ) {
+            return Optional.empty();
+        }
+        Expression receiver = scope.orElseThrow();
+        String receiverText = compact.apply(receiver);
+        if (
+            receiverText.length() <= flatName.length()
+            || layoutWidth.variableInitializer(variable, flatName + " = " + receiverText) > options.lineWidth()
+        ) {
+            return Optional.empty();
+        }
+        return huggableBlockLambdaArguments
+                .render(
+                    methodCallSegmentPrefix(methodCall),
+                    methodCall.getArguments(),
+                    layoutWidth::continuationStatement
+                )
+                .map(call -> Doc.concat(
+                        Doc.text(name + " = "),
+                        expression.apply(receiver),
+                        Doc.indent(Doc.concat(Doc.HARD_LINE, call))
+                ));
+    }
+
+    private String methodCallSegmentPrefix(MethodCallExpr methodCall) {
+        return "."
+            + methodCall.getTypeArguments()
+                    .map(typeArguments -> "<" + compactJoin.apply(typeArguments) + ">")
+                    .orElse("")
+            + methodCall.getNameAsString();
     }
 
     /**
@@ -1229,6 +1345,7 @@ final class VariableInitializerLayout {
      * line through the call opener still fits.
      */
     private Optional<Doc> variableWithSourceMultilineBlockLambdaInitializer(
+            VariableDeclarator variable,
             String name,
             String flatName,
             MethodCallExpr methodCall
@@ -1242,7 +1359,7 @@ final class VariableInitializerLayout {
         ) {
             return Optional.empty();
         }
-        return variableWithBrokenMethodCallArguments(name, flatName, methodCall, false);
+        return variableWithBrokenMethodCallArguments(variable, name, flatName, methodCall, false);
     }
 
     /**

@@ -1,5 +1,6 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.Expression;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
@@ -30,6 +31,8 @@ final class BreakableArgumentExpressionPrinter {
 
     private final Function<Expression, String> compact;
 
+    private final ConditionalExpressionLineProjection conditionalProjection;
+
     private final ToIntFunction<String> continuationStatementWidth;
 
     BreakableArgumentExpressionPrinter(
@@ -45,6 +48,7 @@ final class BreakableArgumentExpressionPrinter {
         this.expressionRenderer = expressionRenderer;
         this.brokenArgumentRenderer = brokenArgumentRenderer;
         this.compact = compact;
+        this.conditionalProjection = new ConditionalExpressionLineProjection(compact);
         this.continuationStatementWidth = continuationStatementWidth;
     }
 
@@ -63,6 +67,7 @@ final class BreakableArgumentExpressionPrinter {
         if (
             broken.isPresent()
             && (sourceShape.spansMultipleLines(argument)
+                || conditionalArgumentLineOverflows(argument, suffix)
                 || continuationStatementWidth.applyAsInt(compact.apply(argument) + suffix) > options.lineWidth())
         ) {
             return Doc.ifBreak(broken.orElseThrow(), flat);
@@ -80,6 +85,7 @@ final class BreakableArgumentExpressionPrinter {
         if (
             broken.isPresent()
             && (sourceShape.spansMultipleLines(argument)
+                || conditionalArgumentLineOverflows(argument, suffix)
                 || continuationStatementWidth.applyAsInt(compact.apply(argument) + suffix) > options.lineWidth())
         ) {
             return broken.orElseThrow();
@@ -92,5 +98,13 @@ final class BreakableArgumentExpressionPrinter {
             return Optional.empty();
         }
         return brokenArgumentRenderer.apply(argument);
+    }
+
+    private boolean conditionalArgumentLineOverflows(Expression argument, String suffix) {
+        if (!(argument instanceof ConditionalExpr conditionalExpr)) {
+            return false;
+        }
+        String line = conditionalProjection.line(conditionalExpr) + suffix;
+        return continuationStatementWidth.applyAsInt(line) > options.lineWidth();
     }
 }

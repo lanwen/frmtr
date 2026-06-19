@@ -155,8 +155,10 @@ final class ExpressionPrinters {
             options,
             this::expression,
             compactSource::compactTypeLike,
+            compactSource::compact,
             types::typeBody,
-            this::currentIndentedWidth
+            this::currentIndentedWidth,
+            this::continuationStatementWidth
         );
         this.classExpressions = new ClassExpressionPrinter(compactSource::compactTypeLike);
         this.enclosedExpressions = new EnclosedExpressionPrinter(
@@ -285,6 +287,7 @@ final class ExpressionPrinters {
             methodCalls::sourceMultilineExpressionLambda,
             methodCalls::sourceMultilineArguments,
             methodCalls::compactRootWithBrokenFinalChainSegment,
+            methodCalls::forcedMethodCallChain,
             methodCalls::forcedMethodCallChain,
             methodCalls::brokenMethodCall,
             methodCalls::brokenMethodCallWithClosingLine,

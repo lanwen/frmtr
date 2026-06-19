@@ -44,6 +44,8 @@ final class ReturnExpressionPrinter {
 
     private final Function<Expression, String> compact;
 
+    private final ConditionalExpressionLineProjection conditionalProjection;
+
     private final ToIntFunction<String> currentIndentedWidth;
 
     private final ToIntFunction<String> continuationStatementWidth;
@@ -59,6 +61,8 @@ final class ReturnExpressionPrinter {
     > compactRootWithBrokenFinalChainSegment;
 
     private final BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Optional<Doc>> forcedMethodCallChain;
+
+    private final BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> forcedMethodCallChainWithFirstLine;
 
     private final Function<MethodCallExpr, Doc> brokenMethodCall;
 
@@ -94,6 +98,7 @@ final class ReturnExpressionPrinter {
             Function<MethodCallExpr, Optional<Doc>> sourceMultilineMethodCall,
             BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Optional<Doc>> compactRootWithBrokenFinalChainSegment,
             BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Optional<Doc>> forcedMethodCallChain,
+            BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> forcedMethodCallChainWithFirstLine,
             Function<MethodCallExpr, Doc> brokenMethodCall,
             BiFunction<MethodCallExpr, String, Doc> brokenMethodCallWithClosingLine,
             Function<MethodCallExpr, String> methodCallPrefix,
@@ -112,12 +117,14 @@ final class ReturnExpressionPrinter {
         this.expressionWithTail = expressionWithTail;
         this.brokenLambdaExpression = brokenLambdaExpression;
         this.compact = compact;
+        this.conditionalProjection = new ConditionalExpressionLineProjection(compact);
         this.currentIndentedWidth = currentIndentedWidth;
         this.continuationStatementWidth = continuationStatementWidth;
         this.sourceMultilineExpressionLambda = sourceMultilineExpressionLambda;
         this.sourceMultilineMethodCall = sourceMultilineMethodCall;
         this.compactRootWithBrokenFinalChainSegment = compactRootWithBrokenFinalChainSegment;
         this.forcedMethodCallChain = forcedMethodCallChain;
+        this.forcedMethodCallChainWithFirstLine = forcedMethodCallChainWithFirstLine;
         this.brokenMethodCall = brokenMethodCall;
         this.brokenMethodCallWithClosingLine = brokenMethodCallWithClosingLine;
         this.methodCallPrefix = methodCallPrefix;
@@ -172,10 +179,42 @@ final class ReturnExpressionPrinter {
         if (sourceMultilineObjectCreation(expression)) {
             return brokenObjectCreation.apply((ObjectCreationExpr) expression);
         }
+        if (
+            expression instanceof ConditionalExpr conditionalExpr
+            && conditionalReturnLineOverflows(conditionalExpr, lineBudget)
+        ) {
+            return conditionalExpression.apply(conditionalExpr, true);
+        }
+        if (
+            expression instanceof MethodCallExpr methodCall
+            && objectCreationRootMethodCallReturnLineOverflows(methodCall, lineBudget)
+        ) {
+            Optional<Doc> forcedChain = returnWithForcedMethodCallChain(methodCall, lineBudget);
+            if (forcedChain.isPresent()) {
+                return forcedChain.orElseThrow();
+            }
+        }
         if (returnLineFits(expression, lineBudget)) {
             return this.expression.apply(expression);
         }
         return brokenReturnExpression(expression, lineBudget).orElseGet(() -> this.expression.apply(expression));
+    }
+
+    private boolean objectCreationRootMethodCallReturnLineOverflows(
+            MethodCallExpr expression,
+            LayoutWidth.LineBudget lineBudget
+    ) {
+        Optional<Expression> scope = expression.getScope();
+        if (scope.filter(ObjectCreationExpr.class::isInstance).isEmpty()) {
+            return false;
+        }
+        String line = "return " + methodCallPrefix.apply(expression) + "(";
+        return returnLineWidth(expression, line, lineBudget) > options.lineWidth();
+    }
+
+    private boolean conditionalReturnLineOverflows(ConditionalExpr expression, LayoutWidth.LineBudget lineBudget) {
+        String line = "return " + conditionalProjection.line(expression) + ";";
+        return returnLineWidth(expression, line, lineBudget) > options.lineWidth();
     }
 
     private Optional<BinaryExpr> sourceMultilineEnclosedBinary(Expression expression) {
@@ -248,7 +287,17 @@ final class ReturnExpressionPrinter {
                 return sourceMultilineCall;
             }
         }
+        if (methodCall.getScope().filter(ObjectCreationExpr.class::isInstance).isPresent()) {
+            return forcedMethodCallChainWithFirstLine.apply(
+                    methodCall,
+                    text -> returnLineWidth(methodCall, "return " + text, lineBudget)
+            ).or(() -> forcedMethodCallChain.apply(methodCall, lineBudget));
+        }
         return compactRootWithBrokenFinalChainSegment.apply(methodCall, lineBudget)
+                .or(() -> forcedMethodCallChainWithFirstLine.apply(
+                        methodCall,
+                        text -> returnLineWidth(methodCall, "return " + text, lineBudget)
+                ))
                 .or(() -> forcedMethodCallChain.apply(methodCall, lineBudget))
                 .or(() -> Optional.of(brokenMethodCall.apply(methodCall)));
     }
@@ -263,6 +312,9 @@ final class ReturnExpressionPrinter {
     private Optional<Doc> returnWithForcedLambdaBreak(Expression expression) {
         if (!(expression instanceof LambdaExpr lambdaExpr) || lambdaExpr.getExpressionBody().isEmpty()) {
             return Optional.empty();
+        }
+        if (lambdaExpr.getExpressionBody().filter(MethodCallExpr.class::isInstance).isPresent()) {
+            return Optional.of(this.expression.apply(lambdaExpr));
         }
         return Optional.of(brokenLambdaExpression.apply(lambdaExpr));
     }

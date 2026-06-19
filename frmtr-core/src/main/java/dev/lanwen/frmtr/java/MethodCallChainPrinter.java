@@ -240,7 +240,8 @@ final class MethodCallChainPrinter {
                 MethodCallChainTail.EMPTY,
                 MethodCallChainSourcePlanner.ChainRootRendering.BROKEN_OBJECT_CREATION,
                 analysis.sourceMultilineChain(),
-                LayoutWidth.LineBudget.CURRENT
+                LayoutWidth.LineBudget.CURRENT,
+                firstLineWidth
             ));
         }
         Doc firstSegment = methodCallChainSegment(
@@ -631,7 +632,8 @@ final class MethodCallChainPrinter {
                 finalSegmentSuffix,
                 chainPlan.rootRendering(),
                 analysis.sourceMultilineChain(),
-                lineBudget
+                lineBudget,
+                firstLineWidth
             ));
         }
         if (
@@ -1796,13 +1798,14 @@ final class MethodCallChainPrinter {
     private ToIntFunction<String> objectRootSegmentWidth(
             ObjectCreationExpr root,
             MethodCallChainSourcePlanner.ChainRootRendering rootRendering,
-            LayoutWidth.LineBudget lineBudget
+            LayoutWidth.LineBudget lineBudget,
+            ToIntFunction<String> firstLineWidth
     ) {
         if (!objectRootUsesCompactLine(root, rootRendering)) {
             return segment -> layoutWidth.line(lineBudget, ")" + segment);
         }
         String rootText = compactSource.compact(root);
-        return segment -> layoutWidth.line(lineBudget, rootText + segment);
+        return segment -> firstLineWidth.applyAsInt(rootText + segment);
     }
 
     private boolean objectRootUsesCompactLine(
@@ -1851,7 +1854,8 @@ final class MethodCallChainPrinter {
             MethodCallChainTail finalSegmentSuffix,
             MethodCallChainSourcePlanner.ChainRootRendering rootRendering,
             boolean sourceMultilineChain,
-            LayoutWidth.LineBudget lineBudget
+            LayoutWidth.LineBudget lineBudget,
+            ToIntFunction<String> firstLineWidth
     ) {
         if (sourceMultilineChain && methodCallSegmentHasLeadingLineComment(call)) {
             return Doc.concat(
@@ -1868,8 +1872,20 @@ final class MethodCallChainPrinter {
         ToIntFunction<String> compactSegmentWidth = objectRootSegmentWidth(
             objectCreation,
             rootRendering,
-            lineBudget
+            lineBudget,
+            firstLineWidth
         );
+        if (compactSegmentWidth.applyAsInt(compactMethodCallChainSegmentOpener(call)) > options.lineWidth()) {
+            return Doc.concat(
+                rootDoc,
+                chainContinuation(methodCallChainSegment(
+                    call,
+                    Optional.empty(),
+                    finalSegmentSuffix,
+                    compactSegmentWidth
+                ))
+            );
+        }
         Optional<Doc> compactAttachedSegment = compactAttachedObjectRootSingleSegment(
             rootDoc,
             call,
@@ -1895,6 +1911,15 @@ final class MethodCallChainPrinter {
             return Doc.concat(rootDoc, chainContinuation(attachedSegment));
         }
         return Doc.concat(rootDoc, attachedSegment);
+    }
+
+    private String compactMethodCallChainSegmentOpener(MethodCallExpr expression) {
+        return "."
+            + expression.getTypeArguments()
+                    .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
+                    .orElse("")
+            + expression.getNameAsString()
+            + "(";
     }
 
     private Doc methodCallChainSegment(

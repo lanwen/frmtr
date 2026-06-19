@@ -4,6 +4,7 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.expr.CastExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.type.IntersectionType;
 import com.github.javaparser.ast.type.Type;
@@ -34,22 +35,30 @@ final class CastExpressionPrinter {
 
     private final Function<Node, String> compactTypeLike;
 
+    private final Function<Node, String> compact;
+
     private final Function<Type, Doc> typeBody;
 
     private final ToIntFunction<String> currentIndentedWidth;
+
+    private final ToIntFunction<String> continuationStatementWidth;
 
     CastExpressionPrinter(
             FormatterOptions options,
             JavaFormatRule<Expression> expression,
             Function<Node, String> compactTypeLike,
+            Function<Node, String> compact,
             Function<Type, Doc> typeBody,
-            ToIntFunction<String> currentIndentedWidth
+            ToIntFunction<String> currentIndentedWidth,
+            ToIntFunction<String> continuationStatementWidth
     ) {
         this.options = options;
         this.expression = expression;
         this.compactTypeLike = compactTypeLike;
+        this.compact = compact;
         this.typeBody = typeBody;
         this.currentIndentedWidth = currentIndentedWidth;
+        this.continuationStatementWidth = continuationStatementWidth;
     }
 
     /**
@@ -60,7 +69,7 @@ final class CastExpressionPrinter {
      */
     Doc castExpression(CastExpr expression) {
         return Doc.concat(
-            castType(expression.getType()),
+            castType(expression.getType(), expression.getExpression()),
             Doc.text(" "),
             this.expression.format(expression.getExpression())
         );
@@ -75,28 +84,44 @@ final class CastExpressionPrinter {
      * cast instead of forcing the surrounding assignment to keep an over-wide atomic type string.
      */
     Doc castType(Type type) {
+        return castType(type, null);
+    }
+
+    private Doc castType(Type type, Expression operand) {
         if (
             type instanceof IntersectionType intersectionType
-            && currentIndentedWidth.applyAsInt("(" + compactTypeLike.apply(type) + ")") > options.lineWidth()
+            && intersectionCastShouldBreak(type, operand)
         ) {
             List<Doc> elements = new ArrayList<>();
             for (int i = 0; i < intersectionType.getElements().size(); i++) {
                 Type element = intersectionType.getElements().get(i);
                 elements.add(Doc.text((i == 0 ? "" : "& ") + compactTypeLike.apply(element)));
             }
+            Doc first = elements.getFirst();
+            List<Doc> tail = elements.subList(1, elements.size());
             return Doc.concat(
                 Doc.text("("),
+                first,
                 Doc.indent(
-                    Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(Doc.HARD_LINE, elements)
-                    )
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, tail)))
                 ),
                 Doc.HARD_LINE,
                 Doc.text(")")
             );
         }
         return Doc.group(Doc.concat(Doc.text("("), typeBody.apply(type), Doc.text(")")));
+    }
+
+    private boolean intersectionCastShouldBreak(Type type, Expression operand) {
+        if (operand instanceof LambdaExpr) {
+            return false;
+        }
+        String suffix = operand == null ? "" : " " + compact.apply(operand);
+        String cast = "(" + compactTypeLike.apply(type) + ")" + suffix;
+        int width = operand == null
+            ? currentIndentedWidth.applyAsInt(cast)
+            : Math.max(currentIndentedWidth.applyAsInt(cast), continuationStatementWidth.applyAsInt(cast));
+        return width > options.lineWidth();
     }
 
     /**

@@ -63,6 +63,8 @@ final class ExpressionLambdaArgumentLayout {
 
     private final LayoutWidth layoutWidth;
 
+    private final ExpressionLambdaMethodCallBodyLayout methodCallBodies;
+
     ExpressionLambdaArgumentLayout(
             RawSource rawSource,
             FormatterOptions options,
@@ -95,6 +97,16 @@ final class ExpressionLambdaArgumentLayout {
         this.lambdaParametersShouldBreak = lambdaParametersShouldBreak;
         this.blockStatementWidth = blockStatementWidth;
         this.layoutWidth = layoutWidth;
+        this.methodCallBodies = new ExpressionLambdaMethodCallBodyLayout(
+            rawSource,
+            options,
+            expressionRenderer,
+            compactJoin,
+            this::methodCallPrefix,
+            this::methodCallSelector,
+            packedMethodCallChainBodyRenderer,
+            this::expressionFirstLineWidth
+        );
     }
 
     /**
@@ -128,6 +140,10 @@ final class ExpressionLambdaArgumentLayout {
                 Doc.text(")")
             )
         );
+    }
+
+    Optional<Doc> methodCallBodyWithHeader(String parameters, MethodCallExpr methodCall) {
+        return methodCallBodies.bodyWithHeader(parameters, methodCall);
     }
 
     /**

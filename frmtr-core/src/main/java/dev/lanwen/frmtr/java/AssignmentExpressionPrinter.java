@@ -46,6 +46,8 @@ final class AssignmentExpressionPrinter {
 
     private final Function<Node, String> compact;
 
+    private final ConditionalExpressionLineProjection conditionalProjection;
+
     private final ToIntFunction<String> blockStatementWidth;
 
     private final BiFunction<Expression, Boolean, Optional<Doc>> suffixedEnclosedExpression;
@@ -84,6 +86,7 @@ final class AssignmentExpressionPrinter {
         this.expression = expression;
         this.expressionWithTail = expressionWithTail;
         this.compact = compact;
+        this.conditionalProjection = new ConditionalExpressionLineProjection(compact::apply);
         this.blockStatementWidth = blockStatementWidth;
         this.suffixedEnclosedExpression = suffixedEnclosedExpression;
         this.shouldKeepCastDivisionContinuationFlat = shouldKeepCastDivisionContinuationFlat;
@@ -103,6 +106,15 @@ final class AssignmentExpressionPrinter {
      */
     Doc assignment(AssignExpr expression) {
         String flat = compact.apply(expression);
+        if (
+            expression.getValue() instanceof ConditionalExpr conditionalExpr
+            && conditionalAssignmentLineOverflows(expression, conditionalExpr)
+        ) {
+            Optional<Doc> conditionalValue = conditionalAssignment.apply(expression, conditionalExpr);
+            if (conditionalValue.isPresent()) {
+                return conditionalValue.orElseThrow();
+            }
+        }
         if (blockStatementWidth.applyAsInt(flat + ";") > options.lineWidth()) {
             Optional<Doc> brokenAssignment = brokenAssignment(expression);
             if (brokenAssignment.isPresent()) {
@@ -110,6 +122,16 @@ final class AssignmentExpressionPrinter {
             }
         }
         return flatAssignment(expression);
+    }
+
+    private boolean conditionalAssignmentLineOverflows(AssignExpr expression, ConditionalExpr conditionalExpr) {
+        String line = compact.apply(expression.getTarget())
+            + " "
+            + expression.getOperator().asString()
+            + " "
+            + conditionalProjection.line(conditionalExpr)
+            + ";";
+        return blockStatementWidth.applyAsInt(line) > options.lineWidth();
     }
 
     Doc assignmentStatement(AssignExpr expression) {

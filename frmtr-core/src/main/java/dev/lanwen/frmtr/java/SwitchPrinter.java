@@ -71,7 +71,7 @@ final class SwitchPrinter {
 
     private final BiFunction<Statement, Statement, Doc> statementSeparator;
 
-    private final Function<Expression, Doc> controlConditionRenderer;
+    private final ControlConditionPrinter controlConditions;
 
     private final Function<Expression, Doc> binaryExpressionLinesRenderer;
 
@@ -82,6 +82,8 @@ final class SwitchPrinter {
     private final Function<NodeWithModifiers<?>, String> modifiers;
 
     private final ToIntFunction<String> currentIndentedWidth;
+
+    private final ToIntFunction<String> blockStatementWidth;
 
     /**
      * Names the switch-label layouts after the caller has already selected structured switch-entry printing.
@@ -146,10 +148,11 @@ final class SwitchPrinter {
             ExpressionTailRenderer expressionWithTailRenderer,
             JavaFormatRule<BlockStmt> blockRenderer,
             BiFunction<Statement, Statement, Doc> statementSeparator,
-            Function<Expression, Doc> controlConditionRenderer,
+            ControlConditionPrinter controlConditions,
             Function<Expression, Doc> binaryExpressionLinesRenderer,
             Function<NodeWithModifiers<?>, String> modifiers,
-            ToIntFunction<String> currentIndentedWidth
+            ToIntFunction<String> currentIndentedWidth,
+            ToIntFunction<String> blockStatementWidth
     ) {
         this.comments = context.comments;
         this.rawSource = context.rawSource;
@@ -163,12 +166,13 @@ final class SwitchPrinter {
         this.expressionWithTailRenderer = expressionWithTailRenderer;
         this.blockRenderer = blockRenderer;
         this.statementSeparator = statementSeparator;
-        this.controlConditionRenderer = controlConditionRenderer;
+        this.controlConditions = controlConditions;
         this.binaryExpressionLinesRenderer = binaryExpressionLinesRenderer;
         this.compactSource = context.compactSource;
         this.commentPlacement = context.commentPlacement;
         this.modifiers = modifiers;
         this.currentIndentedWidth = currentIndentedWidth;
+        this.blockStatementWidth = blockStatementWidth;
     }
 
     /**
@@ -185,7 +189,12 @@ final class SwitchPrinter {
             return Doc.concat(
                 prefix,
                 Doc.text("switch "),
-                controlConditionRenderer.apply(statement.getSelector()),
+                controlConditions.controlCondition(
+                    statement.getSelector(),
+                    "switch (",
+                    ") {}",
+                    blockStatementWidth
+                ),
                 Doc.text(" {"),
                 Doc.HARD_LINE,
                 Doc.text("}")
@@ -195,7 +204,12 @@ final class SwitchPrinter {
         return Doc.concat(
             prefix,
             Doc.text("switch "),
-            controlConditionRenderer.apply(statement.getSelector()),
+            controlConditions.controlCondition(
+                statement.getSelector(),
+                "switch (",
+                ") {}",
+                blockStatementWidth
+            ),
             Doc.text(" "),
             switchBlock(statement, statement.getEntries(), selectorLineComment)
         );

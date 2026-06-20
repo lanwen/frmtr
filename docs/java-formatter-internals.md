@@ -116,17 +116,23 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
 - `ReturnExpressionPrinter`: return-value wrapping after statement dispatch selects `return value;`.
 - `ConditionalExpressionPrinter`: ternary layout for assignment values, variable initializers, comments around `?` and
   `:`, nested conditional branches, and binary condition wrapping.
-- `LambdaExpressionPrinter`: lambda parameter parentheses, commented parameter reconstruction, expression versus block
-  bodies, parenthesized lambdas, broken logical bodies, and lambda arguments that can be hugged by method calls or object
-  creation. `ExpressionLambdaArgumentLayout` owns the call-argument side of expression lambdas: shared eligibility,
-  first-line/body-opener planning, and packed method-call or constructor bodies for call and chain printers.
+- `LambdaExpressionPrinter`: expression versus block bodies, parenthesized lambdas, broken logical bodies, and lambda
+  arguments that can be hugged by method calls or object creation. `LambdaParameterHeaderLayout` owns the canonical
+  parameter/header rendering used by lambda and call layouts: parameter parentheses, commented parameter reconstruction,
+  width-triggered header breaks, and source-multiline parameter detection. `ExpressionLambdaArgumentLayout` owns the
+  call-argument side of expression lambdas: shared eligibility, first-line/body-opener planning, and packed method-call
+  or constructor bodies for call and chain printers. `SourceMultilineLambdaCallLayout` owns source-multiline expression
+  lambda method-call bodies and block-lambda parameter lists that were already multiline in source.
 - `MethodCallPrinter`: ordinary method-call argument-list rendering, empty argument comments, commented argument-gap
-  fallback lists, text-block arguments, over-wide binary arguments, and suffixes on enclosed scopes.
+  fallback lists, over-wide binary arguments, and suffixes on enclosed scopes. `TextBlockArgumentSourceLayout` owns the
+  source indentation recovery for text-block arguments that appear inside expression-lambda method-call bodies; ordinary
+  text-block literal content remains with `TextBlockPrinter`.
   `BreakableArgumentExpressionPrinter` owns the shared break policy for method-call arguments whose expression form must
   stay broken, including over-wide or source-multiline binary string concatenations reused by initializer and
   try-resource opener paths. `MethodCallChainPrinter`
   owns chain doc assembly: chain comments including same-line comments between chained calls and leading line-comment
-  clusters before chained segments, source-multiline single-object-creation call statements, field-root fluent-chain
+  clusters before chained segments, source-multiline first-segment lambda call attachment via
+  `SourceMultilineLambdaCallLayout`, source-multiline single-object-creation call statements, field-root fluent-chain
   preservation for already-multiline statement chains, compact-root plus broken-final-segment calls, root promotion, and
   final-segment tails.
 - `MethodReferencePrinter`: method references, type-argument suffix text, and parenthesized-scope suffixes.

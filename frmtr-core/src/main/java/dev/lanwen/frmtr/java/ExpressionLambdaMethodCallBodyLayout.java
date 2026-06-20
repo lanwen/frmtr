@@ -1,6 +1,7 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import dev.lanwen.frmtr.FormatterOptions;
@@ -35,6 +36,8 @@ final class ExpressionLambdaMethodCallBodyLayout {
 
     private final Function<MethodCallExpr, String> methodCallSelector;
 
+    private final BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList;
+
     private final BiFunction<String, MethodCallExpr, Optional<Doc>> packedMethodCallChainBodyRenderer;
 
     private final ToIntFunction<String> expressionFirstLineWidth;
@@ -46,6 +49,7 @@ final class ExpressionLambdaMethodCallBodyLayout {
             Function<List<? extends Node>, String> compactJoin,
             Function<MethodCallExpr, String> methodCallPrefix,
             Function<MethodCallExpr, String> methodCallSelector,
+            BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList,
             BiFunction<String, MethodCallExpr, Optional<Doc>> packedMethodCallChainBodyRenderer,
             ToIntFunction<String> expressionFirstLineWidth
     ) {
@@ -55,6 +59,7 @@ final class ExpressionLambdaMethodCallBodyLayout {
         this.compactJoin = compactJoin;
         this.methodCallPrefix = methodCallPrefix;
         this.methodCallSelector = methodCallSelector;
+        this.methodCallArgumentList = methodCallArgumentList;
         this.packedMethodCallChainBodyRenderer = packedMethodCallChainBodyRenderer;
         this.expressionFirstLineWidth = expressionFirstLineWidth;
     }
@@ -73,7 +78,6 @@ final class ExpressionLambdaMethodCallBodyLayout {
             !methodCall.getArguments().isEmpty()
             || methodCall.getScope().filter(MethodCallExpr.class::isInstance).isEmpty()
             || !methodCall.getAllContainedComments().isEmpty()
-            || methodCall.getScope().filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n")).isPresent()
         ) {
             return Optional.empty();
         }
@@ -81,9 +85,25 @@ final class ExpressionLambdaMethodCallBodyLayout {
         if (scopeCall.getArguments().isEmpty()) {
             return Optional.empty();
         }
+        if (rawSource.rawWithoutOwnComment(scopeCall).contains("\n") && scopeCall.getArguments().size() <= 1) {
+            return Optional.empty();
+        }
         String opener = methodCallPrefix.apply(scopeCall) + "(";
         if (expressionFirstLineWidth.applyAsInt(parameters + " -> " + opener) > options.lineWidth()) {
             return Optional.empty();
+        }
+        if (scopeCall.getArguments().size() > 1) {
+            return Optional.of(
+                Doc.concat(
+                    Doc.text(parameters + " -> " + opener),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, methodCallArgumentList.apply(
+                        scopeCall.getArguments(),
+                        Doc.HARD_LINE
+                    ))),
+                    Doc.HARD_LINE,
+                    Doc.text(")." + methodCallSelector.apply(methodCall) + "()")
+                )
+            );
         }
         return Optional.of(
             Doc.concat(

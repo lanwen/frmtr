@@ -79,6 +79,8 @@ final class MethodCallChainPrinter {
 
     private final LayoutDecisionLog layoutDecisions;
 
+    private final SourceMultilineLambdaCallLayout sourceMultilineLambdaCalls;
+
     MethodCallChainPrinter(
             JavaFormatContext context,
             MethodCallPrinter calls,
@@ -96,6 +98,7 @@ final class MethodCallChainPrinter {
                 NodeList<Expression>,
                 Optional<ExpressionLambdaArgumentLayout.Plan>
             > expressionLambdaArgumentPlan,
+            Function<LambdaExpr, String> lambdaParameters,
             ToIntFunction<String> currentIndentedWidth,
             ToIntFunction<String> continuationStatementWidth,
             ToIntFunction<String> blockStatementWidth
@@ -123,6 +126,15 @@ final class MethodCallChainPrinter {
         this.continuationStatementWidth = continuationStatementWidth;
         this.blockStatementWidth = blockStatementWidth;
         this.layoutDecisions = context.layoutDecisions;
+        this.sourceMultilineLambdaCalls = new SourceMultilineLambdaCallLayout(
+            context.rawSource,
+            context.sourceShape,
+            expressionRenderer,
+            lambdaParameters,
+            calls::methodCallPrefix,
+            this::methodCallSegmentPrefixText,
+            calls::methodCallArgumentList
+        );
     }
 
     Optional<Doc> methodCallChain(MethodCallExpr expression) {
@@ -268,6 +280,30 @@ final class MethodCallChainPrinter {
         }
     }
 
+    private record SourceMultilineLambdaChainPlan(
+        boolean rootCanAttachExpressionLambdaBody,
+        List<Boolean> callCanAttachExpressionLambdaBody,
+        Optional<SourceMultilineLambdaCallLayout.AttachedFirstSegment> firstCall
+    ) {
+        SourceMultilineLambdaChainPlan {
+            callCanAttachExpressionLambdaBody = List.copyOf(callCanAttachExpressionLambdaBody);
+        }
+
+        boolean callCanAttachExpressionLambdaBody(int index) {
+            return index >= 0 && index < callCanAttachExpressionLambdaBody.size()
+                && callCanAttachExpressionLambdaBody.get(index);
+        }
+
+        boolean anyNonFinalCallCanAttachExpressionLambdaBody() {
+            for (int index = 0; index < Math.max(0, callCanAttachExpressionLambdaBody.size() - 1); index++) {
+                if (callCanAttachExpressionLambdaBody.get(index)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
     private Optional<Doc> forcedMethodCallChain(
             MethodCallExpr expression,
             LayoutWidth.LineBudget lineBudget,
@@ -292,10 +328,33 @@ final class MethodCallChainPrinter {
     ) {
         List<MethodCallExpr> calls = new ArrayList<>();
         Expression root = methodChainPlanner.methodCallChainRoot(expression, calls);
+        SourceMultilineLambdaChainPlan sourceMultilineLambdaPlan = sourceMultilineLambdaChainPlan(root, calls);
+        Optional<Doc> sourceMultilineFirstExpressionLambda = sourceMultilineFirstExpressionLambdaChain(
+            root,
+            calls,
+            MethodCallChainTail.EMPTY,
+            sourceMultilineLambdaPlan
+        );
+        if (sourceMultilineFirstExpressionLambda.isPresent()) {
+            return sourceMultilineFirstExpressionLambda;
+        }
         if (
             !calls.isEmpty()
             && methodCallChainIsSourceMultiline(expression)
             && methodCallSegmentHasExpressionLambdaArgument(calls.getLast())
+        ) {
+            return Optional.empty();
+        }
+        if (
+            root instanceof MethodCallExpr methodRoot
+            && methodCallSegmentHasExpressionLambdaArgument(methodRoot)
+        ) {
+            return Optional.empty();
+        }
+        if (
+            calls.stream()
+                    .limit(Math.max(0, calls.size() - 1))
+                    .anyMatch(this::methodCallSegmentHasExpressionLambdaArgument)
         ) {
             return Optional.empty();
         }
@@ -478,7 +537,8 @@ final class MethodCallChainPrinter {
     ) {
         MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
         boolean rootObjectCreationNeedsBreak = methodChainPlanner.rootObjectCreationNeedsBreak(analysis);
-        boolean sourceMultilineArguments = chainHasSourceMultilineArguments(analysis);
+        SourceMultilineLambdaChainPlan sourceMultilineLambdaPlan = sourceMultilineLambdaChainPlan(analysis);
+        boolean sourceMultilineArguments = chainHasSourceMultilineArguments(analysis, sourceMultilineLambdaPlan);
         if (
             !breakMode.isForced()
             && finalBlockLambdaSegmentCanStayCompact(expression, lineBudget)
@@ -512,7 +572,7 @@ final class MethodCallChainPrinter {
         ) {
             return Optional.empty();
         }
-        if (canBreakAfterCompactExpressionLambdaRoot(breakMode, root, calls)) {
+        if (canBreakAfterCompactExpressionLambdaRoot(breakMode, root, calls, sourceMultilineLambdaPlan)) {
             return Optional.of(
                 Doc.concat(
                     Doc.text(compactSource.compact(root)),
@@ -575,13 +635,27 @@ final class MethodCallChainPrinter {
         chainPlan = promoteFirstBlockLambdaCallWithLambdaBodyComments(analysis, chainPlan).orElse(chainPlan);
         root = chainPlan.root();
         calls = chainPlan.calls();
+        sourceMultilineLambdaPlan = sourceMultilineLambdaChainPlan(root, calls);
         Doc rootDoc = methodCallChainRootDoc(chainPlan, firstLineWidth);
         boolean firstSegmentAttachedToRoot = false;
+        Optional<Doc> sourceMultilineFirstExpressionLambda = sourceMultilineFirstExpressionLambdaChain(
+            root,
+            calls,
+            finalSegmentSuffix,
+            sourceMultilineLambdaPlan
+        );
+        if (sourceMultilineFirstExpressionLambda.isPresent()) {
+            return sourceMultilineFirstExpressionLambda;
+        }
         if (canAttachFirstSegmentToSimpleRoot(chainPlan, calls, analysis)) {
             MethodCallExpr firstCall = calls.getFirst();
             root = firstCall;
             calls = new ArrayList<>(calls.subList(1, calls.size()));
-            rootDoc = firstSegmentAttachedToSimpleRootDoc(chainPlan.root(), firstCall);
+            rootDoc = firstSegmentAttachedToSimpleRootDoc(
+                chainPlan.root(),
+                firstCall,
+                sourceMultilineLambdaPlan.firstCall()
+            );
             firstSegmentAttachedToRoot = true;
         }
         if (calls.isEmpty()) {
@@ -651,6 +725,15 @@ final class MethodCallChainPrinter {
                         .isPresent()
             ) {
                 return Optional.empty();
+            }
+            if (
+                chainPlan.rootRendering()
+                    == MethodCallChainSourcePlanner.ChainRootRendering.INLINE_PROMOTED_METHOD_CALL
+                && promotedNoArgRootScopeOverflows(methodRoot, firstLineWidth)
+            ) {
+                return Optional.of(
+                    Doc.concat(rootDoc, chainContinuation(methodCallChainSegment(calls.getFirst(), finalSegmentSuffix)))
+                );
             }
             if (
                 !analysis.sourceMultilineChain()
@@ -861,11 +944,56 @@ final class MethodCallChainPrinter {
         );
     }
 
-    private Doc firstSegmentAttachedToSimpleRootDoc(Expression root, MethodCallExpr firstCall) {
+    private Doc firstSegmentAttachedToSimpleRootDoc(
+            Expression root,
+            MethodCallExpr firstCall,
+            Optional<SourceMultilineLambdaCallLayout.AttachedFirstSegment> sourceMultilineLambdaPlan
+    ) {
+        if (sourceMultilineLambdaPlan.isPresent()) {
+            SourceMultilineLambdaCallLayout.AttachedFirstSegment plan = sourceMultilineLambdaPlan.orElseThrow();
+            Optional<Doc> sourceMultilineLambdaBody = sourceMultilineLambdaCalls.attachedFirstSegment(
+                root,
+                firstCall
+            );
+            if (sourceMultilineLambdaBody.isPresent()) {
+                return sourceMultilineLambdaBody.orElseThrow();
+            }
+            Optional<Doc> huggableExpressionLambda = huggableExpressionLambdaArguments.apply(
+                plan.chainSegmentPrefix(),
+                firstCall.getArguments()
+            );
+            if (huggableExpressionLambda.isPresent()) {
+                return Doc.concat(expressionRenderer.apply(root), huggableExpressionLambda.orElseThrow());
+            }
+            return Doc.concat(expressionRenderer.apply(root), methodCallChainSegment(firstCall));
+        }
         if (currentIndentedWidth.applyAsInt(compactSource.compact(firstCall)) <= options.lineWidth()) {
             return inlineMethodCall(firstCall);
         }
         return brokenFirstSegmentAttachedToSimpleRoot(root, firstCall);
+    }
+
+    private Optional<Doc> sourceMultilineFirstExpressionLambdaChain(
+            Expression root,
+            List<MethodCallExpr> calls,
+            MethodCallChainTail finalSegmentSuffix,
+            SourceMultilineLambdaChainPlan sourceMultilineLambdaPlan
+    ) {
+        if (
+            calls.size() != 2
+            || root instanceof MethodCallExpr
+            || root instanceof ObjectCreationExpr
+            || !hasSingleExpressionLambdaArgumentAnyShape(calls.getFirst())
+            || sourceMultilineLambdaPlan.firstCall().isEmpty()
+        ) {
+            return Optional.empty();
+        }
+        return Optional.of(
+            Doc.concat(
+                firstSegmentAttachedToSimpleRootDoc(root, calls.getFirst(), sourceMultilineLambdaPlan.firstCall()),
+                methodCallChainSegment(calls.get(1), finalSegmentSuffix)
+            )
+        );
     }
 
     private String firstSegmentAttachedToSimpleRootFirstLine(Expression root, MethodCallExpr firstCall) {
@@ -900,6 +1028,14 @@ final class MethodCallChainPrinter {
         );
     }
 
+    private String methodCallSegmentPrefixText(MethodCallExpr expression) {
+        return "."
+            + expression.getTypeArguments()
+                    .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
+                    .orElse("")
+            + expression.getNameAsString();
+    }
+
     private boolean forcedSingleCallPrefixOverflows(
             MethodCallBreakMode breakMode,
             MethodCallExpr expression,
@@ -912,21 +1048,56 @@ final class MethodCallChainPrinter {
     }
 
     private boolean chainHasSourceMultilineArguments(
-            MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis
+            MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis,
+            SourceMultilineLambdaChainPlan sourceMultilineLambdaPlan
     ) {
         if (
             analysis.root() instanceof MethodCallExpr methodRoot
             && !analysis.calls().isEmpty()
-            && sourceShape.methodCallArgumentsSpanMultipleLines(methodRoot)
+            && (sourceShape.methodCallArgumentsSpanMultipleLines(methodRoot)
+                || sourceMultilineLambdaPlan.rootCanAttachExpressionLambdaBody())
         ) {
             return true;
         }
-        return analysis.calls()
-                .stream()
-                .limit(Math.max(0, analysis.calls().size() - 1))
-                .anyMatch(call -> sourceShape.methodCallArgumentsSpanMultipleLines(call)
-                        || methodCallSegmentHasSourceMultilineBlockLambdaArgument(call)
-                );
+        for (int index = 0; index < Math.max(0, analysis.calls().size() - 1); index++) {
+            MethodCallExpr call = analysis.calls().get(index);
+            if (
+                sourceShape.methodCallArgumentsSpanMultipleLines(call)
+                || methodCallSegmentHasSourceMultilineBlockLambdaArgument(call)
+                || sourceMultilineLambdaPlan.callCanAttachExpressionLambdaBody(index)
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private SourceMultilineLambdaChainPlan sourceMultilineLambdaChainPlan(
+            MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis
+    ) {
+        return sourceMultilineLambdaChainPlan(analysis.root(), analysis.calls());
+    }
+
+    private SourceMultilineLambdaChainPlan sourceMultilineLambdaChainPlan(
+            Expression root,
+            List<MethodCallExpr> calls
+    ) {
+        Optional<SourceMultilineLambdaCallLayout.AttachedFirstSegment> firstCall = calls.isEmpty()
+            ? Optional.empty()
+            : sourceMultilineLambdaCalls.attachedFirstSegmentPlan(calls.getFirst());
+        boolean rootCanAttachExpressionLambdaBody = root instanceof MethodCallExpr methodRoot
+            && sourceMultilineLambdaCalls.canAttachExpressionLambdaBody(methodRoot);
+        List<Boolean> callCanAttachExpressionLambdaBody = new ArrayList<>(calls.size());
+        for (int index = 0; index < calls.size(); index++) {
+            callCanAttachExpressionLambdaBody.add(index == 0
+                ? firstCall.isPresent()
+                : sourceMultilineLambdaCalls.canAttachExpressionLambdaBody(calls.get(index)));
+        }
+        return new SourceMultilineLambdaChainPlan(
+            rootCanAttachExpressionLambdaBody,
+            callCanAttachExpressionLambdaBody,
+            firstCall
+        );
     }
 
     private Doc methodCallChainRootDoc(
@@ -1161,10 +1332,7 @@ final class MethodCallChainPrinter {
             MethodCallChainTail finalSegmentSuffix,
             LayoutWidth.LineBudget lineBudget
     ) {
-        if (
-            !(root instanceof ObjectCreationExpr || root instanceof MethodCallExpr)
-            || call.getArguments().isEmpty()
-        ) {
+        if (call.getArguments().isEmpty()) {
             return Optional.empty();
         }
         if (
@@ -1219,6 +1387,12 @@ final class MethodCallChainPrinter {
             }
         }
         String prefix = callPrefix + "(";
+        if (
+            root instanceof ObjectCreationExpr
+            && compactRootLineWidth(root, prefix, lineBudget) > options.lineWidth()
+        ) {
+            return Optional.empty();
+        }
         if (layoutWidth.line(lineBudget, prefix + ")") > options.lineWidth()) {
             return Optional.empty();
         }
@@ -1493,9 +1667,10 @@ final class MethodCallChainPrinter {
      */
     boolean methodCallChainIsSourceMultiline(MethodCallExpr expression) {
         MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
+        SourceMultilineLambdaChainPlan sourceMultilineLambdaPlan = sourceMultilineLambdaChainPlan(analysis);
         return (
             analysis.sourceMultilineChain()
-            || chainHasSourceMultilineArguments(analysis)
+            || chainHasSourceMultilineArguments(analysis, sourceMultilineLambdaPlan)
             || (analysis.root() instanceof MethodCallExpr methodRoot
                 && sourceShape.methodCallArgumentsSpanMultipleLines(methodRoot))
             || (analysis.root() instanceof ObjectCreationExpr objectCreation
@@ -1604,11 +1779,15 @@ final class MethodCallChainPrinter {
     }
 
     private boolean hasSingleExpressionLambdaArgument(MethodCallExpr expression) {
+        return hasSingleExpressionLambdaArgumentAnyShape(expression)
+            && !sourceShape.methodCallArgumentsSpanMultipleLines(expression);
+    }
+
+    private boolean hasSingleExpressionLambdaArgumentAnyShape(MethodCallExpr expression) {
         return expression.getArguments().size() == 1
             && expression.getArgument(0) instanceof LambdaExpr lambdaExpr
             && lambdaExpr.getExpressionBody().isPresent()
-            && lambdaExpr.getAllContainedComments().isEmpty()
-            && !sourceShape.methodCallArgumentsSpanMultipleLines(expression);
+            && lambdaExpr.getAllContainedComments().isEmpty();
     }
 
     private boolean methodCallSegmentHasComment(MethodCallExpr expression) {
@@ -1665,13 +1844,16 @@ final class MethodCallChainPrinter {
     private boolean canBreakAfterCompactExpressionLambdaRoot(
             MethodCallBreakMode breakMode,
             Expression root,
-            List<MethodCallExpr> calls
+            List<MethodCallExpr> calls,
+            SourceMultilineLambdaChainPlan sourceMultilineLambdaPlan
     ) {
         if (
             !breakMode.isForced()
             || calls.size() != 1
             || !(root instanceof MethodCallExpr methodRoot)
             || !methodCallSegmentHasExpressionLambdaArgument(methodRoot)
+            || sourceMultilineLambdaPlan.rootCanAttachExpressionLambdaBody()
+            || sourceMultilineLambdaPlan.anyNonFinalCallCanAttachExpressionLambdaBody()
             || !methodCallSegmentHasNoOwnContainedComments(calls.getFirst())
             || methodCallSegmentHasComment(calls.getFirst())
         ) {
@@ -1714,7 +1896,37 @@ final class MethodCallChainPrinter {
         if (promotedRootArgumentsShouldBreak(expression, firstLineWidth)) {
             return brokenPromotedMethodCallRoot(expression);
         }
+        if (promotedNoArgRootScopeOverflows(expression, firstLineWidth)) {
+            return expression.getScope()
+                    .filter(FieldAccessExpr.class::isInstance)
+                    .map(FieldAccessExpr.class::cast)
+                    .map(scope -> promotedFieldAccessRootMethodCall(scope, expression))
+                    .or(() -> expression.getScope().map(scope -> Doc.concat(
+                            expressionRenderer.apply(scope),
+                            chainContinuation(methodCallChainSegment(expression))
+                    )))
+                    .orElseGet(() -> inlineMethodCall(expression));
+        }
         return inlineMethodCall(expression);
+    }
+
+    private Doc promotedFieldAccessRootMethodCall(FieldAccessExpr scope, MethodCallExpr expression) {
+        String typeArguments = expression.getTypeArguments()
+                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
+                .orElse("");
+        return Doc.concat(
+            Doc.text(compactSource.compact(scope.getScope())),
+            chainContinuation(Doc.text("." + scope.getNameAsString() + "." + typeArguments + expression.getNameAsString() + "()"))
+        );
+    }
+
+    private boolean promotedNoArgRootScopeOverflows(
+            MethodCallExpr expression,
+            ToIntFunction<String> firstLineWidth
+    ) {
+        return expression.getArguments().isEmpty()
+            && expression.getScope().filter(FieldAccessExpr.class::isInstance).isPresent()
+            && firstLineWidth.applyAsInt(compactSource.compact(expression)) > options.lineWidth();
     }
 
     private boolean promotedRootArgumentsShouldBreak(
@@ -1875,15 +2087,13 @@ final class MethodCallChainPrinter {
             lineBudget,
             firstLineWidth
         );
-        if (compactSegmentWidth.applyAsInt(compactMethodCallChainSegmentOpener(call)) > options.lineWidth()) {
+        if (
+            compactSegmentWidth.applyAsInt(compactMethodCallChainSegment(call) + finalSegmentSuffix.text())
+                > options.lineWidth()
+        ) {
             return Doc.concat(
                 rootDoc,
-                chainContinuation(methodCallChainSegment(
-                    call,
-                    Optional.empty(),
-                    finalSegmentSuffix,
-                    compactSegmentWidth
-                ))
+                objectRootContinuation(brokenMethodCallChainSegment(call, finalSegmentSuffix))
             );
         }
         Optional<Doc> compactAttachedSegment = compactAttachedObjectRootSingleSegment(
@@ -1911,6 +2121,25 @@ final class MethodCallChainPrinter {
             return Doc.concat(rootDoc, chainContinuation(attachedSegment));
         }
         return Doc.concat(rootDoc, attachedSegment);
+    }
+
+    private Doc objectRootContinuation(Doc doc) {
+        return Doc.indent(Doc.concat(Doc.HARD_LINE, doc));
+    }
+
+    private Doc brokenMethodCallChainSegment(
+            MethodCallExpr expression,
+            MethodCallChainTail finalSegmentSuffix
+    ) {
+        String typeArguments = expression.getTypeArguments()
+                .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
+                .orElse("");
+        return brokenMethodCallSegment(
+            expression,
+            "." + typeArguments + expression.getNameAsString(),
+            Doc.EMPTY,
+            finalSegmentSuffix
+        );
     }
 
     private String compactMethodCallChainSegmentOpener(MethodCallExpr expression) {

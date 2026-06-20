@@ -83,6 +83,8 @@ final class MethodCallPrinter {
 
     private final Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer;
 
+    private final TextBlockArgumentSourceLayout textBlockArguments;
+
     private final ToIntFunction<String> currentIndentedWidth;
 
     private final ToIntFunction<String> continuationStatementWidth;
@@ -109,6 +111,7 @@ final class MethodCallPrinter {
                 NodeList<Expression>,
                 Optional<ExpressionLambdaArgumentLayout.Plan>
             > expressionLambdaArgumentPlan,
+            Function<LambdaExpr, String> lambdaParameters,
             Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer,
             Function<Expression, Optional<Doc>> brokenArgumentExpressionRenderer,
             ToIntFunction<String> currentIndentedWidth,
@@ -135,6 +138,7 @@ final class MethodCallPrinter {
             commentedExpressionLambdaArgument,
             huggableExpressionLambdaArguments,
             expressionLambdaArgumentPlan,
+            lambdaParameters,
             currentIndentedWidth,
             continuationStatementWidth,
             blockStatementWidth
@@ -156,6 +160,11 @@ final class MethodCallPrinter {
         this.huggableExpressionLambdaArguments = huggableExpressionLambdaArguments;
         this.expressionLambdaArgumentPlan = expressionLambdaArgumentPlan;
         this.unformattedTextBlockRenderer = unformattedTextBlockRenderer;
+        this.textBlockArguments = new TextBlockArgumentSourceLayout(
+            context.sourceText,
+            context.options,
+            unformattedTextBlockRenderer
+        );
         this.currentIndentedWidth = currentIndentedWidth;
         this.continuationStatementWidth = continuationStatementWidth;
         this.blockStatementWidth = blockStatementWidth;
@@ -603,6 +612,10 @@ final class MethodCallPrinter {
         return methodChains.methodCallChainIsSourceMultiline(expression);
     }
 
+    boolean hasSourceMultilineExpressionLambdaBody(MethodCallExpr expression) {
+        return SourceMultilineLambdaCallLayout.hasMultilineExpressionLambdaMethodCallBody(expression, sourceShape);
+    }
+
     MethodCallChainSourcePlanner.InitializerChainShape methodCallChainInitializerShape(MethodCallExpr expression) {
         return methodChains.methodCallChainInitializerShape(expression);
     }
@@ -673,10 +686,13 @@ final class MethodCallPrinter {
         ) {
             return Optional.empty();
         }
+        Doc argument = textBlockArguments.methodCallIsExpressionLambdaBody(expression)
+            ? textBlockArguments.expressionLambdaSourceMultilineArgument(textBlockLiteralExpr)
+            : Doc.indent(Doc.concat(Doc.HARD_LINE, textBlockArgument(textBlockLiteralExpr, expression)));
         return Optional.of(
             Doc.concat(
                 Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, textBlockArgument(textBlockLiteralExpr, expression))),
+                argument,
                 Doc.HARD_LINE,
                 Doc.text(")")
             )
@@ -695,19 +711,11 @@ final class MethodCallPrinter {
         }
         Optional<Doc> scopedPrefix = sourceMultilineArgumentScopedPrefix(expression);
         if (scopedPrefix.isPresent()) {
+            String prefix = methodCallPrefix(expression);
             return Optional.of(
                 Doc.concat(
                     scopedPrefix.orElseThrow(),
-                    Doc.indent(
-                        Doc.concat(
-                            Doc.HARD_LINE,
-                            methodCallArgumentList(
-                                methodCallPrefix(expression),
-                                expression.getArguments(),
-                                Doc.HARD_LINE
-                            )
-                        )
-                    ),
+                    sourceMultilineArgumentBlock(expression, prefix),
                     Doc.HARD_LINE,
                     Doc.text(")")
                 )
@@ -717,16 +725,30 @@ final class MethodCallPrinter {
         return Optional.of(
             Doc.concat(
                 Doc.text(prefix + "("),
-                Doc.indent(
-                    Doc.concat(
-                        Doc.HARD_LINE,
-                        methodCallArgumentList(prefix, expression.getArguments(), Doc.HARD_LINE)
-                    )
-                ),
+                sourceMultilineArgumentBlock(expression, prefix),
                 Doc.HARD_LINE,
                 Doc.text(")")
             )
         );
+    }
+
+    private Doc sourceMultilineArgumentBlock(MethodCallExpr expression, String prefix) {
+        Doc arguments = Doc.concat(
+            Doc.HARD_LINE,
+            methodCallArgumentList(prefix, expression.getArguments(), Doc.HARD_LINE)
+        );
+        if (singleTextBlockInsideExpressionLambda(expression)) {
+            return textBlockArguments.expressionLambdaSourceMultilineArgument(
+                (TextBlockLiteralExpr) expression.getArgument(0)
+            );
+        }
+        return Doc.indent(arguments);
+    }
+
+    private boolean singleTextBlockInsideExpressionLambda(MethodCallExpr expression) {
+        return expression.getArguments().size() == 1
+            && expression.getArgument(0) instanceof TextBlockLiteralExpr
+            && textBlockArguments.methodCallIsExpressionLambdaBody(expression);
     }
 
     Optional<Doc> sourceMultilineExpressionLambda(MethodCallExpr expression) {

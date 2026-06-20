@@ -18,41 +18,26 @@ class ConditionalExpression {
             : thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne;
     }
 
-    void ternaryOperationThatShouldBreak3() {
-        featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady ? primaryResult : backupResult;
-        var result = featureEnabled
-                && quotaAvailable
-                && regionAvailable
-                && planReady
-                && fallbackReady
-                && policyReady
-                    ? primaryResult
-                    : backupResult;
-        result = featureEnabled
-                && quotaAvailable
-                && regionAvailable
-                && planReady
-                && fallbackReady
-                && policyReady
-                    ? primaryResult
-                    : backupResult;
-        select(featureEnabled
-                && quotaAvailable
-                && regionAvailable
-                && planReady
-                && fallbackReady
-                && policyReady
-                    ? primaryResult
-                    : backupResult
+    RoutingChoice ternaryOperationThatShouldBreak3() {
+        var expressionResult =
+            featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady
+                ? primaryResult
+                : backupResult;
+        var result =
+            featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady
+                ? primaryResult
+                : backupResult;
+        result = featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady
+            ? primaryResult
+            : backupResult;
+        select(
+            featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady
+                ? primaryResult
+                : backupResult
         );
-        return featureEnabled
-                && quotaAvailable
-                && regionAvailable
-                && planReady
-                && fallbackReady
-                && policyReady
-                    ? primaryResult
-                    : backupResult;
+        return featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady
+            ? primaryResult
+            : backupResult;
     }
 
     int ternaryOperationThatShouldNotBreak() {
@@ -61,31 +46,33 @@ class ConditionalExpression {
     }
 
     void nestedTernary() {
-        featureEnabled ? quotaAvailable : regionAvailable ? planReady : fallbackReady ? policyReady : primaryResult;
+        var selectedPlan =
+            featureEnabled ? quotaAvailable : regionAvailable ? planReady : fallbackReady ? policyReady : primaryResult;
     }
 
     void ternaryWithComments() {
-        a
+        var first = a
             ? // b
-            b
+              b
             : // c
-            c;
-        a
-            // b
-            ? b
-            // c
-            : c;
-        a ? // b
-            b
+              c;
+        var second = a
+            ? // b
+              b
             : // c
-            c;
-        a
+              c;
+        var third = a
+            ? // b
+              b
+            : // c
+              c;
+        var fourth = a
             ? b // b
             : c; // c
     }
 
     void ternaryInParentheses() {
-        (featureEnabled ? quotaAvailable : regionAvailable.planReady().fallbackReady().policyReady());
+        select(featureEnabled ? quotaAvailable : regionAvailable.planReady().fallbackReady().policyReady());
     }
 
     void assignment() {

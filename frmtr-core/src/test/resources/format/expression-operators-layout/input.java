@@ -177,6 +177,16 @@ public class ExpressionOperatorSamples {
         }
     }
 
+    public void printNonLogicalControlConditions() {
+        switch (routePolicy.accepts(routeContext.primaryStop(), routeContext.backupStop(), segmentPlan.candidateWindow())) {
+        }
+
+        while (routePolicy.accepts(routeContext.primaryStop(), routeContext.backupStop(), segmentPlan.candidateWindow())) {}
+
+        synchronized (routePolicy.accepts(routeContext.primaryStop(), routeContext.backupStop(), segmentPlan.candidateWindow())) {
+        }
+    }
+
     public void longFullyQualifiedName() {
         com.me.very.very.very.very.very.very.very.very.very.very.very.very.very.longg.fully.qualified.name.FullyQualifiedName.builder().build();
 

@@ -12,6 +12,7 @@ import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
@@ -98,11 +99,90 @@ final class ControlConditionPrinter {
      * formatter.
      */
     Doc controlCondition(Expression expression) {
+        return controlCondition(expression, "(", ") {}", currentIndentedWidth);
+    }
+
+    Doc controlCondition(
+            Expression expression,
+            String opening,
+            String closing,
+            ToIntFunction<String> conditionLineWidth
+    ) {
         String flat = compactWithOwnBlockComment(expression);
-        if (currentIndentedWidth.applyAsInt("(" + flat + ") {}") <= options.lineWidth()) {
+        if (sourceMultilineLogicalCondition(expression)) {
+            return brokenLogicalCondition(expression).orElseGet(() -> brokenCondition(expression));
+        }
+        if (logicalConditionWithControlContextOverflows(expression, flat, opening, closing, conditionLineWidth)) {
+            return brokenLogicalCondition(expression).orElseGet(() -> brokenCondition(expression));
+        }
+        if (conditionLineWidth.applyAsInt(opening + flat + closing) <= options.lineWidth()) {
             return Doc.text("(" + flat + ")");
         }
         return brokenCondition(expression);
+    }
+
+    private boolean logicalConditionWithControlContextOverflows(
+            Expression expression,
+            String flat,
+            String opening,
+            String closing,
+            ToIntFunction<String> conditionLineWidth
+    ) {
+        return sourceMultilineLogicalConditionExpression(expression)
+            && !rawSource.rawWithoutOwnComment(expression).contains("\n")
+            && conditionLineWidth.applyAsInt(opening + flat + closing) > options.lineWidth();
+    }
+
+    private Optional<Doc> brokenLogicalCondition(Expression expression) {
+        List<LogicalConditionTerm> terms = new ArrayList<>();
+        collectLogicalConditionTerms(expression, "", terms);
+        if (terms.size() < 2) {
+            return Optional.empty();
+        }
+        return Optional.of(
+            Doc.concat(
+                Doc.text("("),
+                Doc.indent(Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(
+                            Doc.HARD_LINE,
+                            terms.stream()
+                                    .map(LogicalConditionTerm::doc)
+                                    .toList()
+                        )
+                )),
+                Doc.HARD_LINE,
+                Doc.text(")")
+            )
+        );
+    }
+
+    private void collectLogicalConditionTerms(
+            Expression expression,
+            String operator,
+            List<LogicalConditionTerm> terms
+    ) {
+        Expression current = expression;
+        if (current instanceof BinaryExpr binaryExpr && isLogicalConditionOperator(binaryExpr)) {
+            collectLogicalConditionTerms(binaryExpr.getLeft(), operator, terms);
+            collectLogicalConditionTerms(binaryExpr.getRight(), binaryExpr.getOperator().asString(), terms);
+            return;
+        }
+        Doc operand = logicalConditionOperandShouldBreak(current)
+            ? brokenExpressionLines.apply(current)
+            : rawSource.rawWithoutOwnComment(current).contains("\n")
+            ? expressionRenderer.apply(current)
+            : Doc.text(compact.apply(current));
+        terms.add(new LogicalConditionTerm(operator, operand));
+    }
+
+    private boolean logicalConditionOperandShouldBreak(Expression expression) {
+        return blockStatementWidth.applyAsInt(compact.apply(expression)) > options.lineWidth();
+    }
+
+    private boolean isLogicalConditionOperator(BinaryExpr expression) {
+        return expression.getOperator() == BinaryExpr.Operator.AND
+            || expression.getOperator() == BinaryExpr.Operator.OR;
     }
 
     /**
@@ -287,14 +367,18 @@ final class ControlConditionPrinter {
     }
 
     private boolean sourceMultilineLogicalCondition(Expression condition) {
+        return sourceMultilineLogicalConditionExpression(condition)
+            && rawSource.rawWithoutOwnComment(condition).contains("\n");
+    }
+
+    private boolean sourceMultilineLogicalConditionExpression(Expression condition) {
         Expression expression = condition;
         while (expression instanceof EnclosedExpr enclosedExpr) {
             expression = enclosedExpr.getInner();
         }
         return expression instanceof BinaryExpr binaryExpr
             && (binaryExpr.getOperator() == BinaryExpr.Operator.AND
-                || binaryExpr.getOperator() == BinaryExpr.Operator.OR)
-            && rawSource.rawWithoutOwnComment(condition).contains("\n");
+                || binaryExpr.getOperator() == BinaryExpr.Operator.OR);
     }
 
     private Doc trailingBlockCommentBeforeCloseParen(Expression condition) {
@@ -338,5 +422,11 @@ final class ControlConditionPrinter {
             return text.value();
         }
         return "";
+    }
+
+    private record LogicalConditionTerm(String operator, Doc operand) {
+        Doc doc() {
+            return operator.isEmpty() ? operand : Doc.concat(Doc.text(operator + " "), operand);
+        }
     }
 }

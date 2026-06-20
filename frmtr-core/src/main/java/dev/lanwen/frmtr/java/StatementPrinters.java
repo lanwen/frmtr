@@ -67,10 +67,11 @@ final class StatementPrinters {
             expressions::expressionWithTail,
             this::block,
             blocks::statementSeparator,
-            controlConditions::controlCondition,
+            controlConditions,
             expressions::binaryLines,
             declarations::modifiers,
-            this::currentIndentedWidth
+            this::currentIndentedWidth,
+            this::blockStatementWidth
         );
         this.statements = new StatementPrinter(
             comments,
@@ -112,7 +113,7 @@ final class StatementPrinters {
             expressions::methodCallChainRootIsObjectCreation,
             expressions::methodCallChainRootIsFieldAccess,
             controlConditions::ifCondition,
-            controlConditions::controlCondition,
+            controlConditions,
             controlConditions::compactWithOwnBlockComment,
             commentPlacement::ownSameLineBlockCommentBeforeNode,
             expressions::methodCallArgumentList,

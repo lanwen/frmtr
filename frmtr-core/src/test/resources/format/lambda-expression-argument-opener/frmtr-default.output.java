@@ -139,8 +139,9 @@ final class LambdaExpressionArgumentOpener {
     }
 
     void rejectsInvalidEncodedKey() {
-        assertThatThrownBy(() -> Keys.decode().es256(Base64.getEncoder().encodeToString("something hidden".getBytes())))
-                .isInstanceOf(ParseException.class);
+        assertThatThrownBy(() -> Keys.decode().es256(
+                Base64.getEncoder().encodeToString("something hidden".getBytes())
+        )).isInstanceOf(ParseException.class);
     }
 
     StubFlow repeatsUntilEvent(StubFlow source, EventConsumer consumer, Predicate<Event> filter) {

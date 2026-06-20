@@ -41,8 +41,6 @@ final class LambdaExpressionPrinter {
 
     private final CommentTracker comments;
 
-    private final RawSource rawSource;
-
     private final ObjectCreationLayoutPolicy objectCreationLayoutPolicy;
 
     private final FormatterOptions options;
@@ -79,11 +77,14 @@ final class LambdaExpressionPrinter {
 
     private final ExpressionLambdaArgumentLayout expressionLambdaArguments;
 
+    private final LambdaParameterHeaderLayout lambdaParameterHeaders;
+
     private final LambdaBodyHeaderLayout lambdaBodyHeaders;
 
     LambdaExpressionPrinter(
             CommentTracker comments,
             RawSource rawSource,
+            SourceText sourceText,
             ObjectCreationLayoutPolicy objectCreationLayoutPolicy,
             FormatterOptions options,
             LayoutWidth layoutWidth,
@@ -105,7 +106,6 @@ final class LambdaExpressionPrinter {
             BiPredicate<Comment, Node> startsOnSameLine
     ) {
         this.comments = comments;
-        this.rawSource = rawSource;
         this.objectCreationLayoutPolicy = objectCreationLayoutPolicy;
         this.options = options;
         this.layoutWidth = layoutWidth;
@@ -123,8 +123,16 @@ final class LambdaExpressionPrinter {
         this.blockStatementWidth = blockStatementWidth;
         this.startsBefore = startsBefore;
         this.startsOnSameLine = startsOnSameLine;
+        this.lambdaParameterHeaders = new LambdaParameterHeaderLayout(
+            rawSource,
+            options,
+            compact,
+            compactJoin,
+            currentIndentedWidth
+        );
         this.expressionLambdaArguments = new ExpressionLambdaArgumentLayout(
             rawSource,
+            sourceText,
             options,
             expressionRenderer,
             brokenMethodCallRenderer,
@@ -144,9 +152,9 @@ final class LambdaExpressionPrinter {
             rawSource,
             options,
             expressionRenderer,
-            this::lambdaParametersHaveComments,
+            lambdaParameterHeaders::haveComments,
             this::lambdaParametersShouldBreak,
-            this::lambdaParametersForHeader,
+            lambdaParameterHeaders::forHeader,
             currentIndentedWidth
         );
     }
@@ -169,7 +177,7 @@ final class LambdaExpressionPrinter {
     Doc brokenExpressionLambda(LambdaExpr expression) {
         String parameters = lambdaParameters(expression);
         return Doc.concat(
-            lambdaParametersForHeader(expression, parameters),
+            lambdaParameterHeaders.forHeader(expression, parameters),
             Doc.text(" ->"),
             Doc.indent(Doc.concat(Doc.HARD_LINE, brokenLambdaExpressionBody(expression)))
         );
@@ -179,14 +187,14 @@ final class LambdaExpressionPrinter {
         String parameters = lambdaParameters(expression);
         if (expression.getBody().isBlockStmt()) {
             return Doc.concat(
-                lambdaParametersForHeader(expression, parameters),
+                lambdaParameterHeaders.forHeader(expression, parameters),
                 Doc.text(" -> "),
                 blockRenderer.format(expression.getBody().asBlockStmt())
             );
         }
-        boolean parametersHaveComments = lambdaParametersHaveComments(expression);
+        boolean parametersHaveComments = lambdaParameterHeaders.haveComments(expression);
         if (parametersHaveComments) {
-            Optional<String> inlineCommentedLambda = inlineCommentedLambda(expression);
+            Optional<String> inlineCommentedLambda = lambdaParameterHeaders.inlineCommentedLambda(expression);
             if (
                 inlineCommentedLambda.filter(lambda -> currentIndentedWidth.applyAsInt(lambda) <= options.lineWidth()).isPresent()
             ) {
@@ -213,7 +221,7 @@ final class LambdaExpressionPrinter {
             Expression body = expression.getExpressionBody().orElseThrow();
             if (currentIndentedWidth.applyAsInt(") -> " + compact.apply(body)) <= options.lineWidth()) {
                 return Doc.concat(
-                    lambdaParametersForHeader(expression, parameters),
+                    lambdaParameterHeaders.forHeader(expression, parameters),
                     Doc.text(" -> "),
                     expressionRenderer.format(body)
                 );
@@ -224,7 +232,7 @@ final class LambdaExpressionPrinter {
             && expression.getExpressionBody().filter(this::shouldHugBrokenLambdaBody).isPresent()
         ) {
             return Doc.concat(
-                lambdaParametersForHeader(expression, parameters),
+                lambdaParameterHeaders.forHeader(expression, parameters),
                 Doc.text(" -> "),
                 expressionRenderer.format(expression.getExpressionBody().orElseThrow())
             );
@@ -273,7 +281,7 @@ final class LambdaExpressionPrinter {
         }
         Doc body = brokenLambdaExpressionBody(expression);
         return Doc.concat(
-            lambdaParametersForHeader(expression, parameters),
+            lambdaParameterHeaders.forHeader(expression, parameters),
             Doc.text(" ->"),
             Doc.indent(Doc.concat(Doc.HARD_LINE, body))
         );
@@ -293,7 +301,7 @@ final class LambdaExpressionPrinter {
         }
         return Optional.of(
             Doc.concat(
-                lambdaParametersForHeader(lambda, parameters),
+                lambdaParameterHeaders.forHeader(lambda, parameters),
                 Doc.text(" -> "),
                 brokenObjectCreationRenderer.apply(objectCreation)
             )
@@ -311,7 +319,7 @@ final class LambdaExpressionPrinter {
             String parameters,
             Expression body
     ) {
-        if (lambdaParametersHaveComments(lambda) || lambdaParametersShouldBreak(lambda, parameters)) {
+        if (lambdaParameterHeaders.haveComments(lambda) || lambdaParametersShouldBreak(lambda, parameters)) {
             return Optional.empty();
         }
         Optional<Doc> binaryBody = binaryBodyDoc(body);
@@ -329,7 +337,7 @@ final class LambdaExpressionPrinter {
         }
         return Optional.of(
             Doc.concat(
-                lambdaParametersForHeader(lambda, parameters),
+                lambdaParameterHeaders.forHeader(lambda, parameters),
                 Doc.text(" -> "),
                 Doc.indent(binaryBody.orElseThrow())
             )
@@ -360,35 +368,6 @@ final class LambdaExpressionPrinter {
         return body instanceof MethodCallExpr methodCall
             && methodCall.getArguments().isEmpty()
             && currentIndentedWidth.applyAsInt(") -> " + compact.apply(methodCall)) <= options.lineWidth();
-    }
-
-    private Optional<String> inlineCommentedLambda(LambdaExpr expression) {
-        if (expression.getComment().isPresent() || expression.getExpressionBody().isEmpty()) {
-            return Optional.empty();
-        }
-        return lambdaParameterText(expression)
-                .filter(parameterText -> parameterText.contains("/*"))
-                .filter(parameterText -> !parameterText.contains("//"))
-                .flatMap(this::compactInlineCommentedLambdaParameters)
-                .map(parameters -> parameters + " -> " + compact.apply(expression.getExpressionBody().orElseThrow()));
-    }
-
-    private Optional<String> compactInlineCommentedLambdaParameters(String parameterText) {
-        List<String> lines = parameterText.lines()
-                .map(String::strip)
-                .filter(line -> !line.isEmpty())
-                .toList();
-        for (int i = 1; i < lines.size(); i++) {
-            if (lines.get(i).startsWith("/*")) {
-                return Optional.empty();
-            }
-        }
-        return Optional.of(
-            rawSource.normalizeWhitespace(String.join(" ", lines))
-                    .replace("( /*", "(/*")
-                    .replaceAll(",\\s*", ", ")
-                    .replaceAll("\\s+\\)", ")")
-        );
     }
 
     /**
@@ -483,156 +462,12 @@ final class LambdaExpressionPrinter {
         return depth;
     }
 
-    private Doc lambdaParametersForHeader(LambdaExpr expression, String flatParameters) {
-        if (lambdaParametersHaveComments(expression)) {
-            return commentedLambdaParametersForHeader(expression);
-        }
-        if (!lambdaParametersShouldBreak(expression, flatParameters)) {
-            return Doc.text(flatParameters);
-        }
-        return Doc.concat(
-            Doc.text("("),
-            Doc.indent(
-                Doc.concat(
-                    Doc.HARD_LINE,
-                    Doc.join(
-                        Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                        expression.getParameters()
-                                .stream()
-                                .map(parameter -> Doc.text(compact.apply(parameter)))
-                                .toList()
-                    )
-                )
-            ),
-            Doc.HARD_LINE,
-            Doc.text(")")
-        );
-    }
-
-    private Doc commentedLambdaParametersForHeader(LambdaExpr expression) {
-        return Doc.concat(
-            Doc.text("("),
-            Doc.indent(
-                Doc.concat(
-                    Doc.HARD_LINE,
-                    Doc.join(
-                        Doc.HARD_LINE,
-                        commentedLambdaParameterLines(expression)
-                                .stream()
-                                .map(Doc::text)
-                                .toList()
-                    )
-                )
-            ),
-            Doc.HARD_LINE,
-            Doc.text(")")
-        );
-    }
-
-    /**
-     * Reconstructs commented lambda parameters from the raw token text before {@code ->}.
-     *
-     * <p>JavaParser does not expose comments inside the parameter list as separator-level trivia. The formatter reads
-     * the original parameter text, strips the outer parentheses when present, and then splits comma-separated parameters
-     * while keeping line and block comments on the line where the source placed them.
-     */
-    private List<String> commentedLambdaParameterLines(LambdaExpr expression) {
-        String parameterText = lambdaParameterText(expression).orElseGet(
-            () -> compactJoin.apply(expression.getParameters())
-        );
-        if (parameterText.startsWith("(") && parameterText.endsWith(")")) {
-            parameterText = parameterText.substring(1, parameterText.length() - 1);
-        }
-        List<String> lines = new ArrayList<>();
-        for (String rawLine : parameterText.lines().map(String::strip).toList()) {
-            if (rawLine.isEmpty()) {
-                continue;
-            }
-            addCommentedLambdaParameterLine(lines, rawLine);
-        }
-        return lines;
-    }
-
-    private void addCommentedLambdaParameterLine(List<String> lines, String rawLine) {
-        int lineComment = rawLine.indexOf("//");
-        if (lineComment >= 0) {
-            String beforeComment = rawLine.substring(0, lineComment).stripTrailing();
-            String comment = rawLine.substring(lineComment).stripTrailing();
-            if (beforeComment.isBlank()) {
-                lines.add(comment);
-                return;
-            }
-            addCommaSeparatedLambdaParameters(lines, beforeComment, comment);
-            return;
-        }
-        if (rawLine.startsWith("/*")) {
-            lines.add(rawLine);
-            return;
-        }
-        addCommaSeparatedLambdaParameters(lines, rawLine, "");
-    }
-
-    private void addCommaSeparatedLambdaParameters(List<String> lines, String text, String trailingComment) {
-        boolean lineEndsWithComma = text.stripTrailing().endsWith(",");
-        String[] parameters = text.split(",");
-        for (int i = 0; i < parameters.length; i++) {
-            String parameter = parameters[i].strip();
-            if (parameter.isEmpty()) {
-                continue;
-            }
-            boolean last = i == parameters.length - 1;
-            if (!last) {
-                lines.add(parameter + ",");
-            } else if (!trailingComment.isBlank()) {
-                lines.add(parameter + (lineEndsWithComma ? ", " : " ") + trailingComment);
-            } else {
-                lines.add(parameter + (lineEndsWithComma ? "," : ""));
-            }
-        }
-    }
-
-    private boolean lambdaParametersHaveComments(LambdaExpr expression) {
-        return lambdaParameterText(expression)
-                .map(parameterText -> parameterText.contains("//") || parameterText.contains("/*"))
-                .orElseGet(() -> expression.getParameters().stream().anyMatch(
-                        parameter -> !parameter.getAllContainedComments().isEmpty()
-                ));
-    }
-
-    private Optional<String> lambdaParameterText(LambdaExpr expression) {
-        return expression.getTokenRange()
-                .map(Object::toString)
-                .filter(raw -> raw.contains("->"))
-                .map(raw -> raw.substring(0, raw.indexOf("->")).strip());
-    }
-
     boolean lambdaParametersShouldBreak(LambdaExpr expression, String flatParameters) {
-        return expression.getParameters().size() > 1
-            && currentIndentedWidth.applyAsInt(flatParameters + " -> {}") > options.lineWidth();
+        return lambdaParameterHeaders.shouldBreak(expression, flatParameters);
     }
 
     String lambdaParameters(LambdaExpr expression) {
-        if (expression.getParameters().size() != 1) {
-            return "(" + compactJoin.apply(expression.getParameters()) + ")";
-        }
-        String parameter = compact.apply(expression.getParameters().get(0));
-        if (options.lambdaArrowParens() == FormatterOptions.LambdaArrowParens.ALWAYS) {
-            return "(" + parameter + ")";
-        }
-        if (
-            options.lambdaArrowParens() == FormatterOptions.LambdaArrowParens.AVOID
-            && lambdaParameterCanAvoidParens(expression)
-        ) {
-            return parameter;
-        }
-        return expression.isEnclosingParameters() ? "(" + parameter + ")" : parameter;
-    }
-
-    private boolean lambdaParameterCanAvoidParens(LambdaExpr expression) {
-        return expression.getParameters().size() == 1
-            && expression.getParameters().get(0).getAnnotations().isEmpty()
-            && expression.getParameters().get(0).getModifiers().isEmpty()
-            && expression.getParameters().get(0).getType().isUnknownType();
+        return lambdaParameterHeaders.parameters(expression);
     }
 
     /**
@@ -643,7 +478,7 @@ final class LambdaExpressionPrinter {
      * lambda block, so the normal call formatter handles that case.
      */
     Optional<Doc> huggableBlockLambdaArguments(String prefix, NodeList<Expression> arguments) {
-        return huggableBlockLambdaArguments(prefix, arguments, blockStatementWidth, this::lambdaExpression);
+        return huggableBlockLambdaArguments(prefix, arguments, blockStatementWidth, this::lambdaExpression, blockRenderer);
     }
 
     Optional<Doc> huggableMethodChainBlockLambdaArguments(String prefix, NodeList<Expression> arguments) {
@@ -651,7 +486,8 @@ final class LambdaExpressionPrinter {
             prefix,
             arguments,
             blockStatementWidth,
-            this::methodChainLambdaExpression
+            this::methodChainLambdaExpression,
+            methodChainLambdaBlockRenderer
         );
     }
 
@@ -667,20 +503,35 @@ final class LambdaExpressionPrinter {
             NodeList<Expression> arguments,
             ToIntFunction<String> firstLineWidth
     ) {
-        return huggableBlockLambdaArguments(prefix, arguments, firstLineWidth, this::lambdaExpression);
+        return huggableBlockLambdaArguments(prefix, arguments, firstLineWidth, this::lambdaExpression, blockRenderer);
     }
 
     private Optional<Doc> huggableBlockLambdaArguments(
             String prefix,
             NodeList<Expression> arguments,
             ToIntFunction<String> firstLineWidth,
-            Function<LambdaExpr, Doc> lambdaRenderer
+            Function<LambdaExpr, Doc> lambdaRenderer,
+            JavaFormatRule<BlockStmt> lambdaBlockRenderer
     ) {
         Optional<HuggableBlockLambdaArgument> huggable = huggableBlockLambdaArgument(prefix, arguments);
         if (huggable.isEmpty()) {
             return Optional.empty();
         }
         HuggableBlockLambdaArgument argument = huggable.orElseThrow();
+        Optional<Doc> sourceMultilineParameters = SourceMultilineLambdaCallLayout
+                .blockLambdaArgumentWithSourceMultilineParameters(
+            prefix,
+            arguments,
+            argument.lambdaIndex(),
+            argument.lambdaExpr(),
+            argument.leadingArguments(),
+            compactJoin,
+            lambdaParameterHeaders,
+            lambdaBlockRenderer
+        );
+        if (sourceMultilineParameters.isPresent()) {
+            return sourceMultilineParameters;
+        }
         if (firstLineWidth.applyAsInt(argument.firstLine()) > options.lineWidth()) {
             return Optional.empty();
         }
@@ -698,7 +549,7 @@ final class LambdaExpressionPrinter {
         String parameters = lambdaParameters(expression);
         if (expression.getBody().isBlockStmt()) {
             return Doc.concat(
-                lambdaParametersForHeader(expression, parameters),
+                lambdaParameterHeaders.forHeader(expression, parameters),
                 Doc.text(" -> "),
                 methodChainLambdaBlockRenderer.format(expression.getBody().asBlockStmt())
             );
@@ -720,11 +571,11 @@ final class LambdaExpressionPrinter {
             String prefix,
             NodeList<Expression> arguments
     ) {
-        int lambdaIndex = blockLambdaArgumentIndex(arguments);
+        int lambdaIndex = SourceMultilineLambdaCallLayout.blockLambdaArgumentIndex(arguments);
         if (lambdaIndex < 0 || (lambdaIndex > 0 && lambdaIndex < arguments.size() - 1)) {
             return Optional.empty();
         }
-        if (hasOtherLambdaArgument(arguments, lambdaIndex)) {
+        if (SourceMultilineLambdaCallLayout.hasOtherLambdaArgument(arguments, lambdaIndex)) {
             return Optional.empty();
         }
         if (nonLambdaArgumentHasConstructorChainRootNeedingBreak(arguments, lambdaIndex)) {
@@ -975,25 +826,4 @@ final class LambdaExpressionPrinter {
         return expressionLambdaArguments.plan(prefix, arguments);
     }
 
-    private int blockLambdaArgumentIndex(NodeList<Expression> arguments) {
-        int lambdaIndex = -1;
-        for (int i = 0; i < arguments.size(); i++) {
-            if (arguments.get(i) instanceof LambdaExpr lambdaExpr && lambdaExpr.getBody().isBlockStmt()) {
-                if (lambdaIndex >= 0) {
-                    return -1;
-                }
-                lambdaIndex = i;
-            }
-        }
-        return lambdaIndex;
-    }
-
-    private boolean hasOtherLambdaArgument(NodeList<Expression> arguments, int lambdaIndex) {
-        for (int i = 0; i < arguments.size(); i++) {
-            if (i != lambdaIndex && arguments.get(i) instanceof LambdaExpr) {
-                return true;
-            }
-        }
-        return false;
-    }
 }

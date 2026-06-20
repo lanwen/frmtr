@@ -147,7 +147,7 @@ final class StatementPrinter {
 
     private final Function<Expression, Doc> ifConditionRenderer;
 
-    private final Function<Expression, Doc> controlConditionRenderer;
+    private final ControlConditionPrinter controlConditions;
 
     private final Function<Expression, String> compactWithOwnBlockComment;
 
@@ -193,7 +193,7 @@ final class StatementPrinter {
             Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation,
             Predicate<MethodCallExpr> methodCallChainRootIsFieldAccess,
             Function<Expression, Doc> ifConditionRenderer,
-            Function<Expression, Doc> controlConditionRenderer,
+            ControlConditionPrinter controlConditions,
             Function<Expression, String> compactWithOwnBlockComment,
             Function<Node, Doc> sameLineBlockCommentBeforeNode,
             BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList,
@@ -234,7 +234,7 @@ final class StatementPrinter {
         this.methodCallChainRootIsObjectCreation = methodCallChainRootIsObjectCreation;
         this.methodCallChainRootIsFieldAccess = methodCallChainRootIsFieldAccess;
         this.ifConditionRenderer = ifConditionRenderer;
-        this.controlConditionRenderer = controlConditionRenderer;
+        this.controlConditions = controlConditions;
         this.compactWithOwnBlockComment = compactWithOwnBlockComment;
         this.sameLineBlockCommentBeforeNode = sameLineBlockCommentBeforeNode;
         this.methodCallArgumentList = methodCallArgumentList;
@@ -280,7 +280,12 @@ final class StatementPrinter {
             case TryStmt tryStmt -> tryStatement(tryStmt);
             case SynchronizedStmt synchronizedStmt -> Doc.concat(
                 Doc.text("synchronized "),
-                controlConditionRenderer.apply(synchronizedStmt.getExpression()),
+                controlConditions.controlCondition(
+                    synchronizedStmt.getExpression(),
+                    "synchronized (",
+                    ") {}",
+                    layoutWidth::blockStatement
+                ),
                 Doc.text(" "),
                 blockRenderer.format(synchronizedStmt.getBody())
             );
@@ -1289,13 +1294,23 @@ final class StatementPrinter {
         if (commentedBody.isPresent()) {
             return Doc.concat(
                 Doc.text("while "),
-                controlConditionRenderer.apply(statement.getCondition()),
+                controlConditions.controlCondition(
+                    statement.getCondition(),
+                    "while (",
+                    ") {}",
+                    layoutWidth::blockStatement
+                ),
                 commentedBody.orElseThrow()
             );
         }
         return Doc.concat(
             Doc.text("while "),
-            controlConditionRenderer.apply(statement.getCondition()),
+            controlConditions.controlCondition(
+                statement.getCondition(),
+                "while (",
+                ") {}",
+                layoutWidth::blockStatement
+            ),
             Doc.text(" "),
             nestedStatement(statement.getBody())
         );
@@ -1366,7 +1381,12 @@ final class StatementPrinter {
         }
         return Doc.concat(
             Doc.text(" while "),
-            controlConditionRenderer.apply(statement.getCondition()),
+            controlConditions.controlCondition(
+                statement.getCondition(),
+                "while (",
+                ") {}",
+                layoutWidth::blockStatement
+            ),
             Doc.text(";")
         );
     }

@@ -208,10 +208,49 @@ final class SuspiciousLineWidthAuditTest {
     @Test
     void rejectsAllowlistRowsWithInvalidHashes() {
         assertThatThrownBy(() -> SuspiciousLineWidthAudit.Allowlist.parse(List.of(
-                OUTPUT_RESOURCE + "\t1\tnot-a-sha256\treason"
-            )))
+            OUTPUT_RESOURCE + "\t1\tnot-a-sha256\treason"
+        )))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Invalid suspicious line-width allowlist SHA-256");
+    }
+
+    @Test
+    void expandsAllowlistLineRanges() {
+        String first = "service.first().second().third().fourth().fifth();";
+        String second = "service.alpha().beta().gamma().delta().epsilon();";
+        SuspiciousLineWidthAudit.Allowlist allowlist = SuspiciousLineWidthAudit.Allowlist.parse(List.of(
+            OUTPUT_RESOURCE
+                + "\t1-2\t"
+                + SuspiciousLineWidthAudit.hash(first)
+                + ","
+                + SuspiciousLineWidthAudit.hash(second)
+                + "\tpaired approval"
+        ));
+
+        assertThatCode(() -> SuspiciousLineWidthAudit.assertNoUnexpectedFindings(
+                FIXTURE,
+                first + "\n" + second + "\n",
+                allowlist
+            ))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void rejectsAllowlistRowsWithRangeHashCountMismatch() {
+        assertThatThrownBy(() -> SuspiciousLineWidthAudit.Allowlist.parse(List.of(
+                OUTPUT_RESOURCE + "\t1-2\t" + "0".repeat(64) + "\treason"
+            )))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Invalid suspicious line-width allowlist hash count");
+    }
+
+    @Test
+    void rejectsAllowlistRowsWithDescendingLineRanges() {
+        assertThatThrownBy(() -> SuspiciousLineWidthAudit.Allowlist.parse(List.of(
+                OUTPUT_RESOURCE + "\t2-1\t" + "0".repeat(64) + "\treason"
+            )))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Invalid suspicious line-width allowlist line range");
     }
 
     @Test

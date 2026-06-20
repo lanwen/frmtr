@@ -131,6 +131,7 @@ final class ExpressionPrinters {
         this.lambdas = new LambdaExpressionPrinter(
             comments,
             rawSource,
+            context.sourceText,
             context.objectCreationLayoutPolicy,
             options,
             context.layoutWidth,
@@ -217,6 +218,7 @@ final class ExpressionPrinters {
             lambdas::commentedExpressionLambdaArgument,
             lambdas::huggableMethodCallExpressionLambdaArguments,
             lambdas::huggableExpressionLambdaArgumentPlan,
+            lambdas::lambdaParameters,
             textBlocks::renderUnformattedTextBlock,
             this::brokenArgument,
             this::currentIndentedWidth,
@@ -294,6 +296,7 @@ final class ExpressionPrinters {
             methodCalls::methodCallPrefix,
             methodCalls::methodCallChainIsSourceMultiline,
             methodCalls::methodCallChainHasFinalTrailingLineComment,
+            methodCalls::hasSourceMultilineExpressionLambdaBody,
             objectCreations::brokenObjectCreation,
             objectCreations::objectCreationWithSuffix,
             conditionals::conditionalExpression,

@@ -74,10 +74,10 @@ extent of a single ignored AST node from rendered brace depth.
 
 Current accepted or intentionally raw-preserved suspicious lines are recorded in
 `frmtr-core/src/test/resources/format/suspicious-line-width-allowlist.tsv`. Each row is keyed by output resource, line
-number, and the SHA-256 of the exact physical line, with a required reason. Add a row only when the line is a genuine
-known acceptance rather than a formatter regression. If a fixture output changes so a row is no longer matched by a
-current suspicious finding for that output resource, the audit fails as a stale approval; remove or update the row in
-the same change as the fixture behavior update.
+number or contiguous line range, and the SHA-256 of each exact physical line in that range, with a required reason. Add
+a row only when the line or range is a genuine known acceptance rather than a formatter regression. If a fixture output
+changes so a row is no longer matched by a current suspicious finding for that output resource, the audit fails as a
+stale approval; remove or update the row in the same change as the fixture behavior update.
 
 Unsupported syntax fixtures live under top-level `unsupported/**` and are discovered by
 `@ResourceFixtureSource(glob = "unsupported/**/input.java")`. They must include `input.java` plus `error.txt`, and assert

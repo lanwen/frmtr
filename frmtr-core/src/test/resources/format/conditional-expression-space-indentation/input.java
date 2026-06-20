@@ -10,8 +10,8 @@ class ConditionalExpression {
         return thisIsAVeryLongInteger ? thisIsAnotherVeryLongOne : thisIsAnotherVeryLongIntegerThatIsEvenLongerThanFirstOne;
     }
 
-    void ternaryOperationThatShouldBreak3() {
-        featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady ? primaryResult : backupResult;
+    RoutingChoice ternaryOperationThatShouldBreak3() {
+        var expressionResult = featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady ? primaryResult : backupResult;
         var result = featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady ? primaryResult : backupResult;
         result = featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady ? primaryResult : backupResult;
         select(featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady ? primaryResult : backupResult);
@@ -24,31 +24,34 @@ class ConditionalExpression {
     }
 
     void nestedTernary() {
-        featureEnabled ? quotaAvailable : regionAvailable ? planReady : fallbackReady ? policyReady : primaryResult;
+        var selectedPlan = featureEnabled ? quotaAvailable : regionAvailable ? planReady : fallbackReady ? policyReady : primaryResult;
     }
 
     void ternaryWithComments() {
-        a
+        var first =
+            a
             ? // b
             b
             : // c
             c;
-        a
+        var second =
+            a
             // b
             ? b
             // c
             : c;
-        a ? // b
-            b
+        var third = a // b
+            ? b
             : // c
             c;
-        a
+        var fourth =
+            a
             ? b // b
             : c; // c
     }
 
     void ternaryInParentheses() {
-        (featureEnabled ? quotaAvailable : regionAvailable.planReady().fallbackReady().policyReady());
+        select(featureEnabled ? quotaAvailable : regionAvailable.planReady().fallbackReady().policyReady());
     }
 
     void assignment() {

@@ -65,8 +65,11 @@ final class ExpressionLambdaArgumentLayout {
 
     private final ExpressionLambdaMethodCallBodyLayout methodCallBodies;
 
+    private final TextBlockArgumentSourceLayout textBlockArguments;
+
     ExpressionLambdaArgumentLayout(
             RawSource rawSource,
+            SourceText sourceText,
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
@@ -97,6 +100,7 @@ final class ExpressionLambdaArgumentLayout {
         this.lambdaParametersShouldBreak = lambdaParametersShouldBreak;
         this.blockStatementWidth = blockStatementWidth;
         this.layoutWidth = layoutWidth;
+        this.textBlockArguments = new TextBlockArgumentSourceLayout(sourceText, options, rawSource::raw);
         this.methodCallBodies = new ExpressionLambdaMethodCallBodyLayout(
             rawSource,
             options,
@@ -104,6 +108,7 @@ final class ExpressionLambdaArgumentLayout {
             compactJoin,
             this::methodCallPrefix,
             this::methodCallSelector,
+            methodCallArgumentList,
             packedMethodCallChainBodyRenderer,
             this::expressionFirstLineWidth
         );
@@ -130,12 +135,7 @@ final class ExpressionLambdaArgumentLayout {
         return Optional.of(
             Doc.concat(
                 Doc.text(firstLine),
-                Doc.indent(
-                    Doc.concat(
-                        Doc.HARD_LINE,
-                        methodCallArgumentList.apply(methodCall.getArguments(), Doc.HARD_LINE)
-                    )
-                ),
+                textBlockArguments.expressionLambdaMethodCallBodyArguments(methodCall, methodCallArgumentList),
                 Doc.HARD_LINE,
                 Doc.text(")")
             )
@@ -551,12 +551,7 @@ final class ExpressionLambdaArgumentLayout {
         return Optional.of(
             Doc.concat(
                 Doc.text(opener),
-                Doc.indent(
-                    Doc.concat(
-                        Doc.HARD_LINE,
-                        methodCallArgumentList.apply(methodCall.getArguments(), Doc.HARD_LINE)
-                    )
-                )
+                textBlockArguments.expressionLambdaMethodCallBodyArguments(methodCall, methodCallArgumentList)
             )
         );
     }

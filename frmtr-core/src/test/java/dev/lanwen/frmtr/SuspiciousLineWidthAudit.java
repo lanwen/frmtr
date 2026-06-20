@@ -417,7 +417,8 @@ final class SuspiciousLineWidthAudit {
             return new Allowlist(lines.stream()
                     .filter(line -> !line.isBlank())
                     .filter(line -> !line.startsWith("#"))
-                    .map(Allowlist::entry)
+                    .map(Allowlist::entries)
+                    .flatMap(Collection::stream)
                     .toList());
         }
 
@@ -435,19 +436,54 @@ final class SuspiciousLineWidthAudit {
             return Set.copyOf(entriesByResource.keySet());
         }
 
-        private static AllowlistEntry entry(String line) {
+        private static List<AllowlistEntry> entries(String line) {
             String[] parts = line.split("\\t", 4);
             if (parts.length != 4 || parts[3].isBlank()) {
                 throw new IllegalStateException(
-                    "Invalid suspicious line-width allowlist entry. Expected outputResource<TAB>line<TAB>sha256"
-                        + "<TAB>reason, got: "
+                    "Invalid suspicious line-width allowlist entry. Expected outputResource<TAB>lineRange<TAB>"
+                        + "sha256[,sha256...]<TAB>reason, got: "
                         + line
                 );
             }
-            if (!LINE_HASH.matcher(parts[2]).matches()) {
-                throw new IllegalStateException("Invalid suspicious line-width allowlist SHA-256 in: " + line);
+            List<Integer> lineNumbers = lineNumbers(line, parts[1]);
+            List<String> lineHashes = lineHashes(line, parts[2], lineNumbers.size());
+            return java.util.stream.IntStream.range(0, lineNumbers.size())
+                    .mapToObj(index -> new AllowlistEntry(
+                        new AllowedLine(parts[0], lineNumbers.get(index), lineHashes.get(index)),
+                        parts[3]
+                    ))
+                    .toList();
+        }
+
+        private static List<Integer> lineNumbers(String line, String value) {
+            if (!value.matches("\\d+(?:-\\d+)?")) {
+                lineNumber(line, value);
             }
-            return new AllowlistEntry(new AllowedLine(parts[0], lineNumber(line, parts[1]), parts[2]), parts[3]);
+            String[] range = value.split("-", -1);
+            if (range.length == 1) {
+                return List.of(lineNumber(line, value));
+            }
+            int start = lineNumber(line, range[0]);
+            int end = lineNumber(line, range[1]);
+            if (start > end) {
+                throw new IllegalStateException("Invalid suspicious line-width allowlist line range in: " + line);
+            }
+            return java.util.stream.IntStream.rangeClosed(start, end)
+                    .boxed()
+                    .toList();
+        }
+
+        private static List<String> lineHashes(String line, String value, int expectedCount) {
+            List<String> hashes = List.of(value.split(",", -1));
+            if (hashes.size() != expectedCount) {
+                throw new IllegalStateException("Invalid suspicious line-width allowlist hash count in: " + line);
+            }
+            hashes.forEach(hash -> {
+                if (!LINE_HASH.matcher(hash).matches()) {
+                    throw new IllegalStateException("Invalid suspicious line-width allowlist SHA-256 in: " + line);
+                }
+            });
+            return hashes;
         }
 
         private static int lineNumber(String line, String value) {

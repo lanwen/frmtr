@@ -74,6 +74,8 @@ final class ReturnExpressionPrinter {
 
     private final Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment;
 
+    private final Predicate<MethodCallExpr> sourceMultilineExpressionLambdaBody;
+
     private final Function<ObjectCreationExpr, Doc> brokenObjectCreation;
 
     private final BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix;
@@ -104,6 +106,7 @@ final class ReturnExpressionPrinter {
             Function<MethodCallExpr, String> methodCallPrefix,
             Predicate<MethodCallExpr> methodCallChainIsSourceMultiline,
             Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment,
+            Predicate<MethodCallExpr> sourceMultilineExpressionLambdaBody,
             Function<ObjectCreationExpr, Doc> brokenObjectCreation,
             BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
             BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression,
@@ -130,6 +133,7 @@ final class ReturnExpressionPrinter {
         this.methodCallPrefix = methodCallPrefix;
         this.methodCallChainIsSourceMultiline = methodCallChainIsSourceMultiline;
         this.methodCallChainHasFinalTrailingLineComment = methodCallChainHasFinalTrailingLineComment;
+        this.sourceMultilineExpressionLambdaBody = sourceMultilineExpressionLambdaBody;
         this.brokenObjectCreation = brokenObjectCreation;
         this.objectCreationWithSuffix = objectCreationWithSuffix;
         this.conditionalExpression = conditionalExpression;
@@ -194,6 +198,17 @@ final class ReturnExpressionPrinter {
                 return forcedChain.orElseThrow();
             }
         }
+        if (
+            expression instanceof MethodCallExpr methodCall
+            && (methodCallChainIsSourceMultiline.test(methodCall)
+                || sourceSpansMultipleLines(methodCall)
+                || sourceMultilineExpressionLambdaBody.test(methodCall))
+        ) {
+            Optional<Doc> forcedChain = returnWithForcedMethodCallChain(methodCall, lineBudget);
+            if (forcedChain.isPresent()) {
+                return forcedChain.orElseThrow();
+            }
+        }
         if (returnLineFits(expression, lineBudget)) {
             return this.expression.apply(expression);
         }
@@ -231,6 +246,12 @@ final class ReturnExpressionPrinter {
     private boolean sourceMultilineObjectCreation(Expression expression) {
         return expression instanceof ObjectCreationExpr objectCreationExpr
             && objectCreationLayoutPolicy.shouldPreserveSourceMultilineArguments(objectCreationExpr);
+    }
+
+    private boolean sourceSpansMultipleLines(Expression expression) {
+        return expression.getRange()
+                .map(range -> range.begin.line < range.end.line)
+                .orElse(false);
     }
 
     private boolean returnLineFits(Expression expression, LayoutWidth.LineBudget lineBudget) {

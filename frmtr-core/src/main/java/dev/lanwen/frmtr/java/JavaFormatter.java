@@ -61,14 +61,72 @@ public final class JavaFormatter {
     }
 
     public String format(String source) {
+        FormattedSource formatted = formatSource(source);
+        formatted.parseResult().ifPresent(parseResult -> verifyAstEquivalent(parseResult, formatted.output()));
+        return formatted.output();
+    }
+
+    /**
+     * Formats {@code source} and, for cleanly-parsed input, always verifies the result is AST-equivalent before
+     * returning it (the write-time {@code --verify} safety valve).
+     *
+     * <p>Unlike {@link #format(String)}, verification here is independent of the {@code dev.lanwen.frmtr.debug.verify}
+     * toggle: a caller who asks for {@code formatVerified} is opting in to the re-parse cost and the graceful refusal in
+     * exchange for the guarantee that the returned output means the same program as the input. On a mismatch this throws
+     * a <em>non-internal</em> {@link FormatterException} (see {@link #assertOutputEquivalentOrThrow}) so the failure
+     * renders as a deliberate refusal to overwrite, not an internal formatter bug.
+     *
+     * <p>Verification is skipped for recovered (partially-parsed) inputs, mirroring {@link #verifyAstEquivalent}: the
+     * formatter only round-trips a best-effort tree there, so AST-equivalence is ill-defined and would false-fail. In
+     * that case the formatted recovered output is returned without the equivalence guarantee. Pragma gating is honored
+     * identically to {@link #format(String)}: a require-pragma input without the pragma is returned unchanged and is not
+     * verified.
+     */
+    public String formatVerified(String source) {
+        FormattedSource formatted = formatSource(source);
+        formatted.parseResult()
+                .filter(parseResult -> !parseResult.hasParseProblems())
+                .ifPresent(
+                    parseResult -> assertOutputEquivalentOrThrow(parseResult.compilationUnit(), formatted.output())
+                );
+        return formatted.output();
+    }
+
+    private FormattedSource formatSource(String source) {
         if (options.requirePragma() && !hasFormatPragma(source)) {
-            return source;
+            return new FormattedSource(Optional.empty(), source);
         }
         JavaParseResult parseResult = parse(source);
         Doc doc = printDoc(source, parseResult);
         String formatted = new DocRenderer(options).render(doc);
-        verifyAstEquivalent(parseResult, formatted);
-        return formatted;
+        return new FormattedSource(Optional.of(parseResult), formatted);
+    }
+
+    private record FormattedSource(Optional<JavaParseResult> parseResult, String output) {}
+
+    /**
+     * Throws a non-internal {@link FormatterException} when {@code formatted} is not AST-equivalent to {@code inputUnit}.
+     *
+     * <p>This is the verify safety valve's decision seam, kept package-private so the refusal logic and its non-internal
+     * failure type can be unit-tested directly without round-tripping the whole formatter (the real formatter does not
+     * produce non-equivalent output on its own). The re-parse reuses {@code this.parser}, i.e. the exact same
+     * {@link ParserConfiguration} used for the input. The equivalence contract — which differences are trivia and which
+     * are genuine — lives entirely in {@link AstEquivalence#describeDifference}, reused here as-is; this method only
+     * routes a mismatch into a {@link FormatterException} whose {@link FormatterException#internal()} is {@code false}
+     * so it surfaces as a clean refusal rather than an internal bug.
+     */
+    void assertOutputEquivalentOrThrow(CompilationUnit inputUnit, String formatted) {
+        JavaParseResult outputResult = parse(formatted);
+        if (outputResult.hasParseProblems()) {
+            throw new FormatterException(
+                "frmtr verify: formatted output did not parse under the input's parser configuration"
+            );
+        }
+        AstEquivalence.describeDifference(inputUnit, outputResult.compilationUnit()).ifPresent(difference -> {
+            throw new FormatterException(
+                "frmtr verify: formatted output is not AST-equivalent to the input — " + difference
+            );
+        });
     }
 
     /**

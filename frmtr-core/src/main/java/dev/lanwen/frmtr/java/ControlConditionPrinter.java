@@ -435,7 +435,8 @@ final class ControlConditionPrinter {
         Optional<Comment> ownComment = condition.getComment();
         if (ownComment.filter(LineComment.class::isInstance).isPresent()) {
             Comment comment = ownComment.orElseThrow();
-            if (!conditionCommentStartsBeforeExpression(condition, comment)
+            if (
+                !conditionCommentStartsBeforeExpression(condition, comment)
                 && !lineCommentTrailsInsideCondition(condition, comment)
             ) {
                 return Optional.empty();
@@ -518,8 +519,8 @@ final class ControlConditionPrinter {
     private Optional<String> rawTrailingLineCommentText(Expression condition) {
         Optional<String> suffix = condition.getRange()
                 .flatMap(conditionRange -> condition.getParentNode()
-                        .flatMap(Node::getRange)
-                        .map(parentRange -> sourceText.sliceAfterWithin(conditionRange, parentRange))
+                            .flatMap(Node::getRange)
+                            .map(parentRange -> sourceText.sliceAfterWithin(conditionRange, parentRange))
                 );
         if (suffix.isEmpty()) {
             return Optional.empty();
@@ -542,8 +543,8 @@ final class ControlConditionPrinter {
     private Optional<String> rawCloseParenTrailingLineCommentText(Expression condition) {
         Optional<String> suffix = condition.getRange()
                 .flatMap(conditionRange -> condition.getParentNode()
-                        .flatMap(Node::getRange)
-                        .map(parentRange -> sourceText.sliceAfterWithin(conditionRange, parentRange))
+                            .flatMap(Node::getRange)
+                            .map(parentRange -> sourceText.sliceAfterWithin(conditionRange, parentRange))
                 );
         if (suffix.isEmpty()) {
             return Optional.empty();
@@ -682,15 +683,19 @@ final class ControlConditionPrinter {
 
     private boolean lineCommentBelongsToCondition(Expression condition, Comment comment) {
         return condition.getParentNode()
-                .flatMap(parent -> condition.getRange().flatMap(conditionRange -> parent.getChildNodes()
-                        .stream()
-                        .filter(child -> child != condition)
-                        .flatMap(child -> child.getRange().stream())
-                        .filter(range -> CommentIndex.startsBefore(conditionRange, range))
-                        .min(this::compareRangeBegins)
+                .flatMap(parent -> condition.getRange().flatMap(
+                        conditionRange -> parent.getChildNodes()
+                                .stream()
+                                .filter(child -> child != condition)
+                                .flatMap(child -> child.getRange().stream())
+                                .filter(range -> CommentIndex.startsBefore(conditionRange, range))
+                                .min(this::compareRangeBegins)
                 ))
-                .flatMap(nextRange -> comment.getRange().map(commentRange ->
-                        CommentIndex.startsBefore(commentRange, nextRange)
+                .flatMap(nextRange -> comment.getRange().map(
+                        commentRange -> CommentIndex.startsBefore(
+                            commentRange,
+                            nextRange
+                        )
                 ))
                 .orElse(true);
     }
@@ -705,8 +710,8 @@ final class ControlConditionPrinter {
 
     private boolean lineCommentTrailsConditionContent(Expression condition, Comment comment) {
         return condition.getRange()
-                .flatMap(conditionRange -> comment.getRange().map(commentRange ->
-                        commentRange.begin.line == conditionRange.begin.line
+                .flatMap(conditionRange -> comment.getRange().map(
+                        commentRange -> commentRange.begin.line == conditionRange.begin.line
                                 && commentRange.begin.column > conditionRange.begin.column
                 ))
                 .orElse(false);

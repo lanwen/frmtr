@@ -66,11 +66,38 @@ public final class FormatterRunner {
             FormatterOptions options,
             FormatRunProgress progress
     ) {
+        return writeFiles(displayRoot, files, options, progress, FrmtrSession::format);
+    }
+
+    /**
+     * Writes changed formatter output back to disk, refusing to overwrite a file whose formatted result is not
+     * AST-equivalent to its input.
+     *
+     * <p>Each file is formatted through {@code FrmtrSession#formatVerified}: a verify mismatch throws a non-internal
+     * {@link FormatterException} <em>before</em> any write is attempted, so the original file is left untouched and the
+     * file's result is {@code FAILED} carrying that exception, whose message states why the overwrite was declined.
+     */
+    public static FormatRunResult writeVerified(
+            Path displayRoot,
+            List<Path> files,
+            FormatterOptions options,
+            FormatRunProgress progress
+    ) {
+        return writeFiles(displayRoot, files, options, progress, FrmtrSession::formatVerified);
+    }
+
+    private static FormatRunResult writeFiles(
+            Path displayRoot,
+            List<Path> files,
+            FormatterOptions options,
+            FormatRunProgress progress,
+            BiFunction<FrmtrSession, String, String> formatSource
+    ) {
         return new FormatRunResult(
             formatSelectedFiles(
                 displayRoot,
                 files,
-                (formatter, file) -> writeFile(displayRoot, file, formatter),
+                (formatter, file) -> writeFile(displayRoot, file, formatter, formatSource),
                 options,
                 progress
             )
@@ -262,11 +289,16 @@ public final class FormatterRunner {
         }
     }
 
-    private static FormatFileResult writeFile(Path displayRoot, Path file, Supplier<FrmtrSession> formatter) {
+    private static FormatFileResult writeFile(
+            Path displayRoot,
+            Path file,
+            Supplier<FrmtrSession> formatter,
+            BiFunction<FrmtrSession, String, String> formatSource
+    ) {
         Path displayPath = displayPath(displayRoot, file);
         try {
             String original = Files.readString(file, StandardCharsets.UTF_8);
-            String formatted = formatter.get().format(original);
+            String formatted = formatSource.apply(formatter.get(), original);
             if (formatted.equals(original)) {
                 return new FormatFileResult(file, displayPath, FormatFileStatus.UNCHANGED, "", null);
             }

@@ -33,6 +33,18 @@ public final class FrmtrSession {
     }
 
     /**
+     * Formats one Java source and, for cleanly-parsed input, verifies the result is AST-equivalent to the input.
+     *
+     * <p>This is the opt-in write-time safety valve: on a mismatch the underlying formatter throws a non-internal
+     * {@link FormatterException}, which {@link #formatterCall} passes through unchanged so callers receive a clean
+     * refusal (its {@link FormatterException#internal()} is {@code false}) rather than an internal-error wrapping.
+     * Verification is skipped for recovered (partially-parsed) inputs; see {@code JavaFormatter#formatVerified}.
+     */
+    public String formatVerified(String source) {
+        return formatterCall(() -> formatter.formatVerified(source));
+    }
+
+    /**
      * Returns the structural document tree produced by this session's formatter setup.
      */
     public String debugDoc(String source) {

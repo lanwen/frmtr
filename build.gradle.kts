@@ -56,8 +56,8 @@ tasks.registerFrmtrCliTask("frmtrSelfCheck") {
 }
 
 tasks.registerFrmtrCliTask("frmtrSelfFormat") {
-    description = "Formats code with frmtr CLI."
-    args("--write")
+    description = "Formats code with frmtr CLI and verifies AST equivalence before each write."
+    args("--write", "--verify")
     frmtrSelfFixtureCorpora.forEach { args("--exclude", it) }
     args(".")
 }

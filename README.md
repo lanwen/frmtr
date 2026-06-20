@@ -97,7 +97,7 @@ To format this checkout with the current formatter implementation, use the root 
 ./gradlew frmtrSelfFormat
 ```
 
-These tasks run `:frmtr-cli` from the current checkout in a single Gradle invocation. They dogfood the formatter engine, tooling runner, and CLI over this checkout while excluding `frmtr-core/src/test/resources/format`; `frmtrSelfCheck` prints unified diffs for changed files. Gradle plugin behavior stays covered by `:frmtr-gradle-plugin` functional tests.
+These tasks run `:frmtr-cli` from the current checkout in a single Gradle invocation. They dogfood the formatter engine, tooling runner, and CLI over this checkout while excluding `frmtr-core/src/test/resources/format`; `frmtrSelfCheck` prints unified diffs for changed files, and `frmtrSelfFormat` uses `--write --verify` so self-formatting refuses non-equivalent rewrites. Gradle plugin behavior stays covered by `:frmtr-gradle-plugin` functional tests.
 
 Review the produced Java diff and run tests before committing it; the formatter source contains embedded Java fixtures, so self-formatting can expose formatter bugs rather than producing a purely mechanical style diff.
 
@@ -137,6 +137,12 @@ Format selectors in place:
 ./gradlew :frmtr-cli:run --args='--write "src/**/*.java,examples/*.java"'
 ```
 
+Format selectors in place with the write-time AST-equivalence safety valve:
+
+```bash
+./gradlew :frmtr-cli:run --args='--write --verify "src/**/*.java,examples/*.java"'
+```
+
 Exclude generated or fixture sources from a broad selector:
 
 ```bash
@@ -158,12 +164,19 @@ Exclude generated or fixture sources from a broad selector:
 | --- | --- |
 | `--check` | Checks formatting without changing files. This is the default mode. |
 | `--write` | Formats files in place and prints a processed summary. |
+| `--write --verify` | Like `--write`, but re-parses each formatted file and refuses to overwrite it when the result is not AST-equivalent to the input. |
 | `--stdin` | Reads Java source from stdin and writes formatted source to stdout. |
 | `--stdin --check` | Compares piped source against formatter output. |
 | `--stdin --diff` | Prints a unified diff between piped source and formatter output. |
 
 For multi-file runs, `--check` and `--write` continue after formatter failures and render outlined diagnostics with
 line-numbered JavaParser source context when available.
+
+`--verify` is an opt-in safety valve, off by default and valid only with `--write`; the CLI rejects it in stdin, explain,
+check, and print modes. When enabled, each file's formatted output is re-parsed and compared structurally to the input;
+if it is not AST-equivalent, that file is left untouched and reported as a failure with a clear diagnostic instead of
+being overwritten. Verification doubles parse cost, which is why it stays off by default. The Gradle plugin does not yet
+have an equivalent flag.
 
 ### Check Output
 

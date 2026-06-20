@@ -62,6 +62,13 @@ public final class Main implements Callable<Integer> {
     boolean write;
 
     @Option(
+        names = "--verify",
+        description = "With --write, re-parse each formatted file and refuse to overwrite it if the result is not "
+            + "AST-equivalent to the input. Off by default; doubles parse cost."
+    )
+    boolean verify;
+
+    @Option(
         names = "--explain",
         description = "Explain why the formatter wrapped (or kept flat) each group. Reads --stdin or a single file. "
             + "Prints the formatted result, why each group broke, a rule-label decision tree, and a legend."
@@ -192,6 +199,10 @@ public final class Main implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
+        if (verify && !write) {
+            err.println("--verify requires --write");
+            return 2;
+        }
         if (explain) {
             return runExplain();
         }
@@ -411,12 +422,10 @@ public final class Main implements Callable<Integer> {
             long excluded,
             CliProgressRenderer progress
     ) {
-        FormatRunResult run = FormatterRunner.write(
-            workingDirectory,
-            files,
-            options,
-            progressRenderer(files.size(), "formatted", progress)
-        );
+        FormatRunProgress runProgress = progressRenderer(files.size(), "formatted", progress);
+        FormatRunResult run = verify
+            ? FormatterRunner.writeVerified(workingDirectory, files, options, runProgress)
+            : FormatterRunner.write(workingDirectory, files, options, runProgress);
         printRunFailures(run);
         printWriteSummary(run, ignored, excluded);
         out.flush();

@@ -19,8 +19,9 @@ final class BestEffortAtomicFileWriterTest {
 
         BestEffortAtomicFileWriter.writeString(target, "class Changed {\n\n    int value;\n}\n");
 
-        assertThat(Files.readString(target, StandardCharsets.UTF_8))
-                .isEqualTo("class Changed {\n\n    int value;\n}\n");
+        assertThat(Files.readString(target, StandardCharsets.UTF_8)).isEqualTo(
+            "class Changed {\n\n    int value;\n}\n"
+        );
         assertThat(tempFilesIn(dir)).isEmpty();
     }
 

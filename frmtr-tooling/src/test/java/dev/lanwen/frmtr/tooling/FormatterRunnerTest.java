@@ -111,6 +111,37 @@ final class FormatterRunnerTest {
     }
 
     @Test
+    void verifyWriteStillFormatsCorrectlyFormattableFiles(@TempDir Path dir) throws IOException {
+        // The opt-in verify path must not change behavior for correctly-formattable input: the file is still written and
+        // its contents still match the formatter output. (A refusal cannot be triggered while the formatter is correct;
+        // the seam test in frmtr-core covers the refusal and its non-internal failure type.)
+        Path changed = write(dir.resolve("src/Changed.java"), "class Changed{int value;}");
+
+        FormatRunResult run = FormatterRunner.writeVerified(
+            dir,
+            List.of(changed),
+            FormatterOptions.defaults(),
+            state -> {}
+        );
+
+        assertThat(run.results())
+                .singleElement()
+                .satisfies(result -> {
+                    assertThat(result.status()).isEqualTo(FormatFileStatus.WRITTEN);
+                    assertThat(result.failed()).isFalse();
+                });
+        assertThat(run.hasFailures()).isFalse();
+        assertThat(Files.readString(changed, StandardCharsets.UTF_8)).isEqualTo(
+            """
+                class Changed {
+
+                    int value;
+                }
+                """
+        );
+    }
+
+    @Test
     void reportsPartialWriteWhenChangedFileCannotBeWritten(@TempDir Path dir) throws IOException {
         // Staged writes replace the target through its directory, so a read-only file in a writable directory may still
         // be reformatted. A non-writable directory exercises the write-step failure contract.

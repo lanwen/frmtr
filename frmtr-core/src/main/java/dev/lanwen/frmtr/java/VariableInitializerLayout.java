@@ -1341,11 +1341,9 @@ final class VariableInitializerLayout {
                 .filter(lambdaExpr -> lambdaExpr.getBody().isBlockStmt())
                 .map(lambdaExpr -> lambdaExpr.getBody().asBlockStmt())
                 .filter(block -> !block.getStatements().isEmpty())
-                .anyMatch(block -> !commentPlacement.lineCommentsBeforeFirst(
-                            block,
-                            block.getStatements().getFirst().orElseThrow()
-                        )
-                        .isEmpty()
+                .anyMatch(
+                    block ->
+                        !commentPlacement.lineCommentsBeforeFirst( block, block.getStatements().getFirst().orElseThrow() ) .isEmpty()
                 );
     }
 

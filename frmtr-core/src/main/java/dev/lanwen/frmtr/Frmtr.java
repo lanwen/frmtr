@@ -12,6 +12,30 @@ public final class Frmtr {
         return session(options).format(source);
     }
 
+    /**
+     * Formats the source with formatter defaults and verifies the result is AST-equivalent to the input.
+     *
+     * <p>Convenience overload of {@link #formatVerified(String, FormatterOptions)} using
+     * {@link FormatterOptions#defaults()}.
+     */
+    public static String formatVerified(String source) {
+        return formatVerified(source, FormatterOptions.defaults());
+    }
+
+    /**
+     * Formats the source and, for cleanly-parsed input, verifies the formatted output is AST-equivalent to the input.
+     *
+     * <p>This is the opt-in safety valve behind the CLI {@code --write --verify} mode. Unlike
+     * {@link #format(String, FormatterOptions)}, it always re-parses the formatted output and compares it structurally
+     * to the input (independent of the {@code dev.lanwen.frmtr.debug.verify} debug toggle), accepting the doubled parse
+     * cost in exchange for the guarantee. On a mismatch it throws a non-internal {@link FormatterException} so the
+     * failure reads as a deliberate refusal rather than an internal bug. Verification is skipped for recovered
+     * (partially-parsed) inputs, where AST-equivalence is ill-defined.
+     */
+    public static String formatVerified(String source, FormatterOptions options) {
+        return session(options).formatVerified(source);
+    }
+
     public static String debugDoc(String source) {
         return debugDoc(source, FormatterOptions.defaults());
     }

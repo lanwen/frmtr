@@ -176,6 +176,10 @@ the existing document view and its layout decisions without letting the CLI own 
   distinguishes write-step failures as partially written results, and reports the full run summary.
 - `FormatterRunner.write(...)` stages formatted text in a temp file in the same directory and renames it over the
   original (preserving POSIX mode), preferring atomic moves and falling back to a plain replace only when unsupported.
+- `FormatterRunner.writeVerified(...)` uses the same runner and write pipeline as `write(...)`, but formats each file
+  through `FrmtrSession.formatVerified(...)`; when verification fails the non-internal `FormatterException` is thrown
+  before any write, so the file is left untouched and reported as `FAILED`. The default write path is unchanged and pays
+  no verification cost.
 - Multi-file `check` and `write` runs process selected files on an explicit fixed-size worker pool capped by available
   processors and file count. Results are collected into input-order slots before the `FormatRunResult` is exposed, so
   CLI and Gradle output remains deterministic even when files finish out of order.
@@ -274,6 +278,12 @@ first, then the CLI may expose it by translating arguments into `FormatterOption
 presentation. The CLI currently exposes formatter policy for line width, indentation width, parser language level, and
 parse-error behavior.
 
+The `--verify` flag (off by default, rejected unless `--write` is present) exposes the API's `formatVerified(...)`
+safety valve through `FormatterRunner.writeVerified(...)`. It does not own the equivalence check; it only selects the
+verified write path, which fails closed with a non-internal diagnostic instead of overwriting a non-equivalent result.
+Default `--write`, stdin, explain, check mode, and the `dev.lanwen.frmtr.debug.verify` toggle are unchanged. A
+Gradle-plugin equivalent is a planned follow-up.
+
 Selector discovery is CLI-local because it depends on command-line concepts: default selectors, explicit files,
 directories, globs, comma-separated selector groups, `.gitignore`, and CLI excludes. Discovery uses selector-scoped,
 context-carrying directory jobs on a bounded executor with a bounded shared directory queue, then sorts selected,
@@ -296,8 +306,9 @@ The root build exposes `frmtrSelfCheck` and `frmtrSelfFormat` as shared `JavaExe
 `:frmtr-cli` runtime classpath. They also launch with the Java 21 toolchain, providing a one-invocation dogfood path for
 the formatter engine, tooling runner, and CLI over this checkout while excluding `frmtr-core/src/test/resources/format` and
 `frmtr-core/src/test/resources/unsupported`, whose fixture corpora contain formatter-sensitive or intentionally invalid
-Java samples. `frmtrSelfCheck` enables CLI unified diffs so reviewers can inspect drift directly from the check output.
-Gradle plugin behavior remains covered by
+Java samples. `frmtrSelfCheck` enables CLI unified diffs so reviewers can inspect drift directly from the check output,
+and `frmtrSelfFormat` runs `--write --verify` so repo self-formatting exercises the verified write path and refuses
+non-equivalent rewrites. Gradle plugin behavior remains covered by
 `:frmtr-gradle-plugin` functional tests.
 
 ## Gradle Plugin

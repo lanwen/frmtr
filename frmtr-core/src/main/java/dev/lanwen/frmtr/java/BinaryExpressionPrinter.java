@@ -483,10 +483,11 @@ final class BinaryExpressionPrinter {
             int index,
             int operandCount
     ) {
-        Doc operandDoc = enclosedOperandWithLeadingLineComments(operand).orElseGet(() ->
-            operand.getAllContainedComments().stream().anyMatch(LineComment.class::isInstance)
-            ? expressionRenderer.format(operand)
-            : Doc.text(compactWithoutOwnComment.apply(operand))
+        Doc operandDoc = enclosedOperandWithLeadingLineComments(operand).orElseGet(
+            () ->
+                operand.getAllContainedComments().stream().anyMatch(LineComment.class::isInstance)
+                    ? expressionRenderer.format(operand)
+                    : Doc.text(compactWithoutOwnComment.apply(operand))
         );
         if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.START) {
             return index == 0 ? operandDoc : Doc.concat(Doc.text(operator.asString() + " "), operandDoc);

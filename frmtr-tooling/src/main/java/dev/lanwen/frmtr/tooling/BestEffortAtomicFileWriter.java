@@ -46,8 +46,10 @@ final class BestEffortAtomicFileWriter {
     }
 
     private static void copyPosixModeIfAvailable(Path target, Path tmp) throws IOException {
-        if (Files.exists(target)
-                && Files.getFileStore(target).supportsFileAttributeView(PosixFileAttributeView.class)) {
+        if (
+            Files.exists(target)
+            && Files.getFileStore(target).supportsFileAttributeView(PosixFileAttributeView.class)
+        ) {
             Set<PosixFilePermission> perms = Files.getPosixFilePermissions(target);
             Files.setPosixFilePermissions(tmp, perms);
         }

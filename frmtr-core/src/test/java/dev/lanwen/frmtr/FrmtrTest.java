@@ -187,6 +187,34 @@ final class FrmtrTest {
     }
 
     @Test
+    void formatVerifiedMatchesFormatAndDoesNotThrowForRepresentativeSources() {
+        // The verify safety valve re-parses its own output and compares it structurally to the input. For correctly
+        // formatted sources spanning a method chain, a record, an enum, and a comment-dense class, that round-trip must
+        // agree with plain format byte-for-byte and never refuse — refusal is only for a genuine meaning change.
+        FormatterOptions options = FormatterOptions.defaults().withLineWidth(40);
+        String methodChain = "class A{void m(){foo().bar().baz().qux().quux().corge().grault().garply().waldo();}}";
+        String record = "record Point(int x, int y) { int sum() { return x + y; } }";
+        String enumeration = "enum Color { RED, GREEN, BLUE; boolean warm() { return this == RED; } }";
+        String commentDense = """
+                // leading
+                class Commented {
+                    /** javadoc */
+                    int value; // trailing
+
+                    /* block */
+                    void run() {
+                        // body comment
+                        call(value);
+                    }
+                }
+                """;
+        for (String source : new String[] {methodChain, record, enumeration, commentDense}) {
+            assertThat(Frmtr.formatVerified(source, options)).isEqualTo(Frmtr.format(source, options));
+        }
+        assertThatCode(() -> Frmtr.formatVerified(commentDense)).doesNotThrowAnyException();
+    }
+
+    @Test
     void explainFormattedOutputMatchesFormat() {
         String source = "class Demo{void method(){call(value);}}";
 

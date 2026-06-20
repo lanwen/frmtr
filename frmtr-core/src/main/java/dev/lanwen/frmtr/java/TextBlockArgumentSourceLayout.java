@@ -58,7 +58,7 @@ final class TextBlockArgumentSourceLayout {
 
     Doc expressionLambdaMethodCallArgument(TextBlockLiteralExpr textBlockLiteralExpr) {
         String literal = literalRenderer.apply(textBlockLiteralExpr);
-        return Doc.text(options.lineEnding().value() + sourcePrefix(textBlockLiteralExpr) + literal);
+        return Doc.text(options.lineEnding().value() + sourcePrefix(textBlockLiteralExpr, literal) + literal);
     }
 
     /**
@@ -104,7 +104,7 @@ final class TextBlockArgumentSourceLayout {
      * indentation that should remain before the text block.
      */
     private String sourcePrefixBeforeLiteralIndent(TextBlockLiteralExpr textBlockLiteralExpr, String literal) {
-        String sourcePrefix = sourcePrefix(textBlockLiteralExpr);
+        String sourcePrefix = sourcePrefix(textBlockLiteralExpr, literal);
         int literalPrefixLength = leadingHorizontalWhitespaceLength(literal) + (options.indentUnit().length() * 2);
         if (literalPrefixLength >= sourcePrefix.length()) {
             return "";
@@ -112,10 +112,46 @@ final class TextBlockArgumentSourceLayout {
         return sourcePrefix.substring(0, sourcePrefix.length() - literalPrefixLength);
     }
 
-    private String sourcePrefix(TextBlockLiteralExpr textBlockLiteralExpr) {
-        return textBlockLiteralExpr.getRange()
+    /**
+     * Returns indentation before a text-block opener without copying unrelated code from a collapsed source line.
+     *
+     * <p>When the opener starts on an indentation-only source line, that indentation is the source-shaped placement the
+     * caller wants. Whitespace-perturbed inputs can instead put the opener after earlier statements on the same line;
+     * in that case the closing delimiter's indentation is the closest source-owned text-block placement that is still
+     * independent of the surrounding collapsed code.
+     */
+    private String sourcePrefix(TextBlockLiteralExpr textBlockLiteralExpr, String literal) {
+        String prefix = textBlockLiteralExpr.getRange()
                 .map(range -> sourceText.linePrefix(range.begin))
                 .orElse("");
+        return isHorizontalWhitespace(prefix) ? prefix : closingDelimiterIndent(literal);
+    }
+
+    private boolean isHorizontalWhitespace(String text) {
+        for (int index = 0; index < text.length(); index++) {
+            char current = text.charAt(index);
+            if (current != ' ' && current != '\t') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private String closingDelimiterIndent(String literal) {
+        int closingLineStart = literal.lastIndexOf('\n');
+        if (closingLineStart < 0) {
+            return "";
+        }
+        int indentStart = closingLineStart + 1;
+        int indentEnd = indentStart;
+        while (indentEnd < literal.length()) {
+            char current = literal.charAt(indentEnd);
+            if (current != ' ' && current != '\t') {
+                break;
+            }
+            indentEnd++;
+        }
+        return literal.substring(indentStart, indentEnd);
     }
 
     private int leadingHorizontalWhitespaceLength(String text) {

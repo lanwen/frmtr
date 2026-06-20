@@ -28,6 +28,17 @@ class IfStatements {
         }
     }
 
+    void commentsBetweenLogicalOperands(String keyType) {
+        if (
+            // legacy key type format before registry draft 04
+            keyType.endsWith("-cert-v01@openssh.com") ||
+            // current key type format since registry draft 04
+            keyType.endsWith("-cert")
+        ) {
+            System.out.println("enabled");
+        }
+    }
+
     void commentsIfBlockComment() {
         if (/* test */ isEnabled) {
         }

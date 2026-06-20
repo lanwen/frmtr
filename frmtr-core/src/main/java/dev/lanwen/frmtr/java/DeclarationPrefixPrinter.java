@@ -12,6 +12,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Prints declaration-prefix annotations and modifiers before declaration-specific headers are assembled.
@@ -21,10 +22,10 @@ import java.util.function.Function;
  * prefix policy, while their broader declaration printers still own keyword, type, parameter, throws, and body layout.
  *
  * <p>Annotation expression layout stays with {@link AnnotationExpressionPrinter}; callers provide both rendered
- * annotation docs and compact annotation text as callbacks. Comments that sit between annotation nodes are kept here
- * because this is the shared source-order boundary for declaration-leading annotation stacks. This helper intentionally
- * leaves declaration header assembly, member sequencing, expression dispatch, and non-prefix source-comment attachment
- * to the caller.
+ * annotation docs and compact annotation text as callbacks. Comments that sit between annotation nodes, or between the
+ * final leading annotation and the declaration header, are kept here because this is the shared source-order boundary
+ * for declaration-leading annotation stacks. This helper intentionally leaves declaration header assembly, member
+ * sequencing, expression dispatch, and non-prefix source-comment attachment to the caller.
  */
 final class DeclarationPrefixPrinter {
 
@@ -85,6 +86,8 @@ final class DeclarationPrefixPrinter {
             docs.add(Doc.HARD_LINE);
             if (index + 1 < annotations.size() && node instanceof Node owner) {
                 docs.add(interAnnotationComments(owner, annotation, annotations.get(index + 1)));
+            } else if (node instanceof Node owner) {
+                docs.add(postAnnotationComments(owner, annotation));
             }
         }
         return Doc.concat(docs);
@@ -96,14 +99,59 @@ final class DeclarationPrefixPrinter {
         if (previousRange.isEmpty() || nextRange.isEmpty()) {
             return Doc.EMPTY;
         }
+        return commentsBetween(owner, previousRange.orElseThrow(), nextRange.orElseThrow());
+    }
+
+    /**
+     * Keeps standalone notes that source placed after the last declaration-leading annotation but before the annotated
+     * header token, such as a local variable type or method modifier.
+     */
+    private Doc postAnnotationComments(Node owner, AnnotationExpr previous) {
+        Optional<Range> previousRange = previous.getRange();
+        Optional<Range> nextRange = firstNonAnnotationChildAfter(owner, previous);
+        if (previousRange.isEmpty() || nextRange.isEmpty()) {
+            return Doc.EMPTY;
+        }
+        Range annotationRange = previousRange.orElseThrow();
+        return commentsBetween(
+            owner,
+            annotationRange,
+            nextRange.orElseThrow(),
+            comment -> comment.beginLine(Integer.MIN_VALUE) > annotationRange.end.line
+        );
+    }
+
+    private Optional<Range> firstNonAnnotationChildAfter(Node owner, AnnotationExpr previous) {
+        Optional<Range> previousRange = previous.getRange();
+        if (previousRange.isEmpty()) {
+            return Optional.empty();
+        }
+        return owner.getChildNodes()
+                .stream()
+                .filter(child -> !(child instanceof AnnotationExpr))
+                .map(Node::getRange)
+                .flatMap(Optional::stream)
+                .filter(range -> startsAfter(range, previousRange.orElseThrow()))
+                .min(this::compareRangeBegins);
+    }
+
+    private Doc commentsBetween(Node owner, Range previousRange, Range nextRange) {
+        return commentsBetween(owner, previousRange, nextRange, ignored -> true);
+    }
+
+    private Doc commentsBetween(
+            Node owner,
+            Range previousRange,
+            Range nextRange,
+            Predicate<JavaCommentTrivia> predicate
+    ) {
         return Doc.concat(
             commentPlacement.containedComments(owner)
                     .stream()
+                    .filter(predicate)
                     .filter(comment -> comment.comment()
                                 .getRange()
-                                .filter(range -> startsAfter(range, previousRange.orElseThrow())
-                                        && endsBefore(range, nextRange.orElseThrow())
-                                )
+                                .filter(range -> startsAfter(range, previousRange) && endsBefore(range, nextRange))
                                 .isPresent()
                     )
                     .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
@@ -119,6 +167,14 @@ final class DeclarationPrefixPrinter {
             return commentRange.end.line < annotationRange.begin.line;
         }
         return commentRange.end.column < annotationRange.begin.column;
+    }
+
+    private int compareRangeBegins(Range left, Range right) {
+        int line = Integer.compare(left.begin.line, right.begin.line);
+        if (line != 0) {
+            return line;
+        }
+        return Integer.compare(left.begin.column, right.begin.column);
     }
 
     String inlineAnnotations(NodeWithAnnotations<?> node) {

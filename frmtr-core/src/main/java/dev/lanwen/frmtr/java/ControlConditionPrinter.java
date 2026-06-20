@@ -120,6 +120,9 @@ final class ControlConditionPrinter {
             ToIntFunction<String> conditionLineWidth
     ) {
         String flat = compactWithOwnBlockComment(expression);
+        if (commentedLogicalCondition(expression)) {
+            return brokenCondition(expression);
+        }
         if (sourceMultilineLogicalCondition(expression)) {
             return brokenLogicalCondition(expression).orElseGet(() -> brokenCondition(expression));
         }
@@ -212,6 +215,9 @@ final class ControlConditionPrinter {
      * even when the compact condition would fit the formatter's local width estimate.
      */
     Doc ifCondition(Expression expression) {
+        if (commentedLogicalCondition(expression)) {
+            return brokenCondition(expression);
+        }
         Optional<Doc> commented = commentedIfCondition(expression);
         if (commented.isPresent()) {
             return commented.orElseThrow();
@@ -394,6 +400,11 @@ final class ControlConditionPrinter {
 
     private boolean sourceMultilineLogicalConditionExpression(Expression condition) {
         return sourceShape.logicalConditionExpression(condition);
+    }
+
+    private boolean commentedLogicalCondition(Expression condition) {
+        return sourceMultilineLogicalConditionExpression(condition)
+            && condition.getAllContainedComments().stream().anyMatch(LineComment.class::isInstance);
     }
 
     private Doc trailingBlockCommentBeforeCloseParen(Expression condition) {

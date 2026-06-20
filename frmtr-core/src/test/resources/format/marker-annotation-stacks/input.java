@@ -50,4 +50,13 @@ public class MarkerAnnotations {
   @SuppressWarnings("FixtureLegacyName")
   void scheduledOnly() {}
 
+  void createTransformer() {
+    @SuppressWarnings("resource")
+    // Caller transfers ownership and closes the transformer after registration.
+    Transformer transformer = new DataFormatTransformer(context)
+      .withFallback("fixture")
+      .withRegistry(registry);
+    registry.bind(transformer);
+  }
+
 }

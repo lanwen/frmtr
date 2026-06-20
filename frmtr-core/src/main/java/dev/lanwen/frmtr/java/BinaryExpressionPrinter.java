@@ -22,10 +22,11 @@ import java.util.function.ToIntFunction;
  *
  * <p>This helper owns binary-expression layout: flat binary expression rendering, same-operator operand flattening,
  * start-versus-end operator placement, line comments between operands, precedence-preserving parentheses, end-position
- * method-call operand breaks, and the cast-division continuation exception used by assignment and initializer callers.
- * The boundary exists because {@link JavaPrinter} selects binary expressions through broad expression dispatch, while
- * statements, switch guards, conditional expressions, lambdas, method-call arguments, annotations, and field
- * initializers all need the same binary continuation policy after their own context has decided to break.
+ * method-call operand breaks, line comments before the first broken operand, and the cast-division continuation
+ * exception used by assignment and initializer callers. The boundary exists because {@link JavaPrinter} selects binary
+ * expressions through broad expression dispatch, while statements, switch guards, conditional expressions, lambdas,
+ * method-call arguments, annotations, and field initializers all need the same binary continuation policy after their
+ * own context has decided to break.
  *
  * <p>{@link JavaPrinter} still owns broad expression dispatch, assignment and annotation routing, parenthesized
  * wrapping, pragma/raw gates, and the caller-specific decision that a binary expression should be forced onto multiple
@@ -433,6 +434,9 @@ final class BinaryExpressionPrinter {
         List<Expression> operands = new ArrayList<>();
         flattenBinaryExpression(expression, expression.getOperator(), operands);
         List<Doc> lines = new ArrayList<>();
+        if (!operands.isEmpty()) {
+            lines.addAll(commentDocs(lineCommentsBeforeFirstOperand(expression, operands.getFirst())));
+        }
         for (int i = 0; i < operands.size(); i++) {
             Expression operand = operands.get(i);
             Doc line = Doc.text(binaryLineOperandText(expression.getOperator(), operand, i, operands.size()));
@@ -452,6 +456,23 @@ final class BinaryExpressionPrinter {
             }
         }
         return Doc.join(Doc.HARD_LINE, lines);
+    }
+
+    private List<JavaCommentTrivia> lineCommentsBeforeFirstOperand(BinaryExpr expression, Expression firstOperand) {
+        List<JavaCommentTrivia> beforeFirst = new ArrayList<>();
+        commentPlacement.ownComment(expression, JavaCommentTrivia::isLine)
+                .filter(comment -> comment.startsBefore(firstOperand))
+                .ifPresent(beforeFirst::add);
+        beforeFirst.addAll(commentPlacement.lineCommentsBeforeFirst(expression, firstOperand));
+        return beforeFirst.stream()
+                .distinct()
+                .sorted(
+                    java.util.Comparator.comparing(
+                        JavaCommentTrivia::comment,
+                        CommentIndex.sourceOrderComparator()
+                    )
+                )
+                .toList();
     }
 
     private String binaryLineOperandText(

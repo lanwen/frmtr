@@ -1,5 +1,6 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.Statement;
@@ -55,7 +56,10 @@ final class StatementPrinters {
             compactSource::compactJoin,
             compactSource::compactWithoutOwnComment,
             expressions::expressionHasParenthesizedNestedBinary,
-            expression -> expressions.binaryConditionLines(expression, true),
+            expression ->
+                expression instanceof BinaryExpr binaryExpr && expressions.binaryHasLineComments(binaryExpr)
+                    ? expressions.binaryLinesWithComments(binaryExpr)
+                    : expressions.binaryConditionLines(expression, true),
             expressions::forcedMethodCallChain,
             this::currentIndentedWidth,
             this::blockStatementWidth,

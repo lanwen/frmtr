@@ -157,8 +157,8 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
 - `AnnotationExpressionPrinter`: marker, normal, and single-member annotation shapes, annotation member pairs, compact
   annotation text, raw string-literal tokens inside compact annotation values, annotation array member values including
   line comments between values, trailing line comments, and binary annotation-value continuations.
-- `BinaryExpressionPrinter`: binary flattening, operator position, line comments between operands, precedence
-  parentheses, end-position method-call operand breaks, and cast-division continuation decisions.
+- `BinaryExpressionPrinter`: binary flattening, operator position, line comments before and between broken operands,
+  precedence parentheses, end-position method-call operand breaks, and cast-division continuation decisions.
 - `CastExpressionPrinter`: cast type layout, line-width-aware intersection and generic type-body breaks, operand rendering,
   and nested cast depth checks.
 - `EnclosedExpressionPrinter`: parenthesized expression layout and broken enclosed scopes that keep array, method-call,
@@ -192,8 +192,9 @@ Declaration and type printers own Java declaration grammar after `BodyDeclaratio
 - `ConstructorDeclarationPrinter`, `MethodDeclarationPrinter`, `InitializerDeclarationPrinter`,
   `CallableSignaturePrinter`, and `ThrowsClausePrinter`: callable headers, signatures, throws-clause placement,
   callable parameter annotation prefixes, body-versus-semicolon suffixes, and initializer bodies.
-- `DeclarationPrefixPrinter`: leading annotation docs, comments between declaration-leading annotations, inline annotation
-  text after modifiers, declaration-annotation classification for member spacing, and canonical modifier ordering.
+- `DeclarationPrefixPrinter`: leading annotation docs, comments between declaration-leading annotations, comments after
+  the final declaration-leading annotation before the annotated header, inline annotation text after modifiers,
+  declaration-annotation classification for member spacing, and canonical modifier ordering.
 - `MemberBlockPrinter`: already-rendered type member sequencing with orphan comments, opening-brace line comments, and
   source-range-sensitive blank lines.
 

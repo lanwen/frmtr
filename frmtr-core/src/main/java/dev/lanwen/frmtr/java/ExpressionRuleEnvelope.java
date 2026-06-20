@@ -54,7 +54,8 @@ final class ExpressionRuleEnvelope {
         }
         // TODO: Expose the rejected recovered expression through formatter diagnostics once recovery reporting exists.
         throw new FormatterException(
-            "Unsupported Java parse-error recovery reached expression formatter: " + expression.getClass().getSimpleName()
+            "Unsupported Java parse-error recovery reached expression formatter: "
+                + expression.getClass().getSimpleName()
         );
     }
 }

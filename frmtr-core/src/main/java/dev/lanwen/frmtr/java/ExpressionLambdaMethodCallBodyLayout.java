@@ -96,10 +96,15 @@ final class ExpressionLambdaMethodCallBodyLayout {
             return Optional.of(
                 Doc.concat(
                     Doc.text(parameters + " -> " + opener),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, methodCallArgumentList.apply(
-                        scopeCall.getArguments(),
-                        Doc.HARD_LINE
-                    ))),
+                    Doc.indent(
+                        Doc.concat(
+                            Doc.HARD_LINE,
+                            methodCallArgumentList.apply(
+                                scopeCall.getArguments(),
+                                Doc.HARD_LINE
+                            )
+                        )
+                    ),
                     Doc.HARD_LINE,
                     Doc.text(")." + methodCallSelector.apply(methodCall) + "()")
                 )
@@ -113,7 +118,11 @@ final class ExpressionLambdaMethodCallBodyLayout {
                     Doc.indent(
                         Doc.concat(
                             Doc.HARD_LINE,
-                            Doc.text("." + methodCallSelector.apply(scopeCall) + "(" + compactJoin.apply(scopeCall.getArguments()) + ")"),
+                            Doc.text(
+                                "." + methodCallSelector.apply(scopeCall) + "(" + compactJoin.apply(
+                                    scopeCall.getArguments()
+                                ) + ")"
+                            ),
                             Doc.HARD_LINE,
                             Doc.text("." + methodCallSelector.apply(methodCall) + "()")
                         )

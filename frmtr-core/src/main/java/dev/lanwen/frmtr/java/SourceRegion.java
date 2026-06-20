@@ -27,7 +27,11 @@ record SourceRegion(int beginOffset, int endOffset, int beginLine, int beginColu
      * Returns a debug-oriented line and column range for locating this source region.
      */
     String lineColumnLabel() {
-        return "line %d, column %d to line %d, column %d"
-                .formatted(beginLine, beginColumn, endLine, endColumn);
+        return "line %d, column %d to line %d, column %d".formatted(
+            beginLine,
+            beginColumn,
+            endLine,
+            endColumn
+        );
     }
 }

@@ -478,7 +478,13 @@ final class LambdaExpressionPrinter {
      * lambda block, so the normal call formatter handles that case.
      */
     Optional<Doc> huggableBlockLambdaArguments(String prefix, NodeList<Expression> arguments) {
-        return huggableBlockLambdaArguments(prefix, arguments, blockStatementWidth, this::lambdaExpression, blockRenderer);
+        return huggableBlockLambdaArguments(
+            prefix,
+            arguments,
+            blockStatementWidth,
+            this::lambdaExpression,
+            blockRenderer
+        );
     }
 
     Optional<Doc> huggableMethodChainBlockLambdaArguments(String prefix, NodeList<Expression> arguments) {
@@ -518,17 +524,17 @@ final class LambdaExpressionPrinter {
             return Optional.empty();
         }
         HuggableBlockLambdaArgument argument = huggable.orElseThrow();
-        Optional<Doc> sourceMultilineParameters = SourceMultilineLambdaCallLayout
-                .blockLambdaArgumentWithSourceMultilineParameters(
-            prefix,
-            arguments,
-            argument.lambdaIndex(),
-            argument.lambdaExpr(),
-            argument.leadingArguments(),
-            compactJoin,
-            lambdaParameterHeaders,
-            lambdaBlockRenderer
-        );
+        Optional<Doc> sourceMultilineParameters =
+            SourceMultilineLambdaCallLayout.blockLambdaArgumentWithSourceMultilineParameters(
+                prefix,
+                arguments,
+                argument.lambdaIndex(),
+                argument.lambdaExpr(),
+                argument.leadingArguments(),
+                compactJoin,
+                lambdaParameterHeaders,
+                lambdaBlockRenderer
+            );
         if (sourceMultilineParameters.isPresent()) {
             return sourceMultilineParameters;
         }
@@ -825,5 +831,4 @@ final class LambdaExpressionPrinter {
     ) {
         return expressionLambdaArguments.plan(prefix, arguments);
     }
-
 }

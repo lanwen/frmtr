@@ -174,18 +174,24 @@ final class CommentedExpressionListPrinter {
      * statement printers need to keep that comment at the completed-call boundary.
      */
     private List<JavaCommentTrivia> trailingArgumentComments(Node container, Expression argument) {
-        List<JavaCommentTrivia> sourceComments = new ArrayList<>(commentPlacement.lineCommentsAfterLast(
-            container,
-            argument
-        ));
+        List<JavaCommentTrivia> sourceComments = new ArrayList<>(
+            commentPlacement.lineCommentsAfterLast(
+                container,
+                argument
+            )
+        );
         commentPlacement.trailingLineComment(argument)
-                .filter(comment -> sourceComments.stream().noneMatch(existing -> existing.comment() == comment.comment()))
+                .filter(
+                    comment -> sourceComments.stream().noneMatch(existing -> existing.comment() == comment.comment())
+                )
                 .ifPresent(sourceComments::add);
         commentPlacement.containedComments(argument)
                 .stream()
                 .filter(JavaCommentTrivia::isLine)
                 .filter(comment -> comment.startsOnEndLine(argument) || comment.startsAfterNodeOnSameLine(argument))
-                .filter(comment -> sourceComments.stream().noneMatch(existing -> existing.comment() == comment.comment()))
+                .filter(
+                    comment -> sourceComments.stream().noneMatch(existing -> existing.comment() == comment.comment())
+                )
                 .forEach(sourceComments::add);
         int argumentEndLine = CommentIndex.endLine(argument, Integer.MIN_VALUE);
         argument.getAllContainedComments()
@@ -193,7 +199,9 @@ final class CommentedExpressionListPrinter {
                 .filter(LineComment.class::isInstance)
                 .map(JavaCommentTrivia::from)
                 .filter(comment -> comment.beginLine(Integer.MAX_VALUE) == argumentEndLine)
-                .filter(comment -> sourceComments.stream().noneMatch(existing -> existing.comment() == comment.comment()))
+                .filter(
+                    comment -> sourceComments.stream().noneMatch(existing -> existing.comment() == comment.comment())
+                )
                 .forEach(sourceComments::add);
         return sourceComments
                 .stream()

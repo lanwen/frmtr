@@ -98,7 +98,9 @@ final class FormatterGuardrails {
                 .toList();
         if (!missedComments.isEmpty()) {
             throw new AssertionError(
-                "Formatter comment guardrail failed: unclaimed comment " + describe(missedComments.getFirst()) + " was exposed by JavaParser but was not printed or raw-accounted before formatting completed"
+                "Formatter comment guardrail failed: unclaimed comment "
+                    + describe(missedComments.getFirst())
+                    + " was exposed by JavaParser but was not printed or raw-accounted before formatting completed"
             );
         }
     }

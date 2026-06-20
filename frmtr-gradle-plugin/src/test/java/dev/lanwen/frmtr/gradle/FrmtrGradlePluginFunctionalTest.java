@@ -145,9 +145,7 @@ final class FrmtrGradlePluginFunctionalTest {
 
         assertThat(incremental.task(":frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
         assertThat(incremental.getOutput())
-                .contains(
-                    "frmtr check incremental run selected 1 Java file(s): [src/main/java/demo/Changed.java]"
-                )
+                .contains("frmtr check incremental run selected 1 Java file(s): [src/main/java/demo/Changed.java]")
                 .doesNotContain(
                     "frmtr check incremental run selected 1 Java file(s): [src/main/java/demo/Unchanged.java]"
                 );
@@ -174,8 +172,7 @@ final class FrmtrGradlePluginFunctionalTest {
         BuildResult warm = gradle("frmtrJavaCheck").build();
 
         assertThat(removed.task(":frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
-        assertThat(removed.getOutput())
-                .contains("frmtr check incremental run selected 0 Java file(s): []");
+        assertThat(removed.getOutput()).contains("frmtr check incremental run selected 0 Java file(s): []");
         assertThat(warm.task(":frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.UP_TO_DATE);
     }
 
@@ -193,8 +190,9 @@ final class FrmtrGradlePluginFunctionalTest {
         write("src/main/java/demo/First.java", formattedSource("First"));
         write("src/main/java/demo/Second.java", formattedSource("Second"));
         gradle("frmtrJavaCheck").build();
-        assertThat(gradle("frmtrJavaCheck").build().task(":frmtrJavaCheck").getOutcome())
-                .isEqualTo(TaskOutcome.UP_TO_DATE);
+        assertThat(gradle("frmtrJavaCheck").build().task(":frmtrJavaCheck").getOutcome()).isEqualTo(
+            TaskOutcome.UP_TO_DATE
+        );
 
         writeBuildFile(
             """
@@ -214,11 +212,10 @@ final class FrmtrGradlePluginFunctionalTest {
         BuildResult invalidated = gradle("frmtrJavaCheck", "--info").build();
 
         assertThat(invalidated.task(":frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
-        assertThat(invalidated.getOutput())
-                .contains(
-                    "frmtr check full run selected 2 Java file(s): "
-                            + "[src/main/java/demo/First.java, src/main/java/demo/Second.java]"
-                );
+        assertThat(invalidated.getOutput()).contains(
+            "frmtr check full run selected 2 Java file(s): "
+                + "[src/main/java/demo/First.java, src/main/java/demo/Second.java]"
+        );
     }
 
     @Test

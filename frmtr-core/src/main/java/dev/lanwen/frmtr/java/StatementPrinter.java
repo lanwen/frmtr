@@ -127,11 +127,7 @@ final class StatementPrinter {
 
     private final BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Optional<Doc>> forcedMethodCallChainRenderer;
 
-    private final BiFunction<
-        MethodCallExpr,
-        LayoutWidth.LineBudget,
-        Doc
-    > forcedMethodCallWithSemicolonRenderer;
+    private final BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Doc> forcedMethodCallWithSemicolonRenderer;
 
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
 
@@ -528,7 +524,10 @@ final class StatementPrinter {
         if (expression instanceof AssignExpr assignExpr) {
             return Doc.concat(assignmentStatementRenderer.apply(assignExpr), trailing);
         }
-        return Doc.concat(expressionWithTailRenderer.render(expression, ExpressionTail.SEMICOLON, lineBudget), trailing);
+        return Doc.concat(
+            expressionWithTailRenderer.render(expression, ExpressionTail.SEMICOLON, lineBudget),
+            trailing
+        );
     }
 
     private Doc expressionStatementTrailingComment(ExpressionStmt statement) {

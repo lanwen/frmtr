@@ -266,10 +266,12 @@ final class MethodCallChainPrinter {
             Doc.concat(
                 rootDoc,
                 firstSegment,
-                chainContinuation(Doc.join(
-                    Doc.HARD_LINE,
-                    methodCallChainSegments(calls.subList(1, calls.size()), MethodCallChainTail.EMPTY)
-                ))
+                chainContinuation(
+                    Doc.join(
+                        Doc.HARD_LINE,
+                        methodCallChainSegments(calls.subList(1, calls.size()), MethodCallChainTail.EMPTY)
+                    )
+                )
             )
         );
     }
@@ -290,7 +292,8 @@ final class MethodCallChainPrinter {
         }
 
         boolean callCanAttachExpressionLambdaBody(int index) {
-            return index >= 0 && index < callCanAttachExpressionLambdaBody.size()
+            return index >= 0
+                && index < callCanAttachExpressionLambdaBody.size()
                 && callCanAttachExpressionLambdaBody.get(index);
         }
 
@@ -727,8 +730,7 @@ final class MethodCallChainPrinter {
                 return Optional.empty();
             }
             if (
-                chainPlan.rootRendering()
-                    == MethodCallChainSourcePlanner.ChainRootRendering.INLINE_PROMOTED_METHOD_CALL
+                chainPlan.rootRendering() == MethodCallChainSourcePlanner.ChainRootRendering.INLINE_PROMOTED_METHOD_CALL
                 && promotedNoArgRootScopeOverflows(methodRoot, firstLineWidth)
             ) {
                 return Optional.of(
@@ -1089,9 +1091,11 @@ final class MethodCallChainPrinter {
             && sourceMultilineLambdaCalls.canAttachExpressionLambdaBody(methodRoot);
         List<Boolean> callCanAttachExpressionLambdaBody = new ArrayList<>(calls.size());
         for (int index = 0; index < calls.size(); index++) {
-            callCanAttachExpressionLambdaBody.add(index == 0
-                ? firstCall.isPresent()
-                : sourceMultilineLambdaCalls.canAttachExpressionLambdaBody(calls.get(index)));
+            callCanAttachExpressionLambdaBody.add(
+                index == 0
+                    ? firstCall.isPresent()
+                    : sourceMultilineLambdaCalls.canAttachExpressionLambdaBody(calls.get(index))
+            );
         }
         return new SourceMultilineLambdaChainPlan(
             rootCanAttachExpressionLambdaBody,
@@ -1123,13 +1127,9 @@ final class MethodCallChainPrinter {
         if (
             root instanceof MethodCallExpr methodCall
             && methodCall.getArguments().size() > 1
-            && (
-                firstLineWidth.applyAsInt(compactSourceWidthText(methodCall))
-                    > options.lineWidth()
+            && (firstLineWidth.applyAsInt(compactSourceWidthText(methodCall)) > options.lineWidth()
                 || (sourceMultilineTypeLikeRoot(methodCall)
-                    && firstLineWidth.applyAsInt(compactSource.compact(methodCall))
-                        > options.lineWidth())
-            )
+                    && firstLineWidth.applyAsInt(compactSource.compact(methodCall)) > options.lineWidth()))
         ) {
             return calls.brokenMethodCall(methodCall);
         }
@@ -1536,8 +1536,14 @@ final class MethodCallChainPrinter {
                 }
                 yield new PaddedDoc(Doc.concat(children), nextLineStart);
             }
-            case Doc.Line ignored -> new PaddedDoc(Doc.concat(Doc.LINE, Doc.ifBreak(Doc.text(padding), Doc.EMPTY)), false);
-            case Doc.SoftLine ignored -> new PaddedDoc(Doc.concat(Doc.SOFT_LINE, Doc.breakOnly(Doc.text(padding))), false);
+            case Doc.Line ignored -> new PaddedDoc(
+                Doc.concat(Doc.LINE, Doc.ifBreak(Doc.text(padding), Doc.EMPTY)),
+                false
+            );
+            case Doc.SoftLine ignored -> new PaddedDoc(
+                Doc.concat(Doc.SOFT_LINE, Doc.breakOnly(Doc.text(padding))),
+                false
+            );
             case Doc.HardLine ignored -> new PaddedDoc(Doc.concat(Doc.HARD_LINE, Doc.text(padding)), false);
             case Doc.Indent indented -> {
                 PaddedDoc padded = linePadded(indented.doc(), padding, lineStart);
@@ -1916,7 +1922,9 @@ final class MethodCallChainPrinter {
                 .orElse("");
         return Doc.concat(
             Doc.text(compactSource.compact(scope.getScope())),
-            chainContinuation(Doc.text("." + scope.getNameAsString() + "." + typeArguments + expression.getNameAsString() + "()"))
+            chainContinuation(
+                Doc.text("." + scope.getNameAsString() + "." + typeArguments + expression.getNameAsString() + "()")
+            )
         );
     }
 

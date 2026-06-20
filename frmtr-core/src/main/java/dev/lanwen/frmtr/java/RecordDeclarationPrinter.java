@@ -324,8 +324,10 @@ final class RecordDeclarationPrinter {
         if (recordComponentAnnotationsStartOnDifferentLines(parameter)) {
             return true;
         }
-        if (recordComponentHasSourceMultilineAnnotation(parameter)
-            || recordComponentHasWidthDrivenMultilineAnnotation(parameter)) {
+        if (
+            recordComponentHasSourceMultilineAnnotation(parameter)
+            || recordComponentHasWidthDrivenMultilineAnnotation(parameter)
+        ) {
             return false;
         }
         return currentIndentedWidth.applyAsInt(recordComponentFlat(parameter)) > options.lineWidth();

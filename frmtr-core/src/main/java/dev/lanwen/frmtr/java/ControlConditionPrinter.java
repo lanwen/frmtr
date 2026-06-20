@@ -142,7 +142,8 @@ final class ControlConditionPrinter {
         return Optional.of(
             Doc.concat(
                 Doc.text("("),
-                Doc.indent(Doc.concat(
+                Doc.indent(
+                    Doc.concat(
                         Doc.HARD_LINE,
                         Doc.join(
                             Doc.HARD_LINE,
@@ -150,7 +151,8 @@ final class ControlConditionPrinter {
                                     .map(LogicalConditionTerm::doc)
                                     .toList()
                         )
-                )),
+                    )
+                ),
                 Doc.HARD_LINE,
                 Doc.text(")")
             )
@@ -171,8 +173,8 @@ final class ControlConditionPrinter {
         Doc operand = logicalConditionOperandShouldBreak(current)
             ? brokenExpressionLines.apply(current)
             : rawSource.rawWithoutOwnComment(current).contains("\n")
-            ? expressionRenderer.apply(current)
-            : Doc.text(compact.apply(current));
+                ? expressionRenderer.apply(current)
+                : Doc.text(compact.apply(current));
         terms.add(new LogicalConditionTerm(operator, operand));
     }
 

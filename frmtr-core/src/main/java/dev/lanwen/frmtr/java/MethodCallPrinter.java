@@ -768,12 +768,10 @@ final class MethodCallPrinter {
             expression.getArguments()
         );
         if (
-            plan
-                    .filter(argument -> argument.firstLineFits(
-                            line -> methodCallRootLineWidth(expression, line),
-                            options.lineWidth()
-                    ))
-                    .isEmpty()
+            plan.filter(argument -> argument.firstLineFits(
+                    line -> methodCallRootLineWidth(expression, line),
+                    options.lineWidth()
+            )).isEmpty()
             || plan.filter(argument -> expressionLambdaBodyOpenerOverflows(expression, argument)).isPresent()
         ) {
             return Optional.empty();

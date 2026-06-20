@@ -102,16 +102,10 @@ public final class Main implements Callable<Integer> {
     )
     ProgressMode progressMode;
 
-    @Option(
-        names = "--line-width",
-        description = "Target line width. Defaults to the formatter default."
-    )
+    @Option(names = "--line-width", description = "Target line width. Defaults to the formatter default.")
     Integer lineWidth;
 
-    @Option(
-        names = "--indent-width",
-        description = "Spaces per indentation level. Defaults to the formatter default."
-    )
+    @Option(names = "--indent-width", description = "Spaces per indentation level. Defaults to the formatter default.")
     Integer indentWidth;
 
     @Option(
@@ -229,8 +223,10 @@ public final class Main implements Callable<Integer> {
             effectiveCheck ? "would change" : "formatted",
             usingDefaultSelectors ? DEFAULT_SELECTORS : selectors
         );
-        FileDiscovery.Result discovery = new FileDiscovery(workingDirectory)
-                .discover(usingDefaultSelectors ? DEFAULT_SELECTORS : selectors, excludes);
+        FileDiscovery.Result discovery = new FileDiscovery(workingDirectory).discover(
+            usingDefaultSelectors ? DEFAULT_SELECTORS : selectors,
+            excludes
+        );
         if (discovery.hasMissingFileSelectors()) {
             clearProgress(progress);
             return printMissingFileSelectors(discovery.missingFileSelectors());

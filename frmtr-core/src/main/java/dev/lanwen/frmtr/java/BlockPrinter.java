@@ -79,9 +79,7 @@ final class BlockPrinter {
         }
         if (block.getStatements().isEmpty()) {
             Optional<Doc> emptyBlockComments = emptyBlockCommentContent(block);
-            return emptyBlockComments
-                    .map(comment -> statementBlock(List.of(comment)))
-                    .orElseGet(() -> Doc.text("{}"));
+            return emptyBlockComments.map(comment -> statementBlock(List.of(comment))).orElseGet(() -> Doc.text("{}"));
         }
         List<Doc> statements = blockContents(block, statementRenderer);
         if (statements.isEmpty()) {

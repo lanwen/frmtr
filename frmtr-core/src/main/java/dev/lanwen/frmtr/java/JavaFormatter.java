@@ -87,7 +87,8 @@ public final class JavaFormatter {
         JavaParseResult outputResult = parse(formatted);
         if (outputResult.hasParseProblems()) {
             throw new AssertionError(
-                "Formatter AST-equivalence verify failed: formatted output did not parse cleanly under the " + "input's parser configuration"
+                "Formatter AST-equivalence verify failed: formatted output did not parse cleanly under the "
+                    + "input's parser configuration"
             );
         }
         FormatterGuardrails.assertAstEquivalent(inputResult.compilationUnit(), outputResult.compilationUnit());

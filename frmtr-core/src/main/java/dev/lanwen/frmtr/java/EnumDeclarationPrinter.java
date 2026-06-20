@@ -458,12 +458,12 @@ final class EnumDeclarationPrinter {
         boolean hasBlankLineBetween = previous.getRange()
                 .flatMap(previousRange -> current.getRange().map(
                         currentRange -> enumEntryBeginLine(
-                                previous,
-                                current,
-                                currentRange.begin.line,
-                                gapComments,
-                                recoveredGapBeginLine
-                            ) > previousRange.end.line + 1
+                            previous,
+                            current,
+                            currentRange.begin.line,
+                            gapComments,
+                            recoveredGapBeginLine
+                        ) > previousRange.end.line + 1
                 ))
                 .orElse(false);
         Doc separator = previousOwnsTrailingComma ? Doc.EMPTY : Doc.text(",");
@@ -782,28 +782,31 @@ final class EnumDeclarationPrinter {
                 .getRange()
                 .map(sourceText::region)
                 .orElseThrow(() -> new IllegalArgumentException("enum constant name is missing a source range"));
-        return declaration.getTokenRange().map(tokenRange -> {
-            boolean afterName = false;
-            int parenDepth = 0;
-            for (JavaToken token : tokenRange) {
-                if (!afterName) {
-                    afterName = tokenMatchesRegion(token, nameRegion);
-                    continue;
-                }
-                if (token.getKind() == GeneratedJavaParserConstants.LPAREN) {
-                    parenDepth++;
-                    continue;
-                }
-                if (token.getKind() == GeneratedJavaParserConstants.RPAREN && parenDepth > 0) {
-                    parenDepth--;
-                    continue;
-                }
-                if (token.getKind() == GeneratedJavaParserConstants.LBRACE && parenDepth == 0) {
-                    return true;
-                }
-            }
-            return false;
-        }).orElse(false);
+        return declaration
+                .getTokenRange()
+                .map(tokenRange -> {
+                    boolean afterName = false;
+                    int parenDepth = 0;
+                    for (JavaToken token : tokenRange) {
+                        if (!afterName) {
+                            afterName = tokenMatchesRegion(token, nameRegion);
+                            continue;
+                        }
+                        if (token.getKind() == GeneratedJavaParserConstants.LPAREN) {
+                            parenDepth++;
+                            continue;
+                        }
+                        if (token.getKind() == GeneratedJavaParserConstants.RPAREN && parenDepth > 0) {
+                            parenDepth--;
+                            continue;
+                        }
+                        if (token.getKind() == GeneratedJavaParserConstants.LBRACE && parenDepth == 0) {
+                            return true;
+                        }
+                    }
+                    return false;
+                })
+                .orElse(false);
     }
 
     private boolean tokenMatchesRegion(JavaToken token, SourceRegion expected) {

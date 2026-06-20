@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 final class SuspiciousLineWidthAuditTest {
 
     private static final String OUTPUT_RESOURCE = "format/audit-test/frmtr-default.output.java";
+
     private static final FormatFixture FIXTURE = new FormatFixture(
         "audit-test @ default",
         "",
@@ -51,23 +52,23 @@ final class SuspiciousLineWidthAuditTest {
     @Test
     void escapedTripleQuotesInsideTextBlockDoNotHideFollowingCode() {
         String formatted = String.join(
-                "\n",
-                "class Demo {",
-                "    void method() {",
-                "        String value = \"\"\"",
-                "            escaped \\\"\"\" content",
-                "            \"\"\";",
-                "        service.first().second().third().fourth().fifth();",
-                "    }",
-                "}",
-                ""
+            "\n",
+            "class Demo {",
+            "    void method() {",
+            "        String value = \"\"\"",
+            "            escaped \\\"\"\" content",
+            "            \"\"\";",
+            "        service.first().second().third().fourth().fifth();",
+            "    }",
+            "}",
+            ""
         );
 
         assertThatThrownBy(() -> SuspiciousLineWidthAudit.assertNoUnexpectedFindings(
                 FIXTURE,
                 formatted,
                 SuspiciousLineWidthAudit.Allowlist.empty()
-            ))
+        ))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining(OUTPUT_RESOURCE + ":6")
                 .hasMessageContaining("service.first().second()");
@@ -81,7 +82,7 @@ final class SuspiciousLineWidthAuditTest {
                 FIXTURE,
                 formatted,
                 SuspiciousLineWidthAudit.Allowlist.empty()
-            ))
+        ))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining(OUTPUT_RESOURCE + ":1")
                 .hasMessageContaining(".formatted(alpha, beta");
@@ -98,7 +99,7 @@ final class SuspiciousLineWidthAuditTest {
                 FIXTURE,
                 formatted,
                 SuspiciousLineWidthAudit.Allowlist.empty()
-            ))
+        ))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining(OUTPUT_RESOURCE + ":2")
                 .hasMessageContaining("service.first().second()");
@@ -117,7 +118,7 @@ final class SuspiciousLineWidthAuditTest {
                 FIXTURE,
                 formatted,
                 SuspiciousLineWidthAudit.Allowlist.empty()
-            ))
+        ))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining(OUTPUT_RESOURCE + ":4")
                 .hasMessageContaining("service.first().second()");
@@ -147,7 +148,7 @@ final class SuspiciousLineWidthAuditTest {
                 FIXTURE,
                 formatted,
                 SuspiciousLineWidthAudit.Allowlist.empty()
-            ))
+        ))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining(OUTPUT_RESOURCE + ":4")
                 .hasMessageContaining("service.first().second()");
@@ -166,7 +167,7 @@ final class SuspiciousLineWidthAuditTest {
                 FIXTURE,
                 formatted,
                 SuspiciousLineWidthAudit.Allowlist.empty()
-            ))
+        ))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining(OUTPUT_RESOURCE + ":4")
                 .hasMessageContaining("service.first().second()");
@@ -183,7 +184,7 @@ final class SuspiciousLineWidthAuditTest {
                 FIXTURE,
                 formatted,
                 SuspiciousLineWidthAudit.Allowlist.empty()
-            ))
+        ))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining(OUTPUT_RESOURCE + ":2")
                 .hasMessageContaining("service.first().second()");
@@ -198,18 +199,22 @@ final class SuspiciousLineWidthAuditTest {
 
     @Test
     void rejectsAllowlistRowsWithInvalidLineNumbers() {
-        assertThatThrownBy(() -> SuspiciousLineWidthAudit.Allowlist.parse(List.of(
-                OUTPUT_RESOURCE + "\tnot-a-number\t" + "0".repeat(64) + "\treason"
-            )))
+        assertThatThrownBy(() -> SuspiciousLineWidthAudit.Allowlist.parse(
+                List.of(
+                    OUTPUT_RESOURCE + "\tnot-a-number\t" + "0".repeat(64) + "\treason"
+                )
+        ))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Invalid suspicious line-width allowlist line number");
     }
 
     @Test
     void rejectsAllowlistRowsWithInvalidHashes() {
-        assertThatThrownBy(() -> SuspiciousLineWidthAudit.Allowlist.parse(List.of(
-            OUTPUT_RESOURCE + "\t1\tnot-a-sha256\treason"
-        )))
+        assertThatThrownBy(() -> SuspiciousLineWidthAudit.Allowlist.parse(
+                List.of(
+                    OUTPUT_RESOURCE + "\t1\tnot-a-sha256\treason"
+                )
+        ))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Invalid suspicious line-width allowlist SHA-256");
     }
@@ -218,48 +223,59 @@ final class SuspiciousLineWidthAuditTest {
     void expandsAllowlistLineRanges() {
         String first = "service.first().second().third().fourth().fifth();";
         String second = "service.alpha().beta().gamma().delta().epsilon();";
-        SuspiciousLineWidthAudit.Allowlist allowlist = SuspiciousLineWidthAudit.Allowlist.parse(List.of(
-            OUTPUT_RESOURCE
-                + "\t1-2\t"
-                + SuspiciousLineWidthAudit.hash(first)
-                + ","
-                + SuspiciousLineWidthAudit.hash(second)
-                + "\tpaired approval"
-        ));
+        SuspiciousLineWidthAudit.Allowlist allowlist = SuspiciousLineWidthAudit.Allowlist.parse(
+            List.of(
+                OUTPUT_RESOURCE
+                    + "\t1-2\t"
+                    + SuspiciousLineWidthAudit.hash(first)
+                    + ","
+                    + SuspiciousLineWidthAudit.hash(second)
+                    + "\tpaired approval"
+            )
+        );
 
         assertThatCode(() -> SuspiciousLineWidthAudit.assertNoUnexpectedFindings(
                 FIXTURE,
                 first + "\n" + second + "\n",
                 allowlist
-            ))
-                .doesNotThrowAnyException();
+        )).doesNotThrowAnyException();
     }
 
     @Test
     void rejectsAllowlistRowsWithRangeHashCountMismatch() {
-        assertThatThrownBy(() -> SuspiciousLineWidthAudit.Allowlist.parse(List.of(
-                OUTPUT_RESOURCE + "\t1-2\t" + "0".repeat(64) + "\treason"
-            )))
+        assertThatThrownBy(() -> SuspiciousLineWidthAudit.Allowlist.parse(
+                List.of(
+                    OUTPUT_RESOURCE + "\t1-2\t" + "0".repeat(64) + "\treason"
+                )
+        ))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Invalid suspicious line-width allowlist hash count");
     }
 
     @Test
     void rejectsAllowlistRowsWithDescendingLineRanges() {
-        assertThatThrownBy(() -> SuspiciousLineWidthAudit.Allowlist.parse(List.of(
-                OUTPUT_RESOURCE + "\t2-1\t" + "0".repeat(64) + "\treason"
-            )))
+        assertThatThrownBy(() -> SuspiciousLineWidthAudit.Allowlist.parse(
+                List.of(
+                    OUTPUT_RESOURCE + "\t2-1\t" + "0".repeat(64) + "\treason"
+                )
+        ))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Invalid suspicious line-width allowlist line range");
     }
 
     @Test
     void rejectsStaleAllowlistEntriesForCurrentOutputResource() {
-        SuspiciousLineWidthAudit.Allowlist allowlist = SuspiciousLineWidthAudit.Allowlist.parse(List.of(
-            OUTPUT_RESOURCE + "\t1\t" + "0".repeat(64) + "\tobsolete approval"
-        ));
+        SuspiciousLineWidthAudit.Allowlist allowlist = SuspiciousLineWidthAudit.Allowlist.parse(
+            List.of(
+                OUTPUT_RESOURCE + "\t1\t" + "0".repeat(64) + "\tobsolete approval"
+            )
+        );
 
-        assertThatThrownBy(() -> SuspiciousLineWidthAudit.assertNoUnexpectedFindings(FIXTURE, "class Demo {}\n", allowlist))
+        assertThatThrownBy(() -> SuspiciousLineWidthAudit.assertNoUnexpectedFindings(
+                FIXTURE,
+                "class Demo {}\n",
+                allowlist
+        ))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining("stale suspicious line-width allowlist entry")
                 .hasMessageContaining("obsolete approval");
@@ -267,22 +283,27 @@ final class SuspiciousLineWidthAuditTest {
 
     @Test
     void detectsAllowlistEntriesForUnknownOutputResources() {
-        SuspiciousLineWidthAudit.Allowlist allowlist = SuspiciousLineWidthAudit.Allowlist.parse(List.of(
-            "format/missing/frmtr-default.output.java\t1\t" + "0".repeat(64) + "\tobsolete fixture"
-        ));
+        SuspiciousLineWidthAudit.Allowlist allowlist = SuspiciousLineWidthAudit.Allowlist.parse(
+            List.of(
+                "format/missing/frmtr-default.output.java\t1\t" + "0".repeat(64) + "\tobsolete fixture"
+            )
+        );
 
-        assertThat(SuspiciousLineWidthAudit.unknownOutputResources(allowlist, Set.of(OUTPUT_RESOURCE)))
-                .containsExactly("format/missing/frmtr-default.output.java");
+        assertThat(SuspiciousLineWidthAudit.unknownOutputResources(allowlist, Set.of(OUTPUT_RESOURCE))).containsExactly(
+            "format/missing/frmtr-default.output.java"
+        );
     }
 
     @Test
     void allowlistOnlyReferencesDiscoveredFormatterOutputs() {
         List<String> discoveredOutputs = ResourceFixtureSource.Provider.outputResources("format/**/input.java");
 
-        assertThat(SuspiciousLineWidthAudit.unknownOutputResources(
+        assertThat(
+            SuspiciousLineWidthAudit.unknownOutputResources(
                 SuspiciousLineWidthAudit.Allowlist.load(),
                 discoveredOutputs
-            ))
+            )
+        )
                 .as("unknown suspicious line-width allowlist output resources")
                 .isEmpty();
     }
@@ -292,7 +313,6 @@ final class SuspiciousLineWidthAuditTest {
                 FIXTURE,
                 formatted,
                 SuspiciousLineWidthAudit.Allowlist.empty()
-            ))
-                .doesNotThrowAnyException();
+        )).doesNotThrowAnyException();
     }
 }

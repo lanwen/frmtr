@@ -365,10 +365,10 @@ final class CallableSignaturePrinter {
                 Optional.empty()
             ));
         }
-        parts.sort(Comparator
-                .comparingInt((ParameterPrefixPart part) -> rangeBeginLine(part.range()))
-                .thenComparingInt(part -> rangeBeginColumn(part.range()))
-                .thenComparingInt(ParameterPrefixPart::fallbackOrder)
+        parts.sort(
+            Comparator.comparingInt((ParameterPrefixPart part) -> rangeBeginLine(part.range()))
+                    .thenComparingInt(part -> rangeBeginColumn(part.range()))
+                    .thenComparingInt(ParameterPrefixPart::fallbackOrder)
         );
         return parts;
     }

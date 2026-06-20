@@ -64,8 +64,12 @@ final class RecoveredListPlannerTest {
         ClassOrInterfaceDeclaration type = onlyType(unit);
         SourceText sourceText = new SourceText(source);
 
-        RecoveredListPlanner.Plan<BodyDeclaration<?>> plan = new RecoveredListPlanner(sourceText)
-                .plan(type, classBodyRegion(source), type.getMembers(), RecoveredListPlannerTest::isBoundaryField);
+        RecoveredListPlanner.Plan<BodyDeclaration<?>> plan = new RecoveredListPlanner(sourceText).plan(
+            type,
+            classBodyRegion(source),
+            type.getMembers(),
+            RecoveredListPlannerTest::isBoundaryField
+        );
 
         assertThat(plan.isSafe()).isTrue();
         assertThat(rawGaps(plan).stream().map(RecoveredListPlanner.RawGap::kind)).containsExactly(

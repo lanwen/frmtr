@@ -108,7 +108,10 @@ final class VariableInitializerLayout {
 
     private final Predicate<MethodCallExpr> methodCallChainIsSourceMultiline;
 
-    private final Function<MethodCallExpr, MethodCallChainSourcePlanner.InitializerChainShape> methodCallChainInitializerShape;
+    private final Function<
+        MethodCallExpr,
+        MethodCallChainSourcePlanner.InitializerChainShape
+    > methodCallChainInitializerShape;
 
     private final Function<Type, Doc> castType;
 
@@ -805,7 +808,9 @@ final class VariableInitializerLayout {
         boolean initializerStartsOnContinuationLine = initializerStartsOnContinuationLine(variable, methodCall);
         boolean chainSpansMultipleSourceLines = methodCallChainIsSourceMultiline.test(methodCall)
             || rawSource.rawWithoutOwnComment(methodCall).contains("\n");
-        MethodCallChainSourcePlanner.InitializerChainShape chainShape = methodCallChainInitializerShape.apply(methodCall);
+        MethodCallChainSourcePlanner.InitializerChainShape chainShape = methodCallChainInitializerShape.apply(
+            methodCall
+        );
         if (
             !chainShape.canUseCompactObjectCreationInitializer(
                 initializerStartsOnContinuationLine,
@@ -835,22 +840,17 @@ final class VariableInitializerLayout {
         boolean initializerStartsOnContinuationLine = initializerStartsOnContinuationLine(variable, methodCall);
         boolean chainSpansMultipleSourceLines = methodCallChainIsSourceMultiline.test(methodCall)
             || rawSource.rawWithoutOwnComment(methodCall).contains("\n");
-        MethodCallChainSourcePlanner.InitializerChainShape chainShape = methodCallChainInitializerShape.apply(methodCall);
+        MethodCallChainSourcePlanner.InitializerChainShape chainShape = methodCallChainInitializerShape.apply(
+            methodCall
+        );
         if (
             !methodCallChainRootIsObjectCreation.test(methodCall)
-            || !(
-                chainShape.canUseCompactObjectCreationInitializer(
-                    initializerStartsOnContinuationLine,
-                    chainSpansMultipleSourceLines,
-                    sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
-                )
-                || sourceFirstLineKeepsChainAfterRoot(methodCall)
-            )
-            || (
-                !methodCall.getArguments().isEmpty()
-                && layoutWidth.variableInitializer(variable, flatName + " = " + methodCallPrefix.apply(methodCall) + "(")
-                    <= options.lineWidth()
-            )
+            || !( chainShape.canUseCompactObjectCreationInitializer( initializerStartsOnContinuationLine, chainSpansMultipleSourceLines, sourceShape.methodCallArgumentsSpanMultipleLines(methodCall) ) || sourceFirstLineKeepsChainAfterRoot(methodCall) )
+            || (!methodCall.getArguments().isEmpty()
+                && layoutWidth.variableInitializer(
+                    variable,
+                    flatName + " = " + methodCallPrefix.apply(methodCall) + "("
+                ) <= options.lineWidth())
         ) {
             return Optional.empty();
         }
@@ -862,11 +862,12 @@ final class VariableInitializerLayout {
     private boolean sourceFirstLineKeepsChainAfterRoot(MethodCallExpr methodCall) {
         return compactMethodCallChainRoot.apply(methodCall)
                 .flatMap(rootFirstLine -> rawSource.rawWithoutOwnComment(methodCall)
-                        .lines()
-                        .findFirst()
-                        .map(String::strip)
-                        .filter(firstSourceLine -> firstSourceLine.startsWith(rootFirstLine))
-                        .filter(firstSourceLine -> firstSourceLine.length() > rootFirstLine.length()))
+                            .lines()
+                            .findFirst()
+                            .map(String::strip)
+                            .filter(firstSourceLine -> firstSourceLine.startsWith(rootFirstLine))
+                            .filter(firstSourceLine -> firstSourceLine.length() > rootFirstLine.length())
+                )
                 .isPresent();
     }
 
@@ -1184,7 +1185,9 @@ final class VariableInitializerLayout {
             String flatName,
             MethodCallExpr methodCall
     ) {
-        MethodCallChainSourcePlanner.InitializerChainShape chainShape = methodCallChainInitializerShape.apply(methodCall);
+        MethodCallChainSourcePlanner.InitializerChainShape chainShape = methodCallChainInitializerShape.apply(
+            methodCall
+        );
         if (
             methodCall.getArguments().isEmpty()
             || !rawSource.rawWithoutOwnComment(methodCall).contains("\n")
@@ -1286,10 +1289,7 @@ final class VariableInitializerLayout {
             MethodCallExpr methodCall
     ) {
         String callPrefix = methodCallPrefix.apply(methodCall);
-        if (
-            variableWithHuggableBlockLambdaArguments(variable, name, flatName, methodCall, callPrefix)
-                    .isPresent()
-        ) {
+        if (variableWithHuggableBlockLambdaArguments(variable, name, flatName, methodCall, callPrefix).isPresent()) {
             return Optional.empty();
         }
         return variableWithReceiverBreakBeforeHuggableBlockLambdaArguments(variable, name, flatName, methodCall);
@@ -1454,10 +1454,9 @@ final class VariableInitializerLayout {
         }
         String bodyFirstLine = methodCallChainFirstLine.apply(methodCall);
         String lambdaPrefix = parameters + " ->";
-        Doc body = forcedMethodCallChain.apply(
-            methodCall,
-            firstLineWidth(variable, flatName + " = " + lambdaPrefix + " ")
-        ).orElseGet(() -> expression.apply(methodCall));
+        Doc body = forcedMethodCallChain
+                .apply(methodCall, firstLineWidth(variable, flatName + " = " + lambdaPrefix + " "))
+                .orElseGet(() -> expression.apply(methodCall));
         if (
             layoutWidth.currentIndented(flatName + " = " + lambdaPrefix + " " + bodyFirstLine)
                 <= options.lineWidth()

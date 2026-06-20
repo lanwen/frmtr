@@ -131,8 +131,8 @@ public @interface ResourceFixtureSource {
                 return stream.filter(Files::isRegularFile)
                         .filter(output -> OUTPUT_FILE.matcher(output.getFileName().toString()).matches())
                         .map(output -> resourcePath(resources.rootName(), resources.root(), output)
-                                .toString()
-                                .replace(File.separatorChar, '/')
+                                    .toString()
+                                    .replace(File.separatorChar, '/')
                         )
                         .toList()
                         .stream();

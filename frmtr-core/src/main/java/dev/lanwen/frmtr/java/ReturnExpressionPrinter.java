@@ -309,10 +309,9 @@ final class ReturnExpressionPrinter {
             }
         }
         if (methodCall.getScope().filter(ObjectCreationExpr.class::isInstance).isPresent()) {
-            return forcedMethodCallChainWithFirstLine.apply(
-                    methodCall,
-                    text -> returnLineWidth(methodCall, "return " + text, lineBudget)
-            ).or(() -> forcedMethodCallChain.apply(methodCall, lineBudget));
+            return forcedMethodCallChainWithFirstLine
+                    .apply(methodCall, text -> returnLineWidth(methodCall, "return " + text, lineBudget))
+                    .or(() -> forcedMethodCallChain.apply(methodCall, lineBudget));
         }
         return compactRootWithBrokenFinalChainSegment.apply(methodCall, lineBudget)
                 .or(() -> forcedMethodCallChainWithFirstLine.apply(

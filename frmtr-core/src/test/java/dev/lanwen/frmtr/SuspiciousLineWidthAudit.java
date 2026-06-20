@@ -30,9 +30,11 @@ final class SuspiciousLineWidthAudit {
     private static final Pattern CALL_CHAIN = Pattern.compile(
         "(?:\\.[A-Za-z_$][A-Za-z0-9_$]*\\s*\\(|\\)\\s*\\.[A-Za-z_$][A-Za-z0-9_$]*)"
     );
+
     private static final Pattern CAST_OR_LAMBDA = Pattern.compile(
         "(?:->|\\([A-Za-z_$][A-Za-z0-9_$]*(?:\\s*&\\s*[A-Za-z_$][A-Za-z0-9_$]*)+\\)\\s*[A-Za-z_$])"
     );
+
     private static final Pattern LINE_HASH = Pattern.compile("[0-9a-f]{64}");
 
     private SuspiciousLineWidthAudit() {}
@@ -221,7 +223,7 @@ final class SuspiciousLineWidthAudit {
         return code.contains(" + ")
             || code.contains(" && ")
             || code.contains(" || ")
-            || code.contains(" ? ") && code.contains(" : ");
+            || (code.contains(" ? ") && code.contains(" : "));
     }
 
     private static boolean commaHeavyCallOrDeclaration(String code) {
@@ -243,46 +245,40 @@ final class SuspiciousLineWidthAudit {
     }
 
     record AuditResult(List<Finding> unexpectedFindings, List<AllowlistEntry> staleAllowlistEntries) {
-
         List<String> failures() {
             return java.util.stream.Stream.concat(
-                    unexpectedFindings.stream().map(Finding::toString),
-                    staleAllowlistEntries.stream().map(AllowlistEntry::staleMessage)
-                )
-                    .toList();
+                unexpectedFindings.stream().map(Finding::toString),
+                staleAllowlistEntries.stream().map(AllowlistEntry::staleMessage)
+            ).toList();
         }
     }
 
-    record Finding(
-            String fixtureName,
-            String outputResource,
-            int lineNumber,
-            int length,
-            int lineWidth,
-            String line
-    ) {
-
+    record Finding(String fixtureName, String outputResource, int lineNumber, int length, int lineWidth, String line) {
         AllowedLine allowedLine() {
             return new AllowedLine(outputResource, lineNumber, hash(line));
         }
 
         @Override
         public String toString() {
-            return "%s (%s:%d) length %d > configured width %d%n%s"
-                    .formatted(fixtureName, outputResource, lineNumber, length, lineWidth, line);
+            return "%s (%s:%d) length %d > configured width %d%n%s".formatted(
+                fixtureName,
+                outputResource,
+                lineNumber,
+                length,
+                lineWidth,
+                line
+            );
         }
     }
 
     record AllowlistEntry(AllowedLine allowedLine, String reason) {
-
         String staleMessage() {
-            return "stale suspicious line-width allowlist entry for %s:%d hash %s%nreason: %s"
-                    .formatted(
-                        allowedLine.outputResource(),
-                        allowedLine.lineNumber(),
-                        allowedLine.lineHash(),
-                        reason
-                    );
+            return "stale suspicious line-width allowlist entry for %s:%d hash %s%nreason: %s".formatted(
+                allowedLine.outputResource(),
+                allowedLine.lineNumber(),
+                allowedLine.lineHash(),
+                reason
+            );
         }
     }
 
@@ -293,9 +289,13 @@ final class SuspiciousLineWidthAudit {
     private static final class Pragmas {
 
         private boolean formatterOff;
+
         private boolean formatterOn;
+
         private boolean frmtrIgnore;
+
         private boolean frmtrIgnoreStart;
+
         private boolean frmtrIgnoreEnd;
 
         void record(String comment) {
@@ -338,8 +338,11 @@ final class SuspiciousLineWidthAudit {
     private static final class ScanState {
 
         private boolean inFormatterOff;
+
         private boolean inFrmtrIgnoreRange;
+
         private boolean inTextBlock;
+
         private boolean inBlockComment;
 
         boolean skippingRawRegion() {
@@ -347,7 +350,9 @@ final class SuspiciousLineWidthAudit {
         }
 
         boolean applyPragmas(Pragmas pragmas) {
-            boolean skipLine = pragmas.frmtrIgnore() || pragmas.frmtrIgnoreStart() || pragmas.frmtrIgnoreEnd()
+            boolean skipLine = pragmas.frmtrIgnore()
+                || pragmas.frmtrIgnoreStart()
+                || pragmas.frmtrIgnoreEnd()
                 || pragmas.formatterOff()
                 || pragmas.formatterOn();
 
@@ -389,10 +394,12 @@ final class SuspiciousLineWidthAudit {
 
         private Allowlist(Collection<AllowlistEntry> entries) {
             this.entriesByResource = entries.stream()
-                    .collect(Collectors.groupingBy(
-                        entry -> entry.allowedLine().outputResource(),
-                        Collectors.toUnmodifiableSet()
-                    ));
+                    .collect(
+                        Collectors.groupingBy(
+                            entry -> entry.allowedLine().outputResource(),
+                            Collectors.toUnmodifiableSet()
+                        )
+                    );
         }
 
         static Allowlist empty() {
@@ -400,8 +407,9 @@ final class SuspiciousLineWidthAudit {
         }
 
         static Allowlist load() {
-            try (var input = SuspiciousLineWidthAudit.class.getClassLoader()
-                    .getResourceAsStream(ALLOWLIST_RESOURCE)) {
+            try (var input = SuspiciousLineWidthAudit.class.getClassLoader().getResourceAsStream(
+                    ALLOWLIST_RESOURCE
+            )) {
                 if (input == null) {
                     return empty();
                 }
@@ -414,16 +422,19 @@ final class SuspiciousLineWidthAudit {
         }
 
         static Allowlist parse(List<String> lines) {
-            return new Allowlist(lines.stream()
-                    .filter(line -> !line.isBlank())
-                    .filter(line -> !line.startsWith("#"))
-                    .map(Allowlist::entries)
-                    .flatMap(Collection::stream)
-                    .toList());
+            return new Allowlist(
+                lines.stream()
+                        .filter(line -> !line.isBlank())
+                        .filter(line -> !line.startsWith("#"))
+                        .map(Allowlist::entries)
+                        .flatMap(Collection::stream)
+                        .toList()
+            );
         }
 
         boolean contains(AllowedLine allowedLine) {
-            return entriesFor(allowedLine.outputResource()).stream()
+            return entriesFor(allowedLine.outputResource())
+                    .stream()
                     .map(AllowlistEntry::allowedLine)
                     .anyMatch(allowedLine::equals);
         }
@@ -449,8 +460,8 @@ final class SuspiciousLineWidthAudit {
             List<String> lineHashes = lineHashes(line, parts[2], lineNumbers.size());
             return java.util.stream.IntStream.range(0, lineNumbers.size())
                     .mapToObj(index -> new AllowlistEntry(
-                        new AllowedLine(parts[0], lineNumbers.get(index), lineHashes.get(index)),
-                        parts[3]
+                            new AllowedLine(parts[0], lineNumbers.get(index), lineHashes.get(index)),
+                            parts[3]
                     ))
                     .toList();
         }

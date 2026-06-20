@@ -24,9 +24,13 @@ import org.junit.jupiter.params.provider.MethodSource;
 final class LineCommentTailMatrixTest {
 
     private static final FormatterOptions OPTIONS = FormatterOptions.defaults();
+
     private static final String SENTINEL_PREFIX = "LC_TAIL_";
-    private static final Pattern SENTINEL_SWALLOWED_PUNCTUATION =
-        Pattern.compile(".*//\\s*" + SENTINEL_PREFIX + "\\S*\\s*[;,]\\s*$");
+
+    private static final Pattern SENTINEL_SWALLOWED_PUNCTUATION = Pattern.compile(
+        ".*//\\s*" + SENTINEL_PREFIX + "\\S*\\s*[;,]\\s*$"
+    );
+
     private static final List<String> EXPECTED_CASE_NAMES = List.of(
         "expression-statement / simple-call",
         "expression-statement / flat-final-call",
@@ -66,10 +70,7 @@ final class LineCommentTailMatrixTest {
     );
 
     private static final List<ExpressionContext> EXPRESSION_CONTEXTS = List.of(
-        new ExpressionContext(
-            "expression-statement",
-            expression -> classWithRunMethod(expression + "\n            ;")
-        ),
+        new ExpressionContext("expression-statement", expression -> classWithRunMethod(expression + "\n            ;")),
         new ExpressionContext(
             "assignment-statement",
             expression -> classWithRunMethod("target = " + expression + "\n            ;")
@@ -87,8 +88,7 @@ final class LineCommentTailMatrixTest {
                         ;
                     }
                 }
-                """
-                .formatted(expression)
+                """.formatted(expression)
         ),
         new ExpressionContext(
             "field-initializer",
@@ -97,8 +97,7 @@ final class LineCommentTailMatrixTest {
                     Object value = %s
                     ;
                 }
-                """
-                .formatted(expression)
+                """.formatted(expression)
         ),
         new ExpressionContext(
             "throw-value",
@@ -106,61 +105,66 @@ final class LineCommentTailMatrixTest {
         ),
         new ExpressionContext(
             "yield-value",
-            expression -> classWithRunMethod("""
+            expression -> classWithRunMethod(
+                """
                 Object value = switch (subject.kind()) {
                     default -> {
                         yield %s
                         ;
                     }
                 };
-                """
-                .formatted(expression))
+                """.formatted(expression)
+            )
         ),
         new ExpressionContext(
             "switch-rule-expression",
-            expression -> classWithRunMethod("""
+            expression -> classWithRunMethod(
+                """
                 Object value = switch (subject.kind()) {
                     default -> %s
                     ;
                 };
-                """
-                .formatted(expression))
+                """.formatted(expression)
+            )
         )
     );
 
     private static final List<ExpressionContext> COMMA_CONTEXTS = List.of(
         new ExpressionContext(
             "method-call-argument",
-            expression -> classWithRunMethod("""
+            expression -> classWithRunMethod(
+                """
                 sink(
                     %s
                     ,
                     fallback()
                 );
-                """
-                .formatted(expression))
+                """.formatted(expression)
+            )
         ),
         new ExpressionContext(
             "constructor-argument",
-            expression -> classWithRunMethod("""
+            expression -> classWithRunMethod(
+                """
                 new Pair(
                     %s
                     ,
                     fallback()
                 );
-                """
-                .formatted(expression))
+                """.formatted(expression)
+            )
         ),
         new ExpressionContext(
             "array-initializer",
-            expression -> classWithRunMethod("""
+            expression -> classWithRunMethod(
+                """
                 Object[] values = {
                     %s
                     ,
                     fallback()
                 };
-                """
-                .formatted(expression))
+                """.formatted(expression)
+            )
         )
     );
 
@@ -169,7 +173,8 @@ final class LineCommentTailMatrixTest {
         new ChainShape("flat-final-call", (receiver, sentinel) -> receiver + ".first().last() // " + sentinel),
         new ChainShape(
             "source-multiline-final-call",
-            (receiver, sentinel) -> receiver + "\n                .first()\n                .last() // " + sentinel
+            (receiver, sentinel) ->
+                receiver + "\n                .first()\n                .last() // " + sentinel
         )
     );
 
@@ -195,8 +200,9 @@ final class LineCommentTailMatrixTest {
                 .as("formatted output for `%s` should keep sentinel comments visible", name)
                 .isNotEmpty()
                 .allSatisfy(line -> assertThat(line)
-                        .as("line comment swallowed a suffix/separator in `%s`: %s", name, line)
-                        .doesNotMatch(SENTINEL_SWALLOWED_PUNCTUATION));
+                            .as("line comment swallowed a suffix/separator in `%s`: %s", name, line)
+                            .doesNotMatch(SENTINEL_SWALLOWED_PUNCTUATION)
+                );
     }
 
     @Test
@@ -220,15 +226,16 @@ final class LineCommentTailMatrixTest {
         addExpressionCases(arguments, EXPRESSION_CONTEXTS, "subject()");
         addExpressionCases(arguments, COMMA_CONTEXTS, "subject()");
         addEnumConstantTailCases(arguments);
-        assertThat(arguments.stream().map(argument -> (String) argument.get()[0]).toList())
-                .containsExactlyElementsOf(EXPECTED_CASE_NAMES);
+        assertThat(arguments.stream().map(argument -> (String) argument.get()[0]).toList()).containsExactlyElementsOf(
+            EXPECTED_CASE_NAMES
+        );
         return arguments.stream();
     }
 
     private static void addExpressionCases(
-        List<Arguments> arguments,
-        List<ExpressionContext> contexts,
-        String receiver
+            List<Arguments> arguments,
+            List<ExpressionContext> contexts,
+            String receiver
     ) {
         for (ExpressionContext context : contexts) {
             for (ChainShape shape : CHAIN_SHAPES) {
@@ -240,20 +247,22 @@ final class LineCommentTailMatrixTest {
     }
 
     private static void addEnumConstantTailCases(List<Arguments> arguments) {
-        arguments.add(Arguments.of(
-            "enum-constant-comma",
-            """
+        arguments.add(
+            Arguments.of(
+                "enum-constant-comma",
+                """
             enum Demo {
                 FIRST // %s
                 ,
                 SECOND
             }
-            """
-                .formatted(SENTINEL_PREFIX + "enum_constant_comma")
-        ));
-        arguments.add(Arguments.of(
-            "enum-constant-semicolon",
-            """
+            """.formatted(SENTINEL_PREFIX + "enum_constant_comma")
+            )
+        );
+        arguments.add(
+            Arguments.of(
+                "enum-constant-semicolon",
+                """
             enum Demo {
                 FIRST // %s
                 ;
@@ -262,9 +271,9 @@ final class LineCommentTailMatrixTest {
                     return 1;
                 }
             }
-            """
-                .formatted(SENTINEL_PREFIX + "enum_constant_semicolon")
-        ));
+            """.formatted(SENTINEL_PREFIX + "enum_constant_semicolon")
+            )
+        );
     }
 
     private static String classWithRunMethod(String body) {
@@ -275,7 +284,7 @@ final class LineCommentTailMatrixTest {
                 }
             }
             """
-            .formatted(body.indent(8).stripLeading());
+                .formatted(body.indent(8).stripLeading());
     }
 
     private static List<String> sentinelLines(String formatted) {
@@ -310,10 +319,12 @@ final class LineCommentTailMatrixTest {
     }
 
     private static JavaParser newParser() {
-        return new JavaParser(new ParserConfiguration()
-                .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
-                .setStoreTokens(true)
-                .setAttributeComments(true));
+        return new JavaParser(
+            new ParserConfiguration()
+                    .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
+                    .setStoreTokens(true)
+                    .setAttributeComments(true)
+        );
     }
 
     private record ExpressionContext(String name, Function<String, String> source) {}

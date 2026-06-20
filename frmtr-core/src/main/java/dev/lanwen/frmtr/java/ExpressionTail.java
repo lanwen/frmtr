@@ -10,7 +10,6 @@ import dev.lanwen.frmtr.doc.Doc;
  * for semicolon and comma ownership without encoding those choices as ad-hoc suffix strings.
  */
 record ExpressionTail(String text) {
-
     static final ExpressionTail EMPTY = new ExpressionTail("");
 
     static final ExpressionTail COMMA = new ExpressionTail(",");

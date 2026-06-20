@@ -320,11 +320,11 @@ final class ConditionalExpressionPrinter {
         Optional<Comment> leadingThenComment = thenComment.filter(
             comment -> CommentIndex.startsBefore(comment, expression.getThenExpr())
         );
-        Optional<Comment> conditionTrailingComment = conditionComment
-                .filter(comment -> conditionalQuestionCommentTrailsCondition(expression, comment))
-                .or(() -> leadingThenComment.filter(
-                        comment -> conditionalQuestionCommentTrailsCondition(expression, comment)
-                ));
+        Optional<Comment> conditionTrailingComment = conditionComment.filter(
+            comment -> conditionalQuestionCommentTrailsCondition(expression, comment)
+        ).or(() -> leadingThenComment.filter(
+                comment -> conditionalQuestionCommentTrailsCondition(expression, comment)
+        ));
         Optional<Comment> questionComment = conditionComment
                 .filter(comment -> !conditionalQuestionCommentTrailsCondition(expression, comment))
                 .or(() -> leadingThenComment.filter(
@@ -367,9 +367,9 @@ final class ConditionalExpressionPrinter {
     }
 
     private Doc conditionalConditionWithTrailingComment(Expression condition, Optional<Comment> trailingComment) {
-        Doc trailing = trailingComment
-                .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
-                .orElse(Doc.EMPTY);
+        Doc trailing = trailingComment.map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment))).orElse(
+            Doc.EMPTY
+        );
         return Doc.concat(expressionWithoutOwnCommentRenderer.apply(condition), trailing);
     }
 
@@ -400,9 +400,9 @@ final class ConditionalExpressionPrinter {
                 expressionWithoutOwnCommentRenderer.apply(branch)
             );
         }
-        Doc trailing = trailingComment
-                .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
-                .orElse(Doc.EMPTY);
+        Doc trailing = trailingComment.map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment))).orElse(
+            Doc.EMPTY
+        );
         return Doc.concat(Doc.text(operatorToken + " "), expressionWithoutOwnCommentRenderer.apply(branch), trailing);
     }
 

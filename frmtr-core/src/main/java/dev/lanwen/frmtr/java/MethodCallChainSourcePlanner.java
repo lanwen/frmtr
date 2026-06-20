@@ -116,8 +116,7 @@ final class MethodCallChainSourcePlanner {
         boolean expressionSpansMultipleSourceLines
     ) {
         boolean shouldForceSourceMultilineInitializerChain() {
-            return expressionSpansMultipleSourceLines
-                && (typeLikeRoot || rootObjectCreationArgumentsSpanMultipleLines);
+            return expressionSpansMultipleSourceLines && (typeLikeRoot || rootObjectCreationArgumentsSpanMultipleLines);
         }
 
         boolean shouldForceWideInitializerChain() {
@@ -271,7 +270,8 @@ final class MethodCallChainSourcePlanner {
     }
 
     InitializerChainShape initializerShape(MethodCallChainAnalysis analysis) {
-        boolean rootObjectCreationArgumentsSpanMultipleLines = analysis.root() instanceof ObjectCreationExpr objectCreation
+        boolean rootObjectCreationArgumentsSpanMultipleLines =
+            analysis.root() instanceof ObjectCreationExpr objectCreation
             && sourceShape.objectCreationArgumentsSpanMultipleLines(objectCreation);
         MethodCallExpr tail = analysis.calls().isEmpty() && analysis.root() instanceof MethodCallExpr methodRoot
             ? methodRoot

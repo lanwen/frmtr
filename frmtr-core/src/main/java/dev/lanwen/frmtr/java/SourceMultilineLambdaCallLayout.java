@@ -131,7 +131,9 @@ final class SourceMultilineLambdaCallLayout {
             return Optional.of(
                 Doc.concat(
                     expressionRenderer.apply(root),
-                    Doc.text(chainSegmentPrefix.apply(firstCall) + "(" + lambdaParameters.apply(lambda) + " -> " + bodyPrefix + "("),
+                    Doc.text(
+                        chainSegmentPrefix.apply(firstCall) + "(" + lambdaParameters.apply(lambda) + " -> " + bodyPrefix + "("
+                    ),
                     Doc.indent(
                         Doc.concat(
                             Doc.HARD_LINE,
@@ -174,7 +176,8 @@ final class SourceMultilineLambdaCallLayout {
                 .filter(MethodCallExpr.class::isInstance)
                 .map(MethodCallExpr.class::cast)
                 .anyMatch(methodCall -> sourceShape.spansMultipleLines(methodCall)
-                    || sourceShape.methodCallArgumentsSpanMultipleLines(methodCall));
+                        || sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+                );
     }
 
     private String chainSegmentPrefix(MethodCallExpr expression) {
@@ -190,9 +193,11 @@ final class SourceMultilineLambdaCallLayout {
 
     private boolean lambdaBodyStartsAfterHeader(LambdaExpr expression) {
         return expression.getExpressionBody()
-                .flatMap(body -> expression.getRange().flatMap(lambdaRange -> body.getRange().map(
-                        bodyRange -> bodyRange.begin.line > lambdaRange.begin.line
-                )))
+                .flatMap(body -> expression.getRange().flatMap(
+                        lambdaRange -> body.getRange().map(
+                            bodyRange -> bodyRange.begin.line > lambdaRange.begin.line
+                        )
+                ))
                 .orElse(false);
     }
 

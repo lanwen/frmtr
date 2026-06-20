@@ -42,9 +42,8 @@ public final class FormatterException extends RuntimeException {
     public static FormatterException internal(Throwable cause) {
         Objects.requireNonNull(cause, "cause");
         return new FormatterException(
-            "Internal formatter error. This is a bug in frmtr or one of its parser dependencies: " + failureSummary(
-                cause
-            ),
+            "Internal formatter error. This is a bug in frmtr or one of its parser dependencies: "
+                + failureSummary(cause),
             cause,
             true,
             List.of()

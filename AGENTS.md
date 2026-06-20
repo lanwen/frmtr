@@ -8,6 +8,8 @@
 ## Tests
 
 - Use AssertJ for assertions.
+- Before pushing changes, run the full Gradle test suite (`./gradlew test`) unless that exact suite has already been
+  run for the current change. Gradle cache and up-to-date results are acceptable.
 - Do not add tests that only prove properties can be assigned or copied. Tests should exercise behavior with meaningful
   logic behind it.
 - Formatter output regressions should be covered as `frmtr-core/src/test/resources/format/**` fixtures, not inline

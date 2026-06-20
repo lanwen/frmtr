@@ -36,6 +36,8 @@ final class JavaCommentPlacementPolicy {
     private final Map<Node, Map<Integer, List<JavaCommentTrivia>>> containedCommentsByBeginLine =
         new IdentityHashMap<>();
 
+    private final Map<Node, Integer> contentBeginLines = new IdentityHashMap<>();
+
     /**
      * Initializes the policy once for a single {@link JavaPrinter#print(CompilationUnit)} run.
      *
@@ -48,6 +50,7 @@ final class JavaCommentPlacementPolicy {
         }
         commentMap = JavaCommentMap.from(unit);
         containedCommentsByBeginLine.clear();
+        contentBeginLines.clear();
     }
 
     /**
@@ -194,8 +197,7 @@ final class JavaCommentPlacementPolicy {
         int firstLine = CommentIndex.beginLine(first, Integer.MAX_VALUE);
         return sourceOrderedDistinct(
             java.util.stream.Stream.concat(
-                lineCommentsInRange(container, containerLine, firstLine)
-                        .stream(),
+                lineCommentsInRange(container, containerLine, firstLine).stream(),
                 leadingContentCluster(container, containerLine, first).stream()
             ).toList()
         );
@@ -243,41 +245,79 @@ final class JavaCommentPlacementPolicy {
         ) {
             return List.of();
         }
-        List<JavaCommentTrivia> cluster = adjacentLeadingCluster(
-            commentsOwnedByOrContainingPath(container)
-                    .stream()
-                    .filter(JavaCommentTrivia::isLine)
-                    .filter(comment -> comment.beginLine(Integer.MAX_VALUE) >= lowerLineInclusive)
-                    .filter(comment -> comment.beginLine(Integer.MAX_VALUE) < contentLine)
-                    .toList(),
+        List<JavaCommentTrivia> cluster = adjacentLeadingClusterInContainingPath(
+            container,
             contentLine
-        );
+        )
+                .stream()
+                .filter(comment -> comment.beginLine(Integer.MAX_VALUE) >= lowerLineInclusive)
+                .toList();
         return !cluster.isEmpty() && cluster.getLast().beginLine(Integer.MAX_VALUE) == nodeRangeLine
             ? cluster
             : List.of();
     }
 
+    private List<JavaCommentTrivia> adjacentLeadingClusterInContainingPath(Node node, int nodeBeginLine) {
+        List<JavaCommentTrivia> cluster = new ArrayList<>();
+        int expectedLine = nodeBeginLine - 1;
+        while (expectedLine >= 1) {
+            List<JavaCommentTrivia> lineComments = commentsOwnedByOrContainingPathStartingOnLine(node, expectedLine)
+                    .stream()
+                    .filter(JavaCommentTrivia::isLine)
+                    .toList();
+            if (lineComments.isEmpty()) {
+                break;
+            }
+            cluster.addAll(lineComments);
+            expectedLine--;
+        }
+        return sourceOrderedDistinct(cluster);
+    }
+
     private List<JavaCommentTrivia> adjacentLeadingLineComments(Node node, int nodeBeginLine) {
+        List<JavaCommentTrivia> cluster = new ArrayList<>();
+        int expectedLine = nodeBeginLine - 1;
+        while (expectedLine >= 1) {
+            List<JavaCommentTrivia> lineComments = adjacentLeadingCandidatesOnLine(
+                node,
+                nodeBeginLine,
+                expectedLine
+            );
+            if (lineComments.isEmpty()) {
+                break;
+            }
+            cluster.addAll(lineComments);
+            expectedLine--;
+        }
+        return sourceOrderedDistinct(cluster);
+    }
+
+    private List<JavaCommentTrivia> adjacentLeadingCandidatesOnLine(
+            Node node,
+            int nodeBeginLine,
+            int line
+    ) {
         List<JavaCommentTrivia> candidates = new ArrayList<>();
         Node pathChild = node;
         Optional<Node> parent = node.getParentNode();
         while (parent.isPresent()) {
             Node owner = parent.orElseThrow();
-            candidates.addAll(adjacentLeadingCandidates(owner, pathChild, node, nodeBeginLine));
+            candidates.addAll(adjacentLeadingCandidates(owner, pathChild, node, nodeBeginLine, line));
             pathChild = owner;
             parent = owner.getParentNode();
         }
-        return adjacentLeadingCluster(candidates, nodeBeginLine);
+        return sourceOrderedDistinct(candidates);
     }
 
     private List<JavaCommentTrivia> adjacentLeadingCandidates(
             Node parent,
             Node pathChild,
             Node node,
-            int nodeBeginLine
+            int nodeBeginLine,
+            int line
     ) {
         int nodeRangeBeginLine = CommentIndex.beginLine(node, nodeBeginLine);
-        return commentsOwnedByOrContainedIn(parent)
+        return commentsOwnedByOrContainedInStartingOnLine(parent, line)
                 .stream()
                 .filter(JavaCommentTrivia::isLine)
                 .filter(comment -> comment.beginLine(Integer.MAX_VALUE) <= nodeRangeBeginLine)
@@ -291,20 +331,22 @@ final class JavaCommentPlacementPolicy {
                 .toList();
     }
 
-    private List<JavaCommentTrivia> adjacentLeadingCluster(List<JavaCommentTrivia> candidates, int nodeBeginLine) {
-        List<JavaCommentTrivia> orderedCandidates = sourceOrderedDistinct(candidates);
-        List<JavaCommentTrivia> cluster = new ArrayList<>();
-        int expectedLine = nodeBeginLine - 1;
-        for (int index = orderedCandidates.size() - 1; index >= 0; index--) {
-            JavaCommentTrivia comment = orderedCandidates.get(index);
-            int commentEndLine = comment.endLine(comment.beginLine(Integer.MIN_VALUE));
-            if (commentEndLine != expectedLine) {
-                break;
-            }
-            cluster.add(comment);
-            expectedLine = comment.beginLine(commentEndLine) - 1;
+    private List<JavaCommentTrivia> commentsOwnedByOrContainingPathStartingOnLine(Node node, int line) {
+        List<JavaCommentTrivia> comments = new ArrayList<>();
+        Optional<Node> owner = Optional.of(node);
+        while (owner.isPresent()) {
+            Node current = owner.orElseThrow();
+            comments.addAll(commentsOwnedByOrContainedInStartingOnLine(current, line));
+            owner = current.getParentNode();
         }
-        return cluster.reversed();
+        return sourceOrderedDistinct(comments);
+    }
+
+    private List<JavaCommentTrivia> commentsOwnedByOrContainedInStartingOnLine(Node node, int line) {
+        List<JavaCommentTrivia> comments = new ArrayList<>();
+        ownComment(node, comment -> comment.beginLine(Integer.MIN_VALUE) == line).ifPresent(comments::add);
+        comments.addAll(containedCommentsStartingOnLine(node, line));
+        return sourceOrderedDistinct(comments);
     }
 
     /**
@@ -329,22 +371,15 @@ final class JavaCommentPlacementPolicy {
      * parser comment bucket happened to receive the trivia.
      */
     Optional<JavaCommentTrivia> sameLineTrailingLineComment(Node node) {
-        return commentsOwnedByOrContainingPath(node)
+        int nodeEndLine = CommentIndex.endLine(node, Integer.MIN_VALUE);
+        if (nodeEndLine == Integer.MIN_VALUE) {
+            return Optional.empty();
+        }
+        return commentsOwnedByOrContainingPathStartingOnLine(node, nodeEndLine)
                 .stream()
                 .filter(JavaCommentTrivia::isLine)
                 .filter(comment -> comment.startsAfterNodeOnSameLine(node))
                 .findFirst();
-    }
-
-    private List<JavaCommentTrivia> commentsOwnedByOrContainingPath(Node node) {
-        List<JavaCommentTrivia> comments = new ArrayList<>();
-        Optional<Node> owner = Optional.of(node);
-        while (owner.isPresent()) {
-            Node current = owner.orElseThrow();
-            comments.addAll(commentsOwnedByOrContainedIn(current));
-            owner = current.getParentNode();
-        }
-        return sourceOrderedDistinct(comments);
     }
 
     private List<JavaCommentTrivia> sourceOrderedDistinct(List<JavaCommentTrivia> comments) {
@@ -362,6 +397,16 @@ final class JavaCommentPlacementPolicy {
      * be inside the node rather than adjacent to it.
      */
     private int contentBeginLine(Node node, int fallback) {
+        if (node.getRange().isEmpty()) {
+            return uncachedContentBeginLine(node, fallback);
+        }
+        return contentBeginLines.computeIfAbsent(
+            node,
+            ignored -> uncachedContentBeginLine(node, fallback)
+        );
+    }
+
+    private int uncachedContentBeginLine(Node node, int fallback) {
         int nodeBegin = CommentIndex.beginLine(node, fallback);
         return node.getChildNodes()
                 .stream()
@@ -390,10 +435,10 @@ final class JavaCommentPlacementPolicy {
     private boolean startsAfterNodeBeginOnSameLine(Node node, JavaCommentTrivia comment) {
         return node.getRange()
                 .flatMap(nodeRange -> comment.comment()
-                        .getRange()
-                        .map(commentRange -> commentRange.begin.line == nodeRange.begin.line
-                                && commentRange.begin.column > nodeRange.begin.column
-                        )
+                            .getRange()
+                            .map(commentRange -> commentRange.begin.line == nodeRange.begin.line
+                                    && commentRange.begin.column > nodeRange.begin.column
+                            )
                 )
                 .orElse(false);
     }

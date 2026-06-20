@@ -3,6 +3,7 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.comments.Comment;
+import com.github.javaparser.ast.expr.LambdaExpr;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -20,7 +21,9 @@ import java.util.function.Predicate;
  * <p>This helper owns read-only classification decisions over {@link JavaCommentMap}: leading attachment, trailing line
  * comments, orphan comments, contained comments, between-neighbor line comments, and same-line block-comment placement.
  * The boundary exists so printers ask one policy object how JavaParser comment associations map back to source
- * positions, while {@link CommentIndex} remains the low-level range predicate layer.
+ * positions, while {@link CommentIndex} remains the low-level range predicate layer. Content-gap queries also own the
+ * distinction between a node's parser range and the first non-comment source line inside that node, because JavaParser
+ * can widen first children to include comments that visually precede the code token.
  *
  * <p>Callers still own rendering, spacing, indentation, syntax-specific grouping, and comment claim state. This policy
  * never creates {@link dev.lanwen.frmtr.doc.Doc} values and never mutates {@link CommentTracker}'s printed-comment
@@ -157,7 +160,20 @@ final class JavaCommentPlacementPolicy {
     List<JavaCommentTrivia> lineCommentsBetween(Node container, Node previous, Node next) {
         int previousLine = CommentIndex.endLine(previous, Integer.MIN_VALUE);
         int nextLine = CommentIndex.beginLine(next, Integer.MAX_VALUE);
-        return lineCommentsInRange(container, previousLine, nextLine);
+        return sourceOrderedDistinct(
+            java.util.stream.Stream.concat(
+                lineCommentsInRange(container, previousLine, nextLine).stream(),
+                java.util.stream.Stream.concat(
+                    ownComment(next, JavaCommentTrivia::isLine)
+                            .filter(comment -> comment.beginLine(Integer.MAX_VALUE) >= previousLine)
+                            .filter(comment -> comment.beginLine(Integer.MAX_VALUE) < nextLine)
+                            .stream(),
+                    leadingContentCluster(container, previousLine, next)
+                            .stream()
+                            .filter(comment -> comment.beginLine(Integer.MAX_VALUE) >= previousLine)
+                )
+            ).toList()
+        );
     }
 
     /**
@@ -176,7 +192,13 @@ final class JavaCommentPlacementPolicy {
     List<JavaCommentTrivia> lineCommentsBeforeFirst(Node container, Node first) {
         int containerLine = CommentIndex.beginLine(container, Integer.MIN_VALUE);
         int firstLine = CommentIndex.beginLine(first, Integer.MAX_VALUE);
-        return lineCommentsInRange(container, containerLine, firstLine);
+        return sourceOrderedDistinct(
+            java.util.stream.Stream.concat(
+                lineCommentsInRange(container, containerLine, firstLine)
+                        .stream(),
+                leadingContentCluster(container, containerLine, first).stream()
+            ).toList()
+        );
     }
 
     /**
@@ -197,28 +219,84 @@ final class JavaCommentPlacementPolicy {
      * that start inside another direct child range.
      */
     List<JavaCommentTrivia> adjacentLeadingLineComments(Node node) {
-        return node.getParentNode()
-                .map(parent -> adjacentLeadingLineComments(parent, node))
-                .orElse(List.of());
-    }
-
-    private List<JavaCommentTrivia> adjacentLeadingLineComments(Node parent, Node node) {
         int nodeBeginLine = CommentIndex.beginLine(node, Integer.MAX_VALUE);
         if (nodeBeginLine == Integer.MAX_VALUE) {
             return List.of();
         }
-        List<JavaCommentTrivia> candidates = containedComments(parent)
+        return adjacentLeadingLineComments(node, nodeBeginLine);
+    }
+
+    /**
+     * Returns a range-starting line-comment cluster that JavaParser folded into {@code node}'s own range.
+     *
+     * <p>This is intentionally narrower than "all comments before first content." A parent gap may recover comments
+     * only when the node range itself starts on the comment cluster. Comments inside nested delimiters, such as an
+     * enclosed operand's own opening parenthesis followed by a comment, stay with that nested construct.
+     */
+    private List<JavaCommentTrivia> leadingContentCluster(Node container, int lowerLineInclusive, Node node) {
+        int nodeRangeLine = CommentIndex.beginLine(node, Integer.MAX_VALUE);
+        int contentLine = contentBeginLine(node, nodeRangeLine);
+        if (
+            nodeRangeLine == Integer.MAX_VALUE
+            || contentLine <= nodeRangeLine
+            || node instanceof LambdaExpr
+        ) {
+            return List.of();
+        }
+        List<JavaCommentTrivia> cluster = adjacentLeadingCluster(
+            commentsOwnedByOrContainingPath(container)
+                    .stream()
+                    .filter(JavaCommentTrivia::isLine)
+                    .filter(comment -> comment.beginLine(Integer.MAX_VALUE) >= lowerLineInclusive)
+                    .filter(comment -> comment.beginLine(Integer.MAX_VALUE) < contentLine)
+                    .toList(),
+            contentLine
+        );
+        return !cluster.isEmpty() && cluster.getLast().beginLine(Integer.MAX_VALUE) == nodeRangeLine
+            ? cluster
+            : List.of();
+    }
+
+    private List<JavaCommentTrivia> adjacentLeadingLineComments(Node node, int nodeBeginLine) {
+        List<JavaCommentTrivia> candidates = new ArrayList<>();
+        Node pathChild = node;
+        Optional<Node> parent = node.getParentNode();
+        while (parent.isPresent()) {
+            Node owner = parent.orElseThrow();
+            candidates.addAll(adjacentLeadingCandidates(owner, pathChild, node, nodeBeginLine));
+            pathChild = owner;
+            parent = owner.getParentNode();
+        }
+        return adjacentLeadingCluster(candidates, nodeBeginLine);
+    }
+
+    private List<JavaCommentTrivia> adjacentLeadingCandidates(
+            Node parent,
+            Node pathChild,
+            Node node,
+            int nodeBeginLine
+    ) {
+        int nodeRangeBeginLine = CommentIndex.beginLine(node, nodeBeginLine);
+        return commentsOwnedByOrContainedIn(parent)
                 .stream()
                 .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.beginLine(Integer.MAX_VALUE) <= nodeRangeBeginLine)
                 .filter(comment -> comment.beginLine(Integer.MAX_VALUE) < nodeBeginLine)
-                .filter(comment -> !startsInsideOtherDirectChild(parent, node, comment))
-                .filter(comment -> !startsAfterOtherDirectChildOnSameLine(parent, node, comment))
-                .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
+                .filter(comment -> !startsAfterNodeBeginOnSameLine(node, comment))
+                .filter(comment -> pathChild == node || !comment.startsInsideLineRange(pathChild))
+                .filter(comment -> !comment.startsOnBeginLine(parent))
+                .filter(comment -> !comment.startsOnEndLine(pathChild))
+                .filter(comment -> !startsInsideOtherDirectChild(parent, pathChild, comment))
+                .filter(comment -> !startsAfterOtherDirectChildOnSameLine(parent, pathChild, comment))
                 .toList();
+    }
+
+    private List<JavaCommentTrivia> adjacentLeadingCluster(List<JavaCommentTrivia> candidates, int nodeBeginLine) {
+        List<JavaCommentTrivia> orderedCandidates = sourceOrderedDistinct(candidates);
         List<JavaCommentTrivia> cluster = new ArrayList<>();
         int expectedLine = nodeBeginLine - 1;
-        for (int index = candidates.size() - 1; index >= 0; index--) {
-            JavaCommentTrivia comment = candidates.get(index);
+        for (int index = orderedCandidates.size() - 1; index >= 0; index--) {
+            JavaCommentTrivia comment = orderedCandidates.get(index);
             int commentEndLine = comment.endLine(comment.beginLine(Integer.MIN_VALUE));
             if (commentEndLine != expectedLine) {
                 break;
@@ -227,6 +305,70 @@ final class JavaCommentPlacementPolicy {
             expectedLine = comment.beginLine(commentEndLine) - 1;
         }
         return cluster.reversed();
+    }
+
+    /**
+     * Returns comments that JavaParser attached directly to {@code node} or recursively contained below it.
+     *
+     * <p>Leading-cluster recovery and declaration-prefix printing both need a single ownership view across own-comment
+     * and contained-comment associations, because JavaParser can split adjacent source comments between those two
+     * buckets.
+     */
+    List<JavaCommentTrivia> commentsOwnedByOrContainedIn(Node node) {
+        return java.util.stream.Stream.concat(ownComment(node).stream(), containedComments(node).stream())
+                .distinct()
+                .toList();
+    }
+
+    /**
+     * Finds a line comment source placed after {@code node} on the same line, even when JavaParser attached that comment
+     * to a parent on the containment path.
+     *
+     * <p>Parser recovery can keep a selector or expression parsed while associating its trailing line comment with the
+     * surrounding construct. This query keeps the decision source-position based so callers do not need to know which
+     * parser comment bucket happened to receive the trivia.
+     */
+    Optional<JavaCommentTrivia> sameLineTrailingLineComment(Node node) {
+        return commentsOwnedByOrContainingPath(node)
+                .stream()
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.startsAfterNodeOnSameLine(node))
+                .findFirst();
+    }
+
+    private List<JavaCommentTrivia> commentsOwnedByOrContainingPath(Node node) {
+        List<JavaCommentTrivia> comments = new ArrayList<>();
+        Optional<Node> owner = Optional.of(node);
+        while (owner.isPresent()) {
+            Node current = owner.orElseThrow();
+            comments.addAll(commentsOwnedByOrContainedIn(current));
+            owner = current.getParentNode();
+        }
+        return sourceOrderedDistinct(comments);
+    }
+
+    private List<JavaCommentTrivia> sourceOrderedDistinct(List<JavaCommentTrivia> comments) {
+        return comments.stream()
+                .distinct()
+                .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
+                .toList();
+    }
+
+    /**
+     * Returns the first source line that belongs to non-comment content inside {@code node}.
+     *
+     * <p>JavaParser sometimes starts the range of the first statement, operand, or declaration child on a leading
+     * {@code //} line. Cluster recovery needs the first real code line instead, otherwise the leading comments appear to
+     * be inside the node rather than adjacent to it.
+     */
+    private int contentBeginLine(Node node, int fallback) {
+        int nodeBegin = CommentIndex.beginLine(node, fallback);
+        return node.getChildNodes()
+                .stream()
+                .filter(child -> !(child instanceof Comment))
+                .mapToInt(child -> contentBeginLine(child, CommentIndex.beginLine(child, nodeBegin)))
+                .min()
+                .orElse(nodeBegin);
     }
 
     private boolean startsInsideOtherDirectChild(Node parent, Node node, JavaCommentTrivia comment) {
@@ -243,6 +385,17 @@ final class JavaCommentPlacementPolicy {
                 .filter(child -> !(child instanceof Comment))
                 .filter(child -> child != node)
                 .anyMatch(comment::startsAfterNodeOnSameLine);
+    }
+
+    private boolean startsAfterNodeBeginOnSameLine(Node node, JavaCommentTrivia comment) {
+        return node.getRange()
+                .flatMap(nodeRange -> comment.comment()
+                        .getRange()
+                        .map(commentRange -> commentRange.begin.line == nodeRange.begin.line
+                                && commentRange.begin.column > nodeRange.begin.column
+                        )
+                )
+                .orElse(false);
     }
 
     private List<JavaCommentTrivia> lineCommentsInRange(

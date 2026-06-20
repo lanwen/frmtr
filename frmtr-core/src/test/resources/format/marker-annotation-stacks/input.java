@@ -53,6 +53,7 @@ public class MarkerAnnotations {
   void createTransformer() {
     @SuppressWarnings("resource")
     // Caller transfers ownership and closes the transformer after registration.
+    // The registry owns the cleanup path once the binding is visible.
     Transformer transformer = new DataFormatTransformer(context)
       .withFallback("fixture")
       .withRegistry(registry);

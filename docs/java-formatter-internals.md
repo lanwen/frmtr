@@ -91,20 +91,22 @@ The main envelope and dispatcher boundaries are:
 
 ## Statement And Control Printers
 
-`SwitchPrinter` renders switch expressions and reusable switch-entry grammar used by statement switches: selector line
-comments, empty versus non-empty switch blocks, default and pattern labels, record-pattern label wrapping, guards,
-compact empty rule blocks, rule entries, statement-group entries, source-only raw single-line rule entries, and switch
-entry bodies. It leaves statement switch selection, nested statement rendering, expression rendering, ordinary block
-rendering, statement separators, compact source text, compact type text, modifiers, and width calculations with its
-callers and collaborators.
+`SwitchPrinter` renders switch expressions and reusable switch-entry grammar used by statement switches: empty versus
+non-empty switch blocks, default and pattern labels, record-pattern label wrapping, guards, compact empty rule blocks,
+rule entries, statement-group entries, source-only raw single-line rule entries, and switch entry bodies. It leaves
+selector condition comments to `ControlConditionPrinter`, and leaves statement switch selection, nested statement
+rendering, expression rendering, ordinary block rendering, statement separators, compact source text, compact type text,
+modifiers, and width calculations with its callers and collaborators.
 
 `ControlConditionPrinter` renders expressions after statement grammar or statement-switch rendering has selected a
 parenthesized control-condition context. It owns compact selector, if, and loop condition text, width-triggered broken
-conditions, source-multiline binary `if` condition preservation, and the block-comment placement fork that keeps comments
-before or after the expression according to source ranges. `ControlConditionMethodCallLayout` owns the narrow
-method-call operand policy inside those conditions: source-multiline method-call operands in logical terms, method-call
-shape facts used by logical-condition preservation, and top-level control-context width measurement for broken
-method-call conditions.
+conditions, source-multiline binary `if` condition preservation, line-comment preservation inside condition
+parentheses, and the block-comment placement fork that keeps comments before or after the expression according to source
+ranges. It also owns the narrow raw-source fallback for recovered selector comments that JavaParser leaves in the source
+gap between a parsed condition expression and the closing parenthesis. `ControlConditionMethodCallLayout` owns the
+narrow method-call operand policy inside those conditions: source-multiline method-call operands in logical terms,
+method-call shape facts used by logical-condition preservation, and top-level control-context width measurement for
+broken method-call conditions.
 
 `BlockPrinter` sequences already-rendered statements inside block bodies with orphan comments, printable empty
 statements, formatter-pragma separator rules, and source-range-sensitive blank lines without deciding how statements
@@ -187,8 +189,8 @@ Declaration and type printers own Java declaration grammar after `BodyDeclaratio
   prefixes, local-only declaration-prefix decisions, and handoff to `VariableInitializerLayout`.
   `VariableInitializerLayout` owns shared initializer policy including equals-line cast type-body breaks, direct
   block-lambda openers, object-creation-root method-call opener grouping through the canonical method-call argument-list
-  renderer, switch-expression body preservation, huggable block-lambda method-call initializers, comments around `=`, and
-  initializer-specific width fallbacks.
+  renderer, switch-expression body preservation, huggable block-lambda method-call initializers, first-statement comments
+  inside block-lambda method-call arguments, comments around `=`, and initializer-specific width fallbacks.
 - `ConstructorDeclarationPrinter`, `MethodDeclarationPrinter`, `InitializerDeclarationPrinter`,
   `CallableSignaturePrinter`, and `ThrowsClausePrinter`: callable headers, signatures, throws-clause placement,
   callable parameter annotation prefixes, body-versus-semicolon suffixes, and initializer bodies.
@@ -245,7 +247,11 @@ small comment-aware tokenization and token-line text helpers used by raw-source 
 `JavaCommentMap` captures JavaParser's own, orphan, and contained comment associations once at the
 `JavaPrinter.print(CompilationUnit)` boundary. `JavaCommentPlacementPolicy` reads that map to answer leading,
 adjacent-leading line-cluster, trailing-line, orphan, contained, before-first-child, between-neighbor, after-last-child,
-and same-line placement queries without rendering docs or mutating claim state.
+and same-line placement queries without rendering docs or mutating claim state. Adjacent-leading queries stay anchored
+to the node's JavaParser range for ordinary statement-leading comments; before-first and between-neighbor line-comment
+queries keep ordinary sibling gaps anchored to the next node's parser range and use a narrow range-start cluster recovery
+only when JavaParser attaches a standalone line-comment cluster to the first child or container that visually precedes
+the code token.
 
 `CommentTracker` is the package-private per-run comment accounting helper for comments selected by
 `JavaCommentPlacementPolicy` as leading, adjacent-leading, trailing, or orphan comments. It renders comments through

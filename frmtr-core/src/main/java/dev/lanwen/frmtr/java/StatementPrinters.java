@@ -49,6 +49,8 @@ final class StatementPrinters {
         this.blocks = new BlockPrinter(context, this::statement, formatterPragmas::hasPragma);
         this.controlConditions = new ControlConditionPrinter(
             comments,
+            commentPlacementPolicy,
+            context.sourceText,
             context.sourceShape,
             options,
             expressions::expression,

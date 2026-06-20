@@ -984,9 +984,17 @@ final class StatementPrinter {
         }
         List<Doc> docs = new ArrayList<>();
         Doc thenTrailingLineComment = trailingLineComment(statement.getThenStmt());
+        Doc conditionTrailingLineComment = controlConditions.closeParenTrailingLineComment(statement.getCondition());
         Doc betweenThenAndElseBlockComment = blockCommentBetweenThenAndElse(statement);
         docs.add(ifCondition(statement));
-        docs.add(ifThenStatement(statement));
+        if (conditionTrailingLineComment != Doc.EMPTY) {
+            docs.add(Doc.text(" "));
+            docs.add(conditionTrailingLineComment);
+            docs.add(ifThenStatementAfterConditionTrailingComment(statement));
+        } else {
+            docs.add(Doc.text(" "));
+            docs.add(ifThenStatement(statement));
+        }
         statement
                 .getElseStmt()
                 .ifPresent(elseStatement -> {
@@ -1001,6 +1009,7 @@ final class StatementPrinter {
                         elseChainSeparator(
                             statement,
                             elseStatement,
+                            conditionTrailingLineComment,
                             thenTrailingLineComment,
                             betweenThenAndElseBlockComment,
                             elseLeadingLineComment,
@@ -1093,7 +1102,7 @@ final class StatementPrinter {
     }
 
     private Doc ifCondition(IfStmt statement) {
-        return Doc.concat(Doc.text("if "), ifConditionRenderer.apply(statement.getCondition()), Doc.text(" "));
+        return Doc.concat(Doc.text("if "), ifConditionRenderer.apply(statement.getCondition()));
     }
 
     private boolean conditionCommentStartsBeforeExpression(Expression condition, Comment comment) {
@@ -1113,14 +1122,25 @@ final class StatementPrinter {
         return nestedStatement(statement.getThenStmt());
     }
 
+    private Doc ifThenStatementAfterConditionTrailingComment(IfStmt statement) {
+        if (statement.getThenStmt().isBlockStmt()) {
+            return Doc.concat(Doc.HARD_LINE, ifThenStatement(statement));
+        }
+        return Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement.getThenStmt())));
+    }
+
     private Doc elseChainSeparator(
             IfStmt statement,
             Statement elseStatement,
+            Doc conditionTrailingLineComment,
             Doc thenTrailingLineComment,
             Doc betweenThenAndElseBlockComment,
             Doc elseLeadingLineComment,
             Doc elseLeadingBlockComment
     ) {
+        if (conditionTrailingLineComment != Doc.EMPTY && !statement.getThenStmt().isBlockStmt()) {
+            return Doc.concat(Doc.HARD_LINE, Doc.text("else "));
+        }
         if (thenTrailingLineComment != Doc.EMPTY) {
             return Doc.concat(Doc.HARD_LINE, thenTrailingLineComment, Doc.HARD_LINE, Doc.text("else "));
         }

@@ -30,12 +30,34 @@ class IfStatements {
 
     void commentsBetweenLogicalOperands(String keyType) {
         if (
-            // legacy key type format before registry draft 04
-            keyType.endsWith("-cert-v01@openssh.com") ||
-            // current key type format since registry draft 04
+            // legacy key envelope before registry draft 04
+            // https://docs.example.invalid/token-envelope-03.html
+            keyType.endsWith("-cert-v01@example.test") ||
+            // current key envelope since registry draft 04
+            // https://docs.example.invalid/token-envelope-04.html
             keyType.endsWith("-cert")
         ) {
             System.out.println("enabled");
+        }
+    }
+
+    void commentInsideGroupedOperand(RouteGate routeGate) {
+        if (
+            routeGate.hasPrimaryPath() && (
+                // keep this note inside the grouped fallback operand
+                routeGate.hasFallbackPath()
+            )
+        ) {
+            System.out.println("fallback");
+        }
+    }
+
+    void commentInsideNonLogicalCondition(RoutePlan routePlan) {
+        if (
+            // keep manual routing while backfill catches up
+            routePlan.hasManualOverride()
+        ) {
+            System.out.println("manual");
         }
     }
 

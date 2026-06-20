@@ -129,9 +129,6 @@ final class SwitchPrinter {
         /** No recovered switch-block content has been emitted yet. */
         NONE,
 
-        /** A caller-owned leading document, such as a selector line comment, was emitted before the first entry. */
-        LEADING_DOC,
-
         /** The previous recovered switch-block item was a parsed switch entry rendered structurally. */
         VALID_ENTRY,
 
@@ -179,12 +176,13 @@ final class SwitchPrinter {
      * Prints a statement switch after {@link StatementRuleEnvelope} has applied pragmas and leading comment policy.
      *
      * <p>Empty switch statements keep the legacy expanded block shape because statement switches used that shape before
-     * this helper existed. Non-empty switches enter the shared switch block path, with selector line comments inserted
-     * as the first item inside the block so they stay on their own line before the first entry.
+     * this helper existed. Non-empty switches enter the shared switch block path after the selector has been rendered by
+     * the shared control-condition policy.
      */
     Doc switchStatement(SwitchStmt statement) {
         Doc leadingBlockComment = commentPlacement.ownSameLineBlockCommentBeforeNode(statement);
         Doc prefix = leadingBlockComment == Doc.EMPTY ? Doc.EMPTY : Doc.concat(leadingBlockComment, Doc.text(" "));
+        Doc selectorTrailingLineComment = selectorTrailingLineComment(statement.getSelector());
         if (statement.getEntries().isEmpty()) {
             return Doc.concat(
                 prefix,
@@ -195,12 +193,12 @@ final class SwitchPrinter {
                     ") {}",
                     blockStatementWidth
                 ),
-                Doc.text(" {"),
+                switchBlockPrefix(selectorTrailingLineComment),
+                Doc.text("{"),
                 Doc.HARD_LINE,
                 Doc.text("}")
             );
         }
-        Doc selectorLineComment = comments.ownTriviaComment(statement.getSelector(), JavaCommentTrivia::isLine);
         return Doc.concat(
             prefix,
             Doc.text("switch "),
@@ -210,8 +208,8 @@ final class SwitchPrinter {
                 ") {}",
                 blockStatementWidth
             ),
-            Doc.text(" "),
-            switchBlock(statement, statement.getEntries(), selectorLineComment)
+            switchBlockPrefix(selectorTrailingLineComment),
+            switchBlock(statement, statement.getEntries())
         );
     }
 
@@ -219,34 +217,46 @@ final class SwitchPrinter {
      * Prints an expression switch with the same block, label, guard, and entry-body rules as switch statements.
      */
     Doc switchExpression(SwitchExpr expression) {
+        Doc selectorTrailingLineComment = selectorTrailingLineComment(expression.getSelector());
         return Doc.concat(
-            Doc.text("switch (" + compactSource.compact(expression.getSelector()) + ") "),
+            Doc.text("switch "),
+            controlConditions.controlCondition(
+                expression.getSelector(),
+                "switch (",
+                ") {}",
+                blockStatementWidth
+            ),
+            switchBlockPrefix(selectorTrailingLineComment),
             switchBlock(expression, expression.getEntries())
         );
     }
 
-    private Doc switchBlock(Node owner, NodeList<SwitchEntry> entries) {
-        return switchBlock(owner, entries, Doc.EMPTY);
+    private Doc selectorTrailingLineComment(Expression selector) {
+        return controlConditions.closeParenTrailingLineComment(selector);
+    }
+
+    private Doc switchBlockPrefix(Doc selectorTrailingLineComment) {
+        if (selectorTrailingLineComment == Doc.EMPTY) {
+            return Doc.text(" ");
+        }
+        return Doc.concat(Doc.text(" "), selectorTrailingLineComment, Doc.HARD_LINE);
     }
 
     /**
      * Prints the brace-delimited switch entry list.
      *
-     * <p>Empty expression switch blocks stay compact as {@code {}}. Non-empty blocks, or statement switches with a
-     * selector line comment passed as {@code leadingInside}, use one required line per block item.
+     * <p>Empty expression switch blocks stay compact as {@code {}}. Non-empty blocks use one required line per block
+     * item.
      */
-    private Doc switchBlock(Node owner, NodeList<SwitchEntry> entries, Doc leadingInside) {
+    private Doc switchBlock(Node owner, NodeList<SwitchEntry> entries) {
         Optional<RecoveredListPlanner.Plan<SwitchEntry>> recoveryPlan = recoveryPlan(owner, entries);
         if (recoveryPlan.isPresent() && hasRawGap(recoveryPlan.orElseThrow())) {
-            return recoveredSwitchBlock(owner, recoveryPlan.orElseThrow(), leadingInside);
+            return recoveredSwitchBlock(owner, recoveryPlan.orElseThrow());
         }
         if (entries.isEmpty()) {
             return Doc.text("{}");
         }
         List<Doc> entryDocs = new ArrayList<>();
-        if (leadingInside != Doc.EMPTY) {
-            entryDocs.add(leadingInside);
-        }
         entryDocs.addAll(entries.stream().map(this::switchEntry).toList());
         return Doc.concat(
             Doc.text("{"),
@@ -264,19 +274,13 @@ final class SwitchPrinter {
      */
     private Doc recoveredSwitchBlock(
             Node owner,
-            RecoveredListPlanner.Plan<SwitchEntry> plan,
-            Doc leadingInside
+            RecoveredListPlanner.Plan<SwitchEntry> plan
     ) {
         List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions = rawGaps.rawGapRegions(plan);
         rawGaps.requireRecoverableRawRegions(owner, rawGapRegions);
 
         List<Doc> contents = new ArrayList<>();
         EntryKind previousEntry = EntryKind.NONE;
-        if (leadingInside != Doc.EMPTY) {
-            contents.add(Doc.HARD_LINE);
-            contents.add(leadingInside);
-            previousEntry = EntryKind.LEADING_DOC;
-        }
 
         int rawGapIndex = 0;
         for (RecoveredListPlanner.Entry<SwitchEntry> entry : plan.entries()) {
@@ -290,7 +294,6 @@ final class SwitchPrinter {
                 case RecoveredListPlanner.RawGap<?> ignored -> {
                     RecoveredRawGapPrinter.RawGapRegion rawRegion = rawGapRegions.get(rawGapIndex++);
                     if (rawRegion.region().beginOffset() < rawRegion.region().endOffset()) {
-                        appendSeparatorBeforeRecoveredRawGap(contents, previousEntry, rawRegion);
                         contents.add(rawGaps.raw(owner, rawRegion, "switchEntryList"));
                     }
                     previousEntry = rawRegion.trailingBreakReplaced()
@@ -305,7 +308,7 @@ final class SwitchPrinter {
         }
         Doc closingBreak = switch (previousEntry) {
             case RAW_GAP -> Doc.EMPTY;
-            case NONE, LEADING_DOC, VALID_ENTRY, RAW_GAP_WITH_TRAILING_BREAK -> Doc.HARD_LINE;
+            case NONE, VALID_ENTRY, RAW_GAP_WITH_TRAILING_BREAK -> Doc.HARD_LINE;
         };
         return Doc.concat(Doc.text("{"), Doc.indent(Doc.concat(contents)), closingBreak, Doc.text("}"));
     }
@@ -320,36 +323,11 @@ final class SwitchPrinter {
         }
         switch (previousEntry) {
             case VALID_ENTRY -> contents.add(Doc.HARD_LINE);
-            case LEADING_DOC, RAW_GAP_WITH_TRAILING_BREAK -> contents.add(Doc.HARD_LINE);
+            case RAW_GAP_WITH_TRAILING_BREAK -> contents.add(Doc.HARD_LINE);
             case NONE, RAW_GAP -> {
                 // Raw source already owns the separation before this formatted entry.
             }
         }
-    }
-
-    private void appendSeparatorBeforeRecoveredRawGap(
-            List<Doc> contents,
-            EntryKind previousEntry,
-            RecoveredRawGapPrinter.RawGapRegion rawRegion
-    ) {
-        if (previousEntry != EntryKind.LEADING_DOC || rawRegionStartsWithLineBreak(rawRegion.region())) {
-            return;
-        }
-        contents.add(Doc.HARD_LINE);
-    }
-
-    private boolean rawRegionStartsWithLineBreak(SourceRegion region) {
-        String raw = sourceText.slice(region);
-        for (int i = 0; i < raw.length(); i++) {
-            char value = raw.charAt(i);
-            if (value == '\n' || value == '\r') {
-                return true;
-            }
-            if (!Character.isWhitespace(value)) {
-                return false;
-            }
-        }
-        return false;
     }
 
     private Optional<RecoveredListPlanner.Plan<SwitchEntry>> recoveryPlan(

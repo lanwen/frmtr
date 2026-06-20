@@ -1,6 +1,7 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.CastExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
@@ -439,7 +440,7 @@ final class BinaryExpressionPrinter {
         }
         for (int i = 0; i < operands.size(); i++) {
             Expression operand = operands.get(i);
-            Doc line = Doc.text(binaryLineOperandText(expression.getOperator(), operand, i, operands.size()));
+            Doc line = binaryLineOperandDoc(expression.getOperator(), operand, i, operands.size());
             List<JavaCommentTrivia> between = i < operands.size() - 1
                 ? commentPlacement.lineCommentsBetween(expression, operand, operands.get(i + 1))
                 : List.of();
@@ -460,6 +461,7 @@ final class BinaryExpressionPrinter {
 
     private List<JavaCommentTrivia> lineCommentsBeforeFirstOperand(BinaryExpr expression, Expression firstOperand) {
         List<JavaCommentTrivia> beforeFirst = new ArrayList<>();
+        beforeFirst.addAll(commentPlacement.adjacentLeadingLineComments(expression));
         commentPlacement.ownComment(expression, JavaCommentTrivia::isLine)
                 .filter(comment -> comment.startsBefore(firstOperand))
                 .ifPresent(beforeFirst::add);
@@ -475,17 +477,51 @@ final class BinaryExpressionPrinter {
                 .toList();
     }
 
-    private String binaryLineOperandText(
+    private Doc binaryLineOperandDoc(
             BinaryExpr.Operator operator,
             Expression operand,
             int index,
             int operandCount
     ) {
-        String text = compactWithoutOwnComment.apply(operand);
+        Doc operandDoc = enclosedOperandWithLeadingLineComments(operand).orElseGet(() ->
+            operand.getAllContainedComments().stream().anyMatch(LineComment.class::isInstance)
+            ? expressionRenderer.format(operand)
+            : Doc.text(compactWithoutOwnComment.apply(operand))
+        );
         if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.START) {
-            return index == 0 ? text : operator.asString() + " " + text;
+            return index == 0 ? operandDoc : Doc.concat(Doc.text(operator.asString() + " "), operandDoc);
         }
-        return index < operandCount - 1 ? text + " " + operator.asString() : text;
+        return index < operandCount - 1
+            ? Doc.concat(operandDoc, Doc.text(" " + operator.asString()))
+            : operandDoc;
+    }
+
+    private Optional<Doc> enclosedOperandWithLeadingLineComments(Expression operand) {
+        if (!(operand instanceof EnclosedExpr enclosedOperand)) {
+            return Optional.empty();
+        }
+        List<JavaCommentTrivia> leading = commentPlacement.lineCommentsBeforeFirst(
+            enclosedOperand,
+            enclosedOperand.getInner()
+        );
+        if (leading.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+            Doc.text("("),
+            Doc.indent(Doc.concat(
+                Doc.HARD_LINE,
+                Doc.join(
+                    Doc.HARD_LINE,
+                    java.util.stream.Stream.concat(
+                        commentDocs(leading).stream(),
+                        java.util.stream.Stream.of(expressionRenderer.format(enclosedOperand.getInner()))
+                    ).toList()
+                )
+            )),
+            Doc.HARD_LINE,
+            Doc.text(")")
+        ));
     }
 
     private List<Doc> commentDocs(List<JavaCommentTrivia> sourceComments) {

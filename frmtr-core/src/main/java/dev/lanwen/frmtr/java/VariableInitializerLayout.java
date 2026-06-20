@@ -457,7 +457,11 @@ final class VariableInitializerLayout {
         ) {
             return conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr);
         }
-        if (initializer instanceof MethodCallExpr methodCall && methodCallHasBlockLambdaArgument(methodCall)) {
+        if (
+            initializer instanceof MethodCallExpr methodCall
+            && methodCallHasBlockLambdaArgument(methodCall)
+            && !methodCallHasLeadingCommentedBlockLambdaArgument(methodCall)
+        ) {
             Optional<Doc> receiverBreakCall = variableWithReceiverBreakBeforeOverWidthHuggableBlockLambdaArguments(
                 variable,
                 name,
@@ -466,6 +470,19 @@ final class VariableInitializerLayout {
             );
             if (receiverBreakCall.isPresent()) {
                 return receiverBreakCall.orElseThrow();
+            }
+        }
+        if (
+            initializer instanceof MethodCallExpr methodCall
+            && methodCallHasLeadingCommentedBlockLambdaArgument(methodCall)
+        ) {
+            Optional<Doc> brokenCall = variableWithLeadingCommentedBlockLambdaMethodCall(
+                name,
+                declarationPrefix + variable.getNameAsString(),
+                methodCall
+            );
+            if (brokenCall.isPresent()) {
+                return brokenCall.orElseThrow();
             }
         }
         if (layoutWidth.blockStatement(flat) > options.lineWidth()) {
@@ -1141,8 +1158,8 @@ final class VariableInitializerLayout {
     ) {
         if (
             methodCall.getArguments().isEmpty()
-            || (!allowNestedComments && !methodCall.getAllContainedComments().isEmpty())
             || methodCallHasOwnComment(methodCall)
+            || (!allowNestedComments && !methodCall.getAllContainedComments().isEmpty())
             || methodCall.getScope().filter(shouldPrintScopeAsDoc).isPresent()
         ) {
             return Optional.empty();
@@ -1183,18 +1200,52 @@ final class VariableInitializerLayout {
         if (blockLambdaCall.isPresent()) {
             return blockLambdaCall;
         }
-        return Optional.of(
-            Doc.concat(
-                Doc.text(name + " = " + callPrefix + "("),
-                Doc.indent(
-                    Doc.concat(
-                        Doc.HARD_LINE,
-                        methodCallArgumentList.apply(methodCall.getArguments(), Doc.HARD_LINE)
-                    )
-                ),
-                Doc.HARD_LINE,
-                Doc.text(")")
-            )
+        return Optional.of(brokenMethodCallArgumentList(name, methodCall, callPrefix));
+    }
+
+    /**
+     * Keeps block-lambda method-call arguments with first-statement comments on a direct broken-call layout.
+     *
+     * <p>The ordinary broken-call fallback rejects nested comments so it does not steal comment ownership from method
+     * call rendering. This narrower path is only for source shapes where the comment is the leading cluster before the
+     * first statement inside a block lambda argument and the call opener itself can still stay with the assignment.
+     */
+    private Optional<Doc> variableWithLeadingCommentedBlockLambdaMethodCall(
+            String name,
+            String flatName,
+            MethodCallExpr methodCall
+    ) {
+        if (
+            !methodCallHasLeadingCommentedBlockLambdaArgument(methodCall)
+            || methodCall.getArguments().isEmpty()
+            || methodCallHasOwnComment(methodCall)
+            || methodCall.getScope().filter(shouldPrintScopeAsDoc).isPresent()
+        ) {
+            return Optional.empty();
+        }
+        String callPrefix = methodCallPrefix.apply(methodCall);
+        String firstLine = flatName + " = " + callPrefix + "(";
+        if (layoutWidth.currentIndented(firstLine) > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(brokenMethodCallArgumentList(name, methodCall, callPrefix));
+    }
+
+    private Doc brokenMethodCallArgumentList(
+            String name,
+            MethodCallExpr methodCall,
+            String callPrefix
+    ) {
+        return Doc.concat(
+            Doc.text(name + " = " + callPrefix + "("),
+            Doc.indent(
+                Doc.concat(
+                    Doc.HARD_LINE,
+                    methodCallArgumentList.apply(methodCall.getArguments(), Doc.HARD_LINE)
+                )
+            ),
+            Doc.HARD_LINE,
+            Doc.text(")")
         );
     }
 
@@ -1279,6 +1330,22 @@ final class VariableInitializerLayout {
                 .stream()
                 .anyMatch(argument -> argument instanceof LambdaExpr lambdaExpr
                         && lambdaExpr.getBody().isBlockStmt()
+                );
+    }
+
+    private boolean methodCallHasLeadingCommentedBlockLambdaArgument(MethodCallExpr methodCall) {
+        return methodCall.getArguments()
+                .stream()
+                .filter(LambdaExpr.class::isInstance)
+                .map(LambdaExpr.class::cast)
+                .filter(lambdaExpr -> lambdaExpr.getBody().isBlockStmt())
+                .map(lambdaExpr -> lambdaExpr.getBody().asBlockStmt())
+                .filter(block -> !block.getStatements().isEmpty())
+                .anyMatch(block -> !commentPlacement.lineCommentsBeforeFirst(
+                            block,
+                            block.getStatements().getFirst().orElseThrow()
+                        )
+                        .isEmpty()
                 );
     }
 

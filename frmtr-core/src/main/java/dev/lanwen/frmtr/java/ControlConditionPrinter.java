@@ -23,9 +23,9 @@ import java.util.function.ToIntFunction;
  * Renders expressions once statement or statement-switch rendering has placed them in a parenthesized control condition.
  *
  * <p>This helper owns the condition-specific boundary between compact source text and broken expression docs,
- * including the block-comment placement rules that preserve source shape inside condition parentheses. The boundary
- * exists because if, while, do-while, synchronized, and statement-switch selectors all need one condition layout policy
- * after their caller has already chosen the surrounding keyword, body, and statement separator behavior.
+ * including the comment placement rules that preserve source shape inside condition parentheses. The boundary exists
+ * because if, while, do-while, synchronized, and statement-switch selectors all need one condition layout policy after
+ * their caller has already chosen the surrounding keyword, body, and statement separator behavior.
  *
  * <p>{@link JavaPrinter} still owns broad expression dispatch, raw-source normalization, and width calculation policy.
  * {@link StatementPrinter} owns ordinary statement grammar, and {@link SwitchPrinter} owns statement-switch selector
@@ -35,6 +35,10 @@ import java.util.function.ToIntFunction;
 final class ControlConditionPrinter {
 
     private final CommentTracker comments;
+
+    private final JavaCommentPlacementPolicy commentPlacement;
+
+    private final SourceText sourceText;
 
     private final SourceShape sourceShape;
 
@@ -64,6 +68,8 @@ final class ControlConditionPrinter {
 
     ControlConditionPrinter(
             CommentTracker comments,
+            JavaCommentPlacementPolicy commentPlacement,
+            SourceText sourceText,
             SourceShape sourceShape,
             FormatterOptions options,
             Function<Expression, Doc> expressionRenderer,
@@ -78,6 +84,8 @@ final class ControlConditionPrinter {
             LayoutDecisionLog layoutDecisions
     ) {
         this.comments = comments;
+        this.commentPlacement = commentPlacement;
+        this.sourceText = sourceText;
         this.sourceShape = sourceShape;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
@@ -121,6 +129,13 @@ final class ControlConditionPrinter {
     ) {
         String flat = compactWithOwnBlockComment(expression);
         if (commentedLogicalCondition(expression)) {
+            return brokenCondition(expression);
+        }
+        Optional<Doc> commented = lineCommentCondition(expression);
+        if (commented.isPresent()) {
+            return commented.orElseThrow();
+        }
+        if (hasDetachedConditionLineComment(expression)) {
             return brokenCondition(expression);
         }
         if (sourceMultilineLogicalCondition(expression)) {
@@ -218,7 +233,7 @@ final class ControlConditionPrinter {
         if (commentedLogicalCondition(expression)) {
             return brokenCondition(expression);
         }
-        Optional<Doc> commented = commentedIfCondition(expression);
+        Optional<Doc> commented = commentedCondition(expression);
         if (commented.isPresent()) {
             return commented.orElseThrow();
         }
@@ -226,6 +241,9 @@ final class ControlConditionPrinter {
             if (methodCallLayout.sourceMultilineLogicalConditionHasMethodCallOperand(expression)) {
                 return brokenLogicalCondition(expression).orElseGet(() -> brokenCondition(expression));
             }
+            return brokenCondition(expression);
+        }
+        if (hasDetachedConditionLineComment(expression)) {
             return brokenCondition(expression);
         }
         String flat = compact.apply(expression);
@@ -347,6 +365,10 @@ final class ControlConditionPrinter {
     }
 
     private Doc brokenConditionContent(Expression expression) {
+        Optional<Doc> leadingLineComments = leadingLineCommentConditionContent(expression);
+        if (leadingLineComments.isPresent()) {
+            return leadingLineComments.orElseThrow();
+        }
         if (
             expression instanceof EnclosedExpr enclosedExpr
             && sourceMultilineLogicalConditionExpression(enclosedExpr.getInner())
@@ -360,10 +382,64 @@ final class ControlConditionPrinter {
         return brokenExpressionLines.apply(expression);
     }
 
-    private Optional<Doc> commentedIfCondition(Expression condition) {
+    private Optional<Doc> leadingLineCommentConditionContent(Expression expression) {
+        int contentLine = contentBeginLine(expression, CommentIndex.beginLine(expression, Integer.MAX_VALUE));
+        List<Doc> leadingComments = detachedConditionLineComments(expression)
+                .stream()
+                .filter(comment -> CommentIndex.beginLine(comment, Integer.MAX_VALUE) < contentLine)
+                .map(comments::comment)
+                .filter(comment -> comment != Doc.EMPTY)
+                .toList();
+        if (leadingComments.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.join(
+            Doc.HARD_LINE,
+            java.util.stream.Stream.concat(
+                leadingComments.stream(),
+                java.util.stream.Stream.of(Doc.text(compact.apply(expression)))
+            ).toList()
+        ));
+    }
+
+    private Optional<Doc> commentedCondition(Expression condition) {
+        Optional<Doc> lineComment = lineCommentCondition(condition);
+        if (lineComment.isPresent()) {
+            return lineComment;
+        }
+        if (condition.getComment().filter(BlockComment.class::isInstance).isPresent()) {
+            Comment comment = condition.getComment().orElseThrow();
+            String text = commentText(comments.comment(comment));
+            String expressionText = compactWithoutOwnComment.apply(condition);
+            String conditionText = conditionCommentStartsBeforeExpression(condition, comment)
+                ? text + " " + expressionText
+                : expressionText + " " + text;
+            return Optional.of(Doc.text("(" + conditionText + ")"));
+        }
+        Doc trailingBlock = trailingBlockCommentBeforeCloseParen(condition);
+        if (trailingBlock != Doc.EMPTY) {
+            return Optional.of(Doc.text("(" + compact.apply(condition) + " " + commentText(trailingBlock) + ")"));
+        }
+        return Optional.empty();
+    }
+
+    private Optional<Doc> lineCommentCondition(Expression condition) {
+        Optional<Doc> ownLineComment = ownLineCommentCondition(condition);
+        if (ownLineComment.isPresent()) {
+            return ownLineComment;
+        }
+        return recoverableTrailingLineCommentCondition(condition);
+    }
+
+    private Optional<Doc> ownLineCommentCondition(Expression condition) {
         Optional<Comment> ownComment = condition.getComment();
         if (ownComment.filter(LineComment.class::isInstance).isPresent()) {
             Comment comment = ownComment.orElseThrow();
+            if (!conditionCommentStartsBeforeExpression(condition, comment)
+                && !lineCommentTrailsInsideCondition(condition, comment)
+            ) {
+                return Optional.empty();
+            }
             Doc printedComment = comments.comment(comment);
             Doc conditionDoc = conditionCommentStartsBeforeExpression(condition, comment)
                 ? Doc.join(Doc.HARD_LINE, List.of(printedComment, Doc.text(compactWithoutOwnComment.apply(condition))))
@@ -377,20 +453,148 @@ final class ControlConditionPrinter {
                 )
             );
         }
-        if (ownComment.filter(BlockComment.class::isInstance).isPresent()) {
-            Comment comment = ownComment.orElseThrow();
-            String text = commentText(comments.comment(comment));
-            String expressionText = compactWithoutOwnComment.apply(condition);
-            String conditionText = conditionCommentStartsBeforeExpression(condition, comment)
-                ? text + " " + expressionText
-                : expressionText + " " + text;
-            return Optional.of(Doc.text("(" + conditionText + ")"));
-        }
-        Doc trailingBlock = trailingBlockCommentBeforeCloseParen(condition);
-        if (trailingBlock != Doc.EMPTY) {
-            return Optional.of(Doc.text("(" + compact.apply(condition) + " " + commentText(trailingBlock) + ")"));
-        }
         return Optional.empty();
+    }
+
+    /**
+     * Recovers trailing line comments that JavaParser leaves on the parent or only in the raw source gap instead of
+     * attaching to the condition.
+     *
+     * <p>Recovered switch entry lists can keep the selector expression parsed while storing {@code value // comment}
+     * trivia outside the selector's own comment association. The shared condition renderer still owns that source
+     * shape, so it asks the placement policy first, then falls back to a narrow source slice before choosing a compact
+     * form.
+     */
+    private Optional<Doc> recoverableTrailingLineCommentCondition(Expression condition) {
+        Optional<String> rawComment = rawTrailingLineCommentText(condition);
+        if (rawComment.isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<JavaCommentTrivia> trailing = commentPlacement.sameLineTrailingLineComment(condition)
+                .filter(comment -> lineCommentTrailsConditionContent(condition, comment.comment()))
+                .filter(comment -> rawComment.orElseThrow().equals(commentText(JavaFormatter.commentDoc(comment))));
+        if (trailing.isPresent()) {
+            Doc printedComment = comments.comment(trailing.orElseThrow());
+            if (printedComment == Doc.EMPTY) {
+                return Optional.empty();
+            }
+            return Optional.of(conditionWithTrailingLineComment(condition, commentText(printedComment)));
+        }
+        return Optional.of(conditionWithTrailingLineComment(condition, rawComment.orElseThrow()));
+    }
+
+    Doc closeParenTrailingLineComment(Expression condition) {
+        Optional<String> rawComment = rawCloseParenTrailingLineCommentText(condition);
+        if (rawComment.isEmpty()) {
+            return Doc.EMPTY;
+        }
+        Optional<JavaCommentTrivia> trailing = commentPlacement.sameLineTrailingLineComment(condition)
+                .filter(comment -> lineCommentTrailsConditionContent(condition, comment.comment()))
+                .filter(comment -> rawComment.orElseThrow().equals(commentText(JavaFormatter.commentDoc(comment))));
+        if (trailing.isPresent()) {
+            Doc printedComment = comments.comment(trailing.orElseThrow());
+            return printedComment == Doc.EMPTY ? Doc.EMPTY : printedComment;
+        }
+        return Doc.text(rawComment.orElseThrow());
+    }
+
+    private boolean lineCommentTrailsInsideCondition(Expression condition, Comment comment) {
+        return lineCommentTrailsConditionContent(condition, comment)
+            && rawTrailingLineCommentText(condition)
+                    .filter(rawComment -> rawComment.equals(commentText(JavaFormatter.commentDoc(comment))))
+                    .isPresent();
+    }
+
+    private Doc conditionWithTrailingLineComment(Expression condition, String comment) {
+        Doc conditionDoc = Doc.text(compact.apply(condition) + " " + comment);
+        return Doc.concat(
+            Doc.text("("),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, conditionDoc)),
+            Doc.HARD_LINE,
+            Doc.text(")")
+        );
+    }
+
+    private Optional<String> rawTrailingLineCommentText(Expression condition) {
+        Optional<String> suffix = condition.getRange()
+                .flatMap(conditionRange -> condition.getParentNode()
+                        .flatMap(Node::getRange)
+                        .map(parentRange -> sourceText.sliceAfterWithin(conditionRange, parentRange))
+                );
+        if (suffix.isEmpty()) {
+            return Optional.empty();
+        }
+        String text = suffix.orElseThrow();
+        int closeParen = text.indexOf(')');
+        int commentStart = text.indexOf("//");
+        if (
+            closeParen < 0
+            || commentStart < 0
+            || closeParen < commentStart
+            || !onlyHorizontalWhitespace(text, 0, commentStart)
+        ) {
+            return Optional.empty();
+        }
+        int commentEnd = lineEnd(text, commentStart);
+        return Optional.of(stripTrailingHorizontalWhitespace(text.substring(commentStart, commentEnd)));
+    }
+
+    private Optional<String> rawCloseParenTrailingLineCommentText(Expression condition) {
+        Optional<String> suffix = condition.getRange()
+                .flatMap(conditionRange -> condition.getParentNode()
+                        .flatMap(Node::getRange)
+                        .map(parentRange -> sourceText.sliceAfterWithin(conditionRange, parentRange))
+                );
+        if (suffix.isEmpty()) {
+            return Optional.empty();
+        }
+        String text = suffix.orElseThrow();
+        int closeParen = text.indexOf(')');
+        int commentStart = text.indexOf("//");
+        if (
+            closeParen < 0
+            || commentStart < 0
+            || commentStart < closeParen
+            || !onlyHorizontalWhitespace(text, closeParen + 1, commentStart)
+        ) {
+            return Optional.empty();
+        }
+        int commentEnd = lineEnd(text, commentStart);
+        return Optional.of(stripTrailingHorizontalWhitespace(text.substring(commentStart, commentEnd)));
+    }
+
+    private boolean onlyHorizontalWhitespace(String text, int begin, int end) {
+        for (int index = begin; index < end; index++) {
+            char value = text.charAt(index);
+            if (value != ' ' && value != '\t' && value != '\f') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private int lineEnd(String text, int begin) {
+        int lineFeed = text.indexOf('\n', begin);
+        int carriageReturn = text.indexOf('\r', begin);
+        if (lineFeed < 0) {
+            return carriageReturn < 0 ? text.length() : carriageReturn;
+        }
+        if (carriageReturn < 0) {
+            return lineFeed;
+        }
+        return Math.min(lineFeed, carriageReturn);
+    }
+
+    private String stripTrailingHorizontalWhitespace(String text) {
+        int end = text.length();
+        while (end > 0) {
+            char value = text.charAt(end - 1);
+            if (value != ' ' && value != '\t' && value != '\f') {
+                break;
+            }
+            end--;
+        }
+        return text.substring(0, end);
     }
 
     private boolean sourceMultilineLogicalCondition(Expression condition) {
@@ -441,6 +645,71 @@ final class ControlConditionPrinter {
 
     private boolean conditionCommentStartsBeforeExpression(Expression condition, Comment comment) {
         return CommentIndex.startsBefore(comment, condition);
+    }
+
+    /**
+     * Reports condition-contained line comments that must be rendered by the broken condition path.
+     *
+     * <p>JavaParser can expose a line comment written inside a control condition as contained trivia rather than the
+     * condition's own comment. Compact condition text would either drop or misplace that standalone line, so these
+     * comments force structured condition rendering. Comments that start inside the following body or selector-owned
+     * sibling are excluded by comparing against the next direct child range after the condition.
+     */
+    private boolean hasDetachedConditionLineComment(Expression condition) {
+        return !detachedConditionLineComments(condition).isEmpty();
+    }
+
+    private List<LineComment> detachedConditionLineComments(Expression condition) {
+        return condition.getAllContainedComments()
+                .stream()
+                .filter(LineComment.class::isInstance)
+                .map(LineComment.class::cast)
+                .filter(comment -> !lineCommentTrailsConditionContent(condition, comment))
+                .filter(comment -> lineCommentBelongsToCondition(condition, comment))
+                .sorted(CommentIndex.sourceOrderComparator())
+                .toList();
+    }
+
+    private int contentBeginLine(Node node, int fallback) {
+        int nodeBegin = CommentIndex.beginLine(node, fallback);
+        return node.getChildNodes()
+                .stream()
+                .filter(child -> !(child instanceof Comment))
+                .mapToInt(child -> contentBeginLine(child, CommentIndex.beginLine(child, nodeBegin)))
+                .min()
+                .orElse(nodeBegin);
+    }
+
+    private boolean lineCommentBelongsToCondition(Expression condition, Comment comment) {
+        return condition.getParentNode()
+                .flatMap(parent -> condition.getRange().flatMap(conditionRange -> parent.getChildNodes()
+                        .stream()
+                        .filter(child -> child != condition)
+                        .flatMap(child -> child.getRange().stream())
+                        .filter(range -> CommentIndex.startsBefore(conditionRange, range))
+                        .min(this::compareRangeBegins)
+                ))
+                .flatMap(nextRange -> comment.getRange().map(commentRange ->
+                        CommentIndex.startsBefore(commentRange, nextRange)
+                ))
+                .orElse(true);
+    }
+
+    private int compareRangeBegins(com.github.javaparser.Range left, com.github.javaparser.Range right) {
+        int line = Integer.compare(left.begin.line, right.begin.line);
+        if (line != 0) {
+            return line;
+        }
+        return Integer.compare(left.begin.column, right.begin.column);
+    }
+
+    private boolean lineCommentTrailsConditionContent(Expression condition, Comment comment) {
+        return condition.getRange()
+                .flatMap(conditionRange -> comment.getRange().map(commentRange ->
+                        commentRange.begin.line == conditionRange.begin.line
+                                && commentRange.begin.column > conditionRange.begin.column
+                ))
+                .orElse(false);
     }
 
     private String commentText(Doc comment) {

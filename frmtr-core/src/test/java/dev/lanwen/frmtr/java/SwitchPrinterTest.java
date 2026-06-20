@@ -87,11 +87,54 @@ final class SwitchPrinterTest {
                 class Demo {
 
                     void method(int value) {
-                        /* keep before */ switch (value) {
-                            // selector
+                        /* keep before */ switch (
+                            value // selector
+                        ) {
                             case 1:
                                 before();
                             case 2: broken();
+                            case 3:
+                                after();
+                        }
+                    }
+                }
+                """
+        );
+    }
+
+    @Test
+    void preservesSwitchSelectorCommentAroundRawRecoveredStatementGroup() {
+        String source = """
+                class Demo {
+                    void method(int value) {
+                        switch (value // selector
+                        ) {
+                            case 1: before();
+                            case 2: var broken = ; // keep raw
+                            case 3: after();
+                        }
+                    }
+                }
+                """;
+        CompilationUnit unit = recoveredParseResult(source);
+        SwitchStmt statement = onlySwitchStatement(unit);
+        Statement recoveredStatement = recoveredStatement(statement.getEntries().get(1));
+
+        String formatted = Frmtr.format(source);
+
+        assertThat(SwitchPrinter.hasRecoverableSwitchEntryListProblem(statement)).isTrue();
+        assertThat(JavaFormatter.isSupportedRecovery(recoveredStatement)).isTrue();
+        assertThat(formatted).isEqualTo(
+            """
+                class Demo {
+
+                    void method(int value) {
+                        switch (
+                            value // selector
+                        ) {
+                            case 1:
+                                before();
+                            case 2: var broken = ; // keep raw
                             case 3:
                                 after();
                         }

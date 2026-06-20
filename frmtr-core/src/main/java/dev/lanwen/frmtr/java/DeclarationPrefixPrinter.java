@@ -3,6 +3,7 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.Range;
 import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
@@ -129,6 +130,7 @@ final class DeclarationPrefixPrinter {
         return owner.getChildNodes()
                 .stream()
                 .filter(child -> !(child instanceof AnnotationExpr))
+                .filter(child -> !(child instanceof Comment))
                 .map(Node::getRange)
                 .flatMap(Optional::stream)
                 .filter(range -> startsAfter(range, previousRange.orElseThrow()))
@@ -146,7 +148,7 @@ final class DeclarationPrefixPrinter {
             Predicate<JavaCommentTrivia> predicate
     ) {
         return Doc.concat(
-            commentPlacement.containedComments(owner)
+            commentPlacement.commentsOwnedByOrContainedIn(owner)
                     .stream()
                     .filter(predicate)
                     .filter(comment -> comment.comment()

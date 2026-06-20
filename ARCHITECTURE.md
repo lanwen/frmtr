@@ -174,6 +174,8 @@ the existing document view and its layout decisions without letting the CLI own 
   and aggregate status helpers.
 - `FormatterRunner.write(...)` writes changed formatter output back to disk, continues after per-file failures,
   distinguishes write-step failures as partially written results, and reports the full run summary.
+- `FormatterRunner.write(...)` replaces each file atomically by staging the formatted text in a temp file in the same
+  directory and renaming it over the original (preserving POSIX mode), so an interrupted write cannot truncate source.
 - Multi-file `check` and `write` runs process selected files on an explicit fixed-size worker pool capped by available
   processors and file count. Results are collected into input-order slots before the `FormatRunResult` is exposed, so
   CLI and Gradle output remains deterministic even when files finish out of order.

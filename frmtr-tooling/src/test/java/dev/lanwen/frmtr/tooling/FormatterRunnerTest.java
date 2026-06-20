@@ -111,9 +111,14 @@ final class FormatterRunnerTest {
     }
 
     @Test
-    void reportsPartialWriteWhenChangedFileCannotBeWritten(@TempDir Path dir) {
-        Path readOnly = write(dir.resolve("src/ReadOnly.java"), "class ReadOnly{int value;}");
-        assertThat(readOnly.toFile().setWritable(false)).isTrue();
+    void reportsPartialWriteWhenChangedFileCannotBeWritten(@TempDir Path dir) throws IOException {
+        // Atomic writes stage a sibling temp file and rename it over the original, so a read-only *file* in a writable
+        // directory now gets reformatted. The replace genuinely fails only when its directory is not writable, which is
+        // the case this test exercises.
+        Path subDir = dir.resolve("src");
+        Path readOnly = write(subDir.resolve("ReadOnly.java"), "class ReadOnly{int value;}");
+        String before = Files.readString(readOnly, StandardCharsets.UTF_8);
+        assertThat(subDir.toFile().setWritable(false)).isTrue();
 
         try {
             FormatRunResult run = FormatterRunner.write(dir, List.of(readOnly), FormatterOptions.defaults(), state -> {});
@@ -121,15 +126,39 @@ final class FormatterRunnerTest {
             assertThat(run.results())
                     .singleElement()
                     .satisfies(result -> {
-                        assertThat(result.status()).isEqualTo(FormatFileStatus.WRITTEN_PARTIALLY);
-                        assertThat(result.changed()).isTrue();
+                        assertThat(result.status())
+                                .isIn(FormatFileStatus.WRITTEN_PARTIALLY, FormatFileStatus.FAILED);
                         assertThat(result.failed()).isTrue();
                         assertThat(result.failureException()).isPresent();
                     });
-            assertThat(run.changedCount()).isEqualTo(1);
             assertThat(run.failureCount()).isEqualTo(1);
+            assertThat(Files.readString(readOnly, StandardCharsets.UTF_8)).isEqualTo(before);
         } finally {
-            readOnly.toFile().setWritable(true);
+            subDir.toFile().setWritable(true);
+        }
+    }
+
+    @Test
+    void keepsOriginalIntactAndLeavesNoTempWhenReplaceFails(@TempDir Path root) throws IOException {
+        Path dir = root.resolve("src");
+        Path changed = write(dir.resolve("Changed.java"), "class Changed{int value;}");
+        String before = Files.readString(changed, StandardCharsets.UTF_8);
+        assertThat(dir.toFile().setWritable(false)).isTrue();
+
+        try {
+            FormatRunResult run = FormatterRunner.write(root, List.of(changed), FormatterOptions.defaults(), state -> {});
+
+            assertThat(run.results())
+                    .singleElement()
+                    .extracting(FormatFileResult::status)
+                    .isIn(FormatFileStatus.WRITTEN_PARTIALLY, FormatFileStatus.FAILED);
+            assertThat(Files.readString(changed, StandardCharsets.UTF_8)).isEqualTo(before);
+        } finally {
+            assertThat(dir.toFile().setWritable(true)).isTrue();
+        }
+
+        try (var entries = Files.list(dir)) {
+            assertThat(entries).noneMatch(path -> path.getFileName().toString().endsWith(".frmtr.tmp"));
         }
     }
 

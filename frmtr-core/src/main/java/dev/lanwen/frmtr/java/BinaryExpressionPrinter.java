@@ -7,6 +7,7 @@ import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.InstanceOfExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
@@ -228,7 +229,7 @@ final class BinaryExpressionPrinter {
         }
         if (operand instanceof MethodCallExpr && operand.getAllContainedComments().isEmpty()) {
             MethodCallExpr methodCall = (MethodCallExpr) operand;
-            if (sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)) {
+            if (methodCallOperandShouldBreak(binaryLine, methodCall, nestedContinuationLine)) {
                 return forcedMethodCallChainRenderer.apply(methodCall)
                         .orElseGet(() -> brokenMethodCallRenderer.apply(methodCall));
             }
@@ -252,13 +253,46 @@ final class BinaryExpressionPrinter {
             || !(binaryOperand.getLeft() instanceof MethodCallExpr methodCall)
             || !methodCall.getAllContainedComments().isEmpty()
             || !binaryOperand.getRight().getAllContainedComments().isEmpty()
-            || !sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+            || !methodCallBinaryOperandShouldBreak(binaryLine, binaryOperand)
         ) {
             return false;
         }
         return continuationStatementWidth.applyAsInt(
             methodCallBinaryClosingLine(binaryLine, binaryOperand)
         ) <= options.lineWidth();
+    }
+
+    private boolean methodCallOperandShouldBreak(
+            BinaryExpressionLine binaryLine,
+            MethodCallExpr methodCall,
+            boolean nestedContinuationLine
+    ) {
+        String flat = compact.apply(methodCall);
+        return sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+            || binaryLine.width(flat, nestedContinuationLine) > options.lineWidth()
+            || (nestedContinuationLine
+                && methodCallHasBreakableStructure(methodCall)
+                && binaryLine.width(flat, nestedContinuationLine) > options.lineWidth() - options.indentUnit().length());
+    }
+
+    private boolean methodCallBinaryOperandShouldBreak(BinaryExpressionLine binaryLine, BinaryExpr binaryOperand) {
+        MethodCallExpr methodCall = (MethodCallExpr) binaryOperand.getLeft();
+        return sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+            || binaryLine.width(compact.apply(binaryOperand)) > options.lineWidth()
+            || (methodCallHasBreakableStructure(methodCall)
+                && binaryLine.width(compact.apply(binaryOperand)) >= options.lineWidth());
+    }
+
+    private boolean methodCallHasBreakableStructure(MethodCallExpr methodCall) {
+        return methodCall.getArguments().size() > 1
+            || methodCall
+                    .getArguments()
+                    .stream()
+                    .anyMatch(argument -> argument instanceof BinaryExpr
+                            || argument instanceof MethodCallExpr
+                            || argument instanceof ObjectCreationExpr
+                    )
+            || methodCall.getScope().filter(MethodCallExpr.class::isInstance).isPresent();
     }
 
     private boolean leadingOperatorMethodCallBinaryOperandShouldNest(

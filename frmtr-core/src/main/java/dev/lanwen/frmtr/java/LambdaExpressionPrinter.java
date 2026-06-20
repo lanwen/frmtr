@@ -210,7 +210,9 @@ final class LambdaExpressionPrinter {
             && expressionBody.filter(expressionLambdaArguments::sourceMultilineLogicalBody).isEmpty()
             && expressionBody.filter(expressionLambdaArguments::sourceMultilineMethodCallBody).isEmpty()
             && expressionBody.filter(expressionLambdaArguments::sourceMultilineBinaryMethodCallBody).isEmpty()
-            && expressionBody.filter(body -> lambdaBodyStartsAfterHeader(expression, body)).isEmpty()
+            && expressionBody.filter(body -> lambdaBodyStartsAfterHeader(expression, body))
+                    .filter(this::sourceMultilineBodyMustStayBroken)
+                    .isEmpty()
             && !lambdaFlatOverflowsInBrokenArgumentList(flat)
             && expressionBody.filter(this::methodCallBodyOverflowsInBrokenArgumentList).isEmpty()
             && currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()
@@ -348,6 +350,10 @@ final class LambdaExpressionPrinter {
         return lambda.getRange()
                 .flatMap(lambdaRange -> body.getRange().map(bodyRange -> bodyRange.begin.line > lambdaRange.begin.line))
                 .orElse(false);
+    }
+
+    private boolean sourceMultilineBodyMustStayBroken(Expression body) {
+        return !(body instanceof BinaryExpr binaryExpr && !isLogicalBinaryOperator(binaryExpr));
     }
 
     private boolean methodCallBodyOverflowsInBrokenArgumentList(Expression body) {

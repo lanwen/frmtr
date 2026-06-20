@@ -54,10 +54,10 @@ public abstract class Return {
             Options options,
             String routeLabel
     ) {
-        return (
-            routeProfile.getSegments().size() <= 3
-            && routeMeter.currentIndented(routeLabel + " = " + layout.render(routeRequest) + ";") <= options.lineWidth()
-        );
+        return routeProfile.getSegments().size() <= 3
+            && routeMeter.currentIndented(
+                routeLabel + " = " + layout.render(routeRequest) + ";"
+            ) <= options.lineWidth();
     }
 
     boolean routeCallBodySpansSourceLine(Expression body, SourceText sourceText) {

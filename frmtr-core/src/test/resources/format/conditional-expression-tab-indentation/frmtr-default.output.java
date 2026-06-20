@@ -19,11 +19,21 @@ class ConditionalExpression {
     }
 
     void ternaryOperationThatShouldBreak3() {
-		featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady ? primaryResult : backupResult;
-		var result = featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady ? primaryResult : backupResult;
-		result = featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady ? primaryResult : backupResult;
-		select(featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady ? primaryResult : backupResult);
-		return featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady ? primaryResult : backupResult;
+        var result =
+            featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady
+                ? primaryResult
+                : backupResult;
+        result = featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady
+            ? primaryResult
+            : backupResult;
+        select(
+            featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady
+                ? primaryResult
+                : backupResult
+        );
+        return featureEnabled && quotaAvailable && regionAvailable && planReady && fallbackReady && policyReady
+            ? primaryResult
+            : backupResult;
     }
 
     int ternaryOperationThatShouldNotBreak() {

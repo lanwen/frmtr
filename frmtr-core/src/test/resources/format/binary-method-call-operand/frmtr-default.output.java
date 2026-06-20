@@ -65,16 +65,27 @@ class BinaryMethodCallOperandSample {
     }
 
     boolean routeBudgetFits(RoutePlan routePlan, SegmentBudget segmentBudget, Options options) {
-        return (
-            routePlan.hasOrigin()
+        return routePlan.hasOrigin()
             && routePlan.hasDestination()
             && segmentBudget.continuationRouteWidth(
                 ") "
                     + routePlan.selectedOperator().displayText()
                     + " "
                     + segmentBudget.remainingSegmentExpression()
-            ) <= options.lineWidth()
-        );
+            ) <= options.lineWidth();
+    }
+
+    boolean argumentStartsAfterType(RouteArgument argument, RouteExpression expression) {
+        return argument.getRange()
+                .map(
+                    argumentRange -> argumentRange.begin.line
+                            > expression
+                                    .getType()
+                                    .getRange()
+                                    .map(typeRange -> typeRange.end.line)
+                                    .orElse(argumentRange.begin.line)
+                )
+                .orElse(false);
     }
 
     boolean routeHeaderOverflows(RouteDeclaration declaration, RouteHeader header, Options options) {

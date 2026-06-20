@@ -69,6 +69,8 @@ final class ExpressionPrinters {
 
     private final MethodCallPrinter methodCalls;
 
+    private final UnaryExpressionPrinter unaries;
+
     private final EnclosedSuffixDispatcher enclosedSuffixes;
 
     private final AssignmentExpressionPrinter assignments;
@@ -175,6 +177,12 @@ final class ExpressionPrinters {
             lambdas::parenthesizedLambdaBreak,
             conditionals::conditionalExpression
         );
+        this.unaries = new UnaryExpressionPrinter(
+            options,
+            compactSource::compact,
+            this::currentIndentedWidth,
+            enclosedExpressions::parenthesizedBreak
+        );
         this.objectCreations = new ObjectCreationPrinter(
             context,
             types,
@@ -273,6 +281,7 @@ final class ExpressionPrinters {
             objectCreations::objectCreation,
             switchExpressionRenderer,
             textBlocks::textBlockLiteral,
+            unaries::unaryExpression,
             compactSource
         );
         this.expressionRules = new ExpressionRuleEnvelope(expressionDispatcher::expressionContent);

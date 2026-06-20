@@ -95,6 +95,27 @@ class SourceMultilineObjectChainInitializer {
         }
     }
 
+    void keepObjectChainInitializerPredicateWithFallback(
+            RouteCall methodCall,
+            ChainShape chainShape,
+            SourceShape sourceShape
+    ) {
+        if (
+            !methodCallChainRootIsObjectCreation.test(methodCall)
+            || !(
+                chainShape.canUseCompactObjectCreationInitializer(
+                    initializerStartsOnContinuationLine,
+                    chainSpansMultipleSourceLines,
+                    sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+                )
+                || sourceFirstLineKeepsChainAfterRoot(methodCall)
+            )
+            || methodCall.getArguments().isEmpty()
+        ) {
+            sink(methodCall);
+        }
+    }
+
     boolean objectRootInitializerOverflows(RouteCall methodCall, String flatName) {
         return methodCallChainRootIsObjectCreation.test(methodCall)
             && layoutWidth.variableInitializer(variable, flatName + " = " + compact.apply(methodCall) + ";")

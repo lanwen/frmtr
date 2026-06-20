@@ -114,10 +114,13 @@ final class ControlConditionMethodCallLayout {
     boolean hasComplexArgument(MethodCallExpr expression) {
         return expression.getArguments()
                 .stream()
-                .anyMatch(
-                    argument ->
-                        !(argument.isNameExpr() || argument.isFieldAccessExpr() || argument.isThisExpr() || argument.isSuperExpr() || argument.isLiteralExpr())
-                );
+                .anyMatch(argument -> !(
+                    argument.isNameExpr()
+                        || argument.isFieldAccessExpr()
+                        || argument.isThisExpr()
+                        || argument.isSuperExpr()
+                        || argument.isLiteralExpr()
+                ));
     }
 
     private Optional<Doc> parenthesizedSourceMultilineMethodCallChain(MethodCallExpr expression) {

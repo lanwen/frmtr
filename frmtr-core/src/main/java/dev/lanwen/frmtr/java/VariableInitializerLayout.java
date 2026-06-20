@@ -845,7 +845,14 @@ final class VariableInitializerLayout {
         );
         if (
             !methodCallChainRootIsObjectCreation.test(methodCall)
-            || !(chainShape.canUseCompactObjectCreationInitializer( initializerStartsOnContinuationLine, chainSpansMultipleSourceLines, sourceShape.methodCallArgumentsSpanMultipleLines(methodCall) ) || sourceFirstLineKeepsChainAfterRoot(methodCall))
+            || !(
+                chainShape.canUseCompactObjectCreationInitializer(
+                    initializerStartsOnContinuationLine,
+                    chainSpansMultipleSourceLines,
+                    sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+                )
+                || sourceFirstLineKeepsChainAfterRoot(methodCall)
+            )
             || (!methodCall.getArguments().isEmpty()
                 && layoutWidth.variableInitializer(
                     variable,
@@ -875,8 +882,7 @@ final class VariableInitializerLayout {
         return variable.getName()
                 .getRange()
                 .flatMap(nameRange -> initializer.getRange().map(
-                        initializerRange ->
-                            initializerRange.begin.line > nameRange.end.line
+                        initializerRange -> initializerRange.begin.line > nameRange.end.line
                 ))
                 .orElse(false);
     }
@@ -1068,10 +1074,10 @@ final class VariableInitializerLayout {
     }
 
     private boolean smallConstructorCanStayFlat(String flatName, ObjectCreationExpr objectCreation) {
-        return (
-            objectCreation.getArguments().size() <= 3
-            && layoutWidth.currentIndented(flatName + " = " + compact.apply(objectCreation) + ";") <= options.lineWidth()
-        );
+        return objectCreation.getArguments().size() <= 3
+            && layoutWidth.currentIndented(
+                flatName + " = " + compact.apply(objectCreation) + ";"
+            ) <= options.lineWidth();
     }
 
     /**
@@ -1094,7 +1100,9 @@ final class VariableInitializerLayout {
         ClassOrInterfaceType type = objectCreation.getType().asClassOrInterfaceType();
         if (
             !hasNonEmptyTypeArguments(type)
-            || layoutWidth.currentIndented(flatName + " = new " + typeNameWithoutArguments.apply(type) + "<") > options.lineWidth()
+            || layoutWidth.currentIndented(
+                flatName + " = new " + typeNameWithoutArguments.apply(type) + "<"
+            ) > options.lineWidth()
         ) {
             return Optional.empty();
         }

@@ -70,6 +70,12 @@ class BinaryMethodCallOperandSample {
             ) <= options.lineWidth();
     }
 
+    boolean argumentStartsAfterType(RouteArgument argument, RouteExpression expression) {
+        return argument.getRange()
+            .map(argumentRange -> argumentRange.begin.line > expression.getType().getRange().map(typeRange -> typeRange.end.line).orElse(argumentRange.begin.line))
+            .orElse(false);
+    }
+
     boolean routeHeaderOverflows(RouteDeclaration declaration, RouteHeader header, Options options) {
         return (
             routeHeaderWidth(declaration, header.flatText() + " " + (declaration.emptyStops() ? "{}" : "{"))

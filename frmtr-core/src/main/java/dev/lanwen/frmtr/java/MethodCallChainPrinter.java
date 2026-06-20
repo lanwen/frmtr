@@ -10,6 +10,7 @@ import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
@@ -576,6 +577,9 @@ final class MethodCallChainPrinter {
         ) {
             return Optional.empty();
         }
+        if (singleStringLiteralCallWithSourceMultilineArguments(root, calls)) {
+            return Optional.empty();
+        }
         if (canBreakAfterCompactExpressionLambdaRoot(breakMode, root, calls, sourceMultilineLambdaPlan)) {
             return Optional.of(
                 Doc.concat(
@@ -814,6 +818,17 @@ final class MethodCallChainPrinter {
                 chainContinuation(root, segments)
             )
         );
+    }
+
+    private boolean singleStringLiteralCallWithSourceMultilineArguments(
+            Expression root,
+            List<MethodCallExpr> calls
+    ) {
+        return root instanceof StringLiteralExpr
+            && calls.size() == 1
+            && calls.getFirst().getAllContainedComments().isEmpty()
+            && !methodCallSegmentHasComment(calls.getFirst())
+            && sourceShape.methodCallArgumentsSpanMultipleLines(calls.getFirst());
     }
 
     private boolean methodRootCanKeepSingleSuffixAttached(MethodCallExpr methodRoot) {
@@ -2148,7 +2163,9 @@ final class MethodCallChainPrinter {
         if (
             objectRootUsesCompactLine(objectCreation, rootRendering)
             && call.getArguments().isEmpty()
-            && compactSegmentWidth.applyAsInt(compactMethodCallChainSegment(call) + finalSegmentSuffix.text()) > options.lineWidth()
+            && compactSegmentWidth.applyAsInt(
+                compactMethodCallChainSegment(call) + finalSegmentSuffix.text()
+            ) > options.lineWidth()
         ) {
             return Doc.concat(rootDoc, chainContinuation(attachedSegment));
         }
@@ -2301,12 +2318,25 @@ final class MethodCallChainPrinter {
     ) {
         if (
             reserveStatementTerminator
+            && !singleSimpleMethodCallSegmentArgument(expression)
             && methodCallSegmentWidth(expression, compactSegment, compactSegmentWidth) > options.lineWidth()
         ) {
             return true;
         }
         return overwideTypeLikeScopeSegment(expression)
             && compactSegmentWidth.applyAsInt(compactSegment) > options.lineWidth();
+    }
+
+    private boolean singleSimpleMethodCallSegmentArgument(MethodCallExpr expression) {
+        if (expression.getArguments().size() != 1) {
+            return false;
+        }
+        Expression argument = expression.getArgument(0);
+        return argument.isNameExpr()
+            || argument.isFieldAccessExpr()
+            || argument.isThisExpr()
+            || argument.isSuperExpr()
+            || argument.isLiteralExpr();
     }
 
     private boolean overwideTypeLikeScopeSegment(MethodCallExpr expression) {

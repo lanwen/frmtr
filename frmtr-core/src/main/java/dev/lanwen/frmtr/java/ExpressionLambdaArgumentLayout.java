@@ -9,6 +9,7 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.stmt.Statement;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
@@ -278,6 +279,10 @@ final class ExpressionLambdaArgumentLayout {
             );
         }
         Doc bodyDoc = huggableExpressionLambdaBody(firstLine, bodyExpression);
+        Optional<Doc> negatedLogicalBody = negatedLogicalBodyWithOpener(firstLine, bodyExpression);
+        if (negatedLogicalBody.isPresent()) {
+            return negatedLogicalBody;
+        }
         if (logicalBinaryBody(bodyExpression).isPresent()) {
             if (logicalBinaryFirstLineFits(firstLine, bodyExpression)) {
                 if (closingLayout.callClosingStaysOnLambdaBodyLine(lambdaExpr, bodyExpression)) {
@@ -702,6 +707,28 @@ final class ExpressionLambdaArgumentLayout {
         );
     }
 
+    private Optional<Doc> negatedLogicalBodyWithOpener(String firstLine, Expression bodyExpression) {
+        Optional<BinaryExpr> logicalBody = negatedLogicalBinaryBody(bodyExpression);
+        if (logicalBody.isEmpty()) {
+            return Optional.empty();
+        }
+        String opener = firstLine + " !(";
+        if (expressionFirstLineWidth(opener) > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(
+            Doc.concat(
+                Doc.text(opener),
+                Doc.indent(Doc.concat(
+                    Doc.HARD_LINE,
+                    binaryExpressionNestedLinesRenderer.apply(logicalBody.orElseThrow(), true)
+                )),
+                Doc.HARD_LINE,
+                Doc.text("))")
+            )
+        );
+    }
+
     private Optional<Doc> logicalBinaryBodyDoc(Expression body) {
         return logicalBinaryBody(body).map(binary -> {
             Doc lines = binaryExpressionNestedLinesRenderer.apply(binary, true);
@@ -722,6 +749,17 @@ final class ExpressionLambdaArgumentLayout {
             return Optional.of(binaryExpr);
         }
         if (body instanceof EnclosedExpr enclosedExpr) {
+            return logicalBinaryBody(enclosedExpr.getInner());
+        }
+        return Optional.empty();
+    }
+
+    private Optional<BinaryExpr> negatedLogicalBinaryBody(Expression body) {
+        if (
+            body instanceof UnaryExpr unaryExpr
+            && unaryExpr.getOperator() == UnaryExpr.Operator.LOGICAL_COMPLEMENT
+            && unaryExpr.getExpression() instanceof EnclosedExpr enclosedExpr
+        ) {
             return logicalBinaryBody(enclosedExpr.getInner());
         }
         return Optional.empty();
@@ -812,6 +850,9 @@ final class ExpressionLambdaArgumentLayout {
         if (logicalBinaryBody(body).isPresent()) {
             return true;
         }
+        if (negatedLogicalBinaryBody(body).isPresent()) {
+            return true;
+        }
         if (sourceMultilineBinaryMethodCallBody(body)) {
             return true;
         }
@@ -847,6 +888,9 @@ final class ExpressionLambdaArgumentLayout {
                         return Optional.of(body);
                     }
                     if (logicalBinaryBody(body).isPresent()) {
+                        return Optional.of(body);
+                    }
+                    if (negatedLogicalBinaryBody(body).isPresent()) {
                         return Optional.of(body);
                     }
                     if (sourceMultilineBinaryMethodCallBody(body)) {

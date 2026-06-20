@@ -19,6 +19,7 @@ import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
+import com.github.javaparser.ast.expr.UnaryExpr;
 import dev.lanwen.frmtr.doc.Doc;
 
 /**
@@ -71,6 +72,8 @@ final class ExpressionDispatcher {
 
     private final JavaFormatRule<TextBlockLiteralExpr> textBlocks;
 
+    private final JavaFormatRule<UnaryExpr> unaries;
+
     private final CompactSourceText compactSource;
 
     ExpressionDispatcher(
@@ -92,6 +95,7 @@ final class ExpressionDispatcher {
             JavaFormatRule<ObjectCreationExpr> objectCreations,
             JavaFormatRule<SwitchExpr> switches,
             JavaFormatRule<TextBlockLiteralExpr> textBlocks,
+            JavaFormatRule<UnaryExpr> unaries,
             CompactSourceText compactSource
     ) {
         this.assignments = assignments;
@@ -112,6 +116,7 @@ final class ExpressionDispatcher {
         this.objectCreations = objectCreations;
         this.switches = switches;
         this.textBlocks = textBlocks;
+        this.unaries = unaries;
         this.compactSource = compactSource;
     }
 
@@ -176,6 +181,9 @@ final class ExpressionDispatcher {
         }
         if (expression instanceof TextBlockLiteralExpr textBlockLiteralExpr) {
             return textBlocks.format(textBlockLiteralExpr);
+        }
+        if (expression instanceof UnaryExpr unaryExpr) {
+            return unaries.format(unaryExpr);
         }
         return Doc.text(compactSource.compact(expression));
     }

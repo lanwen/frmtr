@@ -26,4 +26,8 @@ class LambdaBinaryBodyOpenerSample {
                 )
                 .orElse(false);
     }
+
+    void negatedParenthesizedBody(Items<Item> items) {
+        items.anyMatch(item -> !(item.isNameExpr() || item.isFieldAccessExpr() || item.isThisExpr() || item.isSuperExpr() || item.isLiteralExpr()));
+    }
 }

@@ -49,4 +49,17 @@ class LineWidthOvercollapseGuards {
         return overwideTypeLikeScopeSegment(expression)
             && compactSegmentWidth.applyAsInt(compactSegment) > options.lineWidth();
     }
+
+    boolean keepLongPredicateArgumentGrouped(
+            RouteCall expression,
+            RouteCall call,
+            Tail finalSegmentSuffix,
+            WidthBudget compactSegmentWidth
+    ) {
+        return objectRootUsesCompactLine(expression)
+            && call.getArguments().isEmpty()
+            && compactSegmentWidth.applyAsInt(
+                compactMethodCallChainSegment(call) + finalSegmentSuffix.text()
+            ) > options.lineWidth();
+    }
 }

@@ -178,7 +178,24 @@ final class ReturnBinaryExpressionLayout {
         String line = directBinaryReturnLastLinePrefix(expression)
             + compact.apply(lastBinaryOperand(expression))
             + ";";
-        return continuationStatementWidth.applyAsInt(line) <= options.lineWidth();
+        return continuationStatementWidth.applyAsInt(line) <= options.lineWidth()
+            || directBinaryReturnLastMethodCallOperandFits(expression);
+    }
+
+    private boolean directBinaryReturnLastMethodCallOperandFits(BinaryExpr expression) {
+        Expression lastOperand = lastBinaryOperand(expression);
+        if (
+            !(lastOperand instanceof BinaryExpr binaryOperand)
+            || !(binaryOperand.getLeft() instanceof MethodCallExpr methodCall)
+            || !methodCall.getAllContainedComments().isEmpty()
+            || !binaryOperand.getRight().getAllContainedComments().isEmpty()
+            || methodCall.getArguments().isEmpty()
+        ) {
+            return false;
+        }
+        String firstLine = directBinaryReturnLastLinePrefix(expression) + methodCallPrefix.apply(methodCall) + "(";
+        return continuationStatementWidth.applyAsInt(firstLine) <= options.lineWidth()
+            && directBinaryReturnMethodCallClosingLineFits(binaryOperand);
     }
 
     private int returnLineWidth(Expression expression, String line, LayoutWidth.LineBudget lineBudget) {

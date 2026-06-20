@@ -25,14 +25,13 @@ class MethodCallArgumentContextWidth {
     }
 
     String diagnosticLabel(SourceRegion region, String kind) {
-        return "%s:%s@%d:%d-%d:%d"
-                .formatted(
-                    "sample",
-                    kind,
-                    region.beginLine(),
-                    region.beginColumn(),
-                    region.endLine(),
-                    region.endColumn()
-                );
+        return "%s:%s@%d:%d-%d:%d".formatted(
+            "sample",
+            kind,
+            region.beginLine(),
+            region.beginColumn(),
+            region.endLine(),
+            region.endColumn()
+        );
     }
 }

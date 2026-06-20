@@ -1143,7 +1143,9 @@ final class MethodCallPrinter {
         }
         if (
             !breakMode.isForced()
-            && currentIndentedWidth.applyAsInt(prefix + "(" + compactSource.compact(binaryExpr) + ")") <= options.lineWidth()
+            && currentIndentedWidth.applyAsInt(
+                prefix + "(" + compactSource.compact(binaryExpr) + ")"
+            ) <= options.lineWidth()
         ) {
             return Optional.empty();
         }

@@ -90,4 +90,13 @@ class MethodChainSegmentArgumentsSample {
                     && region.endOffset() == expected.endOffset())
                 .orElse(false);
     }
+
+    boolean startsAfterName(Token token, Expression initializer) {
+        return token.getRange()
+                .flatMap(nameRange -> initializer.getRange().map(
+                        initializerRange ->
+                            initializerRange.begin.line > nameRange.end.line
+                ))
+                .orElse(false);
+    }
 }

@@ -64,7 +64,11 @@ final class ObjectCreationLayoutPolicy {
                     .anyMatch(argument -> argument.getRange()
                                 .map(
                                     argumentRange -> argumentRange.begin.line
-                                            > expression.getType().getRange().map(typeRange -> typeRange.end.line).orElse(argumentRange.begin.line)
+                                            > expression
+                                                    .getType()
+                                                    .getRange()
+                                                    .map(typeRange -> typeRange.end.line)
+                                                    .orElse(argumentRange.begin.line)
                                 )
                                 .orElse(false)
                     )

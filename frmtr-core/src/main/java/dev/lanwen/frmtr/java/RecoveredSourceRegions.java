@@ -96,15 +96,14 @@ final class RecoveredSourceRegions {
         if (kind.isEmpty()) {
             throw new IllegalArgumentException("diagnosticKind must not be blank");
         }
-        return "%s:%s@%d:%d-%d:%d"
-                .formatted(
-                    LABEL_PREFIX,
-                    kind,
-                    region.beginLine(),
-                    region.beginColumn(),
-                    region.endLine(),
-                    region.endColumn()
-                );
+        return "%s:%s@%d:%d-%d:%d".formatted(
+            LABEL_PREFIX,
+            kind,
+            region.beginLine(),
+            region.beginColumn(),
+            region.endLine(),
+            region.endColumn()
+        );
     }
 
     /**

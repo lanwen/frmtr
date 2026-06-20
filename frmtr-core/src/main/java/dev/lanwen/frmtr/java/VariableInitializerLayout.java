@@ -845,7 +845,7 @@ final class VariableInitializerLayout {
         );
         if (
             !methodCallChainRootIsObjectCreation.test(methodCall)
-            || !( chainShape.canUseCompactObjectCreationInitializer( initializerStartsOnContinuationLine, chainSpansMultipleSourceLines, sourceShape.methodCallArgumentsSpanMultipleLines(methodCall) ) || sourceFirstLineKeepsChainAfterRoot(methodCall) )
+            || !(chainShape.canUseCompactObjectCreationInitializer( initializerStartsOnContinuationLine, chainSpansMultipleSourceLines, sourceShape.methodCallArgumentsSpanMultipleLines(methodCall) ) || sourceFirstLineKeepsChainAfterRoot(methodCall))
             || (!methodCall.getArguments().isEmpty()
                 && layoutWidth.variableInitializer(
                     variable,

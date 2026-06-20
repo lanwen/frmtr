@@ -64,4 +64,49 @@ class MethodChainSegmentArgumentsSample {
                             .containsEntry("delivery-zone", "eu-central-1b");
                 });
     }
+
+    boolean hasExpressionLambdaBeforeFinalSegment(List<RouteCall> calls) {
+        if (
+            calls.stream()
+                    .limit(Math.max(0, calls.size() - 1))
+                    .anyMatch(this::methodCallSegmentHasExpressionLambdaArgument)
+        ) {
+            return true;
+        }
+        return false;
+    }
+
+    boolean expressionLambdaRootFits(Optional<Plan> plan, Call root, Width lineBudget, Options options) {
+        return plan
+                .map(plan -> plan.firstLineFits(
+                        line -> compactRootLineWidth(root, line, lineBudget),
+                        options.lineWidth()
+                ))
+                .orElse(true);
+    }
+
+    Doc fallbackScope(RouteCall expression) {
+        return promotedFieldAccessRoot(expression)
+                .or(() -> expression.scope().map(
+                        scope -> Doc.concat(
+                            expressionRenderer.apply(scope),
+                            chainContinuation(methodCallChainSegment(expression))
+                        )
+                ))
+                .orElseGet(() -> inlineMethodCall(expression));
+    }
+
+    Doc trailingComment(RouteCall expression, Optional<RouteCall> nextCall) {
+        return nextCall
+                .map(next -> trailingLineCommentBeforeNextSegment(expression, Optional.of(next)))
+                .orElseGet(() -> finalTrailingLineComment(expression));
+    }
+
+    boolean sameRange(Token token, Region expected) {
+        return token.getRange()
+                .map(sourceText::region)
+                .map(region -> region.beginOffset() == expected.beginOffset()
+                    && region.endOffset() == expected.endOffset())
+                .orElse(false);
+    }
 }

@@ -12,4 +12,13 @@ class ObjectCreationStatementArgumentSample {
             FixtureRecords.completed()
         );
     }
+
+    void collectPrefixParts(List<PrefixPart> parts, AnnotationEntry annotation, int fallbackOrder, String text) {
+        parts.add(new PrefixPart(
+            annotation.range(),
+            fallbackOrder++,
+            text,
+            Optional.of(annotation)
+        ));
+    }
 }

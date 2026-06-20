@@ -38,4 +38,15 @@ class LineWidthOvercollapseGuards {
             journal.recordRecoveryFailure(failure);
         }
     }
+
+    void keepLongPredicateCallGrouped(Call root, Call firstCall, Tail suffix, Width lineBudget) {
+        if (compactRootFinalSegmentLineOverflows(root, firstCall, suffix, lineBudget)) {
+            sink(root);
+        }
+    }
+
+    boolean keepLongSimpleConjunction(RouteCall expression, String compactSegment, WidthBudget compactSegmentWidth) {
+        return overwideTypeLikeScopeSegment(expression)
+            && compactSegmentWidth.applyAsInt(compactSegment) > options.lineWidth();
+    }
 }

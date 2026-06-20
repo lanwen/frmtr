@@ -15,4 +15,24 @@ class MethodCallArgumentContextWidth {
             Doc.text(routeHeaderText + ";" + trailingEmptyRouteComment(loopStatement))
         );
     }
+
+    void recordGroupedBranch() {
+        Doc doc = Doc.group(Doc.concat(
+            Doc.text("prefix"),
+            Doc.ifBreak(Doc.text("-broken-branch"), Doc.text("-flat"))
+        ));
+        sink(doc);
+    }
+
+    String diagnosticLabel(SourceRegion region, String kind) {
+        return "%s:%s@%d:%d-%d:%d"
+                .formatted(
+                    "sample",
+                    kind,
+                    region.beginLine(),
+                    region.beginColumn(),
+                    region.endLine(),
+                    region.endColumn()
+                );
+    }
 }

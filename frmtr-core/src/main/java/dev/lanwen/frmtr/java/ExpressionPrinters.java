@@ -280,6 +280,7 @@ final class ExpressionPrinters {
             options,
             context.layoutWidth,
             context.objectCreationLayoutPolicy,
+            context.sourceShape,
             this::expression,
             this::expressionWithTail,
             lambdas::brokenExpressionLambda,

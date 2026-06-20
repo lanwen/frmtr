@@ -83,4 +83,10 @@ class BinaryMethodCallOperandSample {
             header.flatText() + " " + (declaration.emptyStops() ? "{}" : "{")
         ) > options.lineWidth();
     }
+
+    String selectorSegment(RouteCall scopeCall, RouteCall methodCall) {
+        return "." + selector.apply(scopeCall) + "(" + compactJoin.apply(
+            scopeCall.getArguments()
+        ) + ")" + "." + selector.apply(methodCall) + "()";
+    }
 }

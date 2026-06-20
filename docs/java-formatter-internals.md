@@ -101,7 +101,10 @@ callers and collaborators.
 `ControlConditionPrinter` renders expressions after statement grammar or statement-switch rendering has selected a
 parenthesized control-condition context. It owns compact selector, if, and loop condition text, width-triggered broken
 conditions, source-multiline binary `if` condition preservation, and the block-comment placement fork that keeps comments
-before or after the expression according to source ranges.
+before or after the expression according to source ranges. `ControlConditionMethodCallLayout` owns the narrow
+method-call operand policy inside those conditions: source-multiline method-call operands in logical terms, method-call
+shape facts used by logical-condition preservation, and top-level control-context width measurement for broken
+method-call conditions.
 
 `BlockPrinter` sequences already-rendered statements inside block bodies with orphan comments, printable empty
 statements, formatter-pragma separator rules, and source-range-sensitive blank lines without deciding how statements
@@ -114,6 +117,9 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
 - `AssignmentExpressionPrinter`: assignment wrapping, full-expression-statement width gates, suffixed enclosed values,
   binary-value continuations, method-call and conditional assignment hooks, and nested assignment continuations.
 - `ReturnExpressionPrinter`: return-value wrapping after statement dispatch selects `return value;`.
+  `ReturnBinaryExpressionLayout` owns direct binary return layout, including method-call-left return continuations and
+  the choice to keep source-multiline method-call arguments with normal expression rendering. Return-specific constructor
+  source-shape policy is delegated to `ObjectCreationLayoutPolicy`.
 - `ConditionalExpressionPrinter`: ternary layout for assignment values, variable initializers, comments around `?` and
   `:`, nested conditional branches, and binary condition wrapping.
 - `LambdaExpressionPrinter`: expression versus block bodies, parenthesized lambdas, broken logical bodies, and lambda
@@ -121,8 +127,10 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
   parameter/header rendering used by lambda and call layouts: parameter parentheses, commented parameter reconstruction,
   width-triggered header breaks, and source-multiline parameter detection. `ExpressionLambdaArgumentLayout` owns the
   call-argument side of expression lambdas: shared eligibility, first-line/body-opener planning, and packed method-call
-  or constructor bodies for call and chain printers. `SourceMultilineLambdaCallLayout` owns source-multiline expression
-  lambda method-call bodies and block-lambda parameter lists that were already multiline in source.
+  or constructor bodies for call and chain printers. `ExpressionLambdaClosingLayout` owns source-shaped call-closing
+  placement for simple logical expression-lambda bodies, and `PackedLambdaBody` carries the selected body doc with that
+  closing placement. `SourceMultilineLambdaCallLayout` owns source-multiline expression lambda method-call bodies and
+  block-lambda parameter lists that were already multiline in source.
 - `MethodCallPrinter`: ordinary method-call argument-list rendering, empty argument comments, commented argument-gap
   fallback lists, over-wide binary arguments, and suffixes on enclosed scopes. `TextBlockArgumentSourceLayout` owns the
   source indentation recovery for text-block arguments that appear inside expression-lambda method-call bodies; ordinary
@@ -205,13 +213,15 @@ statement, field, and chain helpers do not each recreate their own width arithme
 `SourceShape` centralizes source-line-shape predicates used to preserve existing multiline forms when the structured
 formatter has an otherwise equivalent compact form. It uses JavaParser node ranges first and bounded `SourceText` slices
 between neighboring AST-owned syntax, such as the first thrown exception line or the gap after the last try resource,
-rather than scanning an entire declaration or statement for delimiters and keywords. Printers still decide what doc to
-build after a shape predicate is true.
+rather than scanning an entire declaration or statement for delimiters and keywords. It also owns the shared predicates
+for method-call operands, nested source-multiline method-call arguments, and logical control-condition source shape.
+Printers still decide what doc to build after a shape predicate is true.
 
 `ObjectCreationLayoutPolicy` centralizes constructor-call source-shape decisions that several expression contexts share:
-when source-multiline constructor arguments are meaningful enough to preserve, and whether a constructor root may stay
-compact when a surrounding method-call chain is forced to break. It does not render constructor docs; direct constructor
-printing, return expressions, and method-call chain planning keep their surrounding grammar decisions.
+when source-multiline constructor arguments are meaningful enough to preserve, when returned object creations should
+preserve source-multiline constructor arguments, and whether a constructor root may stay compact when a surrounding
+method-call chain is forced to break. It does not render constructor docs; direct constructor printing, return
+expressions, and method-call chain planning keep their surrounding grammar decisions.
 
 `MethodCallChainSourcePlanner` owns method-call chain source-shape planning before `MethodCallChainPrinter` assembles
 docs: structural root collection, selector-line preservation, source-multiline chain signals for statement routing,

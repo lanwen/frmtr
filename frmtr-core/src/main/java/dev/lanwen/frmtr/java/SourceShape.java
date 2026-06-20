@@ -5,6 +5,9 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.Parameter;
+import com.github.javaparser.ast.expr.BinaryExpr;
+import com.github.javaparser.ast.expr.EnclosedExpr;
+import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
@@ -56,6 +59,65 @@ final class SourceShape {
             expression.getArguments(),
             expression.getRange()
         );
+    }
+
+    /**
+     * Reports whether a method call with arguments occupied more than one source line as an expression operand.
+     */
+    boolean methodCallOperandSpansMultipleLines(MethodCallExpr expression) {
+        return !expression.getArguments().isEmpty() && spansMultipleLines(expression);
+    }
+
+    /**
+     * Reports whether the first method-call argument starts after the selector line.
+     */
+    boolean methodCallFirstArgumentStartsAfterName(MethodCallExpr expression) {
+        return expression.getArguments()
+                .stream()
+                .findFirst()
+                .flatMap(first -> first.getRange().flatMap(
+                        firstRange -> expression.getName()
+                                .getRange()
+                                .map(nameRange -> firstRange.begin.line > nameRange.end.line)
+                ))
+                .orElse(false);
+    }
+
+    /**
+     * Reports whether an expression tree contains a method call whose argument list was source-multiline.
+     */
+    boolean containsSourceMultilineMethodCallArgument(Expression expression) {
+        if (expression instanceof MethodCallExpr methodCall) {
+            return methodCallArgumentsSpanMultipleLines(methodCall);
+        }
+        if (expression instanceof EnclosedExpr enclosedExpr) {
+            return containsSourceMultilineMethodCallArgument(enclosedExpr.getInner());
+        }
+        if (expression instanceof BinaryExpr binaryExpr) {
+            return containsSourceMultilineMethodCallArgument(binaryExpr.getLeft())
+                || containsSourceMultilineMethodCallArgument(binaryExpr.getRight());
+        }
+        return false;
+    }
+
+    /**
+     * Reports whether a control-condition expression is a logical binary expression after source parentheses are peeled.
+     */
+    boolean logicalConditionExpression(Expression condition) {
+        Expression expression = condition;
+        while (expression instanceof EnclosedExpr enclosedExpr) {
+            expression = enclosedExpr.getInner();
+        }
+        return expression instanceof BinaryExpr binaryExpr
+            && (binaryExpr.getOperator() == BinaryExpr.Operator.AND
+                || binaryExpr.getOperator() == BinaryExpr.Operator.OR);
+    }
+
+    /**
+     * Reports whether a logical control condition was already split across source lines.
+     */
+    boolean sourceMultilineLogicalCondition(Expression condition) {
+        return logicalConditionExpression(condition) && spansMultipleLines(condition);
     }
 
     /**

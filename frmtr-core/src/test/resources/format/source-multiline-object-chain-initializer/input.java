@@ -76,4 +76,25 @@ class SourceMultilineObjectChainInitializer {
     // sampleRule {
     public BrowserClient firstPassBrowser = new BrowserClient("browser/standalone-stable:4.13.0")// marker }
     .withNetwork(NETWORK);
+
+    void keepObjectChainInitializerPredicate(RouteCall methodCall, ChainShape chainShape, SourceShape sourceShape) {
+        if (
+            !chainShape.canUseCompactObjectCreationInitializer(
+                initializerStartsOnContinuationLine,
+                chainSpansMultipleSourceLines,
+                sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+            )
+            || !methodCall.getAllContainedComments().isEmpty()
+            || commentPlacement.trailingLineComment(variable).isPresent()
+            || layoutWidth.continuationStatement(compact.apply(methodCall) + ";") > options.lineWidth()
+        ) {
+            sink(methodCall);
+        }
+    }
+
+    boolean objectRootInitializerOverflows(RouteCall methodCall, String flatName) {
+        return methodCallChainRootIsObjectCreation.test(methodCall)
+            && layoutWidth.variableInitializer(variable, flatName + " = " + compact.apply(methodCall) + ";")
+                > options.lineWidth();
+    }
 }

@@ -1,7 +1,10 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
+import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.MethodCallExpr;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.Optional;
@@ -81,10 +84,14 @@ final class BreakableArgumentExpressionPrinter {
 
     Doc sourceMultilineArgument(Expression argument, String suffix) {
         Doc flat = expressionRenderer.apply(argument);
+        if (binaryPlusContainsSourceMultilineMethodCallArgument(argument)) {
+            return flat;
+        }
         Optional<Doc> broken = brokenArgument(argument);
         if (
             broken.isPresent()
             && (sourceShape.spansMultipleLines(argument)
+                || sourceMultilineMethodCallArguments(argument)
                 || conditionalArgumentLineOverflows(argument, suffix)
                 || continuationStatementWidth.applyAsInt(compact.apply(argument) + suffix) > options.lineWidth())
         ) {
@@ -106,5 +113,22 @@ final class BreakableArgumentExpressionPrinter {
         }
         String line = conditionalProjection.line(conditionalExpr) + suffix;
         return continuationStatementWidth.applyAsInt(line) > options.lineWidth();
+    }
+
+    private boolean sourceMultilineMethodCallArguments(Expression argument) {
+        return argument instanceof MethodCallExpr methodCall
+            && sourceShape.methodCallArgumentsSpanMultipleLines(methodCall);
+    }
+
+    private boolean binaryPlusContainsSourceMultilineMethodCallArgument(Expression argument) {
+        if (argument instanceof BinaryExpr binaryExpr) {
+            return binaryExpr.getOperator() == BinaryExpr.Operator.PLUS
+                && (binaryPlusContainsSourceMultilineMethodCallArgument(binaryExpr.getLeft())
+                    || binaryPlusContainsSourceMultilineMethodCallArgument(binaryExpr.getRight()));
+        }
+        if (argument instanceof EnclosedExpr enclosedExpr) {
+            return binaryPlusContainsSourceMultilineMethodCallArgument(enclosedExpr.getInner());
+        }
+        return sourceMultilineMethodCallArguments(argument);
     }
 }

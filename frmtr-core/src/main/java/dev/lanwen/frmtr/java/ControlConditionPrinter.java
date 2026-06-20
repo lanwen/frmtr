@@ -36,7 +36,7 @@ final class ControlConditionPrinter {
 
     private final CommentTracker comments;
 
-    private final RawSource rawSource;
+    private final SourceShape sourceShape;
 
     private final FormatterOptions options;
 
@@ -54,6 +54,8 @@ final class ControlConditionPrinter {
 
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain;
 
+    private final ControlConditionMethodCallLayout methodCallLayout;
+
     private final ToIntFunction<String> currentIndentedWidth;
 
     private final ToIntFunction<String> blockStatementWidth;
@@ -62,7 +64,7 @@ final class ControlConditionPrinter {
 
     ControlConditionPrinter(
             CommentTracker comments,
-            RawSource rawSource,
+            SourceShape sourceShape,
             FormatterOptions options,
             Function<Expression, Doc> expressionRenderer,
             Function<Expression, String> compact,
@@ -76,7 +78,7 @@ final class ControlConditionPrinter {
             LayoutDecisionLog layoutDecisions
     ) {
         this.comments = comments;
-        this.rawSource = rawSource;
+        this.sourceShape = sourceShape;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.compact = compact;
@@ -88,6 +90,15 @@ final class ControlConditionPrinter {
         this.currentIndentedWidth = currentIndentedWidth;
         this.blockStatementWidth = blockStatementWidth;
         this.layoutDecisions = layoutDecisions;
+        this.methodCallLayout = new ControlConditionMethodCallLayout(
+            sourceShape,
+            options,
+            expressionRenderer,
+            compact,
+            compactJoin,
+            forcedMethodCallChain,
+            blockStatementWidth
+        );
     }
 
     /**
@@ -129,7 +140,7 @@ final class ControlConditionPrinter {
             ToIntFunction<String> conditionLineWidth
     ) {
         return sourceMultilineLogicalConditionExpression(expression)
-            && !rawSource.rawWithoutOwnComment(expression).contains("\n")
+            && !sourceShape.spansMultipleLines(expression)
             && conditionLineWidth.applyAsInt(opening + flat + closing) > options.lineWidth();
     }
 
@@ -170,11 +181,16 @@ final class ControlConditionPrinter {
             collectLogicalConditionTerms(binaryExpr.getRight(), binaryExpr.getOperator().asString(), terms);
             return;
         }
-        Doc operand = logicalConditionOperandShouldBreak(current)
-            ? brokenExpressionLines.apply(current)
-            : rawSource.rawWithoutOwnComment(current).contains("\n")
-                ? expressionRenderer.apply(current)
-                : Doc.text(compact.apply(current));
+        Doc operand = methodCallLayout
+                .sourceMultilineLogicalOperand(current)
+                .orElseGet(
+                    () ->
+                        logicalConditionOperandShouldBreak(current)
+                            ? brokenExpressionLines.apply(current)
+                            : sourceShape.spansMultipleLines(current)
+                                ? expressionRenderer.apply(current)
+                                : Doc.text(compact.apply(current))
+                );
         terms.add(new LogicalConditionTerm(operator, operand));
     }
 
@@ -201,6 +217,9 @@ final class ControlConditionPrinter {
             return commented.orElseThrow();
         }
         if (sourceMultilineLogicalCondition(expression)) {
+            if (methodCallLayout.sourceMultilineLogicalConditionHasMethodCallOperand(expression)) {
+                return brokenLogicalCondition(expression).orElseGet(() -> brokenCondition(expression));
+            }
             return brokenCondition(expression);
         }
         String flat = compact.apply(expression);
@@ -208,7 +227,11 @@ final class ControlConditionPrinter {
         if (
             expression instanceof MethodCallExpr methodCall
             && methodCall.getArguments().size() > 1
-            && flatWidth > options.lineWidth() - options.indentUnit().length()
+            && (flatWidth > options.lineWidth()
+                || (sourceMultilineMethodCallArguments(methodCall)
+                    && flatWidth > options.lineWidth() - options.indentUnit().length())
+                || (methodCallLayout.hasComplexArgument(methodCall)
+                    && flatWidth > options.lineWidth() - options.indentUnit().length()))
         ) {
             Optional<Doc> brokenMethodCall = brokenMethodCallCondition(methodCall);
             if (brokenMethodCall.isPresent()) {
@@ -293,29 +316,11 @@ final class ControlConditionPrinter {
         if (expression.getArguments().isEmpty() || !expression.getAllContainedComments().isEmpty()) {
             return Optional.empty();
         }
-        String prefix = methodCallPrefix(expression);
-        if (blockStatementWidth.applyAsInt("if (" + prefix + "(") > options.lineWidth()) {
-            return Optional.empty();
-        }
-        Doc argumentLines = Doc.join(
-            Doc.concat(Doc.text(","), Doc.HARD_LINE),
-            expression.getArguments()
-                    .stream()
-                    .map(expressionRenderer)
-                    .toList()
-        );
-        return Optional.of(
-            Doc.concat(
-                Doc.text("(" + prefix + "("),
-                Doc.indent(Doc.indent(Doc.concat(Doc.HARD_LINE, argumentLines))),
-                Doc.indent(
-                    Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.text("))")
-                    )
-                )
-            )
-        );
+        return methodCallLayout.brokenCondition(expression);
+    }
+
+    private boolean sourceMultilineMethodCallArguments(MethodCallExpr expression) {
+        return methodCallLayout.sourceMultilineArgumentsStartAfterName(expression);
     }
 
     private String methodCallPrefix(MethodCallExpr expression) {
@@ -370,17 +375,11 @@ final class ControlConditionPrinter {
 
     private boolean sourceMultilineLogicalCondition(Expression condition) {
         return sourceMultilineLogicalConditionExpression(condition)
-            && rawSource.rawWithoutOwnComment(condition).contains("\n");
+            && sourceShape.sourceMultilineLogicalCondition(condition);
     }
 
     private boolean sourceMultilineLogicalConditionExpression(Expression condition) {
-        Expression expression = condition;
-        while (expression instanceof EnclosedExpr enclosedExpr) {
-            expression = enclosedExpr.getInner();
-        }
-        return expression instanceof BinaryExpr binaryExpr
-            && (binaryExpr.getOperator() == BinaryExpr.Operator.AND
-                || binaryExpr.getOperator() == BinaryExpr.Operator.OR);
+        return sourceShape.logicalConditionExpression(condition);
     }
 
     private Doc trailingBlockCommentBeforeCloseParen(Expression condition) {

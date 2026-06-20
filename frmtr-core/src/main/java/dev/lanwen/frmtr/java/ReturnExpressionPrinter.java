@@ -36,6 +36,8 @@ final class ReturnExpressionPrinter {
 
     private final ObjectCreationLayoutPolicy objectCreationLayoutPolicy;
 
+    private final SourceShape sourceShape;
+
     private final Function<Expression, Doc> expression;
 
     private final ExpressionTailRenderer expressionWithTail;
@@ -86,10 +88,13 @@ final class ReturnExpressionPrinter {
 
     private final BiFunction<Expression, Boolean, Doc> parenthesizedBreak;
 
+    private final ReturnBinaryExpressionLayout binaryReturns;
+
     ReturnExpressionPrinter(
             FormatterOptions options,
             LayoutWidth layoutWidth,
             ObjectCreationLayoutPolicy objectCreationLayoutPolicy,
+            SourceShape sourceShape,
             Function<Expression, Doc> expression,
             ExpressionTailRenderer expressionWithTail,
             Function<LambdaExpr, Doc> brokenLambdaExpression,
@@ -116,6 +121,7 @@ final class ReturnExpressionPrinter {
         this.options = options;
         this.layoutWidth = layoutWidth;
         this.objectCreationLayoutPolicy = objectCreationLayoutPolicy;
+        this.sourceShape = sourceShape;
         this.expression = expression;
         this.expressionWithTail = expressionWithTail;
         this.brokenLambdaExpression = brokenLambdaExpression;
@@ -139,6 +145,17 @@ final class ReturnExpressionPrinter {
         this.conditionalExpression = conditionalExpression;
         this.binaryLines = binaryLines;
         this.parenthesizedBreak = parenthesizedBreak;
+        this.binaryReturns = new ReturnBinaryExpressionLayout(
+            options,
+            layoutWidth,
+            sourceShape,
+            expression,
+            compact,
+            continuationStatementWidth,
+            binaryLines,
+            brokenMethodCallWithClosingLine,
+            methodCallPrefix
+        );
     }
 
     Doc returnStatement(Expression expression) {
@@ -147,6 +164,12 @@ final class ReturnExpressionPrinter {
 
     Doc returnStatement(Expression expression, LayoutWidth.LineBudget lineBudget) {
         if (expression instanceof ObjectCreationExpr objectCreation) {
+            if (
+                returnLineOverflows(objectCreation, lineBudget)
+                || objectCreationLayoutPolicy.shouldPreserveReturnSourceMultilineArguments(objectCreation)
+            ) {
+                return Doc.concat(Doc.text("return "), brokenObjectCreation.apply(objectCreation), Doc.text(";"));
+            }
             return Doc.concat(Doc.text("return "), objectCreationWithSuffix.apply(objectCreation, ";"));
         }
         if (
@@ -176,7 +199,7 @@ final class ReturnExpressionPrinter {
         Optional<BinaryExpr> sourceMultilineEnclosedBinary = sourceMultilineEnclosedBinary(expression);
         if (sourceMultilineEnclosedBinary.isPresent()) {
             BinaryExpr binaryExpr = sourceMultilineEnclosedBinary.orElseThrow();
-            return directBinaryReturn(binaryExpr, expression, lineBudget).orElseGet(
+            return binaryReturns.directBinaryReturn(binaryExpr, expression, lineBudget).orElseGet(
                 () -> parenthesizedBreak.apply(binaryExpr, true)
             );
         }
@@ -212,6 +235,12 @@ final class ReturnExpressionPrinter {
         if (returnLineFits(expression, lineBudget)) {
             return this.expression.apply(expression);
         }
+        if (
+            expression instanceof BinaryExpr binaryExpr
+            && binaryReturns.shouldUseExpressionRenderer(binaryExpr)
+        ) {
+            return this.expression.apply(binaryExpr);
+        }
         return brokenReturnExpression(expression, lineBudget).orElseGet(() -> this.expression.apply(expression));
     }
 
@@ -236,7 +265,7 @@ final class ReturnExpressionPrinter {
         if (
             expression instanceof EnclosedExpr enclosedExpr
             && enclosedExpr.getInner() instanceof BinaryExpr binaryExpr
-            && expression.getRange().map(range -> range.begin.line < range.end.line).orElse(false)
+            && sourceShape.spansMultipleLines(expression)
         ) {
             return Optional.of(binaryExpr);
         }
@@ -249,14 +278,16 @@ final class ReturnExpressionPrinter {
     }
 
     private boolean sourceSpansMultipleLines(Expression expression) {
-        return expression.getRange()
-                .map(range -> range.begin.line < range.end.line)
-                .orElse(false);
+        return sourceShape.spansMultipleLines(expression);
     }
 
     private boolean returnLineFits(Expression expression, LayoutWidth.LineBudget lineBudget) {
+        return !returnLineOverflows(expression, lineBudget);
+    }
+
+    private boolean returnLineOverflows(Expression expression, LayoutWidth.LineBudget lineBudget) {
         String line = "return " + compact.apply(expression) + ";";
-        return returnLineWidth(expression, line, lineBudget) <= options.lineWidth();
+        return returnLineWidth(expression, line, lineBudget) > options.lineWidth();
     }
 
     private int returnLineWidth(Expression expression, String line, LayoutWidth.LineBudget lineBudget) {
@@ -307,6 +338,11 @@ final class ReturnExpressionPrinter {
             if (sourceMultilineCall.isPresent()) {
                 return sourceMultilineCall;
             }
+        }
+        if (methodCallChainIsSourceMultiline.test(methodCall)) {
+            return forcedMethodCallChainWithFirstLine
+                    .apply(methodCall, text -> returnLineWidth(methodCall, "return " + text, lineBudget))
+                    .or(() -> forcedMethodCallChain.apply(methodCall, lineBudget));
         }
         if (methodCall.getScope().filter(ObjectCreationExpr.class::isInstance).isPresent()) {
             return forcedMethodCallChainWithFirstLine
@@ -367,7 +403,7 @@ final class ReturnExpressionPrinter {
     private Optional<Doc> returnWithParenthesizedValueBreak(Expression expression, LayoutWidth.LineBudget lineBudget) {
         if (expression instanceof EnclosedExpr enclosedExpr) {
             if (enclosedExpr.getInner() instanceof BinaryExpr binaryExpr) {
-                Optional<Doc> directBinary = directBinaryReturn(binaryExpr, enclosedExpr, lineBudget);
+                Optional<Doc> directBinary = binaryReturns.directBinaryReturn(binaryExpr, enclosedExpr, lineBudget);
                 if (directBinary.isPresent()) {
                     return directBinary;
                 }
@@ -375,129 +411,12 @@ final class ReturnExpressionPrinter {
             return Optional.of(parenthesizedBreak.apply(enclosedExpr.getInner(), false));
         }
         if (expression instanceof BinaryExpr binaryExpr) {
-            Optional<Doc> directBinary = directBinaryReturn(binaryExpr, lineBudget);
+            Optional<Doc> directBinary = binaryReturns.directBinaryReturn(binaryExpr, lineBudget);
             if (directBinary.isPresent()) {
                 return directBinary;
             }
             return Optional.of(parenthesizedBreak.apply(binaryExpr, false));
         }
         return Optional.empty();
-    }
-
-    private Optional<Doc> directBinaryReturn(BinaryExpr binaryExpr) {
-        return directBinaryReturn(binaryExpr, LayoutWidth.LineBudget.BLOCK);
-    }
-
-    private Optional<Doc> directBinaryReturn(BinaryExpr binaryExpr, LayoutWidth.LineBudget lineBudget) {
-        return directBinaryReturn(binaryExpr, binaryExpr, lineBudget);
-    }
-
-    private Optional<Doc> directBinaryReturn(
-            BinaryExpr binaryExpr,
-            Expression widthAnchor,
-            LayoutWidth.LineBudget lineBudget
-    ) {
-        if (!binaryExpr.getAllContainedComments().isEmpty()) {
-            return Optional.empty();
-        }
-        if (directBinaryReturnLineFits(binaryExpr, widthAnchor, lineBudget)) {
-            return Optional.of(this.expression.apply(binaryExpr));
-        }
-        Optional<Doc> methodCallLeft = directBinaryReturnWithMethodCallLeft(binaryExpr, lineBudget);
-        if (methodCallLeft.isPresent()) {
-            return methodCallLeft;
-        }
-        if (
-            directBinaryReturnFirstLineFits(binaryExpr, widthAnchor, lineBudget)
-            && directBinaryReturnLastLineFits(binaryExpr)
-        ) {
-            return Optional.of(Doc.indent(binaryLines.apply(binaryExpr, true)));
-        }
-        return Optional.empty();
-    }
-
-    private boolean directBinaryReturnLineFits(
-            BinaryExpr expression,
-            Expression widthAnchor,
-            LayoutWidth.LineBudget lineBudget
-    ) {
-        String line = "return " + compact.apply(expression) + ";";
-        return returnLineWidth(widthAnchor, line, lineBudget) <= options.lineWidth();
-    }
-
-    private Optional<Doc> directBinaryReturnWithMethodCallLeft(
-            BinaryExpr binaryExpr,
-            LayoutWidth.LineBudget lineBudget
-    ) {
-        if (
-            !(binaryExpr.getLeft() instanceof MethodCallExpr methodCall)
-            || methodCall.getArguments().isEmpty()
-            || !methodCall.getAllContainedComments().isEmpty()
-            || !binaryExpr.getRight().getAllContainedComments().isEmpty()
-            || !directBinaryReturnMethodCallFirstLineFits(methodCall, lineBudget)
-            || !directBinaryReturnMethodCallClosingLineFits(binaryExpr)
-        ) {
-            return Optional.empty();
-        }
-        return Optional.of(
-            brokenMethodCallWithClosingLine.apply(methodCall, methodCallBinaryReturnClosingLine(binaryExpr))
-        );
-    }
-
-    private boolean directBinaryReturnMethodCallFirstLineFits(
-            MethodCallExpr methodCall,
-            LayoutWidth.LineBudget lineBudget
-    ) {
-        String line = "return " + methodCallPrefix.apply(methodCall) + "(";
-        return layoutWidth.line(lineBudget, line) <= options.lineWidth();
-    }
-
-    private boolean directBinaryReturnMethodCallClosingLineFits(BinaryExpr binaryExpr) {
-        return continuationStatementWidth.applyAsInt(
-            methodCallBinaryReturnClosingLine(binaryExpr) + ";"
-        ) <= options.lineWidth();
-    }
-
-    private String methodCallBinaryReturnClosingLine(BinaryExpr binaryExpr) {
-        return ") " + binaryExpr.getOperator().asString() + " " + compact.apply(binaryExpr.getRight());
-    }
-
-    private boolean directBinaryReturnFirstLineFits(
-            BinaryExpr expression,
-            Expression widthAnchor,
-            LayoutWidth.LineBudget lineBudget
-    ) {
-        String line = "return " + compact.apply(firstBinaryOperand(expression));
-        return returnLineWidth(widthAnchor, line, lineBudget) <= options.lineWidth();
-    }
-
-    private boolean directBinaryReturnLastLineFits(BinaryExpr expression) {
-        String line = directBinaryReturnLastLinePrefix(expression)
-            + compact.apply(lastBinaryOperand(expression))
-            + ";";
-        return continuationStatementWidth.applyAsInt(line) <= options.lineWidth();
-    }
-
-    private String directBinaryReturnLastLinePrefix(BinaryExpr expression) {
-        if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.START) {
-            return expression.getOperator().asString() + " ";
-        }
-        return "";
-    }
-
-    private Expression firstBinaryOperand(BinaryExpr expression) {
-        Expression left = expression.getLeft();
-        while (left instanceof BinaryExpr leftBinary && leftBinary.getOperator() == expression.getOperator()) {
-            left = leftBinary.getLeft();
-        }
-        return left;
-    }
-
-    private Expression lastBinaryOperand(BinaryExpr expression) {
-        Expression right = expression.getRight();
-        while (right instanceof BinaryExpr rightBinary && rightBinary.getOperator() == expression.getOperator()) {
-            right = rightBinary.getRight();
-        }
-        return right;
     }
 }

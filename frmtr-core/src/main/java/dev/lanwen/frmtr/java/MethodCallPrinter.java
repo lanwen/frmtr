@@ -301,6 +301,14 @@ final class MethodCallPrinter {
         if (singleTextBlockArgument.isPresent()) {
             return singleTextBlockArgument.orElseThrow();
         }
+        Optional<Doc> singleObjectCreationArgument = singleObjectCreationArgument(prefix, expression);
+        if (singleObjectCreationArgument.isPresent()) {
+            return singleObjectCreationArgument.orElseThrow();
+        }
+        Optional<Doc> singleMethodCallArgument = singleMethodCallArgument(prefix, expression);
+        if (singleMethodCallArgument.isPresent()) {
+            return singleMethodCallArgument.orElseThrow();
+        }
         Optional<Doc> singleBinaryArgument = singleBinaryArgument(prefix, expression.getArguments(), breakMode);
         if (singleBinaryArgument.isPresent()) {
             return singleBinaryArgument.orElseThrow();
@@ -703,6 +711,8 @@ final class MethodCallPrinter {
         if (
             expression.getArguments().isEmpty()
             || !expression.getAllContainedComments().isEmpty()
+            || hasSingleAttachableObjectCreationArgument(expression)
+            || hasSingleAttachableMethodCallArgument(expression)
             || (hasHuggableExpressionLambdaArgument(expression)
                 && sourceShape.expressionLambdaStartsOnSelectorLine(expression))
             || !sourceShape.methodCallArgumentsSpanMultipleLines(expression)
@@ -743,6 +753,50 @@ final class MethodCallPrinter {
             );
         }
         return Doc.indent(arguments);
+    }
+
+    private Optional<Doc> singleObjectCreationArgument(String prefix, MethodCallExpr expression) {
+        if (!hasSingleAttachableObjectCreationArgument(expression)) {
+            return Optional.empty();
+        }
+        ObjectCreationExpr argument = (ObjectCreationExpr) expression.getArgument(0);
+        String objectPrefix = compactSource.compact(argument).split("\\(", 2)[0];
+        if (currentIndentedWidth.applyAsInt(prefix + "(" + objectPrefix + "(") > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(Doc.text(prefix + "("), objectCreationWithSuffix.apply(argument, ")")));
+    }
+
+    private Optional<Doc> singleMethodCallArgument(String prefix, MethodCallExpr expression) {
+        if (!hasSingleAttachableMethodCallArgument(expression)) {
+            return Optional.empty();
+        }
+        MethodCallExpr argument = (MethodCallExpr) expression.getArgument(0);
+        String argumentPrefix = methodCallPrefix(argument);
+        if (currentIndentedWidth.applyAsInt(prefix + "(" + argumentPrefix + "(") > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.concat(
+            Doc.text(prefix + "("),
+            methodCallWithTail(argument, ExpressionTail.of(")"))
+        ));
+    }
+
+    private boolean hasSingleAttachableObjectCreationArgument(MethodCallExpr expression) {
+        return expression.getArguments().size() == 1
+            && expression.getArgument(0) instanceof ObjectCreationExpr objectCreation
+            && sourceShape.objectCreationArgumentsSpanMultipleLines(objectCreation)
+            && sourceShape.startsOnSameLine(expression.getName(), objectCreation)
+            && objectCreation.getAnonymousClassBody().isEmpty()
+            && objectCreation.getAllContainedComments().isEmpty();
+    }
+
+    private boolean hasSingleAttachableMethodCallArgument(MethodCallExpr expression) {
+        return expression.getArguments().size() == 1
+            && expression.getArgument(0) instanceof MethodCallExpr methodCall
+            && sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+            && sourceShape.startsOnSameLine(expression.getName(), methodCall)
+            && methodCall.getAllContainedComments().isEmpty();
     }
 
     private boolean singleTextBlockInsideExpressionLambda(MethodCallExpr expression) {

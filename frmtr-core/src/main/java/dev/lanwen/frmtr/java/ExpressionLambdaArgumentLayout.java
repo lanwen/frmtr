@@ -67,6 +67,8 @@ final class ExpressionLambdaArgumentLayout {
 
     private final TextBlockArgumentSourceLayout textBlockArguments;
 
+    private final ExpressionLambdaClosingLayout closingLayout;
+
     ExpressionLambdaArgumentLayout(
             RawSource rawSource,
             SourceText sourceText,
@@ -101,6 +103,7 @@ final class ExpressionLambdaArgumentLayout {
         this.blockStatementWidth = blockStatementWidth;
         this.layoutWidth = layoutWidth;
         this.textBlockArguments = new TextBlockArgumentSourceLayout(sourceText, options, rawSource::raw);
+        this.closingLayout = new ExpressionLambdaClosingLayout();
         this.methodCallBodies = new ExpressionLambdaMethodCallBodyLayout(
             rawSource,
             options,
@@ -277,6 +280,15 @@ final class ExpressionLambdaArgumentLayout {
         Doc bodyDoc = huggableExpressionLambdaBody(firstLine, bodyExpression);
         if (logicalBinaryBody(bodyExpression).isPresent()) {
             if (logicalBinaryFirstLineFits(firstLine, bodyExpression)) {
+                if (closingLayout.callClosingStaysOnLambdaBodyLine(lambdaExpr, bodyExpression)) {
+                    return Optional.of(
+                        Doc.concat(
+                            Doc.text(firstLine + " "),
+                            bodyDoc,
+                            Doc.text(")")
+                        )
+                    );
+                }
                 return Optional.of(
                     Doc.concat(
                         Doc.text(firstLine + " "),
@@ -950,40 +962,5 @@ final class ExpressionLambdaArgumentLayout {
         boolean bodyOpenerOverflows(ToIntFunction<String> bodyOpenerWidth, int lineWidth) {
             return !callBodyOpenerLine.isEmpty() && bodyOpenerWidth.applyAsInt(callBodyOpenerLine) > lineWidth;
         }
-    }
-
-    /**
-     * Carries a packed lambda body with its call-closing policy so body selection does not hide suffix ownership in
-     * repeated ad hoc render branches.
-     */
-    private record PackedLambdaBody(Doc doc, String closingSuffix, Placement placement) {
-        static PackedLambdaBody closingOnOwnLine(Doc doc, String closingSuffix) {
-            return new PackedLambdaBody(doc, closingSuffix, Placement.CLOSING_ON_OWN_LINE);
-        }
-
-        static PackedLambdaBody attachedClosing(Doc doc, String closingSuffix) {
-            return new PackedLambdaBody(doc, closingSuffix, Placement.ATTACHED_CLOSING);
-        }
-
-        Doc render(String firstLine) {
-            return switch (placement) {
-                case CLOSING_ON_OWN_LINE -> Doc.concat(
-                    Doc.text(firstLine + " "),
-                    Doc.indent(doc),
-                    Doc.HARD_LINE,
-                    Doc.text(closingSuffix)
-                );
-                case ATTACHED_CLOSING -> Doc.concat(
-                    Doc.text(firstLine + " "),
-                    doc,
-                    Doc.text(closingSuffix)
-                );
-            };
-        }
-    }
-
-    private enum Placement {
-        CLOSING_ON_OWN_LINE,
-        ATTACHED_CLOSING,
     }
 }

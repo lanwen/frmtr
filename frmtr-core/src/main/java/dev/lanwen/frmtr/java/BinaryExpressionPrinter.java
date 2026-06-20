@@ -209,6 +209,12 @@ final class BinaryExpressionPrinter {
         }
         if (
             operand instanceof BinaryExpr binaryOperand
+            && leadingOperatorMethodCallBinaryOperandShouldNest(binaryLine, binaryOperand)
+        ) {
+            return nestedLines(binaryOperand, true);
+        }
+        if (
+            operand instanceof BinaryExpr binaryOperand
             && shouldParenthesizeNestedBinary(binaryLine.operator(), binaryOperand.getOperator())
         ) {
             return Doc.concat(Doc.text("("), expressionRenderer.format(binaryOperand), Doc.text(")"));
@@ -222,6 +228,10 @@ final class BinaryExpressionPrinter {
         }
         if (operand instanceof MethodCallExpr && operand.getAllContainedComments().isEmpty()) {
             MethodCallExpr methodCall = (MethodCallExpr) operand;
+            if (sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)) {
+                return forcedMethodCallChainRenderer.apply(methodCall)
+                        .orElseGet(() -> brokenMethodCallRenderer.apply(methodCall));
+            }
             String flat = compact.apply(operand);
             if (binaryLine.width(flat, nestedContinuationLine) <= options.lineWidth()) {
                 return Doc.text(flat);
@@ -249,6 +259,17 @@ final class BinaryExpressionPrinter {
         return continuationStatementWidth.applyAsInt(
             methodCallBinaryClosingLine(binaryLine, binaryOperand)
         ) <= options.lineWidth();
+    }
+
+    private boolean leadingOperatorMethodCallBinaryOperandShouldNest(
+            BinaryExpressionLine binaryLine,
+            BinaryExpr binaryOperand
+    ) {
+        return binaryLine.hasLeadingOperator()
+            && binaryOperand.getLeft() instanceof MethodCallExpr methodCall
+            && methodCall.getArguments().size() > 1
+            && !sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+            && binaryLine.width(compact.apply(binaryOperand)) > options.lineWidth();
     }
 
     private String methodCallBinaryClosingLine(BinaryExpressionLine binaryLine, BinaryExpr binaryOperand) {
@@ -300,6 +321,7 @@ final class BinaryExpressionPrinter {
         return binaryLine.hasTrailingOperator()
             && operand instanceof MethodCallExpr methodCall
             && !methodCall.getArguments().isEmpty()
+            && (methodCall.getArguments().size() > 1 || sourceShape.methodCallArgumentsSpanMultipleLines(methodCall))
             && binaryLine.width(compact.apply(methodCall)) > options.lineWidth();
     }
 

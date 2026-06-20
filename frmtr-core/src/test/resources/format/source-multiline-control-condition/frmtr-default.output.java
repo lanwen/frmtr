@@ -59,4 +59,29 @@ class SourceMultilineControlConditionSample {
             segmentPlan.advance();
         }
     }
+
+    void keepWideControlPredicate(
+            Expr expression,
+            String flat,
+            String opening,
+            String closing,
+            WidthBudget conditionLineWidth
+    ) {
+        if (logicalConditionWithControlContextOverflows(expression, flat, opening, closing, conditionLineWidth)) {
+            segmentPlan.reserve();
+        }
+    }
+
+    void preserveSourceMultilineStreamPredicate(List<String> lines) {
+        if (
+            lines.size() < 3
+            || lines.stream()
+                    .skip(1)
+                    .limit(lines.size() - 2)
+                    .map(String::stripLeading)
+                    .anyMatch(line -> !line.startsWith("*"))
+        ) {
+            segmentPlan.reserve();
+        }
+    }
 }

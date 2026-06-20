@@ -49,6 +49,29 @@ final class ObjectCreationLayoutPolicy {
     }
 
     /**
+     * Reports whether a returned constructor should break because its source argument list was intentionally multiline.
+     *
+     * <p>This keeps return-specific constructor preservation with the rest of the constructor source-shape policy while
+     * leaving the return printer to decide whether width alone also forces the same broken constructor document.
+     */
+    boolean shouldPreserveReturnSourceMultilineArguments(ObjectCreationExpr expression) {
+        return (
+            expression.getArguments().size() > 2
+            && sourceShape.spansMultipleLines(expression)
+            && expression
+                    .getArguments()
+                    .stream()
+                    .anyMatch(argument -> argument.getRange()
+                                .map(
+                                    argumentRange -> argumentRange.begin.line
+                                            > expression.getType().getRange().map(typeRange -> typeRange.end.line).orElse(argumentRange.begin.line)
+                                )
+                                .orElse(false)
+                    )
+        );
+    }
+
+    /**
      * Reports whether a constructor root can stay compact when a surrounding method-call chain is forced to break.
      */
     boolean canKeepCompactChainRoot(ObjectCreationExpr expression, int compactWidth, int lineWidth) {

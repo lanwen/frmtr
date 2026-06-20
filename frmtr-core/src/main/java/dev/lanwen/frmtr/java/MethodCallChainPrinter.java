@@ -333,6 +333,7 @@ final class MethodCallChainPrinter {
         Expression root = methodChainPlanner.methodCallChainRoot(expression, calls);
         SourceMultilineLambdaChainPlan sourceMultilineLambdaPlan = sourceMultilineLambdaChainPlan(root, calls);
         Optional<Doc> sourceMultilineFirstExpressionLambda = sourceMultilineFirstExpressionLambdaChain(
+            expression,
             root,
             calls,
             MethodCallChainTail.EMPTY,
@@ -642,6 +643,7 @@ final class MethodCallChainPrinter {
         Doc rootDoc = methodCallChainRootDoc(chainPlan, firstLineWidth);
         boolean firstSegmentAttachedToRoot = false;
         Optional<Doc> sourceMultilineFirstExpressionLambda = sourceMultilineFirstExpressionLambdaChain(
+            expression,
             root,
             calls,
             finalSegmentSuffix,
@@ -650,7 +652,7 @@ final class MethodCallChainPrinter {
         if (sourceMultilineFirstExpressionLambda.isPresent()) {
             return sourceMultilineFirstExpressionLambda;
         }
-        if (canAttachFirstSegmentToSimpleRoot(chainPlan, calls, analysis)) {
+        if (canAttachFirstSegmentToSimpleRoot(expression, chainPlan, calls, analysis)) {
             MethodCallExpr firstCall = calls.getFirst();
             root = firstCall;
             calls = new ArrayList<>(calls.subList(1, calls.size()));
@@ -760,7 +762,12 @@ final class MethodCallChainPrinter {
             if (expressionLambdaRoot.isPresent()) {
                 return expressionLambdaRoot;
             }
-            if (compactRootFinalSegmentLineOverflows(methodRoot, calls.getFirst(), finalSegmentSuffix, lineBudget)) {
+            if (compactRootFinalSegmentLineOverflows(
+                    methodRoot,
+                    calls.getFirst(),
+                    finalSegmentSuffix,
+                    lineBudget
+                )) {
                 Optional<Doc> compactRootWithBrokenSegment = compactRootWithBrokenFinalSegment(
                     methodRoot,
                     calls.getFirst(),
@@ -923,6 +930,7 @@ final class MethodCallChainPrinter {
     }
 
     private boolean canAttachFirstSegmentToSimpleRoot(
+            MethodCallExpr expression,
             MethodCallChainSourcePlanner.MethodCallChainPlan chainPlan,
             List<MethodCallExpr> calls,
             MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis
@@ -934,7 +942,8 @@ final class MethodCallChainPrinter {
             || !analysis.sourceMultilineChain()
             || chainPlan.root() instanceof MethodCallExpr
             || chainPlan.root() instanceof ObjectCreationExpr
-            || sourceFirstLineIsOnlyChainRoot(chainPlan.root(), calls.getLast())
+            || sourceFirstLineIsOnlyChainRoot(chainPlan.root(), expression)
+            || !sourceShape.startsOnSameLine(chainPlan.root(), calls.getFirst().getName())
         ) {
             return false;
         }
@@ -976,6 +985,7 @@ final class MethodCallChainPrinter {
     }
 
     private Optional<Doc> sourceMultilineFirstExpressionLambdaChain(
+            MethodCallExpr expression,
             Expression root,
             List<MethodCallExpr> calls,
             MethodCallChainTail finalSegmentSuffix,
@@ -987,6 +997,7 @@ final class MethodCallChainPrinter {
             || root instanceof ObjectCreationExpr
             || !hasSingleExpressionLambdaArgumentAnyShape(calls.getFirst())
             || sourceMultilineLambdaPlan.firstCall().isEmpty()
+            || sourceFirstLineIsOnlyChainRoot(root, expression)
         ) {
             return Optional.empty();
         }
@@ -1353,6 +1364,14 @@ final class MethodCallChainPrinter {
         ) {
             return Optional.empty();
         }
+        if (
+            !(root instanceof MethodCallExpr)
+            && !(root instanceof ObjectCreationExpr)
+            && !(root instanceof FieldAccessExpr)
+            && !sourceShape.startsOnSameLine(root, call.getName())
+        ) {
+            return Optional.empty();
+        }
         String typeArguments = call.getTypeArguments()
                 .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
                 .orElse("");
@@ -1377,10 +1396,14 @@ final class MethodCallChainPrinter {
                 call.getArguments()
             );
             if (huggableExpressionLambda.isPresent()) {
-                if (expressionLambdaPlan.orElseThrow().bodyOpenerOverflows(
-                        line -> compactRootLineWidth(root, line, lineBudget),
-                        options.lineWidth()
-                    )) {
+                if (
+                    expressionLambdaPlan
+                            .orElseThrow()
+                            .bodyOpenerOverflows(
+                                line -> compactRootLineWidth(root, line, lineBudget),
+                                options.lineWidth()
+                            )
+                ) {
                     return Optional.empty();
                 }
                 return Optional.of(Doc.concat(huggableExpressionLambda.orElseThrow(), finalSegmentSuffix.doc()));
@@ -1719,7 +1742,7 @@ final class MethodCallChainPrinter {
             return compactSource.compact(expression);
         }
         MethodCallChainSourcePlanner.MethodCallChainPlan plan = methodChainPlanner.plan(analysis, true);
-        if (canAttachFirstSegmentToSimpleRoot(plan, plan.calls(), analysis)) {
+        if (canAttachFirstSegmentToSimpleRoot(expression, plan, plan.calls(), analysis)) {
             return firstSegmentAttachedToSimpleRootFirstLine(plan.root(), plan.calls().getFirst());
         }
         if (plan.root() instanceof MethodCallExpr methodRoot) {
@@ -1907,10 +1930,12 @@ final class MethodCallChainPrinter {
                     .filter(FieldAccessExpr.class::isInstance)
                     .map(FieldAccessExpr.class::cast)
                     .map(scope -> promotedFieldAccessRootMethodCall(scope, expression))
-                    .or(() -> expression.getScope().map(scope -> Doc.concat(
-                            expressionRenderer.apply(scope),
-                            chainContinuation(methodCallChainSegment(expression))
-                    )))
+                    .or(() -> expression.getScope().map(
+                            scope -> Doc.concat(
+                                expressionRenderer.apply(scope),
+                                chainContinuation(methodCallChainSegment(expression))
+                            )
+                    ))
                     .orElseGet(() -> inlineMethodCall(expression));
         }
         return inlineMethodCall(expression);
@@ -2123,8 +2148,7 @@ final class MethodCallChainPrinter {
         if (
             objectRootUsesCompactLine(objectCreation, rootRendering)
             && call.getArguments().isEmpty()
-            && compactSegmentWidth.applyAsInt(compactMethodCallChainSegment(call) + finalSegmentSuffix.text())
-                > options.lineWidth()
+            && compactSegmentWidth.applyAsInt(compactMethodCallChainSegment(call) + finalSegmentSuffix.text()) > options.lineWidth()
         ) {
             return Doc.concat(rootDoc, chainContinuation(attachedSegment));
         }

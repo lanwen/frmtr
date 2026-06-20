@@ -5,12 +5,8 @@ import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.FrmtrSession;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.nio.file.attribute.PosixFileAttributeView;
-import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -275,53 +271,13 @@ public final class FormatterRunner {
                 return new FormatFileResult(file, displayPath, FormatFileStatus.UNCHANGED, "", null);
             }
             try {
-                writeAtomically(file, formatted);
+                BestEffortAtomicFileWriter.writeString(file, formatted);
             } catch (IOException exception) {
                 return new FormatFileResult(file, displayPath, FormatFileStatus.WRITTEN_PARTIALLY, "", exception);
             }
             return new FormatFileResult(file, displayPath, FormatFileStatus.WRITTEN, "", null);
         } catch (FormatterException | IOException exception) {
             return new FormatFileResult(file, displayPath, FormatFileStatus.FAILED, "", exception);
-        }
-    }
-
-    /**
-     * Owns crash-safe in-place replacement of a source file: the formatted text is staged in a sibling temp file in the
-     * target's own directory and then renamed over the original, preferring an atomic rename. This exists because the
-     * naive {@code Files.writeString} truncates the target before streaming, so an interrupted write (SIGKILL, power
-     * loss, full disk) would leave the user's source file truncated or empty. Staging plus rename makes the write
-     * all-or-nothing: on disk there is only ever the complete old content or the complete new content.
-     *
-     * <p>The temp file is created in the same directory as the resolved target so the move is a same-filesystem rename
-     * (the precondition for {@link StandardCopyOption#ATOMIC_MOVE}); when the platform or filesystem cannot do an atomic
-     * rename it falls back to a plain replacing move. Symlinked inputs are resolved with {@link Path#toRealPath()} so the
-     * link target is rewritten, matching the prior write-through-symlink behavior. POSIX permissions of the original are
-     * copied onto the temp before the move so a reformatted file keeps its mode instead of inheriting the temp file's
-     * {@code rw-------}; this is skipped silently on non-POSIX filesystems.
-     *
-     * <p>This helper owns only durable replacement. It leaves status mapping (e.g. {@code WRITTEN_PARTIALLY} on
-     * failure) and any threading or per-file coordination to the caller. The temp file is removed on every failure
-     * branch so a failed replace never leaks a sibling file.
-     */
-    private static void writeAtomically(Path file, String contents) throws IOException {
-        Path target = Files.exists(file) ? file.toRealPath() : file;
-        Path dir = target.getParent();
-        Path tmp = Files.createTempFile(dir, target.getFileName().toString(), ".frmtr.tmp");
-        try {
-            Files.writeString(tmp, contents, StandardCharsets.UTF_8);
-            if (Files.exists(target)
-                    && Files.getFileStore(target).supportsFileAttributeView(PosixFileAttributeView.class)) {
-                Set<PosixFilePermission> perms = Files.getPosixFilePermissions(target);
-                Files.setPosixFilePermissions(tmp, perms);
-            }
-            try {
-                Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            } catch (AtomicMoveNotSupportedException unsupported) {
-                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
-            }
-        } catch (IOException | RuntimeException | Error failure) {
-            Files.deleteIfExists(tmp);
-            throw failure;
         }
     }
 

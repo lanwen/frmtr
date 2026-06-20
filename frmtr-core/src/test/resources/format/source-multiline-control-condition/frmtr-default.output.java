@@ -8,6 +8,8 @@ class SourceMultilineControlConditionSample {
 
     DispatchWindow dispatchWindow;
 
+    Registry registry;
+
     void selectIf() {
         if (
             routePolicy.accepts(
@@ -80,6 +82,17 @@ class SourceMultilineControlConditionSample {
                     .limit(lines.size() - 2)
                     .map(String::stripLeading)
                     .anyMatch(line -> !line.startsWith("*"))
+        ) {
+            segmentPlan.reserve();
+        }
+    }
+
+    void preserveParenthesizedRegistryPredicate(String routeName) {
+        if (
+            ((this.registry != null
+                && (!this.registry.containsRoute(routeName) || !this.registry.isSingletonRoute(routeName)))
+            || (this.registry instanceof SingletonRouteRegistry singletonRoutes
+                && singletonRoutes.containsSingletonRoute(routeName)))
         ) {
             segmentPlan.reserve();
         }

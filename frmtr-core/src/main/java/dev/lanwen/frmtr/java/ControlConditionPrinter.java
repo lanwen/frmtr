@@ -334,10 +334,24 @@ final class ControlConditionPrinter {
     private Doc brokenCondition(Expression expression) {
         return Doc.concat(
             Doc.text("("),
-            Doc.indent(Doc.concat(Doc.HARD_LINE, brokenExpressionLines.apply(expression))),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, brokenConditionContent(expression))),
             Doc.HARD_LINE,
             Doc.text(")")
         );
+    }
+
+    private Doc brokenConditionContent(Expression expression) {
+        if (
+            expression instanceof EnclosedExpr enclosedExpr
+            && sourceMultilineLogicalConditionExpression(enclosedExpr.getInner())
+        ) {
+            return Doc.concat(
+                Doc.text("("),
+                brokenConditionContent(enclosedExpr.getInner()),
+                Doc.text(")")
+            );
+        }
+        return brokenExpressionLines.apply(expression);
     }
 
     private Optional<Doc> commentedIfCondition(Expression condition) {

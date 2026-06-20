@@ -64,6 +64,17 @@ class SourceMultilineObjectCreationArgumentsSample {
         );
     }
 
+    void localParserFactory(DocumentFactory factory) {
+        ParserConfigurationException failure = new ParserConfigurationException(
+            "Unable to validate using route schema: provider ["
+            + factory
+            + "] does not support namespace rules. Are you running with the archive parser? "
+            + "Upgrade to the extended catalog parser for full schema support."
+        );
+        failure.initCause(factory);
+        throw failure;
+    }
+
     Object listener(LeaseMonitor monitor, LeaseCallbacks callbacks, RetryBudget retryBudget) {
         return new LeaseLifecycleCoordinator(
             monitor.primaryQueue(),

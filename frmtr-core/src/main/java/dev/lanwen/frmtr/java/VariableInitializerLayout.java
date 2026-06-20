@@ -1062,7 +1062,7 @@ final class VariableInitializerLayout {
                             Doc.concat(Doc.text(","), Doc.HARD_LINE),
                             objectCreation.getArguments()
                                     .stream()
-                                    .map(expression)
+                                    .map(this::brokenObjectCreationArgument)
                                     .toList()
                         )
                     )
@@ -1071,6 +1071,20 @@ final class VariableInitializerLayout {
                 Doc.text(")")
             )
         );
+    }
+
+    private Doc brokenObjectCreationArgument(Expression argument) {
+        if (
+            argument instanceof BinaryExpr binaryExpr
+            && (sourceShape.spansMultipleLines(binaryExpr)
+                || layoutWidth.continuationStatement(compact.apply(binaryExpr)) > options.lineWidth())
+        ) {
+            if (binaryExpressionHasLineComments.test(binaryExpr)) {
+                return binaryExpressionLinesWithComments.apply(binaryExpr);
+            }
+            return binaryExpressionLines.apply(binaryExpr, true);
+        }
+        return expression.apply(argument);
     }
 
     private boolean smallConstructorCanStayFlat(String flatName, ObjectCreationExpr objectCreation) {

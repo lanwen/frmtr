@@ -132,7 +132,6 @@ final class LambdaExpressionPrinter {
             currentIndentedWidth
         );
         this.expressionLambdaArguments = new ExpressionLambdaArgumentLayout(
-            rawSource,
             sourceShapePolicy,
             sourceText,
             options,
@@ -151,7 +150,6 @@ final class LambdaExpressionPrinter {
             layoutWidth
         );
         this.lambdaBodyHeaders = new LambdaBodyHeaderLayout(
-            rawSource,
             sourceShapePolicy,
             options,
             expressionRenderer,

@@ -271,8 +271,22 @@ one line at its call-site indentation (`fitsOnOneLine`, which applies a per-site
 `CompactSourceText` and owns the single `lineWidth()` comparison while leaving compact-text generation in that helper),
 and of whether a fluent-chain segment's selector began on a later source line than the previous segment ended
 (`selectorBrokeAfter`, the chain-split definition the method-call chain source planner consults instead of its own range
-arithmetic). `SourceShape` continues to expose its syntax-specific predicate surface and delegates its canonical
-multiline check to the policy. Shared method-call argument helpers keep over-wide and source-multiline argument policies
+arithmetic). The policy also owns the source-shaped containment gate (`hasContainedComments`) that decides whether a
+compact or otherwise source-shaped layout is safe, delegating containment itself to the run-indexed
+`JavaCommentPlacementPolicy.hasContainedComments` rather than re-scanning JavaParser; compact-source reconstruction that
+strips comments on clones keeps its own direct scan because the run index reports an unknown clone as comment-free.
+Raw-recovery text used purely for a layout or fallback is funneled through the policy too (`rawText`,
+`rawTextWithoutOwnComment`, delegating unchanged to `RawSource`), so a printer that only needs source-derived text no
+longer holds a bare `RawSource`; genuine raw-output passes that must account for the comments they emit stay on
+`RawPreservedSource`, and source-equivalent compact text keeps using `RawSource`/`CompactSourceText`. `SourceShape`
+continues to expose its syntax-specific predicate surface and delegates its canonical multiline check to the policy.
+`SourceShapeCouplingGuardTest` keeps the boundary from eroding: it fails if a printer outside the policy and the
+slicing/raw-output/compact/recovery helpers re-introduces either consolidated pattern — a `rawSource....contains("\n")`
+multiline probe or `previous.end.line + 1` blank-line gap arithmetic. The broader "no `getRange().*.line` layout
+arithmetic outside the policy" rule remains a documented review checklist in
+[docs/java-formatter-internals.md](docs/java-formatter-internals.md) rather than a test, because that arithmetic
+legitimately remains in the recovery and source-slicing helpers. Shared method-call argument helpers keep over-wide and
+source-multiline argument policies
 consistent when method calls appear in direct calls, initializers, and try resources. Expression-lambda helpers share
 width plans across call contexts, and expression tails thread statement terminators or separators through expression
 rendering before trailing line comments are placed. See

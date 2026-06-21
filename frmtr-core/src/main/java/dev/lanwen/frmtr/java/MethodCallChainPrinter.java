@@ -131,7 +131,6 @@ final class MethodCallChainPrinter {
         this.blockStatementWidth = blockStatementWidth;
         this.layoutDecisions = context.layoutDecisions;
         this.sourceMultilineLambdaCalls = new SourceMultilineLambdaCallLayout(
-            context.rawSource,
             context.sourceShape,
             expressionRenderer,
             lambdaParameters,

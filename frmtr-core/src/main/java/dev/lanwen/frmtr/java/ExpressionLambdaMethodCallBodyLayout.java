@@ -24,8 +24,6 @@ import java.util.function.ToIntFunction;
  */
 final class ExpressionLambdaMethodCallBodyLayout {
 
-    private final RawSource rawSource;
-
     private final SourceShapePolicy sourceShapePolicy;
 
     private final FormatterOptions options;
@@ -45,7 +43,6 @@ final class ExpressionLambdaMethodCallBodyLayout {
     private final ToIntFunction<String> expressionFirstLineWidth;
 
     ExpressionLambdaMethodCallBodyLayout(
-            RawSource rawSource,
             SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
@@ -56,7 +53,6 @@ final class ExpressionLambdaMethodCallBodyLayout {
             BiFunction<String, MethodCallExpr, Optional<Doc>> packedMethodCallChainBodyRenderer,
             ToIntFunction<String> expressionFirstLineWidth
     ) {
-        this.rawSource = rawSource;
         this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
         this.expressionRenderer = expressionRenderer;

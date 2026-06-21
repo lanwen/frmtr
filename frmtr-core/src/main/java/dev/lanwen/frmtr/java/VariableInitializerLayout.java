@@ -50,8 +50,6 @@ final class VariableInitializerLayout {
 
     private final JavaCommentPlacementPolicy commentPlacement;
 
-    private final RawSource rawSource;
-
     private final SourceShape sourceShape;
 
     private final SourceShapePolicy sourceShapePolicy;
@@ -152,7 +150,6 @@ final class VariableInitializerLayout {
     VariableInitializerLayout(
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
-            RawSource rawSource,
             SourceShape sourceShape,
             SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
@@ -202,7 +199,6 @@ final class VariableInitializerLayout {
     ) {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
-        this.rawSource = rawSource;
         this.sourceShape = sourceShape;
         this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;

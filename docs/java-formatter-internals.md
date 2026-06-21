@@ -202,6 +202,32 @@ Declaration and type printers own Java declaration grammar after `BodyDeclaratio
 
 ## Raw, Compact, And Comment Boundaries
 
+`SourceShapePolicy` is the single per-run home for "should the formatter respect the author's source shape here?"
+decisions, carried on `JavaFormatContext` and built once per run. It owns one canonical definition each of: whether a
+node was already multiline (`wasMultiline`, range-first with a raw-text fallback), whether the author left a blank line
+between source-adjacent nodes (`hadBlankLineBetween` / `hadBlankLineBefore`), whether a node's source-equivalent compact
+form fits on one line (`fitsOnOneLine`), whether a fluent-chain selector broke onto a later source line
+(`selectorBrokeAfter`), and whether a node carries contained comments that make a compact/source-shaped layout unsafe
+(`hasContainedComments`). The containment gate delegates to the run-indexed
+`JavaCommentPlacementPolicy.hasContainedComments` rather than re-scanning JavaParser, so the formatter keeps one
+containment index; compact-source reconstruction that strips comments on clones (`CompactSourceText`) keeps its own
+direct `getAllContainedComments` scan, because the run index reports an unknown clone as comment-free and would change
+which reconstruction path is taken. Layout/fallback raw-text recovery is funneled through `rawText` /
+`rawTextWithoutOwnComment` (delegating unchanged to `RawSource`) so a printer that only needs source-derived text for a
+layout decision no longer holds a bare `RawSource`. The policy deliberately does not absorb `SourceText` slicing,
+`RawPreservedSource` comment accounting, or recovery-boundary rules; it calls them. `SourceShape` still exposes its
+syntax-specific predicate surface and delegates its canonical multiline check here.
+
+`SourceShapeCouplingGuardTest` enforces the two patterns this consolidation drove to zero: no
+`rawSource....contains("\n")` multiline probe and no `previous.end.line + 1` blank-line gap arithmetic outside the
+policy and the slicing/raw-output/compact/recovery allowlist (`SourceShapePolicy`, `SourceShape`, `SourceText`,
+`RawSource`, `RawPreservedSource`, `CompactSourceText`, and the recovered-region planners). The broader rule is a
+**review checklist, not a test**: when reviewing a Java printer change, reject new `getRange().*.line`,
+`getTokenRange()`, or other AST-position layout arithmetic in a printer when an equivalent `SourceShapePolicy` question
+exists, and require new source-shape decisions to be added as a named policy method rather than spelled inline. That
+range arithmetic legitimately remains inside the recovery and source-slicing helpers above, which is why it is a
+checklist item rather than a pattern match.
+
 `RawPreservedSource` is the canonical raw-output boundary for Java printer fallbacks. It wraps `RawSource` output or
 already-computed source-derived text in `Doc.Text` while atomically accounting for comments preserved by that output,
 including the variant where the node's own attached comment has already been emitted separately.

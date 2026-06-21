@@ -43,8 +43,6 @@ final class MethodDeclarationPrinter {
 
     private final JavaCommentPlacementPolicy commentPlacement;
 
-    private final RawSource rawSource;
-
     private final SourceShape sourceShape;
 
     private final SourceShapePolicy sourceShapePolicy;
@@ -80,7 +78,6 @@ final class MethodDeclarationPrinter {
     MethodDeclarationPrinter(
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
-            RawSource rawSource,
             SourceShape sourceShape,
             SourceShapePolicy sourceShapePolicy,
             RawPreservedSource rawPreservedSource,
@@ -100,7 +97,6 @@ final class MethodDeclarationPrinter {
     ) {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
-        this.rawSource = rawSource;
         this.sourceShape = sourceShape;
         this.sourceShapePolicy = sourceShapePolicy;
         this.rawPreservedSource = rawPreservedSource;

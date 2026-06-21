@@ -49,8 +49,6 @@ final class EnumDeclarationPrinter {
 
     private final EnumConstantComments enumConstantComments;
 
-    private final RawSource rawSource;
-
     private final SourceShapePolicy sourceShapePolicy;
 
     private final FormatterOptions options;
@@ -116,7 +114,6 @@ final class EnumDeclarationPrinter {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
         this.enumConstantComments = new EnumConstantComments(context.comments, context.commentPlacementPolicy);
-        this.rawSource = context.rawSource;
         this.sourceShapePolicy = context.sourceShapePolicy;
         this.options = context.options;
         this.sourceText = context.sourceText;

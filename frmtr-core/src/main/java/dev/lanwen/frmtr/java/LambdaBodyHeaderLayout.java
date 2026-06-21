@@ -21,8 +21,6 @@ import java.util.function.ToIntFunction;
  */
 final class LambdaBodyHeaderLayout {
 
-    private final RawSource rawSource;
-
     private final SourceShapePolicy sourceShapePolicy;
 
     private final FormatterOptions options;
@@ -38,7 +36,6 @@ final class LambdaBodyHeaderLayout {
     private final ToIntFunction<String> currentIndentedWidth;
 
     LambdaBodyHeaderLayout(
-            RawSource rawSource,
             SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
@@ -47,7 +44,6 @@ final class LambdaBodyHeaderLayout {
             BiFunction<LambdaExpr, String, Doc> lambdaParametersForHeader,
             ToIntFunction<String> currentIndentedWidth
     ) {
-        this.rawSource = rawSource;
         this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
         this.expressionRenderer = expressionRenderer;

@@ -34,8 +34,6 @@ final class ObjectCreationPrinter {
 
     private final ObjectCreationLayoutPolicy layoutPolicy;
 
-    private final SourceShape sourceShape;
-
     private final TypePrinter types;
 
     private final CommentedExpressionListPrinter commentedExpressionLists;
@@ -73,7 +71,6 @@ final class ObjectCreationPrinter {
     ) {
         this.comments = context.comments;
         this.layoutPolicy = context.objectCreationLayoutPolicy;
-        this.sourceShape = context.sourceShape;
         this.types = types;
         this.commentedExpressionLists = new CommentedExpressionListPrinter(context, expressionRenderer::format);
         this.expressionRenderer = expressionRenderer;

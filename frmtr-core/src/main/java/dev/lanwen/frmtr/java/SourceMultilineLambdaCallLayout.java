@@ -27,8 +27,6 @@ import java.util.function.Function;
  */
 final class SourceMultilineLambdaCallLayout {
 
-    private final RawSource rawSource;
-
     private final SourceShape sourceShape;
 
     private final Function<Expression, Doc> expressionRenderer;
@@ -42,7 +40,6 @@ final class SourceMultilineLambdaCallLayout {
     private final MethodCallArgumentRenderer methodCallArguments;
 
     SourceMultilineLambdaCallLayout(
-            RawSource rawSource,
             SourceShape sourceShape,
             Function<Expression, Doc> expressionRenderer,
             Function<LambdaExpr, String> lambdaParameters,
@@ -50,7 +47,6 @@ final class SourceMultilineLambdaCallLayout {
             Function<MethodCallExpr, String> chainSegmentPrefix,
             MethodCallArgumentRenderer methodCallArguments
     ) {
-        this.rawSource = rawSource;
         this.sourceShape = sourceShape;
         this.expressionRenderer = expressionRenderer;
         this.lambdaParameters = lambdaParameters;

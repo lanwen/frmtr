@@ -34,8 +34,6 @@ import java.util.function.ToIntFunction;
  */
 final class ExpressionLambdaArgumentLayout {
 
-    private final RawSource rawSource;
-
     private final SourceShapePolicy sourceShapePolicy;
 
     private final FormatterOptions options;
@@ -73,7 +71,6 @@ final class ExpressionLambdaArgumentLayout {
     private final ExpressionLambdaClosingLayout closingLayout;
 
     ExpressionLambdaArgumentLayout(
-            RawSource rawSource,
             SourceShapePolicy sourceShapePolicy,
             SourceText sourceText,
             FormatterOptions options,
@@ -91,7 +88,6 @@ final class ExpressionLambdaArgumentLayout {
             ToIntFunction<String> blockStatementWidth,
             LayoutWidth layoutWidth
     ) {
-        this.rawSource = rawSource;
         this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
@@ -107,10 +103,9 @@ final class ExpressionLambdaArgumentLayout {
         this.lambdaParametersShouldBreak = lambdaParametersShouldBreak;
         this.blockStatementWidth = blockStatementWidth;
         this.layoutWidth = layoutWidth;
-        this.textBlockArguments = new TextBlockArgumentSourceLayout(sourceText, options, rawSource::raw);
+        this.textBlockArguments = new TextBlockArgumentSourceLayout(sourceText, options, sourceShapePolicy::rawText);
         this.closingLayout = new ExpressionLambdaClosingLayout();
         this.methodCallBodies = new ExpressionLambdaMethodCallBodyLayout(
-            rawSource,
             sourceShapePolicy,
             options,
             expressionRenderer,

@@ -47,8 +47,6 @@ final class ConditionalExpressionPrinter {
 
     private final FormatterOptions options;
 
-    private final RawSource rawSource;
-
     private final SourceShape sourceShape;
 
     private final SourceShapePolicy sourceShapePolicy;
@@ -125,7 +123,6 @@ final class ConditionalExpressionPrinter {
     ) {
         this.comments = context.comments;
         this.options = context.options;
-        this.rawSource = context.rawSource;
         this.sourceShape = context.sourceShape;
         this.sourceShapePolicy = context.sourceShapePolicy;
         this.compactSource = context.compactSource;

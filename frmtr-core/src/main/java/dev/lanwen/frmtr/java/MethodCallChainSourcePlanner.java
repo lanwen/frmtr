@@ -157,7 +157,7 @@ final class MethodCallChainSourcePlanner {
     ) {
         List<MethodCallExpr> calls = new ArrayList<>();
         Expression root = methodCallChainRoot(expression, calls);
-        boolean rootHasComments = !root.getAllContainedComments().isEmpty();
+        boolean rootHasComments = sourceShapePolicy.hasContainedComments(root);
         boolean rootHasBlockLambdaArgument = root instanceof MethodCallExpr methodRoot
             && segmentHasBlockLambdaArgument.test(methodRoot);
         boolean hasTrailingLineComments = chainHasTrailingLineComments.test(calls);
@@ -221,7 +221,7 @@ final class MethodCallChainSourcePlanner {
             } else if (
                 analysis.firstCommentedSegment() == 0
                 && root instanceof FieldAccessExpr
-                && !root.getAllContainedComments().isEmpty()
+                && sourceShapePolicy.hasContainedComments(root)
                 && calls.size() > 1
             ) {
                 root = calls.getFirst();

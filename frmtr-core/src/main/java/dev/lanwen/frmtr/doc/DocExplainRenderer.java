@@ -91,20 +91,17 @@ public final class DocExplainRenderer {
                     if (mode == Mode.FLAT) {
                         advance(" ");
                     } else {
-                        flushLineSuffixes();
                         newline(indent);
                     }
                     return Builder.leaf();
                 }
                 case Doc.SoftLine ignored -> {
                     if (mode == Mode.BREAK) {
-                        flushLineSuffixes();
                         newline(indent);
                     }
                     return Builder.leaf();
                 }
                 case Doc.HardLine ignored -> {
-                    flushLineSuffixes();
                     newline(indent);
                     if (enclosingLabel != null) {
                         enclosingLabel.forcedLineBreaks++;
@@ -181,6 +178,9 @@ public final class DocExplainRenderer {
         }
 
         private void newline(int indent) {
+            // Flush buffered line suffixes before resetting the column, mirroring DocRenderer.newline so every break path
+            // (Line, SoftLine, HardLine) replays suffix content on the line being closed rather than the next one.
+            flushLineSuffixes();
             column = options.indentUnit().length() * indent;
         }
     }

@@ -77,10 +77,6 @@ final class CommentPresenceDiagnosticTest {
     private static Map<String, String> knownDrops() {
         Map<String, String> drops = new TreeMap<>();
 
-        // -- P0: drops on NORMAL (verbatim @default) input; the committed golden output is itself lossy. --
-        // comment-complex-block-statements: one of two `/* dead code */` block comments dropped (37 -> 36).
-        drops.put("comment-complex-block-statements @ default", "S9 backlog (P0): \"dead code\"");
-
         // -- P1: drops only when whitespace is perturbed; shape-dependent ownership (B1 evidence). --
 
         // control-condition / if

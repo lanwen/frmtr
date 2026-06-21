@@ -72,6 +72,7 @@ public class ComplexCommentBlocks {
             break;
             /*dead code*/
             return;
+            /*dead code*/
         } /*at least one iteration !*/ while (false);
         synchronized (/*declares synchronizd statement*/ this) {
             while (/*infinite*/ true)

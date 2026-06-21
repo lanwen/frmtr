@@ -123,6 +123,27 @@ final class DocDebugRendererTest {
     }
 
     @Test
+    void rendersConditionalGroupAlternativesUnderNumberedHeaders() {
+        Doc doc = Doc.conditionalGroup(
+            java.util.List.of(Doc.text("compact"), Doc.concat(Doc.text("broken"), Doc.HARD_LINE, Doc.text("tail")))
+        );
+
+        String rendered = DocDebugRenderer.render(doc);
+
+        assertThat(rendered).isEqualTo(
+            """
+                ConditionalGroup
+                  alt 0:
+                    Text("compact")
+                  alt 1:
+                    Concat
+                      Text("broken")
+                      HardLine
+                      Text("tail")"""
+        );
+    }
+
+    @Test
     void rendersBreakParentMarker() {
         Doc doc = Doc.concat(Doc.text("value"), Doc.BREAK_PARENT);
 

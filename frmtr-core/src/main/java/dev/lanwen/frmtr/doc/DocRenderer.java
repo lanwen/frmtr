@@ -78,6 +78,7 @@ public final class DocRenderer {
                 render(group.doc(), indent, next, widths);
             }
             case Doc.Fill fill -> renderFill(fill.parts(), indent, widths);
+            case Doc.ConditionalGroup conditionalGroup -> renderConditionalGroup(conditionalGroup.alternatives(), indent, widths);
             case Doc.IfBreak conditional -> {
                 // An identified IfBreak follows the recorded mode of its target group (which must have rendered first);
                 // an anonymous IfBreak follows the ambient mode. A target that has not rendered yet is treated as flat.
@@ -122,6 +123,29 @@ public final class DocRenderer {
             render(separator, indent, separatorMode, widths);
             render(nextContent, indent, Mode.FLAT, widths);
         }
+    }
+
+    /**
+     * Renders a {@link Doc.ConditionalGroup} by choosing the first alternative (in order, including the last) whose flat
+     * layout fits the space left on the current line and rendering it flat; if no alternative fits, the last is rendered
+     * in break mode as the unconditional fallback. This mirrors the {@link Doc.Group} fit decision but over an ordered
+     * list of candidates: each candidate is probed with the shared {@link DocWidths} authority (the same question a group
+     * asks itself), so a conditional group composes with the renderer's memoized, bounded width measurement and resolves
+     * to exactly the layout a printer's {@code Optional<Doc>} width-probe chain would have selected. An empty alternative
+     * list renders nothing.
+     */
+    private void renderConditionalGroup(List<Doc> alternatives, int indent, DocWidths.Measurement widths) {
+        if (alternatives.isEmpty()) {
+            return;
+        }
+        for (Doc alternative : alternatives) {
+            if (widths.fits(alternative, options.lineWidth() - column)) {
+                render(alternative, indent, Mode.FLAT, widths);
+                return;
+            }
+        }
+        // No alternative fits flat, so render the last one in break mode as the unconditional fallback.
+        render(alternatives.getLast(), indent, Mode.BREAK, widths);
     }
 
     private void append(String value) {
@@ -173,6 +197,8 @@ public final class DocRenderer {
             case Doc.HardLine ignored -> true;
             case Doc.Concat concat -> concat.docs().stream().anyMatch(DocRenderer::containsHardLine);
             case Doc.Fill fill -> fill.parts().stream().anyMatch(DocRenderer::containsHardLine);
+            case Doc.ConditionalGroup conditionalGroup ->
+                conditionalGroup.alternatives().stream().anyMatch(DocRenderer::containsHardLine);
             case Doc.Indent indented -> containsHardLine(indented.doc());
             case Doc.Group group -> containsHardLine(group.doc());
             case Doc.Label label -> containsHardLine(label.doc());

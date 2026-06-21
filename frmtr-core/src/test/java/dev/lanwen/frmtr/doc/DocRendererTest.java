@@ -219,6 +219,90 @@ final class DocRendererTest {
     }
 
     @Test
+    void conditionalGroupRendersTheFirstAlternativeThatFitsFlat() {
+        Doc doc = Doc.conditionalGroup(
+            java.util.List.of(Doc.text("compact"), Doc.text("a-much-wider-fallback-layout"))
+        );
+
+        // "compact" (7) fits in 20 columns, so the first alternative wins and renders flat; the wider fallback is never
+        // reached.
+        assertThat(renderer(20).render(doc)).isEqualTo("compact");
+    }
+
+    @Test
+    void conditionalGroupSkipsAlternativesThatDoNotFitAndPicksTheFirstThatDoes() {
+        Doc wide = Doc.text("this-first-alternative-is-too-wide");
+        Doc medium = Doc.text("middle-fits");
+        Doc fallback = Doc.text("last");
+        Doc doc = Doc.conditionalGroup(java.util.List.of(wide, medium, fallback));
+
+        // At 20 columns the 34-wide first alternative overflows and is skipped; "middle-fits" (11) fits and is chosen,
+        // so the third alternative is never considered even though it is narrower.
+        assertThat(renderer(20).render(doc)).isEqualTo("middle-fits");
+    }
+
+    @Test
+    void conditionalGroupFallsBackToTheLastAlternativeInBreakModeWhenNoneFit() {
+        // The fallback alternative is mode-sensitive at its top level: a bare soft-line layout (not re-wrapped in a Group,
+        // which would re-decide its own mode). Every alternative, including this last one, is too wide to fit flat at 20
+        // columns ("(payloadpayloadpayload)" is 23 wide), so no alternative fits and the last renders in BREAK mode,
+        // splitting its soft lines.
+        Doc fallback = Doc.concat(
+            Doc.text("("),
+            Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.text("payloadpayloadpayload"))),
+            Doc.SOFT_LINE,
+            Doc.text(")")
+        );
+        Doc doc = Doc.conditionalGroup(
+            java.util.List.of(Doc.text("first-alternative-too-wide"), Doc.text("second-too-wide-as-well"), fallback)
+        );
+
+        assertThat(renderer(20).render(doc)).isEqualTo(
+            """
+                (
+                  payloadpayloadpayload
+                )"""
+        );
+    }
+
+    @Test
+    void conditionalGroupRendersTheLastAlternativeFlatWhenItIsTheFirstThatFits() {
+        // The last alternative is fairly flat-probed too: when every earlier alternative overflows but the last fits
+        // flat, it is the first that fits and renders FLAT (not as the break-mode fallback). The same mode-sensitive
+        // layout that broke in the previous test stays on one line here because it now fits.
+        Doc layout = Doc.concat(
+            Doc.text("("),
+            Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.text("payload"))),
+            Doc.SOFT_LINE,
+            Doc.text(")")
+        );
+        Doc doc = Doc.conditionalGroup(java.util.List.of(Doc.text("first-alternative-too-wide"), layout));
+
+        // At 20 columns the 26-wide first alternative overflows, so the loop reaches the last alternative; its 9-wide
+        // flat layout fits, so it renders FLAT: "(payload)" on one line with its soft lines collapsed, rather than broken
+        // as the fallback path would render it.
+        assertThat(renderer(20).render(doc)).isEqualTo("(payload)");
+    }
+
+    @Test
+    void conditionalGroupContributesItsFirstAlternativeWidthToAnEnclosingGroup() {
+        // An enclosing group measures a conditional group by its first (most-flat) alternative. The first alternative is
+        // 5 wide ("FIRST"); a much wider second alternative exists but must not influence the enclosing group's own
+        // flat/break decision.
+        Doc conditional = Doc.conditionalGroup(
+            java.util.List.of(Doc.text("FIRST"), Doc.text("a-far-wider-second-alternative-layout"))
+        );
+        Doc doc = Doc.group(
+            Doc.concat(Doc.text("["), Doc.indent(Doc.concat(Doc.SOFT_LINE, conditional)), Doc.SOFT_LINE, Doc.text("]"))
+        );
+
+        // The enclosing group measures "[" + "FIRST" + "]" = 7 against the limit. At 20 columns that fits even though the
+        // second alternative (37 wide) would overflow it, so the group stays flat and the first alternative renders. Had
+        // the wider second alternative driven the measurement, the group would have broken.
+        assertThat(renderer(20).render(doc)).isEqualTo("[FIRST]");
+    }
+
+    @Test
     void ifBreakBoundToNamedGroupFollowsThatGroupsBreakModeNotTheAmbientMode() {
         // The named "opener" group contains a BreakParent, so it can never stay flat and renders in break mode. The
         // dependent group around the ifBreak is tiny ("x[flat]" = 7 wide) and fits the 20-column limit, so its ambient

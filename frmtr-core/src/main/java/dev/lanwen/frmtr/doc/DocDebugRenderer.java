@@ -1,5 +1,7 @@
 package dev.lanwen.frmtr.doc;
 
+import java.util.List;
+
 /**
  * Renders a stable structural view of formatter documents for internal diagnostics and focused tests.
  *
@@ -38,6 +40,14 @@ public final class DocDebugRenderer {
             case Doc.Fill fill -> {
                 appendLine(out, depth, "Fill");
                 fill.parts().forEach(part -> render(part, out, depth + 1));
+            }
+            case Doc.ConditionalGroup conditionalGroup -> {
+                appendLine(out, depth, "ConditionalGroup");
+                List<Doc> alternatives = conditionalGroup.alternatives();
+                for (int index = 0; index < alternatives.size(); index++) {
+                    appendLine(out, depth + 1, "alt " + index + ":");
+                    render(alternatives.get(index), out, depth + 2);
+                }
             }
             case Doc.Line ignored -> appendLine(out, depth, "Line");
             case Doc.SoftLine ignored -> appendLine(out, depth, "SoftLine");

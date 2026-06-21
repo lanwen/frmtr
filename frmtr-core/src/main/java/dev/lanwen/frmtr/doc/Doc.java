@@ -8,6 +8,7 @@ public sealed interface Doc
     permits
         Doc.BreakParent,
         Doc.Concat,
+        Doc.ConditionalGroup,
         Doc.Fill,
         Doc.Group,
         Doc.HardLine,
@@ -153,6 +154,23 @@ public sealed interface Doc
     }
 
     /**
+     * Picks the first alternative whose flat-or-break layout fits the space left on the current line, falling back to the
+     * last alternative when none fit. This is the IR form of the {@code Optional<Doc>} "try layout A, else B, else C"
+     * fallback chains printers hand-roll: instead of a printer probing widths and returning the first non-empty
+     * candidate, it hands the renderer an ordered list of alternatives and lets the renderer's own fit measurement pick.
+     *
+     * <p>An alternative is accepted when it fits flat on the remaining width and renders flat; otherwise the next is
+     * tried, and the last alternative is the unconditional fallback rendered in break mode. The order encodes preference
+     * (most compact first, most broken last), so the caller owns ranking the layouts and ensuring the final one is a
+     * layout that always works at any width — the renderer only chooses among what it is given and never invents a new
+     * layout. An empty list renders nothing. For width purposes an enclosing group measures a conditional group by its
+     * first (most-flat) alternative, the same representative-width convention Prettier uses.
+     */
+    static Doc conditionalGroup(List<Doc> alternatives) {
+        return new ConditionalGroup(List.copyOf(alternatives));
+    }
+
+    /**
      * Defers {@code content} to the end of the current line: it renders nothing at this position and flushes just before
      * the next line break (or at end of document). Used for trailing comments so the code preceding them is laid out and
      * width-measured as if the comment were absent — the comment can never push that code over the line width or change
@@ -183,6 +201,9 @@ public sealed interface Doc
 
     /** Alternating {@code [content, separator, content, …]} laid out by greedy per-separator packing; see {@link #fill}. */
     record Fill(List<Doc> parts) implements Doc {}
+
+    /** Ordered layout alternatives; the first that fits wins, the last is the fallback. See {@link #conditionalGroup}. */
+    record ConditionalGroup(List<Doc> alternatives) implements Doc {}
 
     record Line() implements Doc {}
 

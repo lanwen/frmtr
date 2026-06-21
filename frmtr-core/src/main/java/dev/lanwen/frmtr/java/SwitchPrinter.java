@@ -51,6 +51,8 @@ final class SwitchPrinter {
 
     private final RawSource rawSource;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final RawPreservedSource rawPreservedSource;
 
     private final FormatterOptions options;
@@ -153,6 +155,7 @@ final class SwitchPrinter {
     ) {
         this.comments = context.comments;
         this.rawSource = context.rawSource;
+        this.sourceShapePolicy = context.sourceShapePolicy;
         this.rawPreservedSource = context.rawPreservedSource;
         this.options = context.options;
         this.sourceText = context.sourceText;

@@ -31,6 +31,8 @@ final class ModuleDeclarationPrinter {
 
     private final CommentTracker comments;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final RawSource rawSource;
 
     private final RawPreservedSource rawPreservedSource;
@@ -51,6 +53,7 @@ final class ModuleDeclarationPrinter {
 
     ModuleDeclarationPrinter(
             CommentTracker comments,
+            SourceShapePolicy sourceShapePolicy,
             RawSource rawSource,
             RawPreservedSource rawPreservedSource,
             CommentedModulePrinter commentedModules,
@@ -62,6 +65,7 @@ final class ModuleDeclarationPrinter {
             boolean recoverParseProblems
     ) {
         this.comments = comments;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.rawSource = rawSource;
         this.rawPreservedSource = rawPreservedSource;
         this.commentedModules = commentedModules;

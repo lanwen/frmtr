@@ -36,7 +36,7 @@ final class ReturnExpressionPrinter {
 
     private final ObjectCreationLayoutPolicy objectCreationLayoutPolicy;
 
-    private final SourceShape sourceShape;
+    private final SourceShapePolicy sourceShapePolicy;
 
     private final Function<Expression, Doc> expression;
 
@@ -94,7 +94,7 @@ final class ReturnExpressionPrinter {
             FormatterOptions options,
             LayoutWidth layoutWidth,
             ObjectCreationLayoutPolicy objectCreationLayoutPolicy,
-            SourceShape sourceShape,
+            SourceShapePolicy sourceShapePolicy,
             Function<Expression, Doc> expression,
             ExpressionTailRenderer expressionWithTail,
             Function<LambdaExpr, Doc> brokenLambdaExpression,
@@ -121,7 +121,7 @@ final class ReturnExpressionPrinter {
         this.options = options;
         this.layoutWidth = layoutWidth;
         this.objectCreationLayoutPolicy = objectCreationLayoutPolicy;
-        this.sourceShape = sourceShape;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.expression = expression;
         this.expressionWithTail = expressionWithTail;
         this.brokenLambdaExpression = brokenLambdaExpression;
@@ -148,7 +148,7 @@ final class ReturnExpressionPrinter {
         this.binaryReturns = new ReturnBinaryExpressionLayout(
             options,
             layoutWidth,
-            sourceShape,
+            sourceShapePolicy,
             expression,
             compact,
             continuationStatementWidth,
@@ -265,7 +265,7 @@ final class ReturnExpressionPrinter {
         if (
             expression instanceof EnclosedExpr enclosedExpr
             && enclosedExpr.getInner() instanceof BinaryExpr binaryExpr
-            && sourceShape.spansMultipleLines(expression)
+            && sourceShapePolicy.wasMultiline(expression)
         ) {
             return Optional.of(binaryExpr);
         }
@@ -278,7 +278,7 @@ final class ReturnExpressionPrinter {
     }
 
     private boolean sourceSpansMultipleLines(Expression expression) {
-        return sourceShape.spansMultipleLines(expression);
+        return sourceShapePolicy.wasMultiline(expression);
     }
 
     private boolean returnLineFits(Expression expression, LayoutWidth.LineBudget lineBudget) {

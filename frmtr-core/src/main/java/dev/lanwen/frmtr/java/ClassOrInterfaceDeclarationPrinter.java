@@ -43,6 +43,8 @@ final class ClassOrInterfaceDeclarationPrinter {
 
     private final CommentTracker comments;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final RawSource rawSource;
 
     private final RawPreservedSource rawPreservedSource;
@@ -73,6 +75,7 @@ final class ClassOrInterfaceDeclarationPrinter {
 
     ClassOrInterfaceDeclarationPrinter(
             CommentTracker comments,
+            SourceShapePolicy sourceShapePolicy,
             RawSource rawSource,
             RawPreservedSource rawPreservedSource,
             FormatterOptions options,
@@ -89,6 +92,7 @@ final class ClassOrInterfaceDeclarationPrinter {
             Function<ClassOrInterfaceDeclaration, Doc> memberBlock
     ) {
         this.comments = comments;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.rawSource = rawSource;
         this.rawPreservedSource = rawPreservedSource;
         this.options = options;

@@ -92,6 +92,7 @@ final class DeclarationPrinters {
         );
         this.moduleDeclarations = new ModuleDeclarationPrinter(
             comments,
+            context.sourceShapePolicy,
             rawSource,
             rawPreservedSource,
             new CommentedModulePrinter(),
@@ -120,8 +121,8 @@ final class DeclarationPrinters {
         this.fields = new FieldDeclarationPrinter(
             comments,
             commentPlacementPolicy,
+            context.sourceShapePolicy,
             rawSource,
-            context.sourceShape,
             options,
             context.layoutWidth,
             declarationPrefixes::declarationAnnotations,
@@ -205,6 +206,7 @@ final class DeclarationPrinters {
         );
         this.classOrInterfaces = new ClassOrInterfaceDeclarationPrinter(
             comments,
+            context.sourceShapePolicy,
             rawSource,
             rawPreservedSource,
             options,
@@ -231,8 +233,8 @@ final class DeclarationPrinters {
         this.methods = new MethodDeclarationPrinter(
             comments,
             context.commentPlacementPolicy,
+            context.sourceShapePolicy,
             rawSource,
-            context.sourceShape,
             rawPreservedSource,
             commentedMethodSignatures,
             callableSignatures,
@@ -265,6 +267,7 @@ final class DeclarationPrinters {
         this.records = new RecordDeclarationPrinter(
             comments,
             commentPlacementPolicy,
+            context.sourceShapePolicy,
             options,
             declarationPrefixes::annotations,
             declarationPrefixes::modifiers,

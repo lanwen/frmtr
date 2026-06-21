@@ -43,6 +43,8 @@ final class ModuleBlockPrinter {
 
     private final CommentTracker comments;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final FormatterOptions options;
 
     private final SourceText sourceText;
@@ -66,6 +68,7 @@ final class ModuleBlockPrinter {
             Function<ModuleRequiresDirective, String> requiresModifiers
     ) {
         this.comments = context.comments;
+        this.sourceShapePolicy = context.sourceShapePolicy;
         this.options = context.options;
         this.sourceText = context.sourceText;
         this.recoveredListPlanner = context.recoveredListPlanner;
@@ -121,11 +124,7 @@ final class ModuleBlockPrinter {
      * Chooses a single line break or a blank line from the directives' original source ranges.
      */
     private Doc moduleDirectiveSeparator(ModuleDirective previous, ModuleDirective current) {
-        boolean hasBlankLineBetween = previous.getRange()
-                .flatMap(previousRange -> current.getRange().map(
-                        currentRange -> currentRange.begin.line > previousRange.end.line + 1
-                ))
-                .orElse(false);
+        boolean hasBlankLineBetween = sourceShapePolicy.hadBlankLineBetween(previous, current);
         return hasBlankLineBetween ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;
     }
 

@@ -24,7 +24,7 @@ import java.util.function.ToIntFunction;
  */
 final class BreakableArgumentExpressionPrinter {
 
-    private final SourceShape sourceShape;
+    private final SourceShapePolicy sourceShapePolicy;
 
     private final FormatterOptions options;
 
@@ -39,14 +39,14 @@ final class BreakableArgumentExpressionPrinter {
     private final ToIntFunction<String> continuationStatementWidth;
 
     BreakableArgumentExpressionPrinter(
-            SourceShape sourceShape,
+            SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
             Function<Expression, Doc> expressionRenderer,
             Function<Expression, Optional<Doc>> brokenArgumentRenderer,
             Function<Expression, String> compact,
             ToIntFunction<String> continuationStatementWidth
     ) {
-        this.sourceShape = sourceShape;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.brokenArgumentRenderer = brokenArgumentRenderer;
@@ -69,7 +69,7 @@ final class BreakableArgumentExpressionPrinter {
         Optional<Doc> broken = brokenArgument(argument);
         if (
             broken.isPresent()
-            && (sourceShape.spansMultipleLines(argument)
+            && (sourceShapePolicy.wasMultiline(argument)
                 || conditionalArgumentLineOverflows(argument, suffix)
                 || continuationStatementWidth.applyAsInt(compact.apply(argument) + suffix) > options.lineWidth())
         ) {
@@ -90,7 +90,7 @@ final class BreakableArgumentExpressionPrinter {
         Optional<Doc> broken = brokenArgument(argument);
         if (
             broken.isPresent()
-            && (sourceShape.spansMultipleLines(argument)
+            && (sourceShapePolicy.wasMultiline(argument)
                 || sourceMultilineMethodCallArguments(argument)
                 || conditionalArgumentLineOverflows(argument, suffix)
                 || continuationStatementWidth.applyAsInt(compact.apply(argument) + suffix) > options.lineWidth())
@@ -117,7 +117,7 @@ final class BreakableArgumentExpressionPrinter {
 
     private boolean sourceMultilineMethodCallArguments(Expression argument) {
         return argument instanceof MethodCallExpr methodCall
-            && sourceShape.methodCallArgumentsSpanMultipleLines(methodCall);
+            && sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall);
     }
 
     private boolean binaryPlusContainsSourceMultilineMethodCallArgument(Expression argument) {

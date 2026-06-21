@@ -43,9 +43,9 @@ final class MethodDeclarationPrinter {
 
     private final JavaCommentPlacementPolicy commentPlacement;
 
-    private final RawSource rawSource;
+    private final SourceShapePolicy sourceShapePolicy;
 
-    private final SourceShape sourceShape;
+    private final RawSource rawSource;
 
     private final RawPreservedSource rawPreservedSource;
 
@@ -78,8 +78,8 @@ final class MethodDeclarationPrinter {
     MethodDeclarationPrinter(
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
+            SourceShapePolicy sourceShapePolicy,
             RawSource rawSource,
-            SourceShape sourceShape,
             RawPreservedSource rawPreservedSource,
             CommentedMethodSignaturePrinter commentedMethodSignatures,
             CallableSignaturePrinter callableSignatures,
@@ -97,8 +97,8 @@ final class MethodDeclarationPrinter {
     ) {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.rawSource = rawSource;
-        this.sourceShape = sourceShape;
         this.rawPreservedSource = rawPreservedSource;
         this.commentedMethodSignatures = commentedMethodSignatures;
         this.callableSignatures = callableSignatures;
@@ -147,7 +147,7 @@ final class MethodDeclarationPrinter {
         String signature = returnType + " " + declaration.getNameAsString();
         prefix += signature;
         boolean breakReturnType = shouldBreakReturnType(declaration, prefix);
-        boolean sourceParametersBreak = sourceShape.callableParametersSpanMultipleLines(declaration);
+        boolean sourceParametersBreak = sourceShapePolicy.callableParametersSpanMultipleLines(declaration);
         boolean parametersBreak = !breakReturnType
             && callableSignatures.parametersBreak(prefix, declaration, methodParameterSuffix(declaration));
         boolean compactContinuationParameters = !declaration.getThrownExceptions().isEmpty();
@@ -160,7 +160,7 @@ final class MethodDeclarationPrinter {
                     declaration.getParameters(),
                     declaration.getThrownExceptions(),
                     declaration.getBody().isPresent() ? " {" : ";",
-                    sourceShape.throwsStartsOnOwnLine(declaration),
+                    sourceShapePolicy.throwsStartsOnOwnLine(declaration),
                     sourceParametersBreak || parametersBreak
                 )
             );
@@ -304,7 +304,7 @@ final class MethodDeclarationPrinter {
     private boolean shouldBreakReturnType(MethodDeclaration declaration, String prefix) {
         return declaration.getReceiverParameter().isEmpty()
             && typeCanBreak.test(declaration.getType())
-            && sourceShape.spansMultipleLines(declaration.getType())
+            && sourceShapePolicy.wasMultiline(declaration.getType())
             && callableSignatures.parametersBreak(prefix, declaration, methodParameterSuffix(declaration));
     }
 

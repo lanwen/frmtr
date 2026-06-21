@@ -35,6 +35,8 @@ final class MemberBlockPrinter {
 
     private final JavaCommentPlacementPolicy commentPlacement;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final SourceText sourceText;
 
     private final RecoveredListPlanner recoveredListPlanner;
@@ -56,6 +58,7 @@ final class MemberBlockPrinter {
     ) {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
+        this.sourceShapePolicy = context.sourceShapePolicy;
         this.sourceText = context.sourceText;
         this.recoveredListPlanner = context.recoveredListPlanner;
         this.rawGaps = new RecoveredRawGapPrinter(context, MemberBlockPrinter::memberDeclarationListRecoveryFailure);
@@ -580,8 +583,7 @@ final class MemberBlockPrinter {
         if (hasPragma.test(previous) || hasPragma.test(current)) {
             return Doc.HARD_LINE;
         }
-        Optional<Boolean> hasSourceBlankLineBetween = hasSourceBlankLineBetween(previous, current);
-        if (hasSourceBlankLineBetween.orElse(false)) {
+        if (hasSourceBlankLineBetween(previous, current)) {
             return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
         }
         // Interface methods without bodies read as a signature list unless annotations make each item standalone.
@@ -604,11 +606,11 @@ final class MemberBlockPrinter {
         return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
     }
 
-    private Optional<Boolean> hasSourceBlankLineBetween(BodyDeclaration<?> previous, BodyDeclaration<?> current) {
-        return previous.getRange()
-                .flatMap(previousRange -> current.getRange().map(
-                        currentRange -> currentRange.begin.line > previousRange.end.line + 1
-                ));
+    private boolean hasSourceBlankLineBetween(BodyDeclaration<?> previous, BodyDeclaration<?> current) {
+        // SourceShapePolicy.hadBlankLineBetween already returns false when either node lacks a source range, so the
+        // missing-range case needs no separate guard here; an absent range and a present-but-no-gap range both mean
+        // "the author did not leave a blank line".
+        return sourceShapePolicy.hadBlankLineBetween(previous, current);
     }
 
     private enum EntryKind {

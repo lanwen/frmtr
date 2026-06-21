@@ -47,7 +47,7 @@ final class MethodCallPrinter {
 
     private final JavaCommentPlacementPolicy commentPlacement;
 
-    private final SourceShape sourceShape;
+    private final SourceShapePolicy sourceShapePolicy;
 
     private final FormatterOptions options;
 
@@ -120,7 +120,7 @@ final class MethodCallPrinter {
     ) {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
-        this.sourceShape = context.sourceShape;
+        this.sourceShapePolicy = context.sourceShapePolicy;
         this.options = context.options;
         this.layoutWidth = context.layoutWidth;
         this.compactSource = context.compactSource;
@@ -148,7 +148,7 @@ final class MethodCallPrinter {
         this.objectCreationWithSuffix = objectCreationWithSuffix;
         this.brokenArgumentExpressionRenderer = brokenArgumentExpressionRenderer;
         this.breakableArguments = new BreakableArgumentExpressionPrinter(
-            context.sourceShape,
+            context.sourceShapePolicy,
             context.options,
             expressionRenderer,
             brokenArgumentExpressionRenderer,
@@ -621,7 +621,7 @@ final class MethodCallPrinter {
     }
 
     boolean hasSourceMultilineExpressionLambdaBody(MethodCallExpr expression) {
-        return SourceMultilineLambdaCallLayout.hasMultilineExpressionLambdaMethodCallBody(expression, sourceShape);
+        return SourceMultilineLambdaCallLayout.hasMultilineExpressionLambdaMethodCallBody(expression, sourceShapePolicy);
     }
 
     MethodCallChainSourcePlanner.InitializerChainShape methodCallChainInitializerShape(MethodCallExpr expression) {
@@ -714,8 +714,8 @@ final class MethodCallPrinter {
             || hasSingleAttachableObjectCreationArgument(expression)
             || hasSingleAttachableMethodCallArgument(expression)
             || (hasHuggableExpressionLambdaArgument(expression)
-                && sourceShape.expressionLambdaStartsOnSelectorLine(expression))
-            || !sourceShape.methodCallArgumentsSpanMultipleLines(expression)
+                && sourceShapePolicy.expressionLambdaStartsOnSelectorLine(expression))
+            || !sourceShapePolicy.methodCallArgumentsSpanMultipleLines(expression)
         ) {
             return Optional.empty();
         }
@@ -785,8 +785,8 @@ final class MethodCallPrinter {
     private boolean hasSingleAttachableObjectCreationArgument(MethodCallExpr expression) {
         return expression.getArguments().size() == 1
             && expression.getArgument(0) instanceof ObjectCreationExpr objectCreation
-            && sourceShape.objectCreationArgumentsSpanMultipleLines(objectCreation)
-            && sourceShape.startsOnSameLine(expression.getName(), objectCreation)
+            && sourceShapePolicy.objectCreationArgumentsSpanMultipleLines(objectCreation)
+            && sourceShapePolicy.startsOnSameLine(expression.getName(), objectCreation)
             && objectCreation.getAnonymousClassBody().isEmpty()
             && objectCreation.getAllContainedComments().isEmpty();
     }
@@ -794,8 +794,8 @@ final class MethodCallPrinter {
     private boolean hasSingleAttachableMethodCallArgument(MethodCallExpr expression) {
         return expression.getArguments().size() == 1
             && expression.getArgument(0) instanceof MethodCallExpr methodCall
-            && sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
-            && sourceShape.startsOnSameLine(expression.getName(), methodCall)
+            && sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall)
+            && sourceShapePolicy.startsOnSameLine(expression.getName(), methodCall)
             && methodCall.getAllContainedComments().isEmpty();
     }
 
@@ -811,7 +811,7 @@ final class MethodCallPrinter {
             || !expression.getAllContainedComments().isEmpty()
             || sourceMultilineChainWithConditionalLambda(expression)
             || sourceMultilineMethodCallScope(expression)
-            || !sourceShape.expressionLambdaStartsOnSelectorLine(expression)
+            || !sourceShapePolicy.expressionLambdaStartsOnSelectorLine(expression)
             || !expressionLambdaSpansMultipleLines(expression)
         ) {
             return Optional.empty();
@@ -920,7 +920,7 @@ final class MethodCallPrinter {
         return expression.getScope()
                 .filter(MethodCallExpr.class::isInstance)
                 .map(MethodCallExpr.class::cast)
-                .filter(sourceShape::spansMultipleLines)
+                .filter(sourceShapePolicy::wasMultiline)
                 .map(scope -> Doc.concat(
                         expressionRenderer.apply(scope),
                         Doc.text("." + methodCallSelector(expression) + "(")
@@ -1035,7 +1035,7 @@ final class MethodCallPrinter {
         List<MethodCallExpr> calls = new ArrayList<>();
         Expression cursor = expression;
         while (cursor instanceof MethodCallExpr call) {
-            if (call.getScope().isEmpty() || sourceShape.methodCallArgumentsSpanMultipleLines(call)) {
+            if (call.getScope().isEmpty() || sourceShapePolicy.methodCallArgumentsSpanMultipleLines(call)) {
                 return Optional.empty();
             }
             calls.add(0, call);
@@ -1062,7 +1062,7 @@ final class MethodCallPrinter {
 
     private Optional<Doc> compactMethodCallArgumentWithSuffix(MethodCallExpr expression, String suffix) {
         List<JavaCommentTrivia> trailingComments = methodCallArgumentTrailingLineComments(expression);
-        if (trailingComments.isEmpty() && sourceShape.spansMultipleLines(expression)) {
+        if (trailingComments.isEmpty() && sourceShapePolicy.wasMultiline(expression)) {
             return Optional.empty();
         }
         if (!trailingComments.isEmpty() && hasNonTrailingContainedComments(expression, trailingComments)) {

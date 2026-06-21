@@ -148,6 +148,21 @@ final class JavaCommentPlacementPolicy {
     }
 
     /**
+     * Reports whether {@code node} contains any comments, the run-indexed answer to the cheap
+     * {@code getAllContainedComments().isEmpty()} safety gate.
+     *
+     * <p>This is the indexed gate that source-shape and compact-layout decisions ask before assuming a node can be
+     * reconstructed or kept on one line without losing comment content. The answer comes from the per-run
+     * {@link JavaCommentMap}, so it is only meaningful for original nodes from the current formatting run: an unknown
+     * detached or cloned node reports {@code false} because the run snapshot has no record of it (see
+     * {@link JavaCommentMap#containedComments(Node)}). Callers that may hold clones must keep their own JavaParser scan
+     * rather than route through this query.
+     */
+    boolean hasContainedComments(Node node) {
+        return !containedComments(node).isEmpty();
+    }
+
+    /**
      * Reports whether {@code node} contains any line comments.
      */
     boolean hasContainedLineComments(Node node) {

@@ -50,7 +50,7 @@ final class BinaryExpressionPrinter {
 
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer;
 
-    private final SourceShape sourceShape;
+    private final SourceShapePolicy sourceShapePolicy;
 
     private final Function<Node, String> compact;
 
@@ -68,7 +68,7 @@ final class BinaryExpressionPrinter {
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
             BiFunction<MethodCallExpr, String, Doc> brokenMethodCallWithClosingLineRenderer,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer,
-            SourceShape sourceShape,
+            SourceShapePolicy sourceShapePolicy,
             Function<Node, String> compact,
             Function<Node, String> compactWithoutOwnComment,
             ToIntFunction<String> continuationStatementWidth,
@@ -81,7 +81,7 @@ final class BinaryExpressionPrinter {
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
         this.brokenMethodCallWithClosingLineRenderer = brokenMethodCallWithClosingLineRenderer;
         this.forcedMethodCallChainRenderer = forcedMethodCallChainRenderer;
-        this.sourceShape = sourceShape;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.compact = compact;
         this.compactWithoutOwnComment = compactWithoutOwnComment;
         this.continuationStatementWidth = continuationStatementWidth;
@@ -205,7 +205,7 @@ final class BinaryExpressionPrinter {
         if (
             operand instanceof EnclosedExpr enclosedOperand
             && enclosedOperand.getInner() instanceof BinaryExpr binaryOperand
-            && (sourceShape.spansMultipleLines(enclosedOperand)
+            && (sourceShapePolicy.wasMultiline(enclosedOperand)
                 || binaryLine.width(compact.apply(enclosedOperand)) > options.lineWidth())
         ) {
             return Doc.concat(Doc.text("("), nestedLines(binaryOperand, true), Doc.text(")"));
@@ -270,7 +270,7 @@ final class BinaryExpressionPrinter {
             boolean nestedContinuationLine
     ) {
         String flat = compact.apply(methodCall);
-        return sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+        return sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall)
             || binaryLine.width(flat, nestedContinuationLine) > options.lineWidth()
             || (nestedContinuationLine
                 && methodCallHasBreakableStructure(methodCall)
@@ -279,7 +279,7 @@ final class BinaryExpressionPrinter {
 
     private boolean methodCallBinaryOperandShouldBreak(BinaryExpressionLine binaryLine, BinaryExpr binaryOperand) {
         MethodCallExpr methodCall = (MethodCallExpr) binaryOperand.getLeft();
-        return sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+        return sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall)
             || binaryLine.width(compact.apply(binaryOperand)) > options.lineWidth()
             || (methodCallHasBreakableStructure(methodCall)
                 && binaryLine.width(compact.apply(binaryOperand)) >= options.lineWidth());
@@ -304,7 +304,7 @@ final class BinaryExpressionPrinter {
         return binaryLine.hasLeadingOperator()
             && binaryOperand.getLeft() instanceof MethodCallExpr methodCall
             && methodCall.getArguments().size() > 1
-            && !sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+            && !sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall)
             && binaryLine.width(compact.apply(binaryOperand)) > options.lineWidth();
     }
 
@@ -357,7 +357,7 @@ final class BinaryExpressionPrinter {
         return binaryLine.hasTrailingOperator()
             && operand instanceof MethodCallExpr methodCall
             && !methodCall.getArguments().isEmpty()
-            && (methodCall.getArguments().size() > 1 || sourceShape.methodCallArgumentsSpanMultipleLines(methodCall))
+            && (methodCall.getArguments().size() > 1 || sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall))
             && binaryLine.width(compact.apply(methodCall)) > options.lineWidth();
     }
 

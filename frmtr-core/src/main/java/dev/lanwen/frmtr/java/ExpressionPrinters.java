@@ -103,7 +103,7 @@ final class ExpressionPrinters {
             this::brokenMethodCall,
             this::brokenMethodCallWithClosingLine,
             this::forcedMethodCallChain,
-            context.sourceShape,
+            context.sourceShapePolicy,
             compactSource::compact,
             compactSource::compactWithoutOwnComment,
             this::continuationStatementWidth,
@@ -133,6 +133,7 @@ final class ExpressionPrinters {
         this.lambdas = new LambdaExpressionPrinter(
             comments,
             rawSource,
+            context.sourceShapePolicy,
             context.sourceText,
             context.objectCreationLayoutPolicy,
             options,
@@ -196,7 +197,7 @@ final class ExpressionPrinters {
             compactSource::compactTypeLikeWithoutOwnComment,
             commentText
         );
-        this.textBlocks = new TextBlockPrinter(rawSource);
+        this.textBlocks = new TextBlockPrinter(context.rawSource);
         this.instanceOfExpressions = new InstanceOfExpressionPrinter(
             options,
             this::expression,
@@ -289,7 +290,7 @@ final class ExpressionPrinters {
             options,
             context.layoutWidth,
             context.objectCreationLayoutPolicy,
-            context.sourceShape,
+            context.sourceShapePolicy,
             this::expression,
             this::expressionWithTail,
             lambdas::brokenExpressionLambda,

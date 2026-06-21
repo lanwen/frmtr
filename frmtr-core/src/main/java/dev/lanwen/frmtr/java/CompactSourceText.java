@@ -99,6 +99,11 @@ final class CompactSourceText {
                 + " : "
                 + compact(conditionalExpr.getElseExpr());
         }
+        // Containment gate kept as a direct JavaParser scan, not SourceShapePolicy/JavaCommentPlacementPolicy's
+        // run index: compact() is reached with comment-stripped clones via compactWithoutOwnComment, and the run
+        // index reports an unknown clone as comment-free, which would flip this reconstruction gate and change
+        // output. The shared run-indexed containment gate (SourceShapePolicy.hasContainedComments) is the coordination
+        // point for original run nodes; clone-reached gates stay local here.
         if (node instanceof AssignExpr assignExpr && assignExpr.getAllContainedComments().isEmpty()) {
             return compact(assignExpr.getTarget())
                 + " "
@@ -227,6 +232,9 @@ final class CompactSourceText {
         if (expression instanceof FieldAccessExpr fieldAccess) {
             return commentFree(fieldAccess.getScope()) + "." + fieldAccess.getNameAsString();
         }
+        // Containment gates below stay direct JavaParser scans rather than the run-indexed
+        // SourceShapePolicy.hasContainedComments: commentFree strips comments and can be reached with clones, and the
+        // run index reports unknown clones as comment-free, which would change which reconstruction branch is taken.
         if (expression instanceof MethodCallExpr methodCall && methodCall.getAllContainedComments().isEmpty()) {
             String scope = methodCall.getScope()
                     .map(this::commentFree)

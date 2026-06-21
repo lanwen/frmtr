@@ -84,6 +84,7 @@ final class LambdaExpressionPrinter {
     LambdaExpressionPrinter(
             CommentTracker comments,
             RawSource rawSource,
+            SourceShapePolicy sourceShapePolicy,
             SourceText sourceText,
             ObjectCreationLayoutPolicy objectCreationLayoutPolicy,
             FormatterOptions options,
@@ -131,6 +132,7 @@ final class LambdaExpressionPrinter {
             currentIndentedWidth
         );
         this.expressionLambdaArguments = new ExpressionLambdaArgumentLayout(
+            sourceShapePolicy,
             rawSource,
             sourceText,
             options,
@@ -149,6 +151,7 @@ final class LambdaExpressionPrinter {
             layoutWidth
         );
         this.lambdaBodyHeaders = new LambdaBodyHeaderLayout(
+            sourceShapePolicy,
             rawSource,
             options,
             expressionRenderer,

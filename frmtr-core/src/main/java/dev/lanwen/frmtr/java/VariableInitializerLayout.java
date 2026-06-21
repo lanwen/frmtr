@@ -50,9 +50,9 @@ final class VariableInitializerLayout {
 
     private final JavaCommentPlacementPolicy commentPlacement;
 
-    private final RawSource rawSource;
+    private final SourceShapePolicy sourceShapePolicy;
 
-    private final SourceShape sourceShape;
+    private final RawSource rawSource;
 
     private final FormatterOptions options;
 
@@ -150,8 +150,8 @@ final class VariableInitializerLayout {
     VariableInitializerLayout(
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
+            SourceShapePolicy sourceShapePolicy,
             RawSource rawSource,
-            SourceShape sourceShape,
             FormatterOptions options,
             LayoutWidth layoutWidth,
             Function<Node, String> compactTypeLike,
@@ -199,8 +199,8 @@ final class VariableInitializerLayout {
     ) {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.rawSource = rawSource;
-        this.sourceShape = sourceShape;
         this.options = options;
         this.layoutWidth = layoutWidth;
         this.compactTypeLike = compactTypeLike;
@@ -824,7 +824,7 @@ final class VariableInitializerLayout {
     ) {
         boolean initializerStartsOnContinuationLine = initializerStartsOnContinuationLine(variable, methodCall);
         boolean chainSpansMultipleSourceLines = methodCallChainIsSourceMultiline.test(methodCall)
-            || rawSource.rawWithoutOwnComment(methodCall).contains("\n");
+            || sourceShapePolicy.wasMultiline(methodCall);
         MethodCallChainSourcePlanner.InitializerChainShape chainShape = methodCallChainInitializerShape.apply(
             methodCall
         );
@@ -832,7 +832,7 @@ final class VariableInitializerLayout {
             !chainShape.canUseCompactObjectCreationInitializer(
                 initializerStartsOnContinuationLine,
                 chainSpansMultipleSourceLines,
-                sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+                sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall)
             )
             || !methodCall.getAllContainedComments().isEmpty()
             || commentPlacement.trailingLineComment(variable).isPresent()
@@ -856,7 +856,7 @@ final class VariableInitializerLayout {
     ) {
         boolean initializerStartsOnContinuationLine = initializerStartsOnContinuationLine(variable, methodCall);
         boolean chainSpansMultipleSourceLines = methodCallChainIsSourceMultiline.test(methodCall)
-            || rawSource.rawWithoutOwnComment(methodCall).contains("\n");
+            || sourceShapePolicy.wasMultiline(methodCall);
         MethodCallChainSourcePlanner.InitializerChainShape chainShape = methodCallChainInitializerShape.apply(
             methodCall
         );
@@ -866,7 +866,7 @@ final class VariableInitializerLayout {
                 chainShape.canUseCompactObjectCreationInitializer(
                     initializerStartsOnContinuationLine,
                     chainSpansMultipleSourceLines,
-                    sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+                    sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall)
                 )
                 || sourceFirstLineKeepsChainAfterRoot(methodCall)
             )
@@ -1093,7 +1093,7 @@ final class VariableInitializerLayout {
     private Doc brokenObjectCreationArgument(Expression argument) {
         if (
             argument instanceof BinaryExpr binaryExpr
-            && (sourceShape.spansMultipleLines(binaryExpr)
+            && (sourceShapePolicy.wasMultiline(binaryExpr)
                 || layoutWidth.continuationStatement(compact.apply(binaryExpr)) > options.lineWidth())
         ) {
             if (binaryExpressionHasLineComments.test(binaryExpr)) {
@@ -1263,10 +1263,10 @@ final class VariableInitializerLayout {
         );
         if (
             methodCall.getArguments().isEmpty()
-            || !rawSource.rawWithoutOwnComment(methodCall).contains("\n")
+            || !sourceShapePolicy.wasMultiline(methodCall)
             || !chainShape.canUseDirectSourceMultilineInitializer()
-            || sourceShape.expressionLambdaStartsOnSelectorLine(methodCall)
-            || methodCall.getScope().filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n")).isPresent()
+            || sourceShapePolicy.expressionLambdaStartsOnSelectorLine(methodCall)
+            || methodCall.getScope().filter(sourceShapePolicy::wasMultiline).isPresent()
             || (methodCallChainRootIsObjectCreation.test(methodCall)
                 && layoutWidth.variableInitializer(variable, flatName + " = " + compact.apply(methodCall) + ";")
                     > options.lineWidth())
@@ -1394,7 +1394,7 @@ final class VariableInitializerLayout {
             || scope.filter(Expression::isMethodCallExpr).isPresent()
             || scope.filter(expression -> !expression.getAllContainedComments().isEmpty()).isPresent()
             || scope.filter(shouldPrintScopeAsDoc).isPresent()
-            || scope.filter(expression -> rawSource.rawWithoutOwnComment(expression).contains("\n")).isPresent()
+            || scope.filter(sourceShapePolicy::wasMultiline).isPresent()
         ) {
             return Optional.empty();
         }
@@ -1486,7 +1486,7 @@ final class VariableInitializerLayout {
         String conditionLine = flatName + " = " + compact.apply(initializer.getCondition());
         String compactInitializer = compact.apply(initializer);
         if (
-            rawSource.rawWithoutOwnComment(initializer).contains("\n")
+            sourceShapePolicy.wasMultiline(initializer)
             && layoutWidth.blockStatement(conditionLine + ";") <= options.lineWidth()
         ) {
             return Doc.concat(Doc.text(name + " = "), brokenConditionalExpression.apply(initializer));

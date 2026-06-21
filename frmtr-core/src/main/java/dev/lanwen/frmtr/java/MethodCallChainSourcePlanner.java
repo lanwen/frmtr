@@ -30,7 +30,7 @@ final class MethodCallChainSourcePlanner {
 
     private final CompactSourceText compactSource;
 
-    private final SourceShape sourceShape;
+    private final SourceShapePolicy sourceShapePolicy;
 
     private final FormatterOptions options;
 
@@ -39,7 +39,7 @@ final class MethodCallChainSourcePlanner {
     MethodCallChainSourcePlanner(JavaFormatContext context, ToIntFunction<String> currentIndentedWidth) {
         this.objectCreationLayoutPolicy = context.objectCreationLayoutPolicy;
         this.compactSource = context.compactSource;
-        this.sourceShape = context.sourceShape;
+        this.sourceShapePolicy = context.sourceShapePolicy;
         this.options = context.options;
         this.currentIndentedWidth = currentIndentedWidth;
     }
@@ -154,7 +154,7 @@ final class MethodCallChainSourcePlanner {
     ) {
         List<MethodCallExpr> calls = new ArrayList<>();
         Expression root = methodCallChainRoot(expression, calls);
-        boolean rootHasComments = !root.getAllContainedComments().isEmpty();
+        boolean rootHasComments = sourceShapePolicy.hasContainedComments(root);
         boolean rootHasBlockLambdaArgument = root instanceof MethodCallExpr methodRoot
             && segmentHasBlockLambdaArgument.test(methodRoot);
         boolean hasTrailingLineComments = chainHasTrailingLineComments.test(calls);
@@ -181,7 +181,7 @@ final class MethodCallChainSourcePlanner {
             firstCallHasArgumentGapComment,
             laterCallsHaveArgumentGapComment,
             hasTrailingLineComments,
-            sourceSpansMultipleLines(expression)
+            sourceShapePolicy.wasMultiline(expression)
         );
     }
 
@@ -218,7 +218,7 @@ final class MethodCallChainSourcePlanner {
             } else if (
                 analysis.firstCommentedSegment() == 0
                 && root instanceof FieldAccessExpr
-                && !root.getAllContainedComments().isEmpty()
+                && sourceShapePolicy.hasContainedComments(root)
                 && calls.size() > 1
             ) {
                 root = calls.getFirst();
@@ -272,7 +272,7 @@ final class MethodCallChainSourcePlanner {
     InitializerChainShape initializerShape(MethodCallChainAnalysis analysis) {
         boolean rootObjectCreationArgumentsSpanMultipleLines =
             analysis.root() instanceof ObjectCreationExpr objectCreation
-            && sourceShape.objectCreationArgumentsSpanMultipleLines(objectCreation);
+            && sourceShapePolicy.objectCreationArgumentsSpanMultipleLines(objectCreation);
         MethodCallExpr tail = analysis.calls().isEmpty() && analysis.root() instanceof MethodCallExpr methodRoot
             ? methodRoot
             : analysis.calls().getLast();
@@ -327,7 +327,7 @@ final class MethodCallChainSourcePlanner {
         }
         Node previous = root;
         for (MethodCallExpr call : calls) {
-            if (selectorStartsAfterPreviousSegmentLine(previous, call)) {
+            if (sourceShapePolicy.selectorBrokeAfter(previous, call)) {
                 return true;
             }
             previous = call;
@@ -335,17 +335,9 @@ final class MethodCallChainSourcePlanner {
         return false;
     }
 
-    boolean selectorStartsAfterPreviousSegmentLine(Node previous, MethodCallExpr call) {
-        return previous.getRange()
-                .flatMap(previousRange -> call.getName().getRange().map(
-                        nameRange -> nameRange.begin.line > previousRange.end.line
-                ))
-                .orElse(false);
-    }
-
     boolean methodCallStartsAfterScopeLine(MethodCallExpr call) {
         return call.getScope()
-                .map(scope -> selectorStartsAfterPreviousSegmentLine(scope, call))
+                .map(scope -> sourceShapePolicy.selectorBrokeAfter(scope, call))
                 .orElse(false);
     }
 
@@ -355,7 +347,7 @@ final class MethodCallChainSourcePlanner {
 
     private boolean sourceMultilinePromotedMethodRoot(MethodCallExpr methodRoot) {
         return methodRoot.getScope()
-                .map(scope -> selectorStartsAfterPreviousSegmentLine(scope, methodRoot))
+                .map(scope -> sourceShapePolicy.selectorBrokeAfter(scope, methodRoot))
                 .orElse(false);
     }
 
@@ -405,12 +397,6 @@ final class MethodCallChainSourcePlanner {
 
     private boolean startsWithUppercase(String name) {
         return !name.isEmpty() && Character.isUpperCase(name.charAt(0));
-    }
-
-    private boolean sourceSpansMultipleLines(Node node) {
-        return node.getRange()
-                .map(range -> range.begin.line < range.end.line)
-                .orElse(false);
     }
 
     private boolean shouldPromoteFirstCallForArgumentComments(

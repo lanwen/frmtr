@@ -79,7 +79,7 @@ final class StatementPrinter {
 
     private final RawSource rawSource;
 
-    private final SourceShape sourceShape;
+    private final SourceShapePolicy sourceShapePolicy;
 
     private final FormatterOptions options;
 
@@ -157,7 +157,7 @@ final class StatementPrinter {
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
             RawSource rawSource,
-            SourceShape sourceShape,
+            SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
             LayoutWidth layoutWidth,
             JavaFormatRule<Statement> statementRenderer,
@@ -198,7 +198,7 @@ final class StatementPrinter {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
         this.rawSource = rawSource;
-        this.sourceShape = sourceShape;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
         this.layoutWidth = layoutWidth;
         this.statementRenderer = statementRenderer;
@@ -635,7 +635,7 @@ final class StatementPrinter {
         if (statement.getResources().isEmpty()) {
             return Doc.EMPTY;
         }
-        SourceShape.TryResourcesShape resourceShape = sourceShape.tryResources(statement);
+        SourceShapePolicy.TryResourcesShape resourceShape = sourceShapePolicy.tryResources(statement);
         boolean trailingSemicolon = resourceShape.trailingSemicolon();
         String flatResources = statement.getResources()
                 .stream()
@@ -688,7 +688,7 @@ final class StatementPrinter {
      */
     private Optional<Doc> attachedSingleMethodCallResource(
             TryStmt statement,
-            SourceShape.TryResourcesShape resourceShape
+            SourceShapePolicy.TryResourcesShape resourceShape
     ) {
         if (
             resourceShape.trailingSemicolon()
@@ -750,7 +750,7 @@ final class StatementPrinter {
     private Doc tryResource(Expression resource) {
         Doc leading = Doc.concat(comments.adjacentLeadingLineComments(resource), comments.leading(resource));
         Doc body;
-        if (sourceShape.spansMultipleLines(resource) && resource instanceof VariableDeclarationExpr declaration) {
+        if (sourceShapePolicy.wasMultiline(resource) && resource instanceof VariableDeclarationExpr declaration) {
             body = variableDeclarationRenderer.format(declaration);
         } else {
             body = Doc.text(compact.apply(resource));

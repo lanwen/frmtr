@@ -261,7 +261,41 @@ comments before fluent-chain segments are printed once while syntax-specific pri
 Complex Java layout rules are factored into dedicated helpers rather than embedded in broad dispatchers. `LayoutWidth`
 centralizes indentation baselines for width probes, source-shape helpers preserve meaningful existing multiline forms,
 initializer helpers coordinate declaration-local wrapping, and chain helpers keep method-call source planning out of
-ordinary argument dispatch. Shared method-call argument helpers keep over-wide and source-multiline argument policies
+ordinary argument dispatch. A per-run `SourceShapePolicy` on `JavaFormatContext` is the consolidating home for
+"should the formatter respect the author's source shape here?" decisions, so printers ask one named question instead of
+re-deriving those reads from raw token text or `getRange()` arithmetic. It owns one canonical definition of each
+source-shape decision:
+
+- whether a node was already multiline — `wasMultiline`, range-first with a raw-text fallback;
+- whether the author left a blank line between two source-adjacent nodes — `hadBlankLineBetween`, plus a
+  `hadBlankLineBefore` overload for callers that first resolve a comment-aware begin line;
+- whether a node's source-equivalent compact text fits on one line at its call-site indentation — `fitsOnOneLine`,
+  which applies a per-site indented-width function to `CompactSourceText` and owns the single `lineWidth()` comparison
+  while leaving compact-text generation in that helper;
+- whether a fluent-chain segment's selector began on a later source line than the previous segment ended —
+  `selectorBrokeAfter`, the chain-split definition the method-call chain source planner consults instead of its own
+  range arithmetic;
+- whether a node encloses comments that make a compact or otherwise source-shaped layout unsafe — `hasContainedComments`,
+  delegating containment itself to the run-indexed `JavaCommentPlacementPolicy.hasContainedComments` rather than
+  re-scanning JavaParser (compact-source reconstruction that strips comments on clones keeps its own direct scan because
+  the run index reports an unknown clone as comment-free); and
+- the syntax-specific predicates built on `wasMultiline` (multiline argument lists, same-line starts, throws-clause and
+  try-with-resources shape, method-call operand and logical-condition shape), so a printer asks one source-shape object
+  rather than reaching for the same multiline answer two different ways.
+
+Raw recovery/fallback text generation is not a source-shape decision and is not funneled through the policy: a printer
+that must emit a node's raw source for recovery or a fallback reads it straight from `RawSource` (the `raw` /
+`rawWithoutOwnComment` string forms), while genuine raw-output passes that must account for the comments they emit use
+`RawPreservedSource`, and source-equivalent compact text keeps using `RawSource`/`CompactSourceText`.
+
+`SourceShapeCouplingGuardTest` keeps the boundary from eroding: it fails if a printer outside the policy and the
+slicing/raw-output/compact/recovery helpers re-introduces either consolidated pattern — a `rawSource....contains("\n")`
+multiline probe or blank-line gap arithmetic in either spelling (`previous.end.line + 1` or the subtraction form
+`next.begin.line - previous.end.line`). The broader "no `getRange().*.line` layout arithmetic outside the policy" rule
+remains a documented review checklist in
+[docs/java-formatter-internals.md](docs/java-formatter-internals.md) rather than a test, because that arithmetic
+legitimately remains in the recovery and source-slicing helpers. Shared method-call argument helpers keep over-wide and
+source-multiline argument policies
 consistent when method calls appear in direct calls, initializers, and try resources. Expression-lambda helpers share
 width plans across call contexts, and expression tails thread statement terminators or separators through expression
 rendering before trailing line comments are placed. See

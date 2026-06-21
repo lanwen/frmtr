@@ -19,10 +19,10 @@ final class ObjectCreationLayoutPolicy {
 
     private static final int MAX_FLAT_ARGUMENTS = 3;
 
-    private final SourceShape sourceShape;
+    private final SourceShapePolicy sourceShapePolicy;
 
-    ObjectCreationLayoutPolicy(SourceShape sourceShape) {
-        this.sourceShape = sourceShape;
+    ObjectCreationLayoutPolicy(SourceShapePolicy sourceShapePolicy) {
+        this.sourceShapePolicy = sourceShapePolicy;
     }
 
     /**
@@ -32,7 +32,7 @@ final class ObjectCreationLayoutPolicy {
      * arguments before the source break is honored, so compact small constructors can still collapse when they fit.
      */
     boolean shouldPreserveSourceMultilineArguments(ObjectCreationExpr expression) {
-        return sourceShape.objectCreationArgumentsSpanMultipleLines(expression)
+        return sourceShapePolicy.objectCreationArgumentsSpanMultipleLines(expression)
             && expression.getAllContainedComments().isEmpty()
             && (isTryResourceObjectCreation(expression) || !hasFlatArgumentCount(expression));
     }
@@ -45,7 +45,7 @@ final class ObjectCreationLayoutPolicy {
      * argument-count rule while ignoring comments that belong to the anonymous body.
      */
     boolean shouldPreserveAnonymousSourceMultilineArguments(ObjectCreationExpr expression) {
-        return sourceShape.objectCreationArgumentsSpanMultipleLines(expression) && !hasFlatArgumentCount(expression);
+        return sourceShapePolicy.objectCreationArgumentsSpanMultipleLines(expression) && !hasFlatArgumentCount(expression);
     }
 
     /**
@@ -57,7 +57,7 @@ final class ObjectCreationLayoutPolicy {
     boolean shouldPreserveReturnSourceMultilineArguments(ObjectCreationExpr expression) {
         return (
             expression.getArguments().size() > 2
-            && sourceShape.spansMultipleLines(expression)
+            && sourceShapePolicy.wasMultiline(expression)
             && expression
                     .getArguments()
                     .stream()
@@ -82,7 +82,7 @@ final class ObjectCreationLayoutPolicy {
         return hasFlatArgumentCount(expression)
             && expression.getAnonymousClassBody().isEmpty()
             && expression.getAllContainedComments().isEmpty()
-            && !sourceShape.objectCreationArgumentsSpanMultipleLines(expression)
+            && !sourceShapePolicy.objectCreationArgumentsSpanMultipleLines(expression)
             && compactWidth <= lineWidth;
     }
 

@@ -36,7 +36,7 @@ final class JavaFormatContext {
 
     final SourceText sourceText;
 
-    final SourceShape sourceShape;
+    final SourceShapePolicy sourceShapePolicy;
 
     final ObjectCreationLayoutPolicy objectCreationLayoutPolicy;
 
@@ -62,12 +62,13 @@ final class JavaFormatContext {
         this.comments = new CommentTracker(commentPlacementPolicy);
         this.formatterPragmas = new FormatterPragmas();
         this.rawSource = new RawSource(options);
-        this.sourceShape = new SourceShape(rawSource, sourceText);
-        this.objectCreationLayoutPolicy = new ObjectCreationLayoutPolicy(sourceShape);
+        this.compactSource = new CompactSourceText(rawSource);
+        this.sourceShapePolicy =
+            new SourceShapePolicy(sourceText, rawSource, compactSource, commentPlacementPolicy, options);
+        this.objectCreationLayoutPolicy = new ObjectCreationLayoutPolicy(sourceShapePolicy);
         this.rawPreservedSource = new RawPreservedSource(rawSource, comments);
         this.recoveredListPlanner = new RecoveredListPlanner(sourceText);
         this.recoveredSourceRegions = new RecoveredSourceRegions(sourceText, options, comments);
-        this.compactSource = new CompactSourceText(rawSource);
         this.layoutWidth = new LayoutWidth(options);
         this.layoutDecisions = new LayoutDecisionLog();
         this.commentPlacement = new CommentPlacement(comments, commentPlacementPolicy);

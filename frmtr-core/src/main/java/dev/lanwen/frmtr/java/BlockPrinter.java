@@ -29,6 +29,8 @@ final class BlockPrinter {
 
     private final JavaCommentPlacementPolicy commentPlacement;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final SourceText sourceText;
 
     private final RecoveredListPlanner recoveredListPlanner;
@@ -52,6 +54,7 @@ final class BlockPrinter {
     ) {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
+        this.sourceShapePolicy = context.sourceShapePolicy;
         this.sourceText = context.sourceText;
         this.recoveredListPlanner = context.recoveredListPlanner;
         this.rawGaps = new RecoveredRawGapPrinter(context, BlockPrinter::blockStatementListRecoveryFailure);
@@ -133,12 +136,10 @@ final class BlockPrinter {
         if (hasPragma.test(previousStatement) || hasPragma.test(currentStatement)) {
             return Doc.HARD_LINE;
         }
-        boolean hasBlankLineBetween = previousStatement.getRange()
-                .flatMap(previousRange -> currentStatement.getRange().map(
-                        currentRange -> effectiveBeginLine(
-                            currentStatement,
-                            currentRange.begin.line
-                        ) > previousRange.end.line + 1
+        boolean hasBlankLineBetween = currentStatement.getRange()
+                .map(currentRange -> sourceShapePolicy.hadBlankLineBefore(
+                    previousStatement,
+                    effectiveBeginLine(currentStatement, currentRange.begin.line)
                 ))
                 .orElse(false);
         return hasBlankLineBetween ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;

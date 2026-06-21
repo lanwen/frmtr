@@ -24,7 +24,7 @@ import java.util.function.ToIntFunction;
  */
 final class ExpressionLambdaMethodCallBodyLayout {
 
-    private final RawSource rawSource;
+    private final SourceShapePolicy sourceShapePolicy;
 
     private final FormatterOptions options;
 
@@ -43,7 +43,7 @@ final class ExpressionLambdaMethodCallBodyLayout {
     private final ToIntFunction<String> expressionFirstLineWidth;
 
     ExpressionLambdaMethodCallBodyLayout(
-            RawSource rawSource,
+            SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
             Function<List<? extends Node>, String> compactJoin,
@@ -53,7 +53,7 @@ final class ExpressionLambdaMethodCallBodyLayout {
             BiFunction<String, MethodCallExpr, Optional<Doc>> packedMethodCallChainBodyRenderer,
             ToIntFunction<String> expressionFirstLineWidth
     ) {
-        this.rawSource = rawSource;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.compactJoin = compactJoin;
@@ -85,7 +85,7 @@ final class ExpressionLambdaMethodCallBodyLayout {
         if (scopeCall.getArguments().isEmpty()) {
             return Optional.empty();
         }
-        if (rawSource.rawWithoutOwnComment(scopeCall).contains("\n") && scopeCall.getArguments().size() <= 1) {
+        if (sourceShapePolicy.wasMultiline(scopeCall) && scopeCall.getArguments().size() <= 1) {
             return Optional.empty();
         }
         String opener = methodCallPrefix.apply(scopeCall) + "(";

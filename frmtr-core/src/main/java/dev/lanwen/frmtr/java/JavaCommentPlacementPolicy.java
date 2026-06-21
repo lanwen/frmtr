@@ -137,12 +137,7 @@ final class JavaCommentPlacementPolicy {
      * statement, independent of whether source put it on the same line or the next one.
      */
     List<JavaCommentTrivia> orphanCommentsOutsideChildRanges(Node node, Collection<? extends Node> children) {
-        return orphanComments(node, comment -> children.stream().noneMatch(child -> belongsToChild(comment, child)));
-    }
-
-    private boolean belongsToChild(JavaCommentTrivia comment, Node child) {
-        return comment.startsInsideLineRange(child)
-                && !CommentIndex.startsAfterNodeOnSameLine(child, comment.comment());
+        return orphanComments(node, comment -> children.stream().noneMatch(comment::isInsideNotTrailing));
     }
 
     /**

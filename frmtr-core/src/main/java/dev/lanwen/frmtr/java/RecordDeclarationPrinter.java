@@ -162,12 +162,14 @@ final class RecordDeclarationPrinter {
             return Doc.text("()");
         }
         List<RecordComponentLayout> layouts = recordComponentLayouts(declaration, forceBreak);
-        boolean hasTrailingLineComment = layouts.stream().anyMatch(RecordComponentLayout::hasTrailingLineComment);
         boolean hasGapLineComment = layouts.stream().anyMatch(RecordComponentLayout::hasGapLineComment);
         List<Doc> parameters = layouts.stream()
                 .flatMap(layout -> layout.docs().stream())
                 .toList();
-        Doc line = forceBreak || hasTrailingLineComment || hasGapLineComment ? Doc.HARD_LINE : Doc.SOFT_LINE;
+        // A component's own trailing line comment no longer forces the hard-line shape here: it emits BreakParent, which
+        // poisons this group's fit so it breaks while its soft lines render as the same newlines the hard-line shape
+        // produced. Gap line comments still force hard lines directly because they print on their own interleaved lines.
+        Doc line = forceBreak || hasGapLineComment ? Doc.HARD_LINE : Doc.SOFT_LINE;
         Doc doc = Doc.concat(
             Doc.text("("),
             Doc.indent(Doc.concat(line, Doc.concat(parameters))),
@@ -189,7 +191,6 @@ final class RecordDeclarationPrinter {
             Parameter parameter = declaration.getParameters().get(i);
             Doc trailing = recordComponentTrailingLineComment(parameter);
             boolean hasNext = i + 1 < declaration.getParameters().size();
-            boolean componentHasTrailingLineComment = trailing != Doc.EMPTY;
             Optional<Doc> separator = Optional.empty();
             List<Doc> gapComments = List.of();
             if (hasNext) {
@@ -199,37 +200,25 @@ final class RecordDeclarationPrinter {
                 separator = Optional.of(
                     recordParameterSeparator(
                         forceBreak || componentHasGapLineComment,
-                        componentHasTrailingLineComment,
                         !componentHasGapLineComment
                             && next.getComment().isEmpty()
                             && recordComponentsHaveBlankLine(parameter, next)
                     )
                 );
             }
-            layouts.add(
-                new RecordComponentLayout(
-                    recordComponent(parameter, trailing, hasNext),
-                    separator,
-                    gapComments,
-                    componentHasTrailingLineComment
-                )
-            );
+            layouts.add(new RecordComponentLayout(recordComponent(parameter, trailing), separator, gapComments));
         }
         return layouts;
     }
 
     /**
      * Separates neighboring record components without adding blank lines inside the record header.
+     *
+     * <p>The comma is always emitted: a preceding component's trailing line comment defers to a line suffix, so the
+     * comma prints before that comment flushes and can never be commented out.
      */
-    private Doc recordParameterSeparator(
-            boolean forceBreak,
-            boolean previousHasTrailingLineComment,
-            boolean sourceBlankLine
-    ) {
+    private Doc recordParameterSeparator(boolean forceBreak, boolean sourceBlankLine) {
         Doc line = sourceBlankLine ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;
-        if (previousHasTrailingLineComment) {
-            return line;
-        }
         return Doc.concat(Doc.text(","), sourceBlankLine ? line : forceBreak ? Doc.HARD_LINE : Doc.LINE);
     }
 
@@ -253,7 +242,7 @@ final class RecordDeclarationPrinter {
      * Prints one record component, including leading component comments, annotation line-break decisions, and a
      * line-comment attached to the component type.
      */
-    private Doc recordComponent(Parameter parameter, Doc trailing, boolean hasNext) {
+    private Doc recordComponent(Parameter parameter, Doc trailing) {
         List<Doc> parts = new ArrayList<>();
         Doc leading = comments.leading(parameter);
         if (leading != Doc.EMPTY) {
@@ -280,11 +269,11 @@ final class RecordDeclarationPrinter {
             parts.add(trailingBlock);
         }
         if (trailing != Doc.EMPTY) {
-            if (hasNext) {
-                parts.add(Doc.text(","));
-            }
-            parts.add(Doc.text(" "));
-            parts.add(trailing);
+            // A trailing line comment defers to a line suffix so the unconditional comma the separator emits prints
+            // first and is never commented out; BreakParent forces the component list open so the suffix flushes at the
+            // break that follows the comma. Block comments above stay inline because they sit before the comma.
+            parts.add(Doc.BREAK_PARENT);
+            parts.add(Doc.lineSuffix(Doc.concat(Doc.text(" "), trailing)));
         }
         return Doc.concat(parts);
     }
@@ -501,8 +490,7 @@ final class RecordDeclarationPrinter {
     private record RecordComponentLayout(
         Doc component,
         Optional<Doc> separator,
-        List<Doc> gapComments,
-        boolean hasTrailingLineComment
+        List<Doc> gapComments
     ) {
         boolean hasGapLineComment() {
             return !gapComments.isEmpty();

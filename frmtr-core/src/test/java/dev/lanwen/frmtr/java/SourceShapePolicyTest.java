@@ -98,6 +98,41 @@ final class SourceShapePolicyTest {
     }
 
     @Test
+    void fitsOnOneLineIsTrueWhenIndentedCompactWidthIsWithinTheLineWidth() {
+        String source = "class Demo {\n    int value = call(first, second);\n}\n";
+        MethodCallExpr call = call(source);
+
+        // "call(first, second)" is 19 chars; with a 4-space indent the gate measures 23 against a 30-wide line.
+        SourceShapePolicy policy = policy(source, FormatterOptions.defaults().withLineWidth(30));
+
+        assertThat(policy.fitsOnOneLine(call, text -> 4 + text.length())).isTrue();
+    }
+
+    @Test
+    void fitsOnOneLineIsFalseWhenIndentedCompactWidthOverflowsTheLineWidth() {
+        String source = "class Demo {\n    int value = call(first, second);\n}\n";
+        MethodCallExpr call = call(source);
+
+        // Same node, but now the 23-wide indented compact text overflows a 20-wide line.
+        SourceShapePolicy policy = policy(source, FormatterOptions.defaults().withLineWidth(20));
+
+        assertThat(policy.fitsOnOneLine(call, text -> 4 + text.length())).isFalse();
+    }
+
+    @Test
+    void fitsOnOneLineAppliesTheCallerSuppliedIndentFunction() {
+        String source = "class Demo {\n    int value = call(first, second);\n}\n";
+        MethodCallExpr call = call(source);
+
+        // The same node and line width flip outcome based purely on the indent the caller charges, proving the gate runs
+        // the per-site indented-width function rather than measuring the bare compact text.
+        SourceShapePolicy policy = policy(source, FormatterOptions.defaults().withLineWidth(20));
+
+        assertThat(policy.fitsOnOneLine(call, text -> text.length())).isTrue();
+        assertThat(policy.fitsOnOneLine(call, text -> 4 + text.length())).isFalse();
+    }
+
+    @Test
     void hadBlankLineBeforeComparesACallerResolvedBeginLineAgainstThePreviousNode() {
         String source = "class Demo {\n    int first;\n\n\n    int second;\n}\n";
         FieldDeclaration first = field(source, 0);
@@ -126,7 +161,10 @@ final class SourceShapePolicyTest {
     }
 
     private static SourceShapePolicy policy(String source) {
-        FormatterOptions options = FormatterOptions.defaults();
+        return policy(source, FormatterOptions.defaults());
+    }
+
+    private static SourceShapePolicy policy(String source, FormatterOptions options) {
         RawSource rawSource = new RawSource(options);
         return new SourceShapePolicy(
             new SourceText(source),

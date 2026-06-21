@@ -2,6 +2,7 @@ package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
 import dev.lanwen.frmtr.FormatterOptions;
+import java.util.function.ToIntFunction;
 
 /**
  * Single per-run home for "should the formatter respect the author's source shape here?" decisions.
@@ -97,5 +98,21 @@ final class SourceShapePolicy {
         return previous.getRange()
                 .map(previousRange -> nextBeginLine > previousRange.end.line + 1)
                 .orElse(false);
+    }
+
+    /**
+     * Reports whether a node's source-equivalent compact form fits on one line at its call-site indentation, the single
+     * canonical "can this stay on one line?" width gate.
+     *
+     * <p>Compact text is source-equivalent by construction, so a width probe over it is itself a source-shape decision:
+     * it asks whether the author's node could render flat rather than how a particular printer happens to spell the
+     * comparison. This method owns the one {@code <= lineWidth()} comparison while leaving the indentation arithmetic to
+     * the caller: each printer passes its own {@code indentedWidth} function so the per-site indent (current statement,
+     * first line, block, continuation, …) is preserved exactly. The function is applied to {@link CompactSourceText}'s
+     * compact text for the node so compact-text generation stays in that helper and only the fit decision lives here.
+     * Sites that test the negation ("must this break?") call {@code !fitsOnOneLine(...)}; the two are the same gate.
+     */
+    boolean fitsOnOneLine(Node node, ToIntFunction<String> indentedWidth) {
+        return indentedWidth.applyAsInt(compactSource.compact(node)) <= options.lineWidth();
     }
 }

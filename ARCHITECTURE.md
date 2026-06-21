@@ -264,10 +264,13 @@ initializer helpers coordinate declaration-local wrapping, and chain helpers kee
 ordinary argument dispatch. A per-run `SourceShapePolicy` on `JavaFormatContext` is the consolidating home for
 "should the formatter respect the author's source shape here?" decisions, so printers ask one named question instead of
 re-deriving those reads from raw token text or `getRange()` arithmetic. It owns the single canonical definition of
-whether a node was already multiline (`wasMultiline`, range-first with a raw-text fallback) and of whether the author
+whether a node was already multiline (`wasMultiline`, range-first with a raw-text fallback), of whether the author
 left a blank line between two source-adjacent nodes (`hadBlankLineBetween`, plus a `hadBlankLineBefore` overload for
-callers that first resolve a comment-aware begin line). `SourceShape` continues to expose its syntax-specific predicate
-surface and delegates its canonical multiline check to the policy. Shared method-call argument helpers keep over-wide and source-multiline argument policies
+callers that first resolve a comment-aware begin line), and of whether a node's source-equivalent compact text fits on
+one line at its call-site indentation (`fitsOnOneLine`, which applies a per-site indented-width function to
+`CompactSourceText` and owns the single `lineWidth()` comparison while leaving compact-text generation in that helper).
+`SourceShape` continues to expose its syntax-specific predicate surface and delegates its canonical multiline check to
+the policy. Shared method-call argument helpers keep over-wide and source-multiline argument policies
 consistent when method calls appear in direct calls, initializers, and try resources. Expression-lambda helpers share
 width plans across call contexts, and expression tails thread statement terminators or separators through expression
 rendering before trailing line comments are placed. See

@@ -241,7 +241,7 @@ final class MethodCallChainPrinter {
             || objectCreation.getAnonymousClassBody().isPresent()
             || sourceShape.objectCreationArgumentsSpanMultipleLines(objectCreation)
             || analysis.calls().stream().anyMatch(call -> !compactMethodCallChainSegmentCanStayFlat(call))
-            || firstLineWidth.applyAsInt(compactSource.compact(objectCreation)) <= options.lineWidth()
+            || sourceShapePolicy.fitsOnOneLine(objectCreation, firstLineWidth)
             || firstLineWidth.applyAsInt(objectCreationPrefix.apply(objectCreation) + "(") > options.lineWidth()
         ) {
             return Optional.empty();
@@ -968,7 +968,7 @@ final class MethodCallChainPrinter {
         MethodCallExpr firstCall = calls.getFirst();
         return (
             !methodCallSegmentHasBlockLambdaArgument(firstCall)
-            && (currentIndentedWidth.applyAsInt(compactSource.compact(firstCall)) <= options.lineWidth()
+            && (sourceShapePolicy.fitsOnOneLine(firstCall, currentIndentedWidth)
                 || currentIndentedWidth.applyAsInt(this.calls.methodCallPrefix(firstCall) + "(") <= options.lineWidth())
         );
     }
@@ -996,7 +996,7 @@ final class MethodCallChainPrinter {
             }
             return Doc.concat(expressionRenderer.apply(root), methodCallChainSegment(firstCall));
         }
-        if (currentIndentedWidth.applyAsInt(compactSource.compact(firstCall)) <= options.lineWidth()) {
+        if (sourceShapePolicy.fitsOnOneLine(firstCall, currentIndentedWidth)) {
             return inlineMethodCall(firstCall);
         }
         return brokenFirstSegmentAttachedToSimpleRoot(root, firstCall);
@@ -1028,7 +1028,7 @@ final class MethodCallChainPrinter {
     }
 
     private String firstSegmentAttachedToSimpleRootFirstLine(Expression root, MethodCallExpr firstCall) {
-        if (currentIndentedWidth.applyAsInt(compactSource.compact(firstCall)) <= options.lineWidth()) {
+        if (sourceShapePolicy.fitsOnOneLine(firstCall, currentIndentedWidth)) {
             return compactSource.compact(firstCall);
         }
         String typeArguments = firstCall.getTypeArguments()
@@ -1158,7 +1158,7 @@ final class MethodCallChainPrinter {
             && methodCall.getArguments().size() > 1
             && (firstLineWidth.applyAsInt(compactSourceWidthText(methodCall)) > options.lineWidth()
                 || (sourceMultilineTypeLikeRoot(methodCall)
-                    && firstLineWidth.applyAsInt(compactSource.compact(methodCall)) > options.lineWidth()))
+                    && !sourceShapePolicy.fitsOnOneLine(methodCall, firstLineWidth)))
         ) {
             return calls.brokenMethodCall(methodCall);
         }
@@ -1230,7 +1230,7 @@ final class MethodCallChainPrinter {
         }
         if (
             expression.getArguments().size() > 1
-            && currentIndentedWidth.applyAsInt(compactSource.compact(expression)) > options.lineWidth()
+            && !sourceShapePolicy.fitsOnOneLine(expression, currentIndentedWidth)
         ) {
             return calls.brokenMethodCall(expression);
         }
@@ -1786,7 +1786,7 @@ final class MethodCallChainPrinter {
         if (promotedRootArgumentsShouldBreak(methodRoot, lineWidth(LayoutWidth.LineBudget.CURRENT))) {
             return Optional.of(prefix + "(");
         }
-        if (currentIndentedWidth.applyAsInt(compactSource.compact(methodRoot)) > options.lineWidth()) {
+        if (!sourceShapePolicy.fitsOnOneLine(methodRoot, currentIndentedWidth)) {
             return Optional.of(prefix + "(");
         }
         if (methodCallSegmentHasBlockLambdaArgument(methodRoot)) {
@@ -1977,7 +1977,7 @@ final class MethodCallChainPrinter {
     ) {
         return expression.getArguments().isEmpty()
             && expression.getScope().filter(FieldAccessExpr.class::isInstance).isPresent()
-            && firstLineWidth.applyAsInt(compactSource.compact(expression)) > options.lineWidth();
+            && !sourceShapePolicy.fitsOnOneLine(expression, firstLineWidth);
     }
 
     private boolean promotedRootArgumentsShouldBreak(

@@ -51,6 +51,8 @@ final class ConditionalExpressionPrinter {
 
     private final SourceShape sourceShape;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final CompactSourceText compactSource;
 
     private final Function<Expression, Doc> expressionRenderer;
@@ -125,6 +127,7 @@ final class ConditionalExpressionPrinter {
         this.options = context.options;
         this.rawSource = context.rawSource;
         this.sourceShape = context.sourceShape;
+        this.sourceShapePolicy = context.sourceShapePolicy;
         this.compactSource = context.compactSource;
         this.expressionRenderer = expressionRenderer;
         this.expressionWithoutOwnCommentRenderer = expressionWithoutOwnCommentRenderer;
@@ -483,7 +486,7 @@ final class ConditionalExpressionPrinter {
     ) {
         if (
             binaryCondition(condition).isEmpty()
-            || continuationStatementWidth.applyAsInt(compactSource.compact(condition)) <= options.lineWidth()
+            || sourceShapePolicy.fitsOnOneLine(condition, continuationStatementWidth)
         ) {
             return ConditionalConditionLayout.EXPRESSION;
         }

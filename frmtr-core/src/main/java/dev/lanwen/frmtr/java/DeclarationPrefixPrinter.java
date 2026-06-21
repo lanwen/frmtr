@@ -3,6 +3,7 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.Range;
 import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
@@ -106,6 +107,13 @@ final class DeclarationPrefixPrinter {
     /**
      * Keeps standalone notes that source placed after the last declaration-leading annotation but before the annotated
      * header token, such as a local variable type or method modifier.
+     *
+     * <p>A note on a line after the annotation is always kept. A note that shares the annotation's own line — e.g.
+     * {@code @Deprecated /* ... *}{@code / public int port()} written inline — is kept only when it is a block comment:
+     * a same-line <em>line</em> comment after an annotation is the annotation's own trailing comment, claimed by
+     * {@link AnnotationExpressionPrinter}, so excluding it here avoids competing with that path. Without this, an inline
+     * block comment between an annotation and its member was dropped entirely because the only printer that could emit it
+     * required the comment to begin on a strictly later line than the annotation.
      */
     private Doc postAnnotationComments(Node owner, AnnotationExpr previous) {
         Optional<Range> previousRange = previous.getRange();
@@ -119,6 +127,7 @@ final class DeclarationPrefixPrinter {
             annotationRange,
             nextRange.orElseThrow(),
             comment -> comment.beginLine(Integer.MIN_VALUE) > annotationRange.end.line
+                || comment.comment() instanceof BlockComment
         );
     }
 

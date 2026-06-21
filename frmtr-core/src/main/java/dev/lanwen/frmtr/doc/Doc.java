@@ -5,7 +5,17 @@ import java.util.Arrays;
 import java.util.List;
 
 public sealed interface Doc
-    permits Doc.Concat, Doc.Group, Doc.HardLine, Doc.IfBreak, Doc.Indent, Doc.Label, Doc.Line, Doc.SoftLine, Doc.Text {
+    permits
+        Doc.Concat,
+        Doc.Group,
+        Doc.HardLine,
+        Doc.IfBreak,
+        Doc.Indent,
+        Doc.Label,
+        Doc.Line,
+        Doc.LineSuffix,
+        Doc.SoftLine,
+        Doc.Text {
     Doc EMPTY = new Text("");
 
     Doc LINE = new Line();
@@ -92,6 +102,18 @@ public sealed interface Doc
         return new Label(label, doc);
     }
 
+    /**
+     * Defers {@code content} to the end of the current line: it renders nothing at this position and flushes just before
+     * the next line break (or at end of document). Used for trailing comments so the code preceding them is laid out and
+     * width-measured as if the comment were absent — the comment can never push that code over the line width or change
+     * which separator prints first.
+     *
+     * <p>Content is single-line only in this version; a {@link HardLine} inside it is rejected at render time.
+     */
+    static Doc lineSuffix(Doc content) {
+        return new LineSuffix(content);
+    }
+
     private static void flattenConcat(List<Doc> docs, List<Doc> out) {
         for (Doc doc : docs) {
             if (doc == EMPTY) {
@@ -122,4 +144,6 @@ public sealed interface Doc
     record IfBreak(Doc breakDoc, Doc flatDoc) implements Doc {}
 
     record Label(String label, Doc doc) implements Doc {}
+
+    record LineSuffix(Doc content) implements Doc {}
 }

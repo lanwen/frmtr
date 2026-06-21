@@ -1601,6 +1601,9 @@ final class MethodCallChainPrinter {
                 PaddedDoc padded = linePadded(label.doc(), padding, lineStart);
                 yield new PaddedDoc(Doc.label(label.label(), padded.doc()), padded.lineStart());
             }
+            // A line suffix renders nothing at its position and flushes at the line break, so it neither consumes the
+            // line-start padding slot nor needs continuation padding inside its deferred content.
+            case Doc.LineSuffix lineSuffix -> new PaddedDoc(lineSuffix, lineStart);
         };
     }
 

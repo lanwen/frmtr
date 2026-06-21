@@ -32,6 +32,8 @@ final class MethodCallChainSourcePlanner {
 
     private final SourceShape sourceShape;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final FormatterOptions options;
 
     private final ToIntFunction<String> currentIndentedWidth;
@@ -40,6 +42,7 @@ final class MethodCallChainSourcePlanner {
         this.objectCreationLayoutPolicy = context.objectCreationLayoutPolicy;
         this.compactSource = context.compactSource;
         this.sourceShape = context.sourceShape;
+        this.sourceShapePolicy = context.sourceShapePolicy;
         this.options = context.options;
         this.currentIndentedWidth = currentIndentedWidth;
     }
@@ -181,7 +184,7 @@ final class MethodCallChainSourcePlanner {
             firstCallHasArgumentGapComment,
             laterCallsHaveArgumentGapComment,
             hasTrailingLineComments,
-            sourceSpansMultipleLines(expression)
+            sourceShapePolicy.wasMultiline(expression)
         );
     }
 
@@ -327,7 +330,7 @@ final class MethodCallChainSourcePlanner {
         }
         Node previous = root;
         for (MethodCallExpr call : calls) {
-            if (selectorStartsAfterPreviousSegmentLine(previous, call)) {
+            if (sourceShapePolicy.selectorBrokeAfter(previous, call)) {
                 return true;
             }
             previous = call;
@@ -335,17 +338,9 @@ final class MethodCallChainSourcePlanner {
         return false;
     }
 
-    boolean selectorStartsAfterPreviousSegmentLine(Node previous, MethodCallExpr call) {
-        return previous.getRange()
-                .flatMap(previousRange -> call.getName().getRange().map(
-                        nameRange -> nameRange.begin.line > previousRange.end.line
-                ))
-                .orElse(false);
-    }
-
     boolean methodCallStartsAfterScopeLine(MethodCallExpr call) {
         return call.getScope()
-                .map(scope -> selectorStartsAfterPreviousSegmentLine(scope, call))
+                .map(scope -> sourceShapePolicy.selectorBrokeAfter(scope, call))
                 .orElse(false);
     }
 
@@ -355,7 +350,7 @@ final class MethodCallChainSourcePlanner {
 
     private boolean sourceMultilinePromotedMethodRoot(MethodCallExpr methodRoot) {
         return methodRoot.getScope()
-                .map(scope -> selectorStartsAfterPreviousSegmentLine(scope, methodRoot))
+                .map(scope -> sourceShapePolicy.selectorBrokeAfter(scope, methodRoot))
                 .orElse(false);
     }
 
@@ -405,12 +400,6 @@ final class MethodCallChainSourcePlanner {
 
     private boolean startsWithUppercase(String name) {
         return !name.isEmpty() && Character.isUpperCase(name.charAt(0));
-    }
-
-    private boolean sourceSpansMultipleLines(Node node) {
-        return node.getRange()
-                .map(range -> range.begin.line < range.end.line)
-                .orElse(false);
     }
 
     private boolean shouldPromoteFirstCallForArgumentComments(

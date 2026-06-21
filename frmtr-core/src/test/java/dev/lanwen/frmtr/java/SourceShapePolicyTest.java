@@ -133,6 +133,38 @@ final class SourceShapePolicyTest {
     }
 
     @Test
+    void selectorBrokeAfterIsFalseWhenTheSelectorStaysOnThePreviousSegmentLine() {
+        // a.first().second() on one line: the "second" selector begins on the same line the "first()" segment ends.
+        String source = "class Demo {\n    Object value = a.first().second();\n}\n";
+        MethodCallExpr outerCall = outermostChainCall(source);
+        MethodCallExpr previousSegment = (MethodCallExpr) outerCall.getScope().orElseThrow();
+
+        assertThat(policy(source).selectorBrokeAfter(previousSegment, outerCall)).isFalse();
+    }
+
+    @Test
+    void selectorBrokeAfterIsTrueWhenTheSelectorBeginsOnALaterLine() {
+        // The "second" selector is broken onto its own line after the "first()" segment, an author-broken chain split.
+        String source = "class Demo {\n    Object value = a.first()\n        .second();\n}\n";
+        MethodCallExpr outerCall = outermostChainCall(source);
+        MethodCallExpr previousSegment = (MethodCallExpr) outerCall.getScope().orElseThrow();
+
+        assertThat(policy(source).selectorBrokeAfter(previousSegment, outerCall)).isTrue();
+    }
+
+    @Test
+    void selectorBrokeAfterMeasuresTheSelectorNameNotTheWholeCallRange() {
+        // The previous segment spans two source lines, but the "second" selector still starts on the line that segment
+        // ends, so the chain was not broken before this selector: the gate measures the selector name, not the call span.
+        String source = "class Demo {\n    Object value = a.first(\n        arg).second();\n}\n";
+        MethodCallExpr outerCall = outermostChainCall(source);
+        MethodCallExpr previousSegment = (MethodCallExpr) outerCall.getScope().orElseThrow();
+
+        assertThat(policy(source).wasMultiline(previousSegment)).isTrue();
+        assertThat(policy(source).selectorBrokeAfter(previousSegment, outerCall)).isFalse();
+    }
+
+    @Test
     void hadBlankLineBeforeComparesACallerResolvedBeginLineAgainstThePreviousNode() {
         String source = "class Demo {\n    int first;\n\n\n    int second;\n}\n";
         FieldDeclaration first = field(source, 0);
@@ -148,6 +180,15 @@ final class SourceShapePolicyTest {
     }
 
     private static MethodCallExpr call(String source) {
+        return parse(source).findFirst(MethodCallExpr.class).orElseThrow();
+    }
+
+    /**
+     * Returns the outermost method call of a fluent chain. JavaParser nests {@code a.first().second()} so the trailing
+     * {@code second()} call is the expression root and the first node visited in pre-order, with {@code first()} as its
+     * scope; tests use it to feed a chain segment and its previous segment to {@code selectorBrokeAfter}.
+     */
+    private static MethodCallExpr outermostChainCall(String source) {
         return parse(source).findFirst(MethodCallExpr.class).orElseThrow();
     }
 

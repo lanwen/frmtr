@@ -268,9 +268,11 @@ whether a node was already multiline (`wasMultiline`, range-first with a raw-tex
 left a blank line between two source-adjacent nodes (`hadBlankLineBetween`, plus a `hadBlankLineBefore` overload for
 callers that first resolve a comment-aware begin line), and of whether a node's source-equivalent compact text fits on
 one line at its call-site indentation (`fitsOnOneLine`, which applies a per-site indented-width function to
-`CompactSourceText` and owns the single `lineWidth()` comparison while leaving compact-text generation in that helper).
-`SourceShape` continues to expose its syntax-specific predicate surface and delegates its canonical multiline check to
-the policy. Shared method-call argument helpers keep over-wide and source-multiline argument policies
+`CompactSourceText` and owns the single `lineWidth()` comparison while leaving compact-text generation in that helper),
+and of whether a fluent-chain segment's selector began on a later source line than the previous segment ended
+(`selectorBrokeAfter`, the chain-split definition the method-call chain source planner consults instead of its own range
+arithmetic). `SourceShape` continues to expose its syntax-specific predicate surface and delegates its canonical
+multiline check to the policy. Shared method-call argument helpers keep over-wide and source-multiline argument policies
 consistent when method calls appear in direct calls, initializers, and try resources. Expression-lambda helpers share
 width plans across call contexts, and expression tails thread statement terminators or separators through expression
 rendering before trailing line comments are placed. See

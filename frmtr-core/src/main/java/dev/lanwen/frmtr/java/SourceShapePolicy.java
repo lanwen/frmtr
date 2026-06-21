@@ -1,6 +1,7 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.expr.MethodCallExpr;
 import dev.lanwen.frmtr.FormatterOptions;
 import java.util.function.ToIntFunction;
 
@@ -114,5 +115,26 @@ final class SourceShapePolicy {
      */
     boolean fitsOnOneLine(Node node, ToIntFunction<String> indentedWidth) {
         return indentedWidth.applyAsInt(compactSource.compact(node)) <= options.lineWidth();
+    }
+
+    /**
+     * Reports whether a method-call chain segment's selector started on a later source line than the previous segment
+     * ended, the single canonical definition of an author-broken chain split.
+     *
+     * <p>A fluent chain such as {@code a.b().c()} is "source-multiline" when the author put a selector on its own line;
+     * the planner detects that one segment at a time by asking whether this call's name token begins after the previous
+     * segment's last line. The selector is the call's name rather than the whole call, so a scope that itself spans
+     * lines does not count as the author breaking before this selector. The comparison is range-only: when either the
+     * previous segment or the selector name lacks a source range the answer is {@code false}, because without positions
+     * the formatter cannot claim the author split the chain here. This is the {@code selectorOwner} typed as
+     * {@link MethodCallExpr} (not the proposal sketch's bare {@code Node}) precisely so the selector-name range stays
+     * available and the arithmetic is lifted unchanged from the planner.
+     */
+    boolean selectorBrokeAfter(Node previous, MethodCallExpr selectorOwner) {
+        return previous.getRange()
+                .flatMap(previousRange -> selectorOwner.getName().getRange().map(
+                        nameRange -> nameRange.begin.line > previousRange.end.line
+                ))
+                .orElse(false);
     }
 }

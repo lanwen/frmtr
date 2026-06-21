@@ -245,8 +245,13 @@ Two opt-in, off-by-default debug toggles guard formatter correctness during deve
 `dev.lanwen.frmtr.debug.verify` enables an AST-equivalence verify mode that re-parses the formatter output and asserts
 it is structurally equivalent to the input (modulo comments, whitespace, and the deliberate import reorder), catching a
 meaning-changing printer bug in any construct. Verification is enabled across the `frmtr-core` test suite so every
-golden fixture is also AST-checked. Both toggles live behind `FormatterGuardrails`; see
-[docs/java-formatter-internals.md](docs/java-formatter-internals.md) for details.
+golden fixture is also AST-checked. The `dev.lanwen.frmtr.debug.guardrails` comment-accounting check stays an opt-in
+dev aid only: the durable "no comment is dropped" CI gate is instead `CommentPresenceDiagnosticTest`, which compares the
+lexer comment-token multiset of each input against its formatted output over every golden fixture and every
+collapsed/expanded perturbation, failing on any genuine drop (a documented exclusion list tracks the remaining S9
+backlog). The stricter "each comment claimed at most once" invariant lives behind a separate off-by-default
+`dev.lanwen.frmtr.debug.guardrails.strict-claims` toggle, deferred until comment ownership is deterministic. All toggles
+live behind `FormatterGuardrails`; see [docs/java-formatter-internals.md](docs/java-formatter-internals.md) for details.
 
 `JavaPrinter` creates one per-run `JavaFormatContext`, constructs shared type rendering, and coordinates the three
 printer composer groups: `ExpressionPrinters`, `DeclarationPrinters`, and `StatementPrinters`. Formatter ownership then

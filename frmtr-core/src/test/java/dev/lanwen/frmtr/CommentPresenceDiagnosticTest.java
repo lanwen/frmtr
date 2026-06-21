@@ -135,12 +135,6 @@ final class CommentPresenceDiagnosticTest {
         drops.put("comment-preservation-block-comment-shapes @ collapsed",
             "S9 backlog (block/annotation gap): \"a\" (3->2)");
 
-        // text-block-adjacent
-        drops.put("text-block-language-and-escapes @ collapsed",
-            "S9 backlog (text-block-adjacent): \"leading comment\"");
-        drops.put("text-block-language-and-escapes @ expanded",
-            "S9 backlog (text-block-adjacent): \"leading comment\", \"trailing comment\"");
-
         // records / enums / conditionals / misc
         drops.put("record-component-spacing @ collapsed", "S9 backlog (records/enums/misc): \"comment\" (2->1)");
         drops.put("record-component-spacing @ expanded", "S9 backlog (records/enums/misc): \"comment\" (2->1)");

@@ -215,7 +215,21 @@ final class CommentedExpressionListPrinter {
                 .stream()
                 .filter(child -> !(child instanceof Comment))
                 .filter(child -> child != argument)
-                .anyMatch(comment::startsInsideLineRange);
+                .anyMatch(child -> commentBelongsToChild(comment, child));
+    }
+
+    /**
+     * Reports whether {@code comment} is owned by {@code child} rather than merely trailing it on a shared line.
+     *
+     * <p>The line-only {@link JavaCommentTrivia#startsInsideLineRange} test alone treats any comment sharing a child's
+     * line as that child's. When whitespace is collapsed, the last argument's trailing comment lands on the same line as
+     * earlier arguments (e.g. {@code alpha(), beta() // after last arg}), so that coarse test would hand the trailing
+     * comment to {@code alpha()} and then drop it (no printer emits it there). A comment that begins after the child's
+     * last token is trailing it, not inside it, so it is not the child's to claim.
+     */
+    private boolean commentBelongsToChild(JavaCommentTrivia comment, Node child) {
+        return comment.startsInsideLineRange(child)
+                && !CommentIndex.startsAfterNodeOnSameLine(child, comment.comment());
     }
 
     private Node argumentListAnchor(Node container) {

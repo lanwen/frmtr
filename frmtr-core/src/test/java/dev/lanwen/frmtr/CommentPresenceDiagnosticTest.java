@@ -79,20 +79,23 @@ final class CommentPresenceDiagnosticTest {
 
         // -- P1: drops only when whitespace is perturbed; shape-dependent ownership (B1 evidence). --
 
-        // control-condition / if
+        // control-condition / if -- ESCALATED to B1 (source-shape consolidation). Under whole-fixture collapse the line
+        // comments inside/after a control condition are mis-attributed by JavaParser across method boundaries (a comment
+        // from one method's switch selector bled into another method's body), so the loss is in attachment, not in a
+        // single printer's adjacency check. A shape-independent fix needs the B1 SourceShapePolicy, not a local patch.
         drops.put("comment-preservation-control-condition @ collapsed",
-            "S9 backlog (control-condition): \"keep polling until the route snapshot is visible\","
+            "needs B1: \"keep polling until the route snapshot is visible\","
                 + " \"use the normalized event kind for routing\"");
         drops.put("comment-preservation-control-condition @ expanded",
-            "S9 backlog (control-condition): \"keep polling until the route snapshot is visible\","
+            "needs B1: \"keep polling until the route snapshot is visible\","
                 + " \"read selector after cursor state is refreshed\","
                 + " \"keep the body delayed until route state is stable\","
                 + " \"keep selector comment outside the condition\", \"use the normalized event kind for routing\"");
         drops.put("comment-preservation-if-statement @ collapsed",
-            "S9 backlog (control-condition/if): \"test\" (12->9),"
+            "needs B1 (control-condition/if): \"test\" (12->9),"
                 + " \"https://docs.example.invalid/token-envelope-03.html\"");
         drops.put("comment-preservation-if-statement @ expanded",
-            "S9 backlog (control-condition/if): \"test\" (12->7), \"comment\","
+            "needs B1 (control-condition/if): \"test\" (12->7), \"comment\","
                 + " \"legacy key envelope before registry draft 04\","
                 + " \"https://docs.example.invalid/token-envelope-03.html\","
                 + " \"keep manual routing while backfill catches up\"");
@@ -111,9 +114,6 @@ final class CommentPresenceDiagnosticTest {
         // method-arguments
         drops.put("comment-preservation-method-arguments @ expanded",
             "S9 backlog (method-arguments): \"services selected directly\", \"services selected by scaling\"");
-        drops.put("block-orphan-method-call-comments @ collapsed",
-            "S9 backlog (method-arguments): \"after last call arg\", \"after last constructor arg\","
-                + " \"after last chain arg\"");
 
         // switch
         drops.put("switch-entry-leading-comments @ collapsed",

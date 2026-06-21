@@ -26,30 +26,172 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
- * Output-level comment-presence diagnostic (investigation {@code inv/comment-presence}).
+ * Output-level comment-presence net — the CI gate for "the formatter never drops a comment" (roadmap S7 part 2;
+ * promoted from the {@code inv/comment-presence} diagnostic).
  *
- * <p><strong>Why this exists.</strong> {@code FormatterGuardrails.assertAllCommentsAccounted} flags a comment when it
- * was not <em>registered</em> in the formatter's claimed / raw-accounted sets. That registration is keyed on JavaParser
- * {@link Comment} object identity, so it is a <em>proxy</em> for "did the comment's text reach the output", not a
- * measurement of it: a comment rendered through a path that never records accounting, or recorded under a different
- * comment identity, is flagged even though its text is present in the formatted output. The guardrail therefore
- * <em>over-reports</em> data loss.
+ * <p><strong>Why this is the gate and {@code assertAllCommentsAccounted} is not.</strong> The accounting guardrail
+ * flags a comment when it was not <em>registered</em> in the formatter's claimed / raw-accounted sets. That
+ * registration is keyed on JavaParser {@link Comment} object identity, so it is a <em>proxy</em> for "did the comment's
+ * text reach the output", not a measurement of it: a comment rendered through a path that never records accounting, or
+ * recorded under a different comment identity, is flagged even though its text is present (over-reports), and an
+ * AST-invisible orphan it never traverses is missed (under-reports). This net answers the real question directly: it
+ * compares the <em>lexer comment-token multiset</em> of the INPUT against that of the {@link Frmtr#format formatted
+ * OUTPUT}, and fails when any input comment content appears fewer times in the output than in the input. The lexer
+ * count is ground truth — it counts the actual {@code //} and {@code /* *}{@code /} tokens in the source bytes, so it
+ * cannot phantom-drop or phantom-gain the way an attributed-comment traversal can.
  *
- * <p>This diagnostic answers the real question directly: it parses the INPUT and the {@link Frmtr#format formatted
- * OUTPUT} with the same parser configuration the formatter uses, extracts every comment's normalized content as a
- * <em>multiset</em>, and reports any input comment content whose multiplicity in the output is lower than in the input.
- * Only a genuine multiplicity drop counts as real comment-data-loss; re-indentation, trailing-whitespace changes, and
- * block-comment re-shaping are normalized away so they never read as a drop.
+ * <p><strong>What it asserts, over what corpus.</strong> Two parameterized passes fail on any non-excluded
+ * {@code (fixture, shape)} that drops a comment: (1) every golden fixture input at its own variant options, verbatim;
+ * (2) collapsed/expanded whitespace perturbations of every golden input at default options, generated exactly as
+ * {@code IdempotencePropertyTest.perturb} does (so a comment dropped only when the layout moves is still caught — that
+ * shape-dependent ownership is the B1 thesis). Tolerant normalization (see {@link #normalizeRawComment}) makes
+ * re-indentation, trailing-whitespace strip, and block {@code *}-prefix re-shaping invisible, so only genuine textual
+ * <em>absence</em> fails.
  *
- * <p><strong>This test never fails the build.</strong> Its job is to enumerate and print, not to assert away findings.
- * The drop inventory is accumulated across the two parameterized passes (golden fixtures with their own options;
- * collapsed/expanded perturbations with default options, matching {@code IdempotencePropertyTest}) and printed by
- * {@link #printReport()}. The one assertion is a positive control on the comparator itself (see
- * {@link #comparatorReportsNoDropForKnownAccountingGap}); the per-case passes never assert on the drops they find.
+ * <p><strong>The exclusion list ({@link #KNOWN_DROPS}) is the S9 backlog.</strong> It is seeded with exactly the
+ * {@code (fixture, shape)} cases that drop a comment on this branch today, each annotated with the dropped text and a
+ * pointer to the S9 cluster that owns the fix. This makes the net green now while it bites on any <em>new</em> drop
+ * immediately. As each S9 cluster lands a real fix, its entries are removed here in the same change; the net is fully
+ * green with an empty exclusion list when S9 completes. The exclusion list is never widened to mask a regression — a
+ * new drop outside the backlog must be fixed or diagnosed, not parked (see the class's STOP conditions in
+ * {@code docs/proposals/comment-data-loss.md}).
+ *
+ * <p>{@link #printReport()} still drains a full per-drop inventory to stdout as a development aid; the build outcome is
+ * decided by the per-case assertions, not the report.
  */
 final class CommentPresenceDiagnosticTest {
 
-    // Accumulators shared across the two parameterized passes; drained by printReport() in @AfterAll.
+    /**
+     * The S9 comment-drop backlog: {@code (fixture, shape)} display names whose formatting genuinely drops a comment on
+     * this branch, each kept out of the asserting net until its S9 cluster fixes the underlying placement/printer bug.
+     *
+     * <p>Each entry's value is the comment text(s) the fixture loses, so the parked finding stays honest and reviewable.
+     * The grouping mirrors the cluster ordering in {@code docs/proposals/comment-data-loss.md}. Removing an entry
+     * re-arms the net for that case; an S9 cluster commit removes its entries in the same change as the fix.
+     *
+     * <p><strong>Do not add entries to silence a regression.</strong> This list only ever shrinks. A drop on a case not
+     * already here is a new data-loss bug the net is meant to catch.
+     */
+    private static final Map<String, String> KNOWN_DROPS = knownDrops();
+
+    private static Map<String, String> knownDrops() {
+        Map<String, String> drops = new TreeMap<>();
+
+        // -- P0: drops on NORMAL (verbatim @default) input; the committed golden output is itself lossy. --
+        // annotation-block-comment-gap: the /* ... */ between @Deprecated and the method is dropped (2 block -> 1).
+        drops.put("annotation-block-comment-gap @ default",
+            "S9 backlog (P0): \"Since version 0.11, the service exposes all APIs on a single(4566 ) port.\"");
+        // comment-complex-block-statements: one of two `/* dead code */` block comments dropped (37 -> 36).
+        drops.put("comment-complex-block-statements @ default", "S9 backlog (P0): \"dead code\"");
+
+        // -- P1: drops only when whitespace is perturbed; shape-dependent ownership (B1 evidence). --
+
+        // control-condition / if
+        drops.put("comment-preservation-control-condition @ collapsed",
+            "S9 backlog (control-condition): \"keep polling until the route snapshot is visible\","
+                + " \"use the normalized event kind for routing\"");
+        drops.put("comment-preservation-control-condition @ expanded",
+            "S9 backlog (control-condition): \"keep polling until the route snapshot is visible\","
+                + " \"read selector after cursor state is refreshed\","
+                + " \"keep the body delayed until route state is stable\","
+                + " \"keep selector comment outside the condition\", \"use the normalized event kind for routing\"");
+        drops.put("comment-preservation-if-statement @ collapsed",
+            "S9 backlog (control-condition/if): \"test\" (12->9),"
+                + " \"https://docs.example.invalid/token-envelope-03.html\"");
+        drops.put("comment-preservation-if-statement @ expanded",
+            "S9 backlog (control-condition/if): \"test\" (12->7), \"comment\","
+                + " \"legacy key envelope before registry draft 04\","
+                + " \"https://docs.example.invalid/token-envelope-03.html\","
+                + " \"keep manual routing while backfill catches up\"");
+
+        // labeled-statement
+        drops.put("comment-preservation-labeled-statement @ collapsed",
+            "S9 backlog (labeled-statement): \"Label statement\" (14->4), \"comment1\" (22->6),"
+                + " \"comment2\" (14->4)");
+
+        // try-resource
+        drops.put("comment-preservation-try-resources @ expanded",
+            "S9 backlog (try-resource): \"resource scope {\", \"single resource scope {\"");
+        drops.put("try-resource-layout @ expanded",
+            "S9 backlog (try-resource): \"a\", \"b\", \"c\", \"a2\", \"b2\", \"c2\"");
+
+        // method-arguments
+        drops.put("comment-preservation-method-arguments @ expanded",
+            "S9 backlog (method-arguments): \"services selected directly\", \"services selected by scaling\"");
+        drops.put("block-orphan-method-call-comments @ collapsed",
+            "S9 backlog (method-arguments): \"after last call arg\", \"after last constructor arg\","
+                + " \"after last chain arg\"");
+
+        // switch
+        drops.put("switch-entry-leading-comments @ collapsed",
+            "S9 backlog (switch): \"keep first detail\", \"keep second detail\", \"keep third detail\","
+                + " \"keep final detail\"");
+        drops.put("switch-entry-leading-comments @ expanded",
+            "S9 backlog (switch): \"keep first detail\", \"keep second detail\", \"keep third detail\","
+                + " \"keep final detail\"");
+        drops.put("switch-statement-rules @ collapsed", "S9 backlog (switch): \"comment\" (3->0)");
+        drops.put("switch-statement-rules @ expanded",
+            "S9 backlog (switch): \"default case\", \"case c\", \"fall through\", \"remote\", \"hybrid\","
+                + " \"comment\"");
+
+        // block-comment / annotation gap
+        drops.put("annotation-block-comment-gap @ collapsed",
+            "S9 backlog (block/annotation gap): \"Since version 0.11, ... single port.\","
+                + " \"Since version 0.11, ... single(4566 ) port.\"");
+        drops.put("comment-complex-block-statements @ collapsed",
+            "S9 backlog (block/annotation gap): \"switch\", \"dead code\", \"The Heart and the Spade\"");
+        drops.put("comment-complex-block-statements @ expanded",
+            "S9 backlog (block/annotation gap): \"is always executed no matter what\", \"Minus One\", \"switch\","
+                + " \"overloading\", \"at least one iteration !\", \"Additionnal enumeration\"");
+        drops.put("comment-preservation-block-comment-shapes @ collapsed",
+            "S9 backlog (block/annotation gap): \"a\" (3->2)");
+
+        // @formatter:* pragma lines
+        drops.put("formatter-pragma-begin-with-on @ expanded",
+            "S9 backlog (pragma): \"@formatter:on\" (2->1), \"@formatter:off\"");
+        drops.put("formatter-pragma-class @ expanded", "S9 backlog (pragma): \"@formatter:on\"");
+        drops.put("formatter-pragma-end-with-off @ expanded",
+            "S9 backlog (pragma): \"@formatter:off\" (2->1), \"@formatter:on\"");
+        drops.put("formatter-pragma-multiple @ expanded", "S9 backlog (pragma): \"@formatter:on\"");
+        drops.put("formatter-pragma-spacing @ expanded",
+            "S9 backlog (pragma): \"@formatter:off\" (3->2), \"@formatter:on\" (3->2)");
+
+        // text-block-adjacent
+        drops.put("text-block-language-and-escapes @ collapsed",
+            "S9 backlog (text-block-adjacent): \"leading comment\"");
+        drops.put("text-block-language-and-escapes @ expanded",
+            "S9 backlog (text-block-adjacent): \"leading comment\", \"trailing comment\"");
+
+        // records / enums / conditionals / misc
+        drops.put("record-component-spacing @ collapsed", "S9 backlog (records/enums/misc): \"comment\" (2->1)");
+        drops.put("record-component-spacing @ expanded", "S9 backlog (records/enums/misc): \"comment\" (2->1)");
+        drops.put("enum-declaration-layout @ collapsed", "S9 backlog (records/enums/misc): \"comment\" (3->2)");
+        drops.put("conditional-expression-space-indentation @ collapsed",
+            "S9 backlog (records/enums/misc): \"c\" (4->3)");
+        drops.put("conditional-expression-space-indentation @ expanded",
+            "S9 backlog (records/enums/misc): \"b\" (4->0), \"c\" (4->1)");
+        drops.put("unnamed-variables-patterns @ expanded",
+            "S9 backlog (records/enums/misc): \"Unnamed pattern variable\" (7->0)");
+        drops.put("correctness-data-loss @ expanded",
+            "S9 backlog (records/enums/misc): \"keep this comment with the type\"");
+        drops.put("empty-statement @ expanded", "S9 backlog (records/enums/misc): \"Bug Fix: #356\"");
+        drops.put("qualified-type-receiver-annotations @ expanded",
+            "S9 backlog (records/enums/misc): \"Fix for https://github.com/jhipster/prettier-java/issues/607\"");
+        drops.put("variable-declarations @ collapsed",
+            "S9 backlog (records/enums/misc): \"there is a random comment on this line up here\"");
+
+        // class-members / interface (guardrail-missed; found only by the lexer net)
+        drops.put("comment-preservation-class-members @ collapsed",
+            "S9 backlog (class-members): three \"TODO(jlevy): ...\" block comments");
+        drops.put("comment-preservation-class-members @ expanded",
+            "S9 backlog (class-members): the Guava copyright file-header block (AST-invisible orphan)");
+        drops.put("comment-preservation-interface-declaration @ collapsed",
+            "S9 backlog (interface-declaration): \"comment\"");
+
+        return Collections.unmodifiableMap(drops);
+    }
+
+    // Accumulators shared across the two parameterized passes; drained by printReport() in @AfterAll for diagnostics.
     private static final Map<String, List<Drop>> GOLDEN_DROPS = new TreeMap<>();
     private static final Map<String, List<Drop>> PERTURBED_DROPS = new TreeMap<>();
     private static final List<String> GOLDEN_EVALUATED = new ArrayList<>();
@@ -62,13 +204,6 @@ final class CommentPresenceDiagnosticTest {
     @ParameterizedTest(name = "{0}")
     @ResourceFixtureSource(glob = "format/**/input.java")
     void goldenFixtureCommentPresence(FormatFixture fixture) {
-        // Sanity-check the comparator on a case known to be an accounting gap (text present): zero drops expected.
-        if (fixture.name().equals("unnamed-variables-patterns @ default")) {
-            assertThat(realDrops(fixture.source(), fixture.options()))
-                    .as("comparator sanity: unnamed-variables-patterns @ default is a known accounting gap"
-                        + " (comment text present in output), so the output-level comparator must report zero drops")
-                    .isEmpty();
-        }
         if (!parses(fixture.source(), fixture.options())) {
             return; // RECOVER-only inputs: AST/comment comparison is ill-defined, skip (surfaced by count below).
         }
@@ -77,6 +212,7 @@ final class CommentPresenceDiagnosticTest {
         if (!drops.isEmpty()) {
             GOLDEN_DROPS.put(fixture.name(), drops);
         }
+        assertNoUnexpectedDrop(fixture.name(), drops);
     }
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -91,6 +227,30 @@ final class CommentPresenceDiagnosticTest {
         List<Drop> drops = safeRealDrops(name, perturbedSource, options);
         if (!drops.isEmpty()) {
             PERTURBED_DROPS.put(name, drops);
+        }
+        assertNoUnexpectedDrop(name, drops);
+    }
+
+    /**
+     * Fails the build when {@code (fixture, shape)} {@code name} drops a comment and is <em>not</em> a documented S9
+     * backlog entry. A case that is in {@link #KNOWN_DROPS} but no longer drops anything also fails — a stale exclusion
+     * means a fix landed without un-parking it, which would let a future regression hide; remove the entry in the fix's
+     * commit.
+     */
+    private static void assertNoUnexpectedDrop(String name, List<Drop> drops) {
+        boolean parked = KNOWN_DROPS.containsKey(name);
+        if (!drops.isEmpty()) {
+            assertThat(parked)
+                    .as("comment-presence net: `%s` drops comment(s) that are not in the documented S9 backlog: %s."
+                        + " The formatter must not drop comments — fix the placement/printer, do not add an exclusion.",
+                        name, drops)
+                    .isTrue();
+        } else {
+            assertThat(parked)
+                    .as("comment-presence net: `%s` is listed in the S9 backlog (KNOWN_DROPS) but no longer drops a"
+                        + " comment. A fix landed without un-parking it; remove its KNOWN_DROPS entry so the net guards"
+                        + " the case again.", name)
+                    .isFalse();
         }
     }
 
@@ -113,6 +273,58 @@ final class CommentPresenceDiagnosticTest {
             }
         }
         return arguments.stream();
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // Comparator positive controls — prove the net actually bites and that its normalization is not over-tolerant.
+    // ---------------------------------------------------------------------------------------------------------------
+
+    /**
+     * The comparator detects a genuine drop. A formatter that silently swallowed a comment must be caught, so this feeds
+     * a known-lossy verbatim golden fixture ({@code annotation-block-comment-gap}) and asserts the comparator reports a
+     * non-empty drop set for it — if this ever returns empty, either the fixture's loss was fixed (un-park it in
+     * {@link #KNOWN_DROPS}) or the comparator stopped measuring presence and the whole net is blind.
+     */
+    @org.junit.jupiter.api.Test
+    void comparatorReportsRealDropOnLossyFixture() {
+        // The inline `@Deprecated /* ... */ method` shape from annotation-block-comment-gap: the formatter currently
+        // drops the block comment sitting between the annotation and the method on the same line.
+        String lossy = """
+            class Demo {
+                @Deprecated /*
+                        Since version 0.11, the service exposes all APIs on a single port.*/ public int port() {
+                    return 0;
+                }
+            }
+            """;
+        assertThat(realDrops(lossy, FormatterOptions.defaults()))
+                .as("comparator must report the dropped annotation/method-gap block comment; an empty result here means"
+                    + " the output-level net has gone blind and would no longer catch data loss")
+                .isNotEmpty();
+    }
+
+    /**
+     * The comparator does <em>not</em> false-positive on the formatter's legitimate comment re-shaping. A block comment
+     * whose body the formatter re-indents and whose lines it re-aligns under a {@code *} prefix carries the same words;
+     * normalization must treat it as present, not dropped — otherwise the net would flag every reflowed comment.
+     */
+    @org.junit.jupiter.api.Test
+    void comparatorIgnoresLegitimateReshapingOfAPreservedComment() {
+        String reshaped = """
+            class Demo {
+                            // a line comment with odd indentation that the formatter re-indents
+                void method() {
+                /*
+                 a block comment
+                 the formatter re-aligns
+                 */
+                    int x = 1;
+                }
+            }
+            """;
+        assertThat(realDrops(reshaped, FormatterOptions.defaults()))
+                .as("re-indentation / *-prefix re-alignment of a preserved comment must not read as a drop")
+                .isEmpty();
     }
 
     // ---------------------------------------------------------------------------------------------------------------

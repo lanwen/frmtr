@@ -5,6 +5,7 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.Parameter;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 import java.util.function.ToIntFunction;
@@ -100,12 +101,32 @@ final class ThrowsClausePrinter {
             ? currentIndentedWidth.applyAsInt(") " + throwsText + suffix)
             : currentIndentedWidth.applyAsInt(flatSignature + " " + throwsText + suffix);
         if (forceBreak && (!parametersBreak || sameLineWidth > options.lineWidth())) {
-            return Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(throwsText)));
+            return brokenThrowsClause(thrownExceptions);
         }
         if (sameLineWidth <= options.lineWidth()) {
             return Doc.text(" " + throwsText);
         }
-        return Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(throwsText)));
+        return brokenThrowsClause(thrownExceptions);
+    }
+
+    /**
+     * Lays out a {@code throws ...} clause on its own indented continuation line, greedily packing the thrown
+     * exceptions across as many lines as the width allows instead of emitting them as one unbreakable blob.
+     *
+     * <p>The clause keyword stays glued to the first exception, then a {@link Doc#fill(List)} drives the inter-exception
+     * separators: each {@code ,} plus {@link Doc#LINE} is laid out flat while the next exception still fits on the
+     * current line and broken to a fresh continuation line only where it does not. This replaces the prior
+     * all-or-nothing shape, where a long exception list moved to its own line but still overflowed because it was a
+     * single {@link Doc#text(String)} string.
+     */
+    private Doc brokenThrowsClause(NodeList<? extends Node> thrownExceptions) {
+        List<Doc> parts = new ArrayList<>();
+        parts.add(Doc.text("throws " + compact.apply(thrownExceptions.get(0))));
+        for (int i = 1; i < thrownExceptions.size(); i++) {
+            parts.add(Doc.concat(Doc.text(","), Doc.LINE));
+            parts.add(Doc.text(compact.apply(thrownExceptions.get(i))));
+        }
+        return Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.fill(parts)));
     }
 
     private boolean parametersBreak(String prefix, NodeList<Parameter> parameters) {

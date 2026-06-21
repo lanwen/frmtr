@@ -57,7 +57,8 @@ public abstract class Throws {
         throws VeryLongException, VeryLongException {}
 
     void aVeryLongNameForAMethodWhichShouldBreakTheThrowsClause()
-        throws ValidationException, TransportException, RetryableException, TimeoutException, AuthorizationException, ConflictException, AuditException {}
+        throws ValidationException, TransportException, RetryableException, TimeoutException, AuthorizationException,
+        ConflictException, AuditException {}
 
     abstract void abstractThrowServiceException1() throws RuntimeException;
 

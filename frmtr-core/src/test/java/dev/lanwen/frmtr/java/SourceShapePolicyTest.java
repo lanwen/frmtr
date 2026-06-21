@@ -8,6 +8,7 @@ import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.Providers;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.FieldDeclaration;
+import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import dev.lanwen.frmtr.FormatterOptions;
@@ -165,6 +166,26 @@ final class SourceShapePolicyTest {
     }
 
     @Test
+    void hasContainedCommentsIsTrueForANodeThatEnclosesAComment() {
+        // The method body encloses a block comment, so the method declaration carries a contained comment and a
+        // compact/source-shaped layout of it would risk dropping that comment content.
+        String source = "class Demo {\n    void run() {\n        /* note */\n        call();\n    }\n}\n";
+        CompilationUnit unit = parse(source);
+        MethodDeclaration method = unit.findFirst(MethodDeclaration.class).orElseThrow();
+
+        assertThat(policyForCommentRun(source, unit).hasContainedComments(method)).isTrue();
+    }
+
+    @Test
+    void hasContainedCommentsIsFalseForACommentFreeNode() {
+        String source = "class Demo {\n    void run() {\n        call();\n    }\n}\n";
+        CompilationUnit unit = parse(source);
+        MethodDeclaration method = unit.findFirst(MethodDeclaration.class).orElseThrow();
+
+        assertThat(policyForCommentRun(source, unit).hasContainedComments(method)).isFalse();
+    }
+
+    @Test
     void hadBlankLineBeforeComparesACallerResolvedBeginLineAgainstThePreviousNode() {
         String source = "class Demo {\n    int first;\n\n\n    int second;\n}\n";
         FieldDeclaration first = field(source, 0);
@@ -212,6 +233,24 @@ final class SourceShapePolicyTest {
             rawSource,
             new CompactSourceText(rawSource),
             new JavaCommentPlacementPolicy(),
+            options
+        );
+    }
+
+    /**
+     * Builds a policy whose comment-placement collaborator has its run index started for {@code unit}, which
+     * {@link SourceShapePolicy#hasContainedComments} requires (the gate delegates to the per-run containment index).
+     */
+    private static SourceShapePolicy policyForCommentRun(String source, CompilationUnit unit) {
+        FormatterOptions options = FormatterOptions.defaults();
+        RawSource rawSource = new RawSource(options);
+        JavaCommentPlacementPolicy commentPolicy = new JavaCommentPlacementPolicy();
+        commentPolicy.startRun(unit);
+        return new SourceShapePolicy(
+            new SourceText(source),
+            rawSource,
+            new CompactSourceText(rawSource),
+            commentPolicy,
             options
         );
     }

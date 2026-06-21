@@ -583,8 +583,7 @@ final class MemberBlockPrinter {
         if (hasPragma.test(previous) || hasPragma.test(current)) {
             return Doc.HARD_LINE;
         }
-        Optional<Boolean> hasSourceBlankLineBetween = hasSourceBlankLineBetween(previous, current);
-        if (hasSourceBlankLineBetween.orElse(false)) {
+        if (hasSourceBlankLineBetween(previous, current)) {
             return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
         }
         // Interface methods without bodies read as a signature list unless annotations make each item standalone.
@@ -607,11 +606,11 @@ final class MemberBlockPrinter {
         return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
     }
 
-    private Optional<Boolean> hasSourceBlankLineBetween(BodyDeclaration<?> previous, BodyDeclaration<?> current) {
-        if (previous.getRange().isEmpty() || current.getRange().isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(sourceShapePolicy.hadBlankLineBetween(previous, current));
+    private boolean hasSourceBlankLineBetween(BodyDeclaration<?> previous, BodyDeclaration<?> current) {
+        // SourceShapePolicy.hadBlankLineBetween already returns false when either node lacks a source range, so the
+        // missing-range case needs no separate guard here; an absent range and a present-but-no-gap range both mean
+        // "the author did not leave a blank line".
+        return sourceShapePolicy.hadBlankLineBetween(previous, current);
     }
 
     private enum EntryKind {

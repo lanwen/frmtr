@@ -25,16 +25,17 @@ import org.junit.jupiter.api.Test;
  * <ul>
  *   <li>the raw multiline probe {@code rawSource....contains("\n")} — there is now one definition of "was multiline",
  *       {@link SourceShapePolicy#wasMultiline}, which keeps the range-first/raw-fallback logic in one place; and</li>
- *   <li>the deliberate-blank-line gap test {@code previous.end.line + 1} — there is now one definition of "had a blank
+ *   <li>the deliberate-blank-line gap test — in both its addition spelling {@code previous.end.line + 1} and its
+ *       subtraction spelling {@code next.begin.line - previous.end.line} — there is now one definition of "had a blank
  *       line between", {@link SourceShapePolicy#hadBlankLineBetween} / {@link SourceShapePolicy#hadBlankLineBefore}.</li>
  * </ul>
  *
- * <p>The guard is intentionally scoped to exactly the two patterns B1 drove to zero, so it stays green while still
- * catching a regression where a new printer hand-rolls one of them again instead of asking the policy. The broader
- * "no {@code getRange().*.line} layout arithmetic outside the policy" rule is <em>not</em> a test here: that arithmetic
- * legitimately remains in {@link SourceShapePolicy} itself and in the recovery/source helpers (for example the
- * recovered-region planners), so it is covered by a documented review checklist in
- * {@code docs/java-formatter-internals.md} rather than a flaky pattern match.
+ * <p>The guard matches exactly these literal spellings of the two patterns B1 drove to zero, so it stays green while
+ * still catching a regression where a new printer hand-rolls one of them again instead of asking the policy. It is a
+ * spelling-level tripwire, not a semantic analysis: the broader "no {@code getRange().*.line} layout arithmetic outside
+ * the policy" rule remains the <em>documented review checklist</em> in {@code docs/java-formatter-internals.md} rather
+ * than a test, because that arithmetic legitimately remains in {@link SourceShapePolicy} itself and in the
+ * recovery/source helpers (for example the recovered-region planners) and a broad pattern match would be flaky.
  *
  * <p>The allowlist names the files that are allowed to spell these patterns: the policy itself ({@link SourceShapePolicy})
  * and the slicing / raw-output / compact / recovery helpers it delegates to. Those own raw text and source slicing on
@@ -70,10 +71,19 @@ final class SourceShapeCouplingGuardTest {
     private static final Pattern RAW_NEWLINE_PROBE = Pattern.compile("rawSource\\b.*contains\\(\"\\\\n\"\\)");
 
     /**
-     * The deliberate-blank-line gap test B1 centralized into {@link SourceShapePolicy#hadBlankLineBetween}: the
-     * {@code <range>.end.line + 1} arithmetic that the member/statement/enum/module/record printers used to copy.
+     * The deliberate-blank-line gap test B1 centralized into {@link SourceShapePolicy#hadBlankLineBetween}, written as
+     * the {@code <range>.end.line + 1} addition the member/statement/enum/module/record printers used to copy.
      */
     private static final Pattern BLANK_LINE_GAP_ARITHMETIC = Pattern.compile("\\.end\\.line\\s*\\+\\s*1\\b");
+
+    /**
+     * The same deliberate-blank-line gap test spelled as subtraction, {@code <next>.begin.line - <prev>.end.line} (the
+     * form deleted from {@code RecordDeclarationPrinter}): {@code begin.line - … end.line > 1} also asks "was there a
+     * blank line between these?" and belongs behind {@link SourceShapePolicy#hadBlankLineBetween}. This complements
+     * {@link #BLANK_LINE_GAP_ARITHMETIC} so neither literal spelling of the gap can creep back into a printer.
+     */
+    private static final Pattern BLANK_LINE_GAP_SUBTRACTION =
+        Pattern.compile("begin\\.line\\s*-\\s*[A-Za-z0-9_.]*end\\.line");
 
     @Test
     void noRawNewlineProbeOutsideTheSourceShapePolicy() {
@@ -91,6 +101,17 @@ final class SourceShapeCouplingGuardTest {
                 .as(
                     "blank-line gap arithmetic (previous.end.line + 1) must ask SourceShapePolicy.hadBlankLineBetween "
                     + "instead; found re-introduced gap arithmetic outside the policy/recovery allowlist"
+                )
+                .isEmpty();
+    }
+
+    @Test
+    void noBlankLineGapSubtractionOutsideTheSourceShapePolicy() {
+        assertThat(matchesOutsideAllowlist(BLANK_LINE_GAP_SUBTRACTION))
+                .as(
+                    "blank-line gap arithmetic (next.begin.line - previous.end.line) must ask "
+                    + "SourceShapePolicy.hadBlankLineBetween instead; found re-introduced gap subtraction outside the "
+                    + "policy/recovery allowlist"
                 )
                 .isEmpty();
     }

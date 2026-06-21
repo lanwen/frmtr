@@ -609,7 +609,7 @@ final class MethodCallChainPrinter {
             Doc rootDoc = singleSegmentMethodRootDoc(methodRoot);
             Doc rootTrailingComment = rootTrailingLineCommentBeforeFirstSegment(methodRoot, calls);
             if (rootTrailingComment != Doc.EMPTY) {
-                rootDoc = Doc.concat(rootDoc, Doc.text(" "), rootTrailingComment);
+                rootDoc = Doc.concat(rootDoc, Doc.lineSuffix(Doc.concat(Doc.text(" "), rootTrailingComment)));
             }
             return Optional.of(
                 Doc.concat(
@@ -690,7 +690,7 @@ final class MethodCallChainPrinter {
             ) {
                 rootDoc = brokenObjectCreationRenderer.apply(objectCreation);
             }
-            rootDoc = Doc.concat(rootDoc, Doc.text(" "), rootTrailingComment);
+            rootDoc = Doc.concat(rootDoc, Doc.lineSuffix(Doc.concat(Doc.text(" "), rootTrailingComment)));
             if (calls.size() == 1) {
                 return Optional.of(
                     Doc.concat(
@@ -2650,12 +2650,10 @@ final class MethodCallChainPrinter {
         Doc trailingComment = nextCall
                 .map(next -> trailingLineCommentBeforeNextSegment(expression, Optional.of(next)))
                 .orElseGet(() -> finalTrailingLineComment(expression));
-        if (!finalSegmentSuffix.isEmpty() && nextCall.isEmpty()) {
-            return trailingComment == Doc.EMPTY
-                ? segment
-                : Doc.concat(segment, Doc.text(" "), trailingComment);
+        if (trailingComment == Doc.EMPTY) {
+            return segment;
         }
-        return trailingComment == Doc.EMPTY ? segment : Doc.concat(segment, Doc.text(" "), trailingComment);
+        return Doc.concat(segment, Doc.lineSuffix(Doc.concat(Doc.text(" "), trailingComment)));
     }
 
     private Doc appendFinalSegmentSuffix(Doc doc, MethodCallChainTail finalSegmentSuffix) {

@@ -57,9 +57,9 @@ final class CommentedExpressionListPrinter {
         for (int index = 0; index < arguments.size(); index++) {
             Expression argument = arguments.get(index);
             boolean hasNext = index + 1 < arguments.size();
-            boolean commaAppended = false;
             List<JavaCommentTrivia> trailingComments = commentGaps.get(index + 1);
             Doc argumentLine = argumentLine(argument, trailingComments);
+            List<Doc> inlineTrailingComments = new ArrayList<>();
             List<Doc> trailingCommentLines = new ArrayList<>();
             for (JavaCommentTrivia comment : trailingComments) {
                 Doc commentDoc = comments.comment(comment);
@@ -71,17 +71,19 @@ final class CommentedExpressionListPrinter {
                     || comment.startsAfterNodeOnSameLine(argument)
                     || argumentContainsComment(argument, comment)
                 ) {
-                    if (hasNext && !commaAppended) {
-                        argumentLine = Doc.concat(argumentLine, Doc.text(","));
-                        commaAppended = true;
-                    }
-                    argumentLine = Doc.concat(argumentLine, Doc.text(" "), commentDoc);
+                    inlineTrailingComments.add(commentDoc);
                 } else {
                     trailingCommentLines.add(commentDoc);
                 }
             }
-            if (hasNext && !commaAppended) {
+            if (hasNext) {
                 argumentLine = Doc.concat(argumentLine, Doc.text(","));
+            }
+            for (Doc inlineTrailingComment : inlineTrailingComments) {
+                argumentLine = Doc.concat(
+                    argumentLine,
+                    Doc.lineSuffix(Doc.concat(Doc.text(" "), inlineTrailingComment))
+                );
             }
             lines.add(argumentLine);
             lines.addAll(trailingCommentLines);

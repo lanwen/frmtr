@@ -444,7 +444,10 @@ final class ControlConditionPrinter {
             Doc printedComment = comments.comment(comment);
             Doc conditionDoc = conditionCommentStartsBeforeExpression(condition, comment)
                 ? Doc.join(Doc.HARD_LINE, List.of(printedComment, Doc.text(compactWithoutOwnComment.apply(condition))))
-                : Doc.text(compactWithoutOwnComment.apply(condition) + " " + commentText(printedComment));
+                : Doc.concat(
+                    Doc.text(compactWithoutOwnComment.apply(condition)),
+                    Doc.lineSuffix(Doc.concat(Doc.text(" "), printedComment))
+                );
             return Optional.of(
                 Doc.concat(
                     Doc.text("("),
@@ -479,9 +482,9 @@ final class ControlConditionPrinter {
             if (printedComment == Doc.EMPTY) {
                 return Optional.empty();
             }
-            return Optional.of(conditionWithTrailingLineComment(condition, commentText(printedComment)));
+            return Optional.of(conditionWithTrailingLineComment(condition, printedComment));
         }
-        return Optional.of(conditionWithTrailingLineComment(condition, rawComment.orElseThrow()));
+        return Optional.of(conditionWithTrailingLineComment(condition, Doc.text(rawComment.orElseThrow())));
     }
 
     Doc closeParenTrailingLineComment(Expression condition) {
@@ -506,8 +509,17 @@ final class ControlConditionPrinter {
                     .isPresent();
     }
 
-    private Doc conditionWithTrailingLineComment(Expression condition, String comment) {
-        Doc conditionDoc = Doc.text(compact.apply(condition) + " " + comment);
+    /**
+     * Lays the condition on its own line inside the parentheses and defers the trailing line comment to a {@link
+     * Doc#lineSuffix(Doc)} so it flushes at the line break before the closing paren. Emitting the comment as a suffix
+     * rather than baking it into the condition's text literal keeps the comment out of width measurement (a trailing
+     * comment never widens the line it sits on) while rendering byte-identically to {@code condition // comment}.
+     */
+    private Doc conditionWithTrailingLineComment(Expression condition, Doc comment) {
+        Doc conditionDoc = Doc.concat(
+            Doc.text(compact.apply(condition)),
+            Doc.lineSuffix(Doc.concat(Doc.text(" "), comment))
+        );
         return Doc.concat(
             Doc.text("("),
             Doc.indent(Doc.concat(Doc.HARD_LINE, conditionDoc)),

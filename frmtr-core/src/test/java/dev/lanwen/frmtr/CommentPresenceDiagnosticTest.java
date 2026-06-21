@@ -115,17 +115,16 @@ final class CommentPresenceDiagnosticTest {
         drops.put("comment-preservation-method-arguments @ expanded",
             "S9 backlog (method-arguments): \"services selected directly\", \"services selected by scaling\"");
 
-        // switch
+        // switch -- entry-leading comments stacked before a `case` are now interleaved from the switch's orphan comments;
+        // these two remain because a leading comment JavaParser mis-attaches to the SELECTOR under collapse (not a switch
+        // orphan) is still dropped, and switch-statement-rules also drops inline block comments inside a case label
+        // (case REMOTE /* remote */, HYBRID). Both are narrower follow-ups on top of the interleave landed here.
         drops.put("switch-entry-leading-comments @ collapsed",
-            "S9 backlog (switch): \"keep first detail\", \"keep second detail\", \"keep third detail\","
-                + " \"keep final detail\"");
-        drops.put("switch-entry-leading-comments @ expanded",
-            "S9 backlog (switch): \"keep first detail\", \"keep second detail\", \"keep third detail\","
-                + " \"keep final detail\"");
+            "S9 backlog (switch): \"keep first detail\" (selector-attached under collapse; the other three now preserved)");
         drops.put("switch-statement-rules @ collapsed", "S9 backlog (switch): \"comment\" (3->0)");
         drops.put("switch-statement-rules @ expanded",
-            "S9 backlog (switch): \"default case\", \"case c\", \"fall through\", \"remote\", \"hybrid\","
-                + " \"comment\"");
+            "S9 backlog (switch): inline case-label block comments \"remote\", \"hybrid\"; \"comment\""
+                + " (leading \"default case\"/\"case c\"/\"fall through\" now preserved)");
 
         // block-comment / annotation gap
         drops.put("comment-complex-block-statements @ collapsed",
@@ -150,8 +149,6 @@ final class CommentPresenceDiagnosticTest {
             "S9 backlog (records/enums/misc): \"c\" (4->3)");
         drops.put("conditional-expression-space-indentation @ expanded",
             "S9 backlog (records/enums/misc): \"b\" (4->0), \"c\" (4->1)");
-        drops.put("unnamed-variables-patterns @ expanded",
-            "S9 backlog (records/enums/misc): \"Unnamed pattern variable\" (7->0)");
         drops.put("correctness-data-loss @ expanded",
             "S9 backlog (records/enums/misc): \"keep this comment with the type\"");
         drops.put("variable-declarations @ collapsed",

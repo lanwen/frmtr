@@ -278,8 +278,11 @@ strips comments on clones keeps its own direct scan because the run index report
 Raw-recovery text used purely for a layout or fallback is funneled through the policy too (`rawText`,
 `rawTextWithoutOwnComment`, delegating unchanged to `RawSource`), so a printer that only needs source-derived text no
 longer holds a bare `RawSource`; genuine raw-output passes that must account for the comments they emit stay on
-`RawPreservedSource`, and source-equivalent compact text keeps using `RawSource`/`CompactSourceText`. `SourceShape`
-continues to expose its syntax-specific predicate surface and delegates its canonical multiline check to the policy.
+`RawPreservedSource`, and source-equivalent compact text keeps using `RawSource`/`CompactSourceText`. The policy also
+owns the syntax-specific source-shape predicate surface directly (multiline argument lists, same-line starts,
+throws-clause and try-with-resources shape, method-call operand and logical-condition shape), all built on the one
+`wasMultiline` definition, so a printer asks one source-shape object rather than reaching for the same multiline answer
+two different ways.
 `SourceShapeCouplingGuardTest` keeps the boundary from eroding: it fails if a printer outside the policy and the
 slicing/raw-output/compact/recovery helpers re-introduces either consolidated pattern — a `rawSource....contains("\n")`
 multiline probe or `previous.end.line + 1` blank-line gap arithmetic. The broader "no `getRange().*.line` layout

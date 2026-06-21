@@ -25,7 +25,7 @@ final class ReturnBinaryExpressionLayout {
 
     private final LayoutWidth layoutWidth;
 
-    private final SourceShape sourceShape;
+    private final SourceShapePolicy sourceShapePolicy;
 
     private final Function<Expression, Doc> expressionRenderer;
 
@@ -42,7 +42,7 @@ final class ReturnBinaryExpressionLayout {
     ReturnBinaryExpressionLayout(
             FormatterOptions options,
             LayoutWidth layoutWidth,
-            SourceShape sourceShape,
+            SourceShapePolicy sourceShapePolicy,
             Function<Expression, Doc> expressionRenderer,
             Function<Expression, String> compact,
             ToIntFunction<String> continuationStatementWidth,
@@ -52,7 +52,7 @@ final class ReturnBinaryExpressionLayout {
     ) {
         this.options = options;
         this.layoutWidth = layoutWidth;
-        this.sourceShape = sourceShape;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.expressionRenderer = expressionRenderer;
         this.compact = compact;
         this.continuationStatementWidth = continuationStatementWidth;
@@ -79,7 +79,7 @@ final class ReturnBinaryExpressionLayout {
      */
     boolean shouldUseExpressionRenderer(BinaryExpr expression) {
         return expression.getOperator() == BinaryExpr.Operator.PLUS
-            && sourceShape.containsSourceMultilineMethodCallArgument(expression);
+            && sourceShapePolicy.containsSourceMultilineMethodCallArgument(expression);
     }
 
     private Optional<Doc> directBinaryReturn(
@@ -123,7 +123,7 @@ final class ReturnBinaryExpressionLayout {
         if (
             !(binaryExpr.getLeft() instanceof MethodCallExpr methodCall)
             || methodCall.getArguments().isEmpty()
-            || (methodCall.getArguments().size() == 1 && !sourceShape.methodCallArgumentsSpanMultipleLines(methodCall))
+            || (methodCall.getArguments().size() == 1 && !sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall))
             || !methodCall.getAllContainedComments().isEmpty()
             || !binaryExpr.getRight().getAllContainedComments().isEmpty()
             || !directBinaryReturnMethodCallFirstLineFits(methodCall, lineBudget)
@@ -169,9 +169,9 @@ final class ReturnBinaryExpressionLayout {
     ) {
         if (
             allowSourceMultilineOverflowContinuation
-            && sourceShape.spansMultipleLines(expression)
+            && sourceShapePolicy.wasMultiline(expression)
             && !hasUnparenthesizedAndUnderOr(expression)
-            && !sourceShape.containsSourceMultilineMethodCallArgument(expression)
+            && !sourceShapePolicy.containsSourceMultilineMethodCallArgument(expression)
         ) {
             return true;
         }

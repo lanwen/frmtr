@@ -215,12 +215,15 @@ direct `getAllContainedComments` scan, because the run index reports an unknown 
 which reconstruction path is taken. Layout/fallback raw-text recovery is funneled through `rawText` /
 `rawTextWithoutOwnComment` (delegating unchanged to `RawSource`) so a printer that only needs source-derived text for a
 layout decision no longer holds a bare `RawSource`. The policy deliberately does not absorb `SourceText` slicing,
-`RawPreservedSource` comment accounting, or recovery-boundary rules; it calls them. `SourceShape` still exposes its
-syntax-specific predicate surface and delegates its canonical multiline check here.
+`RawPreservedSource` comment accounting, or recovery-boundary rules; it calls them. The policy also owns the
+syntax-specific source-shape predicate surface directly (multiline argument lists, same-line starts, throws-clause and
+try-with-resources shape, method-call operand and logical-condition shape), all built on the one canonical
+`wasMultiline` definition, so a printer asks one source-shape object rather than reaching for the same "was this
+multiline?" answer two different ways.
 
 `SourceShapeCouplingGuardTest` enforces the two patterns this consolidation drove to zero: no
 `rawSource....contains("\n")` multiline probe and no `previous.end.line + 1` blank-line gap arithmetic outside the
-policy and the slicing/raw-output/compact/recovery allowlist (`SourceShapePolicy`, `SourceShape`, `SourceText`,
+policy and the slicing/raw-output/compact/recovery allowlist (`SourceShapePolicy`, `SourceText`,
 `RawSource`, `RawPreservedSource`, `CompactSourceText`, and the recovered-region planners). The broader rule is a
 **review checklist, not a test**: when reviewing a Java printer change, reject new `getRange().*.line`,
 `getTokenRange()`, or other AST-position layout arithmetic in a printer when an equivalent `SourceShapePolicy` question
@@ -239,12 +242,12 @@ reconstruction for anonymous-class headers, generic delimiter spacing cleanup fo
 clone-before-comment-removal behavior. `LayoutWidth` centralizes the indentation baselines used for flat-width probes so
 statement, field, and chain helpers do not each recreate their own width arithmetic.
 
-`SourceShape` centralizes source-line-shape predicates used to preserve existing multiline forms when the structured
-formatter has an otherwise equivalent compact form. It uses JavaParser node ranges first and bounded `SourceText` slices
-between neighboring AST-owned syntax, such as the first thrown exception line or the gap after the last try resource,
-rather than scanning an entire declaration or statement for delimiters and keywords. It also owns the shared predicates
-for method-call operands, nested source-multiline method-call arguments, and logical control-condition source shape.
-Printers still decide what doc to build after a shape predicate is true.
+`SourceShapePolicy`'s syntax-specific predicates preserve existing multiline forms when the structured formatter has an
+otherwise equivalent compact form. They use JavaParser node ranges first and bounded `SourceText` slices between
+neighboring AST-owned syntax, such as the first thrown exception line or the gap after the last try resource, rather
+than scanning an entire declaration or statement for delimiters and keywords. They cover method-call operands, nested
+source-multiline method-call arguments, and logical control-condition source shape. Printers still decide what doc to
+build after a shape predicate is true.
 
 `ObjectCreationLayoutPolicy` centralizes constructor-call source-shape decisions that several expression contexts share:
 when source-multiline constructor arguments are meaningful enough to preserve, when returned object creations should

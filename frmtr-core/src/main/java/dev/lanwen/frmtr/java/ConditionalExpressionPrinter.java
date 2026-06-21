@@ -47,8 +47,6 @@ final class ConditionalExpressionPrinter {
 
     private final FormatterOptions options;
 
-    private final SourceShape sourceShape;
-
     private final SourceShapePolicy sourceShapePolicy;
 
     private final CompactSourceText compactSource;
@@ -123,7 +121,6 @@ final class ConditionalExpressionPrinter {
     ) {
         this.comments = context.comments;
         this.options = context.options;
-        this.sourceShape = context.sourceShape;
         this.sourceShapePolicy = context.sourceShapePolicy;
         this.compactSource = context.compactSource;
         this.expressionRenderer = expressionRenderer;
@@ -147,8 +144,8 @@ final class ConditionalExpressionPrinter {
      */
     Optional<Doc> assignmentWithConditionalValue(AssignExpr assignExpr, ConditionalExpr conditionalExpr) {
         if (
-            sourceShape.spansMultipleLines(conditionalExpr)
-            && sourceShape.startsOnSameLine(assignExpr, conditionalExpr)
+            sourceShapePolicy.wasMultiline(conditionalExpr)
+            && sourceShapePolicy.startsOnSameLine(assignExpr, conditionalExpr)
         ) {
             return Optional.of(
                 Doc.concat(
@@ -228,7 +225,7 @@ final class ConditionalExpressionPrinter {
             return commented.orElseThrow();
         }
         String flat = compactSource.compact(expression);
-        if (!breakMode.isForced() && sourceShape.spansMultipleLines(expression)) {
+        if (!breakMode.isForced() && sourceShapePolicy.wasMultiline(expression)) {
             return brokenConditionalExpression(expression);
         }
         int flatWidth = currentIndentedWidth.applyAsInt(flat);
@@ -551,7 +548,7 @@ final class ConditionalExpressionPrinter {
         if (branch instanceof ConditionalExpr conditionalExpr) {
             return conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED);
         }
-        if (branch instanceof MethodCallExpr && sourceShape.spansMultipleLines(branch)) {
+        if (branch instanceof MethodCallExpr && sourceShapePolicy.wasMultiline(branch)) {
             return Doc.text(sourceShapePolicy.rawTextWithoutOwnComment(branch));
         }
         return expressionRenderer.apply(branch);

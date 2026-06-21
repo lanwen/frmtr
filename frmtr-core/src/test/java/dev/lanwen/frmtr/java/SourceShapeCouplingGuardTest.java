@@ -32,9 +32,9 @@ import org.junit.jupiter.api.Test;
  * <p>The guard is intentionally scoped to exactly the two patterns B1 drove to zero, so it stays green while still
  * catching a regression where a new printer hand-rolls one of them again instead of asking the policy. The broader
  * "no {@code getRange().*.line} layout arithmetic outside the policy" rule is <em>not</em> a test here: that arithmetic
- * legitimately remains in the recovery/source helpers (for example {@link SourceShape} and the recovered-region
- * planners), so it is covered by a documented review checklist in {@code docs/java-formatter-internals.md} rather than
- * a flaky pattern match.
+ * legitimately remains in {@link SourceShapePolicy} itself and in the recovery/source helpers (for example the
+ * recovered-region planners), so it is covered by a documented review checklist in
+ * {@code docs/java-formatter-internals.md} rather than a flaky pattern match.
  *
  * <p>The allowlist names the files that are allowed to spell these patterns: the policy itself ({@link SourceShapePolicy})
  * and the slicing / raw-output / compact / recovery helpers it delegates to. Those own raw text and source slicing on
@@ -54,7 +54,6 @@ final class SourceShapeCouplingGuardTest {
      */
     private static final Set<String> ALLOWLISTED_FILES = Set.of(
         "SourceShapePolicy.java",
-        "SourceShape.java",
         "SourceText.java",
         "RawSource.java",
         "RawPreservedSource.java",

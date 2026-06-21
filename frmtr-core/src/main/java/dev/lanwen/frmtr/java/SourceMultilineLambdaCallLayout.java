@@ -27,7 +27,7 @@ import java.util.function.Function;
  */
 final class SourceMultilineLambdaCallLayout {
 
-    private final SourceShape sourceShape;
+    private final SourceShapePolicy sourceShapePolicy;
 
     private final Function<Expression, Doc> expressionRenderer;
 
@@ -40,14 +40,14 @@ final class SourceMultilineLambdaCallLayout {
     private final MethodCallArgumentRenderer methodCallArguments;
 
     SourceMultilineLambdaCallLayout(
-            SourceShape sourceShape,
+            SourceShapePolicy sourceShapePolicy,
             Function<Expression, Doc> expressionRenderer,
             Function<LambdaExpr, String> lambdaParameters,
             Function<MethodCallExpr, String> methodCallPrefix,
             Function<MethodCallExpr, String> chainSegmentPrefix,
             MethodCallArgumentRenderer methodCallArguments
     ) {
-        this.sourceShape = sourceShape;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.expressionRenderer = expressionRenderer;
         this.lambdaParameters = lambdaParameters;
         this.methodCallPrefix = methodCallPrefix;
@@ -160,18 +160,18 @@ final class SourceMultilineLambdaCallLayout {
         Optional<MethodCallExpr> body = lambdaBodyMethodCall(lambda);
         return body.isPresent()
             && (lambdaBodyStartsAfterHeader(lambda)
-                || sourceShape.spansMultipleLines(call)
-                || body.filter(sourceShape::methodCallArgumentsSpanMultipleLines).isPresent());
+                || sourceShapePolicy.wasMultiline(call)
+                || body.filter(sourceShapePolicy::methodCallArgumentsSpanMultipleLines).isPresent());
     }
 
-    static boolean hasMultilineExpressionLambdaMethodCallBody(MethodCallExpr expression, SourceShape sourceShape) {
+    static boolean hasMultilineExpressionLambdaMethodCallBody(MethodCallExpr expression, SourceShapePolicy sourceShapePolicy) {
         return expression.findAll(LambdaExpr.class)
                 .stream()
                 .flatMap(lambda -> lambda.getExpressionBody().stream())
                 .filter(MethodCallExpr.class::isInstance)
                 .map(MethodCallExpr.class::cast)
-                .anyMatch(methodCall -> sourceShape.spansMultipleLines(methodCall)
-                        || sourceShape.methodCallArgumentsSpanMultipleLines(methodCall)
+                .anyMatch(methodCall -> sourceShapePolicy.wasMultiline(methodCall)
+                        || sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall)
                 );
     }
 
@@ -197,7 +197,7 @@ final class SourceMultilineLambdaCallLayout {
     }
 
     private boolean lambdaBodyArgumentsCanBreakAfterHeader(MethodCallExpr body) {
-        return sourceShape.methodCallArgumentsSpanMultipleLines(body)
+        return sourceShapePolicy.methodCallArgumentsSpanMultipleLines(body)
             && body.getArguments().stream().noneMatch(argument -> argument instanceof LambdaExpr)
             && body.getArguments().stream().noneMatch(TextBlockLiteralExpr.class::isInstance);
     }

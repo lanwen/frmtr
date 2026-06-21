@@ -36,8 +36,6 @@ final class MethodCallChainPrinter {
 
     private final RawSource rawSource;
 
-    private final SourceShape sourceShape;
-
     private final SourceShapePolicy sourceShapePolicy;
 
     private final MethodCallChainSourcePlanner methodChainPlanner;
@@ -109,7 +107,6 @@ final class MethodCallChainPrinter {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
         this.rawSource = context.rawSource;
-        this.sourceShape = context.sourceShape;
         this.sourceShapePolicy = context.sourceShapePolicy;
         this.methodChainPlanner = new MethodCallChainSourcePlanner(context, currentIndentedWidth);
         this.options = context.options;
@@ -131,7 +128,7 @@ final class MethodCallChainPrinter {
         this.blockStatementWidth = blockStatementWidth;
         this.layoutDecisions = context.layoutDecisions;
         this.sourceMultilineLambdaCalls = new SourceMultilineLambdaCallLayout(
-            context.sourceShape,
+            context.sourceShapePolicy,
             expressionRenderer,
             lambdaParameters,
             calls::methodCallPrefix,
@@ -238,7 +235,7 @@ final class MethodCallChainPrinter {
             || analysis.calls().isEmpty()
             || objectCreation.getArguments().isEmpty()
             || objectCreation.getAnonymousClassBody().isPresent()
-            || sourceShape.objectCreationArgumentsSpanMultipleLines(objectCreation)
+            || sourceShapePolicy.objectCreationArgumentsSpanMultipleLines(objectCreation)
             || analysis.calls().stream().anyMatch(call -> !compactMethodCallChainSegmentCanStayFlat(call))
             || sourceShapePolicy.fitsOnOneLine(objectCreation, firstLineWidth)
             || firstLineWidth.applyAsInt(objectCreationPrefix.apply(objectCreation) + "(") > options.lineWidth()
@@ -747,7 +744,7 @@ final class MethodCallChainPrinter {
             }
             if (
                 !analysis.sourceMultilineChain()
-                && sourceShape.methodCallArgumentsSpanMultipleLines(calls.getFirst())
+                && sourceShapePolicy.methodCallArgumentsSpanMultipleLines(calls.getFirst())
             ) {
                 Optional<Doc> compactRootWithBrokenSegment = compactRootWithBrokenFinalSegment(
                     methodRoot,
@@ -830,7 +827,7 @@ final class MethodCallChainPrinter {
             && calls.size() == 1
             && calls.getFirst().getAllContainedComments().isEmpty()
             && !methodCallSegmentHasComment(calls.getFirst())
-            && sourceShape.methodCallArgumentsSpanMultipleLines(calls.getFirst());
+            && sourceShapePolicy.methodCallArgumentsSpanMultipleLines(calls.getFirst());
     }
 
     private boolean methodRootCanKeepSingleSuffixAttached(MethodCallExpr methodRoot) {
@@ -960,7 +957,7 @@ final class MethodCallChainPrinter {
             || chainPlan.root() instanceof MethodCallExpr
             || chainPlan.root() instanceof ObjectCreationExpr
             || sourceFirstLineIsOnlyChainRoot(chainPlan.root(), expression)
-            || !sourceShape.startsOnSameLine(chainPlan.root(), calls.getFirst().getName())
+            || !sourceShapePolicy.startsOnSameLine(chainPlan.root(), calls.getFirst().getName())
         ) {
             return false;
         }
@@ -1084,7 +1081,7 @@ final class MethodCallChainPrinter {
         if (
             analysis.root() instanceof MethodCallExpr methodRoot
             && !analysis.calls().isEmpty()
-            && (sourceShape.methodCallArgumentsSpanMultipleLines(methodRoot)
+            && (sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodRoot)
                 || sourceMultilineLambdaPlan.rootCanAttachExpressionLambdaBody())
         ) {
             return true;
@@ -1092,7 +1089,7 @@ final class MethodCallChainPrinter {
         for (int index = 0; index < Math.max(0, analysis.calls().size() - 1); index++) {
             MethodCallExpr call = analysis.calls().get(index);
             if (
-                sourceShape.methodCallArgumentsSpanMultipleLines(call)
+                sourceShapePolicy.methodCallArgumentsSpanMultipleLines(call)
                 || methodCallSegmentHasSourceMultilineBlockLambdaArgument(call)
                 || sourceMultilineLambdaPlan.callCanAttachExpressionLambdaBody(index)
             ) {
@@ -1258,7 +1255,7 @@ final class MethodCallChainPrinter {
 
     private Optional<Doc> groupedPromotedExpressionLambda(MethodCallExpr expression) {
         if (
-            !sourceShape.expressionLambdaStartsOnSelectorLine(expression)
+            !sourceShapePolicy.expressionLambdaStartsOnSelectorLine(expression)
             || !expressionLambdaSpansMultipleLines(expression)
         ) {
             return Optional.empty();
@@ -1292,7 +1289,7 @@ final class MethodCallChainPrinter {
                     ));
         }
         if (
-            sourceShape.expressionLambdaStartsOnSelectorLine(expression)
+            sourceShapePolicy.expressionLambdaStartsOnSelectorLine(expression)
             && expressionLambdaSpansMultipleLines(expression)
             && expressionLambdaBodyOpenerOverflows(
                 root,
@@ -1365,7 +1362,7 @@ final class MethodCallChainPrinter {
         }
         if (
             root instanceof MethodCallExpr methodRoot
-            && sourceShape.methodCallArgumentsSpanMultipleLines(methodRoot)
+            && sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodRoot)
         ) {
             return Optional.empty();
         }
@@ -1377,7 +1374,7 @@ final class MethodCallChainPrinter {
         }
         if (
             root instanceof ObjectCreationExpr objectCreation
-            && sourceShape.objectCreationArgumentsSpanMultipleLines(objectCreation)
+            && sourceShapePolicy.objectCreationArgumentsSpanMultipleLines(objectCreation)
         ) {
             return Optional.empty();
         }
@@ -1385,7 +1382,7 @@ final class MethodCallChainPrinter {
             !(root instanceof MethodCallExpr)
             && !(root instanceof ObjectCreationExpr)
             && !(root instanceof FieldAccessExpr)
-            && !sourceShape.startsOnSameLine(root, call.getName())
+            && !sourceShapePolicy.startsOnSameLine(root, call.getName())
         ) {
             return Optional.empty();
         }
@@ -1400,7 +1397,7 @@ final class MethodCallChainPrinter {
         if (huggableLambda.isPresent()) {
             return Optional.of(Doc.concat(huggableLambda.orElseThrow(), finalSegmentSuffix.doc()));
         }
-        if (sourceShape.expressionLambdaStartsOnSelectorLine(call) && expressionLambdaSpansMultipleLines(call)) {
+        if (sourceShapePolicy.expressionLambdaStartsOnSelectorLine(call) && expressionLambdaSpansMultipleLines(call)) {
             Optional<ExpressionLambdaArgumentLayout.Plan> expressionLambdaPlan = expressionLambdaArgumentPlan.apply(
                 callPrefix,
                 call.getArguments()
@@ -1718,9 +1715,9 @@ final class MethodCallChainPrinter {
             analysis.sourceMultilineChain()
             || chainHasSourceMultilineArguments(analysis, sourceMultilineLambdaPlan)
             || (analysis.root() instanceof MethodCallExpr methodRoot
-                && sourceShape.methodCallArgumentsSpanMultipleLines(methodRoot))
+                && sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodRoot))
             || (analysis.root() instanceof ObjectCreationExpr objectCreation
-                && sourceShape.objectCreationArgumentsSpanMultipleLines(objectCreation))
+                && sourceShapePolicy.objectCreationArgumentsSpanMultipleLines(objectCreation))
         );
     }
 
@@ -1779,7 +1776,7 @@ final class MethodCallChainPrinter {
         if (hasSingleExpressionLambdaArgument(methodRoot)) {
             return Optional.of(prefix + "(");
         }
-        if (sourceShape.methodCallArgumentsSpanMultipleLines(methodRoot)) {
+        if (sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodRoot)) {
             return Optional.of(prefix + "(");
         }
         if (promotedRootArgumentsShouldBreak(methodRoot, lineWidth(LayoutWidth.LineBudget.CURRENT))) {
@@ -1826,7 +1823,7 @@ final class MethodCallChainPrinter {
 
     private boolean hasSingleExpressionLambdaArgument(MethodCallExpr expression) {
         return hasSingleExpressionLambdaArgumentAnyShape(expression)
-            && !sourceShape.methodCallArgumentsSpanMultipleLines(expression);
+            && !sourceShapePolicy.methodCallArgumentsSpanMultipleLines(expression);
     }
 
     private boolean hasSingleExpressionLambdaArgumentAnyShape(MethodCallExpr expression) {
@@ -2075,7 +2072,7 @@ final class MethodCallChainPrinter {
             MethodCallChainSourcePlanner.ChainRootRendering rootRendering
     ) {
         return rootRendering != MethodCallChainSourcePlanner.ChainRootRendering.BROKEN_OBJECT_CREATION
-            && !sourceShape.objectCreationArgumentsSpanMultipleLines(root);
+            && !sourceShapePolicy.objectCreationArgumentsSpanMultipleLines(root);
     }
 
     private Optional<Doc> compactAttachedObjectRootSingleSegment(
@@ -2250,7 +2247,7 @@ final class MethodCallChainPrinter {
             return Doc.concat(segmentPrefix, commentedExpressionLambda.orElseThrow(), finalSegmentSuffix.doc());
         }
         if (
-            sourceShape.expressionLambdaStartsOnSelectorLine(expression)
+            sourceShapePolicy.expressionLambdaStartsOnSelectorLine(expression)
             && expressionLambdaSpansMultipleLines(expression)
         ) {
             Optional<Doc> huggableExpressionLambda = huggableExpressionLambdaArguments.apply(
@@ -2441,7 +2438,7 @@ final class MethodCallChainPrinter {
         if (
             !expression.getAllContainedComments().isEmpty()
             || !methodCallSegmentHasBlockLambdaArgument(expression)
-            || !sourceShape.methodCallArgumentsSpanMultipleLines(expression)
+            || !sourceShapePolicy.methodCallArgumentsSpanMultipleLines(expression)
         ) {
             return Optional.empty();
         }

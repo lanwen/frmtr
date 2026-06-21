@@ -24,7 +24,7 @@ import java.util.function.ToIntFunction;
  */
 final class ControlConditionMethodCallLayout {
 
-    private final SourceShape sourceShape;
+    private final SourceShapePolicy sourceShapePolicy;
 
     private final FormatterOptions options;
 
@@ -39,7 +39,7 @@ final class ControlConditionMethodCallLayout {
     private final ToIntFunction<String> blockStatementWidth;
 
     ControlConditionMethodCallLayout(
-            SourceShape sourceShape,
+            SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
             Function<Expression, Doc> expressionRenderer,
             Function<Expression, String> compact,
@@ -47,7 +47,7 @@ final class ControlConditionMethodCallLayout {
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain,
             ToIntFunction<String> blockStatementWidth
     ) {
-        this.sourceShape = sourceShape;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.compact = compact;
@@ -78,7 +78,7 @@ final class ControlConditionMethodCallLayout {
     Optional<Doc> sourceMultilineLogicalOperand(Expression expression) {
         if (
             expression instanceof MethodCallExpr methodCall
-            && sourceShape.methodCallOperandSpansMultipleLines(methodCall)
+            && sourceShapePolicy.methodCallOperandSpansMultipleLines(methodCall)
         ) {
             return forcedMethodCallChain.apply(methodCall)
                     .or(() -> Optional.of(brokenSourceMultilineMethodCall(methodCall)));
@@ -87,7 +87,7 @@ final class ControlConditionMethodCallLayout {
             expression instanceof UnaryExpr unaryExpr
             && unaryExpr.getOperator() == UnaryExpr.Operator.LOGICAL_COMPLEMENT
             && unaryExpr.getExpression() instanceof MethodCallExpr methodCall
-            && sourceShape.methodCallOperandSpansMultipleLines(methodCall)
+            && sourceShapePolicy.methodCallOperandSpansMultipleLines(methodCall)
         ) {
             return forcedMethodCallChain.apply(methodCall)
                     .map(chain -> Doc.concat(Doc.text("!"), chain))
@@ -108,7 +108,7 @@ final class ControlConditionMethodCallLayout {
     }
 
     boolean sourceMultilineArgumentsStartAfterName(MethodCallExpr expression) {
-        return sourceShape.methodCallFirstArgumentStartsAfterName(expression);
+        return sourceShapePolicy.methodCallFirstArgumentStartsAfterName(expression);
     }
 
     boolean hasComplexArgument(MethodCallExpr expression) {
@@ -124,7 +124,7 @@ final class ControlConditionMethodCallLayout {
     }
 
     private Optional<Doc> parenthesizedSourceMultilineMethodCallChain(MethodCallExpr expression) {
-        if (!sourceShape.spansMultipleLines(expression)) {
+        if (!sourceShapePolicy.wasMultiline(expression)) {
             return Optional.empty();
         }
         return forcedMethodCallChain.apply(expression)

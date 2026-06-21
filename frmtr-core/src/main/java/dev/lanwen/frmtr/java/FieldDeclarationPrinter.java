@@ -69,7 +69,6 @@ final class FieldDeclarationPrinter {
     FieldDeclarationPrinter(
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
-            SourceShape sourceShape,
             SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
             LayoutWidth layoutWidth,
@@ -132,7 +131,6 @@ final class FieldDeclarationPrinter {
         this.initializers = new VariableInitializerLayout(
             comments,
             commentPlacement,
-            sourceShape,
             sourceShapePolicy,
             options,
             layoutWidth,

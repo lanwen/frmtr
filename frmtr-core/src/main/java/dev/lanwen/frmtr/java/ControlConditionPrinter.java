@@ -40,7 +40,7 @@ final class ControlConditionPrinter {
 
     private final SourceText sourceText;
 
-    private final SourceShape sourceShape;
+    private final SourceShapePolicy sourceShapePolicy;
 
     private final FormatterOptions options;
 
@@ -70,7 +70,7 @@ final class ControlConditionPrinter {
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
             SourceText sourceText,
-            SourceShape sourceShape,
+            SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
             Function<Expression, Doc> expressionRenderer,
             Function<Expression, String> compact,
@@ -86,7 +86,7 @@ final class ControlConditionPrinter {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
         this.sourceText = sourceText;
-        this.sourceShape = sourceShape;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.compact = compact;
@@ -99,7 +99,7 @@ final class ControlConditionPrinter {
         this.blockStatementWidth = blockStatementWidth;
         this.layoutDecisions = layoutDecisions;
         this.methodCallLayout = new ControlConditionMethodCallLayout(
-            sourceShape,
+            sourceShapePolicy,
             options,
             expressionRenderer,
             compact,
@@ -158,7 +158,7 @@ final class ControlConditionPrinter {
             ToIntFunction<String> conditionLineWidth
     ) {
         return sourceMultilineLogicalConditionExpression(expression)
-            && !sourceShape.spansMultipleLines(expression)
+            && !sourceShapePolicy.wasMultiline(expression)
             && conditionLineWidth.applyAsInt(opening + flat + closing) > options.lineWidth();
     }
 
@@ -205,7 +205,7 @@ final class ControlConditionPrinter {
                     () ->
                         logicalConditionOperandShouldBreak(current)
                             ? brokenExpressionLines.apply(current)
-                            : sourceShape.spansMultipleLines(current)
+                            : sourceShapePolicy.wasMultiline(current)
                                 ? expressionRenderer.apply(current)
                                 : Doc.text(compact.apply(current))
                 );
@@ -600,11 +600,11 @@ final class ControlConditionPrinter {
 
     private boolean sourceMultilineLogicalCondition(Expression condition) {
         return sourceMultilineLogicalConditionExpression(condition)
-            && sourceShape.sourceMultilineLogicalCondition(condition);
+            && sourceShapePolicy.sourceMultilineLogicalCondition(condition);
     }
 
     private boolean sourceMultilineLogicalConditionExpression(Expression condition) {
-        return sourceShape.logicalConditionExpression(condition);
+        return sourceShapePolicy.logicalConditionExpression(condition);
     }
 
     private boolean commentedLogicalCondition(Expression condition) {

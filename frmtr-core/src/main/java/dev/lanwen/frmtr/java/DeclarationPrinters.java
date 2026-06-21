@@ -120,7 +120,6 @@ final class DeclarationPrinters {
         this.fields = new FieldDeclarationPrinter(
             comments,
             commentPlacementPolicy,
-            context.sourceShape,
             context.sourceShapePolicy,
             options,
             context.layoutWidth,
@@ -231,7 +230,6 @@ final class DeclarationPrinters {
         this.methods = new MethodDeclarationPrinter(
             comments,
             context.commentPlacementPolicy,
-            context.sourceShape,
             context.sourceShapePolicy,
             rawPreservedSource,
             commentedMethodSignatures,

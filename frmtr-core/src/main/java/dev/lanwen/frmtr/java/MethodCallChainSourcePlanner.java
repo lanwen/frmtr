@@ -30,8 +30,6 @@ final class MethodCallChainSourcePlanner {
 
     private final CompactSourceText compactSource;
 
-    private final SourceShape sourceShape;
-
     private final SourceShapePolicy sourceShapePolicy;
 
     private final FormatterOptions options;
@@ -41,7 +39,6 @@ final class MethodCallChainSourcePlanner {
     MethodCallChainSourcePlanner(JavaFormatContext context, ToIntFunction<String> currentIndentedWidth) {
         this.objectCreationLayoutPolicy = context.objectCreationLayoutPolicy;
         this.compactSource = context.compactSource;
-        this.sourceShape = context.sourceShape;
         this.sourceShapePolicy = context.sourceShapePolicy;
         this.options = context.options;
         this.currentIndentedWidth = currentIndentedWidth;
@@ -275,7 +272,7 @@ final class MethodCallChainSourcePlanner {
     InitializerChainShape initializerShape(MethodCallChainAnalysis analysis) {
         boolean rootObjectCreationArgumentsSpanMultipleLines =
             analysis.root() instanceof ObjectCreationExpr objectCreation
-            && sourceShape.objectCreationArgumentsSpanMultipleLines(objectCreation);
+            && sourceShapePolicy.objectCreationArgumentsSpanMultipleLines(objectCreation);
         MethodCallExpr tail = analysis.calls().isEmpty() && analysis.root() instanceof MethodCallExpr methodRoot
             ? methodRoot
             : analysis.calls().getLast();

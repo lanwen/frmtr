@@ -36,8 +36,6 @@ final class JavaFormatContext {
 
     final SourceText sourceText;
 
-    final SourceShape sourceShape;
-
     final SourceShapePolicy sourceShapePolicy;
 
     final ObjectCreationLayoutPolicy objectCreationLayoutPolicy;
@@ -67,8 +65,7 @@ final class JavaFormatContext {
         this.compactSource = new CompactSourceText(rawSource);
         this.sourceShapePolicy =
             new SourceShapePolicy(sourceText, rawSource, compactSource, commentPlacementPolicy, options);
-        this.sourceShape = new SourceShape(sourceShapePolicy, sourceText);
-        this.objectCreationLayoutPolicy = new ObjectCreationLayoutPolicy(sourceShape);
+        this.objectCreationLayoutPolicy = new ObjectCreationLayoutPolicy(sourceShapePolicy);
         this.rawPreservedSource = new RawPreservedSource(rawSource, comments);
         this.recoveredListPlanner = new RecoveredListPlanner(sourceText);
         this.recoveredSourceRegions = new RecoveredSourceRegions(sourceText, options, comments);

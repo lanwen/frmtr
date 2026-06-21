@@ -75,7 +75,7 @@ final class ObjectCreationPrinter {
         this.commentedExpressionLists = new CommentedExpressionListPrinter(context, expressionRenderer::format);
         this.expressionRenderer = expressionRenderer;
         this.breakableArguments = new BreakableArgumentExpressionPrinter(
-            context.sourceShape,
+            context.sourceShapePolicy,
             context.options,
             expressionRenderer::format,
             brokenArgumentRenderer,

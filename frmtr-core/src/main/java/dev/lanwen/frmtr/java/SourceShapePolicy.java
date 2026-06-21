@@ -1,5 +1,6 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.ast.Node;
 import dev.lanwen.frmtr.FormatterOptions;
 
 /**
@@ -49,5 +50,22 @@ final class SourceShapePolicy {
         this.compactSource = compactSource;
         this.commentPolicy = commentPolicy;
         this.options = options;
+    }
+
+    /**
+     * Reports whether the node's own source spanned more than one line, the single canonical "was this multiline?"
+     * definition for the whole formatter.
+     *
+     * <p>The decision is range-first with a raw-text fallback: when JavaParser exposes a position range, a node is
+     * multiline iff its begin and end lines differ; when the range is absent (for example inside unparsed or recovered
+     * regions), it falls back to scanning the node's raw source for a newline after its own attached comment is removed
+     * so the comment's own line breaks do not count. Every printer that needs to know whether the author already broke a
+     * call, lambda, initializer, or chain across lines asks this one method, so the formatter has exactly one fixed point
+     * to reason about for idempotence rather than several range-vs-raw definitions that could disagree on the same node.
+     */
+    boolean wasMultiline(Node node) {
+        return node.getRange()
+                .map(range -> range.begin.line < range.end.line)
+                .orElseGet(() -> rawSource.rawWithoutOwnComment(node).contains("\n"));
     }
 }

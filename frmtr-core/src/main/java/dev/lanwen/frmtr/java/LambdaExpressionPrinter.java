@@ -84,6 +84,7 @@ final class LambdaExpressionPrinter {
     LambdaExpressionPrinter(
             CommentTracker comments,
             RawSource rawSource,
+            SourceShapePolicy sourceShapePolicy,
             SourceText sourceText,
             ObjectCreationLayoutPolicy objectCreationLayoutPolicy,
             FormatterOptions options,
@@ -132,6 +133,7 @@ final class LambdaExpressionPrinter {
         );
         this.expressionLambdaArguments = new ExpressionLambdaArgumentLayout(
             rawSource,
+            sourceShapePolicy,
             sourceText,
             options,
             expressionRenderer,
@@ -150,6 +152,7 @@ final class LambdaExpressionPrinter {
         );
         this.lambdaBodyHeaders = new LambdaBodyHeaderLayout(
             rawSource,
+            sourceShapePolicy,
             options,
             expressionRenderer,
             lambdaParameterHeaders::haveComments,

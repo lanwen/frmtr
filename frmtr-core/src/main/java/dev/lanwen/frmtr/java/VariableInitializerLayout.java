@@ -824,7 +824,7 @@ final class VariableInitializerLayout {
     ) {
         boolean initializerStartsOnContinuationLine = initializerStartsOnContinuationLine(variable, methodCall);
         boolean chainSpansMultipleSourceLines = methodCallChainIsSourceMultiline.test(methodCall)
-            || rawSource.rawWithoutOwnComment(methodCall).contains("\n");
+            || sourceShape.spansMultipleLines(methodCall);
         MethodCallChainSourcePlanner.InitializerChainShape chainShape = methodCallChainInitializerShape.apply(
             methodCall
         );
@@ -856,7 +856,7 @@ final class VariableInitializerLayout {
     ) {
         boolean initializerStartsOnContinuationLine = initializerStartsOnContinuationLine(variable, methodCall);
         boolean chainSpansMultipleSourceLines = methodCallChainIsSourceMultiline.test(methodCall)
-            || rawSource.rawWithoutOwnComment(methodCall).contains("\n");
+            || sourceShape.spansMultipleLines(methodCall);
         MethodCallChainSourcePlanner.InitializerChainShape chainShape = methodCallChainInitializerShape.apply(
             methodCall
         );
@@ -1263,10 +1263,10 @@ final class VariableInitializerLayout {
         );
         if (
             methodCall.getArguments().isEmpty()
-            || !rawSource.rawWithoutOwnComment(methodCall).contains("\n")
+            || !sourceShape.spansMultipleLines(methodCall)
             || !chainShape.canUseDirectSourceMultilineInitializer()
             || sourceShape.expressionLambdaStartsOnSelectorLine(methodCall)
-            || methodCall.getScope().filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n")).isPresent()
+            || methodCall.getScope().filter(sourceShape::spansMultipleLines).isPresent()
             || (methodCallChainRootIsObjectCreation.test(methodCall)
                 && layoutWidth.variableInitializer(variable, flatName + " = " + compact.apply(methodCall) + ";")
                     > options.lineWidth())
@@ -1394,7 +1394,7 @@ final class VariableInitializerLayout {
             || scope.filter(Expression::isMethodCallExpr).isPresent()
             || scope.filter(expression -> !expression.getAllContainedComments().isEmpty()).isPresent()
             || scope.filter(shouldPrintScopeAsDoc).isPresent()
-            || scope.filter(expression -> rawSource.rawWithoutOwnComment(expression).contains("\n")).isPresent()
+            || scope.filter(sourceShape::spansMultipleLines).isPresent()
         ) {
             return Optional.empty();
         }
@@ -1486,7 +1486,7 @@ final class VariableInitializerLayout {
         String conditionLine = flatName + " = " + compact.apply(initializer.getCondition());
         String compactInitializer = compact.apply(initializer);
         if (
-            rawSource.rawWithoutOwnComment(initializer).contains("\n")
+            sourceShape.spansMultipleLines(initializer)
             && layoutWidth.blockStatement(conditionLine + ";") <= options.lineWidth()
         ) {
             return Doc.concat(Doc.text(name + " = "), brokenConditionalExpression.apply(initializer));

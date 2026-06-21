@@ -38,6 +38,8 @@ final class MethodCallChainPrinter {
 
     private final SourceShape sourceShape;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final MethodCallChainSourcePlanner methodChainPlanner;
 
     private final FormatterOptions options;
@@ -108,6 +110,7 @@ final class MethodCallChainPrinter {
         this.commentPlacement = context.commentPlacementPolicy;
         this.rawSource = context.rawSource;
         this.sourceShape = context.sourceShape;
+        this.sourceShapePolicy = context.sourceShapePolicy;
         this.methodChainPlanner = new MethodCallChainSourcePlanner(context, currentIndentedWidth);
         this.options = context.options;
         this.compactSource = context.compactSource;
@@ -409,7 +412,7 @@ final class MethodCallChainPrinter {
             root.ifPresent(ignored -> segments.add(compactMethodCallChainSegment(expression)));
             return root;
         }
-        if (!scoped.getAllContainedComments().isEmpty() || rawSource.rawWithoutOwnComment(scoped).contains("\n")) {
+        if (!scoped.getAllContainedComments().isEmpty() || sourceShapePolicy.wasMultiline(scoped)) {
             return Optional.empty();
         }
         segments.add(compactMethodCallChainSegment(expression));
@@ -425,7 +428,7 @@ final class MethodCallChainPrinter {
                 .stream()
                 .noneMatch(argument -> argument instanceof LambdaExpr
                         || !argument.getAllContainedComments().isEmpty()
-                        || rawSource.rawWithoutOwnComment(argument).contains("\n")
+                        || sourceShapePolicy.wasMultiline(argument)
                 );
     }
 
@@ -458,7 +461,7 @@ final class MethodCallChainPrinter {
             MethodCallExpr expression,
             ExpressionStmt statement
     ) {
-        if (!rawSource.rawWithoutOwnComment(statement).contains("\n")) {
+        if (!sourceShapePolicy.wasMultiline(statement)) {
             return Optional.empty();
         }
         return calls.sourceMultilineArguments(expression);
@@ -1164,7 +1167,7 @@ final class MethodCallChainPrinter {
 
     private boolean sourceMultilineTypeLikeRoot(MethodCallExpr methodCall) {
         return methodChainPlanner.methodCallHasTypeLikeScope(methodCall)
-            && rawSource.rawWithoutOwnComment(methodCall).contains("\n");
+            && sourceShapePolicy.wasMultiline(methodCall);
     }
 
     private Doc singleSegmentMethodRootDoc(MethodCallExpr methodRoot) {
@@ -1606,7 +1609,7 @@ final class MethodCallChainPrinter {
     }
 
     private Optional<String> compactSingleLineRoot(Expression root) {
-        if (!root.getAllContainedComments().isEmpty() || rawSource.rawWithoutOwnComment(root).contains("\n")) {
+        if (!root.getAllContainedComments().isEmpty() || sourceShapePolicy.wasMultiline(root)) {
             return Optional.empty();
         }
         return Optional.of(compactSource.compact(root));

@@ -133,6 +133,7 @@ final class ExpressionPrinters {
         this.lambdas = new LambdaExpressionPrinter(
             comments,
             rawSource,
+            context.sourceShapePolicy,
             context.sourceText,
             context.objectCreationLayoutPolicy,
             options,

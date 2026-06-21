@@ -23,6 +23,8 @@ final class LambdaBodyHeaderLayout {
 
     private final RawSource rawSource;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final FormatterOptions options;
 
     private final JavaFormatRule<Expression> expressionRenderer;
@@ -37,6 +39,7 @@ final class LambdaBodyHeaderLayout {
 
     LambdaBodyHeaderLayout(
             RawSource rawSource,
+            SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
             Predicate<LambdaExpr> lambdaParametersHaveComments,
@@ -45,6 +48,7 @@ final class LambdaBodyHeaderLayout {
             ToIntFunction<String> currentIndentedWidth
     ) {
         this.rawSource = rawSource;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.lambdaParametersHaveComments = lambdaParametersHaveComments;
@@ -62,7 +66,7 @@ final class LambdaBodyHeaderLayout {
             lambdaParametersHaveComments.test(lambda)
             || lambdaParametersShouldBreak.test(lambda, parameters)
             || !(body instanceof MethodCallExpr)
-            || !rawSource.rawWithoutOwnComment(body).contains("\n")
+            || !sourceShapePolicy.wasMultiline(body)
         ) {
             return Optional.empty();
         }

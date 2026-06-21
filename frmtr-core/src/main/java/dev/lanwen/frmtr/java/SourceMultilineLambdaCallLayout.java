@@ -165,7 +165,6 @@ final class SourceMultilineLambdaCallLayout {
         return body.isPresent()
             && (lambdaBodyStartsAfterHeader(lambda)
                 || sourceShape.spansMultipleLines(call)
-                || rawSource.rawWithoutOwnComment(call).contains("\n")
                 || body.filter(sourceShape::methodCallArgumentsSpanMultipleLines).isPresent());
     }
 

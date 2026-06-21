@@ -36,6 +36,8 @@ final class ExpressionLambdaArgumentLayout {
 
     private final RawSource rawSource;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final FormatterOptions options;
 
     private final JavaFormatRule<Expression> expressionRenderer;
@@ -72,6 +74,7 @@ final class ExpressionLambdaArgumentLayout {
 
     ExpressionLambdaArgumentLayout(
             RawSource rawSource,
+            SourceShapePolicy sourceShapePolicy,
             SourceText sourceText,
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
@@ -89,6 +92,7 @@ final class ExpressionLambdaArgumentLayout {
             LayoutWidth layoutWidth
     ) {
         this.rawSource = rawSource;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
@@ -107,6 +111,7 @@ final class ExpressionLambdaArgumentLayout {
         this.closingLayout = new ExpressionLambdaClosingLayout();
         this.methodCallBodies = new ExpressionLambdaMethodCallBodyLayout(
             rawSource,
+            sourceShapePolicy,
             options,
             expressionRenderer,
             compactJoin,
@@ -124,7 +129,7 @@ final class ExpressionLambdaArgumentLayout {
     Optional<Doc> methodCallBodyWithOpener(String parameters, MethodCallExpr methodCall) {
         if (
             methodCall.getArguments().isEmpty()
-            || methodCall.getScope().filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n")).isPresent()
+            || methodCall.getScope().filter(sourceShapePolicy::wasMultiline).isPresent()
         ) {
             return Optional.empty();
         }
@@ -433,15 +438,15 @@ final class ExpressionLambdaArgumentLayout {
     }
 
     boolean sourceMultilineLogicalBody(Expression body) {
-        return logicalBinaryBody(body).isPresent() && rawSource.rawWithoutOwnComment(body).contains("\n");
+        return logicalBinaryBody(body).isPresent() && sourceShapePolicy.wasMultiline(body);
     }
 
     boolean sourceMultilineMethodCallBody(Expression body) {
         return (
             body instanceof MethodCallExpr methodCall
-            && (rawSource.rawWithoutOwnComment(methodCall).contains("\n")
+            && (sourceShapePolicy.wasMultiline(methodCall)
                 || methodCall.getScope()
-                        .filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n"))
+                        .filter(sourceShapePolicy::wasMultiline)
                         .isPresent())
         );
     }
@@ -557,7 +562,7 @@ final class ExpressionLambdaArgumentLayout {
         if (
             !(bodyExpression instanceof MethodCallExpr methodCall)
             || methodCall.getArguments().isEmpty()
-            || methodCall.getScope().filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n")).isPresent()
+            || methodCall.getScope().filter(sourceShapePolicy::wasMultiline).isPresent()
         ) {
             return Optional.empty();
         }
@@ -579,7 +584,7 @@ final class ExpressionLambdaArgumentLayout {
     ) {
         if (
             !(bodyExpression instanceof MethodCallExpr methodCall)
-            || methodCall.getScope().filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n")).isPresent()
+            || methodCall.getScope().filter(sourceShapePolicy::wasMultiline).isPresent()
         ) {
             return Optional.empty();
         }
@@ -790,9 +795,8 @@ final class ExpressionLambdaArgumentLayout {
     }
 
     private boolean bodyFirstSourceLineFits(String firstLine, Expression bodyExpression) {
-        return rawSource.rawWithoutOwnComment(bodyExpression).contains(
-            "\n"
-        ) && expressionFirstLineWidth(firstLine + " " + bodyFirstSourceLine(bodyExpression)) <= options.lineWidth();
+        return sourceShapePolicy.wasMultiline(bodyExpression)
+            && expressionFirstLineWidth(firstLine + " " + bodyFirstSourceLine(bodyExpression)) <= options.lineWidth();
     }
 
     private boolean logicalBinaryFirstLineFits(String firstLine, Expression bodyExpression) {
@@ -802,7 +806,7 @@ final class ExpressionLambdaArgumentLayout {
     }
 
     private Optional<String> logicalBinaryFirstLine(Expression bodyExpression) {
-        if (rawSource.rawWithoutOwnComment(bodyExpression).contains("\n")) {
+        if (sourceShapePolicy.wasMultiline(bodyExpression)) {
             return Optional.of(bodyFirstSourceLine(bodyExpression));
         }
         if (bodyExpression instanceof EnclosedExpr enclosedExpr) {
@@ -932,7 +936,7 @@ final class ExpressionLambdaArgumentLayout {
 
     boolean sourceMultilineBinaryMethodCallBody(Expression body) {
         return binaryMethodCallLeftOperand(body)
-                .filter(methodCall -> rawSource.rawWithoutOwnComment(methodCall).contains("\n"))
+                .filter(sourceShapePolicy::wasMultiline)
                 .isPresent();
     }
 
@@ -942,7 +946,7 @@ final class ExpressionLambdaArgumentLayout {
             || !(binaryExpr.getLeft() instanceof MethodCallExpr methodCall)
             || !binaryExpr.getAllContainedComments().isEmpty()
             || methodCall.getArguments().isEmpty()
-            || methodCall.getScope().filter(scope -> rawSource.rawWithoutOwnComment(scope).contains("\n")).isPresent()
+            || methodCall.getScope().filter(sourceShapePolicy::wasMultiline).isPresent()
         ) {
             return Optional.empty();
         }

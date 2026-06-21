@@ -23,22 +23,24 @@ import java.util.Optional;
  */
 final class SourceShape {
 
-    private final RawSource rawSource;
+    private final SourceShapePolicy sourceShapePolicy;
 
     private final SourceText sourceText;
 
-    SourceShape(RawSource rawSource, SourceText sourceText) {
-        this.rawSource = rawSource;
+    SourceShape(SourceShapePolicy sourceShapePolicy, SourceText sourceText) {
+        this.sourceShapePolicy = sourceShapePolicy;
         this.sourceText = sourceText;
     }
 
     /**
      * Reports whether the node's own source spans more than one line.
+     *
+     * <p>Delegates to {@link SourceShapePolicy#wasMultiline(Node)} so the range-first/raw-fallback "was this multiline?"
+     * definition lives in exactly one place even while the rest of this helper's syntax-specific predicates still build
+     * on it.
      */
     boolean spansMultipleLines(Node node) {
-        return node.getRange()
-                .map(range -> range.begin.line < range.end.line)
-                .orElseGet(() -> rawSource.rawWithoutOwnComment(node).contains("\n"));
+        return sourceShapePolicy.wasMultiline(node);
     }
 
     /**

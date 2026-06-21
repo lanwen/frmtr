@@ -25,18 +25,18 @@ final class FormatterGuardrailsTest {
 
     @Test
     void duplicateCommentClaimsKeepExistingSkipBehaviorByDefault() {
-        withGuardrails(null, () -> {
+        withStrictClaims(null, () -> {
             CommentTracker comments = commentTracker();
             LineComment comment = new LineComment("value");
 
             assertThat(comments.comment(comment)).isNotEqualTo(Doc.EMPTY);
-            assertThatCode(() -> assertThat(comments.comment(comment)).isEqualTo( Doc.EMPTY )).doesNotThrowAnyException();
+            assertThatCode(() -> assertThat(comments.comment(comment)).isEqualTo(Doc.EMPTY)).doesNotThrowAnyException();
         });
     }
 
     @Test
-    void duplicateCommentClaimsFailFastWhenDebugGuardrailsAreEnabled() {
-        withGuardrails("true", () -> {
+    void duplicateCommentClaimsFailFastWhenStrictClaimsAreEnabled() {
+        withStrictClaims("true", () -> {
             CommentTracker comments = commentTracker();
             LineComment comment = new LineComment("value");
 
@@ -51,6 +51,20 @@ final class FormatterGuardrailsTest {
     }
 
     @Test
+    void duplicateCommentClaimsKeepSkipBehaviorWhenOnlyDropDetectionIsEnabled() {
+        // Comment-drop detection (ENABLED_PROPERTY) is on in CI, but the strict "claimed at most once" invariant is not:
+        // a duplicate claim must keep its benign skip behavior, since the claim/render-coupled design legitimately offers
+        // the same comment from more than one printer path.
+        withGuardrails("true", () -> withStrictClaims(null, () -> {
+            CommentTracker comments = commentTracker();
+            LineComment comment = new LineComment("value");
+
+            assertThat(comments.comment(comment)).isNotEqualTo(Doc.EMPTY);
+            assertThatCode(() -> assertThat(comments.comment(comment)).isEqualTo(Doc.EMPTY)).doesNotThrowAnyException();
+        }));
+    }
+
+    @Test
     void guardrailActivationUsesSystemProperty() {
         withGuardrails("true", () -> assertThat(FormatterGuardrails.enabled()).isTrue());
         withGuardrails("false", () -> assertThat(FormatterGuardrails.enabled()).isFalse());
@@ -58,8 +72,19 @@ final class FormatterGuardrailsTest {
     }
 
     @Test
+    void strictClaimsActivationUsesSeparateSystemProperty() {
+        // The strict-claims fail-fast is gated independently of the main guardrail, so enabling drop detection does not
+        // enable it and vice versa.
+        withStrictClaims("true", () -> assertThat(FormatterGuardrails.strictClaimsEnabled()).isTrue());
+        withStrictClaims("false", () -> assertThat(FormatterGuardrails.strictClaimsEnabled()).isFalse());
+        withStrictClaims(null, () -> assertThat(FormatterGuardrails.strictClaimsEnabled()).isFalse());
+        withGuardrails("true", () -> withStrictClaims(null, () ->
+            assertThat(FormatterGuardrails.strictClaimsEnabled()).isFalse()));
+    }
+
+    @Test
     void duplicateCommentClaimMessageCapsCommentText() {
-        withGuardrails("true", () -> {
+        withStrictClaims("true", () -> {
             CommentTracker comments = commentTracker();
             LineComment comment = new LineComment("a".repeat(120) + "tail-marker");
 
@@ -368,19 +393,27 @@ final class FormatterGuardrailsTest {
     }
 
     private static void withGuardrails(String value, Runnable action) {
-        String previous = System.getProperty(FormatterGuardrails.ENABLED_PROPERTY);
+        withProperty(FormatterGuardrails.ENABLED_PROPERTY, value, action);
+    }
+
+    private static void withStrictClaims(String value, Runnable action) {
+        withProperty(FormatterGuardrails.STRICT_CLAIMS_PROPERTY, value, action);
+    }
+
+    private static void withProperty(String key, String value, Runnable action) {
+        String previous = System.getProperty(key);
         try {
             if (value == null) {
-                System.clearProperty(FormatterGuardrails.ENABLED_PROPERTY);
+                System.clearProperty(key);
             } else {
-                System.setProperty(FormatterGuardrails.ENABLED_PROPERTY, value);
+                System.setProperty(key, value);
             }
             action.run();
         } finally {
             if (previous == null) {
-                System.clearProperty(FormatterGuardrails.ENABLED_PROPERTY);
+                System.clearProperty(key);
             } else {
-                System.setProperty(FormatterGuardrails.ENABLED_PROPERTY, previous);
+                System.setProperty(key, previous);
             }
         }
     }

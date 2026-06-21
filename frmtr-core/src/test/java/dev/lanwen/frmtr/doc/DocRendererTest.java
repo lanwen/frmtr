@@ -1,12 +1,118 @@
 package dev.lanwen.frmtr.doc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.TestFormatterOptions;
 import org.junit.jupiter.api.Test;
 
 final class DocRendererTest {
+
+    private static DocRenderer renderer(int lineWidth) {
+        return new DocRenderer(
+            TestFormatterOptions.forLayout(
+                lineWidth,
+                FormatterOptions.IndentStyle.SPACE,
+                2,
+                FormatterOptions.LineEnding.LF,
+                false
+            )
+        );
+    }
+
+    @Test
+    void flushesLineSuffixAfterFollowingContentButBeforeNextNewline() {
+        Doc doc = Doc.concat(
+            Doc.text("VALUE"),
+            Doc.lineSuffix(Doc.text(" // trailing")),
+            Doc.text(","),
+            Doc.HARD_LINE,
+            Doc.text("NEXT")
+        );
+
+        // The suffix is buffered when reached, the comma after it prints first, and the suffix flushes at the break.
+        assertThat(renderer(80).render(doc)).isEqualTo(
+            """
+                VALUE, // trailing
+                NEXT"""
+        );
+    }
+
+    @Test
+    void flushesMultipleLineSuffixesInDocumentOrder() {
+        Doc doc = Doc.concat(
+            Doc.text("A"),
+            Doc.lineSuffix(Doc.text(" // first")),
+            Doc.text("B"),
+            Doc.lineSuffix(Doc.text(" // second")),
+            Doc.HARD_LINE,
+            Doc.text("C")
+        );
+
+        assertThat(renderer(80).render(doc)).isEqualTo(
+            """
+                AB // first // second
+                C"""
+        );
+    }
+
+    @Test
+    void flushesPendingLineSuffixAtEndOfDocument() {
+        Doc doc = Doc.concat(Doc.text("ONLY"), Doc.lineSuffix(Doc.text(" // tail")));
+
+        assertThat(renderer(80).render(doc)).isEqualTo("ONLY // tail");
+    }
+
+    @Test
+    void lineSuffixWidthDoesNotForceEnclosingGroupToBreak() {
+        // The visible content "call(value)" is 11 wide and fits in the 20-column limit; the deferred suffix is far
+        // wider but must not be counted, so the group stays flat and the suffix flushes at end of document. If the
+        // suffix width were counted, the group would break and the soft line would split "call(" from ")".
+        Doc doc = Doc.group(
+            Doc.concat(
+                Doc.text("call("),
+                Doc.lineSuffix(Doc.text(" // a very long trailing comment that would overflow the line")),
+                Doc.text("value"),
+                Doc.SOFT_LINE,
+                Doc.text(")")
+            )
+        );
+
+        assertThat(renderer(20).render(doc))
+            .isEqualTo("call(value) // a very long trailing comment that would overflow the line");
+    }
+
+    @Test
+    void buffersLineSuffixAcrossNestedGroupUntilOuterBreak() {
+        // The suffix is buffered inside the inner group but only flushes at the outer hard line, after both groups
+        // rendered, proving the buffer survives nested group boundaries.
+        Doc doc = Doc.concat(
+            Doc.group(Doc.concat(Doc.text("inner"), Doc.lineSuffix(Doc.text(" // note")))),
+            Doc.text(";"),
+            Doc.HARD_LINE,
+            Doc.text("after")
+        );
+
+        assertThat(renderer(80).render(doc)).isEqualTo(
+            """
+                inner; // note
+                after"""
+        );
+    }
+
+    @Test
+    void rejectsHardLineInsideLineSuffixContent() {
+        Doc doc = Doc.concat(
+            Doc.text("X"),
+            Doc.lineSuffix(Doc.concat(Doc.text("// broken"), Doc.HARD_LINE)),
+            Doc.HARD_LINE
+        );
+
+        assertThatThrownBy(() -> renderer(80).render(doc))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("single-line");
+    }
 
     @Test
     void keepsGroupFlatWhenItFits() {

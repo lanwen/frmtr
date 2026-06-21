@@ -57,6 +57,10 @@ public final class DocDebugRenderer {
                 appendLine(out, depth, "Label(\"" + escaped(label.label()) + "\")");
                 render(label.doc(), out, depth + 1);
             }
+            case Doc.LineSuffix lineSuffix -> {
+                appendLine(out, depth, "LineSuffix");
+                render(lineSuffix.content(), out, depth + 1);
+            }
         }
     }
 

@@ -87,6 +87,26 @@ public final class DocExplainRenderer {
                     }
                     return structural;
                 }
+                case Doc.Fill fill -> {
+                    Builder structural = Builder.structural();
+                    List<Doc> parts = fill.parts();
+                    if (!parts.isEmpty()) {
+                        structural.add(render(parts.getFirst(), indent, Mode.FLAT, enclosingLabel));
+                        for (int i = 1; i + 1 < parts.size(); i += 2) {
+                            Doc separator = parts.get(i);
+                            Doc nextContent = parts.get(i + 1);
+                            // Mirror DocRenderer.renderFill so the column cursor advances identically: each separator's
+                            // mode is decided from the column reached after the preceding content, then the next content
+                            // renders flat.
+                            Mode separatorMode = widths.fits(Doc.concat(separator, nextContent), lineWidth - column)
+                                ? Mode.FLAT
+                                : Mode.BREAK;
+                            structural.add(render(separator, indent, separatorMode, enclosingLabel));
+                            structural.add(render(nextContent, indent, Mode.FLAT, enclosingLabel));
+                        }
+                    }
+                    return structural;
+                }
                 case Doc.Line ignored -> {
                     if (mode == Mode.FLAT) {
                         advance(" ");

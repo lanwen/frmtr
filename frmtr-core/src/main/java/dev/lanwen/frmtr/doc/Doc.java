@@ -8,6 +8,7 @@ public sealed interface Doc
     permits
         Doc.BreakParent,
         Doc.Concat,
+        Doc.Fill,
         Doc.Group,
         Doc.HardLine,
         Doc.IfBreak,
@@ -115,6 +116,22 @@ public sealed interface Doc
     }
 
     /**
+     * Packs an alternating {@code [content, separator, content, separator, …]} list, laying out each separator flat when
+     * the next content still fits on the current line and breaking only at the separators where it does not. Unlike a
+     * {@link Group}, which is all-or-nothing, the fit decision is made independently per separator, so a fill keeps as
+     * many items on a line as fit and wraps only where needed — the layout array elements, argument lists, and similar
+     * sequences want.
+     *
+     * <p>The list alternates content and separator starting and ending with content; an empty list renders nothing and a
+     * single-element list renders just that content. Choosing the separators (a comma plus {@link #LINE}, a bare
+     * {@link #LINE}, etc.) and where break-vs-flat should glue is left to the caller, because a fill only decides whether
+     * each supplied separator lands flat or broken — it does not invent separators of its own.
+     */
+    static Doc fill(List<Doc> parts) {
+        return new Fill(List.copyOf(parts));
+    }
+
+    /**
      * Defers {@code content} to the end of the current line: it renders nothing at this position and flushes just before
      * the next line break (or at end of document). Used for trailing comments so the code preceding them is laid out and
      * width-measured as if the comment were absent — the comment can never push that code over the line width or change
@@ -142,6 +159,9 @@ public sealed interface Doc
     record Text(String value) implements Doc {}
 
     record Concat(List<Doc> docs) implements Doc {}
+
+    /** Alternating {@code [content, separator, content, …]} laid out by greedy per-separator packing; see {@link #fill}. */
+    record Fill(List<Doc> parts) implements Doc {}
 
     record Line() implements Doc {}
 

@@ -35,6 +35,10 @@ public final class DocDebugRenderer {
                 appendLine(out, depth, "Concat");
                 concat.docs().forEach(child -> render(child, out, depth + 1));
             }
+            case Doc.Fill fill -> {
+                appendLine(out, depth, "Fill");
+                fill.parts().forEach(part -> render(part, out, depth + 1));
+            }
             case Doc.Line ignored -> appendLine(out, depth, "Line");
             case Doc.SoftLine ignored -> appendLine(out, depth, "SoftLine");
             case Doc.HardLine ignored -> appendLine(out, depth, "HardLine");

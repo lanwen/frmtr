@@ -124,6 +124,10 @@ instead of building strings directly:
 - `Line`, `SoftLine`, and `HardLine` express break opportunities and required breaks.
 - `Indent` increases indentation after line breaks.
 - `Group` attempts flat rendering first and breaks when content does not fit.
+- `Fill` lays out an alternating `[content, separator, …]` list with greedy per-separator packing: each separator stays
+  flat while the next content still fits on the current line and breaks only where it does not, so a fill keeps as many
+  items per line as fit instead of being all-or-nothing like a `Group`. To an enclosing group it measures as the flat
+  concatenation of all its parts (a safe over-estimate). It is an additive primitive not yet adopted by any Java printer.
 - `IfBreak` selects different output for flat versus broken groups.
 - `Label` attaches debug-only provenance to a subtree.
 - `LineSuffix` defers its content to the next line break (or end of document), rendering nothing at its position and

@@ -63,6 +63,7 @@ public final class DocRenderer {
                 Mode next = widths.fits(group.doc(), options.lineWidth() - column) ? Mode.FLAT : Mode.BREAK;
                 render(group.doc(), indent, next, widths);
             }
+            case Doc.Fill fill -> renderFill(fill.parts(), indent, widths);
             case Doc.IfBreak conditional -> render(
                 mode == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(),
                 indent,
@@ -74,6 +75,31 @@ public final class DocRenderer {
                 requireSingleLineSuffix(lineSuffix.content());
                 lineSuffixes.add(new BufferedSuffix(lineSuffix.content(), indent, mode));
             }
+        }
+    }
+
+    /**
+     * Renders a {@link Doc.Fill}'s alternating {@code [content, separator, …]} parts with greedy per-separator packing:
+     * every content piece renders flat, and each separator is laid out flat when the separator plus the next content
+     * would still fit on the current line and broken otherwise. The fit probe reuses the shared {@link DocWidths}
+     * authority, so it stays compatible with the renderer's memoized, bounded width measurement: each lookahead measures
+     * only one separator and one following content (their flat widths, individually memoized by node identity), never the
+     * whole tail, which keeps the walk linear in the number of parts rather than quadratic.
+     */
+    private void renderFill(List<Doc> parts, int indent, DocWidths.Measurement widths) {
+        if (parts.isEmpty()) {
+            return;
+        }
+        render(parts.getFirst(), indent, Mode.FLAT, widths);
+        for (int i = 1; i + 1 < parts.size(); i += 2) {
+            Doc separator = parts.get(i);
+            Doc nextContent = parts.get(i + 1);
+            // Decide this separator from the column reached after the preceding content: does the separator plus the
+            // next content still fit flat on the current line? If so keep the separator flat, otherwise break only it.
+            Mode separatorMode =
+                widths.fits(Doc.concat(separator, nextContent), options.lineWidth() - column) ? Mode.FLAT : Mode.BREAK;
+            render(separator, indent, separatorMode, widths);
+            render(nextContent, indent, Mode.FLAT, widths);
         }
     }
 
@@ -125,6 +151,7 @@ public final class DocRenderer {
         return switch (doc) {
             case Doc.HardLine ignored -> true;
             case Doc.Concat concat -> concat.docs().stream().anyMatch(DocRenderer::containsHardLine);
+            case Doc.Fill fill -> fill.parts().stream().anyMatch(DocRenderer::containsHardLine);
             case Doc.Indent indented -> containsHardLine(indented.doc());
             case Doc.Group group -> containsHardLine(group.doc());
             case Doc.Label label -> containsHardLine(label.doc());

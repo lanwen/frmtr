@@ -105,6 +105,24 @@ final class DocDebugRendererTest {
     }
 
     @Test
+    void rendersFillPartsAsChildren() {
+        Doc separator = Doc.concat(Doc.text(","), Doc.LINE);
+        Doc doc = Doc.fill(java.util.List.of(Doc.text("a"), separator, Doc.text("b")));
+
+        String rendered = DocDebugRenderer.render(doc);
+
+        assertThat(rendered).isEqualTo(
+            """
+                Fill
+                  Text("a")
+                  Concat
+                    Text(",")
+                    Line
+                  Text("b")"""
+        );
+    }
+
+    @Test
     void rendersBreakParentMarker() {
         Doc doc = Doc.concat(Doc.text("value"), Doc.BREAK_PARENT);
 

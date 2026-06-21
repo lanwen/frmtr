@@ -555,7 +555,7 @@ final class ConditionalExpressionPrinter {
             return conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED);
         }
         if (branch instanceof MethodCallExpr && sourceShape.spansMultipleLines(branch)) {
-            return Doc.text(rawSource.rawWithoutOwnComment(branch));
+            return Doc.text(sourceShapePolicy.rawTextWithoutOwnComment(branch));
         }
         return expressionRenderer.apply(branch);
     }

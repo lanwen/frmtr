@@ -33,6 +33,8 @@ final class ModuleDeclarationPrinter {
 
     private final RawSource rawSource;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final RawPreservedSource rawPreservedSource;
 
     private final CommentedModulePrinter commentedModules;
@@ -52,6 +54,7 @@ final class ModuleDeclarationPrinter {
     ModuleDeclarationPrinter(
             CommentTracker comments,
             RawSource rawSource,
+            SourceShapePolicy sourceShapePolicy,
             RawPreservedSource rawPreservedSource,
             CommentedModulePrinter commentedModules,
             Function<NodeWithAnnotations<?>, Doc> annotations,
@@ -63,6 +66,7 @@ final class ModuleDeclarationPrinter {
     ) {
         this.comments = comments;
         this.rawSource = rawSource;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.rawPreservedSource = rawPreservedSource;
         this.commentedModules = commentedModules;
         this.annotations = annotations;
@@ -83,7 +87,7 @@ final class ModuleDeclarationPrinter {
      * when the directive-list recovery plan proves every raw comment marker remains inside recovered raw gaps.
      */
     Doc moduleDeclaration(ModuleDeclaration declaration) {
-        String raw = rawSource.raw(declaration);
+        String raw = sourceShapePolicy.rawText(declaration);
         boolean recoveredDirectiveList = recoverParseProblems
             && ModuleBlockPrinter.hasRecoverableModuleDirectiveListProblem(declaration);
         boolean commentedModule = raw.contains("/*") || raw.contains("//");

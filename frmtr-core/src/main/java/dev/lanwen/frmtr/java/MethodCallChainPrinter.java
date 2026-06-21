@@ -1885,7 +1885,7 @@ final class MethodCallChainPrinter {
                 .filter(LambdaExpr.class::isInstance)
                 .map(LambdaExpr.class::cast)
                 .filter(lambdaExpr -> lambdaExpr.getBody().isBlockStmt())
-                .anyMatch(lambdaExpr -> rawSource.rawWithoutOwnComment(lambdaExpr.getBody()).contains("\n"));
+                .anyMatch(lambdaExpr -> sourceShapePolicy.wasMultiline(lambdaExpr.getBody()));
     }
 
     private boolean canBreakAfterCompactExpressionLambdaRoot(
@@ -2411,7 +2411,7 @@ final class MethodCallChainPrinter {
     }
 
     private boolean sourceFirstLineIsOnlyChainRoot(Expression root, MethodCallExpr expression) {
-        return rawSource.rawWithoutOwnComment(expression)
+        return sourceShapePolicy.rawTextWithoutOwnComment(expression)
                 .strip()
                 .lines()
                 .findFirst()

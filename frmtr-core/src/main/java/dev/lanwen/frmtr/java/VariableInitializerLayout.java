@@ -54,6 +54,8 @@ final class VariableInitializerLayout {
 
     private final SourceShape sourceShape;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final FormatterOptions options;
 
     private final LayoutWidth layoutWidth;
@@ -152,6 +154,7 @@ final class VariableInitializerLayout {
             JavaCommentPlacementPolicy commentPlacement,
             RawSource rawSource,
             SourceShape sourceShape,
+            SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
             LayoutWidth layoutWidth,
             Function<Node, String> compactTypeLike,
@@ -201,6 +204,7 @@ final class VariableInitializerLayout {
         this.commentPlacement = commentPlacement;
         this.rawSource = rawSource;
         this.sourceShape = sourceShape;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
         this.layoutWidth = layoutWidth;
         this.compactTypeLike = compactTypeLike;
@@ -347,7 +351,7 @@ final class VariableInitializerLayout {
     }
 
     private boolean commentStartsBeforeFinalSemicolonInRawOwner(JavaCommentTrivia comment, Node owner) {
-        String rawOwner = rawSource.raw(owner);
+        String rawOwner = sourceShapePolicy.rawText(owner);
         int commentIndex = commentIndex(rawOwner, comment);
         int semicolonIndex = rawOwner.lastIndexOf(';');
         return commentIndex >= 0 && semicolonIndex >= 0 && commentIndex < semicolonIndex;
@@ -885,7 +889,7 @@ final class VariableInitializerLayout {
 
     private boolean sourceFirstLineKeepsChainAfterRoot(MethodCallExpr methodCall) {
         return compactMethodCallChainRoot.apply(methodCall)
-                .flatMap(rootFirstLine -> rawSource.rawWithoutOwnComment(methodCall)
+                .flatMap(rootFirstLine -> sourceShapePolicy.rawTextWithoutOwnComment(methodCall)
                             .lines()
                             .findFirst()
                             .map(String::strip)
@@ -909,7 +913,7 @@ final class VariableInitializerLayout {
      * initializer branch decides whether to break.
      */
     private Optional<Doc> preEqualsBlockComment(VariableDeclarator variable, Expression initializer) {
-        String raw = rawSource.raw(variable);
+        String raw = sourceShapePolicy.rawText(variable);
         int equals = raw.indexOf('=');
         int blockComment = raw.indexOf("/*");
         if (blockComment < 0 || equals < 0 || blockComment > equals) {
@@ -924,7 +928,7 @@ final class VariableInitializerLayout {
      * check.
      */
     private Optional<String> postEqualsBlockComment(VariableDeclarator variable, Expression initializer) {
-        String raw = rawSource.raw(variable);
+        String raw = sourceShapePolicy.rawText(variable);
         int equals = raw.indexOf('=');
         int blockComment = raw.indexOf("/*");
         if (blockComment < 0 || equals < 0 || blockComment < equals) {

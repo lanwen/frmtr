@@ -47,6 +47,8 @@ final class MethodDeclarationPrinter {
 
     private final SourceShape sourceShape;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final RawPreservedSource rawPreservedSource;
 
     private final CommentedMethodSignaturePrinter commentedMethodSignatures;
@@ -80,6 +82,7 @@ final class MethodDeclarationPrinter {
             JavaCommentPlacementPolicy commentPlacement,
             RawSource rawSource,
             SourceShape sourceShape,
+            SourceShapePolicy sourceShapePolicy,
             RawPreservedSource rawPreservedSource,
             CommentedMethodSignaturePrinter commentedMethodSignatures,
             CallableSignaturePrinter callableSignatures,
@@ -99,6 +102,7 @@ final class MethodDeclarationPrinter {
         this.commentPlacement = commentPlacement;
         this.rawSource = rawSource;
         this.sourceShape = sourceShape;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.rawPreservedSource = rawPreservedSource;
         this.commentedMethodSignatures = commentedMethodSignatures;
         this.callableSignatures = callableSignatures;
@@ -120,7 +124,7 @@ final class MethodDeclarationPrinter {
      * structured header path for methods JavaParser exposes cleanly.
      */
     Doc method(MethodDeclaration declaration) {
-        String raw = rawSource.raw(declaration);
+        String raw = sourceShapePolicy.rawText(declaration);
         Optional<String> commentedMethod = commentedMethodSignatures.tryFormat(declaration, raw);
         if (commentedMethod.isPresent()) {
             return rawPreservedSource.rawWithoutOwnComment(declaration, commentedMethod.orElseThrow());
@@ -256,7 +260,7 @@ final class MethodDeclarationPrinter {
         return annotation
                 .getRange()
                 .map(range -> {
-                    long lineCount = rawSource.rawWithoutOwnComment(annotation).lines().count();
+                    long lineCount = sourceShapePolicy.rawTextWithoutOwnComment(annotation).lines().count();
                     return range.begin.line + Math.toIntExact(lineCount) - 1;
                 });
     }

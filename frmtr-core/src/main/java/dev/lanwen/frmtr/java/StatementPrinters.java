@@ -84,6 +84,7 @@ final class StatementPrinters {
             commentPlacementPolicy,
             rawSource,
             context.sourceShape,
+            context.sourceShapePolicy,
             options,
             context.layoutWidth,
             this::statement,

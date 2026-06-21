@@ -81,6 +81,8 @@ final class StatementPrinter {
 
     private final SourceShape sourceShape;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final FormatterOptions options;
 
     private final LayoutWidth layoutWidth;
@@ -158,6 +160,7 @@ final class StatementPrinter {
             JavaCommentPlacementPolicy commentPlacement,
             RawSource rawSource,
             SourceShape sourceShape,
+            SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
             LayoutWidth layoutWidth,
             JavaFormatRule<Statement> statementRenderer,
@@ -199,6 +202,7 @@ final class StatementPrinter {
         this.commentPlacement = commentPlacement;
         this.rawSource = rawSource;
         this.sourceShape = sourceShape;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
         this.layoutWidth = layoutWidth;
         this.statementRenderer = statementRenderer;
@@ -314,7 +318,7 @@ final class StatementPrinter {
     }
 
     private String trailingStatementBlockComment(Statement statement) {
-        String raw = rawSource.raw(statement);
+        String raw = sourceShapePolicy.rawText(statement);
         int commentStart = raw.indexOf("/*");
         int semicolon = raw.lastIndexOf(';');
         if (commentStart < 0 || semicolon < commentStart) {
@@ -395,7 +399,7 @@ final class StatementPrinter {
     }
 
     private List<String> labeledStatementLeadingComments(LabeledStmt statement) {
-        String raw = rawSource.raw(statement);
+        String raw = sourceShapePolicy.rawText(statement);
         int colon = raw.indexOf(':');
         if (colon < 0) {
             return List.of();
@@ -1245,7 +1249,7 @@ final class StatementPrinter {
     }
 
     private String forEachVariable(ForEachStmt statement) {
-        String raw = rawSource.raw(statement);
+        String raw = sourceShapePolicy.rawText(statement);
         int open = raw.indexOf('(');
         int colon = raw.indexOf(':', open);
         if (open < 0 || colon < open) {
@@ -1469,7 +1473,7 @@ final class StatementPrinter {
         if (unattached != Doc.EMPTY) {
             return " " + commentText(unattached);
         }
-        String raw = rawSource.raw(node);
+        String raw = sourceShapePolicy.rawText(node);
         int semicolon = raw.lastIndexOf(';');
         if (semicolon < 0 || semicolon + 1 >= raw.length()) {
             return "";

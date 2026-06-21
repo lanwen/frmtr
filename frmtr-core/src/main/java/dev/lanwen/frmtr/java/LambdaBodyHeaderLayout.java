@@ -70,7 +70,7 @@ final class LambdaBodyHeaderLayout {
         ) {
             return Optional.empty();
         }
-        String firstBodyLine = rawSource.rawWithoutOwnComment(body)
+        String firstBodyLine = sourceShapePolicy.rawTextWithoutOwnComment(body)
                 .strip()
                 .lines()
                 .findFirst()

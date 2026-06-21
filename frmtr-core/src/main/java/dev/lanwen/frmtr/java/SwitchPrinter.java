@@ -51,6 +51,8 @@ final class SwitchPrinter {
 
     private final RawSource rawSource;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final RawPreservedSource rawPreservedSource;
 
     private final FormatterOptions options;
@@ -153,6 +155,7 @@ final class SwitchPrinter {
     ) {
         this.comments = context.comments;
         this.rawSource = context.rawSource;
+        this.sourceShapePolicy = context.sourceShapePolicy;
         this.rawPreservedSource = context.rawPreservedSource;
         this.options = context.options;
         this.sourceText = context.sourceText;
@@ -591,7 +594,7 @@ final class SwitchPrinter {
     }
 
     private String defaultSwitchEntryLabel(SwitchEntry entry) {
-        String raw = rawSource.raw(entry);
+        String raw = sourceShapePolicy.rawText(entry);
         int boundary = defaultLabelBoundary(raw);
         if (boundary < 0) {
             return "default";
@@ -734,7 +737,7 @@ final class SwitchPrinter {
         String raw = entry
                 .getTokenRange()
                 .map(Object::toString)
-                .orElseGet(() -> rawSource.rawWithoutOwnComment(entry))
+                .orElseGet(() -> sourceShapePolicy.rawTextWithoutOwnComment(entry))
                 .stripTrailing();
         if (!raw.contains("->") || raw.contains("\n")) {
             return Optional.empty();

@@ -699,7 +699,7 @@ final class EnumDeclarationPrinter {
      */
     private boolean enumSemicolonFollowsBodyComments(EnumDeclaration declaration) {
         String raw = declaration.getTokenRange().map(Object::toString).orElseGet(
-            () -> rawSource.rawWithoutOwnComment(
+            () -> sourceShapePolicy.rawTextWithoutOwnComment(
                 declaration
             )
         );
@@ -721,7 +721,7 @@ final class EnumDeclarationPrinter {
      * Recovers a source-written semicolon before ordinary members when there are no enum constants to force one.
      */
     private boolean enumHasExplicitSemicolon(EnumDeclaration declaration) {
-        String raw = rawSource.rawWithoutOwnComment(declaration);
+        String raw = sourceShapePolicy.rawTextWithoutOwnComment(declaration);
         int open = raw.indexOf('{');
         int firstMember = declaration.getMembers()
                 .stream()

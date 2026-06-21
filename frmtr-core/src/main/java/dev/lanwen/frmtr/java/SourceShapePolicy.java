@@ -156,4 +156,35 @@ final class SourceShapePolicy {
                 ))
                 .orElse(false);
     }
+
+    /**
+     * Returns a node's original source text for a layout or fallback that must render the author's bytes rather than a
+     * structured document.
+     *
+     * <p>Recovering source text is a source-shape concern: a printer that cannot (or chooses not to) build docs for a
+     * node and instead emits its raw source is deciding to respect the author's exact layout. Routing that recovery
+     * through the policy keeps a printer that only needs source-derived text from holding a bare {@link RawSource},
+     * which is otherwise the raw-output and comment-accounting owner. The text itself is unchanged: this delegates to
+     * {@link RawSource#raw(Node)}, honoring the same trailing-whitespace option, so recovery output does not move.
+     *
+     * <p>This is deliberately not the raw-output path that needs comment accounting. Genuine raw passes that must
+     * record which comments they emitted stay on {@link RawPreservedSource}; this method is only for layout/fallback
+     * text that no longer needs the accounting collaborator.
+     */
+    String rawText(Node node) {
+        return rawSource.raw(node);
+    }
+
+    /**
+     * Returns a node's original source text with the node's own attached comment removed, for a layout or fallback that
+     * already printed that comment separately.
+     *
+     * <p>Same boundary as {@link #rawText(Node)}: the recovery decision lives behind the policy so layout/fallback
+     * printers do not hold a bare {@link RawSource}. It delegates to {@link RawSource#rawWithoutOwnComment(Node)} so the
+     * own-comment stripping and trailing-whitespace handling are identical and recovery text does not change. Raw passes
+     * that must account for the comments they emit stay on {@link RawPreservedSource} instead.
+     */
+    String rawTextWithoutOwnComment(Node node) {
+        return rawSource.rawWithoutOwnComment(node);
+    }
 }

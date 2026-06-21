@@ -834,7 +834,7 @@ final class ExpressionLambdaArgumentLayout {
     }
 
     private String bodyFirstSourceLine(Node node) {
-        return rawSource.rawWithoutOwnComment(node)
+        return sourceShapePolicy.rawTextWithoutOwnComment(node)
                 .strip()
                 .lines()
                 .findFirst()

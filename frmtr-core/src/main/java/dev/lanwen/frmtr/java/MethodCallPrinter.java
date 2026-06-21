@@ -694,6 +694,13 @@ final class MethodCallPrinter {
         ) {
             return Optional.empty();
         }
+        // A line comment sitting before or after the text-block argument (// leading / // trailing around the block)
+        // lives in the argument gaps, which this hug-the-block layout does not render. Defer to the commented argument
+        // list so the surrounding comment is preserved; without this it is dropped. The text block's own interior is
+        // string content, never a comment, so a plain text-block call still takes this compact path.
+        if (commentedExpressionLists.hasLineComments(expression, expression.getArguments())) {
+            return Optional.empty();
+        }
         Doc argument = textBlockArguments.methodCallIsExpressionLambdaBody(expression)
             ? textBlockArguments.expressionLambdaSourceMultilineArgument(textBlockLiteralExpr)
             : Doc.indent(Doc.concat(Doc.HARD_LINE, textBlockArgument(textBlockLiteralExpr, expression)));

@@ -130,6 +130,11 @@ instead of building strings directly:
   contributing zero flat width. It exists so trailing comments lay out after the code and separator on their line
   without the preceding code being measured against the line width as if the comment were inline. Content is
   single-line only; a `HardLine` inside it is rejected at render time.
+- `BreakParent` (singleton `Doc.BREAK_PARENT`) is a zero-width marker that forces the nearest enclosing `Group` into
+  break mode, the explicit form of the older "emit a `HardLine` to poison the fit measurement" trick but without
+  printing a newline. It measures as a forced break (like `HardLine`) so any group containing it cannot stay flat,
+  and renders nothing. Because group mode is decided top-down by flat measurement, it only affects groups whose
+  measurement encounters it, so it is emitted at the point the breaking child is built.
 
 Small factory helpers such as `Doc.delimited(...)`, `Doc.joinComma(...)`, `Doc.breakOnly(...)`, and
 `Doc.flatOnly(...)` capture recurring document shapes so list-like Java printers share one spelling for common

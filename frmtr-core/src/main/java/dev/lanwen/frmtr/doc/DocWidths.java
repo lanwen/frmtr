@@ -41,7 +41,7 @@ final class DocWidths {
 
     /**
      * Measures the flat-mode display width of {@code doc}, or {@link #NO_FIT} when it contains a forced break
-     * ({@link Doc.HardLine}) and therefore cannot be laid out on a single line.
+     * ({@link Doc.HardLine} or {@link Doc.BreakParent}) and therefore cannot be laid out on a single line.
      *
      * <p>Indentation does not affect flat width, so it is intentionally not threaded here. Conditional {@link
      * Doc.IfBreak} nodes always contribute their flat branch and nested groups always measure flat, because this
@@ -96,6 +96,7 @@ final class DocWidths {
                 case Doc.Line ignored -> 1;
                 case Doc.SoftLine ignored -> 0;
                 case Doc.HardLine ignored -> NO_FIT;
+                case Doc.BreakParent ignored -> NO_FIT;
                 case Doc.Indent indented -> measure(indented.doc(), remaining);
                 case Doc.Group group -> measure(group.doc(), remaining);
                 case Doc.IfBreak conditional -> measure(conditional.flatDoc(), remaining);

@@ -115,6 +115,44 @@ final class DocRendererTest {
     }
 
     @Test
+    void breakParentForcesEnclosingGroupToBreakEvenWhenItWouldFitFlat() {
+        // "a, b" plus the delimiters is 4 wide and fits the 80-column limit, so without the marker the group renders
+        // flat as "(a, b)". The zero-width BreakParent poisons the group's flat measurement, forcing it to break and
+        // split the soft lines, even though nothing here is too wide.
+        Doc doc = Doc.group(
+            Doc.concat(
+                Doc.text("("),
+                Doc.indent(
+                    Doc.concat(Doc.SOFT_LINE, Doc.text("a"), Doc.text(","), Doc.LINE, Doc.text("b"), Doc.BREAK_PARENT)
+                ),
+                Doc.SOFT_LINE,
+                Doc.text(")")
+            )
+        );
+
+        assertThat(renderer(80).render(doc)).isEqualTo(
+            """
+                (
+                  a,
+                  b
+                )"""
+        );
+    }
+
+    @Test
+    void breakParentRendersNothingItself() {
+        // The marker contributes no characters: the surrounding group still breaks (it cannot stay flat), but the
+        // marker leaves no glyph of its own between "value" and the line break.
+        Doc doc = Doc.group(Doc.concat(Doc.text("value"), Doc.BREAK_PARENT, Doc.SOFT_LINE, Doc.text("tail")));
+
+        assertThat(renderer(80).render(doc)).isEqualTo(
+            """
+                value
+                tail"""
+        );
+    }
+
+    @Test
     void keepsGroupFlatWhenItFits() {
         Doc doc = Doc.delimited("call(", ")", Doc.text("value"));
 

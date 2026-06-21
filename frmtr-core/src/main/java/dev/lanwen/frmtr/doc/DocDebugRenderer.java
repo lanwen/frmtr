@@ -38,6 +38,7 @@ public final class DocDebugRenderer {
             case Doc.Line ignored -> appendLine(out, depth, "Line");
             case Doc.SoftLine ignored -> appendLine(out, depth, "SoftLine");
             case Doc.HardLine ignored -> appendLine(out, depth, "HardLine");
+            case Doc.BreakParent ignored -> appendLine(out, depth, "BreakParent");
             case Doc.Indent indented -> {
                 appendLine(out, depth, "Indent");
                 render(indented.doc(), out, depth + 1);

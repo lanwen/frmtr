@@ -108,6 +108,12 @@ public final class DocExplainRenderer {
                     }
                     return Builder.leaf();
                 }
+                case Doc.BreakParent ignored -> {
+                    // Emits no newline and advances no column, so it leaves the cursor untouched. The break it forces
+                    // is already reported on the enclosing Group decision: BreakParent measures as NO_FIT in DocWidths,
+                    // so that group's flatWidth == NO_FIT and its decision is flagged as a forced break.
+                    return Builder.leaf();
+                }
                 case Doc.Indent indented -> {
                     return render(indented.doc(), indent + 1, mode, enclosingLabel);
                 }

@@ -44,6 +44,7 @@ public final class DocExplainRenderer {
     public DocExplanation explain(Doc doc, List<dev.lanwen.frmtr.doc.PrinterWrap> printerWraps) {
         Trace trace = new Trace();
         Builder root = trace.render(doc, 0, Mode.BREAK, null);
+        trace.flushLineSuffixes();
         return new DocExplanation(
             lineWidth,
             List.copyOf(trace.decisions),
@@ -68,6 +69,8 @@ public final class DocExplainRenderer {
         private final List<ForcedBreak> forcedBreaks = new ArrayList<>();
 
         private final DocWidths.Measurement widths = DocWidths.measurement();
+
+        private final List<BufferedSuffix> lineSuffixes = new ArrayList<>();
 
         private int column;
 
@@ -143,6 +146,25 @@ public final class DocExplainRenderer {
                     }
                     return node;
                 }
+                case Doc.LineSuffix lineSuffix -> {
+                    lineSuffixes.add(new BufferedSuffix(lineSuffix.content(), indent, mode, enclosingLabel));
+                    return Builder.leaf();
+                }
+            }
+        }
+
+        /**
+         * Replays buffered {@link Doc.LineSuffix} content at its captured indent/mode/label so the column cursor and
+         * forced-break attribution stay identical to {@link DocRenderer}'s flush at the line break. Drains the buffer
+         * until empty because a flushed suffix may itself buffer another.
+         */
+        private void flushLineSuffixes() {
+            while (!lineSuffixes.isEmpty()) {
+                List<BufferedSuffix> pending = List.copyOf(lineSuffixes);
+                lineSuffixes.clear();
+                for (BufferedSuffix suffix : pending) {
+                    render(suffix.content(), suffix.indent(), suffix.mode(), suffix.enclosingLabel());
+                }
             }
         }
 
@@ -156,6 +178,9 @@ public final class DocExplainRenderer {
         }
 
         private void newline(int indent) {
+            // Flush buffered line suffixes before resetting the column, mirroring DocRenderer.newline so every break path
+            // (Line, SoftLine, HardLine) replays suffix content on the line being closed rather than the next one.
+            flushLineSuffixes();
             column = options.indentUnit().length() * indent;
         }
     }
@@ -164,6 +189,8 @@ public final class DocExplainRenderer {
         FLAT,
         BREAK,
     }
+
+    private record BufferedSuffix(Doc content, int indent, Mode mode, Builder enclosingLabel) {}
 
     /**
      * Mutable scratch node used while walking, so a label can accrue forced line breaks emitted under it before the

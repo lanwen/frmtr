@@ -215,7 +215,7 @@ final class CommentedExpressionListPrinter {
                 .stream()
                 .filter(child -> !(child instanceof Comment))
                 .filter(child -> child != argument)
-                .anyMatch(comment::startsInsideLineRange);
+                .anyMatch(comment::isInsideNotTrailing);
     }
 
     private Node argumentListAnchor(Node container) {

@@ -533,16 +533,18 @@ final class StatementPrinter {
     private Doc expressionStatementTrailingComment(ExpressionStmt statement) {
         Doc statementTrailing = trailingLineComment(statement);
         if (statementTrailing != Doc.EMPTY) {
-            return Doc.concat(Doc.text(" "), statementTrailing);
+            return Doc.lineSuffix(Doc.concat(Doc.text(" "), statementTrailing));
         }
         return conditionalElseStatementTrailingComment(statement)
-                .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
+                .map(comment -> Doc.lineSuffix(Doc.concat(Doc.text(" "), comments.comment(comment))))
                 .orElse(Doc.EMPTY);
     }
 
     private Doc variableDeclarationTrailingComment(VariableDeclarationExpr declaration) {
         Doc declarationTrailing = comments.trailingLineComment(declaration);
-        return declarationTrailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), declarationTrailing);
+        return declarationTrailing == Doc.EMPTY
+            ? Doc.EMPTY
+            : Doc.lineSuffix(Doc.concat(Doc.text(" "), declarationTrailing));
     }
 
     private int methodCallStatementWidth(MethodCallExpr methodCall, LayoutWidth.LineBudget lineBudget) {

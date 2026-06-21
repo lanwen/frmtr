@@ -81,6 +81,10 @@ final class SwitchPrinter {
 
     private final CommentPlacement commentPlacement;
 
+    private final JavaCommentPlacementPolicy commentPlacementPolicy;
+
+    private final SourceOrderedCommentInterleaver<SwitchEntry> commentInterleaver;
+
     private final Function<NodeWithModifiers<?>, String> modifiers;
 
     private final ToIntFunction<String> currentIndentedWidth;
@@ -170,6 +174,8 @@ final class SwitchPrinter {
         this.binaryExpressionLinesRenderer = binaryExpressionLinesRenderer;
         this.compactSource = context.compactSource;
         this.commentPlacement = context.commentPlacement;
+        this.commentPlacementPolicy = context.commentPlacementPolicy;
+        this.commentInterleaver = new SourceOrderedCommentInterleaver<>(context.comments);
         this.modifiers = modifiers;
         this.currentIndentedWidth = currentIndentedWidth;
         this.blockStatementWidth = blockStatementWidth;
@@ -259,13 +265,64 @@ final class SwitchPrinter {
         if (entries.isEmpty()) {
             return Doc.text("{}");
         }
-        List<Doc> entryDocs = new ArrayList<>();
-        entryDocs.addAll(entries.stream().map(this::switchEntry).toList());
         return Doc.concat(
             Doc.text("{"),
-            Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, entryDocs))),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, switchBlockBody(owner, entries))),
             Doc.HARD_LINE,
             Doc.text("}")
+        );
+    }
+
+    /**
+     * Renders the switch entries while restoring switch-owner orphan comments that source placed between the brace and an
+     * entry (or between entries), such as a {@code // keep first detail} note stacked before a {@code case}.
+     *
+     * <p>JavaParser parks a leading comment cluster before a {@code case} as orphans of the {@code switch} (or, when the
+     * whitespace is reshaped, mis-attaches one to the selector), and {@link #switchEntryLeadingComments} only recovers
+     * the part still adjacently attached to the entry — so the rest was dropped once the layout moved. Interleaving the
+     * switch's orphan comments with the entries in source order restores them before the entry they precede, shape
+     * independently. Claim-coupling keeps a comment {@code switchEntryLeadingComments} already emitted from rendering
+     * twice.
+     */
+    private Doc switchBlockBody(Node owner, NodeList<SwitchEntry> entries) {
+        List<JavaCommentTrivia> orphanComments =
+            commentPlacementPolicy.orphanCommentsOutsideChildRanges(owner, entries);
+        if (orphanComments.isEmpty()) {
+            return Doc.join(Doc.HARD_LINE, entries.stream().map(this::switchEntry).toList());
+        }
+        return Doc.concat(
+            commentInterleaver.interleave(
+                entries,
+                orphanComments,
+                (previousSibling, current, index) -> Optional.of(switchEntry(current)),
+                new SourceOrderedCommentInterleaver.Spacing<>() {
+                    @Override
+                    public int beginLine(SwitchEntry sibling) {
+                        return CommentIndex.beginLine(sibling, Integer.MAX_VALUE);
+                    }
+
+                    @Override
+                    public int endLine(SwitchEntry sibling) {
+                        return CommentIndex.endLine(sibling, beginLine(sibling));
+                    }
+
+                    @Override
+                    public Doc separatorBeforeSibling(
+                            SourceOrderedCommentInterleaver.PreviousEntry<SwitchEntry> previous,
+                            SwitchEntry currentSibling
+                    ) {
+                        return Doc.HARD_LINE;
+                    }
+
+                    @Override
+                    public Doc separatorBeforeComment(
+                            SourceOrderedCommentInterleaver.PreviousEntry<SwitchEntry> previous,
+                            JavaCommentTrivia comment
+                    ) {
+                        return Doc.HARD_LINE;
+                    }
+                }
+            )
         );
     }
 

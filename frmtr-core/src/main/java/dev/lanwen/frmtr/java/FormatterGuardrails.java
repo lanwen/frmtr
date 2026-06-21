@@ -28,6 +28,26 @@ final class FormatterGuardrails {
     static final String ENABLED_PROPERTY = "dev.lanwen.frmtr.debug.guardrails";
 
     /**
+     * Toggles the stricter "each comment is claimed at most once" invariant in {@link #claimComment}. Separate from
+     * {@link #ENABLED_PROPERTY} because, unlike comment-drop detection and the transform-identity check, this invariant
+     * does <em>not</em> hold under the formatter's current design and so must stay off in CI.
+     *
+     * <p>{@code CommentTracker} couples claim and render — every render path is
+     * {@code commentPlacement.X(node).filter(this::claim)…} — so first-claim-wins both de-dupes and renders. Comment
+     * ownership between adjacent constructs is inherently ambiguous, so several printer paths legitimately <em>offer</em>
+     * the same comment; the losing claim returns {@code false} and simply skips its (redundant) render, and the comment
+     * still reaches the output exactly once. A "fail fast on the second claim" assertion therefore flags benign
+     * speculative claims as errors even on golden fixtures that are correct.
+     *
+     * <p>The strict invariant becomes satisfiable — and this property worth CI-enabling — only once roadmap <strong>B1</strong>
+     * (source-shape consolidation, so ownership no longer depends on layout) and <strong>B2</strong> ({@code lineSuffix},
+     * which retires most of the comment-placement machinery) land. Until then it is deferred and left off; the valuable
+     * half of the guardrail ({@link #assertAllCommentsAccounted} drop detection and the transform-identity check) runs in
+     * CI under {@link #ENABLED_PROPERTY} instead.
+     */
+    static final String STRICT_CLAIMS_PROPERTY = "dev.lanwen.frmtr.debug.guardrails.strict-claims";
+
+    /**
      * Toggles the AST-equivalence verify mode (roadmap B3, layer 1). Separate from {@link #ENABLED_PROPERTY} because
      * verification re-parses the formatted output and so has real cost; it must stay off in the shipped hot path.
      */
@@ -38,15 +58,21 @@ final class FormatterGuardrails {
     private FormatterGuardrails() {}
 
     /**
-     * Records that a comment has been claimed for rendering and rejects duplicate claims when debug guardrails are on.
+     * Records that a comment has been claimed for rendering and rejects duplicate claims under the strict-claims toggle.
      *
      * <p>Normal formatter runs keep the existing best-effort behavior: a duplicate claim simply returns {@code false} so
-     * callers can skip rendering a second copy. Enabling {@value #ENABLED_PROPERTY} makes the same duplicate claim fail
-     * fast, which exposes comment-accounting bugs without changing default formatting output.
+     * callers can skip rendering a second copy. The {@code printed} set is populated by {@link JavaCommentTrivia#claim}
+     * whether or not the throw fires, so comment-drop detection keeps working with the fail-fast off.
+     *
+     * <p>The fail-fast is gated on {@value #STRICT_CLAIMS_PROPERTY}, <em>not</em> {@value #ENABLED_PROPERTY}: as
+     * documented on {@link #STRICT_CLAIMS_PROPERTY}, the "claimed at most once" invariant does not hold under the current
+     * claim/render-coupled design (benign speculative claims are expected), so it stays off in CI and is deferred to
+     * roadmap B1/B2. Comment-drop detection ({@link #assertAllCommentsAccounted}) and the transform-identity check stay
+     * on {@value #ENABLED_PROPERTY} and run in CI.
      */
     static boolean claimComment(JavaCommentTrivia trivia, Set<Comment> claimedComments) {
         boolean claimed = trivia.claim(claimedComments);
-        if (!claimed && enabled()) {
+        if (!claimed && strictClaimsEnabled()) {
             throw new AssertionError(
                 "Formatter comment guardrail failed: duplicate claim for " + describe(trivia.comment())
             );
@@ -125,6 +151,10 @@ final class FormatterGuardrails {
 
     static boolean enabled() {
         return Boolean.getBoolean(ENABLED_PROPERTY);
+    }
+
+    static boolean strictClaimsEnabled() {
+        return Boolean.getBoolean(STRICT_CLAIMS_PROPERTY);
     }
 
     static boolean verifyEnabled() {

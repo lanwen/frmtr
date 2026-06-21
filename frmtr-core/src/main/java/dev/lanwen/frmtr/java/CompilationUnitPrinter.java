@@ -46,6 +46,10 @@ final class CompilationUnitPrinter {
 
     private final CommentTracker comments;
 
+    private final JavaCommentPlacementPolicy commentPlacement;
+
+    private final SourceOrderedCommentInterleaver<BodyDeclaration<?>> commentInterleaver;
+
     private final SourceText sourceText;
 
     private final RecoveredListPlanner recoveredListPlanner;
@@ -74,6 +78,8 @@ final class CompilationUnitPrinter {
             JavaFormatRule<BodyDeclaration<?>> bodyDeclarations
     ) {
         this.comments = context.comments;
+        this.commentPlacement = context.commentPlacementPolicy;
+        this.commentInterleaver = new SourceOrderedCommentInterleaver<>(context.comments);
         this.sourceText = context.sourceText;
         this.recoveredListPlanner = context.recoveredListPlanner;
         this.importRawGaps = new RecoveredRawGapPrinter(
@@ -213,7 +219,76 @@ final class CompilationUnitPrinter {
         if (recoveryPlan.isPresent() && hasRawGap(recoveryPlan.orElseThrow())) {
             return Optional.of(recoveredTopLevelDeclarations(unit, recoveryPlan.orElseThrow()));
         }
-        return joinedTopLevelDeclarations(declarations, declarations.stream().map(bodyDeclarations::format).toList());
+        return interleavedTopLevelDeclarations(unit, declarations);
+    }
+
+    /**
+     * Joins top-level type declarations while restoring file orphan comments that source placed <em>between</em> two
+     * types, such as a {@code // Bug Fix: #123} note sitting between two classes.
+     *
+     * <p>Comments before the first type and after the last type are already emitted by {@code print} (around the
+     * package/import block and as the file footer). A comment between two top-level types is a compilation-unit orphan
+     * that neither of those handles, so without this interleave it is dropped — most visibly when whitespace is expanded
+     * so the comment no longer shares a line with either type. The interleaver places it in source order between the
+     * surrounding type docs; claim-coupling keeps the before-first / after-last passes from re-emitting it.
+     */
+    private Optional<Doc> interleavedTopLevelDeclarations(CompilationUnit unit, List<BodyDeclaration<?>> declarations) {
+        List<JavaCommentTrivia> betweenTypeComments = betweenTypeOrphanComments(unit, declarations);
+        if (betweenTypeComments.isEmpty()) {
+            return joinedTopLevelDeclarations(declarations, declarations.stream().map(bodyDeclarations::format).toList());
+        }
+        List<Doc> declarationDocs = declarations.stream().map(bodyDeclarations::format).toList();
+        List<Doc> parts = commentInterleaver.interleave(
+            declarations,
+            betweenTypeComments,
+            (previousSibling, current, index) -> Optional.of(declarationDocs.get(index)),
+            new SourceOrderedCommentInterleaver.Spacing<>() {
+                @Override
+                public int beginLine(BodyDeclaration<?> sibling) {
+                    return CommentIndex.beginLine(sibling, Integer.MAX_VALUE);
+                }
+
+                @Override
+                public int endLine(BodyDeclaration<?> sibling) {
+                    return CommentIndex.endLine(sibling, beginLine(sibling));
+                }
+
+                @Override
+                public Doc separatorBeforeSibling(
+                        SourceOrderedCommentInterleaver.PreviousEntry<BodyDeclaration<?>> previous,
+                        BodyDeclaration<?> currentSibling
+                ) {
+                    return previous.kind() == SourceOrderedCommentInterleaver.EntryKind.SIBLING
+                        ? topLevelDeclarationSeparator(previous.sibling().orElse(null), currentSibling)
+                        : Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
+                }
+
+                @Override
+                public Doc separatorBeforeComment(
+                        SourceOrderedCommentInterleaver.PreviousEntry<BodyDeclaration<?>> previous,
+                        JavaCommentTrivia comment
+                ) {
+                    return Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE);
+                }
+            }
+        );
+        return parts.isEmpty() ? Optional.empty() : Optional.of(Doc.concat(parts));
+    }
+
+    /**
+     * Returns compilation-unit orphan comments that begin after the first top-level type starts and before the last one
+     * ends, i.e. comments interleaved between top-level types. The before-first and after-last regions are intentionally
+     * excluded because {@code print} already emits them.
+     */
+    private List<JavaCommentTrivia> betweenTypeOrphanComments(CompilationUnit unit, List<BodyDeclaration<?>> types) {
+        int firstTypeLine = firstTypeLine(unit);
+        int lastTypeLine = lastTypeLine(unit);
+        return commentPlacement.orphanComments(unit)
+                .stream()
+                .filter(comment -> comment.beginLine(Integer.MAX_VALUE) > firstTypeLine
+                        && comment.beginLine(Integer.MIN_VALUE) <= lastTypeLine
+                        && types.stream().noneMatch(comment::startsInsideLineRange))
+                .toList();
     }
 
     /**

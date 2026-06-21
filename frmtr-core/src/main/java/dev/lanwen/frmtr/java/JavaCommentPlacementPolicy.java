@@ -128,9 +128,16 @@ final class JavaCommentPlacementPolicy {
      * <p>JavaParser may leave comments as parent orphans even when their source line belongs inside a child range. This
      * query lets block-like printers keep those comments with the child renderer instead of hoisting them to the parent
      * sequence.
+     *
+     * <p>A comment that merely <em>trails</em> a child — it begins on the child's end line but after the child's last
+     * token, e.g. {@code return; /* dead code *}{@code /} — is deliberately kept as a parent orphan rather than handed to
+     * the child. Statement printers recover only the trailing block comment that lives inside their own token range; a
+     * trailing comment JavaParser parked as a block orphan is in no statement's range, so excluding it here on the
+     * coarse line-range test alone would drop it entirely. Keeping it lets the block sequence render it after the
+     * statement, independent of whether source put it on the same line or the next one.
      */
     List<JavaCommentTrivia> orphanCommentsOutsideChildRanges(Node node, Collection<? extends Node> children) {
-        return orphanComments(node, comment -> children.stream().noneMatch(comment::startsInsideLineRange));
+        return orphanComments(node, comment -> children.stream().noneMatch(comment::isInsideNotTrailing));
     }
 
     /**

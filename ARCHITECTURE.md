@@ -126,15 +126,21 @@ instead of building strings directly:
 - `Group` attempts flat rendering first and breaks when content does not fit.
 - `IfBreak` selects different output for flat versus broken groups.
 - `Label` attaches debug-only provenance to a subtree.
+- `LineSuffix` defers its content to the next line break (or end of document), rendering nothing at its position and
+  contributing zero flat width. It exists so trailing comments lay out after the code and separator on their line
+  without the preceding code being measured against the line width as if the comment were inline. Content is
+  single-line only; a `HardLine` inside it is rejected at render time.
 
 Small factory helpers such as `Doc.delimited(...)`, `Doc.joinComma(...)`, `Doc.breakOnly(...)`, and
 `Doc.flatOnly(...)` capture recurring document shapes so list-like Java printers share one spelling for common
 break/flat envelopes while the renderer remains language-agnostic.
 
 `DocRenderer` is language-agnostic. Java-specific choices belong in `JavaPrinter`, not in the renderer. Label nodes are
-transparent to rendering, fitting, and width calculations. `DocWidths` is the single flat-width authority: it owns the
-flat-width measurement and the fit test, so `DocRenderer` and any observer of its decisions compute fit identically and
-a fit decision can never diverge from the width number reported for it.
+transparent to rendering, fitting, and width calculations. `DocRenderer` buffers `LineSuffix` content and flushes it,
+in document order, immediately before each line break, so the deferred content prints at the visual end of its line.
+`DocWidths` is the single flat-width authority: it owns the flat-width measurement and the fit test, so `DocRenderer`
+and any observer of its decisions compute fit identically and a fit decision can never diverge from the width number
+reported for it.
 
 `DocDebugRenderer` provides a stable structural dump of the document tree so formatter maintainers can inspect break
 opportunities, indentation scopes, groups, flat-vs-broken alternatives, and high-level formatter rule labels. Label
@@ -245,8 +251,13 @@ Two opt-in, off-by-default debug toggles guard formatter correctness during deve
 `dev.lanwen.frmtr.debug.verify` enables an AST-equivalence verify mode that re-parses the formatter output and asserts
 it is structurally equivalent to the input (modulo comments, whitespace, and the deliberate import reorder), catching a
 meaning-changing printer bug in any construct. Verification is enabled across the `frmtr-core` test suite so every
-golden fixture is also AST-checked. Both toggles live behind `FormatterGuardrails`; see
-[docs/java-formatter-internals.md](docs/java-formatter-internals.md) for details.
+golden fixture is also AST-checked. The `dev.lanwen.frmtr.debug.guardrails` comment-accounting check stays an opt-in
+dev aid only: the durable "no comment is dropped" CI gate is instead `CommentPresenceDiagnosticTest`, which compares the
+lexer comment-token multiset of each input against its formatted output over every golden fixture and every
+collapsed/expanded perturbation, failing on any genuine drop (a documented exclusion list tracks the remaining S9
+backlog). The stricter "each comment claimed at most once" invariant lives behind a separate off-by-default
+`dev.lanwen.frmtr.debug.guardrails.strict-claims` toggle, deferred until comment ownership is deterministic. All toggles
+live behind `FormatterGuardrails`; see [docs/java-formatter-internals.md](docs/java-formatter-internals.md) for details.
 
 `JavaPrinter` creates one per-run `JavaFormatContext`, constructs shared type rendering, and coordinates the three
 printer composer groups: `ExpressionPrinters`, `DeclarationPrinters`, and `StatementPrinters`. Formatter ownership then

@@ -13,8 +13,9 @@ import java.util.List;
  * <p>This helper owns enum-constant comment ownership: leading comments attached to a constant, same-line trailing
  * comments attached to the constant or its neighbor, contained comments on the constant's end line, and parent orphan
  * comments that should trail a constant instead of moving into the enum body. It intentionally does not decide enum
- * entry ordering, blank-line preservation, raw recovery, or whether the last trailing comment must be hoisted past the
- * list terminator; callers use the returned {@link Tail} values for those enum-list decisions.
+ * entry ordering, blank-line preservation, or raw recovery; callers use the returned {@link Tail} values for those
+ * enum-list decisions. A resolved tail is rendered as a {@link Tail#suffix()} (a deferred {@link Doc#lineSuffix(Doc)}),
+ * so the enum printer can emit separators and the list terminator unconditionally without the comment swallowing them.
  */
 final class EnumConstantComments {
 
@@ -136,12 +137,14 @@ final class EnumConstantComments {
             return comment != Doc.EMPTY;
         }
 
-        boolean ownsInlineComma() {
-            return hasComment();
-        }
-
-        Doc inline() {
-            return hasComment() ? Doc.concat(Doc.text(", "), comment) : Doc.EMPTY;
+        /**
+         * Returns the trailing comment as a {@link Doc#lineSuffix(Doc)} so it defers past the constant's separator and
+         * flushes at the line break. Deferring it this way means the separator (and the list terminator on the last
+         * constant) is always emitted unconditionally and cannot be commented out, regardless of which of the four
+         * comment sources the tail came from.
+         */
+        Doc suffix() {
+            return hasComment() ? Doc.lineSuffix(Doc.concat(Doc.text(" "), comment)) : Doc.EMPTY;
         }
     }
 }

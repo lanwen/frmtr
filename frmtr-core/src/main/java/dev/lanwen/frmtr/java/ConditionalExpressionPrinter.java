@@ -49,6 +49,8 @@ final class ConditionalExpressionPrinter {
 
     private final SourceShapePolicy sourceShapePolicy;
 
+    private final RawSource rawSource;
+
     private final CompactSourceText compactSource;
 
     private final Function<Expression, Doc> expressionRenderer;
@@ -122,6 +124,7 @@ final class ConditionalExpressionPrinter {
         this.comments = context.comments;
         this.options = context.options;
         this.sourceShapePolicy = context.sourceShapePolicy;
+        this.rawSource = context.rawSource;
         this.compactSource = context.compactSource;
         this.expressionRenderer = expressionRenderer;
         this.expressionWithoutOwnCommentRenderer = expressionWithoutOwnCommentRenderer;
@@ -549,7 +552,7 @@ final class ConditionalExpressionPrinter {
             return conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED);
         }
         if (branch instanceof MethodCallExpr && sourceShapePolicy.wasMultiline(branch)) {
-            return Doc.text(sourceShapePolicy.rawTextWithoutOwnComment(branch));
+            return Doc.text(rawSource.rawWithoutOwnComment(branch));
         }
         return expressionRenderer.apply(branch);
     }

@@ -23,10 +23,10 @@ import dev.lanwen.frmtr.doc.Doc;
  */
 final class TextBlockPrinter {
 
-    private final SourceShapePolicy sourceShapePolicy;
+    private final RawSource rawSource;
 
-    TextBlockPrinter(SourceShapePolicy sourceShapePolicy) {
-        this.sourceShapePolicy = sourceShapePolicy;
+    TextBlockPrinter(RawSource rawSource) {
+        this.rawSource = rawSource;
     }
 
     /**
@@ -48,6 +48,6 @@ final class TextBlockPrinter {
      * reinterpret them, so this path preserves the literal body and closing delimiter exactly as written.
      */
     String renderUnformattedTextBlock(TextBlockLiteralExpr expression) {
-        return sourceShapePolicy.rawText(expression);
+        return rawSource.raw(expression);
     }
 }

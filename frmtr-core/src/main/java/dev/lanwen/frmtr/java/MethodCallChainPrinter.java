@@ -2407,7 +2407,7 @@ final class MethodCallChainPrinter {
     }
 
     private boolean sourceFirstLineIsOnlyChainRoot(Expression root, MethodCallExpr expression) {
-        return sourceShapePolicy.rawTextWithoutOwnComment(expression)
+        return rawSource.rawWithoutOwnComment(expression)
                 .strip()
                 .lines()
                 .findFirst()

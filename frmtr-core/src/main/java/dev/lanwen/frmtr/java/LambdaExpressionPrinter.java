@@ -133,6 +133,7 @@ final class LambdaExpressionPrinter {
         );
         this.expressionLambdaArguments = new ExpressionLambdaArgumentLayout(
             sourceShapePolicy,
+            rawSource,
             sourceText,
             options,
             expressionRenderer,
@@ -151,6 +152,7 @@ final class LambdaExpressionPrinter {
         );
         this.lambdaBodyHeaders = new LambdaBodyHeaderLayout(
             sourceShapePolicy,
+            rawSource,
             options,
             expressionRenderer,
             lambdaParameterHeaders::haveComments,

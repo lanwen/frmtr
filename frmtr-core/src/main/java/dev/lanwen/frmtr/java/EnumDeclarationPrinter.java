@@ -51,6 +51,8 @@ final class EnumDeclarationPrinter {
 
     private final SourceShapePolicy sourceShapePolicy;
 
+    private final RawSource rawSource;
+
     private final FormatterOptions options;
 
     private final SourceText sourceText;
@@ -115,6 +117,7 @@ final class EnumDeclarationPrinter {
         this.commentPlacement = context.commentPlacementPolicy;
         this.enumConstantComments = new EnumConstantComments(context.comments, context.commentPlacementPolicy);
         this.sourceShapePolicy = context.sourceShapePolicy;
+        this.rawSource = context.rawSource;
         this.options = context.options;
         this.sourceText = context.sourceText;
         this.recoveredListPlanner = context.recoveredListPlanner;
@@ -696,7 +699,7 @@ final class EnumDeclarationPrinter {
      */
     private boolean enumSemicolonFollowsBodyComments(EnumDeclaration declaration) {
         String raw = declaration.getTokenRange().map(Object::toString).orElseGet(
-            () -> sourceShapePolicy.rawTextWithoutOwnComment(
+            () -> rawSource.rawWithoutOwnComment(
                 declaration
             )
         );
@@ -718,7 +721,7 @@ final class EnumDeclarationPrinter {
      * Recovers a source-written semicolon before ordinary members when there are no enum constants to force one.
      */
     private boolean enumHasExplicitSemicolon(EnumDeclaration declaration) {
-        String raw = sourceShapePolicy.rawTextWithoutOwnComment(declaration);
+        String raw = rawSource.rawWithoutOwnComment(declaration);
         int open = raw.indexOf('{');
         int firstMember = declaration.getMembers()
                 .stream()

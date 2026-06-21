@@ -197,7 +197,7 @@ final class ExpressionPrinters {
             compactSource::compactTypeLikeWithoutOwnComment,
             commentText
         );
-        this.textBlocks = new TextBlockPrinter(context.sourceShapePolicy);
+        this.textBlocks = new TextBlockPrinter(context.rawSource);
         this.instanceOfExpressions = new InstanceOfExpressionPrinter(
             options,
             this::expression,

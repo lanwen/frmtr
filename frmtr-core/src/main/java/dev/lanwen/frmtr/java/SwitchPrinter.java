@@ -594,7 +594,7 @@ final class SwitchPrinter {
     }
 
     private String defaultSwitchEntryLabel(SwitchEntry entry) {
-        String raw = sourceShapePolicy.rawText(entry);
+        String raw = rawSource.raw(entry);
         int boundary = defaultLabelBoundary(raw);
         if (boundary < 0) {
             return "default";
@@ -737,7 +737,7 @@ final class SwitchPrinter {
         String raw = entry
                 .getTokenRange()
                 .map(Object::toString)
-                .orElseGet(() -> sourceShapePolicy.rawTextWithoutOwnComment(entry))
+                .orElseGet(() -> rawSource.rawWithoutOwnComment(entry))
                 .stripTrailing();
         if (!raw.contains("->") || raw.contains("\n")) {
             return Optional.empty();

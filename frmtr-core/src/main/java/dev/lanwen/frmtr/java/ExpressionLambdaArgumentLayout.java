@@ -36,6 +36,8 @@ final class ExpressionLambdaArgumentLayout {
 
     private final SourceShapePolicy sourceShapePolicy;
 
+    private final RawSource rawSource;
+
     private final FormatterOptions options;
 
     private final JavaFormatRule<Expression> expressionRenderer;
@@ -72,6 +74,7 @@ final class ExpressionLambdaArgumentLayout {
 
     ExpressionLambdaArgumentLayout(
             SourceShapePolicy sourceShapePolicy,
+            RawSource rawSource,
             SourceText sourceText,
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
@@ -89,6 +92,7 @@ final class ExpressionLambdaArgumentLayout {
             LayoutWidth layoutWidth
     ) {
         this.sourceShapePolicy = sourceShapePolicy;
+        this.rawSource = rawSource;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
@@ -103,7 +107,7 @@ final class ExpressionLambdaArgumentLayout {
         this.lambdaParametersShouldBreak = lambdaParametersShouldBreak;
         this.blockStatementWidth = blockStatementWidth;
         this.layoutWidth = layoutWidth;
-        this.textBlockArguments = new TextBlockArgumentSourceLayout(sourceText, options, sourceShapePolicy::rawText);
+        this.textBlockArguments = new TextBlockArgumentSourceLayout(sourceText, options, rawSource::raw);
         this.closingLayout = new ExpressionLambdaClosingLayout();
         this.methodCallBodies = new ExpressionLambdaMethodCallBodyLayout(
             sourceShapePolicy,
@@ -829,7 +833,7 @@ final class ExpressionLambdaArgumentLayout {
     }
 
     private String bodyFirstSourceLine(Node node) {
-        return sourceShapePolicy.rawTextWithoutOwnComment(node)
+        return rawSource.rawWithoutOwnComment(node)
                 .strip()
                 .lines()
                 .findFirst()

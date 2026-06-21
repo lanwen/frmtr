@@ -45,6 +45,8 @@ final class ClassOrInterfaceDeclarationPrinter {
 
     private final SourceShapePolicy sourceShapePolicy;
 
+    private final RawSource rawSource;
+
     private final RawPreservedSource rawPreservedSource;
 
     private final FormatterOptions options;
@@ -74,6 +76,7 @@ final class ClassOrInterfaceDeclarationPrinter {
     ClassOrInterfaceDeclarationPrinter(
             CommentTracker comments,
             SourceShapePolicy sourceShapePolicy,
+            RawSource rawSource,
             RawPreservedSource rawPreservedSource,
             FormatterOptions options,
             CommentedInterfacePrinter commentedInterfaces,
@@ -90,6 +93,7 @@ final class ClassOrInterfaceDeclarationPrinter {
     ) {
         this.comments = comments;
         this.sourceShapePolicy = sourceShapePolicy;
+        this.rawSource = rawSource;
         this.rawPreservedSource = rawPreservedSource;
         this.options = options;
         this.commentedInterfaces = commentedInterfaces;
@@ -114,7 +118,7 @@ final class ClassOrInterfaceDeclarationPrinter {
      * generic classes, and interface bodies keep sharing the same doc pipeline.
      */
     Doc classOrInterface(ClassOrInterfaceDeclaration declaration) {
-        String raw = sourceShapePolicy.rawText(declaration);
+        String raw = rawSource.raw(declaration);
         if (declaration.isInterface() && commentedInterfaces.hasCommentedHeader(raw)) {
             return rawPreservedSource.rawWithoutOwnComment(
                 declaration,

@@ -212,9 +212,10 @@ form fits on one line (`fitsOnOneLine`), whether a fluent-chain selector broke o
 `JavaCommentPlacementPolicy.hasContainedComments` rather than re-scanning JavaParser, so the formatter keeps one
 containment index; compact-source reconstruction that strips comments on clones (`CompactSourceText`) keeps its own
 direct `getAllContainedComments` scan, because the run index reports an unknown clone as comment-free and would change
-which reconstruction path is taken. Layout/fallback raw-text recovery is funneled through `rawText` /
-`rawTextWithoutOwnComment` (delegating unchanged to `RawSource`) so a printer that only needs source-derived text for a
-layout decision no longer holds a bare `RawSource`. The policy deliberately does not absorb `SourceText` slicing,
+which reconstruction path is taken. Raw recovery/fallback text generation is **not** a source-shape decision, so it
+does not live behind the policy: printers that must emit a node's raw source for recovery or a fallback retrieve it from
+`RawSource` directly (the string forms `raw` / `rawWithoutOwnComment`), or from `RawPreservedSource` when that raw
+output also needs comment accounting. The policy deliberately does not absorb `SourceText` slicing,
 `RawPreservedSource` comment accounting, or recovery-boundary rules; it calls them. The policy also owns the
 syntax-specific source-shape predicate surface directly (multiline argument lists, same-line starts, throws-clause and
 try-with-resources shape, method-call operand and logical-condition shape), all built on the one canonical

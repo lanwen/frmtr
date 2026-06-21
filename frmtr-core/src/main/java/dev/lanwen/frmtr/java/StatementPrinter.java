@@ -314,7 +314,7 @@ final class StatementPrinter {
     }
 
     private String trailingStatementBlockComment(Statement statement) {
-        String raw = sourceShapePolicy.rawText(statement);
+        String raw = rawSource.raw(statement);
         int commentStart = raw.indexOf("/*");
         int semicolon = raw.lastIndexOf(';');
         if (commentStart < 0 || semicolon < commentStart) {
@@ -395,7 +395,7 @@ final class StatementPrinter {
     }
 
     private List<String> labeledStatementLeadingComments(LabeledStmt statement) {
-        String raw = sourceShapePolicy.rawText(statement);
+        String raw = rawSource.raw(statement);
         int colon = raw.indexOf(':');
         if (colon < 0) {
             return List.of();
@@ -1245,7 +1245,7 @@ final class StatementPrinter {
     }
 
     private String forEachVariable(ForEachStmt statement) {
-        String raw = sourceShapePolicy.rawText(statement);
+        String raw = rawSource.raw(statement);
         int open = raw.indexOf('(');
         int colon = raw.indexOf(':', open);
         if (open < 0 || colon < open) {
@@ -1469,7 +1469,7 @@ final class StatementPrinter {
         if (unattached != Doc.EMPTY) {
             return " " + commentText(unattached);
         }
-        String raw = sourceShapePolicy.rawText(node);
+        String raw = rawSource.raw(node);
         int semicolon = raw.lastIndexOf(';');
         if (semicolon < 0 || semicolon + 1 >= raw.length()) {
             return "";

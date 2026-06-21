@@ -275,9 +275,9 @@ arithmetic). The policy also owns the source-shaped containment gate (`hasContai
 compact or otherwise source-shaped layout is safe, delegating containment itself to the run-indexed
 `JavaCommentPlacementPolicy.hasContainedComments` rather than re-scanning JavaParser; compact-source reconstruction that
 strips comments on clones keeps its own direct scan because the run index reports an unknown clone as comment-free.
-Raw-recovery text used purely for a layout or fallback is funneled through the policy too (`rawText`,
-`rawTextWithoutOwnComment`, delegating unchanged to `RawSource`), so a printer that only needs source-derived text no
-longer holds a bare `RawSource`; genuine raw-output passes that must account for the comments they emit stay on
+Raw recovery/fallback text generation is not a source-shape decision and is not funneled through the policy: a printer
+that must emit a node's raw source for recovery or a fallback reads it straight from `RawSource` (the `raw` /
+`rawWithoutOwnComment` string forms), while genuine raw-output passes that must account for the comments they emit use
 `RawPreservedSource`, and source-equivalent compact text keeps using `RawSource`/`CompactSourceText`. The policy also
 owns the syntax-specific source-shape predicate surface directly (multiline argument lists, same-line starts,
 throws-clause and try-with-resources shape, method-call operand and logical-condition shape), all built on the one

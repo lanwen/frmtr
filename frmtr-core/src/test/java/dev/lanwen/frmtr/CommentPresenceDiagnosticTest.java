@@ -136,16 +136,6 @@ final class CommentPresenceDiagnosticTest {
         drops.put("comment-preservation-block-comment-shapes @ collapsed",
             "S9 backlog (block/annotation gap): \"a\" (3->2)");
 
-        // @formatter:* pragma lines
-        drops.put("formatter-pragma-begin-with-on @ expanded",
-            "S9 backlog (pragma): \"@formatter:on\" (2->1), \"@formatter:off\"");
-        drops.put("formatter-pragma-class @ expanded", "S9 backlog (pragma): \"@formatter:on\"");
-        drops.put("formatter-pragma-end-with-off @ expanded",
-            "S9 backlog (pragma): \"@formatter:off\" (2->1), \"@formatter:on\"");
-        drops.put("formatter-pragma-multiple @ expanded", "S9 backlog (pragma): \"@formatter:on\"");
-        drops.put("formatter-pragma-spacing @ expanded",
-            "S9 backlog (pragma): \"@formatter:off\" (3->2), \"@formatter:on\" (3->2)");
-
         // text-block-adjacent
         drops.put("text-block-language-and-escapes @ collapsed",
             "S9 backlog (text-block-adjacent): \"leading comment\"");
@@ -164,9 +154,6 @@ final class CommentPresenceDiagnosticTest {
             "S9 backlog (records/enums/misc): \"Unnamed pattern variable\" (7->0)");
         drops.put("correctness-data-loss @ expanded",
             "S9 backlog (records/enums/misc): \"keep this comment with the type\"");
-        drops.put("empty-statement @ expanded", "S9 backlog (records/enums/misc): \"Bug Fix: #356\"");
-        drops.put("qualified-type-receiver-annotations @ expanded",
-            "S9 backlog (records/enums/misc): \"Fix for https://github.com/jhipster/prettier-java/issues/607\"");
         drops.put("variable-declarations @ collapsed",
             "S9 backlog (records/enums/misc): \"there is a random comment on this line up here\"");
 

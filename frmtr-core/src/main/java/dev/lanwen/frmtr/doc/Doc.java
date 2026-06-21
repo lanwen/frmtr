@@ -8,6 +8,7 @@ public sealed interface Doc
     permits
         Doc.BreakParent,
         Doc.Concat,
+        Doc.Fill,
         Doc.Group,
         Doc.HardLine,
         Doc.IfBreak,
@@ -78,7 +79,18 @@ public sealed interface Doc
     }
 
     static Doc group(Doc doc) {
-        return new Group(doc);
+        return new Group(doc, null);
+    }
+
+    /**
+     * Builds a group with a stable identity so a dependent {@link IfBreak} can read this group's chosen mode by name
+     * instead of the ambient mode. The id has no effect on this group's own layout; it only labels the group so a later
+     * {@code ifBreak(..., groupId)} renders according to whether <em>this</em> group rendered flat or broken. The
+     * identified group must render before any {@code IfBreak} that targets it (the renderer reads the mode the group
+     * already recorded), which printers arrange by emitting the opener group ahead of its dependent closer.
+     */
+    static Doc group(Doc doc, String groupId) {
+        return new Group(doc, groupId);
     }
 
     static Doc indent(Doc doc) {
@@ -86,7 +98,17 @@ public sealed interface Doc
     }
 
     static Doc ifBreak(Doc breakDoc, Doc flatDoc) {
-        return new IfBreak(breakDoc, flatDoc);
+        return new IfBreak(breakDoc, flatDoc, null);
+    }
+
+    /**
+     * Selects {@code breakDoc} or {@code flatDoc} based on the mode of the named group rather than the ambient
+     * surrounding group. The group identified by {@code groupId} must have rendered before this node so its mode is
+     * already recorded; this lets a closing delimiter follow the break/flat decision of its matching opener group even
+     * when the two sit in different ambient groups.
+     */
+    static Doc ifBreak(Doc breakDoc, Doc flatDoc, String groupId) {
+        return new IfBreak(breakDoc, flatDoc, groupId);
     }
 
     /**
@@ -112,6 +134,22 @@ public sealed interface Doc
 
     static Doc label(String label, Doc doc) {
         return new Label(label, doc);
+    }
+
+    /**
+     * Packs an alternating {@code [content, separator, content, separator, …]} list, laying out each separator flat when
+     * the next content still fits on the current line and breaking only at the separators where it does not. Unlike a
+     * {@link Group}, which is all-or-nothing, the fit decision is made independently per separator, so a fill keeps as
+     * many items on a line as fit and wraps only where needed — the layout array elements, argument lists, and similar
+     * sequences want.
+     *
+     * <p>The list alternates content and separator starting and ending with content; an empty list renders nothing and a
+     * single-element list renders just that content. Choosing the separators (a comma plus {@link #LINE}, a bare
+     * {@link #LINE}, etc.) and where break-vs-flat should glue is left to the caller, because a fill only decides whether
+     * each supplied separator lands flat or broken — it does not invent separators of its own.
+     */
+    static Doc fill(List<Doc> parts) {
+        return new Fill(List.copyOf(parts));
     }
 
     /**
@@ -143,6 +181,9 @@ public sealed interface Doc
 
     record Concat(List<Doc> docs) implements Doc {}
 
+    /** Alternating {@code [content, separator, content, …]} laid out by greedy per-separator packing; see {@link #fill}. */
+    record Fill(List<Doc> parts) implements Doc {}
+
     record Line() implements Doc {}
 
     record SoftLine() implements Doc {}
@@ -153,9 +194,19 @@ public sealed interface Doc
 
     record Indent(Doc doc) implements Doc {}
 
-    record Group(Doc doc) implements Doc {}
+    /**
+     * A flat-first layout group. {@code groupId} is an optional identity (nullable): when set, the renderer records
+     * this group's chosen mode under that id so a dependent {@link IfBreak} can read it by name. A null id is the
+     * common, anonymous case and has no rendering effect.
+     */
+    record Group(Doc doc, String groupId) implements Doc {}
 
-    record IfBreak(Doc breakDoc, Doc flatDoc) implements Doc {}
+    /**
+     * Chooses between {@code breakDoc} and {@code flatDoc} by group mode. With a null {@code groupId} it follows the
+     * ambient surrounding group (the common case); with a non-null id it follows the mode the identified {@link Group}
+     * recorded when it rendered earlier.
+     */
+    record IfBreak(Doc breakDoc, Doc flatDoc, String groupId) implements Doc {}
 
     record Label(String label, Doc doc) implements Doc {}
 

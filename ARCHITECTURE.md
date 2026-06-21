@@ -123,8 +123,19 @@ instead of building strings directly:
 - `Concat` joins documents.
 - `Line`, `SoftLine`, and `HardLine` express break opportunities and required breaks.
 - `Indent` increases indentation after line breaks.
-- `Group` attempts flat rendering first and breaks when content does not fit.
-- `IfBreak` selects different output for flat versus broken groups.
+- `Group` attempts flat rendering first and breaks when content does not fit. It carries an optional, nullable
+  `groupId`: when set, the renderer records the group's chosen mode under that id so a dependent `IfBreak` can read it
+  by name. The id never affects the group's own layout; the common, anonymous case (null id) is unchanged.
+- `Fill` lays out an alternating `[content, separator, …]` list with greedy per-separator packing: each separator stays
+  flat while the next content still fits on the current line and breaks only where it does not, so a fill keeps as many
+  items per line as fit instead of being all-or-nothing like a `Group`. To an enclosing group it measures as the flat
+  concatenation of all its parts (a safe over-estimate). It is an additive primitive not yet adopted by any Java printer.
+- `IfBreak` selects different output for flat versus broken groups. With a null `groupId` it follows the ambient
+  surrounding group (the common case); with a non-null `groupId` it follows the mode the identified `Group` recorded
+  when it rendered earlier, so a closing delimiter can mirror the break/flat decision of an opener group it does not
+  enclose. The group-identity factories (`Doc.group(doc, groupId)` / `Doc.ifBreak(break, flat, groupId)`) are additive
+  and not yet used by any Java printer; the existing `Doc.group(doc)` / `Doc.ifBreak(break, flat)` keep their signatures
+  and pass a null id.
 - `Label` attaches debug-only provenance to a subtree.
 - `LineSuffix` defers its content to the next line break (or end of document), rendering nothing at its position and
   contributing zero flat width. It exists so trailing comments lay out after the code and separator on their line
@@ -142,7 +153,11 @@ break/flat envelopes while the renderer remains language-agnostic.
 
 `DocRenderer` is language-agnostic. Java-specific choices belong in `JavaPrinter`, not in the renderer. Label nodes are
 transparent to rendering, fitting, and width calculations. `DocRenderer` buffers `LineSuffix` content and flushes it,
-in document order, immediately before each line break, so the deferred content prints at the visual end of its line.
+in document order, immediately before each line break, so the deferred content prints at the visual end of its line. It
+also keeps a per-render map from each identified group's `groupId` to the mode that group chose, populated as the group
+renders and reset per render; a `groupId`-bound `IfBreak` reads that map instead of the ambient mode, so the identified
+group must render before any `IfBreak` that targets it. `DocExplainRenderer` mirrors both the suffix buffer and the
+group-mode map so its replayed column cursor stays identical to what `DocRenderer` emits.
 `DocWidths` is the single flat-width authority: it owns the flat-width measurement and the fit test, so `DocRenderer`
 and any observer of its decisions compute fit identically and a fit decision can never diverge from the width number
 reported for it.

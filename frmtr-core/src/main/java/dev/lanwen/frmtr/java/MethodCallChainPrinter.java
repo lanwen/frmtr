@@ -1573,6 +1573,18 @@ final class MethodCallChainPrinter {
                 }
                 yield new PaddedDoc(Doc.concat(children), nextLineStart);
             }
+            // A fill threads continuation padding through its parts exactly like a concat, preserving the alternating
+            // content/separator structure so its own greedy packing still applies after re-padding.
+            case Doc.Fill fill -> {
+                List<Doc> parts = new ArrayList<>();
+                boolean nextLineStart = lineStart;
+                for (Doc part : fill.parts()) {
+                    PaddedDoc padded = linePadded(part, padding, nextLineStart);
+                    parts.add(padded.doc());
+                    nextLineStart = padded.lineStart();
+                }
+                yield new PaddedDoc(Doc.fill(parts), nextLineStart);
+            }
             case Doc.Line ignored -> new PaddedDoc(
                 Doc.concat(Doc.LINE, Doc.ifBreak(Doc.text(padding), Doc.EMPTY)),
                 false
@@ -1588,12 +1600,14 @@ final class MethodCallChainPrinter {
             }
             case Doc.Group group -> {
                 PaddedDoc padded = linePadded(group.doc(), padding, lineStart);
-                yield new PaddedDoc(Doc.group(padded.doc()), padded.lineStart());
+                // Preserve any group identity through re-padding so a dependent IfBreak still resolves this group.
+                yield new PaddedDoc(Doc.group(padded.doc(), group.groupId()), padded.lineStart());
             }
             case Doc.IfBreak conditional -> new PaddedDoc(
                 Doc.ifBreak(
                     linePadded(conditional.breakDoc(), padding, lineStart).doc(),
-                    linePadded(conditional.flatDoc(), padding, lineStart).doc()
+                    linePadded(conditional.flatDoc(), padding, lineStart).doc(),
+                    conditional.groupId()
                 ),
                 false
             );

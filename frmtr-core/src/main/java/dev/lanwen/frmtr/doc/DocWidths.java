@@ -1,6 +1,7 @@
 package dev.lanwen.frmtr.doc;
 
 import java.util.IdentityHashMap;
+import java.util.List;
 
 /**
  * Single width authority for document layout: measures the flat-mode width of a {@link Doc} and answers whether it fits
@@ -92,7 +93,8 @@ final class DocWidths {
             }
             int measured = switch (doc) {
                 case Doc.Text text -> text.value().length();
-                case Doc.Concat concat -> measureConcat(concat, remaining);
+                case Doc.Concat concat -> measureSequence(concat.docs(), remaining);
+                case Doc.Fill fill -> measureSequence(fill.parts(), remaining);
                 case Doc.Line ignored -> 1;
                 case Doc.SoftLine ignored -> 0;
                 case Doc.HardLine ignored -> NO_FIT;
@@ -109,10 +111,16 @@ final class DocWidths {
             return measured;
         }
 
-        private int measureConcat(Doc.Concat concat, int remaining) {
+        /**
+         * Measures a child sequence as the sum of its parts' flat widths, bounded by {@code remaining}. Used for both
+         * {@link Doc.Concat} and {@link Doc.Fill}: a fill's flat width is the concatenation of all its parts (each
+         * separator counted at its flat width), which over-estimates the fill but is the safe width to report to an
+         * enclosing group deciding its own mode — if the whole fill fits flat, so does any greedily packed layout of it.
+         */
+        private int measureSequence(List<Doc> parts, int remaining) {
             int total = 0;
-            for (int i = 0; i < concat.docs().size(); i++) {
-                Doc child = concat.docs().get(i);
+            for (int i = 0; i < parts.size(); i++) {
+                Doc child = parts.get(i);
                 int measured = measure(child, remainingAfter(remaining, total));
                 if (measured == NO_FIT) {
                     return NO_FIT;
@@ -121,7 +129,7 @@ final class DocWidths {
                     return OVERFLOW;
                 }
                 total += measured;
-                if (exceeds(remaining, total) && i < concat.docs().size() - 1) {
+                if (exceeds(remaining, total) && i < parts.size() - 1) {
                     return OVERFLOW;
                 }
             }

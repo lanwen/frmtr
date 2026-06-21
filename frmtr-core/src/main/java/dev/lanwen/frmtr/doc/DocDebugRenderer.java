@@ -35,6 +35,10 @@ public final class DocDebugRenderer {
                 appendLine(out, depth, "Concat");
                 concat.docs().forEach(child -> render(child, out, depth + 1));
             }
+            case Doc.Fill fill -> {
+                appendLine(out, depth, "Fill");
+                fill.parts().forEach(part -> render(part, out, depth + 1));
+            }
             case Doc.Line ignored -> appendLine(out, depth, "Line");
             case Doc.SoftLine ignored -> appendLine(out, depth, "SoftLine");
             case Doc.HardLine ignored -> appendLine(out, depth, "HardLine");
@@ -44,11 +48,11 @@ public final class DocDebugRenderer {
                 render(indented.doc(), out, depth + 1);
             }
             case Doc.Group group -> {
-                appendLine(out, depth, "Group");
+                appendLine(out, depth, "Group" + groupIdSuffix(group.groupId()));
                 render(group.doc(), out, depth + 1);
             }
             case Doc.IfBreak conditional -> {
-                appendLine(out, depth, "IfBreak");
+                appendLine(out, depth, "IfBreak" + groupIdSuffix(conditional.groupId()));
                 appendLine(out, depth + 1, "break:");
                 render(conditional.breakDoc(), out, depth + 2);
                 appendLine(out, depth + 1, "flat:");
@@ -67,6 +71,15 @@ public final class DocDebugRenderer {
 
     private static void appendLine(StringBuilder out, int depth, String line) {
         out.append(INDENT.repeat(depth)).append(line).append('\n');
+    }
+
+    /**
+     * Renders an identified {@link Doc.Group}/{@link Doc.IfBreak}'s id as a {@code (#id)} suffix so the debug tree shows
+     * which groups carry an identity and which {@code IfBreak}s target one. Anonymous nodes (null id) add nothing, so
+     * the common case stays unchanged.
+     */
+    private static String groupIdSuffix(String groupId) {
+        return groupId == null ? "" : "(#" + escaped(groupId) + ")";
     }
 
     /**

@@ -153,6 +153,135 @@ final class DocRendererTest {
     }
 
     @Test
+    void fillPacksItemsPerLineAndBreaksOnlyBeforeAnItemThatOverflows() {
+        Doc separator = Doc.concat(Doc.text(","), Doc.LINE);
+        Doc doc = Doc.fill(
+            java.util.List.of(
+                Doc.text("aaaa"),
+                separator,
+                Doc.text("bbbb"),
+                separator,
+                Doc.text("cccccccccccccccc"),
+                separator,
+                Doc.text("dddd")
+            )
+        );
+
+        // Line width is 20. "aaaa" and "bbbb" pack together (4 + ", " + 4 = 10 <= 20). The next separator plus
+        // "cccccccccccccccc" (2 + 16 = 18) no longer fits in the 10 columns left, so the fill breaks before it;
+        // "cccccccccccccccc" then fills the line so "dddd" is pushed to its own line too. Each comma stays glued to the
+        // item it follows.
+        assertThat(renderer(20).render(doc)).isEqualTo(
+            """
+                aaaa, bbbb,
+                cccccccccccccccc,
+                dddd"""
+        );
+    }
+
+    @Test
+    void fillKeepsEveryItemOnOneLineWhenTheyAllFit() {
+        Doc separator = Doc.concat(Doc.text(","), Doc.LINE);
+        Doc doc = Doc.fill(
+            java.util.List.of(Doc.text("a"), separator, Doc.text("b"), separator, Doc.text("c"))
+        );
+
+        // All three items and their separators fit well within 80 columns, so no separator breaks.
+        assertThat(renderer(80).render(doc)).isEqualTo("a, b, c");
+    }
+
+    @Test
+    void fillContributesItsConcatenatedFlatWidthToAnEnclosingGroup() {
+        Doc separator = Doc.concat(Doc.text(","), Doc.LINE);
+        Doc fill = Doc.fill(
+            java.util.List.of(Doc.text("alphaalpha"), separator, Doc.text("betabeta"), separator, Doc.text("gammagamma"))
+        );
+        Doc doc = Doc.group(
+            Doc.concat(Doc.text("["), Doc.indent(Doc.concat(Doc.SOFT_LINE, fill)), Doc.SOFT_LINE, Doc.text("]"))
+        );
+
+        // The enclosing group measures the fill as the flat concatenation of all its parts
+        // ("alphaalpha, betabeta, gammagamma" = 32, plus the brackets = 34). At 40 columns that fits, so the group stays
+        // flat and the fill packs everything on one line.
+        assertThat(renderer(40).render(doc)).isEqualTo("[alphaalpha, betabeta, gammagamma]");
+
+        // At 24 columns the 34-wide flat measurement overflows, so the group breaks and the soft lines split. On the
+        // indented continuation the fill still packs greedily: "alphaalpha, betabeta" share a line and only
+        // "gammagamma" — which would overflow — breaks before it. This proves the fill drove the outer group decision yet
+        // kept its own per-separator packing.
+        assertThat(renderer(24).render(doc)).isEqualTo(
+            """
+                [
+                  alphaalpha, betabeta,
+                  gammagamma
+                ]"""
+        );
+    }
+
+    @Test
+    void ifBreakBoundToNamedGroupFollowsThatGroupsBreakModeNotTheAmbientMode() {
+        // The named "opener" group contains a BreakParent, so it can never stay flat and renders in break mode. The
+        // dependent group around the ifBreak is tiny ("x[flat]" = 7 wide) and fits the 20-column limit, so its ambient
+        // mode is FLAT. The ifBreak is bound to "opener", so it must render its break arm "[broke]" — following the
+        // named group, not the flat ambient group it actually sits inside.
+        Doc opener = Doc.group(Doc.concat(Doc.text("opener"), Doc.BREAK_PARENT), "opener");
+        Doc dependent = Doc.group(
+            Doc.concat(Doc.text("x"), Doc.ifBreak(Doc.text("[broke]"), Doc.text("[flat]"), "opener"))
+        );
+        Doc doc = Doc.concat(opener, Doc.HARD_LINE, dependent);
+
+        assertThat(renderer(20).render(doc)).isEqualTo(
+            """
+                opener
+                x[broke]"""
+        );
+    }
+
+    @Test
+    void ifBreakBoundToNamedGroupFollowsThatGroupsFlatModeEvenInsideABrokenAmbientGroup() {
+        // The named "opener" group is "ab" — it fits, so it renders flat and records FLAT under its id. The dependent
+        // group is forced to break because its first child is 22 columns wide (> 20), so its ambient mode is BREAK and
+        // the soft line splits. The ifBreak is bound to "opener", so it still renders its flat arm "FLAT" — proving the
+        // arm follows the named group's mode independent of the broken ambient group enclosing the ifBreak.
+        Doc namedFlat = Doc.group(Doc.text("ab"), "opener");
+        Doc ambientBreaks = Doc.group(
+            Doc.concat(
+                Doc.text("aaaaaaaaaaaaaaaaaaaaaa"),
+                Doc.SOFT_LINE,
+                Doc.ifBreak(Doc.text("BROKE"), Doc.text("FLAT"), "opener")
+            )
+        );
+        Doc doc = Doc.concat(namedFlat, Doc.HARD_LINE, ambientBreaks);
+
+        assertThat(renderer(20).render(doc)).isEqualTo(
+            """
+                ab
+                aaaaaaaaaaaaaaaaaaaaaa
+                FLAT"""
+        );
+    }
+
+    @Test
+    void anonymousIfBreakStillFollowsTheAmbientModeWhenGroupsAreIdentified() {
+        // A null-groupId ifBreak keeps today's ambient behavior even though identified groups exist elsewhere in the
+        // document: here the enclosing group breaks (its 24-wide content exceeds 20), so the anonymous ifBreak renders
+        // its break arm. This pins that adding group identity did not change the unidentified path.
+        Doc doc = Doc.group(
+            Doc.concat(
+                Doc.text("aaaaaaaaaaaaaaaaaaaaaaaa"),
+                Doc.SOFT_LINE,
+                Doc.ifBreak(Doc.text("BROKE"), Doc.text("FLAT"))
+            )
+        );
+
+        assertThat(renderer(20).render(doc)).isEqualTo(
+            """
+                aaaaaaaaaaaaaaaaaaaaaaaa
+                BROKE"""
+        );
+    }
+
+    @Test
     void keepsGroupFlatWhenItFits() {
         Doc doc = Doc.delimited("call(", ")", Doc.text("value"));
 

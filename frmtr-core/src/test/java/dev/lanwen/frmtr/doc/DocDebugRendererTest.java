@@ -105,6 +105,24 @@ final class DocDebugRendererTest {
     }
 
     @Test
+    void rendersFillPartsAsChildren() {
+        Doc separator = Doc.concat(Doc.text(","), Doc.LINE);
+        Doc doc = Doc.fill(java.util.List.of(Doc.text("a"), separator, Doc.text("b")));
+
+        String rendered = DocDebugRenderer.render(doc);
+
+        assertThat(rendered).isEqualTo(
+            """
+                Fill
+                  Text("a")
+                  Concat
+                    Text(",")
+                    Line
+                  Text("b")"""
+        );
+    }
+
+    @Test
     void rendersBreakParentMarker() {
         Doc doc = Doc.concat(Doc.text("value"), Doc.BREAK_PARENT);
 
@@ -115,6 +133,29 @@ final class DocDebugRendererTest {
                 Concat
                   Text("value")
                   BreakParent"""
+        );
+    }
+
+    @Test
+    void rendersGroupIdentityOnIdentifiedGroupAndIfBreak() {
+        Doc doc = Doc.group(
+            Doc.concat(Doc.text("("), Doc.ifBreak(Doc.text("br"), Doc.text("fl"), "opener"), Doc.text(")")),
+            "opener"
+        );
+
+        String rendered = DocDebugRenderer.render(doc);
+
+        assertThat(rendered).isEqualTo(
+            """
+                Group(#opener)
+                  Concat
+                    Text("(")
+                    IfBreak(#opener)
+                      break:
+                        Text("br")
+                      flat:
+                        Text("fl")
+                    Text(")")"""
         );
     }
 

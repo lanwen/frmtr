@@ -2,7 +2,9 @@ package dev.lanwen.frmtr.doc;
 
 import dev.lanwen.frmtr.FormatterOptions;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public final class DocRenderer {
 
@@ -17,6 +19,14 @@ public final class DocRenderer {
      */
     private final List<BufferedSuffix> lineSuffixes = new ArrayList<>();
 
+    /**
+     * Mode chosen by each identified {@link Doc.Group}, keyed by its {@code groupId}. A dependent {@link Doc.IfBreak}
+     * with a matching id reads this map instead of the ambient mode, so a closing delimiter can follow the break/flat
+     * decision of an opener group it does not enclose. Populated as each identified group renders and reset per render,
+     * which requires the identified group to render before the {@code IfBreak} that targets it.
+     */
+    private final Map<String, Mode> groupModes = new HashMap<>();
+
     private int column;
 
     public DocRenderer(FormatterOptions options) {
@@ -27,6 +37,7 @@ public final class DocRenderer {
         out.setLength(0);
         column = 0;
         lineSuffixes.clear();
+        groupModes.clear();
         DocWidths.Measurement widths = DocWidths.measurement();
         render(doc, 0, Mode.BREAK, widths);
         flushLineSuffixes(widths);
@@ -61,19 +72,55 @@ public final class DocRenderer {
             case Doc.Indent indented -> render(indented.doc(), indent + 1, mode, widths);
             case Doc.Group group -> {
                 Mode next = widths.fits(group.doc(), options.lineWidth() - column) ? Mode.FLAT : Mode.BREAK;
+                if (group.groupId() != null) {
+                    groupModes.put(group.groupId(), next);
+                }
                 render(group.doc(), indent, next, widths);
             }
-            case Doc.IfBreak conditional -> render(
-                mode == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(),
-                indent,
-                mode,
-                widths
-            );
+            case Doc.Fill fill -> renderFill(fill.parts(), indent, widths);
+            case Doc.IfBreak conditional -> {
+                // An identified IfBreak follows the recorded mode of its target group (which must have rendered first);
+                // an anonymous IfBreak follows the ambient mode. A target that has not rendered yet is treated as flat.
+                Mode effective = conditional.groupId() == null
+                    ? mode
+                    : groupModes.getOrDefault(conditional.groupId(), Mode.FLAT);
+                render(
+                    effective == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(),
+                    indent,
+                    mode,
+                    widths
+                );
+            }
             case Doc.Label label -> render(label.doc(), indent, mode, widths);
             case Doc.LineSuffix lineSuffix -> {
                 requireSingleLineSuffix(lineSuffix.content());
                 lineSuffixes.add(new BufferedSuffix(lineSuffix.content(), indent, mode));
             }
+        }
+    }
+
+    /**
+     * Renders a {@link Doc.Fill}'s alternating {@code [content, separator, …]} parts with greedy per-separator packing:
+     * every content piece renders flat, and each separator is laid out flat when the separator plus the next content
+     * would still fit on the current line and broken otherwise. The fit probe reuses the shared {@link DocWidths}
+     * authority, so it stays compatible with the renderer's memoized, bounded width measurement: each lookahead measures
+     * only one separator and one following content (their flat widths, individually memoized by node identity), never the
+     * whole tail, which keeps the walk linear in the number of parts rather than quadratic.
+     */
+    private void renderFill(List<Doc> parts, int indent, DocWidths.Measurement widths) {
+        if (parts.isEmpty()) {
+            return;
+        }
+        render(parts.getFirst(), indent, Mode.FLAT, widths);
+        for (int i = 1; i + 1 < parts.size(); i += 2) {
+            Doc separator = parts.get(i);
+            Doc nextContent = parts.get(i + 1);
+            // Decide this separator from the column reached after the preceding content: does the separator plus the
+            // next content still fit flat on the current line? If so keep the separator flat, otherwise break only it.
+            Mode separatorMode =
+                widths.fits(Doc.concat(separator, nextContent), options.lineWidth() - column) ? Mode.FLAT : Mode.BREAK;
+            render(separator, indent, separatorMode, widths);
+            render(nextContent, indent, Mode.FLAT, widths);
         }
     }
 
@@ -125,6 +172,7 @@ public final class DocRenderer {
         return switch (doc) {
             case Doc.HardLine ignored -> true;
             case Doc.Concat concat -> concat.docs().stream().anyMatch(DocRenderer::containsHardLine);
+            case Doc.Fill fill -> fill.parts().stream().anyMatch(DocRenderer::containsHardLine);
             case Doc.Indent indented -> containsHardLine(indented.doc());
             case Doc.Group group -> containsHardLine(group.doc());
             case Doc.Label label -> containsHardLine(label.doc());

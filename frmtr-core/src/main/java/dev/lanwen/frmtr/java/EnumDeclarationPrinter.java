@@ -51,6 +51,8 @@ final class EnumDeclarationPrinter {
 
     private final RawSource rawSource;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final FormatterOptions options;
 
     private final SourceText sourceText;
@@ -115,6 +117,7 @@ final class EnumDeclarationPrinter {
         this.commentPlacement = context.commentPlacementPolicy;
         this.enumConstantComments = new EnumConstantComments(context.comments, context.commentPlacementPolicy);
         this.rawSource = context.rawSource;
+        this.sourceShapePolicy = context.sourceShapePolicy;
         this.options = context.options;
         this.sourceText = context.sourceText;
         this.recoveredListPlanner = context.recoveredListPlanner;
@@ -455,15 +458,16 @@ final class EnumDeclarationPrinter {
             List<JavaCommentTrivia> gapComments,
             OptionalInt recoveredGapBeginLine
     ) {
-        boolean hasBlankLineBetween = previous.getRange()
-                .flatMap(previousRange -> current.getRange().map(
-                        currentRange -> enumEntryBeginLine(
-                            previous,
-                            current,
-                            currentRange.begin.line,
-                            gapComments,
-                            recoveredGapBeginLine
-                        ) > previousRange.end.line + 1
+        boolean hasBlankLineBetween = current.getRange()
+                .map(currentRange -> sourceShapePolicy.hadBlankLineBefore(
+                    previous,
+                    enumEntryBeginLine(
+                        previous,
+                        current,
+                        currentRange.begin.line,
+                        gapComments,
+                        recoveredGapBeginLine
+                    )
                 ))
                 .orElse(false);
         Doc separator = previousOwnsTrailingComma ? Doc.EMPTY : Doc.text(",");

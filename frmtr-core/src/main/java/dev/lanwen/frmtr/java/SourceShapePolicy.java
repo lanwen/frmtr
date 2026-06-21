@@ -68,4 +68,34 @@ final class SourceShapePolicy {
                 .map(range -> range.begin.line < range.end.line)
                 .orElseGet(() -> rawSource.rawWithoutOwnComment(node).contains("\n"));
     }
+
+    /**
+     * Reports whether the author left a blank line between two source-adjacent nodes, the single canonical definition of
+     * the formatter's deliberate-blank-line preservation rule.
+     *
+     * <p>A blank line existed iff the next node begins more than one line after the previous node ends, so the printers
+     * that separate members, enum constants, module directives, record components, and statements all share one
+     * {@code + 1} test instead of re-spelling the arithmetic. When either node lacks a source range the decision is
+     * {@code false}: with no positions the formatter cannot claim the author asked for a blank line.
+     */
+    boolean hadBlankLineBetween(Node previous, Node next) {
+        return next.getRange()
+                .map(nextRange -> hadBlankLineBefore(previous, nextRange.begin.line))
+                .orElse(false);
+    }
+
+    /**
+     * Reports whether a blank line preceded a node whose effective first source line the caller has already resolved.
+     *
+     * <p>Some printers do not compare a node's raw begin line: JavaParser can fold a leading comment into a node's range,
+     * so {@link BlockPrinter} and {@link EnumDeclarationPrinter} first resolve the line of the real code (or recovered
+     * gap) that opens the next entry. This overload still owns the one {@code previous.end.line + 1} comparison so that
+     * blank-line arithmetic lives in a single place, while leaving the begin-line adjustment to the caller that knows the
+     * syntactic context. Returns {@code false} when the previous node lacks a source range.
+     */
+    boolean hadBlankLineBefore(Node previous, int nextBeginLine) {
+        return previous.getRange()
+                .map(previousRange -> nextBeginLine > previousRange.end.line + 1)
+                .orElse(false);
+    }
 }

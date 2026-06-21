@@ -265,6 +265,7 @@ final class DeclarationPrinters {
         this.records = new RecordDeclarationPrinter(
             comments,
             commentPlacementPolicy,
+            context.sourceShapePolicy,
             options,
             declarationPrefixes::annotations,
             declarationPrefixes::modifiers,

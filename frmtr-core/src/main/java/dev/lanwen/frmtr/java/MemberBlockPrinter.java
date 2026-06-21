@@ -35,6 +35,8 @@ final class MemberBlockPrinter {
 
     private final JavaCommentPlacementPolicy commentPlacement;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final SourceText sourceText;
 
     private final RecoveredListPlanner recoveredListPlanner;
@@ -56,6 +58,7 @@ final class MemberBlockPrinter {
     ) {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
+        this.sourceShapePolicy = context.sourceShapePolicy;
         this.sourceText = context.sourceText;
         this.recoveredListPlanner = context.recoveredListPlanner;
         this.rawGaps = new RecoveredRawGapPrinter(context, MemberBlockPrinter::memberDeclarationListRecoveryFailure);
@@ -605,10 +608,10 @@ final class MemberBlockPrinter {
     }
 
     private Optional<Boolean> hasSourceBlankLineBetween(BodyDeclaration<?> previous, BodyDeclaration<?> current) {
-        return previous.getRange()
-                .flatMap(previousRange -> current.getRange().map(
-                        currentRange -> currentRange.begin.line > previousRange.end.line + 1
-                ));
+        if (previous.getRange().isEmpty() || current.getRange().isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(sourceShapePolicy.hadBlankLineBetween(previous, current));
     }
 
     private enum EntryKind {

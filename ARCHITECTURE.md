@@ -263,8 +263,11 @@ centralizes indentation baselines for width probes, source-shape helpers preserv
 initializer helpers coordinate declaration-local wrapping, and chain helpers keep method-call source planning out of
 ordinary argument dispatch. A per-run `SourceShapePolicy` on `JavaFormatContext` is the consolidating home for
 "should the formatter respect the author's source shape here?" decisions, so printers ask one named question instead of
-re-deriving those reads from raw token text or `getRange()` arithmetic. `SourceShape` continues to expose its
-syntax-specific predicate surface alongside the policy. Shared method-call argument helpers keep over-wide and source-multiline argument policies
+re-deriving those reads from raw token text or `getRange()` arithmetic. It owns the single canonical definition of
+whether a node was already multiline (`wasMultiline`, range-first with a raw-text fallback) and of whether the author
+left a blank line between two source-adjacent nodes (`hadBlankLineBetween`, plus a `hadBlankLineBefore` overload for
+callers that first resolve a comment-aware begin line). `SourceShape` continues to expose its syntax-specific predicate
+surface and delegates its canonical multiline check to the policy. Shared method-call argument helpers keep over-wide and source-multiline argument policies
 consistent when method calls appear in direct calls, initializers, and try resources. Expression-lambda helpers share
 width plans across call contexts, and expression tails thread statement terminators or separators through expression
 rendering before trailing line comments are placed. See

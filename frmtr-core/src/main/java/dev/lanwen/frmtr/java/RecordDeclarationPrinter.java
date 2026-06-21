@@ -42,6 +42,8 @@ final class RecordDeclarationPrinter {
 
     private final JavaCommentPlacementPolicy commentPlacement;
 
+    private final SourceShapePolicy sourceShapePolicy;
+
     private final FormatterOptions options;
 
     private final Function<NodeWithAnnotations<?>, Doc> annotations;
@@ -73,6 +75,7 @@ final class RecordDeclarationPrinter {
     RecordDeclarationPrinter(
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
+            SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
             Function<NodeWithAnnotations<?>, Doc> annotations,
             Function<NodeWithModifiers<?>, String> modifiers,
@@ -90,6 +93,7 @@ final class RecordDeclarationPrinter {
     ) {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
+        this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
         this.annotations = annotations;
         this.modifiers = modifiers;
@@ -242,11 +246,7 @@ final class RecordDeclarationPrinter {
     }
 
     private boolean recordComponentsHaveBlankLine(Parameter previous, Parameter next) {
-        return previous.getRange()
-                .flatMap(previousRange -> next.getRange().map(
-                        nextRange -> nextRange.begin.line - previousRange.end.line > 1
-                ))
-                .orElse(false);
+        return sourceShapePolicy.hadBlankLineBetween(previous, next);
     }
 
     /**

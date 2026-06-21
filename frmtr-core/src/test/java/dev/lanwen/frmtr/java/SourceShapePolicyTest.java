@@ -67,6 +67,51 @@ final class SourceShapePolicyTest {
         assertThat(policy(source).wasMultiline(initializer)).isFalse();
     }
 
+    @Test
+    void hadBlankLineBetweenIsTrueWhenABlankLineSeparatesTheNodes() {
+        String source = "class Demo {\n    int first;\n\n    int second;\n}\n";
+        FieldDeclaration first = field(source, 0);
+        FieldDeclaration second = field(source, 1);
+
+        assertThat(policy(source).hadBlankLineBetween(first, second)).isTrue();
+    }
+
+    @Test
+    void hadBlankLineBetweenIsFalseWhenTheNodesAreOnConsecutiveLines() {
+        String source = "class Demo {\n    int first;\n    int second;\n}\n";
+        FieldDeclaration first = field(source, 0);
+        FieldDeclaration second = field(source, 1);
+
+        assertThat(policy(source).hadBlankLineBetween(first, second)).isFalse();
+    }
+
+    @Test
+    void hadBlankLineBetweenIsFalseWhenEitherNodeHasNoRange() {
+        String source = "class Demo {\n    int first;\n\n    int second;\n}\n";
+        FieldDeclaration first = field(source, 0);
+        FieldDeclaration second = field(source, 1);
+        second.setRange(null);
+
+        // Without both ranges the formatter cannot claim the author asked for a blank line.
+        assertThat(policy(source).hadBlankLineBetween(first, second)).isFalse();
+        assertThat(policy(source).hadBlankLineBetween(second, first)).isFalse();
+    }
+
+    @Test
+    void hadBlankLineBeforeComparesACallerResolvedBeginLineAgainstThePreviousNode() {
+        String source = "class Demo {\n    int first;\n\n\n    int second;\n}\n";
+        FieldDeclaration first = field(source, 0);
+        int previousEndLine = first.getRange().orElseThrow().end.line;
+
+        // The overload lets callers substitute a comment-aware begin line while the policy keeps the one + 1 rule.
+        assertThat(policy(source).hadBlankLineBefore(first, previousEndLine + 1)).isFalse();
+        assertThat(policy(source).hadBlankLineBefore(first, previousEndLine + 2)).isTrue();
+    }
+
+    private static FieldDeclaration field(String source, int index) {
+        return parse(source).findAll(FieldDeclaration.class).get(index);
+    }
+
     private static MethodCallExpr call(String source) {
         return parse(source).findFirst(MethodCallExpr.class).orElseThrow();
     }

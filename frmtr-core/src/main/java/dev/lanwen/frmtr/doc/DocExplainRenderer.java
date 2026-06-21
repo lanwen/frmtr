@@ -6,7 +6,9 @@ import dev.lanwen.frmtr.doc.DocExplanation.ForcedBreak;
 import dev.lanwen.frmtr.doc.DocExplanation.GroupDecision;
 import dev.lanwen.frmtr.doc.DocExplanation.Node;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -71,6 +73,12 @@ public final class DocExplainRenderer {
         private final DocWidths.Measurement widths = DocWidths.measurement();
 
         private final List<BufferedSuffix> lineSuffixes = new ArrayList<>();
+
+        /**
+         * Mirrors {@link DocRenderer}'s per-render group-mode map so a named {@link Doc.IfBreak} resolves the same arm
+         * here as in the real render; otherwise the replayed column cursor would drift from what the renderer emits.
+         */
+        private final Map<String, Mode> groupModes = new HashMap<>();
 
         private int column;
 
@@ -142,6 +150,9 @@ public final class DocExplainRenderer {
                     boolean fits = widths.fits(group.doc(), available);
                     int flatWidth = widths.flatWidth(group.doc());
                     Mode next = fits ? Mode.FLAT : Mode.BREAK;
+                    if (group.groupId() != null) {
+                        groupModes.put(group.groupId(), next);
+                    }
                     Optional<String> label = enclosingLabel == null ? Optional.empty() : enclosingLabel.label;
                     GroupDecision decision = new GroupDecision(
                         label,
@@ -157,8 +168,13 @@ public final class DocExplainRenderer {
                     return node;
                 }
                 case Doc.IfBreak conditional -> {
+                    // Resolve the arm exactly as DocRenderer does: by the named group's recorded mode when identified,
+                    // otherwise by the ambient mode, so the replayed column advances identically.
+                    Mode effective = conditional.groupId() == null
+                        ? mode
+                        : groupModes.getOrDefault(conditional.groupId(), Mode.FLAT);
                     return render(
-                        mode == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(),
+                        effective == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(),
                         indent,
                         mode,
                         enclosingLabel

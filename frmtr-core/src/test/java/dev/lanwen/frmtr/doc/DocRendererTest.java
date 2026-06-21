@@ -219,6 +219,69 @@ final class DocRendererTest {
     }
 
     @Test
+    void ifBreakBoundToNamedGroupFollowsThatGroupsBreakModeNotTheAmbientMode() {
+        // The named "opener" group contains a BreakParent, so it can never stay flat and renders in break mode. The
+        // dependent group around the ifBreak is tiny ("x[flat]" = 7 wide) and fits the 20-column limit, so its ambient
+        // mode is FLAT. The ifBreak is bound to "opener", so it must render its break arm "[broke]" — following the
+        // named group, not the flat ambient group it actually sits inside.
+        Doc opener = Doc.group(Doc.concat(Doc.text("opener"), Doc.BREAK_PARENT), "opener");
+        Doc dependent = Doc.group(
+            Doc.concat(Doc.text("x"), Doc.ifBreak(Doc.text("[broke]"), Doc.text("[flat]"), "opener"))
+        );
+        Doc doc = Doc.concat(opener, Doc.HARD_LINE, dependent);
+
+        assertThat(renderer(20).render(doc)).isEqualTo(
+            """
+                opener
+                x[broke]"""
+        );
+    }
+
+    @Test
+    void ifBreakBoundToNamedGroupFollowsThatGroupsFlatModeEvenInsideABrokenAmbientGroup() {
+        // The named "opener" group is "ab" — it fits, so it renders flat and records FLAT under its id. The dependent
+        // group is forced to break because its first child is 22 columns wide (> 20), so its ambient mode is BREAK and
+        // the soft line splits. The ifBreak is bound to "opener", so it still renders its flat arm "FLAT" — proving the
+        // arm follows the named group's mode independent of the broken ambient group enclosing the ifBreak.
+        Doc namedFlat = Doc.group(Doc.text("ab"), "opener");
+        Doc ambientBreaks = Doc.group(
+            Doc.concat(
+                Doc.text("aaaaaaaaaaaaaaaaaaaaaa"),
+                Doc.SOFT_LINE,
+                Doc.ifBreak(Doc.text("BROKE"), Doc.text("FLAT"), "opener")
+            )
+        );
+        Doc doc = Doc.concat(namedFlat, Doc.HARD_LINE, ambientBreaks);
+
+        assertThat(renderer(20).render(doc)).isEqualTo(
+            """
+                ab
+                aaaaaaaaaaaaaaaaaaaaaa
+                FLAT"""
+        );
+    }
+
+    @Test
+    void anonymousIfBreakStillFollowsTheAmbientModeWhenGroupsAreIdentified() {
+        // A null-groupId ifBreak keeps today's ambient behavior even though identified groups exist elsewhere in the
+        // document: here the enclosing group breaks (its 24-wide content exceeds 20), so the anonymous ifBreak renders
+        // its break arm. This pins that adding group identity did not change the unidentified path.
+        Doc doc = Doc.group(
+            Doc.concat(
+                Doc.text("aaaaaaaaaaaaaaaaaaaaaaaa"),
+                Doc.SOFT_LINE,
+                Doc.ifBreak(Doc.text("BROKE"), Doc.text("FLAT"))
+            )
+        );
+
+        assertThat(renderer(20).render(doc)).isEqualTo(
+            """
+                aaaaaaaaaaaaaaaaaaaaaaaa
+                BROKE"""
+        );
+    }
+
+    @Test
     void keepsGroupFlatWhenItFits() {
         Doc doc = Doc.delimited("call(", ")", Doc.text("value"));
 

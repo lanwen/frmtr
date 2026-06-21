@@ -2,7 +2,9 @@ package dev.lanwen.frmtr.doc;
 
 import dev.lanwen.frmtr.FormatterOptions;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public final class DocRenderer {
 
@@ -17,6 +19,14 @@ public final class DocRenderer {
      */
     private final List<BufferedSuffix> lineSuffixes = new ArrayList<>();
 
+    /**
+     * Mode chosen by each identified {@link Doc.Group}, keyed by its {@code groupId}. A dependent {@link Doc.IfBreak}
+     * with a matching id reads this map instead of the ambient mode, so a closing delimiter can follow the break/flat
+     * decision of an opener group it does not enclose. Populated as each identified group renders and reset per render,
+     * which requires the identified group to render before the {@code IfBreak} that targets it.
+     */
+    private final Map<String, Mode> groupModes = new HashMap<>();
+
     private int column;
 
     public DocRenderer(FormatterOptions options) {
@@ -27,6 +37,7 @@ public final class DocRenderer {
         out.setLength(0);
         column = 0;
         lineSuffixes.clear();
+        groupModes.clear();
         DocWidths.Measurement widths = DocWidths.measurement();
         render(doc, 0, Mode.BREAK, widths);
         flushLineSuffixes(widths);
@@ -61,15 +72,25 @@ public final class DocRenderer {
             case Doc.Indent indented -> render(indented.doc(), indent + 1, mode, widths);
             case Doc.Group group -> {
                 Mode next = widths.fits(group.doc(), options.lineWidth() - column) ? Mode.FLAT : Mode.BREAK;
+                if (group.groupId() != null) {
+                    groupModes.put(group.groupId(), next);
+                }
                 render(group.doc(), indent, next, widths);
             }
             case Doc.Fill fill -> renderFill(fill.parts(), indent, widths);
-            case Doc.IfBreak conditional -> render(
-                mode == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(),
-                indent,
-                mode,
-                widths
-            );
+            case Doc.IfBreak conditional -> {
+                // An identified IfBreak follows the recorded mode of its target group (which must have rendered first);
+                // an anonymous IfBreak follows the ambient mode. A target that has not rendered yet is treated as flat.
+                Mode effective = conditional.groupId() == null
+                    ? mode
+                    : groupModes.getOrDefault(conditional.groupId(), Mode.FLAT);
+                render(
+                    effective == Mode.BREAK ? conditional.breakDoc() : conditional.flatDoc(),
+                    indent,
+                    mode,
+                    widths
+                );
+            }
             case Doc.Label label -> render(label.doc(), indent, mode, widths);
             case Doc.LineSuffix lineSuffix -> {
                 requireSingleLineSuffix(lineSuffix.content());

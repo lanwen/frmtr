@@ -137,6 +137,29 @@ final class DocDebugRendererTest {
     }
 
     @Test
+    void rendersGroupIdentityOnIdentifiedGroupAndIfBreak() {
+        Doc doc = Doc.group(
+            Doc.concat(Doc.text("("), Doc.ifBreak(Doc.text("br"), Doc.text("fl"), "opener"), Doc.text(")")),
+            "opener"
+        );
+
+        String rendered = DocDebugRenderer.render(doc);
+
+        assertThat(rendered).isEqualTo(
+            """
+                Group(#opener)
+                  Concat
+                    Text("(")
+                    IfBreak(#opener)
+                      break:
+                        Text("br")
+                      flat:
+                        Text("fl")
+                    Text(")")"""
+        );
+    }
+
+    @Test
     void escapesTextValues() {
         Doc doc = Doc.text("quote \" tab\tnewline\nslash\\");
 

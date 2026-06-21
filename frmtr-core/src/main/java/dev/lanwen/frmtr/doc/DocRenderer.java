@@ -54,6 +54,10 @@ public final class DocRenderer {
                 }
             }
             case Doc.HardLine ignored -> newline(indent, widths);
+            case Doc.BreakParent ignored -> {
+                // Emits nothing: the break it forces already happened when the enclosing group measured this marker
+                // and chose BREAK mode (see DocWidths, where BreakParent yields NO_FIT exactly like HardLine).
+            }
             case Doc.Indent indented -> render(indented.doc(), indent + 1, mode, widths);
             case Doc.Group group -> {
                 Mode next = widths.fits(group.doc(), options.lineWidth() - column) ? Mode.FLAT : Mode.BREAK;
@@ -130,6 +134,8 @@ public final class DocRenderer {
             case Doc.Text ignored -> false;
             case Doc.Line ignored -> false;
             case Doc.SoftLine ignored -> false;
+            // BreakParent forces a group break but emits no newline, so it does not violate the single-line restriction.
+            case Doc.BreakParent ignored -> false;
         };
     }
 

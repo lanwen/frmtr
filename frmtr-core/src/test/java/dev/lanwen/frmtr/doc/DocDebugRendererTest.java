@@ -105,6 +105,20 @@ final class DocDebugRendererTest {
     }
 
     @Test
+    void rendersBreakParentMarker() {
+        Doc doc = Doc.concat(Doc.text("value"), Doc.BREAK_PARENT);
+
+        String rendered = DocDebugRenderer.render(doc);
+
+        assertThat(rendered).isEqualTo(
+            """
+                Concat
+                  Text("value")
+                  BreakParent"""
+        );
+    }
+
+    @Test
     void escapesTextValues() {
         Doc doc = Doc.text("quote \" tab\tnewline\nslash\\");
 

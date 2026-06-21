@@ -6,6 +6,7 @@ import java.util.List;
 
 public sealed interface Doc
     permits
+        Doc.BreakParent,
         Doc.Concat,
         Doc.Group,
         Doc.HardLine,
@@ -23,6 +24,17 @@ public sealed interface Doc
     Doc SOFT_LINE = new SoftLine();
 
     Doc HARD_LINE = new HardLine();
+
+    /**
+     * Zero-width marker that forces the nearest enclosing {@link Group} into break mode without printing anything
+     * itself. It is the explicit form of today's "emit a {@link HardLine} to poison the fit measurement" trick: a
+     * group that measures this marker can never stay flat, but unlike {@code HARD_LINE} the marker emits no newline.
+     *
+     * <p>Because this single-pass renderer decides each group's mode top-down via its flat measurement, a
+     * {@code BREAK_PARENT} only affects groups whose measurement <em>encounters</em> it; it does not retroactively
+     * break a sibling group whose mode was already chosen. Emit it at the point the breaking child is built.
+     */
+    Doc BREAK_PARENT = new BreakParent();
 
     static Doc text(String value) {
         return value.isEmpty() ? EMPTY : new Text(value);
@@ -136,6 +148,8 @@ public sealed interface Doc
     record SoftLine() implements Doc {}
 
     record HardLine() implements Doc {}
+
+    record BreakParent() implements Doc {}
 
     record Indent(Doc doc) implements Doc {}
 

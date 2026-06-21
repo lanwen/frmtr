@@ -1604,6 +1604,9 @@ final class MethodCallChainPrinter {
             // A line suffix renders nothing at its position and flushes at the line break, so it neither consumes the
             // line-start padding slot nor needs continuation padding inside its deferred content.
             case Doc.LineSuffix lineSuffix -> new PaddedDoc(lineSuffix, lineStart);
+            // A break-parent marker renders nothing and only influences the enclosing group's fit, so it passes
+            // through untouched and leaves the line-start padding slot for the next visible token.
+            case Doc.BreakParent ignored -> new PaddedDoc(doc, lineStart);
         };
     }
 

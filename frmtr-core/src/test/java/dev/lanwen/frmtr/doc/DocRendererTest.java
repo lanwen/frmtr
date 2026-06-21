@@ -268,6 +268,31 @@ final class DocRendererTest {
     }
 
     @Test
+    void doesNotLeakBufferedLineSuffixAcrossRenders() {
+        DocRenderer renderer = renderer(80);
+
+        // Render #1 buffers a line suffix and then aborts before any flush: the second (multi-line) suffix is rejected
+        // the moment it is reached, while the first suffix is still parked in the buffer. The end-of-document flush is
+        // never reached, so render #1 leaves the renderer with a pending suffix.
+        Doc abortsWithSuffixStillBuffered = Doc.concat(
+            Doc.text("A"),
+            Doc.lineSuffix(Doc.text(" // leftover")),
+            Doc.lineSuffix(Doc.concat(Doc.text("// illegal"), Doc.HARD_LINE))
+        );
+        assertThatThrownBy(() -> renderer.render(abortsWithSuffixStillBuffered))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("single-line");
+
+        // Render #2 of a suffix-free document on the same renderer must not inherit the leftover " // leftover" suffix.
+        Doc suffixFree = Doc.concat(Doc.text("B"), Doc.HARD_LINE, Doc.text("C"));
+        assertThat(renderer.render(suffixFree)).isEqualTo(
+            """
+                B
+                C"""
+        );
+    }
+
+    @Test
     void doesNotCachePartialOverflowForSameNodeInsideOneRender() {
         Doc shared = Doc.group(
             Doc.concat(

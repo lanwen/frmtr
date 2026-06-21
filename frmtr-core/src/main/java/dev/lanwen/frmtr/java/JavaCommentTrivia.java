@@ -140,6 +140,18 @@ record JavaCommentTrivia(Comment comment) {
     }
 
     /**
+     * Reports whether the comment is owned by {@code child} rather than merely trailing it on a shared line.
+     *
+     * <p>The line-only {@link #startsInsideLineRange(Node)} test alone treats any comment sharing a child's line as that
+     * child's. When whitespace is collapsed, a trailing comment can land on the same line as an earlier sibling (e.g.
+     * {@code alpha(), beta() // after last arg}), so the coarse test would hand the trailing comment to {@code alpha()}.
+     * A comment that begins after the child's last token is trailing it, not inside it, so it is not the child's to claim.
+     */
+    boolean isInsideNotTrailing(Node child) {
+        return startsInsideLineRange(child) && !startsAfterNodeOnSameLine(child);
+    }
+
+    /**
      * Reports whether the supplied identity set has already claimed this exact JavaParser comment instance.
      */
     boolean isClaimedBy(Set<Comment> claimedComments) {

@@ -78,9 +78,6 @@ final class CommentPresenceDiagnosticTest {
         Map<String, String> drops = new TreeMap<>();
 
         // -- P0: drops on NORMAL (verbatim @default) input; the committed golden output is itself lossy. --
-        // annotation-block-comment-gap: the /* ... */ between @Deprecated and the method is dropped (2 block -> 1).
-        drops.put("annotation-block-comment-gap @ default",
-            "S9 backlog (P0): \"Since version 0.11, the service exposes all APIs on a single(4566 ) port.\"");
         // comment-complex-block-statements: one of two `/* dead code */` block comments dropped (37 -> 36).
         drops.put("comment-complex-block-statements @ default", "S9 backlog (P0): \"dead code\"");
 
@@ -135,9 +132,6 @@ final class CommentPresenceDiagnosticTest {
                 + " \"comment\"");
 
         // block-comment / annotation gap
-        drops.put("annotation-block-comment-gap @ collapsed",
-            "S9 backlog (block/annotation gap): \"Since version 0.11, ... single port.\","
-                + " \"Since version 0.11, ... single(4566 ) port.\"");
         drops.put("comment-complex-block-statements @ collapsed",
             "S9 backlog (block/annotation gap): \"switch\", \"dead code\", \"The Heart and the Spade\"");
         drops.put("comment-complex-block-statements @ expanded",
@@ -280,27 +274,32 @@ final class CommentPresenceDiagnosticTest {
     // ---------------------------------------------------------------------------------------------------------------
 
     /**
-     * The comparator detects a genuine drop. A formatter that silently swallowed a comment must be caught, so this feeds
-     * a known-lossy verbatim golden fixture ({@code annotation-block-comment-gap}) and asserts the comparator reports a
-     * non-empty drop set for it — if this ever returns empty, either the fixture's loss was fixed (un-park it in
-     * {@link #KNOWN_DROPS}) or the comparator stopped measuring presence and the whole net is blind.
+     * The comparator detects a genuine drop. Rather than rely on a particular formatter bug to manufacture a drop (those
+     * get fixed), this feeds the pure comparator an {@code output} that is the input with one comment deleted, and
+     * asserts that exact content is reported missing. If this ever returns empty, the output-level net has gone blind
+     * and would no longer catch data loss.
      */
     @org.junit.jupiter.api.Test
-    void comparatorReportsRealDropOnLossyFixture() {
-        // The inline `@Deprecated /* ... */ method` shape from annotation-block-comment-gap: the formatter currently
-        // drops the block comment sitting between the annotation and the method on the same line.
-        String lossy = """
+    void comparatorReportsDropWhenAnInputCommentIsAbsentFromOutput() {
+        String input = """
             class Demo {
-                @Deprecated /*
-                        Since version 0.11, the service exposes all APIs on a single port.*/ public int port() {
-                    return 0;
-                }
+                // keep me
+                int present; // also keep
+                int gone; // DROP-ME-marker
             }
             """;
-        assertThat(realDrops(lossy, FormatterOptions.defaults()))
-                .as("comparator must report the dropped annotation/method-gap block comment; an empty result here means"
-                    + " the output-level net has gone blind and would no longer catch data loss")
-                .isNotEmpty();
+        String outputMissingOneComment = """
+            class Demo {
+                // keep me
+                int present; // also keep
+                int gone;
+            }
+            """;
+        List<Drop> drops = realDrops(input, outputMissingOneComment, FormatterOptions.defaults());
+        assertThat(drops)
+                .as("comparator must report the deleted comment as a drop; an empty result means the net is blind")
+                .extracting(Drop::content)
+                .contains("DROP-ME-marker");
     }
 
     /**
@@ -400,8 +399,15 @@ final class CommentPresenceDiagnosticTest {
      * authoritative lexer magnitude, so the divergence between the two witnesses stays visible rather than hidden.
      */
     static List<Drop> realDrops(String source, FormatterOptions options) {
-        String formatted = Frmtr.format(source, options);
+        return realDrops(source, Frmtr.format(source, options), options);
+    }
 
+    /**
+     * Pure comparator over an arbitrary (input, output) pair, factored out of {@link #realDrops(String,
+     * FormatterOptions)} so the comparator itself can be exercised in isolation (feeding a deliberately comment-stripped
+     * output) without depending on any particular formatter bug to manufacture a drop.
+     */
+    static List<Drop> realDrops(String source, String formatted, FormatterOptions options) {
         Map<String, Integer> lexerInput = lexerCommentCounts(source);
         Map<String, Integer> lexerOutput = lexerCommentCounts(formatted);
 

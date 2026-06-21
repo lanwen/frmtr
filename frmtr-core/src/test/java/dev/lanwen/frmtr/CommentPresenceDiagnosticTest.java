@@ -62,12 +62,26 @@ import org.junit.jupiter.params.provider.MethodSource;
 final class CommentPresenceDiagnosticTest {
 
     /**
-     * The S9 comment-drop backlog: {@code (fixture, shape)} display names whose formatting genuinely drops a comment on
-     * this branch, each kept out of the asserting net until its S9 cluster fixes the underlying placement/printer bug.
+     * The S9 comment-drop backlog: {@code (fixture, shape)} display names whose formatting still drops a comment on this
+     * branch, each kept out of the asserting net until its fix lands.
      *
-     * <p>Each entry's value is the comment text(s) the fixture loses, so the parked finding stays honest and reviewable.
-     * The grouping mirrors the cluster ordering in {@code docs/proposals/comment-data-loss.md}. Removing an entry
-     * re-arms the net for that case; an S9 cluster commit removes its entries in the same change as the fix.
+     * <p>Each entry's value records the comment text(s) the fixture loses and the work the fix belongs to, so the parked
+     * finding stays honest and reviewable. The remaining entries fall into two buckets, both documented per-entry:
+     *
+     * <ul>
+     *   <li><strong>needs B1</strong> — source-shape consolidation. The comment is dropped only when the whitespace
+     *       perturbation moves it off the source line/column its ownership recovery keys on (or JavaParser re-attributes
+     *       it across constructs under collapse). These are the headline evidence for the B1 {@code SourceShapePolicy};
+     *       a shape-independent fix is the policy consolidation, not a local printer patch.
+     *   <li><strong>needs B2</strong> — deterministic, attachment-independent comment ownership. The Guava copyright
+     *       file-header has an empty AST attachment ({@code getAllContainedComments} never returns it), so no
+     *       attachment-based path can reach it.
+     * </ul>
+     *
+     * <p>The structural drops that did <em>not</em> depend on incidental layout — comments orphaned between top-level
+     * types, before a {@code case}, around a single text-block argument, trailing a block's last statement or a call's
+     * last argument, and an inline block comment between an annotation and its member — are fixed and removed from this
+     * list (see the branch's per-cluster commits).
      *
      * <p><strong>Do not add entries to silence a regression.</strong> This list only ever shrinks. A drop on a case not
      * already here is a new data-loss bug the net is meant to catch.
@@ -100,20 +114,25 @@ final class CommentPresenceDiagnosticTest {
                 + " \"https://docs.example.invalid/token-envelope-03.html\","
                 + " \"keep manual routing while backfill catches up\"");
 
-        // labeled-statement
+        // labeled-statement -- needs B1. Under whole-fixture collapse the labeled-statement leading comments are
+        // mis-attributed en masse (comment1 22->6), the same source-shape attachment failure as control-condition.
         drops.put("comment-preservation-labeled-statement @ collapsed",
-            "S9 backlog (labeled-statement): \"Label statement\" (14->4), \"comment1\" (22->6),"
-                + " \"comment2\" (14->4)");
+            "needs B1 (labeled-statement): \"Label statement\" (14->4), \"comment1\" (22->6), \"comment2\" (14->4)");
 
-        // try-resource
+        // try-resource -- needs B1. The try-resource opener comment (try ( // note) and the per-clause trailing
+        // comments (try {} // a) are recovered from source-position scans that the expand perturbation defeats by
+        // moving the comment off the try/clause line; reconciling all of opener/leading/gap/trailing shape-independently
+        // is the B1 SourceShapePolicy consolidation rather than a local printer patch.
         drops.put("comment-preservation-try-resources @ expanded",
-            "S9 backlog (try-resource): \"resource scope {\", \"single resource scope {\"");
+            "needs B1 (try-resource): \"resource scope {\", \"single resource scope {\" (opener comment after `(`)");
         drops.put("try-resource-layout @ expanded",
-            "S9 backlog (try-resource): \"a\", \"b\", \"c\", \"a2\", \"b2\", \"c2\"");
+            "needs B1 (try-resource): \"a\", \"b\", \"c\", \"a2\", \"b2\", \"c2\" (per-clause try/catch/finally trailing"
+                + " comments)");
 
-        // method-arguments
+        // method-arguments -- needs B1. The remaining @ expanded drops are gap comments between arguments that move
+        // off their anchor line under expand; the trailing-argument case is fixed (block-orphan-method-call-comments).
         drops.put("comment-preservation-method-arguments @ expanded",
-            "S9 backlog (method-arguments): \"services selected directly\", \"services selected by scaling\"");
+            "needs B1 (method-arguments): \"services selected directly\", \"services selected by scaling\"");
 
         // switch -- entry-leading comments stacked before a `case` are now interleaved from the switch's orphan comments;
         // these two remain because a leading comment JavaParser mis-attaches to the SELECTOR under collapse (not a switch
@@ -126,35 +145,47 @@ final class CommentPresenceDiagnosticTest {
             "S9 backlog (switch): inline case-label block comments \"remote\", \"hybrid\"; \"comment\""
                 + " (leading \"default case\"/\"case c\"/\"fall through\" now preserved)");
 
-        // block-comment / annotation gap
+        // block-comment / annotation gap -- needs B1. comment-complex-block-statements is the dense inline-comment
+        // torture fixture; under collapse/expand its many inline block comments (between tokens, inside switch/case,
+        // inside loops) are re-attached across constructs. block-comment-shapes loses a `/*a*/` whose ownership flips
+        // with layout. These are the source-shape attachment problem at its most concentrated.
         drops.put("comment-complex-block-statements @ collapsed",
-            "S9 backlog (block/annotation gap): \"switch\", \"dead code\", \"The Heart and the Spade\"");
+            "needs B1 (block/annotation gap): \"switch\", \"dead code\", \"The Heart and the Spade\"");
         drops.put("comment-complex-block-statements @ expanded",
-            "S9 backlog (block/annotation gap): \"is always executed no matter what\", \"Minus One\", \"switch\","
+            "needs B1 (block/annotation gap): \"is always executed no matter what\", \"Minus One\", \"switch\","
                 + " \"overloading\", \"at least one iteration !\", \"Additionnal enumeration\"");
         drops.put("comment-preservation-block-comment-shapes @ collapsed",
-            "S9 backlog (block/annotation gap): \"a\" (3->2)");
+            "needs B1 (block/annotation gap): \"a\" (3->2)");
 
-        // records / enums / conditionals / misc
-        drops.put("record-component-spacing @ collapsed", "S9 backlog (records/enums/misc): \"comment\" (2->1)");
-        drops.put("record-component-spacing @ expanded", "S9 backlog (records/enums/misc): \"comment\" (2->1)");
-        drops.put("enum-declaration-layout @ collapsed", "S9 backlog (records/enums/misc): \"comment\" (3->2)");
+        // records / enums / conditionals / misc -- needs B1. Each loses a comment whose anchor moves under perturbation:
+        // a leading comment between `=` and an initializer (variable-declarations), a comment between a record
+        // component's type and name (correctness-data-loss), an empty-enum-body comment, a ternary-branch comment, and
+        // record-component leading comments. All are position-anchored recoveries the perturbation defeats.
+        drops.put("record-component-spacing @ collapsed", "needs B1 (records/enums/misc): \"comment\" (2->1)");
+        drops.put("record-component-spacing @ expanded", "needs B1 (records/enums/misc): \"comment\" (2->1)");
+        drops.put("enum-declaration-layout @ collapsed", "needs B1 (records/enums/misc): \"comment\" (3->2)");
         drops.put("conditional-expression-space-indentation @ collapsed",
-            "S9 backlog (records/enums/misc): \"c\" (4->3)");
+            "needs B1 (records/enums/misc): \"c\" (4->3)");
         drops.put("conditional-expression-space-indentation @ expanded",
-            "S9 backlog (records/enums/misc): \"b\" (4->0), \"c\" (4->1)");
+            "needs B1 (records/enums/misc): \"b\" (4->0), \"c\" (4->1)");
         drops.put("correctness-data-loss @ expanded",
-            "S9 backlog (records/enums/misc): \"keep this comment with the type\"");
+            "needs B1 (records/enums/misc): \"keep this comment with the type\" (between record-component type and name)");
         drops.put("variable-declarations @ collapsed",
-            "S9 backlog (records/enums/misc): \"there is a random comment on this line up here\"");
+            "needs B1 (records/enums/misc): \"there is a random comment on this line up here\" (initializer-leading"
+                + " comment lost when the declaration collapses onto one line)");
 
         // class-members / interface (guardrail-missed; found only by the lexer net)
+        // class-members @ expanded loses the Guava copyright FILE HEADER, which has an empty AST attachment
+        // (getAllContainedComments never returns it): this is the B2 orphan-ownership case, not reachable by any
+        // attachment-based path. The @ collapsed TODO(jlevy) blocks and the interface `// comment` are B1 (member-block
+        // / interface-body comment ownership that the perturbation re-anchors).
         drops.put("comment-preservation-class-members @ collapsed",
-            "S9 backlog (class-members): three \"TODO(jlevy): ...\" block comments");
+            "needs B1 (class-members): three \"TODO(jlevy): ...\" block comments");
         drops.put("comment-preservation-class-members @ expanded",
-            "S9 backlog (class-members): the Guava copyright file-header block (AST-invisible orphan)");
+            "needs B2 (class-members): the Guava copyright file-header block (AST-invisible orphan,"
+                + " getAllContainedComments never returns it)");
         drops.put("comment-preservation-interface-declaration @ collapsed",
-            "S9 backlog (interface-declaration): \"comment\"");
+            "needs B1 (interface-declaration): \"comment\" (interface-body leading comment)");
 
         return Collections.unmodifiableMap(drops);
     }

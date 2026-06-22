@@ -1615,8 +1615,16 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * Collects source-leading line comments that JavaParser attaches to either the variable or initializer before the
-     * initializer expression starts.
+     * Collects source-leading line comments that sit in the gap between the declarator name and the initializer
+     * expression, recovered from wherever JavaParser bucketed them rather than from a single fixed association.
+     *
+     * <p>JavaParser spreads {@code =}-leading comments across three buckets depending on the source layout: a comment on
+     * its own line lands in the declarator's orphan comments, the comment immediately preceding the initializer becomes
+     * the initializer's own comment, and a comment that collapse pushes onto the declarator name's line attaches to the
+     * name as <em>its</em> trailing comment. Keying recovery on any one bucket loses comments when a whitespace
+     * perturbation moves them between buckets, so this gathers from all three and selects purely by source order — a
+     * comment belongs here when it begins after the declarator name and before the initializer. At the {@code @default}
+     * shape the name-trailing bucket is empty, so adding it is a superset that leaves unperturbed output unchanged.
      */
     private Optional<Doc> leadingInitializerComments(VariableDeclarator variable, Expression initializer) {
         List<Comment> leadingComments = new ArrayList<>();
@@ -1628,6 +1636,15 @@ final class VariableInitializerLayout {
         initializer.getComment()
                 .filter(LineComment.class::isInstance)
                 .filter(comment -> CommentIndex.startsBefore(comment, initializer))
+                .ifPresent(leadingComments::add);
+        // A comment that collapse slid onto the declarator name's line attaches to the name; recover it here when it
+        // sits in the name-to-initializer gap (after the name, before the initializer) rather than leading the name.
+        variable.getName()
+                .getComment()
+                .filter(LineComment.class::isInstance)
+                .filter(comment -> CommentIndex.startsAfterEndOf(variable.getName(), comment))
+                .filter(comment -> CommentIndex.startsBefore(comment, initializer))
+                .filter(comment -> leadingComments.stream().noneMatch(existing -> existing == comment))
                 .ifPresent(leadingComments::add);
         List<Doc> docs = leadingComments.stream()
                 .sorted(CommentIndex.sourceOrderComparator())

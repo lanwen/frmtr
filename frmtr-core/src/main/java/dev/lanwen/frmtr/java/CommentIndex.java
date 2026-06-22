@@ -256,6 +256,32 @@ final class CommentIndex {
     }
 
     /**
+     * Reports whether {@code comment} begins strictly before {@code position} in source order.
+     *
+     * <p>Callers use this to classify a comment against an operator or separator token position that does not exist as
+     * its own AST node — for example the {@code ?} or {@code :} of a conditional expression — without reconstructing the
+     * comment's column offset from a token-range string, which a whitespace perturbation defeats.
+     */
+    static boolean startsBefore(Comment comment, Position position) {
+        return comment.getRange()
+                .map(commentRange -> commentRange.begin.isBefore(position))
+                .orElse(false);
+    }
+
+    /**
+     * Reports whether {@code comment} begins strictly after {@code position} in source order.
+     *
+     * <p>The source-order counterpart to {@link #startsBefore(Comment, Position)}: it answers "does the comment come
+     * after this operator/separator token" purely by source position, so the same classification holds however whitespace
+     * lays the comment out relative to the token.
+     */
+    static boolean startsAfter(Comment comment, Position position) {
+        return comment.getRange()
+                .map(commentRange -> commentRange.begin.isAfter(position))
+                .orElse(false);
+    }
+
+    /**
      * Reports whether {@code comment} begins before the source end of {@code node}.
      *
      * <p>Callers use this when a same-line comment may either belong inside an unterminated syntax gap, such as

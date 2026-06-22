@@ -166,14 +166,11 @@ final class CommentPresenceDiagnosticTest {
                 + " \"services selected by scaling\" — trailing comments on Stream.concat(...) args when the chain"
                 + " receiver is on its own line bypass CommentedExpressionListPrinter");
 
-        // conditional-expression -- NOT the gap predicate. ConditionalExpressionPrinter classifies ternary branch
-        // comments with its own token-range column arithmetic (commentAppearsAfterOperator), keyed on which side of the
-        // `?`/`:` token a comment's column falls. Perturbing whitespace moves those columns, so the classifier mislabels
-        // (or drops) the branch comments. A fix belongs in that ternary classifier, not in the gap-ownership predicate.
-        drops.put("conditional-expression-space-indentation @ collapsed",
-            "ternary branch classifier (not gap-between-siblings): \"c\" (4->3)");
-        drops.put("conditional-expression-space-indentation @ expanded",
-            "ternary branch classifier (not gap-between-siblings): \"b\" (4->0), \"c\" (4->1)");
+        // conditional-expression @ collapsed/expanded -- FIXED. ConditionalExpressionPrinter classified ternary branch
+        // comments with token-range column arithmetic that whitespace perturbations defeated. It now classifies each
+        // comment (gathered from both the child expressions' own comments and the conditional's orphan comments) by
+        // source position relative to the `?`/`:` operator-token positions, and renders both a branch's leading and
+        // trailing comment so re-bucketing never drops one. Removed from the backlog with that fix.
 
         // enum-declaration-layout @ collapsed -- NOT gap-between-siblings. The dropped \"comment\" is the sole comment
         // inside an EMPTY enum body (EmptyEnumWithComment { // comment }); there are no constant siblings to sit between,
@@ -181,14 +178,11 @@ final class CommentPresenceDiagnosticTest {
         drops.put("enum-declaration-layout @ collapsed",
             "empty-enum-body comment (not gap-between-siblings): \"comment\" (3->2)");
 
-        // variable-declarations @ collapsed -- NOT gap-between-siblings. The two `=`-leading initializer comments are
-        // recovered by VariableInitializerLayout.leadingInitializerComments from the declarator orphan bucket plus the
-        // initializer's own comment. Under collapse the FIRST comment lands on the `=` line and JavaParser attaches it to
-        // neither the declarator orphans nor the initializer, so the initializer-leading recovery loses it. The fix
-        // belongs in that initializer-leading mechanism, not in the sibling-gap predicate.
-        drops.put("variable-declarations @ collapsed",
-            "initializer-leading comment (not gap-between-siblings): \"there is a random comment on this line up here\""
-                + " (first of two `=`-leading comments lost when the declaration collapses onto one line)");
+        // variable-declarations @ collapsed -- FIXED. The two `=`-leading initializer comments were recovered only from
+        // the declarator orphan bucket plus the initializer's own comment; under collapse the FIRST comment slides onto
+        // the declarator name's line and JavaParser attaches it to the name, which neither bucket reads.
+        // VariableInitializerLayout.leadingInitializerComments now also recovers the declarator name's own line comment
+        // when it sits in the name-to-initializer gap, selecting purely by source order. Removed from the backlog.
 
         // class-members / interface (guardrail-missed; found only by the lexer net)
         // class-members @ expanded loses the Guava copyright FILE HEADER, which has an empty AST attachment

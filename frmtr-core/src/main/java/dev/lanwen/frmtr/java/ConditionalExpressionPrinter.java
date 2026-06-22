@@ -1,5 +1,7 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.JavaToken;
+import com.github.javaparser.Position;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.Comment;
@@ -13,7 +15,10 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -299,66 +304,66 @@ final class ConditionalExpressionPrinter {
     /**
      * Rebuilds a conditional expression when line comments are attached around the ternary operators.
      *
-     * <p>JavaParser attaches these comments to nearby expressions, not to {@code ?} or {@code :} tokens. The formatter
-     * therefore checks source positions to classify each line comment as trailing the condition, leading the
-     * {@code ?} branch, trailing the then branch, leading the {@code :} branch, or trailing the else branch. A line
-     * comment that actually trails the containing expression statement is left to statement-level handling.
+     * <p>JavaParser attaches these comments to nearby expressions, not to {@code ?} or {@code :} tokens, and which bucket
+     * it picks depends on the source layout: at one shape a {@code ? // x} comment is the then expression's own leading
+     * comment, while a whitespace perturbation that moves it onto its own line re-buckets it as one of the conditional's
+     * orphan comments. The formatter therefore gathers every candidate line comment from <em>both</em> the child
+     * expressions' own comments and the conditional's orphan comments, then classifies each by where it begins in source
+     * order relative to the condition, then, and else expression ranges and the {@code ?} / {@code :} operator-token
+     * positions: trailing the condition, leading the {@code ?} branch, trailing the then branch, leading the {@code :}
+     * branch, or trailing the else branch. A line comment that actually trails the containing expression statement is
+     * left to statement-level handling.
+     *
+     * <p>The classification is deliberately position-based rather than column-arithmetic or attachment-bucket based. The
+     * {@code ?} and {@code :} are not AST nodes, so the branch a comment belongs to is decided purely by whether the
+     * comment begins before or after each operator token's source position — a relationship a whitespace perturbation
+     * cannot change.
      */
     private Optional<Doc> commentedConditionalExpression(ConditionalExpr expression) {
-        if (expression.getAllContainedComments().stream().noneMatch(LineComment.class::isInstance)) {
+        List<Comment> candidates = ternaryBranchComments(expression);
+        if (candidates.isEmpty()) {
             return Optional.empty();
         }
-        Optional<Comment> conditionComment = expression.getCondition()
-                .getComment()
-                .filter(LineComment.class::isInstance);
-        Optional<Comment> thenComment = expression.getThenExpr()
-                .getComment()
-                .filter(LineComment.class::isInstance);
-        Optional<Comment> elseComment = expression.getElseExpr()
-                .getComment()
-                .filter(LineComment.class::isInstance);
-        Optional<Comment> leadingThenComment = thenComment.filter(
-            comment -> CommentIndex.startsBefore(comment, expression.getThenExpr())
+        Optional<Position> questionPosition = operatorPosition(
+            expression,
+            "?",
+            expression.getCondition(),
+            expression.getThenExpr()
         );
-        Optional<Comment> conditionTrailingComment = conditionComment.filter(
-            comment -> conditionalQuestionCommentTrailsCondition(expression, comment)
-        ).or(() -> leadingThenComment.filter(
-                comment -> conditionalQuestionCommentTrailsCondition(expression, comment)
-        ));
-        Optional<Comment> questionComment = conditionComment
-                .filter(comment -> !conditionalQuestionCommentTrailsCondition(expression, comment))
-                .or(() -> leadingThenComment.filter(
-                        comment -> !conditionalQuestionCommentTrailsCondition(expression, comment)
-                ));
-        Optional<Comment> thenTrailingComment = thenComment
-                .filter(comment -> !CommentIndex.startsBefore(comment, expression.getThenExpr()))
-                .filter(comment -> !commentAppearsAfterColon(expression, comment));
-        Optional<Comment> colonComment = thenComment
-                .filter(comment -> questionComment.filter(question -> question == comment).isEmpty())
-                .filter(comment -> commentAppearsAfterColon(expression, comment))
-                .or(() -> elseComment.filter(comment -> CommentIndex.startsBefore(comment, expression.getElseExpr())));
-        Optional<Comment> elseTrailingComment = elseComment
-                .filter(comment -> colonComment.filter(colon -> colon == comment).isEmpty())
-                .filter(comment -> !CommentIndex.startsBefore(comment, expression.getElseExpr()))
-                .filter(comment -> !conditionalElseCommentIsStatementTrailing(expression, comment));
+        Optional<Position> colonPosition = operatorPosition(
+            expression,
+            ":",
+            expression.getThenExpr(),
+            expression.getElseExpr()
+        );
+        Map<Region, Comment> byRegion = new EnumMap<>(Region.class);
+        for (Comment comment : candidates) {
+            byRegion.putIfAbsent(
+                classifyTernaryComment(expression, comment, questionPosition, colonPosition),
+                comment
+            );
+        }
         return Optional.of(
             Doc.concat(
-                conditionalConditionWithTrailingComment(expression.getCondition(), conditionTrailingComment),
+                conditionalConditionWithTrailingComment(
+                    expression.getCondition(),
+                    regionComment(byRegion, Region.CONDITION_TRAILING)
+                ),
                 Doc.indent(
                     Doc.concat(
                         Doc.HARD_LINE,
                         conditionalCommentedBranch(
                             "?",
                             expression.getThenExpr(),
-                            questionComment,
-                            thenTrailingComment
+                            regionComment(byRegion, Region.QUESTION_LEADING),
+                            regionComment(byRegion, Region.THEN_TRAILING)
                         ),
                         Doc.HARD_LINE,
                         conditionalCommentedBranch(
                             ":",
                             expression.getElseExpr(),
-                            colonComment,
-                            elseTrailingComment
+                            regionComment(byRegion, Region.COLON_LEADING),
+                            regionComment(byRegion, Region.ELSE_TRAILING)
                         )
                     )
                 )
@@ -366,43 +371,213 @@ final class ConditionalExpressionPrinter {
         );
     }
 
-    private Doc conditionalConditionWithTrailingComment(Expression condition, Optional<Comment> trailingComment) {
-        Doc trailing = trailingComment.map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment))).orElse(
-            Doc.EMPTY
-        );
+    /** Branch slot a candidate line comment renders into; STATEMENT_TRAILING is never rendered here. */
+    private enum Region {
+        CONDITION_TRAILING,
+        QUESTION_LEADING,
+        THEN_TRAILING,
+        COLON_LEADING,
+        ELSE_TRAILING,
+        STATEMENT_TRAILING
+    }
+
+    /** Source interval a comment begins in, split by the {@code ?} / {@code :} operator-token positions. */
+    private enum Zone {
+        BEFORE_THEN,
+        THEN_TO_COLON,
+        COLON_TO_ELSE,
+        ELSE_OR_AFTER
+    }
+
+    /** Which interval of the ternary the comment begins in, split by the {@code ?} / {@code :} operator-token positions. */
+    private Zone zoneOf(ConditionalExpr expression, Comment comment, Optional<Position> colonPosition) {
+        if (CommentIndex.startsBefore(comment, expression.getThenExpr())) {
+            return Zone.BEFORE_THEN;
+        }
+        if (startsBeforeOperator(comment, colonPosition)) {
+            return Zone.THEN_TO_COLON;
+        }
+        if (CommentIndex.startsBefore(comment, expression.getElseExpr())) {
+            return Zone.COLON_TO_ELSE;
+        }
+        return Zone.ELSE_OR_AFTER;
+    }
+
+    /**
+     * Classifies a candidate line comment into its ternary region by source position. STATEMENT_TRAILING is left to
+     * statement-level handling (never rendered here). Mirrors the prior position-based classification exactly.
+     */
+    private Region classifyTernaryComment(
+            ConditionalExpr expression,
+            Comment comment,
+            Optional<Position> questionPosition,
+            Optional<Position> colonPosition
+    ) {
+        return switch (zoneOf(expression, comment, colonPosition)) {
+            // condition / `?` region. The comment trails the condition only in the flat `cond ? // x` shape — after the
+            // `?` token yet still on the condition's end line — which keeps it before the line break. Every other comment
+            // here (on its own line before or after `?`, inline before `?`) leads the `?` branch.
+            case BEFORE_THEN -> conditionTrailsBeforeQuestionBranch(expression, comment, questionPosition)
+                    ? Region.CONDITION_TRAILING
+                    : Region.QUESTION_LEADING;
+            // then / `:` region before the `:` token. A comment inline-trailing the then expression trails the then
+            // branch; a comment on its own line here leads the `:` branch, the mirror of the condition / `?` split.
+            case THEN_TO_COLON -> CommentIndex.startsAfterNodeOnSameLine(expression.getThenExpr(), comment)
+                    ? Region.THEN_TRAILING
+                    : Region.COLON_LEADING;
+            case COLON_TO_ELSE -> Region.COLON_LEADING;
+            case ELSE_OR_AFTER -> conditionalElseCommentIsStatementTrailing(expression, comment)
+                    ? Region.STATEMENT_TRAILING
+                    : Region.ELSE_TRAILING;
+        };
+    }
+
+    /** Renders a region's claimed comment to a Doc, or {@link Doc#EMPTY} when that region has no comment. */
+    private Doc regionComment(Map<Region, Comment> byRegion, Region region) {
+        Comment comment = byRegion.get(region);
+        return comment == null ? Doc.EMPTY : comments.comment(comment);
+    }
+
+    /**
+     * Collects the line comments that sit around a ternary's operators, from both the child expressions' own comments
+     * and the conditional's orphan comments, in source order.
+     *
+     * <p>Comments from a nested conditional branch are excluded: they are already owned by the inner {@link
+     * ConditionalExpr} and would otherwise be classified twice. Each candidate is included once even when it is reachable
+     * through more than one association.
+     */
+    private List<Comment> ternaryBranchComments(ConditionalExpr expression) {
+        List<Comment> candidates = new ArrayList<>();
+        ternaryOwnComment(expression.getCondition()).ifPresent(candidates::add);
+        ternaryOwnComment(expression.getThenExpr()).ifPresent(candidates::add);
+        ternaryOwnComment(expression.getElseExpr()).ifPresent(candidates::add);
+        for (Comment orphan : expression.getOrphanComments()) {
+            if (orphan instanceof LineComment && !candidates.contains(orphan)) {
+                candidates.add(orphan);
+            }
+        }
+        candidates.removeIf(comment -> belongsToNestedConditional(expression, comment));
+        candidates.sort(CommentIndex.sourceOrderComparator());
+        return candidates;
+    }
+
+    private Optional<Comment> ternaryOwnComment(Expression branch) {
+        return branch.getComment().filter(LineComment.class::isInstance);
+    }
+
+    /**
+     * Reports whether {@code comment} begins inside one of this conditional's branches that is itself a conditional, so
+     * the nested ternary owns the comment and this level must not claim it.
+     */
+    private boolean belongsToNestedConditional(ConditionalExpr expression, Comment comment) {
+        return expression.findAll(ConditionalExpr.class).stream()
+                .filter(nested -> nested != expression)
+                .anyMatch(nested -> nested.getRange()
+                        .flatMap(nestedRange -> comment.getRange().map(
+                                commentRange -> commentRange.begin.isAfterOrEqual(nestedRange.begin)
+                                        && commentRange.begin.isBeforeOrEqual(nestedRange.end)
+                        ))
+                        .orElse(false));
+    }
+
+    private Doc conditionalConditionWithTrailingComment(Expression condition, Doc trailingComment) {
+        Doc trailing = trailingComment == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailingComment);
         return Doc.concat(expressionWithoutOwnCommentRenderer.apply(condition), trailing);
     }
 
-    private boolean conditionalQuestionCommentTrailsCondition(ConditionalExpr expression, Comment comment) {
-        return commentAppearsAfterOperator(
-            expression,
-            comment,
-            "?"
-        ) && CommentIndex.startsAfterNodeOnSameLine(expression.getCondition(), comment);
+    /**
+     * Reports whether a condition / {@code ?}-region comment trails the condition rather than leading the {@code ?}
+     * branch.
+     *
+     * <p>This is the flat {@code cond ? // x} shape: the comment begins after the {@code ?} token yet still on the
+     * condition's end line, so rendering it as a condition-trailing comment keeps it before the line break. A comment on
+     * its own line — before or after {@code ?} — or one inline before {@code ?} leads the {@code ?} branch instead. The
+     * predicate is the source-position equivalent of the previous "comment is after the {@code ?} operator and on the
+     * condition's end line" rule, so it preserves the {@code @default} classification while no longer depending on
+     * reconstructed column arithmetic.
+     */
+    private boolean conditionTrailsBeforeQuestionBranch(
+            ConditionalExpr expression,
+            Comment comment,
+            Optional<Position> questionPosition
+    ) {
+        return questionPosition
+                .filter(position -> CommentIndex.startsAfter(comment, position))
+                .map(position -> CommentIndex.startsAfterNodeOnSameLine(expression.getCondition(), comment))
+                .orElse(false);
+    }
+
+    /**
+     * Reports whether {@code comment} begins before {@code operatorPosition} in source order.
+     *
+     * <p>When the operator token position is unavailable (a missing range), the comment is treated as <em>not</em>
+     * before it, so a comment with no position falls into the same after-operator branch the previous column logic chose
+     * by default rather than being silently reclassified.
+     */
+    private boolean startsBeforeOperator(Comment comment, Optional<Position> operatorPosition) {
+        return operatorPosition.map(position -> CommentIndex.startsBefore(comment, position)).orElse(false);
+    }
+
+    /**
+     * Finds the source position of the ternary operator token (the {@code ?} or {@code :}) that sits in the source-order
+     * gap between two of the conditional's child expressions.
+     *
+     * <p>The {@code ?} is the only such token between the condition and the then expression, and the {@code :} the only
+     * one between the then and else expression, so scanning the conditional's token stream for the matching operator
+     * whose position lies strictly between {@code before}'s end and {@code after}'s begin pins the outer operator without
+     * confusing it with an operator from a nested conditional (those live inside a branch sub-range).
+     */
+    private Optional<Position> operatorPosition(
+            ConditionalExpr expression,
+            String operatorToken,
+            Expression before,
+            Expression after
+    ) {
+        Position lowerBound = before.getRange().map(range -> range.end).orElse(null);
+        Position upperBound = after.getRange().map(range -> range.begin).orElse(null);
+        if (lowerBound == null || upperBound == null) {
+            return Optional.empty();
+        }
+        return expression.getTokenRange()
+                .flatMap(tokenRange -> {
+                    for (JavaToken token : tokenRange) {
+                        if (!token.getText().equals(operatorToken)) {
+                            continue;
+                        }
+                        Position tokenBegin = token.getRange().map(range -> range.begin).orElse(null);
+                        if (tokenBegin != null && tokenBegin.isAfter(lowerBound) && tokenBegin.isBefore(upperBound)) {
+                            return Optional.of(tokenBegin);
+                        }
+                    }
+                    return Optional.empty();
+                });
     }
 
     /**
      * Prints one commented ternary branch after the surrounding classifier has decided whether the comment belongs
      * before or after the branch expression.
+     *
+     * <p>A branch can carry both a leading and a trailing comment at once when a whitespace perturbation re-buckets
+     * comments onto the branch's line; both are rendered so neither is lost. At the {@code @default} shape a branch never
+     * holds both, so this leaves the unperturbed layout untouched while keeping the perturbed shapes comment-complete.
      */
     private Doc conditionalCommentedBranch(
             String operatorToken,
             Expression branch,
-            Optional<Comment> leadingComment,
-            Optional<Comment> trailingComment
+            Doc leadingComment,
+            Doc trailingComment
     ) {
-        if (leadingComment.isPresent()) {
+        Doc trailing = trailingComment == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailingComment);
+        if (leadingComment != Doc.EMPTY) {
             return Doc.concat(
                 Doc.text(operatorToken + " "),
-                comments.comment(leadingComment.orElseThrow()),
+                leadingComment,
                 Doc.HARD_LINE,
                 Doc.text("  "),
-                expressionWithoutOwnCommentRenderer.apply(branch)
+                expressionWithoutOwnCommentRenderer.apply(branch),
+                trailing
             );
         }
-        Doc trailing = trailingComment.map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment))).orElse(
-            Doc.EMPTY
-        );
         return Doc.concat(Doc.text(operatorToken + " "), expressionWithoutOwnCommentRenderer.apply(branch), trailing);
     }
 
@@ -425,40 +600,6 @@ final class ConditionalExpressionPrinter {
         return Optional.empty();
     }
 
-    private boolean commentAppearsAfterColon(ConditionalExpr expression, Comment comment) {
-        return commentAppearsAfterOperator(expression, comment, ":");
-    }
-
-    private boolean commentAppearsAfterOperator(
-            ConditionalExpr expression,
-            Comment comment,
-            String operatorToken
-    ) {
-        return expression.getTokenRange()
-                .flatMap(tokenRange -> expression.getRange().flatMap(
-                        expressionRange -> comment.getRange().map(
-                            commentRange -> {
-                                List<String> lines = tokenRange.toString().lines().toList();
-                                int lineIndex = commentRange.begin.line - expressionRange.begin.line;
-                                if (lineIndex < 0 || lineIndex >= lines.size()) {
-                                    return false;
-                                }
-                                int column = lineIndex == 0
-                                    ? commentRange.begin.column - expressionRange.begin.column
-                                    : commentRange.begin.column - 1;
-                                if (column <= 0) {
-                                    return false;
-                                }
-                                String prefix = lines.get(lineIndex).substring(
-                                    0,
-                                    Math.min(column, lines.get(lineIndex).length())
-                                );
-                                return prefix.contains(operatorToken);
-                            }
-                        )
-                ))
-                .orElse(false);
-    }
 
     /**
      * Prints the ternary condition and chooses the binary wrapping shape for long binary conditions.

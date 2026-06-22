@@ -4,10 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.TestFormatterOptions;
+import dev.lanwen.frmtr.doc.DocExplanation.ConditionalGroupDecision;
 import dev.lanwen.frmtr.doc.DocExplanation.Decision;
+import dev.lanwen.frmtr.doc.DocExplanation.FillDecision;
 import dev.lanwen.frmtr.doc.DocExplanation.ForcedBreak;
 import dev.lanwen.frmtr.doc.DocExplanation.GroupDecision;
 import dev.lanwen.frmtr.doc.PrinterWrap;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 final class DocExplainRendererTest {
@@ -140,6 +143,102 @@ final class DocExplainRendererTest {
         // renderer-trace forced breaks they correspond to.
         assertThat(explanation.printerWraps()).containsExactly(wrap);
         assertThat(explanation.printerWrapLabels()).containsExactly("java.expression:MethodCallExpr");
+    }
+
+    @Test
+    void recordsPerSeparatorFillDecisionsWithWidthMath() {
+        // A fill packs greedily: the first separator still fits the line, the second runs out of room and breaks.
+        Doc fill = Doc.label(
+            "java.expression:Fill",
+            Doc.fill(List.of(
+                Doc.text("aaaa"),
+                Doc.LINE,
+                Doc.text("bbbb"),
+                Doc.LINE,
+                Doc.text("cccccccccccccc")
+            ))
+        );
+
+        DocExplanation explanation = explain(20, fill);
+
+        assertThat(explanation.fillDecisions()).singleElement().satisfies(decision -> {
+            assertThat(decision.label()).contains("java.expression:Fill");
+            assertThat(decision.anyBroke()).isTrue();
+            assertThat(decision.separators()).hasSize(2);
+
+            FillDecision.Separator first = decision.separators().get(0);
+            assertThat(first.index()).isEqualTo(1);
+            assertThat(first.decision()).isEqualTo(Decision.FLAT);
+            // "aaaa" reaches column 4; the separator+next content "( )bbbb" is 5 wide and fits the 16 left.
+            assertThat(first.startColumn()).isEqualTo(4);
+            assertThat(first.available()).isEqualTo(16);
+            assertThat(first.flatWidth()).isEqualTo(5);
+
+            FillDecision.Separator second = decision.separators().get(1);
+            assertThat(second.index()).isEqualTo(3);
+            assertThat(second.decision()).isEqualTo(Decision.BREAK);
+            // The flat run reached column 9, leaving only 11, but "( )cccccccccccccc" needs 15, so this separator breaks.
+            assertThat(second.startColumn()).isEqualTo(9);
+            assertThat(second.available()).isEqualTo(11);
+            assertThat(second.flatWidth()).isEqualTo(15);
+        });
+        assertThat(explanation.brokenFills()).containsExactly(explanation.fillDecisions().getFirst());
+    }
+
+    @Test
+    void recordsConditionalGroupChosenAlternativeWhenFirstFlatLayoutFits() {
+        Doc conditional = Doc.label(
+            "java.expression:Conditional",
+            Doc.conditionalGroup(List.of(Doc.text("short"), Doc.text("muchlongeralternativelayout")))
+        );
+
+        DocExplanation explanation = explain(40, conditional);
+
+        assertThat(explanation.conditionalGroupDecisions()).singleElement().satisfies(decision -> {
+            assertThat(decision.label()).contains("java.expression:Conditional");
+            assertThat(decision.chosenIndex()).isEqualTo(0);
+            assertThat(decision.chosenInBreakMode()).isFalse();
+            assertThat(decision.available()).isEqualTo(40);
+            // Probing stops at the first fit, so only the chosen alternative was measured.
+            assertThat(decision.alternatives()).singleElement().satisfies(alternative -> {
+                assertThat(alternative.index()).isEqualTo(0);
+                assertThat(alternative.fits()).isTrue();
+                assertThat(alternative.flatWidth()).isEqualTo("short".length());
+            });
+        });
+    }
+
+    @Test
+    void recordsConditionalGroupBreakModeFallbackAndEachProbedAlternative() {
+        // The first flat alternative does not fit the narrow budget and the last alternative contains a forced break,
+        // so the renderer falls back to the last alternative in break mode and every alternative was probed.
+        Doc conditional = Doc.label(
+            "java.expression:Conditional",
+            Doc.conditionalGroup(List.of(
+                Doc.text("aaaaaaaaaaaaaaaaaaaaaaaaa"),
+                Doc.concat(Doc.text("x"), Doc.HARD_LINE, Doc.text("y"))
+            ))
+        );
+
+        DocExplanation explanation = explain(20, conditional);
+
+        assertThat(explanation.conditionalGroupDecisions()).singleElement().satisfies(decision -> {
+            assertThat(decision.chosenIndex()).isEqualTo(1);
+            assertThat(decision.chosenInBreakMode()).isTrue();
+            assertThat(decision.available()).isEqualTo(20);
+            assertThat(decision.alternatives()).hasSize(2);
+
+            ConditionalGroupDecision.Alternative flatCandidate = decision.alternatives().get(0);
+            assertThat(flatCandidate.index()).isEqualTo(0);
+            assertThat(flatCandidate.fits()).isFalse();
+            assertThat(flatCandidate.flatWidth()).isEqualTo(25);
+
+            ConditionalGroupDecision.Alternative fallback = decision.alternatives().get(1);
+            assertThat(fallback.index()).isEqualTo(1);
+            assertThat(fallback.fits()).isFalse();
+            // The fallback contains a hard line break, so its flat width is the NO_FIT sentinel (negative).
+            assertThat(fallback.flatWidth()).isNegative();
+        });
     }
 
     @Test

@@ -13,7 +13,10 @@ import java.util.Optional;
  * terminal.
  *
  * <p>It captures the ways this formatter wraps a line. Width-driven wraps the renderer decided are {@link GroupDecision}s:
- * the renderer measured a {@link Doc.Group} and broke it because its flat width exceeded the columns left. Many
+ * the renderer measured a {@link Doc.Group} and broke it because its flat width exceeded the columns left. The greedy
+ * per-separator choices of a {@link Doc.Fill} are {@link FillDecision}s, and the alternative the renderer picked for a
+ * {@link Doc.ConditionalGroup} is a {@link ConditionalGroupDecision}; both carry the same kind of width arithmetic so
+ * those constructs can explain their layout too. Many
  * constructs developers debug (method chains, argument lists, ternaries, control conditions) are instead width-measured
  * by their Java printer and emitted as hard line breaks, so the renderer only sees a {@link ForcedBreak} and cannot
  * report the arithmetic. For those, the printers record their own decision as a {@link PrinterWrap}, which carries the
@@ -23,12 +26,16 @@ import java.util.Optional;
 public record DocExplanation(
     int lineWidth,
     List<GroupDecision> decisions,
+    List<FillDecision> fillDecisions,
+    List<ConditionalGroupDecision> conditionalGroupDecisions,
     List<ForcedBreak> forcedBreaks,
     List<PrinterWrap> printerWraps,
     Node tree
 ) {
     public DocExplanation {
         decisions = List.copyOf(decisions);
+        fillDecisions = List.copyOf(fillDecisions);
+        conditionalGroupDecisions = List.copyOf(conditionalGroupDecisions);
         forcedBreaks = List.copyOf(forcedBreaks);
         printerWraps = List.copyOf(printerWraps);
     }
@@ -47,6 +54,14 @@ public record DocExplanation(
      */
     public List<GroupDecision> brokenGroups() {
         return decisions.stream().filter(decision -> decision.decision() == Decision.BREAK).toList();
+    }
+
+    /**
+     * Returns only the fills that broke at least one separator across lines, in render order. These are the fill layouts
+     * a developer debugging an unexpected wrap usually cares about.
+     */
+    public List<FillDecision> brokenFills() {
+        return fillDecisions.stream().filter(FillDecision::anyBroke).toList();
     }
 
     /**
@@ -95,6 +110,90 @@ public record DocExplanation(
         public String ruleName() {
             return DocExplanation.ruleName(label);
         }
+    }
+
+    /**
+     * A {@link Doc.Fill}'s greedy per-separator layout, with the width arithmetic behind each separator's FLAT/BREAK
+     * choice.
+     *
+     * <p>A fill packs an alternating {@code [content, separator, …]} list greedily: it keeps each separator flat while
+     * the separator together with the content that follows it still fits the columns left, and breaks only that one
+     * separator otherwise. Because every separator is decided independently against the column it reaches, a fill is one
+     * construct holding several sub-decisions, modelled here as a list of {@link Separator} entries rather than as N
+     * unrelated decisions. {@code label} is the nearest enclosing {@link Doc.Label} rule provenance, absent for an
+     * unlabeled structural fill.
+     */
+    public record FillDecision(Optional<String> label, List<Separator> separators) {
+        public FillDecision {
+            separators = List.copyOf(separators);
+        }
+
+        public String ruleName() {
+            return DocExplanation.ruleName(label);
+        }
+
+        /**
+         * Whether any separator in this fill broke across lines.
+         */
+        public boolean anyBroke() {
+            return separators.stream().anyMatch(separator -> separator.decision() == Decision.BREAK);
+        }
+
+        /**
+         * One separator in a {@link Doc.Fill} and the arithmetic that decided it.
+         *
+         * <p>{@code index} is the separator's position in the fill's part list (separators sit at odd indices).
+         * {@code flatWidth} is the single-line width of the separator plus the content that immediately follows it — the
+         * span the fill measures to decide whether to keep this separator flat — and {@code available} is the columns
+         * left ({@code lineWidth - startColumn}) when the renderer reached it, having advanced past the preceding
+         * content from {@code startColumn}. The separator stays {@link Decision#FLAT} when {@code flatWidth} fits
+         * {@code available} and {@link Decision#BREAK} otherwise.
+         */
+        public record Separator(
+            int index,
+            Decision decision,
+            int flatWidth,
+            int available,
+            int startColumn
+        ) {}
+    }
+
+    /**
+     * A {@link Doc.ConditionalGroup}'s alternative selection and the fit measurements behind it.
+     *
+     * <p>A conditional group holds an ordered list of layout alternatives, most-flat first, and renders the first whose
+     * flat layout fits the columns left; if none fit, it falls back to the last alternative laid out in break mode.
+     * {@code chosenIndex} is the selected alternative and {@code chosenInBreakMode} distinguishes the two reasons: false
+     * when an earlier alternative fit flat, true when nothing fit and the last alternative was taken as the break-mode
+     * fallback. Each probed {@link Alternative} carries its own flat width and whether it fit, so the explanation can
+     * show why earlier (narrower) alternatives were skipped. {@code label} is the nearest enclosing rule provenance,
+     * absent for an unlabeled structural conditional group.
+     */
+    public record ConditionalGroupDecision(
+        Optional<String> label,
+        int chosenIndex,
+        boolean chosenInBreakMode,
+        int available,
+        int startColumn,
+        List<Alternative> alternatives
+    ) {
+        public ConditionalGroupDecision {
+            alternatives = List.copyOf(alternatives);
+        }
+
+        public String ruleName() {
+            return DocExplanation.ruleName(label);
+        }
+
+        /**
+         * One probed alternative in a {@link Doc.ConditionalGroup}.
+         *
+         * <p>{@code index} is its position in the alternative list, {@code flatWidth} its single-line width (or
+         * {@link DocWidths#NO_FIT} when it contains a forced break), and {@code fits} whether that flat width fit the
+         * columns left. Probing stops at the first alternative that fits, so alternatives after the chosen one are not
+         * measured and do not appear here.
+         */
+        public record Alternative(int index, int flatWidth, boolean fits) {}
     }
 
     /**

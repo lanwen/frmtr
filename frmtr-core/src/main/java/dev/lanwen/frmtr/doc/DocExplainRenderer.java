@@ -1,7 +1,9 @@
 package dev.lanwen.frmtr.doc;
 
 import dev.lanwen.frmtr.FormatterOptions;
+import dev.lanwen.frmtr.doc.DocExplanation.ConditionalGroupDecision;
 import dev.lanwen.frmtr.doc.DocExplanation.Decision;
+import dev.lanwen.frmtr.doc.DocExplanation.FillDecision;
 import dev.lanwen.frmtr.doc.DocExplanation.ForcedBreak;
 import dev.lanwen.frmtr.doc.DocExplanation.GroupDecision;
 import dev.lanwen.frmtr.doc.DocExplanation.Node;
@@ -50,6 +52,8 @@ public final class DocExplainRenderer {
         return new DocExplanation(
             lineWidth,
             List.copyOf(trace.decisions),
+            List.copyOf(trace.fillDecisions),
+            List.copyOf(trace.conditionalGroupDecisions),
             List.copyOf(trace.forcedBreaks),
             List.copyOf(printerWraps),
             root.freeze()
@@ -67,6 +71,10 @@ public final class DocExplainRenderer {
     private final class Trace {
 
         private final List<GroupDecision> decisions = new ArrayList<>();
+
+        private final List<FillDecision> fillDecisions = new ArrayList<>();
+
+        private final List<ConditionalGroupDecision> conditionalGroupDecisions = new ArrayList<>();
 
         private final List<ForcedBreak> forcedBreaks = new ArrayList<>();
 
@@ -98,6 +106,7 @@ public final class DocExplainRenderer {
                 case Doc.Fill fill -> {
                     Builder structural = Builder.structural();
                     List<Doc> parts = fill.parts();
+                    List<FillDecision.Separator> separatorDecisions = new ArrayList<>();
                     if (!parts.isEmpty()) {
                         structural.add(render(parts.getFirst(), indent, Mode.FLAT, enclosingLabel));
                         for (int i = 1; i + 1 < parts.size(); i += 2) {
@@ -106,13 +115,28 @@ public final class DocExplainRenderer {
                             // Decide each separator through the shared DocWidths.separatorFitsFlat helper that
                             // DocRenderer.renderFill also calls, so the column cursor advances identically: the mode is
                             // decided from the column reached after the preceding content, then the next content renders
-                            // flat.
-                            Mode separatorMode = widths.separatorFitsFlat(separator, nextContent, lineWidth - column)
-                                ? Mode.FLAT
-                                : Mode.BREAK;
+                            // flat. Record the arithmetic behind that choice — the column reached after the preceding
+                            // content, the flat width of concat(separator, nextContent) the helper measures, and the
+                            // columns left — before the separator advances the cursor, so a recorded BREAK reflects the
+                            // budget the renderer actually weighed.
+                            int available = lineWidth - column;
+                            int separatorFlatWidth = widths.flatWidth(Doc.concat(separator, nextContent));
+                            boolean fitsFlat = widths.separatorFitsFlat(separator, nextContent, available);
+                            Mode separatorMode = fitsFlat ? Mode.FLAT : Mode.BREAK;
+                            separatorDecisions.add(new FillDecision.Separator(
+                                i,
+                                fitsFlat ? Decision.FLAT : Decision.BREAK,
+                                separatorFlatWidth,
+                                available,
+                                column
+                            ));
                             structural.add(render(separator, indent, separatorMode, enclosingLabel));
                             structural.add(render(nextContent, indent, Mode.FLAT, enclosingLabel));
                         }
+                    }
+                    if (!separatorDecisions.isEmpty()) {
+                        Optional<String> label = enclosingLabel == null ? Optional.empty() : enclosingLabel.label;
+                        fillDecisions.add(new FillDecision(label, separatorDecisions));
                     }
                     return structural;
                 }
@@ -124,15 +148,35 @@ public final class DocExplainRenderer {
                     Builder structural = Builder.structural();
                     List<Doc> alternatives = conditionalGroup.alternatives();
                     if (!alternatives.isEmpty()) {
+                        int available = lineWidth - column;
+                        int startColumn = column;
                         int chosen = alternatives.size() - 1;
                         Mode chosenMode = Mode.BREAK;
+                        // Probe alternatives in order, recording each one's flat width and whether it fit, so the trace
+                        // can show why earlier (narrower) alternatives were skipped. Probing stops at the first fit, so
+                        // alternatives after the chosen one are never measured and are intentionally absent.
+                        List<ConditionalGroupDecision.Alternative> probed = new ArrayList<>();
                         for (int i = 0; i < alternatives.size(); i++) {
-                            if (widths.fits(alternatives.get(i), lineWidth - column)) {
+                            boolean fits = widths.fits(alternatives.get(i), available);
+                            probed.add(new ConditionalGroupDecision.Alternative(
+                                i,
+                                widths.flatWidth(alternatives.get(i)),
+                                fits
+                            ));
+                            if (fits) {
                                 chosen = i;
                                 chosenMode = Mode.FLAT;
                                 break;
                             }
                         }
+                        conditionalGroupDecisions.add(new ConditionalGroupDecision(
+                            enclosingLabel == null ? Optional.empty() : enclosingLabel.label,
+                            chosen,
+                            chosenMode == Mode.BREAK,
+                            available,
+                            startColumn,
+                            probed
+                        ));
                         structural.add(render(alternatives.get(chosen), indent, chosenMode, enclosingLabel));
                     }
                     return structural;

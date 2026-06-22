@@ -99,6 +99,15 @@ record JavaCommentTrivia(Comment comment) {
     }
 
     /**
+     * Reports whether the comment sits in the source-order gap between {@code previous} and {@code next}, i.e. it begins
+     * after {@code previous} ends and before {@code next} begins. See {@link CommentIndex#liesBetween(Comment, Node,
+     * Node)} for why gap-between-siblings ownership is source-order rather than source-line based.
+     */
+    boolean liesBetween(Node previous, Node next) {
+        return CommentIndex.liesBetween(comment, previous, next);
+    }
+
+    /**
      * Reports whether the comment begins on the source line where {@code node} begins.
      */
     boolean startsOnBeginLine(Node node) {

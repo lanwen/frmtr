@@ -210,28 +210,43 @@ final class JavaCommentPlacementPolicy {
     }
 
     /**
-     * Finds line comments whose source lines sit between two neighboring nodes inside {@code container}.
+     * Finds line comments that sit in the source-order gap between two neighboring nodes inside {@code container}.
      *
-     * <p>The comparison is intentionally line-based, matching the previous binary-expression behavior that preserved
-     * comments in the gap between adjacent operands without making column ownership part of the rule.
+     * <p>This is the gap-between-siblings <em>ownership</em> query: which line comments belong to the slot between
+     * {@code previous} and {@code next} (call arguments, record components, resources, operands, …). It is deliberately
+     * source-order based (see {@link CommentIndex#liesBetween(Comment, Node, Node)}) rather than keyed on the
+     * {@code begin.line >= previous.end.line && begin.line < next.begin.line} source-line window the gap printers used
+     * before: that window broke when a whitespace perturbation moved a {@code arg(), // note} trailing comment onto the
+     * line below its argument even though the AST was unchanged, so the comment fell out of every sibling slot and was
+     * dropped. The source-order test is a strict superset at the {@code @default} shape — a comment genuinely on the gap
+     * lines selects the same owner under both — so re-pointing ownership here does not move {@code @default} output.
+     * Callers still own how a recovered comment renders (inline {@code lineSuffix} when it trails a sibling on the
+     * sibling's printed line versus on its own gap line); that rendering choice stays line-based at the call sites.
      */
     List<JavaCommentTrivia> lineCommentsBetween(Node container, Node previous, Node next) {
         int previousLine = CommentIndex.endLine(previous, Integer.MIN_VALUE);
-        int nextLine = CommentIndex.beginLine(next, Integer.MAX_VALUE);
         return sourceOrderedDistinct(
             java.util.stream.Stream.concat(
-                lineCommentsInRange(container, previousLine, nextLine).stream(),
+                containedLineCommentsBetween(container, previous, next).stream(),
                 java.util.stream.Stream.concat(
                     ownComment(next, JavaCommentTrivia::isLine)
-                            .filter(comment -> comment.beginLine(Integer.MAX_VALUE) >= previousLine)
-                            .filter(comment -> comment.beginLine(Integer.MAX_VALUE) < nextLine)
+                            .filter(comment -> comment.liesBetween(previous, next))
                             .stream(),
                     leadingContentCluster(container, previousLine, next)
                             .stream()
-                            .filter(comment -> comment.beginLine(Integer.MAX_VALUE) >= previousLine)
+                            .filter(comment -> comment.startsAfterEndOf(previous))
                 )
             ).toList()
         );
+    }
+
+    private List<JavaCommentTrivia> containedLineCommentsBetween(Node container, Node previous, Node next) {
+        return containedComments(container)
+                .stream()
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.liesBetween(previous, next))
+                .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
+                .toList();
     }
 
     /**

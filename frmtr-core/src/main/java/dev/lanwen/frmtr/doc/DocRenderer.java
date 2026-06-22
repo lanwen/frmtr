@@ -130,9 +130,10 @@ public final class DocRenderer {
      * layout fits the space left on the current line and rendering it flat; if no alternative fits, the last is rendered
      * in break mode as the unconditional fallback. This mirrors the {@link Doc.Group} fit decision but over an ordered
      * list of candidates: each candidate is probed with the shared {@link DocWidths} authority (the same question a group
-     * asks itself), so a conditional group composes with the renderer's memoized, bounded width measurement and resolves
-     * to exactly the layout a printer's {@code Optional<Doc>} width-probe chain would have selected. An empty alternative
-     * list renders nothing.
+     * asks itself), so a conditional group composes with the renderer's memoized, bounded width measurement. Because
+     * every non-last alternative is chosen purely by flat fit, an alternative containing a forced break never fits and is
+     * skipped, so only the last alternative is reachable as a broken layout (see {@link Doc#conditionalGroup}). The
+     * factory rejects an empty list, so this walk always has at least one alternative to fall back on.
      */
     private void renderConditionalGroup(List<Doc> alternatives, int indent, DocWidths.Measurement widths) {
         if (alternatives.isEmpty()) {

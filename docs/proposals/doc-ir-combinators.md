@@ -1,6 +1,37 @@
 # Enrich the Doc IR with the combinators printers are faking today
 
-Status: Proposed
+Status: Implemented — see [Outcomes](#outcomes)
+
+## Outcomes
+
+All four proposed primitives landed on `main`, plus group identity:
+
+- **`LineSuffix`**, **`BreakParent`**, **`Fill`**, **`ConditionalGroup`**, and the optional `Group`/`IfBreak` `groupId`
+  are implemented in `Doc` with renderer (`DocRenderer`), width (`DocWidths`), debug (`DocDebugRenderer`), and explain
+  (`DocExplainRenderer`) support. `Fill` validates its alternating shape (rejecting a non-empty even-length list) and
+  `ConditionalGroup` rejects an empty alternative list; both have focused `DocRendererTest` coverage.
+- **`LineSuffix` was adopted broadly**, retiring the trailing-comment placement coupling as planned: the enum constant
+  trailing comment is now a `Doc.lineSuffix(...)` (see `EnumConstantComments` / `EnumDeclarationPrinter`), and
+  `RecordDeclarationPrinter`, `CommentedExpressionListPrinter`, `ControlConditionPrinter`, `StatementPrinter`, and
+  `MethodCallChainPrinter` route their trailing comments through it as well. **`BreakParent`** has one consumer
+  (`RecordDeclarationPrinter`).
+- **`Fill`'s first (and so far only) Java-printer consumer is `ThrowsClausePrinter`**, which greedily packs an overflowing
+  `throws ...` exception list across continuation lines instead of emitting it as one unbreakable `Doc.text` blob.
+- **The chain-collapse goal was NOT achieved and is not achievable.** Replacing `MethodCallChainPrinter`'s `Optional<Doc>`
+  dispatch (and the `LayoutWidth` probes that feed it) with `ConditionalGroup` is neither byte-identical nor expressible:
+  - **Not byte-identical.** The chain probes measure *flattened strings* at fixed-indent baselines and at source columns
+    (`LayoutWidth`, `range.begin.column`), whereas `ConditionalGroup` measures *flat fit at the actual output column*
+    via `DocWidths`. The two measurements disagree, so swapping in `ConditionalGroup` would move break points and change
+    golden output.
+  - **Not expressible.** The chain ranks *multiple broken layouts* and selects among them on structural/source
+    predicates; `ConditionalGroup` is Prettier-shaped — N flat candidates plus exactly one final broken fallback,
+    chosen purely by flat fit, with no predicate gating. It cannot rank two broken layouts against each other.
+  - Therefore `MethodCallChainPrinter`'s `Optional<Doc>` dispatch and `LayoutWidth` **stay**; `ConditionalGroup` is an
+    additive primitive with no Java-printer consumer yet.
+- **Enum-constant `Fill` packing was declined.** Reflowing enum constants to pack as many per line as fit is an
+  opinionated layout that conflicts with frmtr's source-shape-preservation bias (it would discard the author's
+  one-constant-per-line intent), so it was not pursued. `LineSuffix` still removes the enum comma/comment coupling
+  independently of any packing decision.
 
 ## Summary
 

@@ -144,29 +144,67 @@ public sealed interface Doc
      * many items on a line as fit and wraps only where needed — the layout array elements, argument lists, and similar
      * sequences want.
      *
-     * <p>The list alternates content and separator starting and ending with content; an empty list renders nothing and a
-     * single-element list renders just that content. Choosing the separators (a comma plus {@link #LINE}, a bare
-     * {@link #LINE}, etc.) and where break-vs-flat should glue is left to the caller, because a fill only decides whether
-     * each supplied separator lands flat or broken — it does not invent separators of its own.
+     * <p>The list alternates content and separator starting and ending with content, so a well-formed list is empty or
+     * has odd length; an empty list renders nothing and a single-element list renders just that content. Choosing the
+     * separators (a comma plus {@link #LINE}, a bare {@link #LINE}, etc.) and where break-vs-flat should glue is left to
+     * the caller, because a fill only decides whether each supplied separator lands flat or broken — it does not invent
+     * separators of its own.
+     *
+     * <p>A non-empty even-length list is rejected: it ends with a trailing separator that the renderer's pairwise walk
+     * never reaches, so the separator would be silently dropped (the same data-loss footgun fixed in {@code 0332c16c}).
+     * The factory fails fast rather than emit output that quietly differs from the list handed in.
+     *
+     * @throws IllegalArgumentException if {@code parts} is non-empty with an even number of elements (a trailing
+     *     separator with no following content)
      */
     static Doc fill(List<Doc> parts) {
+        if (!parts.isEmpty() && parts.size() % 2 == 0) {
+            throw new IllegalArgumentException(
+                "fill parts must alternate [content, separator, content, …] (empty or odd length), but got an "
+                    + "even-length list of size " + parts.size() + " ending with a trailing separator"
+            );
+        }
         return new Fill(List.copyOf(parts));
     }
 
     /**
-     * Picks the first alternative whose flat-or-break layout fits the space left on the current line, falling back to the
-     * last alternative when none fit. This is the IR form of the {@code Optional<Doc>} "try layout A, else B, else C"
-     * fallback chains printers hand-roll: instead of a printer probing widths and returning the first non-empty
-     * candidate, it hands the renderer an ordered list of alternatives and lets the renderer's own fit measurement pick.
+     * Builds a Prettier-style conditional group: an ordered list of layout alternatives where the renderer selects the
+     * <em>first alternative whose flat layout fits</em> the space left on the current line and renders it flat, falling
+     * back to the <em>last</em> alternative rendered in break mode when none fit. The order encodes preference, and the
+     * caller owns supplying alternatives and guaranteeing the final one is a layout that always works at any width; the
+     * renderer only chooses among what it is given and never invents a new layout.
      *
-     * <p>An alternative is accepted when it fits flat on the remaining width and renders flat; otherwise the next is
-     * tried, and the last alternative is the unconditional fallback rendered in break mode. The order encodes preference
-     * (most compact first, most broken last), so the caller owns ranking the layouts and ensuring the final one is a
-     * layout that always works at any width — the renderer only chooses among what it is given and never invents a new
-     * layout. An empty list renders nothing. For width purposes an enclosing group measures a conditional group by its
-     * first (most-flat) alternative, the same representative-width convention Prettier uses.
+     * <p>Because every non-last alternative is selected purely by flat fit, <strong>only the last alternative may be a
+     * broken/multi-line layout.</strong> A non-last alternative that contains a forced break ({@link HardLine} or
+     * {@link #BREAK_PARENT}) can never fit flat, so the renderer always skips it: such an alternative is dead. The first
+     * alternative must additionally be the <em>narrowest</em> flat layout, because an enclosing {@link Group} sizes the
+     * whole conditional group by its first alternative (see {@link DocWidths}); reporting the first alternative's width is
+     * a safe over-estimate for the group only when no later alternative is narrower.
+     *
+     * <p>This invariant is documented rather than asserted here: detecting "contains a forced break" in this factory
+     * would require calling into {@link DocWidths}/{@code DocRenderer}, inverting the {@code Doc} → renderer layering
+     * into a circular dependency. The renderer naturally renders a malformed group as if the dead alternative were
+     * absent, so the cost of violating the invariant is a silently-ignored alternative, not incorrect output.
+     *
+     * <p>A singleton list is valid and degenerate: with one alternative there is nothing to choose, so it is simply an
+     * unconditional fallback rendered flat when it fits and broken otherwise (identical to wrapping that one layout in a
+     * {@link #group(Doc)}). An empty list is rejected: "render nothing" is never a valid layout-choice intent, and an
+     * empty conditional group is almost always a construction bug; use {@link #EMPTY} to render nothing deliberately.
+     *
+     * <p>This does <em>not</em> subsume the predicate-gated {@code Optional<Doc>} layout dispatch that printers such as
+     * {@code MethodCallChainPrinter} hand-roll: that chain selects on source/structural predicates and ranks multiple
+     * <em>broken</em> layouts, whereas a conditional group ranks N flat candidates plus one final broken fallback and
+     * chooses purely by flat fit at the actual output column. For width purposes an enclosing group measures a
+     * conditional group by its first (most-flat) alternative, the same representative-width convention Prettier uses.
+     *
+     * @throws IllegalArgumentException if {@code alternatives} is empty
      */
     static Doc conditionalGroup(List<Doc> alternatives) {
+        if (alternatives.isEmpty()) {
+            throw new IllegalArgumentException(
+                "conditionalGroup requires at least one alternative; 'render nothing' is not a valid layout choice"
+            );
+        }
         return new ConditionalGroup(List.copyOf(alternatives));
     }
 

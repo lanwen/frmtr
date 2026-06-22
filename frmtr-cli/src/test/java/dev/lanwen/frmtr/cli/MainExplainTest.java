@@ -139,6 +139,34 @@ final class MainExplainTest {
     }
 
     @Test
+    void explainReportsWidthDrivenFillSeparatorBreakWithArithmetic() {
+        // A long throws clause is laid out as a Doc.Fill: it packs exceptions greedily and breaks only the separator
+        // that overflows. The explain trace surfaces that per-separator break with real width arithmetic rather than as
+        // an opaque forced break.
+        Result result = run(
+            Path.of("."),
+            "class A{void m() throws ValidationException, TransportException, RetryableException, TimeoutException,"
+                + " AuthorizationException, ConflictException, AuditException {}}",
+            "--stdin",
+            "--explain",
+            "--line-width",
+            "60",
+            "--color",
+            "never"
+        );
+
+        assertThat(result.exitCode()).isZero();
+        String why = whySection(result.out());
+        // The fill reports how many separators broke and the width math for the one that overflowed.
+        assertThat(why)
+                .contains("separators broke")
+                .contains("flat width")
+                .contains("available")
+                .contains("from column");
+        assertThat(result.err()).isEmpty();
+    }
+
+    @Test
     void explainReportsNothingWrappedWhenSourceFitsOnOneLine() {
         Result result = run(Path.of("."), "class A{}", "--stdin", "--explain", "--color", "never");
 

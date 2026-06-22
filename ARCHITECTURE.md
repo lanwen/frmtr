@@ -189,7 +189,13 @@ rendering.
 `DocExplainRenderer` re-walks a document with the same `DocWidths` fit logic and column accounting as `DocRenderer` to
 trace why each line laid out as it did, producing the presentation-free `DocExplanation` model. It records the
 renderer's own width-driven `Group` breaks (with flat width, columns available, and start column) and the forced hard
-line breaks a Java printer emitted as policy, attributing each forced break to the nearest enclosing rule label.
+line breaks a Java printer emitted as policy, attributing each forced break to the nearest enclosing rule label. It
+records the other two width-deciding primitives with the same arithmetic: a `Fill`'s greedy per-separator FLAT/BREAK
+choices as a `FillDecision` (one entry per separator, each carrying the flat width of `separator + next content`, the
+columns left, and the column the separator started at), and a `ConditionalGroup`'s alternative selection as a
+`ConditionalGroupDecision` (the chosen index, whether it was the break-mode fallback, and each probed alternative's flat
+width and fit so the report can show why earlier alternatives were skipped). The CLI surfaces broken fills and break-mode
+conditional groups in the same width-break wording as group breaks.
 
 The renderer trace alone, however, cannot honestly explain the wraps developers debug most. Method chains, argument
 lists, ternaries, and control conditions are pre-measured by their Java printers and emitted as `Doc.HardLine`s, so the

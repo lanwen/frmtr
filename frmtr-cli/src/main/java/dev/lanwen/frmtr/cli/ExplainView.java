@@ -2,7 +2,9 @@ package dev.lanwen.frmtr.cli;
 
 import dev.lanwen.frmtr.ExplainResult;
 import dev.lanwen.frmtr.doc.DocExplanation;
+import dev.lanwen.frmtr.doc.DocExplanation.ConditionalGroupDecision;
 import dev.lanwen.frmtr.doc.DocExplanation.Decision;
+import dev.lanwen.frmtr.doc.DocExplanation.FillDecision;
 import dev.lanwen.frmtr.doc.DocExplanation.ForcedBreak;
 import dev.lanwen.frmtr.doc.DocExplanation.GroupDecision;
 import dev.lanwen.frmtr.doc.DocExplanation.Node;
@@ -86,10 +88,18 @@ final class ExplainView {
                 .stream()
                 .filter(decision -> !decision.forcedBreak())
                 .toList();
-        boolean hasMeasuredReason = !printerWraps.isEmpty() || !rendererBreaks.isEmpty();
+        List<FillDecision> brokenFills = explanation.brokenFills();
+        List<ConditionalGroupDecision> brokenConditionalGroups = explanation.conditionalGroupDecisions()
+                .stream()
+                .filter(ConditionalGroupDecision::chosenInBreakMode)
+                .toList();
+        boolean hasMeasuredReason = !printerWraps.isEmpty()
+            || !rendererBreaks.isEmpty()
+            || !brokenFills.isEmpty()
+            || !brokenConditionalGroups.isEmpty();
         List<ForcedBreak> causalForced = causalForcedBreaks(explanation, hasMeasuredReason);
 
-        if (printerWraps.isEmpty() && rendererBreaks.isEmpty() && causalForced.isEmpty()) {
+        if (!hasMeasuredReason && causalForced.isEmpty()) {
             out.append("  ")
                     .append(styler.style(Role.FLAT, "Nothing wrapped"))
                     .append(" — everything fit within ")
@@ -103,6 +113,12 @@ final class ExplainView {
         }
         for (GroupDecision decision : rendererBreaks) {
             appendRendererWidthBreak(out, decision);
+        }
+        for (FillDecision fill : brokenFills) {
+            appendFillBreak(out, fill);
+        }
+        for (ConditionalGroupDecision conditionalGroup : brokenConditionalGroups) {
+            appendConditionalGroupBreak(out, conditionalGroup);
         }
         for (ForcedBreak forcedBreak : causalForced) {
             appendCausalForcedBreak(out, forcedBreak);
@@ -225,6 +241,86 @@ final class ExplainView {
                 .append('\n');
         if (verbose) {
             out.append("    ").append(styler.style(Role.FADE, decision.label().orElse("group"))).append('\n');
+        }
+    }
+
+    /**
+     * Renders a {@link FillDecision} whose greedy packing broke at least one separator, reusing the same width-break
+     * wording as a renderer group: one {@code flat width N > W available (from column C)} line per separator that broke,
+     * so the developer sees which packing step ran out of room and by how much.
+     */
+    private void appendFillBreak(StringBuilder out, FillDecision fill) {
+        long brokenCount = fill.separators().stream()
+                .filter(separator -> separator.decision() == Decision.BREAK)
+                .count();
+        out.append("  ")
+                .append(styler.style(Role.LABEL, friendlyLabel(fill.label().orElse("fill"))))
+                .append(" wrapped")
+                .append(styler.style(Role.FADE, " (" + brokenCount + " of " + fill.separators().size()
+                        + " separators broke)"))
+                .append(":\n");
+        for (FillDecision.Separator separator : fill.separators()) {
+            if (separator.decision() != Decision.BREAK) {
+                continue;
+            }
+            // A negative flat width is the forced-break sentinel: the separator's following content contains a hard
+            // line break, so it could never have stayed flat regardless of width.
+            if (separator.flatWidth() < 0) {
+                out.append("    ")
+                        .append(styler.style(Role.FADE, "forced (contains a hard line break)"))
+                        .append('\n');
+            } else {
+                out.append("    flat width ")
+                        .append(styler.style(Role.NUMBER, separator.flatWidth() + ""))
+                        .append(" > ")
+                        .append(styler.style(Role.NUMBER, separator.available() + ""))
+                        .append(" available")
+                        .append(styler.style(Role.FADE, " (from column " + separator.startColumn() + ")"))
+                        .append('\n');
+            }
+        }
+        if (verbose) {
+            out.append("    ").append(styler.style(Role.FADE, fill.label().orElse("fill"))).append('\n');
+        }
+    }
+
+    /**
+     * Renders a {@link ConditionalGroupDecision} that fell back to its break-mode last alternative because no flatter
+     * alternative fit. Reports the chosen alternative and each probed alternative's flat width against the columns left,
+     * so the developer sees why the narrower layouts were skipped, in the same width wording as a group break.
+     */
+    private void appendConditionalGroupBreak(StringBuilder out, ConditionalGroupDecision conditionalGroup) {
+        out.append("  ")
+                .append(styler.style(Role.LABEL, friendlyLabel(conditionalGroup.label().orElse("conditional group"))))
+                .append(" wrapped")
+                .append(
+                    styler.style(
+                        Role.FADE,
+                        " (no alternative fit, used alternative " + conditionalGroup.chosenIndex()
+                            + " in break mode)"
+                    )
+                )
+                .append(":\n");
+        for (ConditionalGroupDecision.Alternative alternative : conditionalGroup.alternatives()) {
+            out.append("    alternative ").append(styler.style(Role.NUMBER, alternative.index() + ""));
+            // A negative flat width is the forced-break sentinel: the alternative contains a hard line break and can
+            // never lay out flat, so report it as forced rather than printing a meaningless huge negative number.
+            if (alternative.flatWidth() < 0) {
+                out.append(": ").append(styler.style(Role.FADE, "forced (contains a hard line break)"));
+            } else {
+                out.append(": flat width ")
+                        .append(styler.style(Role.NUMBER, alternative.flatWidth() + ""))
+                        .append(alternative.fits() ? " <= " : " > ")
+                        .append(styler.style(Role.NUMBER, conditionalGroup.available() + ""))
+                        .append(" available")
+                        .append(styler.style(Role.FADE, " (from column " + conditionalGroup.startColumn() + ")"));
+            }
+            out.append('\n');
+        }
+        if (verbose) {
+            out.append("    ")
+                    .append(styler.style(Role.FADE, conditionalGroup.label().orElse("conditional group")))
+                    .append('\n');
         }
     }
 

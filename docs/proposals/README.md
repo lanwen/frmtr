@@ -7,6 +7,9 @@ This is the umbrella proposal. It states the strategic direction and tracks a se
 improvements grouped by leverage (Big / Middle / Small). Items that warrant a dedicated design
 investigation link out to a focused proposal in this directory.
 
+**Backlog:** outstanding follow-ups consolidated from merged-PR checklists, per-proposal future
+work, the `KNOWN_DROPS` list, and a stranded-branch sweep live in [`follow-ups.md`](follow-ups.md).
+
 ## Status legend
 
 | Status | Meaning |
@@ -332,6 +335,7 @@ Drafted for this roadmap:
 | M2 | Linear-time renderer | [linear-time-doc-renderer.md](linear-time-doc-renderer.md) |
 | M3 | Parallelism + caching | [multi-file-parallelism-and-caching.md](multi-file-parallelism-and-caching.md) |
 | M4 | LSP / editor integration | [lsp-editor-integration.md](lsp-editor-integration.md) |
+| — | Consolidated outstanding follow-ups backlog | [follow-ups.md](follow-ups.md) |
 
 Pre-existing, related:
 

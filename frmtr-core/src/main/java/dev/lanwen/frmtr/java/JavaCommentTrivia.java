@@ -91,6 +91,14 @@ record JavaCommentTrivia(Comment comment) {
     }
 
     /**
+     * Reports whether the comment begins after {@code node} ends in source order, i.e. it trails the node's last token
+     * regardless of how whitespace lays the two out. See {@link CommentIndex#startsAfterEndOf(Node, Comment)}.
+     */
+    boolean startsAfterEndOf(Node node) {
+        return CommentIndex.startsAfterEndOf(node, comment);
+    }
+
+    /**
      * Reports whether the comment begins on the source line where {@code node} begins.
      */
     boolean startsOnBeginLine(Node node) {

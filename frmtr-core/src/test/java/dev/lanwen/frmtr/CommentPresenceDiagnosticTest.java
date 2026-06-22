@@ -126,9 +126,6 @@ final class CommentPresenceDiagnosticTest {
         // is the B1 SourceShapePolicy consolidation rather than a local printer patch.
         drops.put("comment-preservation-try-resources @ expanded",
             "needs B1 (try-resource): \"resource scope {\", \"single resource scope {\" (opener comment after `(`)");
-        drops.put("try-resource-layout @ expanded",
-            "needs B1 (try-resource): \"a\", \"b\", \"c\", \"a2\", \"b2\", \"c2\" (per-clause try/catch/finally trailing"
-                + " comments)");
 
         // method-arguments -- needs B1. The remaining @ expanded drops are gap comments between arguments that move
         // off their anchor line under expand; the trailing-argument case is fixed (block-orphan-method-call-comments).

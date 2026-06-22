@@ -66,6 +66,24 @@ final class CommentTracker {
                 .orElse(Doc.EMPTY);
     }
 
+    /**
+     * Claims and renders the line comments that trail {@code body} but were parked as an orphan of {@code owner}.
+     *
+     * <p>This is the orphan-bucket counterpart of {@link #trailingLineComment(Node)}: the try-clause handoff uses it to
+     * recover a clause body's trailing comment when a whitespace shape moved it off the brace line, so JavaParser left it
+     * as a {@code try}-statement orphan instead of the body's own trivia. See
+     * {@link JavaCommentPlacementPolicy#trailingLineCommentsAfter(Node, Node, java.util.Optional)}.
+     */
+    Doc trailingLineCommentsAfter(Node owner, Node body, java.util.Optional<? extends Node> nextStructural) {
+        return Doc.concat(
+            commentPlacement.trailingLineCommentsAfter(owner, body, nextStructural)
+                    .stream()
+                    .filter(this::claim)
+                    .map(JavaFormatter::commentDoc)
+                    .toList()
+        );
+    }
+
     Doc orphanComments(Node node) {
         return orphanComments(node, ignored -> true);
     }

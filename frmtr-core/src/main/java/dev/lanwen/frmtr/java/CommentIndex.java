@@ -129,6 +129,36 @@ final class CommentIndex {
     }
 
     /**
+     * Reports whether {@code comment} begins after {@code node} ends in source order, i.e. it trails the node's last
+     * token regardless of how whitespace lays the two out.
+     *
+     * <p>This is the shape-independent <em>ownership</em> counterpart to {@link #startsOnEndLine(Node, Comment)}. Where
+     * the line-equality test asks "is the comment on the node's end line" — which a whitespace perturbation defeats by
+     * moving the comment onto the following line even though the AST is unchanged — this asks the structural question
+     * "does the comment come after the node's last source character". For a comment JavaParser already attached to
+     * {@code node} as its own trivia, beginning after the node end means it trails the node rather than leading it.
+     *
+     * <p>It is a strict superset of {@link #startsOnEndLine(Node, Comment)} for genuinely trailing comments: a comment on
+     * the node's end line always begins at a column past the node's end column (the node's last token occupies that
+     * column), so the line-based test and this source-order test agree on every {@code @default}-shape trailing comment.
+     * The source-order test additionally keeps the same owner when later whitespace pushes the comment onto its own line.
+     */
+    static boolean startsAfterEndOf(Node node, Comment comment) {
+        return node.getRange()
+                .flatMap(nodeRange -> comment.getRange().map(
+                        commentRange -> endsBefore(nodeRange.end, commentRange.begin)
+                ))
+                .orElse(false);
+    }
+
+    private static boolean endsBefore(Position nodeEnd, Position commentBegin) {
+        if (nodeEnd.line != commentBegin.line) {
+            return nodeEnd.line < commentBegin.line;
+        }
+        return nodeEnd.column < commentBegin.column;
+    }
+
+    /**
      * Reports whether {@code comment} begins inside the source line range covered by {@code node}.
      *
      * <p>This intentionally ignores columns because callers use it for coarse containment when JavaParser left a

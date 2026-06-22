@@ -580,7 +580,11 @@ final class StatementPrinter {
         docs.add(tryResources(statement));
         docs.add(Doc.text(" "));
         docs.add(tryBlock(statement.getTryBlock()));
-        Doc previousBlockTrailingComment = comments.trailingLineComment(statement.getTryBlock());
+        Doc previousBlockTrailingComment = clauseTrailingComment(
+            statement,
+            statement.getTryBlock(),
+            firstFollowingClause(statement, -1)
+        );
         for (int i = 0; i < statement.getCatchClauses().size(); i++) {
             CatchClause clause = statement.getCatchClauses().get(i);
             Doc catchPrefixComment = ownBlockCommentBeforeNode(clause);
@@ -597,7 +601,7 @@ final class StatementPrinter {
                     Doc.concat(previousBlockTrailingComment, ownLineCommentBeforeNode(clause))
                 )
             );
-            previousBlockTrailingComment = trailingCommentAfterClause(clause);
+            previousBlockTrailingComment = trailingCommentAfterClause(statement, clause, firstFollowingClause(statement, i));
         }
         if (statement.getFinallyBlock().isPresent()) {
             BlockStmt finallyBlock = statement.getFinallyBlock().orElseThrow();
@@ -836,12 +840,40 @@ final class StatementPrinter {
                 );
     }
 
-    private Doc trailingCommentAfterClause(CatchClause clause) {
-        Doc bodyTrailing = comments.trailingLineComment(clause.getBody());
+    private Doc trailingCommentAfterClause(TryStmt statement, CatchClause clause, Optional<? extends Node> next) {
+        Doc bodyTrailing = clauseTrailingComment(statement, clause.getBody(), next);
         if (bodyTrailing != Doc.EMPTY) {
             return bodyTrailing;
         }
         return comments.trailingLineComment(clause);
+    }
+
+    /**
+     * Recovers the line comment trailing a completed try/catch/finally clause body, independent of source shape.
+     *
+     * <p>The handoff prefers {@code body}'s own trailing line comment ({@link CommentTracker#trailingLineComment(Node)}).
+     * When the comment lands on the brace line that path recovers it. When a whitespace perturbation pushes the comment
+     * onto the line below the brace, JavaParser re-buckets it as an orphan of the enclosing {@code try}, so the orphan
+     * recovery ({@link CommentTracker#trailingLineCommentsAfter(Node, Node, Optional)}) keeps the same ownership by
+     * selecting the {@code try} orphans that source-order between this body's end and the next clause's begin.
+     */
+    private Doc clauseTrailingComment(TryStmt statement, Node body, Optional<? extends Node> next) {
+        Doc own = comments.trailingLineComment(body);
+        if (own != Doc.EMPTY) {
+            return own;
+        }
+        return comments.trailingLineCommentsAfter(statement, body, next);
+    }
+
+    /**
+     * Returns the structural node that begins the clause following the one at {@code clauseIndex} (a {@code -1} index
+     * means "after the try block"). Used to bound which {@code try}-orphan trailing comments belong to each handoff.
+     */
+    private Optional<? extends Node> firstFollowingClause(TryStmt statement, int clauseIndex) {
+        if (clauseIndex + 1 < statement.getCatchClauses().size()) {
+            return Optional.of(statement.getCatchClauses().get(clauseIndex + 1));
+        }
+        return statement.getFinallyBlock();
     }
 
     private Doc ownBlockCommentBeforeNode(Node node) {

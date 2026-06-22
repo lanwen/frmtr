@@ -78,10 +78,43 @@ final class JavaCommentPlacementPolicy {
     }
 
     /**
-     * Returns an own line comment that starts on the source line where {@code node} ends.
+     * Returns an own line comment that trails {@code node} in source order.
+     *
+     * <p>This is the trailing-comment <em>ownership</em> question — "is {@code node}'s own line comment one that comes
+     * after the node rather than leading it" — and is deliberately source-order based (see
+     * {@link CommentIndex#startsAfterEndOf(Node, Comment)}) rather than line-equality based. Keying on the end line breaks
+     * when a whitespace perturbation moves a {@code } // note} comment onto the line below the brace even though the AST is
+     * unchanged, dropping the comment. The source-order test is a strict superset at the {@code @default} shape: a comment
+     * genuinely on the node's end line begins past the node's end column, so both tests select the same owner there.
+     * Callers still decide how the recovered comment is rendered (inline {@code lineSuffix} versus its own line); that
+     * rendering choice stays line-based at the call sites and is not part of this ownership query.
      */
     Optional<JavaCommentTrivia> trailingLineComment(Node node) {
-        return ownComment(node, JavaCommentTrivia::isLine).filter(comment -> comment.startsOnEndLine(node));
+        return ownComment(node, JavaCommentTrivia::isLine).filter(comment -> comment.startsAfterEndOf(node));
+    }
+
+    /**
+     * Recovers the line comment that trails {@code body} but that JavaParser parked as an orphan of {@code owner} rather
+     * than as {@code body}'s own trivia.
+     *
+     * <p>This is the orphan-bucket sibling of {@link #trailingLineComment(Node)}, and exists for the same shape-independent
+     * ownership reason. When a clause body's trailing {@code } // note} comment sits on the body's end line, JavaParser
+     * attaches it to the body and {@link #trailingLineComment(Node)} recovers it. When a whitespace perturbation moves the
+     * comment onto the line below the brace, JavaParser instead leaves it as an orphan of the enclosing construct (e.g. the
+     * {@code try}). The AST is otherwise identical, so the comment still trails the same clause; this query keeps that
+     * ownership by selecting the {@code owner} orphan line comments whose source position is after {@code body} ends and
+     * before {@code nextStructural} begins (the next clause, or — when absent — open to the owner's end). Bounding by the
+     * next structural element keeps each clause handoff claiming exactly its own slice instead of swallowing later clauses'
+     * trailing comments.
+     */
+    List<JavaCommentTrivia> trailingLineCommentsAfter(Node owner, Node body, Optional<? extends Node> nextStructural) {
+        return orphanComments(owner)
+                .stream()
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.startsAfterEndOf(body))
+                .filter(comment -> nextStructural.map(comment::startsBefore).orElse(true))
+                .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
+                .toList();
     }
 
     /**

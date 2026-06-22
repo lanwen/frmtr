@@ -182,9 +182,6 @@ final class CommentPresenceDiagnosticTest {
         // / interface-body comment ownership that the perturbation re-anchors).
         drops.put("comment-preservation-class-members @ collapsed",
             "needs B1 (class-members): three \"TODO(jlevy): ...\" block comments");
-        drops.put("comment-preservation-class-members @ expanded",
-            "needs B2 (class-members): the Guava copyright file-header block (AST-invisible orphan,"
-                + " getAllContainedComments never returns it)");
         drops.put("comment-preservation-interface-declaration @ collapsed",
             "needs B1 (interface-declaration): \"comment\" (interface-body leading comment)");
 

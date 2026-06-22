@@ -1,5 +1,8 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.GeneratedJavaParserConstants;
+import com.github.javaparser.JavaToken;
+import com.github.javaparser.TokenRange;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.PackageDeclaration;
 import dev.lanwen.frmtr.FormatterOptions;
@@ -34,23 +37,42 @@ final class PackageDeclarationPrinter {
     /**
      * Recovers raw comments that appear in the source before the package declaration token sequence.
      *
-     * <p>This path only emits the raw prefix when a package declaration exists, the original source contains the
-     * {@code package <name>} text after earlier content, and that earlier content starts with a line or block comment.
-     * If any of those checks fail, the caller's normal orphan-comment and JavaParser leading-comment handling keeps
-     * ownership exactly as before.
+     * <p>This path only emits the raw prefix when a package declaration exists, the compilation-unit token stream has
+     * content before the {@code package} keyword, and that earlier content starts with a line or block comment. If any
+     * of those checks fail, the caller's normal orphan-comment and JavaParser leading-comment handling keeps ownership
+     * exactly as before.
+     *
+     * <p>The package boundary is located by the lexer {@code package} keyword token, not by a literal
+     * {@code "package <name>"} substring match. A substring match is defeated whenever the source has non-canonical
+     * spacing inside the package token run (for example {@code package  com . google . common . collect}, as the
+     * idempotence/comment-presence whitespace perturbations produce): the literal {@code package com.google...} prefix
+     * no longer occurs verbatim, so the recovery would silently return {@link Doc#EMPTY} and drop an AST-invisible file
+     * header. Accumulating the raw token text up to the first {@code package} keyword reconstructs exactly the same
+     * leading region the old {@code rawUnit.substring(0, packageStart)} produced, independent of intra-declaration
+     * spacing.
      */
     Doc sourceLeadingCommentsBeforePackage(CompilationUnit unit) {
         if (unit.getPackageDeclaration().isEmpty()) {
             return Doc.EMPTY;
         }
-        String packagePrefix = "package " + unit.getPackageDeclaration().orElseThrow().getNameAsString();
-        String rawUnit = unit.getTokenRange().map(Object::toString).orElse("");
-        int packageStart = rawUnit.indexOf(packagePrefix);
-        if (packageStart <= 0) {
+        TokenRange tokens = unit.getTokenRange().orElse(null);
+        if (tokens == null) {
             return Doc.EMPTY;
         }
-        String leading = rawUnit.substring(0, packageStart).stripTrailing();
-        if (!leading.startsWith("/*") && !leading.startsWith("//")) {
+        StringBuilder leadingTokens = new StringBuilder();
+        boolean foundPackageKeyword = false;
+        for (JavaToken token : tokens) {
+            if (token.getKind() == GeneratedJavaParserConstants.PACKAGE) {
+                foundPackageKeyword = true;
+                break;
+            }
+            leadingTokens.append(token.getText());
+        }
+        if (!foundPackageKeyword) {
+            return Doc.EMPTY;
+        }
+        String leading = leadingTokens.toString().stripTrailing();
+        if (leading.isEmpty() || (!leading.startsWith("/*") && !leading.startsWith("//"))) {
             return Doc.EMPTY;
         }
         return Doc.text(

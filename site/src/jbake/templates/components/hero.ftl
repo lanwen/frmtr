@@ -3,7 +3,8 @@
           <div class="hero-paper">
             <h1 id="title">frmtr</h1>
             <p class="hero-summary">
-              Fast Java formatting, width-aware output, and diagnostics that stay attached to the file.
+              A fast (allegedly) Java formatter with strong opinions and weak justifications.
+              Based on JavaParser.
             </p>
           </div>
 

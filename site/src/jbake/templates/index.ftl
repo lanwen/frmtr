@@ -1,11 +1,5 @@
 <#include "components/site-nav.ftl">
 <#include "components/hero.ftl">
-<#include "components/code-panel.ftl">
-<#include "components/coordinates-panel.ftl">
-<#include "components/task-strip.ftl">
-<#include "components/setup-section.ftl">
-<#include "components/link-list.ftl">
-<#include "components/architecture-section.ftl">
 <!doctype html>
 <html lang="en">
   <head>
@@ -43,11 +37,6 @@
 
       <main>
         <@hero />
-
-        <section class="content" id="setup" aria-labelledby="setup-title">
-          <@setupSection />
-          <@architectureSection />
-        </section>
       </main>
     </div>
   </body>

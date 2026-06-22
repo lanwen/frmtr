@@ -92,6 +92,11 @@ pre {
 }
 
 .mark {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: #252527;
+  color: #fff;
   font-family: var(--font-brand);
   font-size: clamp(18px, 2.6vw, 28px);
   font-weight: 900;
@@ -99,34 +104,63 @@ pre {
   text-decoration: none;
 }
 
-.nav-links {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  font-size: 13px;
-  font-weight: 800;
+.mark-accent {
+  color: var(--yellow);
 }
 
-.nav-links a {
+.brand {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.brand-ver {
+  font-family: var(--font-code);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.nav-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.version {
+  padding: 5px 9px;
+  border: 1px solid currentColor;
+  font-family: var(--font-code);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.gh {
+  display: inline-flex;
+  align-items: center;
+  color: inherit;
   text-decoration: none;
 }
 
-.nav-links a:hover {
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
+.gh svg {
+  display: block;
+}
+
+.gh:hover {
+  opacity: 0.65;
 }
 
 .hero {
   display: grid;
   grid-template-rows: minmax(420px, 52svh) minmax(480px, auto);
   min-height: 100svh;
-  background: #171719;
+  background: #252527;
   color: #eef4ef;
 }
 
 html.dark .hero {
-  background: #050506;
+  background: #252527;
   color: #eef4ef;
 }
 
@@ -151,11 +185,13 @@ html.dark .hero {
 }
 
 .hero-summary {
+  justify-self: end;
   max-width: 430px;
   margin: 0;
   font-size: clamp(19px, 2.6vw, 27px);
   font-weight: 900;
   line-height: 1.02;
+  text-align: right;
 }
 
 .hero-dark {

@@ -200,12 +200,7 @@ public sealed interface Doc
      * @throws IllegalArgumentException if {@code alternatives} is empty
      */
     static Doc conditionalGroup(List<Doc> alternatives) {
-        if (alternatives.isEmpty()) {
-            throw new IllegalArgumentException(
-                "conditionalGroup requires at least one alternative; 'render nothing' is not a valid layout choice"
-            );
-        }
-        return new ConditionalGroup(List.copyOf(alternatives));
+        return new ConditionalGroup(alternatives);
     }
 
     /**
@@ -241,7 +236,22 @@ public sealed interface Doc
     record Fill(List<Doc> parts) implements Doc {}
 
     /** Ordered layout alternatives; the first that fits wins, the last is the fallback. See {@link #conditionalGroup}. */
-    record ConditionalGroup(List<Doc> alternatives) implements Doc {}
+    record ConditionalGroup(List<Doc> alternatives) implements Doc {
+        /**
+         * Rejects an empty alternative list and defensively copies the rest, so the "at least one alternative"
+         * invariant holds for every {@code ConditionalGroup} no matter how it is constructed — including a direct
+         * in-package {@code new ConditionalGroup(...)} that bypasses the {@link #conditionalGroup(List)} factory.
+         * "Render nothing" is never a valid layout-choice intent; use {@link #EMPTY} to render nothing deliberately.
+         */
+        public ConditionalGroup {
+            if (alternatives.isEmpty()) {
+                throw new IllegalArgumentException(
+                    "conditionalGroup requires at least one alternative; 'render nothing' is not a valid layout choice"
+                );
+            }
+            alternatives = List.copyOf(alternatives);
+        }
+    }
 
     record Line() implements Doc {}
 

@@ -26,8 +26,19 @@ All four proposed primitives landed on `main`, plus group identity:
   - **Not expressible.** The chain ranks *multiple broken layouts* and selects among them on structural/source
     predicates; `ConditionalGroup` is Prettier-shaped — N flat candidates plus exactly one final broken fallback,
     chosen purely by flat fit, with no predicate gating. It cannot rank two broken layouts against each other.
-  - Therefore `MethodCallChainPrinter`'s `Optional<Doc>` dispatch and `LayoutWidth` **stay**; `ConditionalGroup` is an
-    additive primitive with no Java-printer consumer yet.
+  - Therefore `MethodCallChainPrinter`'s `Optional<Doc>` dispatch and `LayoutWidth` **stay**.
+- **The throws clause was evaluated as a `ConditionalGroup` consumer and also rejected, for the same reason.** Replacing
+  `ThrowsClausePrinter`'s inline-vs-broken width probe with `Doc.conditionalGroup([inline-flat, broken-fill])` is not
+  behavior-preserving: the hand-rolled probe measures the signature width **including the trailing body opener**
+  (`" {"` / `";"`) the caller emits *after* the throws clause, but a `ConditionalGroup` alternative is sized by its own
+  flat width at the output column and cannot see that trailing same-line content. The swap would let a signature that
+  fits without the brace but overflows with it stay inline, emitting a line 1–2 columns over the limit — it happens to
+  leave the current fixture corpus byte-identical, but the behavior differs. This is the same
+  node-local-fit-vs-trailing-context limitation as chain-collapse.
+- **`ConditionalGroup` therefore stays an additive, validated foundation primitive with no byte-identical Java-printer
+  consumer.** Its "at least one alternative" invariant is now enforced at the type level (a compact constructor on the
+  `ConditionalGroup` record), not just in the `Doc.conditionalGroup(...)` factory, so a direct in-package
+  `new ConditionalGroup(...)` cannot bypass it.
 - **Enum-constant `Fill` packing was declined.** Reflowing enum constants to pack as many per line as fit is an
   opinionated layout that conflicts with frmtr's source-shape-preservation bias (it would discard the author's
   one-constant-per-line intent), so it was not pursued. `LineSuffix` still removes the enum comma/comment coupling

@@ -1585,6 +1585,16 @@ final class MethodCallChainPrinter {
                 }
                 yield new PaddedDoc(Doc.fill(parts), nextLineStart);
             }
+            // A conditional group's alternatives are mutually exclusive layouts; only one renders, so each is padded from
+            // the same incoming line-start rather than threaded in sequence. Like IfBreak, the choice is deferred to the
+            // renderer, so the result conservatively reports lineStart=false for the token that follows the group.
+            case Doc.ConditionalGroup conditionalGroup -> {
+                List<Doc> alternatives = new ArrayList<>();
+                for (Doc alternative : conditionalGroup.alternatives()) {
+                    alternatives.add(linePadded(alternative, padding, lineStart).doc());
+                }
+                yield new PaddedDoc(Doc.conditionalGroup(alternatives), false);
+            }
             case Doc.Line ignored -> new PaddedDoc(
                 Doc.concat(Doc.LINE, Doc.ifBreak(Doc.text(padding), Doc.EMPTY)),
                 false

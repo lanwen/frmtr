@@ -46,9 +46,10 @@ final class DocWidths {
      *
      * <p>Indentation does not affect flat width, so it is intentionally not threaded here. Conditional {@link
      * Doc.IfBreak} nodes always contribute their flat branch and nested groups always measure flat, because this
-     * measures the width a subtree would occupy if it were laid out on a single line. A {@link Doc.LineSuffix}
-     * contributes zero width: its content is deferred to the line break, so it never widens the line it sits on or
-     * forces an enclosing group to break.
+     * measures the width a subtree would occupy if it were laid out on a single line. A {@link Doc.ConditionalGroup} is
+     * measured by its first (most-flat) alternative, the representative layout an enclosing group reasons about. A
+     * {@link Doc.LineSuffix} contributes zero width: its content is deferred to the line break, so it never widens the
+     * line it sits on or forces an enclosing group to break.
      */
     static int flatWidth(Doc doc) {
         return measurement().flatWidth(doc);
@@ -95,6 +96,11 @@ final class DocWidths {
                 case Doc.Text text -> text.value().length();
                 case Doc.Concat concat -> measureSequence(concat.docs(), remaining);
                 case Doc.Fill fill -> measureSequence(fill.parts(), remaining);
+                // An enclosing group measures a conditional group by its first (most-flat) alternative, the layout the
+                // renderer prefers when it fits; an empty alternative list renders nothing and so has zero flat width.
+                case Doc.ConditionalGroup conditionalGroup -> conditionalGroup.alternatives().isEmpty()
+                    ? 0
+                    : measure(conditionalGroup.alternatives().getFirst(), remaining);
                 case Doc.Line ignored -> 1;
                 case Doc.SoftLine ignored -> 0;
                 case Doc.HardLine ignored -> NO_FIT;

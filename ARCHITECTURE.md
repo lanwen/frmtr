@@ -130,6 +130,12 @@ instead of building strings directly:
   flat while the next content still fits on the current line and breaks only where it does not, so a fill keeps as many
   items per line as fit instead of being all-or-nothing like a `Group`. To an enclosing group it measures as the flat
   concatenation of all its parts (a safe over-estimate). It is an additive primitive not yet adopted by any Java printer.
+- `ConditionalGroup` holds an ordered list of layout alternatives and renders the first whose flat layout fits the space
+  left on the current line (in flat mode), falling back to the last alternative in break mode when none fit. It is the
+  IR form of the `Optional<Doc>` "try layout A, else B, else C" fallback chains printers hand-roll: ranking the
+  alternatives (most compact first, an always-valid layout last) is the caller's job, while the renderer only picks among
+  them using its own width measurement. To an enclosing group it measures as its first (most-flat) alternative. It is an
+  additive primitive not yet adopted by any Java printer.
 - `IfBreak` selects different output for flat versus broken groups. With a null `groupId` it follows the ambient
   surrounding group (the common case); with a non-null `groupId` it follows the mode the identified `Group` recorded
   when it rendered earlier, so a closing delimiter can mirror the break/flat decision of an opener group it does not
@@ -156,8 +162,10 @@ transparent to rendering, fitting, and width calculations. `DocRenderer` buffers
 in document order, immediately before each line break, so the deferred content prints at the visual end of its line. It
 also keeps a per-render map from each identified group's `groupId` to the mode that group chose, populated as the group
 renders and reset per render; a `groupId`-bound `IfBreak` reads that map instead of the ambient mode, so the identified
-group must render before any `IfBreak` that targets it. `DocExplainRenderer` mirrors both the suffix buffer and the
-group-mode map so its replayed column cursor stays identical to what `DocRenderer` emits.
+group must render before any `IfBreak` that targets it. For a `ConditionalGroup` it probes the alternatives in order with
+the same `DocWidths` fit authority and renders only the chosen one, so exactly one alternative reaches the output.
+`DocExplainRenderer` mirrors the suffix buffer, the group-mode map, and the conditional-group alternative selection so
+its replayed column cursor stays identical to what `DocRenderer` emits.
 `DocWidths` is the single flat-width authority: it owns the flat-width measurement and the fit test, so `DocRenderer`
 and any observer of its decisions compute fit identically and a fit decision can never diverge from the width number
 reported for it.

@@ -115,6 +115,27 @@ public final class DocExplainRenderer {
                     }
                     return structural;
                 }
+                case Doc.ConditionalGroup conditionalGroup -> {
+                    // Mirror DocRenderer.renderConditionalGroup so the column cursor advances identically: probe each
+                    // alternative with the shared fit authority and the same remaining width, render only the first that
+                    // fits (flat) or the last as the break-mode fallback. Only the chosen alternative is walked, exactly
+                    // as the renderer emits it, so the replayed cursor cannot drift.
+                    Builder structural = Builder.structural();
+                    List<Doc> alternatives = conditionalGroup.alternatives();
+                    if (!alternatives.isEmpty()) {
+                        int chosen = alternatives.size() - 1;
+                        Mode chosenMode = Mode.BREAK;
+                        for (int i = 0; i < alternatives.size(); i++) {
+                            if (widths.fits(alternatives.get(i), lineWidth - column)) {
+                                chosen = i;
+                                chosenMode = Mode.FLAT;
+                                break;
+                            }
+                        }
+                        structural.add(render(alternatives.get(chosen), indent, chosenMode, enclosingLabel));
+                    }
+                    return structural;
+                }
                 case Doc.Line ignored -> {
                     if (mode == Mode.FLAT) {
                         advance(" ");

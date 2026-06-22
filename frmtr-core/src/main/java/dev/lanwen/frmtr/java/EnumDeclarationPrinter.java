@@ -16,6 +16,7 @@ import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -622,11 +623,67 @@ final class EnumDeclarationPrinter {
 
     /**
      * Returns orphan comments that belong to the body section rather than to the trailing side of an enum constant.
+     *
+     * <p>An empty enum body ({@code enum E { // comment }} with no constants and no members) is recovered by source
+     * position instead, because the comment is a body orphan only at the expanded shape. When a whitespace perturbation
+     * collapses the body onto the header line, JavaParser re-attaches the comment to the enum's name rather than leaving
+     * it a declaration orphan, so {@code getOrphanComments()} no longer exposes it and the orphan-based path drops it. The
+     * comment is still a <em>contained</em> comment of the enum, so {@link #emptyBodyComments(EnumDeclaration)} keeps the
+     * same ownership by selecting, in source order, the contained comments (line and block alike) that begin inside the
+     * empty body.
      */
     private List<Doc> enumBodyComments(EnumDeclaration declaration) {
+        if (declaration.getEntries().isEmpty() && declaration.getMembers().isEmpty()) {
+            return emptyBodyComments(declaration);
+        }
         return comments.orphanCommentStatements(declaration, comment -> declaration.getEntries().stream().noneMatch(
                 entry -> CommentIndex.startsOnEndLine(entry, comment)
         ));
+    }
+
+    /**
+     * Recovers the comments inside an empty enum body, independent of source shape.
+     *
+     * <p>The body interior of an empty enum holds no constants and no members, so every contained comment that begins
+     * after the body's opening brace is a body comment — line and block comments alike, matching the orphan-based path's
+     * {@link CommentTracker#orphanCommentStatements} which applies no comment-kind filter. Selecting by the opening-brace
+     * source position (rather than by JavaParser's orphan association, which the collapse perturbation moves onto the enum
+     * name) keeps the same comment owned by the body however whitespace lays the declaration out. This is a strict
+     * superset of the orphan-based path at the {@code @default} shape: an own-line body comment is both a declaration
+     * orphan and a contained comment that begins after the opening brace, so both selections return the same comment.
+     */
+    private List<Doc> emptyBodyComments(EnumDeclaration declaration) {
+        OptionalInt openingBraceOffset = enumBodyOpeningBraceOffset(declaration);
+        if (openingBraceOffset.isEmpty()) {
+            return List.of();
+        }
+        int afterOpeningBrace = openingBraceOffset.getAsInt();
+        return commentPlacement.containedComments(declaration)
+                .stream()
+                .filter(comment -> commentBeginOffset(comment) > afterOpeningBrace)
+                .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
+                .map(comments::comment)
+                .filter(doc -> doc != Doc.EMPTY)
+                .toList();
+    }
+
+    /**
+     * Returns the source offset just past the enum body's opening brace, or empty when the brace has no source range.
+     */
+    private OptionalInt enumBodyOpeningBraceOffset(EnumDeclaration declaration) {
+        List<JavaToken> tokens = tokens(declaration);
+        JavaToken openingBrace = tokens.get(enumBodyOpeningBraceIndex(tokens));
+        return openingBrace.getRange()
+                .map(sourceText::region)
+                .map(region -> OptionalInt.of(region.endOffset()))
+                .orElseGet(OptionalInt::empty);
+    }
+
+    private int commentBeginOffset(JavaCommentTrivia comment) {
+        return comment.comment()
+                .getRange()
+                .map(range -> sourceText.region(range).beginOffset())
+                .orElse(Integer.MAX_VALUE);
     }
 
     /**

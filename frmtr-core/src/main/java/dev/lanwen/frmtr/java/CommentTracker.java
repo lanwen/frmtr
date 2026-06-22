@@ -84,6 +84,23 @@ final class CommentTracker {
         );
     }
 
+    /**
+     * Claims and renders the line comments that sit between {@code afterNode} and {@code body} but that JavaParser parked
+     * on one of {@code attachmentBuckets} instead of as {@code body}'s own leading trivia.
+     *
+     * <p>This is the switch-rule arm counterpart of {@link #trailingLineCommentsAfter(Node, Node, java.util.Optional)}: it
+     * recovers a {@code case x -> // note body} comment when a whitespace shape moved it off the body and onto the case
+     * label expression or the entry orphan bucket. See
+     * {@link JavaCommentPlacementPolicy#gapLineCommentsBefore(Node, Node, Collection)}.
+     */
+    List<Doc> gapLineCommentsBefore(Node afterNode, Node body, Collection<? extends Node> attachmentBuckets) {
+        return commentPlacement.gapLineCommentsBefore(afterNode, body, attachmentBuckets)
+                .stream()
+                .filter(this::claim)
+                .map(JavaFormatter::commentDoc)
+                .toList();
+    }
+
     Doc orphanComments(Node node) {
         return orphanComments(node, ignored -> true);
     }

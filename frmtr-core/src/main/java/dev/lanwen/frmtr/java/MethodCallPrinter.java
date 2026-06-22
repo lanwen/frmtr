@@ -1,6 +1,7 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.ArrayAccessExpr;
 import com.github.javaparser.ast.expr.ArrayCreationExpr;
@@ -643,30 +644,42 @@ final class MethodCallPrinter {
     /**
      * Rebuilds empty argument lists that contain comments JavaParser exposes outside the argument list.
      *
-     * <p>For calls like {@code call( // note )}, JavaParser can attach the line comment to the call or its scope rather
-     * than to a missing argument node, so this method gathers those source-line comments and orphan comments before
-     * deciding the call is really empty.
+     * <p>For calls like {@code call( // note )}, JavaParser can attach the line comment to the call, its scope, or its
+     * name rather than to a missing argument node, so this method gathers those source-line comments and orphan comments
+     * before deciding the call is really empty.
+     *
+     * <p>The where-it-attaches choice is shape-dependent: at the source-multiline shape {@code // note} is the call's
+     * own orphan comment, but collapsing {@code call(// note)} onto one line makes JavaParser re-attach it to the call's
+     * name child as the name's own trivia. Recovering the name's own line comment too keeps the same comment owned by
+     * the call regardless of layout. Each recovery is source-bounded to the inside of the parens (begins before the call
+     * end), so a comment that actually trails the completed call stays out of this empty-argument path.
      */
     Optional<Doc> emptyMethodCallArguments(String prefix, MethodCallExpr expression) {
         List<Doc> argumentComments = new ArrayList<>();
-        Doc firstArgumentComment = comments.ownComment(
+        Doc callOwnComment = comments.ownComment(
             expression,
-            comment -> comment instanceof LineComment
+            comment -> isLineCommentInsideParens(comment, expression)
                     && CommentIndex.startsOnBeginLine(comment, expression)
-                    && CommentIndex.startsBeforeEnd(comment, expression)
         );
-        if (firstArgumentComment != Doc.EMPTY) {
-            argumentComments.add(firstArgumentComment);
+        if (callOwnComment != Doc.EMPTY) {
+            argumentComments.add(callOwnComment);
         }
         expression.getScope()
                 .map(scope -> comments.ownComment(
                         scope,
-                        comment -> comment instanceof LineComment
+                        comment -> isLineCommentInsideParens(comment, expression)
                                 && CommentIndex.startsOnBeginLine(comment, expression)
-                                && CommentIndex.startsBeforeEnd(comment, expression)
                 ))
                 .filter(comment -> comment != Doc.EMPTY)
                 .ifPresent(argumentComments::add);
+        Doc nameOwnComment = comments.ownComment(
+            expression.getName(),
+            comment -> isLineCommentInsideParens(comment, expression)
+                    && CommentIndex.startsAfterEndOf(expression.getName(), comment)
+        );
+        if (nameOwnComment != Doc.EMPTY) {
+            argumentComments.add(nameOwnComment);
+        }
         argumentComments.addAll(comments.orphanCommentStatements(expression));
         if (argumentComments.isEmpty()) {
             return Optional.empty();
@@ -679,6 +692,11 @@ final class MethodCallPrinter {
                 Doc.text(")")
             )
         );
+    }
+
+    /** A line comment that begins before the call's source end, i.e. inside the parentheses rather than trailing it. */
+    private static boolean isLineCommentInsideParens(Comment comment, MethodCallExpr expression) {
+        return comment instanceof LineComment && CommentIndex.startsBeforeEnd(comment, expression);
     }
 
     /**

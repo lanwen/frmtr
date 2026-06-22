@@ -10,6 +10,7 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.stmt.IfStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
@@ -490,7 +491,7 @@ final class ControlConditionPrinter {
     Doc closeParenTrailingLineComment(Expression condition) {
         Optional<String> rawComment = rawCloseParenTrailingLineCommentText(condition);
         if (rawComment.isEmpty()) {
-            return Doc.EMPTY;
+            return recoveredCloseParenTrailingLineComment(condition);
         }
         Optional<JavaCommentTrivia> trailing = commentPlacement.sameLineTrailingLineComment(condition)
                 .filter(comment -> lineCommentTrailsConditionContent(condition, comment.comment()))
@@ -500,6 +501,45 @@ final class ControlConditionPrinter {
             return printedComment == Doc.EMPTY ? Doc.EMPTY : printedComment;
         }
         return Doc.text(rawComment.orElseThrow());
+    }
+
+    /**
+     * Recovers the close-paren trailing line comment of an {@code if} statement that a whitespace perturbation moved onto
+     * its own line below the {@code )} and re-bucketed onto the enclosing {@link IfStmt} as an orphan, so {@code rawClose
+     * ParenTrailingLineCommentText} no longer finds it inline after the {@code )}.
+     *
+     * <p>At the {@code @default} shape the comment sits inline after {@code )}; the raw-slice path above renders it and
+     * the {@code if} statement holds no such orphan, so this recovery fires only under perturbation and adds nothing at
+     * default. The comment value comes from the orphan comment itself (not a raw slice): there is no inline slice to
+     * match when the comment is on its own line, so requiring a raw-slice match here would silently drop it. The caller
+     * still owns whether the recovered comment renders inline after {@code )} or on its own line.
+     *
+     * <p>This is intentionally scoped to {@link IfStmt}, the only construct with a distinct then-statement node that
+     * bounds the {@code )}-to-body gap. Switch selectors are excluded: a comment between a switch selector and its first
+     * entry is a switch-body leading comment that {@code SwitchPrinter} owns, not a close-paren tail, so recovering it
+     * here would hoist it onto the {@code )} line and double-claim it away from the body.
+     */
+    private Doc recoveredCloseParenTrailingLineComment(Expression condition) {
+        return closeParenTrailingOrphans(condition)
+                .stream()
+                .findFirst()
+                .map(comments::comment)
+                .filter(printed -> printed != Doc.EMPTY)
+                .orElse(Doc.EMPTY);
+    }
+
+    private List<JavaCommentTrivia> closeParenTrailingOrphans(Expression condition) {
+        Optional<IfStmt> controlStmt = condition.getParentNode()
+                .filter(IfStmt.class::isInstance)
+                .map(IfStmt.class::cast);
+        if (controlStmt.isEmpty()) {
+            return List.of();
+        }
+        return commentPlacement.trailingConditionComments(
+            controlStmt.orElseThrow(),
+            condition,
+            controlStmt.orElseThrow().getThenStmt()
+        );
     }
 
     private boolean lineCommentTrailsInsideCondition(Expression condition, Comment comment) {
@@ -673,13 +713,41 @@ final class ControlConditionPrinter {
     }
 
     private List<LineComment> detachedConditionLineComments(Expression condition) {
-        return condition.getAllContainedComments()
-                .stream()
+        return java.util.stream.Stream.concat(
+                condition.getAllContainedComments().stream(),
+                recoveredLeadingConditionComments(condition).stream()
+            )
+                .distinct()
                 .filter(LineComment.class::isInstance)
                 .map(LineComment.class::cast)
                 .filter(comment -> !lineCommentTrailsConditionContent(condition, comment))
                 .filter(comment -> lineCommentBelongsToCondition(condition, comment))
                 .sorted(CommentIndex.sourceOrderComparator())
+                .toList();
+    }
+
+    /**
+     * Recovers the condition's leading line comments that a whitespace perturbation re-bucketed onto the enclosing
+     * control statement as orphans, so {@link #detachedConditionLineComments(Expression)} sees them alongside the
+     * condition's own contained trivia. At the {@code @default} shape a simple (non-logical) condition's control
+     * statement holds no such orphan, so this widens the input set by nothing and the broken-condition render gate stays
+     * byte-identical.
+     *
+     * <p>Logical {@code &&}/{@code ||} conditions are intentionally excluded: their operand-leading comments are rendered
+     * by the operand-by-operand path ({@link #brokenLogicalCondition(Expression)} / {@code brokenExpressionLines}), and a
+     * multi-line logical condition's first operand-leading comment is already a control-statement orphan at the
+     * {@code @default} shape. Feeding it into the line-based leading-comment render gate would hijack the logical layout
+     * and drop the per-operand comments, so the logical case keeps its existing handling.
+     */
+    private List<Comment> recoveredLeadingConditionComments(Expression condition) {
+        if (sourceMultilineLogicalConditionExpression(condition)) {
+            return List.of();
+        }
+        return condition.getParentNode()
+                .map(parent -> commentPlacement.leadingConditionComments(parent, condition))
+                .orElseGet(List::of)
+                .stream()
+                .map(JavaCommentTrivia::comment)
                 .toList();
     }
 

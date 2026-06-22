@@ -94,61 +94,99 @@ final class CommentPresenceDiagnosticTest {
 
         // -- P1: drops only when whitespace is perturbed; shape-dependent ownership (B1 evidence). --
 
-        // control-condition / if -- ESCALATED to B1 (source-shape consolidation). Under whole-fixture collapse the line
-        // comments inside/after a control condition are mis-attributed by JavaParser across method boundaries (a comment
-        // from one method's switch selector bled into another method's body), so the loss is in attachment, not in a
-        // single printer's adjacency check. A shape-independent fix needs the B1 SourceShapePolicy, not a local patch.
-        drops.put("comment-preservation-control-condition @ collapsed",
-            "needs B1: \"keep polling until the route snapshot is visible\","
-                + " \"use the normalized event kind for routing\"");
-        drops.put("comment-preservation-control-condition @ expanded",
-            "needs B1: \"keep polling until the route snapshot is visible\","
-                + " \"read selector after cursor state is refreshed\","
-                + " \"keep the body delayed until route state is stable\","
-                + " \"keep selector comment outside the condition\", \"use the normalized event kind for routing\"");
+        // control-condition -- FIXED (source-order ownership; rendering stays line-based). Two sub-mechanisms, both the
+        // shape-independent orphan-recovery shape:
+        //  1. A control-condition leading line comment (while ( // note value )) re-buckets from the condition's own
+        //     contained trivia to the enclosing WhileStmt/SwitchStmt/SwitchExpr ORPHAN pool under collapse/expand.
+        //     JavaCommentPlacementPolicy.leadingConditionComments recovers the control-statement orphan line comments that
+        //     begin after the statement's keyword and before the condition; ControlConditionPrinter.detachedCondition
+        //     LineComments unions them with the condition's contained trivia (deduped by identity, source-ordered) and the
+        //     existing line-based broken-condition render gate prints them unchanged. Logical &&/|| conditions are excluded
+        //     (their operand-leading comments are an IfStmt orphan even at @default and are rendered operand-by-operand), so
+        //     @default stays byte-identical.
+        //  2. A close-paren trailing line comment (if (cond) // note { body }) re-buckets onto the enclosing IfStmt/switch
+        //     orphan pool when expand pushes it onto its own line below the `)`. ControlConditionPrinter.closeParenTrailing
+        //     LineComment falls back to JavaCommentPlacementPolicy.trailingConditionComments (control-statement orphan line
+        //     comments after the condition and before the then/body) when the inline raw-slice path finds nothing; the
+        //     comment value comes from the orphan itself, not the raw slice. At @default the comment is inline after `)`,
+        //     so the raw-slice path renders it and the orphan pool is empty there.
+
+        // if-statement -- PARTIALLY FIXED, STILL PARKED. The control-condition leading/close-paren orphan recovery above
+        // cleared the simple "comment" (if ( true // comment )) and "keep the body delayed" close-paren cases, but the
+        // if-statement fixture has two further drop mechanisms outside this slice:
+        //  1. logical-condition operand-leading comments ("legacy key envelope ...", the token-envelope-03 URL): a
+        //     multi-line &&/|| condition's first operand-leading comment re-buckets to the IfStmt orphan pool, but the
+        //     operand-by-operand renderer (brokenLogicalCondition / brokenExpressionLines / collectLogicalConditionTerms)
+        //     only reads the condition's own/contained trivia, so the recovered orphan never reaches it. The fix is in the
+        //     logical-operand renderer, not the leading/trailing close-paren path this slice touched.
+        //  2. else-leading line comment (// test\nelse) and the then/else block comment (} /* test */ else): the first
+        //     re-buckets from the else statement's own trivia to the IfStmt orphan pool under expand; the second is
+        //     blockCommentBetweenThenAndElse, which is column-arithmetic and explicitly out of this slice's scope.
         drops.put("comment-preservation-if-statement @ collapsed",
-            "needs B1 (control-condition/if): \"test\" (12->9),"
-                + " \"https://docs.example.invalid/token-envelope-03.html\"");
+            "needs logical-operand orphan recovery + else-comment recovery: \"test\" (else-leading/then-else block),"
+                + " \"https://docs.example.invalid/token-envelope-03.html\" (logical operand-leading)");
         drops.put("comment-preservation-if-statement @ expanded",
-            "needs B1 (control-condition/if): \"test\" (12->7), \"comment\","
-                + " \"legacy key envelope before registry draft 04\","
-                + " \"https://docs.example.invalid/token-envelope-03.html\","
-                + " \"keep manual routing while backfill catches up\"");
+            "needs logical-operand orphan recovery + else-comment recovery: \"test\" (else-leading line + then-else"
+                + " block comment), \"legacy key envelope before registry draft 04\","
+                + " \"https://docs.example.invalid/token-envelope-03.html\" (logical operand-leading)");
 
-        // labeled-statement -- needs B1. Under whole-fixture collapse the labeled-statement leading comments are
-        // mis-attributed en masse (comment1 22->6), the same source-shape attachment failure as control-condition.
+        // labeled-statement -- DEFERRED. StatementPrinter.labeledStatementLeadingComments scans the raw source slice
+        // between the `:` and the nested statement for comment-only lines. Under collapse the leading comments re-bucket to
+        // the LabeledStmt orphan pool, the label SimpleName own comment, and the ForEachStmt body own comment, and the raw
+        // slice (now single-line) no longer exposes them as comment-only lines, so most are dropped ("Label statement"
+        // 14->4, "comment1" 22->6, "comment2" 14->4). A source-order LabeledStmt-orphan rewrite is the right shape, but the
+        // @default golden renders these as own-line leading comments with blank-line preservation between groups and a
+        // mixed line/block ordering that the raw scan reproduces exactly; reconstructing that byte-identically from the
+        // three-bucket orphan associations (including reconstructed blank lines) is high-risk, so it is deferred per the
+        // slice's defer-beats-forcing-green rule rather than moving the golden.
         drops.put("comment-preservation-labeled-statement @ collapsed",
-            "needs B1 (labeled-statement): \"Label statement\" (14->4), \"comment1\" (22->6), \"comment2\" (14->4)");
+            "deferred (byte-identity risk): labeled leading comments re-bucket to LabeledStmt orphan / label SimpleName"
+                + " own / body own; \"Label statement\" (14->4), \"comment1\" (22->6), \"comment2\" (14->4)");
 
-        // try-resource -- needs B1. The try-resource opener comment (try ( // note) and the per-clause trailing
-        // comments (try {} // a) are recovered from source-position scans that the expand perturbation defeats by
-        // moving the comment off the try/clause line; reconciling all of opener/leading/gap/trailing shape-independently
-        // is the B1 SourceShapePolicy consolidation rather than a local printer patch.
-        drops.put("comment-preservation-try-resources @ expanded",
-            "needs B1 (try-resource): \"resource scope {\", \"single resource scope {\" (opener comment after `(`)");
+        // try-resource opener comment @ expanded -- FIXED. The opener comment (try ( // note) was recovered only when it
+        // shared the `try (` line (StatementPrinter.tryResourceOpenerComments keyed on startsOnBeginLine(statement)); the
+        // expand perturbation pushes the opener onto its own line below the `(` even though the AST is unchanged, so the
+        // line-equality filter dropped it. Ownership is now source-order: the opener is the line comment that begins
+        // before the first resource, within the `(`-to-first-resource region lineCommentsBeforeFirst already bounds. The
+        // per-clause trailing comments (try {} // a) already preserve via the source-order clauseTrailingComment path.
+        // Removed from the backlog with that fix.
 
-        // switch -- entry-leading comments stacked before a `case` are now interleaved from the switch's orphan comments;
-        // these two remain because a leading comment JavaParser mis-attaches to the SELECTOR under collapse (not a switch
-        // orphan) is still dropped, and switch-statement-rules also drops inline block comments inside a case label
-        // (case REMOTE /* remote */, HYBRID). Both are narrower follow-ups on top of the interleave landed here.
-        drops.put("switch-entry-leading-comments @ collapsed",
-            "S9 backlog (switch): \"keep first detail\" (selector-attached under collapse; the other three now preserved)");
-        drops.put("switch-statement-rules @ collapsed", "S9 backlog (switch): \"comment\" (3->0)");
-        drops.put("switch-statement-rules @ expanded",
-            "S9 backlog (switch): inline case-label block comments \"remote\", \"hybrid\"; \"comment\""
-                + " (leading \"default case\"/\"case c\"/\"fall through\" now preserved)");
+        // switch -- FIXED (three sub-mechanisms, all source-order ownership; rendering stays line-based).
+        //  1. switch-entry-leading-comments @ collapsed dropped "keep first detail": a note stacked before the first
+        //     `case` that shares the selector's line is re-bucketed onto the SELECTOR as its own trailing trivia under
+        //     collapse. SwitchPrinter.selectorLeadingEntryComments recovers the selector's own/orphan line comments that
+        //     lie after the selector and before the first entry (JavaCommentPlacementPolicy.gapLineCommentsBefore) and
+        //     feeds them into the existing switch-orphan interleave. At @default the selector owns no such comment (the
+        //     notes are switch orphans), so this adds nothing there.
+        //  2. switch-statement-rules @ collapsed/expanded dropped the arrow-leading "comment" of a switch rule
+        //     (case x -> // comment body): at @default the comment is the body statement's own trivia (COMMENTED_RULE_BODY
+        //     renders it), but collapse re-attaches it to the case label expression and expand to the entry orphan bucket.
+        //     SwitchPrinter.RECOVERED_COMMENTED_RULE_BODY recovers it via gapLineCommentsBefore over the label and entry
+        //     buckets and renders it on its own indented line after `->`, identical to the body-owned shape.
+        //  3. switch-statement-rules @ expanded dropped inline case-label block comments "remote"/"hybrid"
+        //     (case REMOTE /* remote */, HYBRID): preserved at @default by the raw single-line entry path, but once expand
+        //     spreads the entry across lines the structured label renderer rebuilt the comma list from label expressions
+        //     only, stripping the comments. SwitchPrinter.commentPreservingCaseLabel rebuilds the label region from its
+        //     raw commented token text (CommentedTokenText.tokenLine) and accounts the comments as raw-rendered. Labels
+        //     without block comments never enter that path, so @default is unchanged. Removed from the backlog here.
 
         // block-comment / annotation gap -- needs B1. comment-complex-block-statements is the dense inline-comment
         // torture fixture; under collapse/expand its many inline block comments (between tokens, inside switch/case,
         // inside loops) are re-attached across constructs. block-comment-shapes loses a `/*a*/` whose ownership flips
         // with layout. These are the source-shape attachment problem at its most concentrated.
+        // The remaining comment-complex-block-statements drops need two hard, fixture-specific mechanisms that this
+        // slice does not attempt: a last-parameter trailing block comment that expand re-attaches to the method body and
+        // moves off its source line, and a `//switch` leading comment whose collapse mis-attaches to the switch
+        // selector. Both shapes stay parked until those mechanisms land. (Earlier annotations listed "dead code" and
+        // "switch" @collapsed and "Additionnal enumeration" @expanded; those no longer drop, so they are removed here to
+        // keep the parked finding honest about what is still lost.)
         drops.put("comment-complex-block-statements @ collapsed",
-            "needs B1 (block/annotation gap): \"switch\", \"dead code\", \"The Heart and the Spade\"");
+            "needs B1 (block/annotation gap): \"The Heart and the Spade\""
+                + " — needs the //switch selector mis-attach mechanism");
         drops.put("comment-complex-block-statements @ expanded",
             "needs B1 (block/annotation gap): \"is always executed no matter what\", \"Minus One\", \"switch\","
-                + " \"overloading\", \"at least one iteration !\", \"Additionnal enumeration\"");
-        drops.put("comment-preservation-block-comment-shapes @ collapsed",
-            "needs B1 (block/annotation gap): \"a\" (3->2)");
+                + " \"overloading\", \"at least one iteration !\""
+                + " — needs the param-trailing-block-re-attached-to-body and //switch selector mis-attach mechanisms");
 
         // records / enums / conditionals / misc -- the gap-between-siblings ownership predicate is now source-order
         // (CommentIndex.liesBetween), which drained the record-component-spacing and correctness-data-loss perturbations
@@ -156,15 +194,15 @@ final class CommentPresenceDiagnosticTest {
         // re-buckets into the Parameter orphan slot). The entries that remain here are NOT gap-between-siblings: each is
         // a distinct comment-ownership mechanism the perturbation defeats independently of the gap predicate.
 
-        // method-arguments @ expanded -- NOT the gap predicate. The two dropped comments trail arguments of a chained
-        // `Stream.concat(...)` whose receiver (`Stream`) sits on its own line. The duplicate `Stream.concat(...)` whose
-        // receiver is inline keeps both comments through CommentedExpressionListPrinter; the receiver-on-own-line form
-        // routes the same arguments through a method-chain segment renderer that never reaches the comment-aware
-        // argument-list path. The fix is in MethodCallChainPrinter segment routing, not in gap ownership.
-        drops.put("comment-preservation-method-arguments @ expanded",
-            "method-chain segment routing (not gap-between-siblings): \"services selected directly\","
-                + " \"services selected by scaling\" — trailing comments on Stream.concat(...) args when the chain"
-                + " receiver is on its own line bypass CommentedExpressionListPrinter");
+        // method-arguments @ expanded -- FIXED (method-chain segment routing, not the gap predicate). The two dropped
+        // comments trail arguments of a chained `Stream.concat(...)` whose receiver (`Stream`) sits on its own line.
+        // Expand promotes `concat(...)` to the chain root and, because the receiver is on its own line, renders it through
+        // MethodCallChainPrinter.brokenPromotedMethodCallRoot, which called the comment-unaware methodCallArgumentList and
+        // never recovered the per-argument gap comments. The duplicate `Stream.concat(...)` whose receiver is inline kept
+        // both comments through CommentedExpressionListPrinter. brokenPromotedMethodCallRoot now short-circuits through the
+        // comment-aware commentedExpressionLists.parenthesized(prefix, expression, arguments) when the argument list
+        // carries unclaimed gap comments; parenthesized() returns empty otherwise, so the comment-free path is unchanged.
+        // Removed from the backlog with that fix.
 
         // conditional-expression @ collapsed/expanded -- FIXED. ConditionalExpressionPrinter classified ternary branch
         // comments with token-range column arithmetic that whitespace perturbations defeated. It now classifies each
@@ -172,11 +210,12 @@ final class CommentPresenceDiagnosticTest {
         // source position relative to the `?`/`:` operator-token positions, and renders both a branch's leading and
         // trailing comment so re-bucketing never drops one. Removed from the backlog with that fix.
 
-        // enum-declaration-layout @ collapsed -- NOT gap-between-siblings. The dropped \"comment\" is the sole comment
-        // inside an EMPTY enum body (EmptyEnumWithComment { // comment }); there are no constant siblings to sit between,
-        // so it is an empty-body orphan-comment recovery, a separate mechanism from the constant-gap predicate.
-        drops.put("enum-declaration-layout @ collapsed",
-            "empty-enum-body comment (not gap-between-siblings): \"comment\" (3->2)");
+        // enum-declaration-layout @ collapsed -- FIXED. The dropped "comment" is the sole comment inside an EMPTY enum
+        // body (EmptyEnumWithComment { // comment }); with no constant siblings it is a body orphan only at the expanded
+        // shape. Collapsing the body onto the header line makes JavaParser re-attach the comment to the enum name, so
+        // getOrphanComments() no longer exposes it and EnumDeclarationPrinter.enumBodyComments dropped it. For an empty
+        // body the recovery is now source-order: emptyBodyComments selects the contained line comments that begin after
+        // the body's opening brace, which keeps the same comment owned by the body regardless of layout. Removed here.
 
         // variable-declarations @ collapsed -- FIXED. The two `=`-leading initializer comments were recovered only from
         // the declarator orphan bucket plus the initializer's own comment; under collapse the FIRST comment slides onto
@@ -184,16 +223,23 @@ final class CommentPresenceDiagnosticTest {
         // VariableInitializerLayout.leadingInitializerComments now also recovers the declarator name's own line comment
         // when it sits in the name-to-initializer gap, selecting purely by source order. Removed from the backlog.
 
-        // class-members / interface (guardrail-missed; found only by the lexer net)
-        // class-members @ expanded loses the Guava copyright FILE HEADER, which has an empty AST attachment
-        // (getAllContainedComments never returns it): this is the B2 orphan-ownership case, not reachable by any
-        // attachment-based path. The @ collapsed TODO(jlevy) blocks and the interface `// comment` are B1 (member-block
-        // / interface-body comment ownership that the perturbation re-anchors).
-        drops.put("comment-preservation-class-members @ collapsed",
-            "needs B1 (class-members): three \"TODO(jlevy): ...\" block comments");
-        drops.put("comment-preservation-interface-declaration @ collapsed",
-            "needs B1 (interface-declaration): \"comment\" (interface-body leading comment)");
+        // class-members @ collapsed -- FIXED. Three `/* TODO(jlevy) */` block comments sit between class members; under
+        // collapse a preceding declaration collapses onto one line and CallableSignaturePrinter's trailing-block-comment
+        // recovery reached across the parameter list's `)` (via unattachedTrailingBlockComment, which only checks
+        // startsAfterNodeOnSameLine) and claimed a comment that belongs to the following member. The broken signature did
+        // not render it, so it was claimed-but-dropped. The parameter call site now requires the recovered block comment
+        // to begin before the parameter list's closing `)` (trailingBlockCommentPrecedesCloseParen), so it can no longer
+        // reach past the signature; the member/block interleaver then renders all three on their own lines. At the default
+        // layout the comments are on their own lines, so the same-line recovery matched nothing for them. The narrowing is
+        // call-site-local (the shared policy is untouched), so legitimate same-line `param /* note */)` trailing blocks —
+        // which begin before `)` — are unaffected, and no record/switch golden moves.
 
+        // interface-declaration @ collapsed -- FIXED. The interface header carries inline block comments, so it routes
+        // through the raw escape hatch CommentedInterfacePrinter, whose header rebuild kept only the tokens up to `{`.
+        // Under collapse the body's first `// comment` slid onto the brace line (`... { // comment`) and was truncated
+        // with the discarded after-brace tokens. formatCommentedInterfaceHeader now returns those after-brace comment
+        // tokens separately and the caller carries them onto their own indented body line. At the default layout `{` is
+        // the last header token, so the after-brace list is empty and the rendered header is byte-identical.
         return Collections.unmodifiableMap(drops);
     }
 

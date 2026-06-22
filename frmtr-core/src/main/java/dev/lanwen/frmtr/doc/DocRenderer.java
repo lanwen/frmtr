@@ -116,10 +116,11 @@ public final class DocRenderer {
         for (int i = 1; i + 1 < parts.size(); i += 2) {
             Doc separator = parts.get(i);
             Doc nextContent = parts.get(i + 1);
-            // Decide this separator from the column reached after the preceding content: does the separator plus the
-            // next content still fit flat on the current line? If so keep the separator flat, otherwise break only it.
-            Mode separatorMode =
-                widths.fits(Doc.concat(separator, nextContent), options.lineWidth() - column) ? Mode.FLAT : Mode.BREAK;
+            // Decide this separator from the column reached after the preceding content via the shared fit helper, so
+            // the renderer and the --explain trace make the identical per-separator flat/break choice.
+            Mode separatorMode = widths.separatorFitsFlat(separator, nextContent, options.lineWidth() - column)
+                ? Mode.FLAT
+                : Mode.BREAK;
             render(separator, indent, separatorMode, widths);
             render(nextContent, indent, Mode.FLAT, widths);
         }
@@ -136,9 +137,6 @@ public final class DocRenderer {
      * factory rejects an empty list, so this walk always has at least one alternative to fall back on.
      */
     private void renderConditionalGroup(List<Doc> alternatives, int indent, DocWidths.Measurement widths) {
-        if (alternatives.isEmpty()) {
-            return;
-        }
         for (Doc alternative : alternatives) {
             if (widths.fits(alternative, options.lineWidth() - column)) {
                 render(alternative, indent, Mode.FLAT, widths);

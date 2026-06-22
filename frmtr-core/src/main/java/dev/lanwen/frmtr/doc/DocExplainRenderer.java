@@ -103,10 +103,11 @@ public final class DocExplainRenderer {
                         for (int i = 1; i + 1 < parts.size(); i += 2) {
                             Doc separator = parts.get(i);
                             Doc nextContent = parts.get(i + 1);
-                            // Mirror DocRenderer.renderFill so the column cursor advances identically: each separator's
-                            // mode is decided from the column reached after the preceding content, then the next content
-                            // renders flat.
-                            Mode separatorMode = widths.fits(Doc.concat(separator, nextContent), lineWidth - column)
+                            // Decide each separator through the shared DocWidths.separatorFitsFlat helper that
+                            // DocRenderer.renderFill also calls, so the column cursor advances identically: the mode is
+                            // decided from the column reached after the preceding content, then the next content renders
+                            // flat.
+                            Mode separatorMode = widths.separatorFitsFlat(separator, nextContent, lineWidth - column)
                                 ? Mode.FLAT
                                 : Mode.BREAK;
                             structural.add(render(separator, indent, separatorMode, enclosingLabel));

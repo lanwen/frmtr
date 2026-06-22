@@ -272,6 +272,9 @@ final class RecordDeclarationPrinter {
             // A trailing line comment defers to a line suffix so the unconditional comma the separator emits prints
             // first and is never commented out; BreakParent forces the component list open so the suffix flushes at the
             // break that follows the comma. Block comments above stay inline because they sit before the comma.
+            // This BreakParent only opens the list because recordParameters wraps the soft-line parameter envelope in an
+            // enclosing Doc.group(...): the group is what BreakParent poisons into break mode; without it the marker has
+            // no group to force open.
             parts.add(Doc.BREAK_PARENT);
             parts.add(Doc.lineSuffix(Doc.concat(Doc.text(" "), trailing)));
         }
@@ -501,6 +504,10 @@ final class RecordDeclarationPrinter {
             docs.add(component);
             separator.ifPresent(docs::add);
             if (!gapComments.isEmpty()) {
+                // The two hard lines are not a blank-line idiom (compare MemberBlockPrinter, which doubles HARD_LINE to
+                // keep a blank line): the join only breaks between multiple gap comments, and the trailing HARD_LINE
+                // terminates the comment block so the next component starts on its own line. The separator already
+                // emitted the comma+HARD_LINE that opens this comment block, so no two hard lines are ever adjacent.
                 docs.add(Doc.join(Doc.HARD_LINE, gapComments));
                 docs.add(Doc.HARD_LINE);
             }

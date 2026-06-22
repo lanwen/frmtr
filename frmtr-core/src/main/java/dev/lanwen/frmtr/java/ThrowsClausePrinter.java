@@ -118,6 +118,11 @@ final class ThrowsClausePrinter {
      * current line and broken to a fresh continuation line only where it does not. This replaces the prior
      * all-or-nothing shape, where a long exception list moved to its own line but still overflowed because it was a
      * single {@link Doc#text(String)} string.
+     *
+     * @param thrownExceptions the declared thrown exceptions; must be non-empty, since the keyword is glued to
+     *     {@code .get(0)} and the packing loop assumes at least one exception. Every call site already guards
+     *     {@code isEmpty()} (a method or constructor with no {@code throws} clause never reaches a throws-clause
+     *     layout at all).
      */
     private Doc brokenThrowsClause(NodeList<? extends Node> thrownExceptions) {
         List<Doc> parts = new ArrayList<>();

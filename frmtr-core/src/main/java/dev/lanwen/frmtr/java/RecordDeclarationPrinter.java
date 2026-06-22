@@ -189,12 +189,12 @@ final class RecordDeclarationPrinter {
         List<RecordComponentLayout> layouts = new ArrayList<>();
         for (int i = 0; i < declaration.getParameters().size(); i++) {
             Parameter parameter = declaration.getParameters().get(i);
-            Doc trailing = recordComponentTrailingLineComment(parameter);
             boolean hasNext = i + 1 < declaration.getParameters().size();
+            Parameter next = hasNext ? declaration.getParameters().get(i + 1) : null;
+            Doc trailing = recordComponentTrailingLineComment(declaration, parameter, next);
             Optional<Doc> separator = Optional.empty();
             List<Doc> gapComments = List.of();
             if (hasNext) {
-                Parameter next = declaration.getParameters().get(i + 1);
                 gapComments = recordComponentGapComments(declaration, parameter, next);
                 boolean componentHasGapLineComment = !gapComments.isEmpty();
                 separator = Optional.of(
@@ -262,6 +262,10 @@ final class RecordDeclarationPrinter {
             parts.add(typeComment);
             parts.add(Doc.HARD_LINE);
         }
+        Doc orphanLeading = recordComponentOrphanLeadingLineComments(parameter);
+        if (orphanLeading != Doc.EMPTY) {
+            parts.add(orphanLeading);
+        }
         parts.add(recordComponentTailDoc(parameter));
         Doc trailingBlock = recordComponentTrailingBlockComment(parameter);
         if (trailingBlock != Doc.EMPTY) {
@@ -279,6 +283,31 @@ final class RecordDeclarationPrinter {
             parts.add(Doc.lineSuffix(Doc.concat(Doc.text(" "), trailing)));
         }
         return Doc.concat(parts);
+    }
+
+    /**
+     * Recovers a leading line comment that JavaParser parked as the component's orphan rather than as the type's own
+     * comment.
+     *
+     * <p>A {@code // comment} written between a component's last annotation and its type, or between the type and the
+     * name, is the type's own trivia at the {@code @default} shape (handled by the {@code typeComment} slot above), so
+     * this orphan bucket is empty there and the recovery is a no-op — golden output is unchanged. When a whitespace
+     * expansion pushes that comment onto its own line, JavaParser re-buckets it from the type's own comment into the
+     * {@link Parameter}'s orphan comments even though the AST is otherwise identical; without this recovery the comment
+     * is in no rendered slot and is dropped. The comment is kept directly before the component tail (its type and name),
+     * matching where the {@code @default} type-attached comment renders.
+     */
+    private Doc recordComponentOrphanLeadingLineComments(Parameter parameter) {
+        return Doc.concat(
+            commentPlacement.orphanComments(parameter)
+                    .stream()
+                    .filter(JavaCommentTrivia::isLine)
+                    .filter(comment -> comment.startsBefore(parameter.getName()))
+                    .map(comments::comment)
+                    .filter(doc -> doc != Doc.EMPTY)
+                    .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
+                    .toList()
+        );
     }
 
     private Doc recordComponentTrailingBlockComment(Parameter parameter) {
@@ -367,13 +396,50 @@ final class RecordDeclarationPrinter {
                 .anyMatch(annotation -> currentIndentedWidth.applyAsInt(annotation) > options.lineWidth());
     }
 
-    private Doc recordComponentTrailingLineComment(Parameter parameter) {
+    private Doc recordComponentTrailingLineComment(
+            RecordDeclaration declaration,
+            Parameter parameter,
+            Parameter next
+    ) {
         Doc parameterTrailing = comments.trailingLineComment(parameter);
         if (parameterTrailing != Doc.EMPTY) {
             return parameterTrailing;
         }
-        return comments.ownComment(parameter.getType(), comment -> comment instanceof LineComment
+        Doc typeTrailing = comments.ownComment(parameter.getType(), comment -> comment instanceof LineComment
                 && CommentIndex.startsAfterNodeOnSameLine(parameter.getName(), comment)
+        );
+        if (typeTrailing != Doc.EMPTY) {
+            return typeTrailing;
+        }
+        return recordComponentGapTrailingLineComment(declaration, parameter, next);
+    }
+
+    /**
+     * Recovers a gap line comment that ends up trailing {@code parameter} on its own source line.
+     *
+     * <p>This mirrors the enum-constant tail recovery: {@link #recordComponentGapComments} renders gap comments as
+     * standalone lines but deliberately leaves out comments that begin on {@code parameter}'s end line (those trail the
+     * component, so they belong inline, not as a free-standing line before the next component). At the {@code @default}
+     * shape a component's gap-leading comment sits on its own line, so this recovery is a no-op and golden output is
+     * unchanged. When a whitespace collapse moves that comment up onto {@code parameter}'s end line — JavaParser then
+     * attaches it to the component name rather than to the {@link Parameter} — neither the parameter own-comment nor the
+     * standalone gap path claims it, so this is where the comment is kept instead of dropped.
+     */
+    private Doc recordComponentGapTrailingLineComment(
+            RecordDeclaration declaration,
+            Parameter parameter,
+            Parameter next
+    ) {
+        if (next == null) {
+            return Doc.EMPTY;
+        }
+        return Doc.concat(
+            commentPlacement.lineCommentsBetween(declaration, parameter, next)
+                    .stream()
+                    .filter(comment -> comment.startsOnEndLine(parameter))
+                    .map(comments::comment)
+                    .filter(comment -> comment != Doc.EMPTY)
+                    .toList()
         );
     }
 

@@ -127,11 +127,6 @@ final class CommentPresenceDiagnosticTest {
         drops.put("comment-preservation-try-resources @ expanded",
             "needs B1 (try-resource): \"resource scope {\", \"single resource scope {\" (opener comment after `(`)");
 
-        // method-arguments -- needs B1. The remaining @ expanded drops are gap comments between arguments that move
-        // off their anchor line under expand; the trailing-argument case is fixed (block-orphan-method-call-comments).
-        drops.put("comment-preservation-method-arguments @ expanded",
-            "needs B1 (method-arguments): \"services selected directly\", \"services selected by scaling\"");
-
         // switch -- entry-leading comments stacked before a `case` are now interleaved from the switch's orphan comments;
         // these two remain because a leading comment JavaParser mis-attaches to the SELECTOR under collapse (not a switch
         // orphan) is still dropped, and switch-statement-rules also drops inline block comments inside a case label
@@ -155,22 +150,45 @@ final class CommentPresenceDiagnosticTest {
         drops.put("comment-preservation-block-comment-shapes @ collapsed",
             "needs B1 (block/annotation gap): \"a\" (3->2)");
 
-        // records / enums / conditionals / misc -- needs B1. Each loses a comment whose anchor moves under perturbation:
-        // a leading comment between `=` and an initializer (variable-declarations), a comment between a record
-        // component's type and name (correctness-data-loss), an empty-enum-body comment, a ternary-branch comment, and
-        // record-component leading comments. All are position-anchored recoveries the perturbation defeats.
-        drops.put("record-component-spacing @ collapsed", "needs B1 (records/enums/misc): \"comment\" (2->1)");
-        drops.put("record-component-spacing @ expanded", "needs B1 (records/enums/misc): \"comment\" (2->1)");
-        drops.put("enum-declaration-layout @ collapsed", "needs B1 (records/enums/misc): \"comment\" (3->2)");
+        // records / enums / conditionals / misc -- the gap-between-siblings ownership predicate is now source-order
+        // (CommentIndex.liesBetween), which drained the record-component-spacing and correctness-data-loss perturbations
+        // (a gap comment that collapse pushes onto a previous component's line, and a type/name comment that expand
+        // re-buckets into the Parameter orphan slot). The entries that remain here are NOT gap-between-siblings: each is
+        // a distinct comment-ownership mechanism the perturbation defeats independently of the gap predicate.
+
+        // method-arguments @ expanded -- NOT the gap predicate. The two dropped comments trail arguments of a chained
+        // `Stream.concat(...)` whose receiver (`Stream`) sits on its own line. The duplicate `Stream.concat(...)` whose
+        // receiver is inline keeps both comments through CommentedExpressionListPrinter; the receiver-on-own-line form
+        // routes the same arguments through a method-chain segment renderer that never reaches the comment-aware
+        // argument-list path. The fix is in MethodCallChainPrinter segment routing, not in gap ownership.
+        drops.put("comment-preservation-method-arguments @ expanded",
+            "method-chain segment routing (not gap-between-siblings): \"services selected directly\","
+                + " \"services selected by scaling\" — trailing comments on Stream.concat(...) args when the chain"
+                + " receiver is on its own line bypass CommentedExpressionListPrinter");
+
+        // conditional-expression -- NOT the gap predicate. ConditionalExpressionPrinter classifies ternary branch
+        // comments with its own token-range column arithmetic (commentAppearsAfterOperator), keyed on which side of the
+        // `?`/`:` token a comment's column falls. Perturbing whitespace moves those columns, so the classifier mislabels
+        // (or drops) the branch comments. A fix belongs in that ternary classifier, not in the gap-ownership predicate.
         drops.put("conditional-expression-space-indentation @ collapsed",
-            "needs B1 (records/enums/misc): \"c\" (4->3)");
+            "ternary branch classifier (not gap-between-siblings): \"c\" (4->3)");
         drops.put("conditional-expression-space-indentation @ expanded",
-            "needs B1 (records/enums/misc): \"b\" (4->0), \"c\" (4->1)");
-        drops.put("correctness-data-loss @ expanded",
-            "needs B1 (records/enums/misc): \"keep this comment with the type\" (between record-component type and name)");
+            "ternary branch classifier (not gap-between-siblings): \"b\" (4->0), \"c\" (4->1)");
+
+        // enum-declaration-layout @ collapsed -- NOT gap-between-siblings. The dropped \"comment\" is the sole comment
+        // inside an EMPTY enum body (EmptyEnumWithComment { // comment }); there are no constant siblings to sit between,
+        // so it is an empty-body orphan-comment recovery, a separate mechanism from the constant-gap predicate.
+        drops.put("enum-declaration-layout @ collapsed",
+            "empty-enum-body comment (not gap-between-siblings): \"comment\" (3->2)");
+
+        // variable-declarations @ collapsed -- NOT gap-between-siblings. The two `=`-leading initializer comments are
+        // recovered by VariableInitializerLayout.leadingInitializerComments from the declarator orphan bucket plus the
+        // initializer's own comment. Under collapse the FIRST comment lands on the `=` line and JavaParser attaches it to
+        // neither the declarator orphans nor the initializer, so the initializer-leading recovery loses it. The fix
+        // belongs in that initializer-leading mechanism, not in the sibling-gap predicate.
         drops.put("variable-declarations @ collapsed",
-            "needs B1 (records/enums/misc): \"there is a random comment on this line up here\" (initializer-leading"
-                + " comment lost when the declaration collapses onto one line)");
+            "initializer-leading comment (not gap-between-siblings): \"there is a random comment on this line up here\""
+                + " (first of two `=`-leading comments lost when the declaration collapses onto one line)");
 
         // class-members / interface (guardrail-missed; found only by the lexer net)
         // class-members @ expanded loses the Guava copyright FILE HEADER, which has an empty AST attachment

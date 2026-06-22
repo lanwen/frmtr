@@ -159,6 +159,33 @@ final class CommentIndex {
     }
 
     /**
+     * Reports whether {@code comment} sits in the source-order gap between two sibling nodes, i.e. it begins after
+     * {@code previous} ends and before {@code next} begins.
+     *
+     * <p>This is the shape-independent <em>ownership</em> counterpart to the {@code begin.line >= previous.end.line &&
+     * begin.line < next.begin.line} line-window that gap printers previously used to claim comments between adjacent
+     * arguments, record components, or other siblings. The line-window asks "is the comment on a line at or after the
+     * previous sibling's end line and before the next sibling's begin line" — which a whitespace perturbation defeats:
+     * expanding a one-per-line argument list pushes a {@code arg(), // note} trailing comment onto the line below its
+     * argument (now {@code >= next.begin.line}, so the window drops it) even though the AST is unchanged. This asks the
+     * structural question "does the comment come after the previous sibling's last token and before the next sibling's
+     * first token" instead, so the same sibling keeps ownership regardless of how whitespace lays the gap out.
+     *
+     * <p>It is a strict superset of the line-window for comments genuinely in the gap at the {@code @default} shape. A
+     * comment trailing {@code previous} on its end line begins past {@code previous}'s end column (so
+     * {@link #startsAfterEndOf(Node, Comment)} agrees with {@code begin.line >= previous.end.line}), and a comment before
+     * {@code next} that the line-window placed on an earlier line begins before {@code next} in source order (so
+     * {@link #startsBefore(Comment, Node)} agrees with {@code begin.line < next.begin.line}). The two boundaries the
+     * source-order test treats differently both move ownership toward the sibling the comment really belongs to: it
+     * excludes a comment that ends inside {@code previous}'s last line before {@code previous}'s last token (that comment
+     * is inside {@code previous}, not the gap), and it includes a comment that shares {@code next}'s begin line but begins
+     * before {@code next} (the gap comment the expand perturbation pushed down onto the next sibling's line).
+     */
+    static boolean liesBetween(Comment comment, Node previous, Node next) {
+        return startsAfterEndOf(previous, comment) && startsBefore(comment, next);
+    }
+
+    /**
      * Reports whether {@code comment} begins inside the source line range covered by {@code node}.
      *
      * <p>This intentionally ignores columns because callers use it for coarse containment when JavaParser left a

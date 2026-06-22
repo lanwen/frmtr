@@ -80,6 +80,24 @@ final class DocWidths {
             return fitsWidth(measured, remaining);
         }
 
+        /**
+         * The per-separator FLAT-vs-BREAK fit decision a {@link Doc.Fill} makes for each separator, expressed as
+         * "should this separator stay flat?". A fill keeps a separator flat when the separator together with the next
+         * content still fits in the columns left on the current line, and breaks only that separator otherwise.
+         *
+         * <p>This boundary exists so the rendering walk ({@link DocRenderer#render(Doc)}) and the {@code --explain}
+         * trace ({@link DocExplainRenderer}) ask the fit question through one place and cannot silently drift: both
+         * must advance their column cursor by the same flat/break choice or the explained layout would diverge from the
+         * emitted output. It centralizes only the correctness-relevant probe — the same {@link Doc#concat} of separator
+         * and next content against the same shared width authority. The caller still owns supplying its own remaining
+         * width (each renderer subtracts its own tracked column from the configured line width), mapping the returned
+         * boolean onto its own flat/break mode, and the per-step action that follows (emitting text versus recording a
+         * trace node).
+         */
+        boolean separatorFitsFlat(Doc separator, Doc nextContent, int remaining) {
+            return fits(Doc.concat(separator, nextContent), remaining);
+        }
+
         int flatWidth(Doc doc) {
             return measure(doc, UNBOUNDED);
         }
@@ -97,10 +115,9 @@ final class DocWidths {
                 case Doc.Concat concat -> measureSequence(concat.docs(), remaining);
                 case Doc.Fill fill -> measureSequence(fill.parts(), remaining);
                 // An enclosing group measures a conditional group by its first (most-flat) alternative, the layout the
-                // renderer prefers when it fits; an empty alternative list renders nothing and so has zero flat width.
-                case Doc.ConditionalGroup conditionalGroup -> conditionalGroup.alternatives().isEmpty()
-                    ? 0
-                    : measure(conditionalGroup.alternatives().getFirst(), remaining);
+                // renderer prefers when it fits.
+                case Doc.ConditionalGroup conditionalGroup ->
+                    measure(conditionalGroup.alternatives().getFirst(), remaining);
                 case Doc.Line ignored -> 1;
                 case Doc.SoftLine ignored -> 0;
                 case Doc.HardLine ignored -> NO_FIT;

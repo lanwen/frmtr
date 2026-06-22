@@ -53,6 +53,32 @@ final class EnumConstantComments {
     }
 
     /**
+     * Returns the first constant's leading comment, recovering the source-order line comments that {@code owner} owns
+     * before the first constant in addition to the constant's own leading comment.
+     *
+     * <p>At {@code @default} JavaParser attaches a leading line comment ({@code // note}) above the first constant as that
+     * constant's own comment, so {@link #leading(EnumConstantDeclaration)} alone renders it and the recovery adds nothing
+     * (the union deduplicates by JavaParser comment identity before claiming). A whitespace perturbation that collapses
+     * the enum body re-buckets the same comment onto the first constant's name {@link com.github.javaparser.ast.expr.SimpleName},
+     * which the constant's own-comment view no longer exposes; {@link JavaCommentPlacementPolicy#lineCommentsBeforeFirst(Node,
+     * Node)} keeps it owned by the enum entry list by selecting the line comments after the body brace and before the
+     * first constant. Each recovered comment renders on its own line, exactly like the {@code @default} leading shape.
+     */
+    Doc firstConstantLeading(EnumDeclaration owner, EnumConstantDeclaration first) {
+        Doc own = leading(first);
+        List<Doc> recovered = commentPlacement.lineCommentsBeforeFirst(owner, first)
+                .stream()
+                .map(comments::comment)
+                .filter(comment -> comment != Doc.EMPTY)
+                .map(comment -> Doc.concat(comment, Doc.HARD_LINE))
+                .toList();
+        if (recovered.isEmpty()) {
+            return own;
+        }
+        return Doc.concat(Doc.concat(recovered), own);
+    }
+
+    /**
      * Finds comments written after a constant but attached by JavaParser to either the next constant or the enum body.
      */
     Tail tail(

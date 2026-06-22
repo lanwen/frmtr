@@ -227,6 +227,41 @@ final class JavaCommentPlacementPolicy {
     }
 
     /**
+     * Returns every comment (line <em>and</em> block) JavaParser parked on the supplied {@code attachmentBuckets} that
+     * lies source-order strictly between {@code afterNode} and {@code body}, in source order.
+     *
+     * <p>This is the {@link com.github.javaparser.ast.stmt.LabeledStmt LabeledStmt} leading-comment counterpart of
+     * {@link #gapLineCommentsBefore(Node, Node,
+     * Collection)}. A labeled statement's leading comments (the lines between {@code loop:} and the nested {@code for}/
+     * block) are reproduced verbatim at {@code @default} from the raw source slice between the {@code :} and the nested
+     * statement (see {@code StatementPrinter.labeledStatementLeadingComments}), which preserves author blank-line groups
+     * the AST cannot reconstruct. Under a whitespace collapse the same comments re-bucket onto the {@code LabeledStmt}
+     * orphan pool, the label {@code SimpleName}'s own comment, the nested {@link com.github.javaparser.ast.stmt.ForEachStmt
+     * ForEachStmt}'s own/orphan comments, and the single-line raw slice no longer exposes them as comment-only lines, so
+     * they are dropped. This query recovers exactly those re-bucketed comments by source position.
+     *
+     * <p>Unlike {@link #gapLineCommentsBefore(Node, Node, Collection)} this query deliberately <em>keeps</em>
+     * {@code body}'s own comment: a labeled empty {@code for (...) {}} body is rendered as flat text that never emits the
+     * body node's own trivia, so the body-own slot is one of the buckets the leading comment can hide in. It also returns
+     * block comments, since labeled leading comments are mixed line/block. The query never claims; the caller applies its
+     * own raw-slice string dedupe before claiming each surviving comment by identity (which renders already-claimed
+     * comments empty), so the {@code @default} shape — where every such comment is already produced by the raw slice — is
+     * left byte-identical.
+     */
+    List<JavaCommentTrivia> gapCommentsBetween(
+            Node afterNode,
+            Node body,
+            Collection<? extends Node> attachmentBuckets
+    ) {
+        return attachmentBuckets.stream()
+                .flatMap(bucket -> ownAndOrphanComments(bucket).stream())
+                .filter(comment -> comment.liesBetween(afterNode, body))
+                .distinct()
+                .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
+                .toList();
+    }
+
+    /**
      * Returns JavaParser orphan comments associated directly with {@code node}.
      */
     List<JavaCommentTrivia> orphanComments(Node node) {

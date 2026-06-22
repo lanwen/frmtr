@@ -260,7 +260,11 @@ final class EnumDeclarationPrinter {
 
         List<Doc> entryDocs = new ArrayList<>();
         for (int i = 0; i < entries.size(); i++) {
-            entryDocs.add(enumConstant(entries.get(i), tails.get(i)));
+            EnumConstantDeclaration entry = entries.get(i);
+            Doc leading = i == 0
+                ? enumConstantComments.firstConstantLeading(declaration, entry)
+                : enumConstantComments.leading(entry);
+            entryDocs.add(enumConstant(leading, entry, tails.get(i)));
         }
         return new EnumEntryList(enumEntryList(declaration, entryDocs), false);
     }
@@ -773,8 +777,12 @@ final class EnumDeclarationPrinter {
     }
 
     private Doc enumConstant(EnumConstantDeclaration declaration, EnumConstantComments.Tail tail) {
+        return enumConstant(enumConstantComments.leading(declaration), declaration, tail);
+    }
+
+    private Doc enumConstant(Doc leading, EnumConstantDeclaration declaration, EnumConstantComments.Tail tail) {
         return Doc.concat(
-            enumConstantComments.leading(declaration),
+            leading,
             enumConstantAnnotations(declaration),
             Doc.text(declaration.getNameAsString()),
             enumConstantArguments(declaration),

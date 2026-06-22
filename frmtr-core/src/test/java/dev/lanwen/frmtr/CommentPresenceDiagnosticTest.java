@@ -111,37 +111,61 @@ final class CommentPresenceDiagnosticTest {
         //     comment value comes from the orphan itself, not the raw slice. At @default the comment is inline after `)`,
         //     so the raw-slice path renders it and the orphan pool is empty there.
 
-        // if-statement -- PARTIALLY FIXED, STILL PARKED. The control-condition leading/close-paren orphan recovery above
-        // cleared the simple "comment" (if ( true // comment )) and "keep the body delayed" close-paren cases, but the
-        // if-statement fixture has two further drop mechanisms outside this slice:
-        //  1. logical-condition operand-leading comments ("legacy key envelope ...", the token-envelope-03 URL): a
-        //     multi-line &&/|| condition's first operand-leading comment re-buckets to the IfStmt orphan pool, but the
-        //     operand-by-operand renderer (brokenLogicalCondition / brokenExpressionLines / collectLogicalConditionTerms)
-        //     only reads the condition's own/contained trivia, so the recovered orphan never reaches it. The fix is in the
-        //     logical-operand renderer, not the leading/trailing close-paren path this slice touched.
-        //  2. else-leading line comment (// test\nelse) and the then/else block comment (} /* test */ else): the first
-        //     re-buckets from the else statement's own trivia to the IfStmt orphan pool under expand; the second is
-        //     blockCommentBetweenThenAndElse, which is column-arithmetic and explicitly out of this slice's scope.
-        drops.put("comment-preservation-if-statement @ collapsed",
-            "needs logical-operand orphan recovery + else-comment recovery: \"test\" (else-leading/then-else block),"
-                + " \"https://docs.example.invalid/token-envelope-03.html\" (logical operand-leading)");
-        drops.put("comment-preservation-if-statement @ expanded",
-            "needs logical-operand orphan recovery + else-comment recovery: \"test\" (else-leading line + then-else"
-                + " block comment), \"legacy key envelope before registry draft 04\","
-                + " \"https://docs.example.invalid/token-envelope-03.html\" (logical operand-leading)");
+        // if-statement -- FIXED (four sub-mechanisms, all shape-independent comment ownership; rendering stays
+        // line/column-based and @default is byte-identical):
+        //  1. logical-condition operand-leading line comments ("legacy key envelope ...", the token-envelope-03 URL):
+        //     a multi-line &&/|| condition's first operand-leading comment re-buckets to the IfStmt orphan pool, but the
+        //     operand-by-operand renderer (BinaryExpressionPrinter.linesWithComments) only read the condition's
+        //     own/contained trivia. lineCommentsBeforeFirstOperand now adds a fourth, source-order source:
+        //     JavaCommentPlacementPolicy.leadingConditionComments(parent, expression) when the binary expression is the
+        //     condition/selector of its enclosing if/while/switch statement or switch expression. At @default that comment
+        //     is either already recovered by the line-keyed sources (deduped by identity) or is the expression's own
+        //     contained trivia (which the statement does not hold as an orphan), so nothing is added there. This is the
+        //     logical-condition counterpart that ControlConditionPrinter.recoveredLeadingConditionComments deliberately
+        //     skips because logical conditions render operand-by-operand.
+        //  2. else-leading line comment (// test\nelse): re-buckets from the else statement's own trivia to the IfStmt
+        //     orphan pool under expand. StatementPrinter.elseLeadingLineComment falls back to gapLineCommentsBefore(then,
+        //     else, [if]) when the genuinely-leading own line comment is absent. The own predicate also now requires the
+        //     comment to start before the else node, so an else-trailing line comment is no longer mis-claimed as leading
+        //     (the fix that drained sub-mechanism 3 at collapse).
+        //  3. else-block trailing line comment (} else {} // test) under collapse: the comment lands on the shared else
+        //     `}` position so trailingLineComment's startsAfterEndOf(else) own path still selects it -- once the leading
+        //     slot (mechanism 2) stops stealing it -- and StatementPrinter.elseTrailingLineComment additionally falls back
+        //     to trailingLineCommentsAfter(if, else, empty) for the orphan-bucket shape, mirroring the try-clause handoff.
+        //  4. then/else block comment (} /* test */ else) under expand: blockCommentBetweenThenAndElse keeps its original
+        //     column arithmetic as the own path (that window is what distinguishes } /* note */ else from else /* note */
+        //     {, both of which are the else node's own block comment at @default) and adds an IfStmt-orphan fallback that
+        //     recovers the orphan block comment lying source-order between the then end and the else begin. The fallback
+        //     sees only orphans, so an else-leading block comment (still the else node's own trivia under perturbation) is
+        //     never claimed there and @default stays byte-identical.
 
-        // labeled-statement -- DEFERRED. StatementPrinter.labeledStatementLeadingComments scans the raw source slice
-        // between the `:` and the nested statement for comment-only lines. Under collapse the leading comments re-bucket to
-        // the LabeledStmt orphan pool, the label SimpleName own comment, and the ForEachStmt body own comment, and the raw
-        // slice (now single-line) no longer exposes them as comment-only lines, so most are dropped ("Label statement"
-        // 14->4, "comment1" 22->6, "comment2" 14->4). A source-order LabeledStmt-orphan rewrite is the right shape, but the
-        // @default golden renders these as own-line leading comments with blank-line preservation between groups and a
-        // mixed line/block ordering that the raw scan reproduces exactly; reconstructing that byte-identically from the
-        // three-bucket orphan associations (including reconstructed blank lines) is high-risk, so it is deferred per the
-        // slice's defer-beats-forcing-green rule rather than moving the golden.
+        // labeled-statement @ collapsed -- DEFERRED (one residual before-label drop). The leading-comment recovery for a
+        // labeled statement now has a third, @collapsed-only path: StatementPrinter.recoveredLabeledLeadingComments adds
+        // a GATED fallback over the comments JavaCommentPlacementPolicy.gapCommentsBetween selects source-order between
+        // the label and the body across the LabeledStmt orphan pool, the label SimpleName own, and the nested ForEachStmt
+        // own/orphan buckets. It dedupes against the raw-slice path two ways: (1) a STRING guard excludes any candidate
+        // whose normalized text the raw slice (StatementPrinter.labeledStatementLeadingComments, a List<String> that does
+        // not claim through CommentTracker) already produced for this statement, comparing with the same normalization
+        // this net uses (normalizeRawComment); and (2) an identity claim via CommentTracker.comment renders an
+        // already-claimed comment (the envelope path's LabeledStmt-own leading) empty. At @default the raw slice produces
+        // every between-label-and-body leading comment, so the string guard removes all candidates and @default stays
+        // byte-identical (verified: git diff main on the golden corpus is empty). That fallback clears "comment1"
+        // (22->22) and "comment2" (14->14) fully and 13 of 14 "Label statement".
+        //   The single residual drop is a DIFFERENT mechanism the between-label-and-body scope deliberately does not
+        // reach: in the all-line method's third statement the leading comment sits BEFORE the label (`// Label statement`
+        // then `loop:`), so at @default it is the LabeledStmt's OWN comment (the envelope renders it). Under collapse it
+        // re-buckets onto the PREVIOUS sibling's ForEachStmt as that node's own comment (positioned after the prior
+        // for-loop's `}`), so it is owned by neither this statement's label/body buckets nor its own/orphan pool. Reaching
+        // a preceding sibling's own-comment slot to recover it is exactly the @default-risky cross-statement ownership
+        // move the original analysis flagged: a following labeled statement could then steal a comment that legitimately
+        // belongs to the previous statement at some other shape, moving that statement's golden. Per the slice's
+        // defer-beats-forcing-green / moving-a-golden rule this last comment is left parked rather than chased.
         drops.put("comment-preservation-labeled-statement @ collapsed",
-            "deferred (byte-identity risk): labeled leading comments re-bucket to LabeledStmt orphan / label SimpleName"
-                + " own / body own; \"Label statement\" (14->4), \"comment1\" (22->6), \"comment2\" (14->4)");
+            "deferred (one residual): a before-label leading line comment (\"Label statement\", 14->13) re-buckets onto"
+                + " the PREVIOUS sibling's ForEachStmt own slot under collapse; recovering it needs a cross-statement"
+                + " reach that risks moving another statement's @default golden. The between-label-and-body fallback"
+                + " (StatementPrinter.recoveredLabeledLeadingComments) already clears \"comment1\" and \"comment2\" fully"
+                + " and 13/14 \"Label statement\".");
 
         // try-resource opener comment @ expanded -- FIXED. The opener comment (try ( // note) was recovered only when it
         // shared the `try (` line (StatementPrinter.tryResourceOpenerComments keyed on startsOnBeginLine(statement)); the
@@ -170,23 +194,37 @@ final class CommentPresenceDiagnosticTest {
         //     raw commented token text (CommentedTokenText.tokenLine) and accounts the comments as raw-rendered. Labels
         //     without block comments never enter that path, so @default is unchanged. Removed from the backlog here.
 
-        // block-comment / annotation gap -- needs B1. comment-complex-block-statements is the dense inline-comment
-        // torture fixture; under collapse/expand its many inline block comments (between tokens, inside switch/case,
-        // inside loops) are re-attached across constructs. block-comment-shapes loses a `/*a*/` whose ownership flips
-        // with layout. These are the source-shape attachment problem at its most concentrated.
-        // The remaining comment-complex-block-statements drops need two hard, fixture-specific mechanisms that this
-        // slice does not attempt: a last-parameter trailing block comment that expand re-attaches to the method body and
-        // moves off its source line, and a `//switch` leading comment whose collapse mis-attaches to the switch
-        // selector. Both shapes stay parked until those mechanisms land. (Earlier annotations listed "dead code" and
-        // "switch" @collapsed and "Additionnal enumeration" @expanded; those no longer drop, so they are removed here to
-        // keep the parked finding honest about what is still lost.)
-        drops.put("comment-complex-block-statements @ collapsed",
-            "needs B1 (block/annotation gap): \"The Heart and the Spade\""
-                + " — needs the //switch selector mis-attach mechanism");
-        drops.put("comment-complex-block-statements @ expanded",
-            "needs B1 (block/annotation gap): \"is always executed no matter what\", \"Minus One\", \"switch\","
-                + " \"overloading\", \"at least one iteration !\""
-                + " — needs the param-trailing-block-re-attached-to-body and //switch selector mis-attach mechanisms");
+        // comment-complex-block-statements -- comment-complex-block-statements is the dense inline-comment torture
+        // fixture; under collapse/expand its many inline block comments (between tokens, inside switch/case, inside
+        // loops) are re-attached across constructs. The shape-independent comment-ownership recoveries on this branch
+        // (source-order/orphan recovery reusing CommentIndex + JavaCommentPlacementPolicy) cleared every shape-dependent
+        // drop except one:
+        //  - @collapsed (was "The Heart and the Spade", the enum first-constant leading line comment): FIXED. Collapse
+        //    re-buckets that comment from the EnumConstantDeclaration onto its name SimpleName, so EnumConstantComments
+        //    .leading (which reads only the declaration's own comment) missed it. EnumConstantComments.firstConstantLeading
+        //    now unions the first constant's own leading with JavaCommentPlacementPolicy.lineCommentsBeforeFirst(owner,
+        //    first), deduped by comment identity via the claim set, and EnumDeclarationPrinter.formattedEnumEntryList feeds
+        //    it as the first constant's leading doc. At @default the comment is the constant's own trivia, so the union
+        //    adds the same identity the own path already claimed and the output is unchanged. Removed from the backlog.
+        //  - @expanded "is always executed no matter what" (block comment before finally), "at least one iteration !"
+        //    (block comment between do-body and while), "Minus One" (trailing block comment on the -1 array element), and
+        //    "switch" (the /*switch*/ leading block comment off the switch line): ALL FIXED by the same orphan-recovery
+        //    shape. Each owning node's own-comment path renders the comment at @default; when a perturbation re-buckets it
+        //    onto the enclosing TryStmt/DoStmt/ArrayInitializerExpr orphan pool (or lifts /*switch*/ onto the line above
+        //    the switch keyword), the printer falls back to JavaCommentPlacementPolicy.blockCommentsBefore (or, for the
+        //    switch own comment, renders it inline vs own-line by source position). At @default these fallbacks return the
+        //    same or empty sets, so output is byte-identical.
+        // comment-complex-block-statements @ expanded -- FIXED. The last remaining drop was "overloading", the last
+        // parameter's trailing block comment (... int unusedStep /*overloading*/)). The body block owns that comment at
+        // both shapes; at @default it sits on the last parameter's line and CallableSignaturePrinter's signature
+        // recovery claimed it first, so the body printer never re-emitted it. Expand moved the comment off the
+        // parameter's line, defeating the same-line recovery gates (startsAfterNodeOnSameLine), and BlockPrinter does
+        // not render a BlockStmt's own comment, so it dropped. The recovery now selects by source order bounded by the
+        // parameter list's `)` (startsAfterEndOf(parameter) && startsBefore(closeParen)) instead of same-line, which
+        // matches the comment at both shapes while keeping the #20 class-members narrowing: the comment must still
+        // begin before `)`, so a next member's leading block comment after `)` is never claimed. At @default the
+        // comment begins past the parameter's end column on the same line, so the source-order window is a strict
+        // superset of the old same-line window and @default stays byte-identical. Removed from the backlog with that fix.
 
         // records / enums / conditionals / misc -- the gap-between-siblings ownership predicate is now source-order
         // (CommentIndex.liesBetween), which drained the record-component-spacing and correctness-data-loss perturbations

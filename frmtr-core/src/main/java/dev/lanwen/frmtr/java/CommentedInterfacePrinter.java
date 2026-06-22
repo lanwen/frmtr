@@ -40,7 +40,13 @@ final class CommentedInterfacePrinter {
         if (headerLine < 0) {
             return rawInterface.strip();
         }
-        formatted.add(formatCommentedInterfaceHeader(lines[headerLine].strip()));
+        HeaderSplit header = formatCommentedInterfaceHeader(lines[headerLine].strip());
+        formatted.add(header.headerLines());
+        // A collapsed layout slides the body's first comment onto the brace line (`... { // comment`); carry that
+        // trailing-after-brace comment onto its own indented body line so it is not discarded with the header rebuild.
+        for (String afterBrace : header.afterBraceComments()) {
+            formatted.add("  " + afterBrace);
+        }
         for (int i = headerLine + 1; i < lines.length; i++) {
             String line = lines[i].strip();
             // Blank raw lines inside this fallback are omitted to preserve the existing compact interface-member style.
@@ -70,14 +76,31 @@ final class CommentedInterfacePrinter {
     }
 
     /**
+     * The rebuilt header text plus any comment tokens that trailed the opening brace on the (possibly collapsed) header
+     * line. The caller renders {@link #afterBraceComments()} on their own indented body lines so they survive the header
+     * rebuild, which keeps only the tokens up to {@code "{"}.
+     */
+    private record HeaderSplit(String headerLines, List<String> afterBraceComments) {}
+
+    /**
      * Rebuilds a commented interface header while preserving comments around the {@code extends} clause and opening
      * brace.
+     *
+     * <p>Comment tokens that follow the {@code "{"} on the same source line (e.g. a body's first {@code // comment} that a
+     * collapsed layout slid up onto the brace line) are returned separately so the caller can carry them into the body
+     * instead of letting the header rebuild — which keeps only tokens up to {@code "{"} — discard them. At the default
+     * layout {@code "{"} is the last header token, so the after-brace list is empty and the rendered header is unchanged.
      */
-    private String formatCommentedInterfaceHeader(String line) {
+    private HeaderSplit formatCommentedInterfaceHeader(String line) {
         List<String> tokens = new ArrayList<>(CommentedTokenText.tokens(line));
         int openBrace = tokens.indexOf("{");
         if (openBrace < 0) {
-            return line;
+            return new HeaderSplit(line, List.of());
+        }
+        List<String> afterBrace = new ArrayList<>();
+        // Comments after "{" on this line belong to the body (collapsed layouts slide the first body comment up here).
+        for (int i = openBrace + 1; i < tokens.size() && CommentedTokenText.isComment(tokens.get(i)); i++) {
+            afterBrace.add(tokens.get(i));
         }
         List<String> beforeBrace = new ArrayList<>();
         // Comments immediately before "{" belong on the closing header line, after any broken extends clause.
@@ -87,7 +110,7 @@ final class CommentedInterfacePrinter {
         tokens = new ArrayList<>(tokens.subList(0, openBrace - beforeBrace.size()));
         int extendsIndex = tokens.indexOf("extends");
         if (extendsIndex < 0) {
-            return CommentedTokenText.tokenLine(tokens) + " {";
+            return new HeaderSplit(CommentedTokenText.tokenLine(tokens) + " {", afterBrace);
         }
         List<String> beforeExtends = new ArrayList<>(tokens.subList(0, extendsIndex));
         List<String> clauseLeading = new ArrayList<>();
@@ -97,12 +120,13 @@ final class CommentedInterfacePrinter {
         }
         List<String> clause = new ArrayList<>(clauseLeading);
         clause.addAll(tokens.subList(extendsIndex, tokens.size()));
-        return String.join(
+        String headerLines = String.join(
             "\n",
             CommentedTokenText.tokenLine(beforeExtends),
             "  " + CommentedTokenText.tokenLine(clause),
             CommentedTokenText.tokenLine(beforeBrace) + " {"
         );
+        return new HeaderSplit(headerLines, afterBrace);
     }
 
     /**

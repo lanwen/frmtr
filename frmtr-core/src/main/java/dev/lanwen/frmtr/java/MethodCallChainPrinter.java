@@ -2035,6 +2035,18 @@ final class MethodCallChainPrinter {
 
     private Doc brokenPromotedMethodCallRoot(MethodCallExpr expression) {
         String prefix = calls.methodCallPrefix(expression);
+        // When the promoted root's argument list carries unclaimed gap comments (e.g. trailing notes on each argument of
+        // Stream.concat(...) whose receiver sits on its own line under expand), route through the comment-aware
+        // argument-list renderer so those comments survive. parenthesized() returns empty when there are no such
+        // comments, so the comment-free path below stays byte-identical.
+        Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(
+            prefix,
+            expression,
+            expression.getArguments()
+        );
+        if (commentedArguments.isPresent()) {
+            return commentedArguments.orElseThrow();
+        }
         return Doc.concat(
             Doc.text(prefix + "("),
             Doc.indent(

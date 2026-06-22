@@ -1,6 +1,10 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.GeneratedJavaParserConstants;
+import com.github.javaparser.JavaToken;
+import com.github.javaparser.Position;
 import com.github.javaparser.Range;
+import com.github.javaparser.TokenRange;
 import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
@@ -423,6 +427,14 @@ final class CallableSignaturePrinter {
     }
 
     private String parameterTrailingBlockCommentText(Parameter parameter) {
+        // A trailing block comment is the last parameter's only when it sits inside the parameter list, i.e. before the
+        // closing ")". A collapsed layout can slide the next member's leading block comment up onto the last parameter's
+        // line, where the same-line recovery would otherwise reach across ")" (and even the method body) and claim a
+        // comment that belongs to the following member. Requiring the comment to precede ")" keeps that comment with its
+        // real owner. At the default layout the comment is on its own line, so the recovery already matches nothing.
+        if (!trailingBlockCommentPrecedesCloseParen(parameter)) {
+            return "";
+        }
         Doc trailingBlockComment = unattachedTrailingBlockComment.apply(parameter);
         if (trailingBlockComment == Doc.EMPTY) {
             trailingBlockComment = parameterTrailingBlockComment(parameter);
@@ -431,6 +443,62 @@ final class CallableSignaturePrinter {
             return " " + commentText.apply(trailingBlockComment);
         }
         return "";
+    }
+
+    /**
+     * Reports whether a same-line block comment trailing {@code parameter} begins before the parameter list's closing
+     * {@code ")"}, which is the only position from which it can genuinely belong to the last parameter.
+     *
+     * <p>The closing paren is the first {@code RPAREN} in the callable's token range that begins at or after the last
+     * parameter ends; any {@code ")"} from an annotation or type on the parameter itself ends before the parameter does,
+     * so it is skipped. When the callable, the parameter, or the close paren has no source range, the gate stays closed
+     * and the recovery is suppressed rather than guessed.
+     */
+    private boolean trailingBlockCommentPrecedesCloseParen(Parameter parameter) {
+        if (!lastCallableParameter(parameter)) {
+            return false;
+        }
+        Optional<Range> parameterRange = parameter.getRange();
+        Optional<Range> closeParenRange = parameter.getParentNode()
+                .flatMap(Node::getTokenRange)
+                .flatMap(tokenRange -> closeParenAfter(tokenRange, parameterRange.orElse(null)));
+        if (parameterRange.isEmpty() || closeParenRange.isEmpty()) {
+            return false;
+        }
+        Range closeParen = closeParenRange.orElseThrow();
+        return parameter.getParentNode()
+                .stream()
+                .flatMap(parent -> parent.getAllContainedComments().stream())
+                .filter(BlockComment.class::isInstance)
+                .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(parameter, comment))
+                .anyMatch(comment -> comment.getRange()
+                        .map(range -> CommentIndex.startsBefore(range, closeParen))
+                        .orElse(false));
+    }
+
+    private Optional<Range> closeParenAfter(TokenRange tokenRange, Range parameterRange) {
+        if (parameterRange == null) {
+            return Optional.empty();
+        }
+        for (JavaToken token : tokenRange) {
+            if (token.getKind() != GeneratedJavaParserConstants.RPAREN) {
+                continue;
+            }
+            // The parameter list closer is the first ")" that begins strictly after the last parameter ends; any ")"
+            // from a parameter annotation or type argument begins within the parameter's own span and is skipped.
+            Optional<Range> range = token.getRange().filter(paren -> beginsAfter(paren.begin, parameterRange.end));
+            if (range.isPresent()) {
+                return range;
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static boolean beginsAfter(Position candidateBegin, Position parameterEnd) {
+        if (candidateBegin.line != parameterEnd.line) {
+            return candidateBegin.line > parameterEnd.line;
+        }
+        return candidateBegin.column > parameterEnd.column;
     }
 
     /**

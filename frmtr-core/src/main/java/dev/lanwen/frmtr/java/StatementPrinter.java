@@ -788,13 +788,28 @@ final class StatementPrinter {
                 .toList();
     }
 
+    /**
+     * Recovers the opener comment that trails the resource list's {@code (} (e.g. {@code try ( // resource scope {}),
+     * independent of source shape.
+     *
+     * <p>Ownership is source-order, not line-based: the opener is a line comment that begins before the first resource.
+     * {@link JavaCommentPlacementPolicy#lineCommentsBeforeFirst(Node, Node)} already bounds the candidates to the region
+     * after the {@code try (} opening and at or before the first resource's line, so any candidate that begins before the
+     * first resource in source order sits in the {@code (}-to-first-resource gap — that is the opener. The previous
+     * line-equality filter ({@code startsOnBeginLine(statement)}) required the comment to share the {@code try (} line,
+     * which a whitespace perturbation defeats by pushing the opener onto its own line below the {@code (} even though the
+     * AST is unchanged. The source-order test is a strict superset at the {@code @default} shape: an opener inline on the
+     * {@code try (} line begins on the statement's begin line and before the first resource, so both tests agree; the
+     * source-order test additionally keeps the same owner when expansion moves the opener off the {@code (} line.
+     */
     private List<JavaCommentTrivia> tryResourceOpenerComments(TryStmt statement) {
         if (statement.getResources().isEmpty()) {
             return List.of();
         }
-        return commentPlacement.lineCommentsBeforeFirst(statement, statement.getResources().getFirst().orElseThrow())
+        Expression firstResource = statement.getResources().getFirst().orElseThrow();
+        return commentPlacement.lineCommentsBeforeFirst(statement, firstResource)
                 .stream()
-                .filter(comment -> comment.startsOnBeginLine(statement))
+                .filter(comment -> comment.startsBefore(firstResource))
                 .toList();
     }
 

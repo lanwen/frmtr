@@ -124,6 +124,12 @@ final class SwitchPrinter {
         /** Render a rule entry body on the next line because its body statement owns a leading comment. */
         COMMENTED_RULE_BODY,
 
+        /**
+         * Render a rule entry body on the next line because an arrow-leading comment was re-attached off the body (to the
+         * case label expression or the entry orphan bucket) by a whitespace perturbation.
+         */
+        RECOVERED_COMMENTED_RULE_BODY,
+
         /** Render a rule entry body after {@code ->} on the same line through the normal body renderer. */
         INLINE_RULE_BODY,
     }
@@ -283,10 +289,17 @@ final class SwitchPrinter {
      * switch's orphan comments with the entries in source order restores them before the entry they precede, shape
      * independently. Claim-coupling keeps a comment {@code switchEntryLeadingComments} already emitted from rendering
      * twice.
+     *
+     * <p>The interleaved set also includes the line comments JavaParser mis-attaches to the selector under collapse: a
+     * note stacked before the first {@code case} that shares the selector's line becomes the selector's own trailing
+     * trivia even though it belongs before the entry. {@link #selectorLeadingEntryComments} recovers it by source
+     * position (after the selector, before the first entry), so it interleaves like the switch's own orphans.
      */
     private Doc switchBlockBody(Node owner, NodeList<SwitchEntry> entries) {
-        List<JavaCommentTrivia> orphanComments =
-            commentPlacementPolicy.orphanCommentsOutsideChildRanges(owner, entries);
+        List<JavaCommentTrivia> orphanComments = new ArrayList<>(
+            commentPlacementPolicy.orphanCommentsOutsideChildRanges(owner, entries)
+        );
+        orphanComments.addAll(selectorLeadingEntryComments(owner, entries));
         if (orphanComments.isEmpty()) {
             return Doc.join(Doc.HARD_LINE, entries.stream().map(this::switchEntry).toList());
         }
@@ -324,6 +337,38 @@ final class SwitchPrinter {
                 }
             )
         );
+    }
+
+    /**
+     * Recovers the line comments JavaParser parked on the selector that source placed before the first entry.
+     *
+     * <p>Under collapse a note stacked before the first {@code case} that shares the selector's line is re-bucketed onto
+     * the selector as its own trailing trivia. Selecting the selector's own and orphan line comments that lie in the
+     * source-order gap after the selector ends and before the first entry begins keeps them owned by the entry list,
+     * regardless of which bucket the parser used. At the {@code @default} shape the selector owns no such comment (the
+     * notes are switch orphans), so this contributes nothing and {@code @default} output is unchanged.
+     */
+    private List<JavaCommentTrivia> selectorLeadingEntryComments(Node owner, NodeList<SwitchEntry> entries) {
+        if (entries.isEmpty()) {
+            return List.of();
+        }
+        return selector(owner)
+                .map(selector -> commentPlacementPolicy.gapLineCommentsBefore(
+                    selector,
+                    entries.get(0),
+                    List.of(selector)
+                ))
+                .orElseGet(List::of);
+    }
+
+    private Optional<Expression> selector(Node owner) {
+        if (owner instanceof SwitchStmt statement) {
+            return Optional.of(statement.getSelector());
+        }
+        if (owner instanceof SwitchExpr expression) {
+            return Optional.of(expression.getSelector());
+        }
+        return Optional.empty();
     }
 
     /**
@@ -522,15 +567,8 @@ final class SwitchPrinter {
         Doc entryDoc = switch (switchEntryLayout(entry)) {
             case STATEMENT_GROUP -> switchStatementGroupEntry(label, guard, entry.getStatements());
             case EMPTY_RULE -> Doc.concat(label, guard, Doc.text(" ->"));
-            case COMMENTED_RULE_BODY -> {
-                Statement statement = entry.getStatements().get(0);
-                yield Doc.concat(
-                    label,
-                    guard,
-                    Doc.text(" ->"),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement)))
-                );
-            }
+            case COMMENTED_RULE_BODY -> commentedRuleBody(label, guard, entry.getStatements().get(0));
+            case RECOVERED_COMMENTED_RULE_BODY -> recoveredCommentedRuleBody(label, guard, entry);
             case INLINE_RULE_BODY -> Doc.concat(
                 label,
                 guard,
@@ -540,6 +578,59 @@ final class SwitchPrinter {
         };
         entryDoc = trailingComment == Doc.EMPTY ? entryDoc : Doc.concat(entryDoc, Doc.text(" "), trailingComment);
         return Doc.concat(leadingComment, entryDoc);
+    }
+
+    private Doc commentedRuleBody(Doc label, Doc guard, Statement statement) {
+        return Doc.concat(
+            label,
+            guard,
+            Doc.text(" ->"),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement)))
+        );
+    }
+
+    /**
+     * Renders a {@code case x -> // note body} rule arm whose arrow-leading line comment a whitespace perturbation moved
+     * off the body statement (where {@link #commentedRuleBody} would have rendered it) and onto the case label expression
+     * or the entry orphan bucket.
+     *
+     * <p>The recovered comment renders on its own indented line after {@code ->}, exactly as the body-owned comment does,
+     * so the arm matches the {@code @default} shape byte for byte while the body renders inline through the ordinary body
+     * renderer (the body no longer owns the comment in this shape).
+     */
+    private Doc recoveredCommentedRuleBody(Doc label, Doc guard, SwitchEntry entry) {
+        Statement statement = entry.getStatements().get(0);
+        List<Doc> commentLines = new ArrayList<>();
+        for (Doc comment : ruleArrowLeadingComments(entry, statement)) {
+            commentLines.add(comment);
+            commentLines.add(Doc.HARD_LINE);
+        }
+        return Doc.concat(
+            label,
+            guard,
+            Doc.text(" ->"),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.concat(commentLines), switchEntryBody(statement)))
+        );
+    }
+
+    /**
+     * Recovers the arrow-leading line comments of a rule entry from the buckets a whitespace perturbation re-attaches them
+     * to: the comma-separated case label expressions and the entry's own orphan comments. Bounded to the gap after the
+     * guard (or last label) and before the body so guard-internal or body-internal comments stay with their owners.
+     */
+    private List<Doc> ruleArrowLeadingComments(SwitchEntry entry, Statement body) {
+        Optional<Node> afterNode = ruleArrowGapStart(entry);
+        if (afterNode.isEmpty()) {
+            return List.of();
+        }
+        return comments.gapLineCommentsBefore(afterNode.orElseThrow(), body, arrowLeadingCommentBuckets(entry));
+    }
+
+    private Optional<Node> ruleArrowGapStart(SwitchEntry entry) {
+        if (entry.getGuard().isPresent()) {
+            return entry.getGuard().map(Node.class::cast);
+        }
+        return entry.getLabels().getLast().map(Node.class::cast);
     }
 
     /**
@@ -569,10 +660,30 @@ final class SwitchPrinter {
         if (entry.getStatements().isEmpty()) {
             return SwitchEntryLayout.EMPTY_RULE;
         }
-        if (hasLeadingOwnComment(entry.getStatements().get(0))) {
+        Statement body = entry.getStatements().get(0);
+        if (hasLeadingOwnComment(body)) {
             return SwitchEntryLayout.COMMENTED_RULE_BODY;
         }
+        if (hasRecoverableArrowLeadingComment(entry, body)) {
+            return SwitchEntryLayout.RECOVERED_COMMENTED_RULE_BODY;
+        }
         return SwitchEntryLayout.INLINE_RULE_BODY;
+    }
+
+    private boolean hasRecoverableArrowLeadingComment(SwitchEntry entry, Statement body) {
+        return !commentPlacementPolicy
+                .gapLineCommentsBefore(
+                    ruleArrowGapStart(entry).orElse(body),
+                    body,
+                    arrowLeadingCommentBuckets(entry)
+                )
+                .isEmpty();
+    }
+
+    private List<Node> arrowLeadingCommentBuckets(SwitchEntry entry) {
+        List<Node> buckets = new ArrayList<>(entry.getLabels());
+        buckets.add(entry);
+        return buckets;
     }
 
     /**
@@ -584,6 +695,10 @@ final class SwitchPrinter {
     private Doc switchEntryLabel(SwitchEntry entry) {
         if (entry.isDefault()) {
             return Doc.text(defaultSwitchEntryLabel(entry));
+        }
+        Optional<Doc> commented = commentPreservingCaseLabel(entry);
+        if (commented.isPresent()) {
+            return commented.orElseThrow();
         }
         String flatLabels = entry.getLabels()
                 .stream()
@@ -607,6 +722,68 @@ final class SwitchPrinter {
                 )
             );
         };
+    }
+
+    /**
+     * Renders a {@code case} label list that carries inline block comments ({@code case REMOTE /* remote *}{@code /,
+     * HYBRID}) from its raw commented token text, preserving the comments structured rendering would otherwise strip.
+     *
+     * <p>At the {@code @default} shape a single-line entry with such a comment is preserved verbatim by
+     * {@link #rawSingleLineSwitchEntry}; once a whitespace perturbation spreads the entry across lines, that raw path no
+     * longer fires and the comma-separated label list is rebuilt token by token, dropping the comments because
+     * {@link #switchLabelText} renders only the label expression. This path keeps the comments by rebuilding the label
+     * region with {@link CommentedTokenText#tokenLine}, which reproduces the source spacing of inline label comments, and
+     * accounts those comments as raw-rendered so the print-once guardrails still see them. Labels without block comments
+     * never enter this path, so ordinary case labels are unaffected.
+     */
+    private Optional<Doc> commentPreservingCaseLabel(SwitchEntry entry) {
+        Node boundary = entry.getStatements().isEmpty() ? entry : entry.getStatements().get(0);
+        List<JavaCommentTrivia> labelComments =
+            commentPlacementPolicy.blockCommentsBefore(arrowLeadingCommentBuckets(entry), boundary);
+        if (labelComments.isEmpty()) {
+            return Optional.empty();
+        }
+        String raw = rawSource.raw(entry);
+        int boundaryIndex = defaultLabelBoundary(raw);
+        if (boundaryIndex < 0) {
+            return Optional.empty();
+        }
+        String labelText = CommentedTokenText.tokenLine(CommentedTokenText.tokens(raw.substring(0, boundaryIndex)));
+        if (labelText.isEmpty()) {
+            return Optional.empty();
+        }
+        List<JavaCommentTrivia> renderedLabelComments = labelComments.stream()
+                .filter(comment -> beginsWithinLabelRegion(entry, comment, boundaryIndex))
+                .toList();
+        if (renderedLabelComments.isEmpty()) {
+            return Optional.empty();
+        }
+        comments.accountRaw(renderedLabelComments.stream().map(JavaCommentTrivia::comment).toList());
+        return Optional.of(Doc.text(labelText));
+    }
+
+    /**
+     * Reports whether a label block comment begins inside the rebuilt label region (the raw token text before the
+     * arrow/colon), so accounting it matches what {@code labelText} actually renders.
+     *
+     * <p>{@link JavaCommentPlacementPolicy#blockCommentsBefore} bounds its result by the body node, so it can include a
+     * comment parked in the arrow-to-body gap ({@code case X -> /* mid *}{@code / body}) that {@code labelText} never
+     * reproduces. Mapping the comment's absolute source offset to the same coordinate space as {@code boundaryIndex}
+     * (a character index into {@link RawSource#raw(Node)}, i.e. relative to the entry's stripped token range) and
+     * keeping only comments before the boundary makes the accounted set equal the rendered set by construction.
+     */
+    private boolean beginsWithinLabelRegion(SwitchEntry entry, JavaCommentTrivia comment, int boundaryIndex) {
+        return entry.getRange()
+                .map(range -> sourceText.region(range).beginOffset())
+                .flatMap(entryRawBeginOffset -> commentBeginOffset(comment)
+                    .map(commentBeginOffset -> commentBeginOffset - entryRawBeginOffset < boundaryIndex))
+                .orElse(false);
+    }
+
+    private Optional<Integer> commentBeginOffset(JavaCommentTrivia comment) {
+        return comment.comment()
+                .getRange()
+                .map(range -> sourceText.region(range).beginOffset());
     }
 
     private SwitchLabelLayout switchLabelLayout(SwitchEntry entry, String flat) {

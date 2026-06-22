@@ -118,6 +118,115 @@ final class JavaCommentPlacementPolicy {
     }
 
     /**
+     * Recovers the line comments that lead a control-statement {@code condition} but that JavaParser parked as orphans of
+     * the enclosing {@code controlStmt} ({@code while}/{@code if}/{@code switch} statement or {@code switch} expression)
+     * rather than as the condition's own contained trivia.
+     *
+     * <p>This is the orphan-bucket sibling of the condition's own {@code getAllContainedComments()} leading comments, and
+     * exists for the same shape-independent ownership reason as {@link #trailingLineCommentsAfter(Node, Node, Optional)}.
+     * At the {@code @default} shape a {@code while ( // note value )} comment is contained trivia of the condition, so the
+     * condition renderer already sees it and this query adds nothing (the control statement holds no such orphan). A
+     * whitespace perturbation that re-shapes the condition re-buckets the same comment onto the enclosing control
+     * statement as an orphan even though the AST is otherwise identical, so the contained-trivia view loses it and it is
+     * dropped. This query keeps the comment owned by the condition by selecting the {@code controlStmt} orphan line
+     * comments whose source position is after the control statement begins (so a comment leading the whole statement is
+     * never claimed) and before {@code condition} begins.
+     */
+    List<JavaCommentTrivia> leadingConditionComments(Node controlStmt, Node condition) {
+        return orphanComments(controlStmt)
+                .stream()
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> startsAfterBeginOf(controlStmt, comment))
+                .filter(comment -> comment.startsBefore(condition))
+                .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
+                .toList();
+    }
+
+    /**
+     * Recovers the line comments that trail a control-statement {@code condition} after its closing parenthesis but that
+     * JavaParser parked as orphans of the enclosing {@code controlStmt} rather than as the condition's own trivia.
+     *
+     * <p>This is the trailing counterpart to {@link #leadingConditionComments(Node, Node)}. At the {@code @default} shape
+     * an {@code if (cond) // note} comment is the condition's (or its last operand's) own trivia, so the close-paren
+     * renderer recovers it directly. A whitespace perturbation that pushes the comment onto its own line below the
+     * close-paren re-buckets it onto the enclosing {@code if}/{@code while}/{@code switch} as an orphan; the own-trivia
+     * view then loses it. This query keeps the comment owned by the condition's tail by selecting the {@code controlStmt}
+     * orphan line comments whose source position is after {@code condition} ends and before {@code body} begins. Bounding
+     * by {@code body} keeps the close-paren tail from swallowing the body/then/else leading comments.
+     */
+    List<JavaCommentTrivia> trailingConditionComments(Node controlStmt, Node condition, Node body) {
+        return orphanComments(controlStmt)
+                .stream()
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.startsAfterEndOf(condition))
+                .filter(comment -> comment.startsBefore(body))
+                .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
+                .toList();
+    }
+
+    private boolean startsAfterBeginOf(Node node, JavaCommentTrivia comment) {
+        return node.getRange()
+                .map(range -> CommentIndex.startsAfter(comment.comment(), range.begin))
+                .orElse(false);
+    }
+
+    /**
+     * Recovers the line comment that sits between {@code afterNode} and {@code body} but that JavaParser parked on one of
+     * the supplied {@code attachmentBuckets} instead of as {@code body}'s own leading trivia.
+     *
+     * <p>This is the gap-ownership counterpart to {@link #adjacentLeadingLineComments(Node)} for a comment that lives
+     * inside a single grammar slot — here, the {@code case label ->}/{@code body} arm of a switch rule. At the
+     * {@code @default} shape JavaParser attaches a {@code case x -> // note body} comment to {@code body}, so the body's
+     * own leading comment renders it; a whitespace perturbation re-buckets the same comment onto the case label
+     * expression (collapse) or onto the switch entry as an orphan (expand) even though the AST is unchanged, so the
+     * body-own slot no longer holds it and it is dropped. This query keeps the comment owned by the gap by selecting the
+     * line comments from {@code attachmentBuckets} whose source position lies strictly after {@code afterNode} ends and
+     * strictly before {@code body} begins (see {@link CommentIndex#liesBetween(Comment, Node, Node)}). It deliberately
+     * excludes {@code body}'s own comment: the caller renders that one through the body statement renderer, so returning
+     * it here would double-print it. The bucket scan is source-order and shape-independent, so re-pointing ownership here
+     * does not move {@code @default} output, where the gap comment is the body's own trivia and is not in any bucket.
+     */
+    List<JavaCommentTrivia> gapLineCommentsBefore(
+            Node afterNode,
+            Node body,
+            Collection<? extends Node> attachmentBuckets
+    ) {
+        Optional<Comment> bodyOwn = ownComment(body).map(JavaCommentTrivia::comment);
+        return attachmentBuckets.stream()
+                .flatMap(bucket -> ownAndOrphanComments(bucket).stream())
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.liesBetween(afterNode, body))
+                .filter(comment -> bodyOwn.map(own -> own != comment.comment()).orElse(true))
+                .distinct()
+                .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
+                .toList();
+    }
+
+    private List<JavaCommentTrivia> ownAndOrphanComments(Node node) {
+        return java.util.stream.Stream.concat(ownComment(node).stream(), orphanComments(node).stream()).toList();
+    }
+
+    /**
+     * Returns the block comments JavaParser parked on the supplied {@code attachmentBuckets} that begin before
+     * {@code boundary} in source order.
+     *
+     * <p>Inline case-label block comments ({@code case REMOTE /* remote *}{@code /, HYBRID}) attach to a label expression
+     * as its own comment, or to the switch entry as an orphan, depending on layout. A caller that re-renders the label
+     * list from its raw commented token text needs the exact set of comments that text already prints, so it can mark them
+     * accounted without claiming any body comment that begins past {@code boundary} (the {@code ->}/{@code :} marker or the
+     * body statement). The query is source-order, so it selects the same set however whitespace lays the labels out.
+     */
+    List<JavaCommentTrivia> blockCommentsBefore(Collection<? extends Node> attachmentBuckets, Node boundary) {
+        return attachmentBuckets.stream()
+                .flatMap(bucket -> ownAndOrphanComments(bucket).stream())
+                .filter(JavaCommentTrivia::isBlock)
+                .filter(comment -> comment.startsBefore(boundary))
+                .distinct()
+                .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
+                .toList();
+    }
+
+    /**
      * Returns JavaParser orphan comments associated directly with {@code node}.
      */
     List<JavaCommentTrivia> orphanComments(Node node) {

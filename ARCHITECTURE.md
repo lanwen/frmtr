@@ -129,7 +129,9 @@ instead of building strings directly:
 - `Fill` lays out an alternating `[content, separator, …]` list with greedy per-separator packing: each separator stays
   flat while the next content still fits on the current line and breaks only where it does not, so a fill keeps as many
   items per line as fit instead of being all-or-nothing like a `Group`. To an enclosing group it measures as the flat
-  concatenation of all its parts (a safe over-estimate). It is an additive primitive not yet adopted by any Java printer.
+  concatenation of all its parts (a safe over-estimate). Its first Java-printer consumer is the throws-clause printer,
+  which greedily packs an overflowing `throws ...` exception list across continuation lines instead of leaving it as one
+  unbreakable line (see `ThrowsClausePrinter`).
 - `ConditionalGroup` holds an ordered list of layout alternatives and renders the first whose flat layout fits the space
   left on the current line (in flat mode), falling back to the last alternative in break mode when none fit. It is the
   IR form of the `Optional<Doc>` "try layout A, else B, else C" fallback chains printers hand-roll: ranking the

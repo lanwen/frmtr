@@ -19,9 +19,10 @@ investigation link out to a focused proposal in this directory.
 | ⚪ Deferred | Intentionally parked. |
 
 **Overall status:** Active roadmap — several focused slices are implemented (**S3**, **S5**,
-**M2**, **M2a**), **B3** and **M3** are in progress, and the remaining items stay proposed,
-investigating, accepted, or deferred as marked below. Focused investigation docs (linked below)
-continue to de-risk the highest-leverage items before broader implementation.
+**M2**, **M2a**, and **B2**'s Doc-IR primitives), **B3** and **M3** are in progress, and the
+remaining items stay proposed, investigating, accepted, or deferred as marked below. Focused
+investigation docs (linked below) continue to de-risk the highest-leverage items before broader
+implementation.
 
 ### Relationship to existing proposals in this directory
 
@@ -83,27 +84,41 @@ from reaching into raw source directly.
 - **Effort:** large, phased. Unblocks B2 and B3.
 
 ### B2. Enrich the Doc IR with the combinators printers are faking today
-**Status:** 🟣 Investigating · _focused proposal:_ [doc-ir-combinators.md](doc-ir-combinators.md)
+**Status:** ✅ Done — all four primitives + group identity landed; consumer migration is limited (see outcomes) · _focused proposal:_ [doc-ir-combinators.md](doc-ir-combinators.md)
 
-> **Investigation finding:** recommends implementing **`lineSuffix` first** — it retires the
-> largest, most bug-prone body of special-case code (trailing-comment placement + the enum
-> comma-ordering coupling that has broken repeatedly) with the least renderer risk (zero width, no
-> effect on existing fit/break decisions, fixtures stay byte-identical). Caveat: land **S5** before
-> adding any primitive, so new variants don't have to edit two parallel width switches — **S5 is now
-> done** (`6e4f600a`), so this prerequisite is satisfied.
+> **Outcome:** all four primitives — `LineSuffix`, `BreakParent`, `Fill`, `ConditionalGroup` — plus
+> the optional `Group`/`IfBreak` `groupId` landed on `main`, with renderer, width, debug, and
+> explain support and factory validation (`Fill` rejects a non-empty even-length list;
+> `ConditionalGroup` rejects an empty alternative list). `LineSuffix` delivered the headline win:
+> the enum trailing-comment comma-ordering coupling is gone (the constant emits a `lineSuffix`), and
+> records, control conditions, statements, expression lists, and method-call chains route trailing
+> comments through it too. `Fill`'s only consumer so far is `ThrowsClausePrinter` (wrapping
+> overflowing `throws` lists). **The chain-collapse goal was not achievable** — `ConditionalGroup`
+> cannot replace `MethodCallChainPrinter`'s `Optional<Doc>` dispatch byte-identically (the chain
+> probes flattened strings at fixed-indent/source-column baselines via `LayoutWidth`, vs
+> `ConditionalGroup` measuring flat fit at the actual output column) nor expressibly (the chain ranks
+> multiple *broken* layouts on structural/source predicates; `ConditionalGroup` is Prettier-shaped: N
+> flat candidates + one final broken fallback), so `MethodCallChainPrinter` and `LayoutWidth` stay.
+> Enum-constant `Fill` packing was **declined** as an opinionated reflow at odds with frmtr's
+> source-shape-preservation bias.
 
-The IR has 9 primitives (`Text/Concat/Line/SoftLine/HardLine/Indent/Group/IfBreak/Label`). It is
-missing the ones that matter most:
+The IR had 9 primitives (`Text/Concat/Line/SoftLine/HardLine/Indent/Group/IfBreak/Label`); it gained
+the four it was missing most:
 
-- **`lineSuffix`** — defer trailing content (comments!) to end of line. Would retire most of the
-  comment-placement machinery and the comma/comment ordering logic that has repeatedly broken.
-- **`fill`** — pack as many items per line as fit (arrays, arguments, throws lists, enum
-  constants).
-- **`breakParent` / `conditionalGroup`** — "if any child breaks, break the parent" and "try layout
-  A, else B, else C", currently emulated with width probes.
+- **`lineSuffix`** — defer trailing content (comments!) to end of line. **Done and widely adopted**,
+  retiring the comment-placement machinery and the comma/comment ordering logic that had repeatedly
+  broken.
+- **`fill`** — pack as many items per line as fit. **Done**; first consumer is the throws-clause
+  printer. Arrays/arguments/enum-constant packing were not migrated (enum packing was declined as an
+  opinionated reflow).
+- **`breakParent` / `conditionalGroup`** — "if any child breaks, break the parent" and the
+  Prettier-style "first flat layout that fits, else the final broken fallback". **Both done.**
+  `breakParent` has one consumer (`RecordDeclarationPrinter`); `conditionalGroup` is additive with no
+  Java-printer consumer yet, because collapsing the method-chain `Optional<Doc>` dispatch onto it is
+  neither byte-identical nor expressible (see outcome above).
 
 - **Serves:** maintainer-friendly (delete special cases), richer layouts, uniform comments.
-- **Effort:** large but additive and incremental. Pairs with B1.
+- **Effort:** large but additive and incremental. Paired with B1.
 
 ### B3. A correctness safety net: AST-equivalence + idempotence + a real-world corpus
 **Status:** 🟢 In progress — Layers 1-2 landed · _focused proposal:_ [semantic-preservation-safety-net.md](semantic-preservation-safety-net.md)
@@ -308,8 +323,10 @@ width authority with a `NO_FIT` sentinel (replacing the dual `-1`/`false` hard-l
 
 1. **S5 → M2** (cheap cleanup that unlocks the renderer speedup) and **B3 layer 1**
    (AST-equivalence check — small, catches real bugs now). _S5 is done (`6e4f600a`); M2 is unblocked._
-2. **B2** incrementally, starting with `lineSuffix` (retire the comment machinery), letting it pull
-   **B1** along where the two intersect.
+2. **B2** — ✅ primitives landed. `lineSuffix` retired the comment machinery as planned (and pulled
+   **B1** along where the two intersect); `fill` adopted by the throws-clause printer.
+   `conditionalGroup`/`breakParent` landed too, but the method-chain `Optional<Doc>` collapse proved
+   not byte-identical or expressible, so `MethodCallChainPrinter`/`LayoutWidth` stay.
 3. **M1** in parallel (numbers are needed before/after B2/M2), then **M3 / M4** for the adoption and
    speed story.
 4. Smalls (**S1–S4**) slot in anywhere; **S2 / S4** are quick user-facing wins.

@@ -317,6 +317,51 @@ width authority with a `NO_FIT` sentinel (replacing the dual `-1`/`false` hard-l
 
 - **Serves:** maintainer-friendly. Landed as ~30 lines (net −10).
 
+### S6. Atomic in-place writes for `--write` / `frmtrFormat`
+**Status:** ✅ Done — landed on `main` · _focused proposal:_ [atomic-in-place-writes.md](atomic-in-place-writes.md)
+
+`--write`/`frmtrFormat` overwrote source in place via a non-atomic truncate-then-write, so an interrupted write could
+leave a truncated or empty source file. **Now crash-safe:** `BestEffortAtomicFileWriter` writes a sibling `*.frmtr.tmp`,
+copies the target's POSIX mode, and renames it over the original (`ATOMIC_MOVE`, falling back to a plain replacing move
+where unsupported); `FormatterRunner.writeFile` routes through it. `FormatFileStatus.WRITTEN_PARTIALLY` was kept and now
+means "replace failed, original intact."
+
+- **Serves:** correctness / data-loss. Isolated to `frmtr-tooling`.
+
+### S7. Comment guardrail split + output-level comment-drop net in CI
+**Status:** ✅ Done — landed on `main` · _focused proposal:_ [comment-accounting-in-ci.md](comment-accounting-in-ci.md) · _evidence:_ [comment-handling-findings.md](comment-handling-findings.md)
+
+The single `debug.guardrails` toggle conflated an unreliable dup-claim fail-fast with the accounting checks; it was
+**split** so the dup-claim invariant sits behind an off-by-default `FormatterGuardrails.STRICT_CLAIMS_PROPERTY`. The
+durable "no comment dropped" gate is **not** `assertAllCommentsAccounted` (12 FP / 3 FN) but an output-level lexer
+comment-token comparison: `CommentPresenceDiagnosticTest` now **asserts** over every golden fixture plus
+collapsed/expanded perturbations, with the S9 backlog as a documented `KNOWN_DROPS` exclusion list.
+
+- **Serves:** correctness, test discipline. Enables S9.
+
+### S8. Opt-in `--verify` safety valve: refuse to overwrite non-equivalent output
+**Status:** ✅ Done — landed on `main` · _focused proposal:_ [verify-on-write-safety-valve.md](verify-on-write-safety-valve.md)
+
+The AST-equivalence check existed only as a debug toggle whose failure was mislabeled as an internal crash. **Now an
+opt-in valve:** `--write --verify` (CLI) → public `Frmtr.formatVerified` → `JavaFormatter.formatVerified` (seam `assertOutputEquivalentOrThrow`)
+re-parses each file and refuses to overwrite (non-internal `"frmtr verify: …"` message, original left intact) when the
+output is not AST-equivalent; recovered inputs are skipped. Reuses the `FAILED` status; the Gradle `verify` option was
+deferred. Pairs with S6 so `--write` is fully safe.
+
+- **Serves:** correctness / UX. Partially overlaps B3's surface.
+
+### S9. Fix comment data loss
+**Status:** 🟢 In progress — verbatim-input drops fixed; shape-dependent/orphan backlog routed to B1/B2 · _focused proposal:_ [comment-data-loss.md](comment-data-loss.md)
+
+The S7 net surfaced ~42 `(fixture, shape)` real comment drops. The **verbatim @default-input** drops (where the golden
+output was itself lossy) are fixed and pinned — concrete preservation fixes landed in `CompilationUnitPrinter`
+(file-orphan ordering), `SwitchPrinter` (orphan interleaving), and `CommentedExpressionListPrinter` (`lineSuffix`
+routing), plus fixtures like `block-orphan-method-call-comments`. ~24 collapsed/expanded perturbation cases remain parked
+in `CommentPresenceDiagnosticTest.KNOWN_DROPS`, routed to **B1** (shape-independent ownership) and one **B2**
+AST-invisible file-header orphan; the net bites on any new or stale entry.
+
+- **Serves:** correctness / data-loss. Iterative; folds into B1/B2.
+
 ---
 
 ## Suggested sequencing
@@ -349,6 +394,11 @@ Drafted for this roadmap:
 | M2 | Linear-time renderer | [linear-time-doc-renderer.md](linear-time-doc-renderer.md) |
 | M3 | Parallelism + caching | [multi-file-parallelism-and-caching.md](multi-file-parallelism-and-caching.md) |
 | M4 | LSP / editor integration | [lsp-editor-integration.md](lsp-editor-integration.md) |
+| S6 | Atomic in-place writes (implemented) | [atomic-in-place-writes.md](atomic-in-place-writes.md) |
+| S7 | Comment guardrail split + drop net (implemented) | [comment-accounting-in-ci.md](comment-accounting-in-ci.md) |
+| S8 | `--verify` safety valve (implemented) | [verify-on-write-safety-valve.md](verify-on-write-safety-valve.md) |
+| S9 | Fix comment data loss (in progress) | [comment-data-loss.md](comment-data-loss.md) |
+| S7/S9 | Comment-handling findings → B-work map | [comment-handling-findings.md](comment-handling-findings.md) |
 
 Pre-existing, related:
 
@@ -359,6 +409,7 @@ Pre-existing, related:
 | Lazy `.gitignore` discovery | [cli-discovery-lazy-ignore.md](cli-discovery-lazy-ignore.md) | M3 (delivered part) |
 
 > Items without a dedicated doc — the smalls **S1–S5** (self-contained) — are specified inline above
-> and can be picked up directly.
+> and can be picked up directly. The audit-correctness smalls **S6–S9** each carry a dedicated doc (listed in the
+> "Drafted for this roadmap" table above), preserved as provenance records of already-shipped work.
 > **S5** (the recommended prerequisite for **M2** and **B2**) is ✅ **done** — landed on `main` in
 > `6e4f600a`.

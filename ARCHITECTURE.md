@@ -128,16 +128,24 @@ instead of building strings directly:
   by name. The id never affects the group's own layout; the common, anonymous case (null id) is unchanged.
 - `Fill` lays out an alternating `[content, separator, …]` list with greedy per-separator packing: each separator stays
   flat while the next content still fits on the current line and breaks only where it does not, so a fill keeps as many
-  items per line as fit instead of being all-or-nothing like a `Group`. To an enclosing group it measures as the flat
-  concatenation of all its parts (a safe over-estimate). Its first Java-printer consumer is the throws-clause printer,
-  which greedily packs an overflowing `throws ...` exception list across continuation lines instead of leaving it as one
-  unbreakable line (see `ThrowsClausePrinter`).
+  items per line as fit instead of being all-or-nothing like a `Group`. The list starts and ends with content, so a
+  well-formed list is empty or odd-length; the factory rejects a non-empty even-length list, whose trailing separator the
+  pairwise render walk would otherwise silently drop. To an enclosing group it measures as the flat concatenation of all
+  its parts (a safe over-estimate). Its first Java-printer consumer is the throws-clause printer, which greedily packs an
+  overflowing `throws ...` exception list across continuation lines instead of leaving it as one unbreakable line (see
+  `ThrowsClausePrinter`).
 - `ConditionalGroup` holds an ordered list of layout alternatives and renders the first whose flat layout fits the space
-  left on the current line (in flat mode), falling back to the last alternative in break mode when none fit. It is the
-  IR form of the `Optional<Doc>` "try layout A, else B, else C" fallback chains printers hand-roll: ranking the
-  alternatives (most compact first, an always-valid layout last) is the caller's job, while the renderer only picks among
-  them using its own width measurement. To an enclosing group it measures as its first (most-flat) alternative. It is an
-  additive primitive not yet adopted by any Java printer.
+  left on the current line (rendered flat), falling back to the last alternative in break mode when none fit. This is the
+  Prettier-style conditional group: ranking the alternatives (narrowest flat layout first, an always-valid layout last)
+  is the caller's job, while the renderer only picks among them by its own flat-fit measurement. Because every non-last
+  alternative is selected purely by flat fit, **only the last alternative may be a broken/multi-line layout** — a
+  non-last alternative carrying a forced break (`HardLine`/`BreakParent`) can never fit flat and is therefore dead. The
+  first alternative must be the narrowest flat layout, because an enclosing group sizes the whole conditional group by
+  its first alternative (a safe over-estimate only when the first is narrowest). The factory rejects an empty list
+  ("render nothing" is not a layout choice) and treats a singleton as an unconditional flat-or-break fallback. It does
+  **not** encode predicate-gated selection or ranking among multiple broken layouts, so it does not subsume the
+  source/structural-predicate-gated `Optional<Doc>` layout dispatch in `MethodCallChainPrinter`. It is an additive
+  primitive not yet adopted by any Java printer.
 - `IfBreak` selects different output for flat versus broken groups. With a null `groupId` it follows the ambient
   surrounding group (the common case); with a non-null `groupId` it follows the mode the identified `Group` recorded
   when it rendered earlier, so a closing delimiter can mirror the break/flat decision of an opener group it does not

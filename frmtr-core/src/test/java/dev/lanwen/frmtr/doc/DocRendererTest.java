@@ -303,6 +303,49 @@ final class DocRendererTest {
     }
 
     @Test
+    void fillRejectsAnEvenLengthListWhoseTrailingSeparatorWouldBeSilentlyDropped() {
+        // An even-length list ends with a separator that the pairwise render walk never reaches, so it would vanish
+        // from the output. The factory rejects it rather than emit a layout that quietly differs from the parts handed in.
+        Doc separator = Doc.concat(Doc.text(","), Doc.LINE);
+        assertThatThrownBy(() -> Doc.fill(java.util.List.of(Doc.text("a"), separator)))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("even-length");
+    }
+
+    @Test
+    void fillAcceptsEmptyAndOddLengthListsAsTheWellFormedShapes() {
+        // The well-formed shapes are accepted: empty (renders nothing), a single content element, and an odd-length
+        // alternating list. None throw, and each renders the content it was given.
+        Doc separator = Doc.concat(Doc.text(","), Doc.LINE);
+        assertThat(renderer(80).render(Doc.fill(java.util.List.of()))).isEmpty();
+        assertThat(renderer(80).render(Doc.fill(java.util.List.of(Doc.text("only"))))).isEqualTo("only");
+        assertThat(renderer(80).render(Doc.fill(java.util.List.of(Doc.text("a"), separator, Doc.text("b")))))
+            .isEqualTo("a, b");
+    }
+
+    @Test
+    void conditionalGroupRejectsAnEmptyAlternativeList() {
+        // "Render nothing" is never a valid layout-choice intent and an empty conditional group is almost always a
+        // construction bug, so the factory fails fast instead of building a group with nothing to fall back on.
+        assertThatThrownBy(() -> Doc.conditionalGroup(java.util.List.of()))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("at least one alternative");
+    }
+
+    @Test
+    void conditionalGroupAcceptsASingletonAsAnUnconditionalFallback() {
+        // A single alternative is the degenerate, valid case: there is nothing to choose, so it renders flat when it fits
+        // and broken otherwise, exactly like wrapping that one layout in a group. Here the lone layout fits at 20 columns.
+        Doc layout = Doc.concat(
+            Doc.text("("),
+            Doc.indent(Doc.concat(Doc.SOFT_LINE, Doc.text("payload"))),
+            Doc.SOFT_LINE,
+            Doc.text(")")
+        );
+        assertThat(renderer(20).render(Doc.conditionalGroup(java.util.List.of(layout)))).isEqualTo("(payload)");
+    }
+
+    @Test
     void ifBreakBoundToNamedGroupFollowsThatGroupsBreakModeNotTheAmbientMode() {
         // The named "opener" group contains a BreakParent, so it can never stay flat and renders in break mode. The
         // dependent group around the ifBreak is tiny ("x[flat]" = 7 wide) and fits the 20-column limit, so its ambient

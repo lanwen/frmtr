@@ -2,18 +2,22 @@ package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.ArrayAccessExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
+import com.github.javaparser.ast.expr.CastExpr;
 import com.github.javaparser.ast.expr.CharLiteralExpr;
 import com.github.javaparser.ast.expr.ClassExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
+import com.github.javaparser.ast.expr.InstanceOfExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
+import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.Type;
 import java.util.List;
@@ -98,6 +102,24 @@ final class CompactSourceText {
                 + compact(conditionalExpr.getThenExpr())
                 + " : "
                 + compact(conditionalExpr.getElseExpr());
+        }
+        if (node instanceof UnaryExpr unaryExpr && containsRawLiteral(unaryExpr)) {
+            String operator = unaryExpr.getOperator().asString();
+            return unaryExpr.getOperator().isPrefix()
+                ? operator + compact(unaryExpr.getExpression())
+                : compact(unaryExpr.getExpression()) + operator;
+        }
+        if (node instanceof ArrayAccessExpr arrayAccessExpr && containsRawLiteral(arrayAccessExpr)) {
+            return compact(arrayAccessExpr.getName()) + "[" + compact(arrayAccessExpr.getIndex()) + "]";
+        }
+        if (node instanceof CastExpr castExpr && containsRawLiteral(castExpr)) {
+            return "(" + compactTypeLike(castExpr.getType()) + ") " + compact(castExpr.getExpression());
+        }
+        if (node instanceof InstanceOfExpr instanceOfExpr && containsRawLiteral(instanceOfExpr)) {
+            String right = instanceOfExpr.getPattern()
+                    .map(this::compact)
+                    .orElseGet(() -> compactTypeLike(instanceOfExpr.getType()));
+            return compact(instanceOfExpr.getExpression()) + " instanceof " + right;
         }
         // Containment gate kept as a direct JavaParser scan, not SourceShapePolicy/JavaCommentPlacementPolicy's
         // run index: compact() is reached with comment-stripped clones via compactWithoutOwnComment, and the run

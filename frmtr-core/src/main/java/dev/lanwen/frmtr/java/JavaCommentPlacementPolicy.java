@@ -118,6 +118,45 @@ final class JavaCommentPlacementPolicy {
     }
 
     /**
+     * Recovers the line comments that trail a variable/field {@code initializer} after its last token but before the
+     * closing {@code ;}, which neither the initializer's own renderer nor the declarator's post-{@code ;} trailing slot
+     * prints.
+     *
+     * <p>This is the after-initializer/before-{@code ;} sibling of the two trailing buckets that already cover a declared
+     * initializer's comments, and exists because that slot is owned by neither. The initializer-contained renderer (e.g.
+     * {@code BinaryExpressionPrinter.commentedBinaryLines}) only emits comments <em>between</em> operands — between
+     * {@code ""} and the first {@code +}, or between two {@code +} operands — so it recovers a leading/inter-operand
+     * comment but never one that begins after the whole initializer's last token, even when JavaParser attaches that
+     * trailing comment to the last operand as contained trivia. The declarator's own trailing-line slot
+     * ({@link #trailingLineComment(Node)}, consumed at the call site after the {@code ;}) only sees a comment JavaParser
+     * attached to the declarator and positioned after it, which for a multi-line concatenation is the post-{@code ;}
+     * comment, a different bucket. A {@code //} line that sits after the last {@code +} operand and before the closing
+     * {@code ;} lands in neither: depending on how whitespace lays the operands out JavaParser parks it either as an orphan
+     * of the {@code semicolonOwner} ({@link com.github.javaparser.ast.body.FieldDeclaration} or
+     * {@link com.github.javaparser.ast.stmt.ExpressionStmt}) — the multi-line shape — or as the initializer's own contained
+     * trivia on the last operand — the collapsed shape — so it is dropped both ways.
+     *
+     * <p>This query keeps that comment owned by the initializer tail by unioning both buckets and selecting only the line
+     * comments whose source position is after {@code initializer} ends (see
+     * {@link CommentIndex#startsAfterEndOf(Node, Comment)}), in source order. The {@code startsAfterEndOf} bound is what
+     * makes the union safe: a leading/inter-operand comment such as the START line begins inside the initializer range, so
+     * it is excluded from both halves and only the binary renderer prints it; the post-{@code ;} declarator comment is in
+     * neither bucket. So this query can only ever add the genuinely-trailing comment that both existing slots drop, and the
+     * claim-once wrapper renders it exactly once even if a future initializer renderer also reaches it.
+     */
+    List<JavaCommentTrivia> trailingInitializerCommentsBeforeSemicolon(Node semicolonOwner, Node initializer) {
+        return java.util.stream.Stream.concat(
+                orphanComments(semicolonOwner).stream(),
+                containedComments(initializer).stream()
+            )
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.startsAfterEndOf(initializer))
+                .distinct()
+                .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
+                .toList();
+    }
+
+    /**
      * Recovers the line comments that lead a control-statement {@code condition} but that JavaParser parked as orphans of
      * the enclosing {@code controlStmt} ({@code while}/{@code if}/{@code switch} statement or {@code switch} expression)
      * rather than as the condition's own contained trivia.

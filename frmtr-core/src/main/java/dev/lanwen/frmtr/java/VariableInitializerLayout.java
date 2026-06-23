@@ -282,7 +282,46 @@ final class VariableInitializerLayout {
         Doc declaration = variable.getInitializer()
                 .map(initializer -> variableWithInitializer(variable, initializer, declarationPrefix))
                 .orElseGet(() -> Doc.text(variableName(variable)));
-        return Doc.concat(declaration, Doc.text(";"), trailingLineComment(trailingLineComment));
+        Doc preSemicolonInitializerComment = preSemicolonInitializerComment(variable);
+        Doc semicolon = preSemicolonInitializerComment == Doc.EMPTY
+            ? Doc.text(";")
+            : Doc.concat(Doc.HARD_LINE, Doc.text(";"));
+        return Doc.concat(
+            declaration,
+            preSemicolonInitializerComment,
+            semicolon,
+            trailingLineComment(trailingLineComment)
+        );
+    }
+
+    /**
+     * Recovers the {@code //} line comments that trail this declarator's initializer after its last operand and before the
+     * closing {@code ;}, emitting them on their own continuation lines so the {@code ;} can drop onto its own line below.
+     *
+     * <p>For a multi-line String concatenation initializer JavaParser parks such a comment as an orphan of the enclosing
+     * {@link FieldDeclaration}/{@link ExpressionStmt} rather than as the initializer's contained trivia or the declarator's
+     * own trailing trivia, so neither the binary-line recovery nor the post-{@code ;} trailing slot prints it (see
+     * {@link CommentTracker#trailingInitializerCommentsBeforeSemicolon(Node, Node)}). The recovered comments are indented to
+     * the operand-continuation column the START/between-operand lines already use so the END comment aligns with the
+     * {@code +} lines; the caller drops the {@code ;} onto its own base-indent line below via {@link Doc#HARD_LINE}, because a
+     * {@code //} line would otherwise swallow a trailing {@code ;} into the comment. When there is no such comment the result
+     * is {@link Doc#EMPTY} (the same singleton the empty-recovery branch returns), leaving the terminator byte-identical to
+     * the no-recovery {@code concat(declaration, ";", trailing)}.
+     */
+    private Doc preSemicolonInitializerComment(VariableDeclarator variable) {
+        Expression initializer = variable.getInitializer().orElse(null);
+        if (initializer == null) {
+            return Doc.EMPTY;
+        }
+        Node owner = semicolonOwner(variable).orElse(null);
+        if (owner == null) {
+            return Doc.EMPTY;
+        }
+        List<Doc> recovered = comments.trailingInitializerCommentsBeforeSemicolon(owner, initializer);
+        if (recovered.isEmpty()) {
+            return Doc.EMPTY;
+        }
+        return Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, recovered)));
     }
 
     private boolean methodCallNeedsStatementTerminatorTail(VariableDeclarator variable, MethodCallExpr methodCall) {

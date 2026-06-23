@@ -297,29 +297,6 @@ final class CommentPresenceDiagnosticTest {
             "same bug as @default: trailing `//` END comment after the last `+` operand line and before the closing `;`"
                 + " of a multi-line String concatenation initializer is dropped");
 
-        // method-signature-line-comment-braces -- TRACKED (Branch B structured-path gap-comment drop). A `//` line comment
-        // whose TEXT contains braces, written alone on a line between a method signature's `)` and its body `{`, used to be
-        // de-commented into non-compiling live code (issue #23). The fix (comment-aware body-brace and close-paren
-        // detection in CommentedMethodSignaturePrinter) is byte-correct: the single-statement method (markNameBody, the
-        // `1 << 3` comment) routes through the raw commented-signature fallback (Branch A), which now preserves its gap
-        // comment verbatim on the signature line at every shape -- so that comment is NOT parked here. The two-statement
-        // method (markNameStart, the `1 << 4` comment) exceeds the fallback's body-size guard and takes the structured
-        // MethodDeclarationPrinter path (Branch B), which has no slot for the `)`-to-`{` gap comment and silently drops it
-        // (body intact, compiles). That structured-path slot is a separate, larger change tracked for a follow-up; the
-        // drop is the same at all three shapes because it is structural, not layout-dependent. Un-park all three together
-        // when the structured method path learns to render the signature-to-body gap comment.
-        drops.put("method-signature-line-comment-braces @ default",
-            "tracked (Branch B, >=2-statement structured path): the two-statement method's `// flags[point] |= (1 << 4)"
-                + " marks { ... }` gap comment between `)` and `{` is dropped by MethodDeclarationPrinter, which has no"
-                + " gap-comment slot. The single-statement method's comment is preserved by the raw fallback (issue #23"
-                + " fix). Un-park when the structured path renders the signature-to-body gap comment.");
-        drops.put("method-signature-line-comment-braces @ collapsed",
-            "same Branch B drop as @default: the two-statement method's `)`-to-`{` gap comment is dropped on the"
-                + " structured path; structural, not layout-dependent.");
-        drops.put("method-signature-line-comment-braces @ expanded",
-            "same Branch B drop as @default: the two-statement method's `)`-to-`{` gap comment is dropped on the"
-                + " structured path; structural, not layout-dependent.");
-
         return Collections.unmodifiableMap(drops);
     }
 

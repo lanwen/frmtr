@@ -1,6 +1,6 @@
 # Fix Comment Data Loss
 
-**Status:** Implemented in part (roadmap S9, ongoing) — verbatim-input drops fixed and pinned by the S7 lexer net; ~24 shape-dependent/orphan `(fixture, shape)` cases remain parked in `CommentPresenceDiagnosticTest.KNOWN_DROPS` (deferred to B1/B2); see [Outcome](#outcome) · Category: correctness / data-loss · Effort: L (iterative) · Risk: MED
+**Status:** Implemented / complete (roadmap S9) — all comment-drop cases fixed; `CommentPresenceDiagnosticTest.KNOWN_DROPS` is empty and the S7 lexer net is green over the corpus + all perturbations; see [Outcome](#outcome) · Category: correctness / data-loss · Effort: L (iterative) · Risk: MED
 **Planned at:** commit `9a89f7eb`, 2026-06-20 · **Depends on:** [comment-accounting-in-ci.md](comment-accounting-in-ci.md) (S7 — the output-level lexer net + the exclusion list that is this backlog) · **Evidence:** [comment-handling-findings.md](comment-handling-findings.md)
 
 > **Executor instructions**: Iterative backlog — fix **one cluster at a time**, each its own commit/branch, re-running
@@ -19,6 +19,9 @@ outputs encode the loss as "expected." Most drops need reshaped input to trigger
 (comment ownership must not depend on incidental whitespace). A few drop on ordinary input.
 
 ## Work-list (drain the S7 exclusion list; clusters below)
+
+> **All clusters below are now drained/completed** — `KNOWN_DROPS` is empty. The enumerated work-list is kept as
+> provenance of what S9 covered, not as open TODOs.
 
 ### P0 — drops on NORMAL (verbatim @default) input — fix first; the golden output is itself lossy
 - **`annotation-block-comment-gap`** — the `/* … */` between `@Deprecated` and the method is dropped (input 2 block
@@ -71,9 +74,9 @@ Grouped by construct (each entry is one or more `(fixture, shape)` pairs in the 
 Commit per cluster (imperative subject); end each body with: `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
 
 ## Done criteria
-- [ ] The S7 lexer-net exclusion list is **empty**; the net is green over the whole corpus + all perturbations.
-- [ ] Each fix has a `format/**` fixture; the two P0 golden outputs are re-baselined to include the recovered comment.
-- [ ] `bash -l -c "./gradlew test"` exits 0; no fixture/assertion weakened.
+- [x] The S7 lexer-net exclusion list is **empty**; the net is green over the whole corpus + all perturbations.
+- [x] Each fix has a `format/**` fixture; the two P0 golden outputs are re-baselined to include the recovered comment.
+- [x] `bash -l -c "./gradlew test"` exits 0; no fixture/assertion weakened.
 
 ## STOP conditions
 - S7's lexer net has not landed → STOP (no gate).
@@ -92,15 +95,12 @@ Commit per cluster (imperative subject); end each body with: `Co-Authored-By: Cl
 
 ## Outcome
 
-Partially implemented on `main`, and deliberately ongoing. The S7 lexer net
+Complete on `main`. The S7 lexer net
 (`frmtr-core/src/test/java/dev/lanwen/frmtr/CommentPresenceDiagnosticTest.java`) is the live gate, and its `KNOWN_DROPS`
-map *is* this backlog. The P0 cluster — drops on **verbatim @default input**, where the golden output was itself lossy —
-was drained: `annotation-block-comment-gap` and the `StatementPrinter` block-trailing `} // …` drops are fixed and no
-longer parked, and `comment-complex-block-statements` is now parked only under `@ collapsed`/`@ expanded` perturbations
-(not at default). Several perturbation-only fixes also landed (e.g. the switch entry-leading interleave and the
-trailing-argument method-call case). What **remains** is ~24 parked `(fixture, shape)` cases, every one a
-collapsed/expanded perturbation rather than verbatim input: shape-dependent ownership routed to **B1** (control-condition/if,
-labeled-statement, try-resource, method-arguments gap comments, records/enums/conditionals, member/interface bodies,
-the two remaining switch cases) and one AST-invisible file-header orphan routed to **B2**
-(`comment-preservation-class-members @ expanded`, the Guava copyright header `getAllContainedComments` never returns).
-The net fails on any *new* drop and on any *stale* exclusion, so the remaining work is honestly tracked, not masked.
+map — which *was* this backlog — is now **empty**. The P0 cluster (drops on **verbatim @default input**, where the
+golden output was itself lossy) and every collapsed/expanded perturbation cluster are drained:
+`annotation-block-comment-gap`, the `StatementPrinter` block-trailing `} // …` drops, `comment-complex-block-statements`,
+the control-condition/if, labeled-statement, try-resource, method-argument, switch, records/enums/conditionals, and
+member/interface-body cases all preserve their comments at every shape, each pinned by a fixture. With no exclusions
+left, S9 is done and the net stands as a regression guard. The net fails on any *new* drop and on any *stale* exclusion,
+so a future regression cannot hide and cannot be parked.

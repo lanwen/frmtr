@@ -1,6 +1,6 @@
 # Comment-Handling Findings → B-Work Map
 
-**Status:** Implemented — reference/synthesis whose findings were actioned: S7 net + guardrail split landed, the verbatim-input comment-preservation fixes landed on `main`, the residual shape-dependent/orphan drops are routed to B1/B2; see [Outcome](#outcome) · **As of:** commit `9a89f7eb` (S6 + S8 merged), 2026-06-20
+**Status:** Implemented — reference/synthesis whose findings were actioned: S7 net + guardrail split landed, and all bucket-A comment-drop fixes landed on `main` so `CommentPresenceDiagnosticTest.KNOWN_DROPS` is empty; the bucket B/C/D strict-claims/accounting work stays deferred to B1/B2; see [Outcome](#outcome) · **As of:** commit `9a89f7eb` (S6 + S8 merged), 2026-06-20
 
 This is the consolidated, evidence-backed map of every comment-handling finding surfaced by the S7 guardrail
 experiment and the output-level investigation behind it. Its job is to **route each finding to its fix and to the right
@@ -103,7 +103,10 @@ the lexer net `frmtr-core/src/test/java/dev/lanwen/frmtr/CommentPresenceDiagnost
 `frmtr-core/src/main/java/dev/lanwen/frmtr/java/CompilationUnitPrinter.java` (orphan-before-first-type and trailing-orphan
 emission), switch orphan interleaving in `SwitchPrinter.java` (`commentInterleaver.interleave(... orphanComments ...)`),
 trailing-comment routing through `Doc.lineSuffix` in `CommentedExpressionListPrinter.java` and peers (the B2 `lineSuffix`
-adoption), and fixture-pinned recoveries such as `block-orphan-method-call-comments`. **The residual bucket-A
-perturbation drops were *not* all fixed and are intentionally routed onward:** they remain the `KNOWN_DROPS` backlog in
-the net, tracked as B1 (shape-independent ownership) plus one B2 AST-invisible file-header orphan — matching this map's
-routing. So the findings here are resolved or assigned, not open-ended.
+adoption), and fixture-pinned recoveries such as `block-orphan-method-call-comments`. **The bucket-A perturbation drops
+are now fully resolved:** the shape-dependent ownership recoveries landed across every cluster (control-condition/if,
+labeled-statement, try-resource, method-argument, switch, records/enums/conditionals, member/interface bodies, and the
+AST-invisible file-header orphan), so `CommentPresenceDiagnosticTest.KNOWN_DROPS` is **empty** and the net is green with
+no exclusions. The buckets B/C/D routing is unchanged and still deferred: the strict-claims (exactly-once) invariant and
+the accounting gaps dissolve only once comment ownership is fully unified under B1/B2, so the `…strict-claims` guardrail
+stays off by default. So the findings here are resolved or assigned, not open-ended.

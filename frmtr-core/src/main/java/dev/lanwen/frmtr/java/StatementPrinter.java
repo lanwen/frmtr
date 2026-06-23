@@ -371,7 +371,15 @@ final class StatementPrinter {
     }
 
     private void consumeLabeledBodyLeadingLineComment(Statement statement) {
-        comments.ownComment(statement, LineComment.class::isInstance);
+        // Suppress only a genuinely-LEADING own line comment on the labeled body so the raw-slice leading path does not
+        // double-print it. A line comment that starts after the body ends is the body's own TRAILING comment, not a
+        // leading one (under a whitespace collapse a following statement's before-label line comment re-buckets onto the
+        // previous sibling's body as exactly such a trailing comment); claiming it here would drop it, since the body
+        // renderer reads it back via trailingLineComment. The startsAfterEndOf guard leaves the trailing comment unclaimed.
+        comments.ownComment(
+            statement,
+            comment -> comment instanceof LineComment && !CommentIndex.startsAfterEndOf(statement, comment)
+        );
     }
 
     /**
@@ -466,13 +474,20 @@ final class StatementPrinter {
             && forEachStmt.getBody().asBlockStmt().getStatements().isEmpty()
             && forEachStmt.getBody().asBlockStmt().getOrphanComments().isEmpty()
         ) {
-            return Doc.text(
+            Doc emptyFor = Doc.text(
                 "for ("
                     + compact.apply(forEachStmt.getVariable())
                     + " : "
                     + compact.apply(forEachStmt.getIterable())
                     + ") {}"
             );
+            // This fast path renders an empty labeled for-loop body directly instead of routing through the statement
+            // envelope, so it must still emit the ForEachStmt's own trailing line comment (e.g. `loop: for (...) {} //
+            // note`) that the bypassed envelope would otherwise render. trailingLineComment claims the comment once, so
+            // it is not double-printed when the idempotence pass re-attaches it to the rebuilt LabeledStmt and renders
+            // it through the envelope. With no such comment this returns the byte-identical `for (...) {}` text.
+            Doc trailing = comments.trailingLineComment(forEachStmt);
+            return trailing == Doc.EMPTY ? emptyFor : Doc.concat(emptyFor, Doc.text(" "), trailing);
         }
         if (statement instanceof BlockStmt blockStmt) {
             return blockRenderer.format(blockStmt);

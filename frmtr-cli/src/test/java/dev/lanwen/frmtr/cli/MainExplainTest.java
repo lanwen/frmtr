@@ -210,7 +210,7 @@ final class MainExplainTest {
         Result result = run(Path.of("."), "class A{}", "--stdin", "--explain", "--verify");
 
         assertThat(result.exitCode()).isEqualTo(2);
-        assertThat(result.err()).isEqualTo("--verify requires --write\n");
+        assertThat(result.err()).isEqualTo("--verify requires --write or --check\n");
         assertThat(result.out()).isEmpty();
     }
 

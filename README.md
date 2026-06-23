@@ -143,6 +143,12 @@ Format selectors in place with the write-time AST-equivalence safety valve:
 ./gradlew :frmtr-cli:run --args='--write --verify "src/**/*.java,examples/*.java"'
 ```
 
+Assert AST-equivalence read-only — format each file in memory and verify, writing nothing (exit 3 on a violation):
+
+```bash
+./gradlew :frmtr-cli:run --args='--check --verify "src/**/*.java,examples/*.java"'
+```
+
 Exclude generated or fixture sources from a broad selector:
 
 ```bash
@@ -165,6 +171,7 @@ Exclude generated or fixture sources from a broad selector:
 | `--check` | Checks formatting without changing files. This is the default mode. |
 | `--write` | Formats files in place and prints a processed summary. |
 | `--write --verify` | Like `--write`, but re-parses each formatted file and refuses to overwrite it when the result is not AST-equivalent to the input. |
+| `--check --verify` | Like `--check`, but also re-parses each in-memory formatted result and asserts AST-equivalence. Read-only: it reports would-change and writes nothing, exiting 3 if any file's output is not AST-equivalent. |
 | `--stdin` | Reads Java source from stdin and writes formatted source to stdout. |
 | `--stdin --check` | Compares piped source against formatter output. |
 | `--stdin --diff` | Prints a unified diff between piped source and formatter output. |
@@ -172,11 +179,25 @@ Exclude generated or fixture sources from a broad selector:
 For multi-file runs, `--check` and `--write` continue after formatter failures and render outlined diagnostics with
 line-numbered JavaParser source context when available.
 
-`--verify` is an opt-in safety valve, off by default and valid only with `--write`; the CLI rejects it in stdin, explain,
-check, and print modes. When enabled, each file's formatted output is re-parsed and compared structurally to the input;
-if it is not AST-equivalent, that file is left untouched and reported as a failure with a clear diagnostic instead of
-being overwritten. Verification doubles parse cost, which is why it stays off by default. The Gradle plugin does not yet
-have an equivalent flag.
+`--verify` is an opt-in safety valve, off by default and valid with `--write` or `--check`; the CLI rejects it in stdin,
+explain, and print modes (and standalone, without `--write` or `--check`). When enabled, each file's formatted output is
+re-parsed and compared structurally to the input. Under `--write`, a non-AST-equivalent result leaves that file
+untouched and reports it as a failure instead of overwriting it. Under `--check`, formatting happens in memory only:
+nothing is ever written, the file is reported as would-change like a normal check, and a non-AST-equivalent result is a
+verify violation (exit 3). Verification doubles parse cost, which is why it stays off by default. The Gradle plugin does
+not yet have an equivalent flag.
+
+### Exit Codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | Success: all files clean / written / verified, or no files matched. |
+| `1` | Would change (check modes only): files need formatting, with no failures. |
+| `2` | Parse failure, IO error, or usage/config error: the run could not be completed. |
+| `3` | Verify violation: a cleanly-parsed file's formatted output was not AST-equivalent to the input (or did not re-parse) — a formatter bug. |
+
+When a run produces a mix of outcomes, the highest-severity code wins: `3 > 2 > 1 > 0`. Usage and configuration errors
+stay `2`; there is no separate usage code.
 
 ### Check Output
 

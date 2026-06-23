@@ -49,11 +49,52 @@ public final class FormatterRunner {
             UnifiedDiffRenderer.RenderMode diffRenderMode,
             FormatRunProgress progress
     ) {
+        return checkFiles(displayRoot, files, options, includeDiffs, diffRenderMode, progress, FrmtrSession::format);
+    }
+
+    /**
+     * Read-only check that also asserts AST-equivalence of each file's formatted output, writing nothing.
+     *
+     * <p>Parallels {@link #check}, but formats through {@code FrmtrSession#formatVerified} so a cleanly-parsed file whose
+     * formatted output is not AST-equivalent to its input (or does not re-parse) surfaces as a {@code FAILED} result
+     * carrying the verify-violation {@link FormatterException}. Because the underlying {@code checkFile} never touches
+     * disk, this path is inherently read-only: it reports would-change exactly like {@link #check} and writes nothing,
+     * making it the read-only counterpart to {@link #writeVerified}.
+     */
+    public static FormatRunResult checkVerified(
+            Path displayRoot,
+            List<Path> files,
+            FormatterOptions options,
+            boolean includeDiffs,
+            UnifiedDiffRenderer.RenderMode diffRenderMode,
+            FormatRunProgress progress
+    ) {
+        return checkFiles(
+            displayRoot,
+            files,
+            options,
+            includeDiffs,
+            diffRenderMode,
+            progress,
+            FrmtrSession::formatVerified
+        );
+    }
+
+    private static FormatRunResult checkFiles(
+            Path displayRoot,
+            List<Path> files,
+            FormatterOptions options,
+            boolean includeDiffs,
+            UnifiedDiffRenderer.RenderMode diffRenderMode,
+            FormatRunProgress progress,
+            BiFunction<FrmtrSession, String, String> formatSource
+    ) {
         return new FormatRunResult(
             formatSelectedFiles(
                 displayRoot,
                 files,
-                (formatter, file) -> checkFile(displayRoot, file, formatter, options, includeDiffs, diffRenderMode),
+                (formatter, file) ->
+                    checkFile(displayRoot, file, formatter, options, includeDiffs, diffRenderMode, formatSource),
                 options,
                 progress
             )
@@ -271,12 +312,13 @@ public final class FormatterRunner {
             Supplier<FrmtrSession> formatter,
             FormatterOptions options,
             boolean includeDiffs,
-            UnifiedDiffRenderer.RenderMode diffRenderMode
+            UnifiedDiffRenderer.RenderMode diffRenderMode,
+            BiFunction<FrmtrSession, String, String> formatSource
     ) {
         Path displayPath = displayPath(displayRoot, file);
         try {
             String original = Files.readString(file, StandardCharsets.UTF_8);
-            String formatted = formatter.get().format(original);
+            String formatted = formatSource.apply(formatter.get(), original);
             if (formatted.equals(original)) {
                 return new FormatFileResult(file, displayPath, FormatFileStatus.UNCHANGED, "", null);
             }

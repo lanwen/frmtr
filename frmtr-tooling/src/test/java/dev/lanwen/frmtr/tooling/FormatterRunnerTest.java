@@ -3,6 +3,7 @@ package dev.lanwen.frmtr.tooling;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -139,6 +140,72 @@ final class FormatterRunnerTest {
                 }
                 """
         );
+    }
+
+    @Test
+    void checkVerifiedReportsChangesWithoutWritingForCorrectlyFormattableFiles(@TempDir Path dir) throws IOException {
+        // Read-only check+verify must classify files exactly like check (CHANGED vs UNCHANGED) and write nothing, even
+        // though it formats through the verifying path. A refusal cannot be triggered while the formatter is correct;
+        // the verify-violation failure type and its exit-code routing are covered in frmtr-core and the CLI.
+        Path changed = write(dir.resolve("src/Changed.java"), "class Changed{int value;}");
+        String changedBefore = Files.readString(changed, StandardCharsets.UTF_8);
+        Path unchanged = write(
+            dir.resolve("src/Unchanged.java"),
+            """
+                class Unchanged {
+
+                    int value;
+                }
+                """
+        );
+        String unchangedBefore = Files.readString(unchanged, StandardCharsets.UTF_8);
+
+        FormatRunResult run = FormatterRunner.checkVerified(
+            dir,
+            List.of(changed, unchanged),
+            FormatterOptions.defaults(),
+            true,
+            UnifiedDiffRenderer.RenderMode.PATCH,
+            state -> {}
+        );
+
+        assertThat(run.results())
+                .extracting(FormatFileResult::displayPath, FormatFileResult::status)
+                .containsExactly(
+                    org.assertj.core.groups.Tuple.tuple(Path.of("src/Changed.java"), FormatFileStatus.CHANGED),
+                    org.assertj.core.groups.Tuple.tuple(Path.of("src/Unchanged.java"), FormatFileStatus.UNCHANGED)
+                );
+        assertThat(run.hasFailures()).isFalse();
+        assertThat(run.hasChanges()).isTrue();
+        assertThat(run.changedResults().getFirst().unifiedDiff()).isPresent();
+        // Read-only: neither file is rewritten, including the one that would change.
+        assertThat(Files.readString(changed, StandardCharsets.UTF_8)).isEqualTo(changedBefore);
+        assertThat(Files.readString(unchanged, StandardCharsets.UTF_8)).isEqualTo(unchangedBefore);
+    }
+
+    @Test
+    void failedResultCarriesVerifyViolationExceptionForExitCodeRouting(@TempDir Path dir) {
+        // The real formatter never emits non-equivalent output, so the refusal — a FAILED result whose exception is a
+        // verify-violation FormatterException — is asserted at the result plumbing the CLI exit-code mapping reads.
+        // This guards that a verify violation surfaces as a distinguishable failure, not collapsed into a plain one.
+        Path file = dir.resolve("src/Refused.java");
+        FormatFileResult refused = new FormatFileResult(
+            file,
+            Path.of("src/Refused.java"),
+            FormatFileStatus.FAILED,
+            "",
+            FormatterException.verifyViolation("frmtr verify: formatted output is not AST-equivalent to the input — x")
+        );
+
+        FormatRunResult run = new FormatRunResult(List.of(refused));
+
+        assertThat(run.hasFailures()).isTrue();
+        assertThat(run.firstFailure())
+                .get()
+                .isInstanceOfSatisfying(FormatterException.class, exception -> {
+                    assertThat(exception.verifyViolation()).isTrue();
+                    assertThat(exception.internal()).isFalse();
+                });
     }
 
     @Test

@@ -36,11 +36,35 @@ import picocli.CommandLine.Parameters;
     name = "frmtr",
     mixinStandardHelpOptions = true,
     versionProvider = Main.BuildVersionProvider.class,
-    description = "Formats Java source."
+    description = "Formats Java source.",
+    footer = {
+        "",
+        "Exit codes (highest severity wins: 3 > 2 > 1 > 0):",
+        "  0  success: all files clean / written / verified, or no files matched.",
+        "  1  would change: check modes only, files need formatting, no failures.",
+        "  2  parse failure, IO error, or usage error: the run could not be completed.",
+        "  3  verify violation: a cleanly-parsed file's formatted output was not",
+        "     AST-equivalent to the input (or did not re-parse) — a formatter bug.",
+    }
 )
 public final class Main implements Callable<Integer> {
 
     private static final List<String> DEFAULT_SELECTORS = List.of("./**/*.java");
+
+    /** All files clean / written / verified, or no files matched. */
+    static final int EXIT_OK = 0;
+
+    /** Check modes only: files would change, with no failures. */
+    static final int EXIT_CHANGED = 1;
+
+    /** Parse failure, IO error, or usage/config error: the run could not be completed. */
+    static final int EXIT_FAILED = 2;
+
+    /**
+     * Verify violation: a cleanly-parsed file's formatted output was not AST-equivalent to the input (or did not
+     * re-parse) — a formatter bug. Highest severity; takes precedence over {@link #EXIT_FAILED} and {@link #EXIT_CHANGED}.
+     */
+    static final int EXIT_VERIFY = 3;
 
     private static final char LINE_WIDTH_MARKER = '⋮';
 
@@ -63,8 +87,8 @@ public final class Main implements Callable<Integer> {
 
     @Option(
         names = "--verify",
-        description = "With --write, re-parse each formatted file and refuse to overwrite it if the result is not "
-            + "AST-equivalent to the input. Off by default; doubles parse cost."
+        description = "Re-parse each formatted file and assert AST-equivalence. Valid with --write (refuse "
+            + "non-equivalent overwrites) or --check (read-only, writes nothing). Off by default; doubles parse cost."
     )
     boolean verify;
 
@@ -199,14 +223,18 @@ public final class Main implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-        if (verify && !write) {
-            err.println("--verify requires --write");
-            return 2;
+        if (verify && !write && !check) {
+            err.println("--verify requires --write or --check");
+            return EXIT_FAILED;
         }
         if (explain) {
             return runExplain();
         }
         if (stdinMode) {
+            if (verify) {
+                err.println("--verify requires --write or --check");
+                return EXIT_FAILED;
+            }
             if (write || !selectors.isEmpty() || !excludes.isEmpty()) {
                 err.println("--stdin cannot be combined with --write, selectors, or --exclude");
                 return 2;
@@ -384,14 +412,11 @@ public final class Main implements Callable<Integer> {
             long excluded,
             CliProgressRenderer progress
     ) {
-        FormatRunResult run = FormatterRunner.check(
-            workingDirectory,
-            files,
-            options,
-            diff || renderLineWidth,
-            diffMode(),
-            progressRenderer(files.size(), "would change", progress)
-        );
+        FormatRunProgress runProgress = progressRenderer(files.size(), "would change", progress);
+        FormatRunResult run = verify
+            ? FormatterRunner.checkVerified(workingDirectory, files, options, diff || renderLineWidth, diffMode(),
+                runProgress)
+            : FormatterRunner.check(workingDirectory, files, options, diff || renderLineWidth, diffMode(), runProgress);
         for (FormatFileResult result : run.results()) {
             out.println(statusLine(statusMarker(result.status()), result.displayPath()));
             if (result.failed() && !stacktrace) {
@@ -406,9 +431,23 @@ public final class Main implements Callable<Integer> {
         printCheckSummary(run, excluded);
         out.flush();
         if (run.hasFailures()) {
-            return 2;
+            return failureExit(run);
         }
-        return run.hasChanges() ? 1 : 0;
+        return run.hasChanges() ? EXIT_CHANGED : EXIT_OK;
+    }
+
+    /**
+     * Maps a run that has failures to {@link #EXIT_VERIFY} when any failure is the verify safety valve's
+     * AST-equivalence refusal, otherwise {@link #EXIT_FAILED}. This is the single seam that distinguishes a formatter
+     * bug (non-AST-equivalent output) from an ordinary parse/IO failure, keyed on
+     * {@link FormatterException#verifyViolation()} rather than the failure message string.
+     */
+    static int failureExit(FormatRunResult run) {
+        boolean verifyViolation = run.failedResults().stream()
+                .flatMap(result -> result.failureException().stream())
+                .anyMatch(exception ->
+                    exception instanceof FormatterException formatterException && formatterException.verifyViolation());
+        return verifyViolation ? EXIT_VERIFY : EXIT_FAILED;
     }
 
     private RenderMode diffMode() {
@@ -429,7 +468,7 @@ public final class Main implements Callable<Integer> {
         printRunFailures(run);
         printWriteSummary(run, ignored, excluded);
         out.flush();
-        return run.hasFailures() ? 2 : 0;
+        return run.hasFailures() ? failureExit(run) : EXIT_OK;
     }
 
     private CliProgressRenderer progressRendererBeforeDiscovery(

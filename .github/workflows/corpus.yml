@@ -2,13 +2,22 @@ name: Corpus
 
 # Release-triggered corpus correctness check.
 #
-# Fetches a pinned real-world Java corpus and runs the frmtr CLI over its main
-# sources to assert two invariants on every release:
+# Fetches a pinned real-world Java corpus into a throwaway checkout and runs the
+# frmtr CLI over its main sources to assert two DISTINCT invariants on every
+# release:
 #   1. parse-stability + AST-equivalence -- `frmtr --write --verify` re-parses
 #      each formatted file and refuses output that is not AST-equivalent to the
-#      input (non-zero exit on any violation).
-#   2. one-pass idempotence -- after formatting, `frmtr --check` exits non-zero
-#      if any already-formatted file would still change on a second pass.
+#      input. The CLI's distinct exit codes let this step report a formatter bug
+#      (exit 3, non-AST-equivalent output) apart from a parse/IO failure (exit 2).
+#   2. one-pass idempotence -- after formatting, `frmtr --check` exits 1 if any
+#      already-formatted file would still change on a second pass.
+#
+# These are separate properties: --verify gives parse-stability + AST-equivalence
+# only; it does NOT prove one-pass idempotence, which is why step 2 exists. The
+# mutating --write --verify then read-only --check pairing is deliberate. (The
+# read-only `--check --verify` mode is for non-throwaway targets; this checkout
+# is ephemeral, so mutating it in place is fine and idempotence still needs the
+# separate --check pass.)
 #
 # All knobs (corpus pin, scope, excludes) live in the `env` block below so they
 # are trivial to bump. No bespoke Java harness -- this reuses the shipping CLI.
@@ -76,22 +85,40 @@ jobs:
       - name: Parse-stability + AST-equivalence (frmtr --write --verify)
         working-directory: ${{ env.CORPUS_DIR }}
         run: |
-          set -euo pipefail
+          set -uo pipefail
           # --verify re-parses each output and refuses non-AST-equivalent results;
-          # --write is required for --verify. Non-zero exit on any violation.
+          # --write is required for --verify here. We mutate this throwaway checkout
+          # in place. The CLI's distinct exit codes let us message a formatter bug
+          # apart from a parse/IO failure:
+          #   0  ok                       2  parse/IO failure
+          #   3  FORMATTER BUG (non-AST-equivalent output)
           "$GITHUB_WORKSPACE"/frmtr-cli/build/install/frmtr-cli/bin/frmtr-cli \
             --write --verify --progress=never \
             $CORPUS_EXCLUDES \
             $CORPUS_SCOPE
+          status=$?
+          case "$status" in
+            0) echo "Parse-stability + AST-equivalence: ok." ;;
+            3) echo "::error::FORMATTER BUG: non-AST-equivalent output on the corpus (exit 3)."; exit 1 ;;
+            2) echo "::error::Parse failure or IO error formatting the corpus (exit 2)."; exit 1 ;;
+            *) echo "::error::Unexpected frmtr exit code $status."; exit 1 ;;
+          esac
 
       - name: One-pass idempotence (frmtr --check)
         working-directory: ${{ env.CORPUS_DIR }}
         run: |
-          set -euo pipefail
-          # The corpus is now formatted; --check exits non-zero if any file would
-          # still change, i.e. formatting is not a fixed point. (--check and
-          # --write cannot be combined, so this is a second invocation.)
+          set -uo pipefail
+          # The corpus is now formatted; --check exits 1 if any file would still
+          # change, i.e. formatting is not a fixed point. This checks one-pass
+          # idempotence, which --verify does NOT cover. (--check and --write cannot
+          # be combined, so this is a second invocation over the mutated tree.)
           "$GITHUB_WORKSPACE"/frmtr-cli/build/install/frmtr-cli/bin/frmtr-cli \
             --check --diff --progress=never \
             $CORPUS_EXCLUDES \
             $CORPUS_SCOPE
+          status=$?
+          case "$status" in
+            0) echo "One-pass idempotence: ok." ;;
+            1) echo "::error::Non-idempotent: a formatted file would still change (exit 1)."; exit 1 ;;
+            *) echo "::error::Unexpected frmtr exit code $status during idempotence check."; exit 1 ;;
+          esac

@@ -19,23 +19,32 @@ public final class FormatterException extends RuntimeException {
 
     private final boolean internal;
 
+    private final boolean verifyViolation;
+
     private final transient List<SourceProblem> sourceProblems;
 
     public FormatterException(String message) {
-        this(message, null, false, List.of());
+        this(message, null, false, false, List.of());
     }
 
     public FormatterException(String message, Throwable cause) {
-        this(message, cause, false, List.of());
+        this(message, cause, false, false, List.of());
     }
 
     public FormatterException(String message, Throwable cause, List<SourceProblem> sourceProblems) {
-        this(message, cause, false, sourceProblems);
+        this(message, cause, false, false, sourceProblems);
     }
 
-    private FormatterException(String message, Throwable cause, boolean internal, List<SourceProblem> sourceProblems) {
+    private FormatterException(
+            String message,
+            Throwable cause,
+            boolean internal,
+            boolean verifyViolation,
+            List<SourceProblem> sourceProblems
+    ) {
         super(message, cause);
         this.internal = internal;
+        this.verifyViolation = verifyViolation;
         this.sourceProblems = List.copyOf(Objects.requireNonNull(sourceProblems, "sourceProblems"));
     }
 
@@ -46,12 +55,36 @@ public final class FormatterException extends RuntimeException {
                 + failureSummary(cause),
             cause,
             true,
+            false,
             List.of()
         );
     }
 
+    /**
+     * Builds the verify safety valve's refusal exception: a cleanly-parsed input whose formatted output failed the
+     * AST-equivalence re-check (or did not re-parse) under the verify mode.
+     *
+     * <p>This is the single principled discriminator for that failure kind. {@link #verifyViolation()} is set
+     * {@code true} only through this factory, used exclusively at the two {@code JavaFormatter} verify throw sites, so
+     * callers (notably the CLI exit-code mapping) can distinguish "formatter produced non-equivalent output — a
+     * formatter bug" from an ordinary parse/IO failure without matching on the message string. The failure is not
+     * {@link #internal()}: it surfaces as a deliberate refusal, not an internal crash.
+     */
+    public static FormatterException verifyViolation(String message) {
+        return new FormatterException(message, null, false, true, List.of());
+    }
+
     public boolean internal() {
         return internal;
+    }
+
+    /**
+     * Returns {@code true} when this failure is the verify safety valve's AST-equivalence refusal — a cleanly-parsed
+     * file whose formatted output was not AST-equivalent to the input (or did not re-parse). Distinct from
+     * {@link #internal()}; both are {@code false} for ordinary parse and IO failures.
+     */
+    public boolean verifyViolation() {
+        return verifyViolation;
     }
 
     /**

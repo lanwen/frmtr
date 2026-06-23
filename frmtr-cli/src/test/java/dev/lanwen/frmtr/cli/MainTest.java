@@ -5,13 +5,18 @@ import static dev.lanwen.frmtr.cli.MainTestSupport.stripAnsi;
 import static dev.lanwen.frmtr.cli.MainTestSupport.write;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.cli.MainTestSupport.Result;
+import dev.lanwen.frmtr.tooling.FormatFileResult;
+import dev.lanwen.frmtr.tooling.FormatFileStatus;
+import dev.lanwen.frmtr.tooling.FormatRunResult;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -346,7 +351,115 @@ final class MainTest {
 
         assertThat(result.exitCode()).isEqualTo(2);
         assertThat(result.out()).isEmpty();
-        assertThat(result.err()).isEqualTo("--verify requires --write\n");
+        assertThat(result.err()).isEqualTo("--verify requires --write or --check\n");
+    }
+
+    @Test
+    void rejectsStandaloneVerifyWithoutWriteOrCheck() {
+        StringWriter out = new StringWriter();
+        StringWriter err = new StringWriter();
+        Main main = new Main(new PrintWriter(out, true), new PrintWriter(err, true), "");
+
+        int exitCode = Main.commandLine(main).execute("--verify", "src");
+
+        assertThat(exitCode).isEqualTo(2);
+        assertThat(out.toString()).isEmpty();
+        assertThat(err.toString()).isEqualTo("--verify requires --write or --check\n");
+    }
+
+    @Test
+    void rejectsStdinCheckVerifyBecauseVerifyNeedsFiles() {
+        Result result = run(Path.of("."), "class Demo{}", "--stdin", "--check", "--verify");
+
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.out()).isEmpty();
+        assertThat(result.err()).isEqualTo("--verify requires --write or --check\n");
+    }
+
+    @Test
+    void checkVerifyOnAlreadyFormattedFilesReturnsZeroAndWritesNothing(@TempDir Path dir) throws IOException {
+        String formatted = """
+                class Main {
+
+                    int value;
+                }
+                """;
+        write(dir.resolve("src/Main.java"), formatted);
+
+        Result result = run(dir, null, "--check", "--verify", "src");
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.out()).isEqualTo(
+            """
+                ✓ src/Main.java
+                Checked 1 file: 1 unchanged.
+                """
+        );
+        assertThat(result.err()).isEmpty();
+        assertThat(Files.readString(dir.resolve("src/Main.java"))).isEqualTo(formatted);
+    }
+
+    @Test
+    void checkVerifyOnMisformattedFilesReturnsOneAndLeavesFilesUnchanged(@TempDir Path dir) throws IOException {
+        String original = "class Main{int value;}";
+        write(dir.resolve("src/Main.java"), original);
+
+        Result result = run(dir, null, "--check", "--verify", "src");
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.out()).isEqualTo(
+            """
+                ✗ src/Main.java
+                Checked 1 file: 1 would change.
+                """
+        );
+        assertThat(result.err()).isEmpty();
+        // Read-only: --check --verify reports would-change but never rewrites the file.
+        assertThat(Files.readString(dir.resolve("src/Main.java"))).isEqualTo(original);
+    }
+
+    @Test
+    void readOnlyVerifyViolationMapsToExitThreeWithoutWriting(@TempDir Path dir) throws IOException {
+        // The real formatter never emits non-AST-equivalent output, so the read-only verify violation is exercised at
+        // the production decision seam: a FAILED result carrying a verify-violation FormatterException must map to
+        // EXIT_VERIFY (3), distinct from an ordinary parse/IO failure which maps to EXIT_FAILED (2). The file is never
+        // touched because check+verify formats in memory only.
+        Path file = dir.resolve("src/Main.java");
+        write(file, "class Main{int value;}");
+        String before = Files.readString(file);
+
+        FormatFileResult verifyFailure = new FormatFileResult(
+            file,
+            Path.of("src/Main.java"),
+            FormatFileStatus.FAILED,
+            "",
+            FormatterException.verifyViolation("frmtr verify: formatted output is not AST-equivalent to the input — x")
+        );
+        FormatFileResult parseFailure = new FormatFileResult(
+            file,
+            Path.of("src/Other.java"),
+            FormatFileStatus.FAILED,
+            "",
+            new FormatterException("Unable to parse Java source")
+        );
+
+        assertThat(Main.failureExit(new FormatRunResult(List.of(verifyFailure)))).isEqualTo(3);
+        assertThat(Main.failureExit(new FormatRunResult(List.of(parseFailure)))).isEqualTo(2);
+        // A verify violation mixed with a plain parse failure still wins (3 > 2).
+        assertThat(Main.failureExit(new FormatRunResult(List.of(parseFailure, verifyFailure)))).isEqualTo(3);
+        assertThat(Files.readString(file)).isEqualTo(before);
+    }
+
+    @Test
+    void writeVerifyParseFailureMapsToExitTwoNotThree(@TempDir Path dir) throws IOException {
+        // A parse failure under --write --verify is an ordinary failure, not a verify violation: it must stay exit 2.
+        // (The exit-3 verify-violation branch shares failureExit and is covered by the read-only seam test above.)
+        write(dir.resolve("src/Broken.java"), "class {");
+
+        Result result = run(dir, null, "--write", "--verify", "src");
+
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(Files.readString(dir.resolve("src/Broken.java"))).isEqualTo("class {");
     }
 
     @Test

@@ -85,6 +85,25 @@ final class CommentTracker {
     }
 
     /**
+     * Claims and renders the line comments that trail {@code initializer} after its last token but before the closing
+     * {@code ;}, which JavaParser parked as an orphan of {@code semicolonOwner}.
+     *
+     * <p>This is the after-initializer/before-{@code ;} counterpart of {@link #trailingLineComment(Node)} (the declarator's
+     * post-{@code ;} own trailing slot) and of the initializer-contained comment recovery (e.g. the binary printer's
+     * between-operand lines). Neither of those buckets owns a {@code //} line that begins after a multi-line concatenation
+     * initializer's last operand and before the {@code ;}, so this wrapper recovers exactly that slice and claims each
+     * comment once so it is never double-printed. See
+     * {@link JavaCommentPlacementPolicy#trailingInitializerCommentsBeforeSemicolon(Node, Node)}.
+     */
+    List<Doc> trailingInitializerCommentsBeforeSemicolon(Node semicolonOwner, Node initializer) {
+        return commentPlacement.trailingInitializerCommentsBeforeSemicolon(semicolonOwner, initializer)
+                .stream()
+                .filter(this::claim)
+                .map(JavaFormatter::commentDoc)
+                .toList();
+    }
+
+    /**
      * Claims and renders the line comments that sit between {@code afterNode} and {@code body} but that JavaParser parked
      * on one of {@code attachmentBuckets} instead of as {@code body}'s own leading trivia.
      *

@@ -169,7 +169,7 @@ final class MethodDeclarationPrinter {
         docs.add(
             declaration.getBody()
                     .map(body -> gapComment
-                            .map(comment -> Doc.concat(Doc.text(" "), comment, Doc.HARD_LINE, block.apply(body)))
+                            .map(comment -> Doc.concat(Doc.HARD_LINE, comment, Doc.HARD_LINE, block.apply(body)))
                             .orElseGet(() -> Doc.concat(Doc.text(" "), block.apply(body))))
                     .orElse(Doc.text(";")));
         return Doc.concat(docs);
@@ -177,14 +177,15 @@ final class MethodDeclarationPrinter {
 
     /**
      * Recovers the {@code //} line comment written alone between a method signature's {@code )} and its body {@code {}
-     * — trivia that the structured {@link JavaPrinter} block rendering never emits — and renders it on the signature line
-     * with a {@link Doc#HARD_LINE} so the {@code {} drops to its own line below.
+     * — trivia that the structured {@link JavaPrinter} block rendering never emits — and renders it on its own line
+     * below the signature, preserving the source shape: a {@link Doc#HARD_LINE} before the comment drops it onto a fresh
+     * line at the member indent and a second {@link Doc#HARD_LINE} after it drops the {@code {} onto the line below.
      *
      * <p>This is the structured-path counterpart of the raw commented-signature fallback handled by
      * {@link CommentedMethodSignaturePrinter}: methods with {@code >=2} statements stay on this structured path, where
-     * {@code block.apply(body)} drops the body block's own comment. The {@link Doc#HARD_LINE} is mandatory — a line
-     * comment with the brace on its own line would comment the brace out. When no such gap comment exists the slot is
-     * empty and the body renders exactly as before, keeping comment-free methods byte-identical.
+     * {@code block.apply(body)} drops the body block's own comment. The trailing {@link Doc#HARD_LINE} is mandatory — a
+     * line comment with the brace on the same line would comment the brace out. When no such gap comment exists the slot
+     * is empty and the body renders exactly as before, keeping comment-free methods byte-identical.
      */
     private Optional<Doc> signatureToBodyGapComment(MethodDeclaration declaration) {
         return declaration.getBody()

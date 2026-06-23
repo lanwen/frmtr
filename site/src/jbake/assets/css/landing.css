@@ -167,14 +167,98 @@ html.dark .hero {
 
 .hero-paper {
   display: grid;
+  grid-template-rows: 1fr auto;
+  gap: clamp(28px, 5vw, 72px);
+  width: 100%;
+  margin: 0;
+  padding: 64px clamp(22px, 3.4vw, 70px) 52px;
+  background: #eef4ef;
+  color: #252527;
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
+}
+
+.hero-headline {
+  display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 690px);
   gap: clamp(34px, 7vw, 128px);
   align-items: end;
-  width: 100%;
+}
+
+/* Centered published-coordinate display with a rotating module name. */
+.hero-coords {
+  align-self: center;
+  justify-self: center;
+  display: grid;
+  gap: 14px;
+}
+
+.coords {
+  display: flex;
+  justify-content: center;
+  align-items: center;
   margin: 0;
-  padding: 86px clamp(22px, 3.4vw, 70px) 52px;
-  background: #eef4ef;
+  font-family: var(--font-code);
+  font-size: clamp(11px, 2.4vw, 20px);
+  font-weight: 700;
+  line-height: 1.5;
   color: #252527;
+}
+
+.coords-rotator {
+  display: inline-block;
+  height: 1.5em;
+  overflow: hidden;
+  vertical-align: top;
+  text-align: left;
+}
+
+.coords-rotor {
+  display: flex;
+  flex-direction: column;
+  animation: coords-roll 12s infinite;
+}
+
+.coords-rotor span {
+  display: block;
+  height: 1.5em;
+  line-height: 1.5em;
+}
+
+@keyframes coords-roll {
+  0%, 28% { transform: translateY(0); }
+  33%, 61% { transform: translateY(-1.5em); }
+  66%, 94% { transform: translateY(-3em); }
+  100% { transform: translateY(-4.5em); }
+}
+
+.command {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 10px;
+  min-height: 36px;
+  color: inherit;
+  font-family: var(--font-code);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.command-arrow {
+  display: inline-block;
+  font-weight: 900;
+  animation: arrow-jump 1.2s ease-in-out infinite;
+}
+
+.command:hover .command-arrow {
+  animation-duration: 0.6s;
+}
+
+@keyframes arrow-jump {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(5px); }
 }
 
 .hero h1 {
@@ -193,6 +277,12 @@ html.dark .hero {
   font-weight: 900;
   line-height: 1.02;
   text-align: right;
+}
+
+.hero-summary a {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 
 .hero-dark {
@@ -218,6 +308,8 @@ html.dark .hero {
 
 .quickstart {
   position: relative;
+  z-index: 1;
+  box-shadow: 22px 0 44px rgba(0, 0, 0, 0.5);
   display: grid;
   align-items: center;
   min-width: 0;
@@ -319,6 +411,23 @@ html.dark .hero {
   white-space: pre;
 }
 
+/* Gradle snippet wraps within the panel; long lines (e.g. the plugin version)
+   drop to a hanging-indented continuation instead of overflowing the padding. */
+.qs-p-gradle code {
+  white-space: normal;
+}
+
+.qs-p-gradle .cl {
+  display: block;
+  white-space: pre-wrap;
+  padding-left: 8ch;
+  text-indent: -8ch;
+}
+
+.qs-p-gradle .nowrap {
+  white-space: nowrap;
+}
+
 /* Schematic --render-line-width guide: a dotted ruler in the right margin,
    marking the 120-column limit the code stays within. */
 .qs-p-native {
@@ -368,10 +477,24 @@ html.dark .hero {
   color: #171719;
 }
 
+.stamp-stack {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
 .yellow-panel .stamp {
   font-family: var(--font-display);
   font-size: 126px;
   line-height: 0.72;
+}
+
+.yellow-panel .stamp-sub {
+  font-family: var(--font-display);
+  /* sized so "configuration" matches the width of the big ZERO above it */
+  font-size: 41.5px;
+  line-height: 0.88;
+  text-align: center;
 }
 
 .yellow-panel p:last-child {
@@ -656,7 +779,8 @@ h2 {
 
   .hero-paper,
   .hero-dark,
-  .quickstart {
+  .quickstart,
+  .hero-headline {
     grid-template-columns: 1fr;
   }
 
@@ -673,9 +797,7 @@ h2 {
   }
 
   .qs-word {
-    align-self: auto;
-    writing-mode: horizontal-tb;
-    padding: 0;
+    display: none;
   }
 
   .qs-tabs {
@@ -684,10 +806,6 @@ h2 {
 
   .qs-right {
     padding-top: 0;
-  }
-
-  .yellow-panel {
-    display: none;
   }
 
   .content {

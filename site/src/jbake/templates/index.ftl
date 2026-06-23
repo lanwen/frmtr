@@ -1,11 +1,5 @@
 <#include "components/site-nav.ftl">
 <#include "components/hero.ftl">
-<#include "components/code-panel.ftl">
-<#include "components/coordinates-panel.ftl">
-<#include "components/task-strip.ftl">
-<#include "components/setup-section.ftl">
-<#include "components/link-list.ftl">
-<#include "components/architecture-section.ftl">
 <!doctype html>
 <html lang="en">
   <head>
@@ -33,7 +27,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-      href="https://fonts.googleapis.com/css2?family=Anton&family=JetBrains+Mono:wght@600;700;800&family=Unbounded:wght@800;900&family=Work+Sans:wght@500;700;800;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Anton&family=Fira+Code:wght@400;500;600;700&family=Unbounded:wght@800;900&family=Work+Sans:wght@500;700;800;900&display=swap"
       rel="stylesheet">
     <link rel="stylesheet" href="${content.rootpath}css/landing.css">
   </head>
@@ -43,11 +37,6 @@
 
       <main>
         <@hero />
-
-        <section class="content" id="setup" aria-labelledby="setup-title">
-          <@setupSection />
-          <@architectureSection />
-        </section>
       </main>
     </div>
   </body>

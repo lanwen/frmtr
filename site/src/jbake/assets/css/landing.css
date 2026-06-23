@@ -14,7 +14,7 @@
   --font-body: "Work Sans", Arial, "Helvetica Neue", sans-serif;
   --font-brand: "Unbounded", Arial, "Helvetica Neue", sans-serif;
   --font-display: Anton, Impact, "Arial Black", sans-serif;
-  --font-code: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --font-code: "Fira Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   color: var(--ink);
   background: var(--paper);
   font-family: var(--font-body);
@@ -92,6 +92,12 @@ pre {
 }
 
 .mark {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--yellow);
+  color: #252527;
+  box-shadow: 0 8px 22px rgba(23, 23, 25, 0.28);
   font-family: var(--font-brand);
   font-size: clamp(18px, 2.6vw, 28px);
   font-weight: 900;
@@ -99,47 +105,169 @@ pre {
   text-decoration: none;
 }
 
-.nav-links {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  font-size: 13px;
-  font-weight: 800;
+.mark-accent {
+  color: #fff;
 }
 
-.nav-links a {
+/* Both logo parts get matching vertical room so the rainbow fill on the name
+   isn't clipped, while staying aligned with each other. */
+.mark-accent,
+.mark-name {
+  display: inline-block;
+  margin: -0.24em 0;
+  padding: 0.24em 0;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.brand-ver {
+  font-family: var(--font-code);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.nav-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.version {
+  padding: 5px 9px;
+  border: 1px solid currentColor;
+  font-family: var(--font-code);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.gh {
+  display: inline-flex;
+  align-items: center;
+  color: inherit;
   text-decoration: none;
 }
 
-.nav-links a:hover {
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
+.gh svg {
+  display: block;
+}
+
+.gh:hover {
+  opacity: 0.65;
 }
 
 .hero {
   display: grid;
-  grid-template-rows: minmax(420px, 52svh) minmax(480px, auto);
+  grid-template-rows: minmax(336px, 41.6svh) minmax(480px, auto);
   min-height: 100svh;
-  background: #171719;
+  background: #252527;
   color: #eef4ef;
 }
 
 html.dark .hero {
-  background: #050506;
+  background: #252527;
   color: #eef4ef;
 }
 
 .hero-paper {
   display: grid;
+  grid-template-rows: 1fr auto;
+  gap: clamp(28px, 5vw, 72px);
+  width: 100%;
+  margin: 0;
+  padding: 64px clamp(22px, 3.4vw, 70px) 52px;
+  background: #eef4ef;
+  color: #252527;
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.4);
+}
+
+.hero-headline {
+  display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 690px);
   gap: clamp(34px, 7vw, 128px);
   align-items: end;
-  width: 100%;
+}
+
+/* Centered published-coordinate display with a rotating module name. */
+.hero-coords {
+  align-self: center;
+  justify-self: center;
+  display: grid;
+  gap: 14px;
+}
+
+.coords {
+  display: flex;
+  justify-content: center;
+  align-items: center;
   margin: 0;
-  padding: 86px clamp(22px, 3.4vw, 70px) 52px;
-  background: #eef4ef;
+  font-family: var(--font-code);
+  font-size: clamp(11px, 2.4vw, 20px);
+  font-weight: 700;
+  line-height: 1.5;
   color: #252527;
+}
+
+.coords-rotator {
+  display: inline-block;
+  height: 1.5em;
+  overflow: hidden;
+  vertical-align: top;
+  text-align: left;
+}
+
+.coords-rotor {
+  display: flex;
+  flex-direction: column;
+  animation: coords-roll 12s infinite;
+}
+
+.coords-rotor span {
+  display: block;
+  height: 1.5em;
+  line-height: 1.5em;
+}
+
+@keyframes coords-roll {
+  0%, 28% { transform: translateY(0); }
+  33%, 61% { transform: translateY(-1.5em); }
+  66%, 94% { transform: translateY(-3em); }
+  100% { transform: translateY(-4.5em); }
+}
+
+.command {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 10px;
+  min-height: 36px;
+  color: inherit;
+  font-family: var(--font-code);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.command-arrow {
+  display: inline-block;
+  font-weight: 900;
+  animation: arrow-jump 1.2s ease-in-out infinite;
+}
+
+.command:hover .command-arrow {
+  animation-duration: 0.6s;
+}
+
+@keyframes arrow-jump {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(5px); }
 }
 
 .hero h1 {
@@ -150,40 +278,226 @@ html.dark .hero {
   line-height: 0.76;
 }
 
+/* Animated rainbow on hover for the logo name. */
+.mark:hover .mark-name {
+  background-image: linear-gradient(
+    90deg,
+    #ff0040,
+    #ff9500,
+    #ffe000,
+    #1fd655,
+    #18b6ff,
+    #7b2cff,
+    #ff0040);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: rainbow-slide 6s linear infinite;
+}
+
+@keyframes rainbow-slide {
+  to {
+    background-position: 200% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mark:hover .mark-name {
+    animation: none;
+  }
+}
+
 .hero-summary {
+  justify-self: end;
   max-width: 430px;
   margin: 0;
   font-size: clamp(19px, 2.6vw, 27px);
   font-weight: 900;
   line-height: 1.02;
+  text-align: right;
+}
+
+.hero-summary a {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
 }
 
 .hero-dark {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 24vw);
+  grid-template-columns: clamp(170px, 15vw, 224px) minmax(0, 1fr) minmax(320px, 24vw);
   width: 100%;
   margin: 0;
 }
 
-.specimen {
+/* Big selected word: full-height vertical title on the left of the dark band. */
+.qs-word {
+  align-self: stretch;
   display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(280px, 1fr);
-  gap: 34px;
-  align-items: center;
-  padding: 42px clamp(22px, 3.4vw, 70px) 50px;
-}
-
-.specimen-word {
+  place-items: center;
   margin: 0;
+  padding: 0;
   font-family: var(--font-display);
-  font-size: clamp(72px, 13vw, 156px);
-  line-height: 0.76;
+  font-size: clamp(100px, 13.5vw, 172px);
+  line-height: 1;
+  text-transform: uppercase;
+  writing-mode: vertical-rl;
 }
 
-.specimen-copy {
+.quickstart {
+  position: relative;
+  z-index: 1;
+  box-shadow: 22px 0 44px rgba(0, 0, 0, 0.5);
+  display: grid;
+  align-items: center;
+  min-width: 0;
+  /* Top padding exceeds the bottom by the tab-zone height (~92px) so the
+     centered card sits in the middle of the area below the tabs. */
+  padding: 142px clamp(22px, 3.4vw, 70px) 50px;
+}
+
+/* Visually-hidden radios hold the active-tab state; :has() drives the view. */
+.qs-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.qs-w {
+  display: none;
+}
+
+.hero-dark:has(#qs-gradle:checked) .qs-w-gradle,
+.hero-dark:has(#qs-native:checked) .qs-w-native {
+  display: block;
+}
+
+.qs-right {
   display: grid;
   gap: 18px;
+  width: 100%;
+  max-width: 540px;
+  min-width: 0;
+  justify-self: center;
 }
+
+/* Horizontal tabs pinned to the top-right of the content column. */
+.qs-tabs {
+  position: absolute;
+  top: 28px;
+  right: clamp(22px, 3.4vw, 70px);
+  z-index: 2;
+  display: flex;
+  gap: 30px;
+}
+
+.qs-tab {
+  padding-top: 12px;
+  border-top: 8px solid transparent;
+  color: rgba(238, 244, 239, 0.5);
+  font-size: 30px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.qs-tab:hover {
+  color: rgba(238, 244, 239, 0.82);
+}
+
+.hero-dark:has(#qs-gradle:checked) .qs-tab[for="qs-gradle"],
+.hero-dark:has(#qs-native:checked) .qs-tab[for="qs-native"] {
+  border-top-color: var(--yellow);
+  color: #eef4ef;
+}
+
+.hero-dark:has(#qs-gradle:focus-visible) .qs-tab[for="qs-gradle"],
+.hero-dark:has(#qs-native:focus-visible) .qs-tab[for="qs-native"] {
+  outline: 2px solid var(--yellow);
+  outline-offset: 4px;
+}
+
+/* Carbon-style code card: rounded corners, soft drop shadow, roomy padding. */
+.qs-panel {
+  display: none;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #171719;
+  box-shadow: 0 20px 68px rgba(0, 0, 0, 0.55);
+}
+
+.hero-dark:has(#qs-gradle:checked) .qs-p-gradle,
+.hero-dark:has(#qs-native:checked) .qs-p-native {
+  display: block;
+}
+
+.qs-panel pre {
+  padding: 22px 24px 24px;
+  overflow-x: auto;
+  color: #eef4ef;
+  font-size: 13px;
+  line-height: 1.62;
+}
+
+.qs-panel code {
+  white-space: pre;
+}
+
+/* Gradle snippet wraps within the panel; long lines (e.g. the plugin version)
+   drop to a hanging-indented continuation instead of overflowing the padding. */
+.qs-p-gradle code {
+  white-space: normal;
+}
+
+.qs-p-gradle .cl {
+  display: block;
+  white-space: pre-wrap;
+  padding-left: 8ch;
+  text-indent: -8ch;
+}
+
+.qs-p-gradle .nowrap {
+  white-space: nowrap;
+}
+
+/* Schematic --render-line-width guide: a dotted ruler in the right margin,
+   marking the 120-column limit the code stays within. */
+.qs-p-native {
+  position: relative;
+}
+
+.qs-guide {
+  position: absolute;
+  top: 20px;
+  bottom: 20px;
+  left: 72%;
+  padding-left: 6px;
+  border-left: 1px dotted rgba(238, 244, 239, 0.3);
+  color: rgba(238, 244, 239, 0.38);
+  font-family: var(--font-code);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.tok-comment { color: rgba(238, 244, 239, 0.42); }
+.tok-key { color: var(--yellow); font-weight: 800; }
+.tok-fn { color: #d2a8ff; }
+.tok-str { color: #9ce0a0; }
+.tok-flag { color: var(--yellow); }
+.tok-dim { color: rgba(238, 244, 239, 0.45); }
+.tok-ok { color: #7ee787; font-weight: 800; }
+.tok-bad { color: var(--yellow); font-weight: 800; }
+.tok-add { color: #7ee787; }
+.tok-del { color: #ff7b72; }
 
 .eyebrow {
   margin: 0;
@@ -191,37 +505,6 @@ html.dark .hero {
   font-weight: 900;
   line-height: 1.05;
   text-transform: uppercase;
-}
-
-.copy {
-  max-width: 36rem;
-  margin: 0;
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1.28;
-}
-
-.command {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  min-height: 42px;
-  padding: 0 14px;
-  border: 1px solid currentColor;
-  color: inherit;
-  font-family: var(--font-code);
-  font-size: 13px;
-  font-weight: 800;
-  line-height: 1.2;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.command::after {
-  content: " ->";
-  padding-left: 12px;
-  font-family: Arial, sans-serif;
-  font-weight: 900;
 }
 
 .yellow-panel {
@@ -234,10 +517,34 @@ html.dark .hero {
   color: #171719;
 }
 
+.stamp-stack {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
 .yellow-panel .stamp {
   font-family: var(--font-display);
   font-size: 126px;
   line-height: 0.72;
+}
+
+.stamp-rule {
+  width: 136px;
+  height: 1px;
+  /* Sit below ZERO with a clear gap (its tight line-height puts the box bottom
+     near the glyphs, so push the line down rather than up). */
+  margin: 10px 0 2px;
+  background: currentColor;
+}
+
+.yellow-panel .stamp-sub {
+  font-family: var(--font-display);
+  /* sized so the wider "sensible defaults" line fits on one line, about the
+     width of the big ZERO above it */
+  font-size: 32px;
+  line-height: 0.92;
+  text-align: center;
 }
 
 .yellow-panel p:last-child {
@@ -522,10 +829,8 @@ h2 {
 
   .hero-paper,
   .hero-dark,
-  .specimen,
-  .section-head,
-  .setup-grid,
-  .architecture-grid {
+  .quickstart,
+  .hero-headline {
     grid-template-columns: 1fr;
   }
 
@@ -537,12 +842,20 @@ h2 {
     min-height: auto;
   }
 
-  .specimen {
+  .quickstart {
     padding: 32px 20px;
   }
 
-  .yellow-panel {
+  .qs-word {
     display: none;
+  }
+
+  .qs-tabs {
+    position: static;
+  }
+
+  .qs-right {
+    padding-top: 0;
   }
 
   .content {
@@ -563,12 +876,8 @@ h2 {
     font-size: 18px;
   }
 
-  .specimen-word {
+  .qs-word {
     font-size: 64px;
-  }
-
-  .copy {
-    font-size: 16px;
   }
 
   .command {

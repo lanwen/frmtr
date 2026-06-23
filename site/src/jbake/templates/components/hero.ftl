@@ -28,6 +28,7 @@
               <div class="qs-tabs" role="tablist" aria-label="Quick start">
                 <label class="qs-tab" for="qs-native">Native</label>
                 <label class="qs-tab" for="qs-gradle">Gradle</label>
+                <span class="qs-tab-bar" aria-hidden="true"></span>
               </div>
 
               <div class="qs-right">

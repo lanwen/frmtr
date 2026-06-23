@@ -470,8 +470,46 @@ html.dark .hero {
 
 .hero-dark:has(#qs-gradle:checked) .qs-tab[for="qs-gradle"],
 .hero-dark:has(#qs-native:checked) .qs-tab[for="qs-native"] {
-  border-top-color: var(--yellow);
   color: #eef4ef;
+}
+
+/* Single yellow indicator that eases between tabs and squishes mid-slide. */
+.qs-tab-bar {
+  position: absolute;
+  top: 0;
+  height: 8px;
+  background: var(--yellow);
+  transform-origin: center;
+  transition:
+    left 0.45s cubic-bezier(0.65, 0, 0.35, 1),
+    right 0.45s cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.hero-dark:has(#qs-gradle:checked) .qs-tab-bar {
+  left: 145px;
+  right: 0;
+  animation: bar-slide-g 0.45s cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.hero-dark:has(#qs-native:checked) .qs-tab-bar {
+  left: 0;
+  right: 155px;
+  animation: bar-slide-n 0.45s cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+@keyframes bar-slide-g {
+  50% { transform: scaleX(0.6); }
+}
+
+@keyframes bar-slide-n {
+  50% { transform: scaleX(0.6); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .qs-tab-bar {
+    transition: none;
+    animation: none;
+  }
 }
 
 .hero-dark:has(#qs-gradle:focus-visible) .qs-tab[for="qs-gradle"],
@@ -889,7 +927,7 @@ h2 {
   }
 
   .qs-tabs {
-    position: static;
+    position: relative;
     margin-bottom: 24px;
   }
 

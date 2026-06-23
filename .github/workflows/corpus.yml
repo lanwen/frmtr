@@ -1,0 +1,97 @@
+name: Corpus
+
+# Release-triggered corpus correctness check.
+#
+# Fetches a pinned real-world Java corpus and runs the frmtr CLI over its main
+# sources to assert two invariants on every release:
+#   1. parse-stability + AST-equivalence -- `frmtr --write --verify` re-parses
+#      each formatted file and refuses output that is not AST-equivalent to the
+#      input (non-zero exit on any violation).
+#   2. one-pass idempotence -- after formatting, `frmtr --check` exits non-zero
+#      if any already-formatted file would still change on a second pass.
+#
+# All knobs (corpus pin, scope, excludes) live in the `env` block below so they
+# are trivial to bump. No bespoke Java harness -- this reuses the shipping CLI.
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+env:
+  # --- Corpus pin (bump these two to move/upgrade the corpus) ---
+  CORPUS_REPO: https://github.com/testcontainers/testcontainers-java.git
+  CORPUS_SHA: deb78e1e6e47675f56e8d7b3f4747093d66f1baa
+  # --- Scope: which corpus directories to format (shell-expanded into CLI args).
+  #     core main sources + every module's main sources. ---
+  CORPUS_SCOPE: "core/src/main/java modules/*/src/main/java"
+  # --- Excludes: never format build output, generated code, or test sources. ---
+  CORPUS_EXCLUDES: "--exclude **/build/** --exclude **/generated/** --exclude **/src/test/**"
+  CORPUS_DIR: corpus
+
+jobs:
+  check:
+    name: Corpus correctness (CLI --write --verify + --check)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Set up Java
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+
+      - name: Build CLI dist
+        run: ./gradlew :frmtr-cli:installDist
+
+      - name: Cache corpus
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ${{ env.CORPUS_DIR }}
+          key: corpus-${{ env.CORPUS_SHA }}
+
+      - name: Fetch pinned corpus
+        run: |
+          set -euo pipefail
+          if [ -d "$CORPUS_DIR/.git" ] && \
+             [ "$(git -C "$CORPUS_DIR" rev-parse HEAD)" = "$CORPUS_SHA" ]; then
+            echo "Corpus cache hit at $CORPUS_SHA"
+          else
+            rm -rf "$CORPUS_DIR"
+            mkdir -p "$CORPUS_DIR"
+            git -C "$CORPUS_DIR" init -q
+            git -C "$CORPUS_DIR" remote add origin "$CORPUS_REPO"
+            git -C "$CORPUS_DIR" fetch --depth 1 origin "$CORPUS_SHA"
+            git -C "$CORPUS_DIR" checkout -q FETCH_HEAD
+          fi
+
+      - name: Parse-stability + AST-equivalence (frmtr --write --verify)
+        working-directory: ${{ env.CORPUS_DIR }}
+        run: |
+          set -euo pipefail
+          # --verify re-parses each output and refuses non-AST-equivalent results;
+          # --write is required for --verify. Non-zero exit on any violation.
+          "$GITHUB_WORKSPACE"/frmtr-cli/build/install/frmtr-cli/bin/frmtr-cli \
+            --write --verify --progress=never \
+            $CORPUS_EXCLUDES \
+            $CORPUS_SCOPE
+
+      - name: One-pass idempotence (frmtr --check)
+        working-directory: ${{ env.CORPUS_DIR }}
+        run: |
+          set -euo pipefail
+          # The corpus is now formatted; --check exits non-zero if any file would
+          # still change, i.e. formatting is not a fixed point. (--check and
+          # --write cannot be combined, so this is a second invocation.)
+          "$GITHUB_WORKSPACE"/frmtr-cli/build/install/frmtr-cli/bin/frmtr-cli \
+            --check --diff --progress=never \
+            $CORPUS_EXCLUDES \
+            $CORPUS_SCOPE

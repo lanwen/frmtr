@@ -456,3 +456,13 @@ The test suite is module-scoped:
 Golden fixture strategy, frmtr-owned fixture conventions, glob-discovered JUnit fixture sources, and new-rule coverage
 expectations are documented in [docs/testing-strategy.md](docs/testing-strategy.md). Option-specific snapshots use
 fixture-owned output variants with sidecar option properties rather than Java test lists.
+
+### Real-World Corpus Check
+
+`.github/workflows/corpus.yml` runs a release-triggered correctness check against a pinned real-world corpus
+(`testcontainers/testcontainers-java` at a fixed SHA). It reuses the shipping CLI rather than a bespoke Java harness:
+the workflow fetches the pinned corpus, runs `frmtr --write --verify` over the corpus main sources (parse-stability plus
+AST-equivalence, non-zero exit on any violation), then `frmtr --check` over the now-formatted sources (one-pass
+idempotence, non-zero exit if any file would still change). The pin, scope, and exclude globs live in the workflow's
+`env` block so they are easy to bump. Cadence is opt-in: `workflow_dispatch` plus `release: published`, not per-push or
+per-PR.

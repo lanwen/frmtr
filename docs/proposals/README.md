@@ -351,14 +351,15 @@ deferred. Pairs with S6 so `--write` is fully safe.
 - **Serves:** correctness / UX. Partially overlaps B3's surface.
 
 ### S9. Fix comment data loss
-**Status:** 🟢 In progress — verbatim-input drops fixed; shape-dependent/orphan backlog routed to B1/B2 · _focused proposal:_ [comment-data-loss.md](comment-data-loss.md)
+**Status:** ✅ Done — all comment-drop cases fixed; `KNOWN_DROPS` empty · _focused proposal:_ [comment-data-loss.md](comment-data-loss.md)
 
-The S7 net surfaced ~42 `(fixture, shape)` real comment drops. The **verbatim @default-input** drops (where the golden
-output was itself lossy) are fixed and pinned — concrete preservation fixes landed in `CompilationUnitPrinter`
-(file-orphan ordering), `SwitchPrinter` (orphan interleaving), and `CommentedExpressionListPrinter` (`lineSuffix`
-routing), plus fixtures like `block-orphan-method-call-comments`. ~24 collapsed/expanded perturbation cases remain parked
-in `CommentPresenceDiagnosticTest.KNOWN_DROPS`, routed to **B1** (shape-independent ownership) and one **B2**
-AST-invisible file-header orphan; the net bites on any new or stale entry.
+The S7 net surfaced ~42 `(fixture, shape)` real comment drops. **All are now fixed** — concrete preservation fixes
+landed in `CompilationUnitPrinter` (file-orphan ordering), `SwitchPrinter` (orphan interleaving), and
+`CommentedExpressionListPrinter` (`lineSuffix` routing), plus the shape-dependent ownership recoveries across the
+control-condition/if, labeled-statement, try-resource, method-argument, switch, records/enums/conditionals, and
+member/interface-body clusters, pinned by fixtures like `block-orphan-method-call-comments`.
+`CommentPresenceDiagnosticTest.KNOWN_DROPS` is now **empty**: the S7 net is green over the full corpus plus every
+collapsed/expanded perturbation and bites on any new or stale entry.
 
 - **Serves:** correctness / data-loss. Iterative; folds into B1/B2.
 
@@ -397,7 +398,7 @@ Drafted for this roadmap:
 | S6 | Atomic in-place writes (implemented) | [atomic-in-place-writes.md](atomic-in-place-writes.md) |
 | S7 | Comment guardrail split + drop net (implemented) | [comment-accounting-in-ci.md](comment-accounting-in-ci.md) |
 | S8 | `--verify` safety valve (implemented) | [verify-on-write-safety-valve.md](verify-on-write-safety-valve.md) |
-| S9 | Fix comment data loss (in progress) | [comment-data-loss.md](comment-data-loss.md) |
+| S9 | Fix comment data loss (implemented) | [comment-data-loss.md](comment-data-loss.md) |
 | S7/S9 | Comment-handling findings → B-work map | [comment-handling-findings.md](comment-handling-findings.md) |
 
 Pre-existing, related:

@@ -298,8 +298,8 @@ meaning-changing printer bug in any construct. Verification is enabled across th
 golden fixture is also AST-checked. The `dev.lanwen.frmtr.debug.guardrails` comment-accounting check stays an opt-in
 dev aid only: the durable "no comment is dropped" CI gate is instead `CommentPresenceDiagnosticTest`, which compares the
 lexer comment-token multiset of each input against its formatted output over every golden fixture and every
-collapsed/expanded perturbation, failing on any genuine drop (a documented exclusion list tracks any remaining S9
-backlog entries; it is currently empty — every tracked drop has been fixed). The stricter "each comment claimed at most once" invariant lives behind a separate off-by-default
+collapsed/expanded perturbation, failing on any genuine drop. The exclusion list it carries for known, tracked drops is
+currently empty, and the net also fails on a stale (no-longer-needed) exclusion. The stricter "each comment claimed at most once" invariant lives behind a separate off-by-default
 `dev.lanwen.frmtr.debug.guardrails.strict-claims` toggle, deferred until comment ownership is deterministic. All toggles
 live behind `FormatterGuardrails`; see [docs/java-formatter-internals.md](docs/java-formatter-internals.md) for details.
 

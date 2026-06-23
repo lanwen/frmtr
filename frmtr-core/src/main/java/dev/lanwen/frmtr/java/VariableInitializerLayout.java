@@ -1222,15 +1222,17 @@ final class VariableInitializerLayout {
                 return brokenReceiverCall;
             }
         }
+        String firstLine = flatName + " = " + callPrefix + "(";
+        boolean openerFits = layoutWidth.currentIndented(firstLine) <= options.lineWidth();
         if (
             methodCallChainIsSourceMultiline.test(methodCall)
             && blockLambdaCall.isEmpty()
             && !methodCallHasBlockLambdaArgument(methodCall)
+            && !singleObjectCreationCallConvergesOnArgumentBreak(methodCall, openerFits)
         ) {
             return Optional.empty();
         }
-        String firstLine = flatName + " = " + callPrefix + "(";
-        if (layoutWidth.currentIndented(firstLine) > options.lineWidth()) {
+        if (!openerFits) {
             return Optional.empty();
         }
         if (!methodCall.getAllContainedComments().isEmpty()) {
@@ -1240,6 +1242,28 @@ final class VariableInitializerLayout {
             return blockLambdaCall;
         }
         return Optional.of(brokenMethodCallArgumentList(name, methodCall, callPrefix));
+    }
+
+    /**
+     * Decides whether a single object-creation-rooted call should converge on the argument-break layout instead of
+     * deferring to the source-shape gate.
+     *
+     * <p>For an over-width {@code NAME = new X(<ctorargs>).method(...)} chain with exactly one selector segment, two
+     * layouts can render within the line width: keeping {@code new X(<ctorargs>).method(} on the assignment line and
+     * breaking the argument list (the argument-break shape), or stranding {@code =} and collapsing the whole chain onto
+     * the continuation line. The source-shape gate above selects between them by reading whether the source broke before
+     * the selector, but the collapsing fallback erases that source feature, so a selector-broken input and its already
+     * collapsed re-format disagree and the formatter never reaches a fixed point.
+     *
+     * <p>This predicate keys the decision on AST shape (object-creation root, single selector segment) and width (the
+     * argument-break opener fits) only, never on the source line breaks. When it holds, the argument-break shape is
+     * chosen on every pass, so the layout is idempotent. Multi-segment and non-object-creation chains, and openers that
+     * do not fit, are intentionally left to the source-shape gate and the forced-chain fallbacks.
+     */
+    private boolean singleObjectCreationCallConvergesOnArgumentBreak(MethodCallExpr methodCall, boolean openerFits) {
+        return openerFits
+            && methodCallChainRootIsObjectCreation.test(methodCall)
+            && methodCallChainInitializerShape.apply(methodCall).singleCall();
     }
 
     /**

@@ -436,6 +436,18 @@ final class BinaryExpressionPrinter {
      * next to the previous operand for end-position operators, and emits the remaining comments as their own lines.
      */
     Doc linesWithComments(BinaryExpr expression) {
+        return Doc.join(Doc.HARD_LINE, commentedBinaryLines(expression));
+    }
+
+    /**
+     * Builds the comment-aware broken lines for a binary chain, in source order, with no enclosing join policy.
+     *
+     * <p>Both the top-level {@link #linesWithComments(BinaryExpr)} (which joins with {@link Doc#HARD_LINE}) and the
+     * nested-operand form {@link #nestedMixedOperatorOperandDoc} (which indents every line after the first to mirror the
+     * comment-free {@code nestedLines(binaryOperand, true)} continuation) share this builder so the operand and
+     * between-operand comment logic stays in one place.
+     */
+    private List<Doc> commentedBinaryLines(BinaryExpr expression) {
         List<Expression> operands = new ArrayList<>();
         flattenBinaryExpression(expression, expression.getOperator(), operands);
         List<Doc> lines = new ArrayList<>();
@@ -460,7 +472,7 @@ final class BinaryExpressionPrinter {
                 lines.addAll(commentDocs(between));
             }
         }
-        return Doc.join(Doc.HARD_LINE, lines);
+        return lines;
     }
 
     private List<JavaCommentTrivia> lineCommentsBeforeFirstOperand(BinaryExpr expression, Expression firstOperand) {
@@ -521,18 +533,82 @@ final class BinaryExpressionPrinter {
             int index,
             int operandCount
     ) {
-        Doc operandDoc = enclosedOperandWithLeadingLineComments(operand).orElseGet(
-            () ->
-                operand.getAllContainedComments().stream().anyMatch(LineComment.class::isInstance)
-                    ? expressionRenderer.format(operand)
-                    : Doc.text(compactWithoutOwnComment.apply(operand))
-        );
+        Doc operandDoc = nestedMixedOperatorOperandDoc(operator, operand)
+            .or(() -> enclosedOperandWithLeadingLineComments(operand))
+            .orElseGet(
+                () ->
+                    operand.getAllContainedComments().stream().anyMatch(LineComment.class::isInstance)
+                        ? expressionRenderer.format(operand)
+                        : Doc.text(compactWithoutOwnComment.apply(operand))
+            );
         if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.START) {
             return index == 0 ? operandDoc : Doc.concat(Doc.text(operator.asString() + " "), operandDoc);
         }
         return index < operandCount - 1
             ? Doc.concat(operandDoc, Doc.text(" " + operator.asString()))
             : operandDoc;
+    }
+
+    /**
+     * Breaks a nested mixed-operator logical sub-chain ({@code a && b} under an enclosing {@code ||}, or vice versa)
+     * inside the comment-aware operand renderer so its own inter-operand line comments can surface and so it never
+     * produces an over-width line.
+     *
+     * <p>{@link #linesWithComments(BinaryExpr)} flattens only the enclosing same-operator chain, so a nested chain that
+     * uses the <em>other</em> logical operator arrives here as one opaque operand. Routing it through
+     * {@link #expressionRenderer} (or compact text) would render it flat on a single line: any {@code //} comment that
+     * sits between the inner operands would be dropped, and a wide sub-chain would overflow
+     * {@link FormatterOptions#lineWidth()} and force a non-idempotent second-pass re-wrap. We therefore parenthesize it
+     * (the readability boundary the comment-free {@link #binaryExpressionLineOperand} path already adds for
+     * {@code ||(&&)}) and rebuild it through the comment-aware {@link #commentedBinaryLines(BinaryExpr)} builder — not
+     * {@link #binaryExpression(BinaryExpr)} — so the inner chain is itself flattened and its {@code lineCommentsBetween}
+     * query runs, emitting the inter-operand comment on its own line. The parentheses hug the content the same way the
+     * comment-free {@code nestedLines(binaryOperand, true)} form does: {@code (} precedes the first operand and {@code )}
+     * trails the last, with every line after the first indented as a continuation.
+     *
+     * <p>The gate is essential to source-shape preservation and golden stability: we break here ONLY when the sub-chain
+     * carries line comments or would overflow when parenthesized. A comment-free, width-fitting nested sub-chain returns
+     * {@link Optional#empty()} so the caller keeps its existing inline rendering byte-for-byte.
+     *
+     * <p>The {@link EnclosedExpr} arm is what makes the fix idempotent: our own first-pass output parenthesizes the
+     * broken sub-chain, so a second pass re-parses it as an enclosed logical binary whose inter-operand comment again
+     * sits between the inner operands (not before the inner expression, so {@link #enclosedOperandWithLeadingLineComments}
+     * does not see it). We unwrap that enclosure and rebuild the same hugging-paren broken form. We only take this arm
+     * when the enclosed inner is itself a logical binary, so an enclosed single operand with a leading comment stays with
+     * {@link #enclosedOperandWithLeadingLineComments}.
+     */
+    private Optional<Doc> nestedMixedOperatorOperandDoc(BinaryExpr.Operator operator, Expression operand) {
+        if (!isLogicalOperator(operator)) {
+            return Optional.empty();
+        }
+        BinaryExpr nestedBinary;
+        if (
+            operand instanceof BinaryExpr bareBinary
+            && isLogicalOperator(bareBinary.getOperator())
+            && bareBinary.getOperator() != operator
+        ) {
+            nestedBinary = bareBinary;
+        } else if (
+            operand instanceof EnclosedExpr enclosed
+            && enclosed.getInner() instanceof BinaryExpr enclosedBinary
+            && isLogicalOperator(enclosedBinary.getOperator())
+        ) {
+            nestedBinary = enclosedBinary;
+        } else {
+            return Optional.empty();
+        }
+        boolean overflows =
+            parenthesizedBinaryOperandWidth(operator, compact.apply(nestedBinary)) > options.lineWidth();
+        if (!hasLineComments(nestedBinary) && !overflows) {
+            return Optional.empty();
+        }
+        List<Doc> innerLines = commentedBinaryLines(nestedBinary);
+        List<Doc> nestedLines = new ArrayList<>();
+        for (int i = 0; i < innerLines.size(); i++) {
+            Doc line = innerLines.get(i);
+            nestedLines.add(i == 0 ? line : Doc.indent(Doc.concat(Doc.HARD_LINE, line)));
+        }
+        return Optional.of(Doc.concat(Doc.text("("), Doc.concat(nestedLines), Doc.text(")")));
     }
 
     private Optional<Doc> enclosedOperandWithLeadingLineComments(Expression operand) {

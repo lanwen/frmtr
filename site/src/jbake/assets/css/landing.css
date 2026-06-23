@@ -95,8 +95,9 @@ pre {
   display: inline-flex;
   align-items: center;
   padding: 8px 12px;
-  background: #252527;
-  color: #fff;
+  background: var(--yellow);
+  color: #252527;
+  box-shadow: 0 8px 22px rgba(23, 23, 25, 0.28);
   font-family: var(--font-brand);
   font-size: clamp(18px, 2.6vw, 28px);
   font-weight: 900;
@@ -105,7 +106,7 @@ pre {
 }
 
 .mark-accent {
-  color: var(--yellow);
+  color: #fff;
 }
 
 .brand {

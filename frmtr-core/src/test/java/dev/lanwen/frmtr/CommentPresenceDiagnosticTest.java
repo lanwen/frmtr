@@ -139,34 +139,6 @@ final class CommentPresenceDiagnosticTest {
         //     sees only orphans, so an else-leading block comment (still the else node's own trivia under perturbation) is
         //     never claimed there and @default stays byte-identical.
 
-        // labeled-statement @ collapsed -- DEFERRED (one residual before-label drop). The leading-comment recovery for a
-        // labeled statement now has a third, @collapsed-only path: StatementPrinter.recoveredLabeledLeadingComments adds
-        // a GATED fallback over the comments JavaCommentPlacementPolicy.gapCommentsBetween selects source-order between
-        // the label and the body across the LabeledStmt orphan pool, the label SimpleName own, and the nested ForEachStmt
-        // own/orphan buckets. It dedupes against the raw-slice path two ways: (1) a STRING guard excludes any candidate
-        // whose normalized text the raw slice (StatementPrinter.labeledStatementLeadingComments, a List<String> that does
-        // not claim through CommentTracker) already produced for this statement, comparing with the same normalization
-        // this net uses (normalizeRawComment); and (2) an identity claim via CommentTracker.comment renders an
-        // already-claimed comment (the envelope path's LabeledStmt-own leading) empty. At @default the raw slice produces
-        // every between-label-and-body leading comment, so the string guard removes all candidates and @default stays
-        // byte-identical (verified: git diff main on the golden corpus is empty). That fallback clears "comment1"
-        // (22->22) and "comment2" (14->14) fully and 13 of 14 "Label statement".
-        //   The single residual drop is a DIFFERENT mechanism the between-label-and-body scope deliberately does not
-        // reach: in the all-line method's third statement the leading comment sits BEFORE the label (`// Label statement`
-        // then `loop:`), so at @default it is the LabeledStmt's OWN comment (the envelope renders it). Under collapse it
-        // re-buckets onto the PREVIOUS sibling's ForEachStmt as that node's own comment (positioned after the prior
-        // for-loop's `}`), so it is owned by neither this statement's label/body buckets nor its own/orphan pool. Reaching
-        // a preceding sibling's own-comment slot to recover it is exactly the @default-risky cross-statement ownership
-        // move the original analysis flagged: a following labeled statement could then steal a comment that legitimately
-        // belongs to the previous statement at some other shape, moving that statement's golden. Per the slice's
-        // defer-beats-forcing-green / moving-a-golden rule this last comment is left parked rather than chased.
-        drops.put("comment-preservation-labeled-statement @ collapsed",
-            "deferred (one residual): a before-label leading line comment (\"Label statement\", 14->13) re-buckets onto"
-                + " the PREVIOUS sibling's ForEachStmt own slot under collapse; recovering it needs a cross-statement"
-                + " reach that risks moving another statement's @default golden. The between-label-and-body fallback"
-                + " (StatementPrinter.recoveredLabeledLeadingComments) already clears \"comment1\" and \"comment2\" fully"
-                + " and 13/14 \"Label statement\".");
-
         // try-resource opener comment @ expanded -- FIXED. The opener comment (try ( // note) was recovered only when it
         // shared the `try (` line (StatementPrinter.tryResourceOpenerComments keyed on startsOnBeginLine(statement)); the
         // expand perturbation pushes the opener onto its own line below the `(` even though the AST is unchanged, so the

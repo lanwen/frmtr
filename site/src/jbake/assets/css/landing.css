@@ -271,11 +271,64 @@ html.dark .hero {
 }
 
 .hero h1 {
+  width: max-content;
   margin: 0;
   font-family: var(--font-brand);
   font-size: clamp(72px, 10vw, 170px);
   font-weight: 900;
   line-height: 0.76;
+}
+
+/* Shimmer text: base wordmark with a highlight band swept across the glyphs
+   via a ::before that masks a moving gradient (background-clip: text). */
+.t-shimmer {
+  --shimmer-dur: 4500ms;
+  --shimmer-base: #252527;
+  --shimmer-highlight: #41434a;
+  --shimmer-band: 400%;
+  --shimmer-ease: linear;
+  position: relative;
+  display: inline-block;
+  color: var(--shimmer-base);
+}
+
+/* Only on hover. The box extends past the tight line-height (top/bottom -0.3em)
+   with a matching padding-top so the masked text stays aligned with the base
+   glyphs but the fill now reaches the ascenders/descenders (f top, t bottom). */
+.t-shimmer:hover::before {
+  content: attr(data-text);
+  position: absolute;
+  top: -0.3em;
+  right: 0;
+  bottom: -0.3em;
+  left: 0;
+  padding-top: 0.3em;
+  pointer-events: none;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    transparent 40%,
+    var(--shimmer-highlight) 50%,
+    transparent 60%,
+    transparent 100%);
+  background-size: var(--shimmer-band) 100%;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: t-shimmer var(--shimmer-dur) var(--shimmer-ease) infinite;
+}
+
+@keyframes t-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-shimmer:hover::before {
+    animation: none !important;
+  }
 }
 
 /* Animated rainbow on hover for the logo name. */
@@ -349,7 +402,9 @@ html.dark .hero {
 .quickstart {
   position: relative;
   z-index: 1;
-  box-shadow: 22px 0 44px rgba(0, 0, 0, 0.5);
+  /* Offset + negative spread keeps the shadow on the right (yellow panel)
+     without the blur bleeding left onto the GRADLE/NATIVE word column. */
+  box-shadow: 26px 0 34px -10px rgba(0, 0, 0, 0.5);
   display: grid;
   align-items: center;
   min-width: 0;
@@ -383,7 +438,7 @@ html.dark .hero {
   display: grid;
   gap: 18px;
   width: 100%;
-  max-width: 540px;
+  max-width: 900px;
   min-width: 0;
   justify-self: center;
 }
@@ -443,7 +498,7 @@ html.dark .hero {
   padding: 22px 24px 24px;
   overflow-x: auto;
   color: #eef4ef;
-  font-size: 13px;
+  font-size: clamp(13px, 1vw, 16px);
   line-height: 1.62;
 }
 
@@ -470,28 +525,11 @@ html.dark .hero {
 
 /* Schematic --render-line-width guide: a dotted ruler in the right margin,
    marking the 120-column limit the code stays within. */
-.qs-p-native {
-  position: relative;
-}
-
-.qs-guide {
-  position: absolute;
-  top: 20px;
-  bottom: 20px;
-  left: 72%;
-  padding-left: 6px;
-  border-left: 1px dotted rgba(238, 244, 239, 0.3);
-  color: rgba(238, 244, 239, 0.38);
-  font-family: var(--font-code);
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1;
-}
-
 .tok-comment { color: rgba(238, 244, 239, 0.42); }
-.tok-key { color: var(--yellow); font-weight: 800; }
-.tok-fn { color: #d2a8ff; }
-.tok-str { color: #9ce0a0; }
+.tok-key { color: #eef4ef; }
+.tok-fn { color: #eef4ef; }
+.tok-task { color: #d2a8ff; }
+.tok-str { color: var(--yellow); }
 .tok-flag { color: var(--yellow); }
 .tok-dim { color: rgba(238, 244, 239, 0.45); }
 .tok-ok { color: #7ee787; font-weight: 800; }
@@ -852,6 +890,7 @@ h2 {
 
   .qs-tabs {
     position: static;
+    margin-bottom: 24px;
   }
 
   .qs-right {

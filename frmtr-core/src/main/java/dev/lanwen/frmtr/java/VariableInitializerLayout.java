@@ -500,6 +500,7 @@ final class VariableInitializerLayout {
             initializer instanceof MethodCallExpr methodCall
             && methodCallHasBlockLambdaArgument(methodCall)
             && !methodCallHasLeadingCommentedBlockLambdaArgument(methodCall)
+            && !methodCallHasContainedCommentObjectCreationBlockLambdaArgument(methodCall)
         ) {
             Optional<Doc> receiverBreakCall = variableWithReceiverBreakBeforeOverWidthHuggableBlockLambdaArguments(
                 variable,
@@ -513,7 +514,8 @@ final class VariableInitializerLayout {
         }
         if (
             initializer instanceof MethodCallExpr methodCall
-            && methodCallHasLeadingCommentedBlockLambdaArgument(methodCall)
+            && (methodCallHasLeadingCommentedBlockLambdaArgument(methodCall)
+                || methodCallHasContainedCommentObjectCreationBlockLambdaArgument(methodCall))
         ) {
             Optional<Doc> brokenCall = variableWithLeadingCommentedBlockLambdaMethodCall(
                 name,
@@ -1267,11 +1269,16 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * Keeps block-lambda method-call arguments with first-statement comments on a direct broken-call layout.
+     * Keeps a commented block-lambda method-call argument on a direct broken-call layout.
      *
      * <p>The ordinary broken-call fallback rejects nested comments so it does not steal comment ownership from method
-     * call rendering. This narrower path is only for source shapes where the comment is the leading cluster before the
-     * first statement inside a block lambda argument and the call opener itself can still stay with the assignment.
+     * call rendering. This narrower path covers two source shapes where that fallback would otherwise drop the comment
+     * and oscillate: the comment is the leading cluster before the first statement inside a block lambda argument, or it
+     * is a contained comment anywhere inside the block lambda of a single object-creation-rooted call (see
+     * {@link #methodCallHasContainedCommentObjectCreationBlockLambdaArgument}). In both cases the call opener must still
+     * fit with the assignment. Routing through {@link #brokenMethodCallArgumentList} renders the lambda body with the
+     * normal block renderer, which keys the layout on the AST and opener width rather than on source line breaks and
+     * preserves the contained comment.
      */
     private Optional<Doc> variableWithLeadingCommentedBlockLambdaMethodCall(
             String name,
@@ -1279,7 +1286,8 @@ final class VariableInitializerLayout {
             MethodCallExpr methodCall
     ) {
         if (
-            !methodCallHasLeadingCommentedBlockLambdaArgument(methodCall)
+            (!methodCallHasLeadingCommentedBlockLambdaArgument(methodCall)
+                && !methodCallHasContainedCommentObjectCreationBlockLambdaArgument(methodCall))
             || methodCall.getArguments().isEmpty()
             || methodCallHasOwnComment(methodCall)
             || methodCall.getScope().filter(shouldPrintScopeAsDoc).isPresent()
@@ -1408,6 +1416,30 @@ final class VariableInitializerLayout {
                     block ->
                         !commentPlacement.lineCommentsBeforeFirst( block, block.getStatements().getFirst().orElseThrow() ) .isEmpty()
                 );
+    }
+
+    /**
+     * Identifies the one initializer shape that the leading-comment block-lambda handler must also rescue: a single
+     * object-creation-rooted call (for example {@code new Runner(arg).query(arg, lambda -> { ... })}) whose block lambda
+     * carries any contained comment that is not the call's own comment.
+     *
+     * <p>The receiver-break and hug paths reject this shape on a contained comment, so it would otherwise fall through to
+     * the source-shape-keyed forced chain. That chain explodes when the source was already multiline and hugs when it was
+     * flat, which is non-idempotent, and it drops the comment. Routing this case through the argument-break renderer keys
+     * the decision on the AST and the opener width instead of the source line breaks, and preserves the comment because
+     * the argument list is rendered through the normal block renderer.
+     *
+     * <p>This deliberately excludes method-call-rooted and name-rooted block-lambda chains so their existing attached-hug
+     * layout is left untouched. It also excludes the leading-comment case, which the original predicate already covers,
+     * and the no-comment case, which must keep hugging. The wider, layout-independent contained-comment drop in those
+     * other initializer shapes is a separate concern this predicate intentionally does not widen into.
+     */
+    private boolean methodCallHasContainedCommentObjectCreationBlockLambdaArgument(MethodCallExpr methodCall) {
+        return methodCallChainRootIsObjectCreation.test(methodCall)
+            && methodCallChainInitializerShape.apply(methodCall).singleCall()
+            && methodCallHasBlockLambdaArgument(methodCall)
+            && !methodCallHasOwnComment(methodCall)
+            && !methodCall.getAllContainedComments().isEmpty();
     }
 
     /**

@@ -7,7 +7,7 @@
             </div>
 
             <div class="hero-headline">
-              <h1 id="title">frmtr</h1>
+              <h1 id="title" class="t-shimmer" data-text="frmtr">frmtr</h1>
               <p class="hero-summary">
                 A fast (allegedly) Java formatter with strong opinions and weak justifications.
                 Based on <a href="https://javaparser.org" target="_blank" rel="noopener">JavaParser</a>.
@@ -28,6 +28,7 @@
               <div class="qs-tabs" role="tablist" aria-label="Quick start">
                 <label class="qs-tab" for="qs-native">Native</label>
                 <label class="qs-tab" for="qs-gradle">Gradle</label>
+                <span class="qs-tab-bar" aria-hidden="true"></span>
               </div>
 
               <div class="qs-right">
@@ -39,27 +40,24 @@
                     <span class="cl">    <span class="tok-fn">id</span>(<span class="tok-str">"dev.lanwen.frmtr"</span>) <span class="nowrap">version <span class="tok-str">"${config.frmtr_version!"dev"}"</span></span></span>
                     <span class="cl">}</span>
                     <span class="cl">&nbsp;</span>
-                    <span class="cl"><span class="tok-dim">$</span> ./gradlew <span class="tok-fn">frmtrCheck</span></span>
-                    <span class="cl"><span class="tok-dim">$</span> ./gradlew <span class="tok-fn">frmtrFormat</span></span></code></pre>
+                    <span class="cl"><span class="tok-dim">$</span> ./gradlew <span class="tok-task">frmtrCheck</span></span>
+                    <span class="cl"><span class="tok-dim">$</span> ./gradlew <span class="tok-task">frmtrFormat</span></span></code></pre>
                 </div>
 
                 <div class="qs-panel qs-p-native">
-                  <span class="qs-guide" aria-hidden="true">120</span>
                   <pre><code><span class="tok-comment"># frmtr cli</span>
 
-<span class="tok-dim">$</span> frmtr <span class="tok-flag">--check --diff</span> \
-       <span class="tok-flag">--render-line-width</span> \
-       <span class="tok-flag">--color=always</span> \
-       <span class="tok-flag">--progress=always</span> .
+<span class="tok-dim">$</span> <span class="tok-task">frmtr</span> <span class="tok-flag">--check --diff --render-line-width</span> \
+       <span class="tok-flag">--color=always --progress=always</span> .
 <span class="tok-dim">Discovering Java files...</span>
 <span class="tok-dim">Processed [240/823, 7 would change].</span>
 <span class="tok-dim">(⠋)</span> src/generated/Huge.java
 <span class="tok-ok">✓</span> src/Main.java
 <span class="tok-bad">✗</span> src/App.java
-  <span class="tok-dim">--- origin</span>
-  <span class="tok-dim">+++ frmtr</span>
-  <span class="tok-del">- int[] dense={1,2};</span>
-  <span class="tok-add">+ int[] dense = {1, 2};</span></code></pre>
+  <span class="tok-dim">--- origin</span>               <span class="tok-dim">⋮ 120</span>
+  <span class="tok-dim">+++ frmtr</span>                <span class="tok-dim">⋮</span>
+  <span class="tok-del">- int[] dense={1,2};</span>     <span class="tok-dim">⋮</span>
+  <span class="tok-add">+ int[] dense = {1, 2};</span>  <span class="tok-dim">⋮</span></code></pre>
                 </div>
               </div>
             </div>

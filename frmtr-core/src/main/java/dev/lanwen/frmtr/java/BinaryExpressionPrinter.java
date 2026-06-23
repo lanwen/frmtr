@@ -9,6 +9,10 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.InstanceOfExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
+import com.github.javaparser.ast.expr.SwitchExpr;
+import com.github.javaparser.ast.stmt.IfStmt;
+import com.github.javaparser.ast.stmt.SwitchStmt;
+import com.github.javaparser.ast.stmt.WhileStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
@@ -466,6 +470,7 @@ final class BinaryExpressionPrinter {
                 .filter(comment -> comment.startsBefore(firstOperand))
                 .ifPresent(beforeFirst::add);
         beforeFirst.addAll(commentPlacement.lineCommentsBeforeFirst(expression, firstOperand));
+        beforeFirst.addAll(leadingControlConditionLineComments(expression));
         return beforeFirst.stream()
                 .distinct()
                 .sorted(
@@ -475,6 +480,39 @@ final class BinaryExpressionPrinter {
                     )
                 )
                 .toList();
+    }
+
+    /**
+     * Recovers the line comments that lead this logical condition's first operand but that a whitespace perturbation
+     * re-bucketed onto the enclosing control statement as orphans rather than leaving as the condition's own contained
+     * trivia.
+     *
+     * <p>This is the operand-by-operand renderer's source-order sibling of the three line-keyed sources above. A
+     * multi-line {@code &&}/{@code ||} condition renders here (via {@link #linesWithComments(BinaryExpr)}), not through
+     * the line-based broken-condition gate, so the leading-condition orphan recovery {@link ControlConditionPrinter}
+     * deliberately skips for logical conditions must be applied at this operand boundary instead. We add it only when the
+     * binary expression is the condition/selector of its enclosing {@link IfStmt}/{@link WhileStmt}/{@link SwitchStmt}/
+     * {@link SwitchExpr}, so a nested binary never claims its parent statement's leading comments.
+     *
+     * <p>At the {@code @default} shape the first operand-leading comment is either already recovered by the line-keyed
+     * sources (same comment identity, removed by {@code distinct()}) or is the binary expression's own contained trivia
+     * (which the control statement does not hold as an orphan), so this adds nothing and the layout stays byte-identical.
+     */
+    private List<JavaCommentTrivia> leadingControlConditionLineComments(BinaryExpr expression) {
+        return expression.getParentNode()
+                .filter(parent -> controlConditionIs(parent, expression))
+                .map(parent -> commentPlacement.leadingConditionComments(parent, expression))
+                .orElseGet(List::of);
+    }
+
+    private boolean controlConditionIs(Node parent, BinaryExpr expression) {
+        return switch (parent) {
+            case IfStmt ifStmt -> ifStmt.getCondition() == expression;
+            case WhileStmt whileStmt -> whileStmt.getCondition() == expression;
+            case SwitchStmt switchStmt -> switchStmt.getSelector() == expression;
+            case SwitchExpr switchExpr -> switchExpr.getSelector() == expression;
+            default -> false;
+        };
     }
 
     private Doc binaryLineOperandDoc(

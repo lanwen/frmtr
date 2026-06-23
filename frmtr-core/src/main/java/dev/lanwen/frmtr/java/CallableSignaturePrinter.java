@@ -12,6 +12,7 @@ import com.github.javaparser.ast.body.CallableDeclaration;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.ReceiverParameter;
 import com.github.javaparser.ast.comments.BlockComment;
+import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
@@ -446,8 +447,17 @@ final class CallableSignaturePrinter {
     }
 
     /**
-     * Reports whether a same-line block comment trailing {@code parameter} begins before the parameter list's closing
-     * {@code ")"}, which is the only position from which it can genuinely belong to the last parameter.
+     * Reports whether a block comment trailing {@code parameter} lies in the source-order gap between the last
+     * parameter's end and the parameter list's closing {@code ")"}, which is the only span from which it can genuinely
+     * belong to the last parameter.
+     *
+     * <p>Selection is by source order, not by same-line: the comment must begin after the parameter ends and before the
+     * close paren. A same-line {@code param /* note *​/)} block comment satisfies both bounds, and so does an expanded
+     * layout that pushes the comment onto its own line while keeping it before {@code ")"} — the body block's own
+     * comment that {@code expand} slides off the last parameter's line. Bounding strictly at {@code ")"} (never the body
+     * brace) preserves PR #20's narrowing: under {@code collapse} a following member's leading block comment can slide
+     * up onto the last parameter's line, but it begins after {@code ")"}, so it is rejected and stays with its real
+     * owner.
      *
      * <p>The closing paren is the first {@code RPAREN} in the callable's token range that begins at or after the last
      * parameter ends; any {@code ")"} from an annotation or type on the parameter itself ends before the parameter does,
@@ -455,14 +465,8 @@ final class CallableSignaturePrinter {
      * and the recovery is suppressed rather than guessed.
      */
     private boolean trailingBlockCommentPrecedesCloseParen(Parameter parameter) {
-        if (!lastCallableParameter(parameter)) {
-            return false;
-        }
-        Optional<Range> parameterRange = parameter.getRange();
-        Optional<Range> closeParenRange = parameter.getParentNode()
-                .flatMap(Node::getTokenRange)
-                .flatMap(tokenRange -> closeParenAfter(tokenRange, parameterRange.orElse(null)));
-        if (parameterRange.isEmpty() || closeParenRange.isEmpty()) {
+        Optional<Range> closeParenRange = closeParenForParameterList(parameter);
+        if (closeParenRange.isEmpty()) {
             return false;
         }
         Range closeParen = closeParenRange.orElseThrow();
@@ -470,10 +474,34 @@ final class CallableSignaturePrinter {
                 .stream()
                 .flatMap(parent -> parent.getAllContainedComments().stream())
                 .filter(BlockComment.class::isInstance)
-                .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(parameter, comment))
-                .anyMatch(comment -> comment.getRange()
-                        .map(range -> CommentIndex.startsBefore(range, closeParen))
-                        .orElse(false));
+                .anyMatch(comment -> precedesCloseParen(parameter, comment, closeParen));
+    }
+
+    /**
+     * Locates the parameter list's closing {@code ")"} for the last parameter, returning empty when {@code parameter} is
+     * not the last ordinary parameter or any required source range is missing.
+     */
+    private Optional<Range> closeParenForParameterList(Parameter parameter) {
+        if (!lastCallableParameter(parameter)) {
+            return Optional.empty();
+        }
+        Optional<Range> parameterRange = parameter.getRange();
+        if (parameterRange.isEmpty()) {
+            return Optional.empty();
+        }
+        return parameter.getParentNode()
+                .flatMap(Node::getTokenRange)
+                .flatMap(tokenRange -> closeParenAfter(tokenRange, parameterRange.orElse(null)));
+    }
+
+    /**
+     * Reports whether a block {@code comment} lies in the source-order window {@code (parameter end, closeParen)}: it
+     * begins after the parameter's last token and before the parameter list's closing {@code ")"}. The lower bound is
+     * source-order rather than same-line so a layout perturbation that moves the comment off the parameter's line cannot
+     * defeat ownership; the upper bound stays at {@code ")"} so the recovery never reaches past the parameter list.
+     */
+    private boolean precedesCloseParen(Parameter parameter, Comment comment, Range closeParen) {
+        return CommentIndex.startsAfterEndOf(parameter, comment) && CommentIndex.startsBefore(comment, closeParen.begin);
     }
 
     private Optional<Range> closeParenAfter(TokenRange tokenRange, Range parameterRange) {
@@ -503,16 +531,24 @@ final class CallableSignaturePrinter {
 
     /**
      * Finds block comments that JavaParser leaves inside the callable rather than attaching to the last parameter node.
+     *
+     * <p>Selection is the same source-order window the gate ({@link #trailingBlockCommentPrecedesCloseParen}) uses: the
+     * comment must begin after the last parameter ends and before the parameter list's closing {@code ")"}. Bounding by
+     * source order rather than same-line keeps the comment owned by the parameter even when an expanded layout pushes it
+     * onto its own line (the body block's own comment that {@code expand} slides off the parameter's line), while the
+     * {@code ")"} upper bound keeps the recovery from reaching past the parameter list into a following member.
      */
     Doc parameterTrailingBlockComment(Parameter parameter) {
-        if (!lastCallableParameter(parameter)) {
+        Optional<Range> closeParenRange = closeParenForParameterList(parameter);
+        if (closeParenRange.isEmpty()) {
             return Doc.EMPTY;
         }
+        Range closeParen = closeParenRange.orElseThrow();
         return parameter.getParentNode()
                 .stream()
                 .flatMap(parent -> parent.getAllContainedComments().stream())
                 .filter(BlockComment.class::isInstance)
-                .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(parameter, comment))
+                .filter(comment -> precedesCloseParen(parameter, comment, closeParen))
                 .findFirst()
                 .map(comments::comment)
                 .orElse(Doc.EMPTY);

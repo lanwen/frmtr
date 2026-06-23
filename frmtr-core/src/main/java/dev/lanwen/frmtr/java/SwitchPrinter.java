@@ -79,8 +79,6 @@ final class SwitchPrinter {
 
     private final CompactSourceText compactSource;
 
-    private final CommentPlacement commentPlacement;
-
     private final JavaCommentPlacementPolicy commentPlacementPolicy;
 
     private final SourceOrderedCommentInterleaver<SwitchEntry> commentInterleaver;
@@ -179,7 +177,6 @@ final class SwitchPrinter {
         this.controlConditions = controlConditions;
         this.binaryExpressionLinesRenderer = binaryExpressionLinesRenderer;
         this.compactSource = context.compactSource;
-        this.commentPlacement = context.commentPlacement;
         this.commentPlacementPolicy = context.commentPlacementPolicy;
         this.commentInterleaver = new SourceOrderedCommentInterleaver<>(context.comments);
         this.modifiers = modifiers;
@@ -195,8 +192,7 @@ final class SwitchPrinter {
      * the shared control-condition policy.
      */
     Doc switchStatement(SwitchStmt statement) {
-        Doc leadingBlockComment = commentPlacement.ownSameLineBlockCommentBeforeNode(statement);
-        Doc prefix = leadingBlockComment == Doc.EMPTY ? Doc.EMPTY : Doc.concat(leadingBlockComment, Doc.text(" "));
+        Doc prefix = switchLeadingBlockCommentPrefix(statement);
         Doc selectorTrailingLineComment = selectorTrailingLineComment(statement.getSelector());
         if (statement.getEntries().isEmpty()) {
             return Doc.concat(
@@ -226,6 +222,37 @@ final class SwitchPrinter {
             switchBlockPrefix(selectorTrailingLineComment),
             switchBlock(statement, statement.getEntries())
         );
+    }
+
+    /**
+     * Renders the {@code switch} statement's own leading block comment ({@code /* note *}{@code / switch (...)}),
+     * placing it inline before {@code switch} or on its own line by source position.
+     *
+     * <p>{@link StatementRuleEnvelope} suppresses the shared leading slot whenever the {@code switch} statement carries an
+     * own block comment, so this printer owns rendering it. The shared
+     * {@link JavaCommentPlacementPolicy#ownSameLineBlockCommentBeforeNode(Node)} query only recovers the comment when it
+     * shares the {@code switch} line, which a whitespace perturbation that lifts the comment onto the line above defeats:
+     * the envelope still suppresses the slot, so the comment would be dropped. This local prefix instead selects the own
+     * block comment by source order ({@link CommentIndex#startsBefore(Comment, Node)}) and then decides inline versus
+     * own-line by line position ({@link CommentIndex#startsOnBeginLine(Comment, Node)}). At {@code @default} the comment
+     * shares the {@code switch} line, so it renders inline exactly as before. The shared same-line policy is intentionally
+     * left untouched because {@code catch}/{@code finally} prefixes depend on its strict same-line behavior.
+     */
+    private Doc switchLeadingBlockCommentPrefix(SwitchStmt statement) {
+        return commentPlacementPolicy.ownComment(
+                statement,
+                comment -> comment.isBlock() && comment.startsBefore(statement)
+            )
+            .map(trivia -> {
+                Doc comment = comments.comment(trivia);
+                if (comment == Doc.EMPTY) {
+                    return Doc.EMPTY;
+                }
+                return trivia.startsOnBeginLine(statement)
+                    ? Doc.concat(comment, Doc.text(" "))
+                    : Doc.concat(comment, Doc.HARD_LINE);
+            })
+            .orElse(Doc.EMPTY);
     }
 
     /**

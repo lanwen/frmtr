@@ -101,6 +101,27 @@ final class CommentTracker {
                 .toList();
     }
 
+    /**
+     * Claims and renders the block comments that begin before {@code boundary} but that JavaParser parked on one of
+     * {@code attachmentBuckets} instead of as the node that originally owned them.
+     *
+     * <p>This is the orphan-bucket counterpart to a node's own leading block comment, in the same source-order ownership
+     * shape as {@link #gapLineCommentsBefore(Node, Node, Collection)} and
+     * {@link #trailingLineCommentsAfter(Node, Node, java.util.Optional)}. A {@code finally}/{@code while}/array-element
+     * leading or trailing block comment is the owning node's own trivia at {@code @default}, so the owner's own-comment
+     * path renders it and this query is only consulted on the empty-own fallback; under a whitespace perturbation the same
+     * comment re-buckets onto the enclosing statement orphan pool, where this query recovers it. Already-claimed comments
+     * render as {@link Doc#EMPTY} so an earlier clause that consumed a shared block comment (e.g. a {@code catch} prefix)
+     * is not double-printed. See {@link JavaCommentPlacementPolicy#blockCommentsBefore(Collection, Node)}.
+     */
+    List<Doc> blockCommentsBefore(Collection<? extends Node> attachmentBuckets, Node boundary) {
+        return commentPlacement.blockCommentsBefore(attachmentBuckets, boundary)
+                .stream()
+                .filter(this::claim)
+                .map(JavaFormatter::commentDoc)
+                .toList();
+    }
+
     Doc orphanComments(Node node) {
         return orphanComments(node, ignored -> true);
     }

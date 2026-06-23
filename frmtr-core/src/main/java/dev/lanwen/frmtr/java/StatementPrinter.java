@@ -41,8 +41,10 @@ import com.github.javaparser.ast.stmt.YieldStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -357,20 +359,104 @@ final class StatementPrinter {
         if (!leadingComments.isEmpty()) {
             consumeLabeledBodyLeadingLineComment(statement.getStatement());
         }
+        List<Doc> recovered = recoveredLabeledLeadingComments(statement, leadingComments);
         Doc labeledBody = labeledStatementBody(statement.getStatement());
         Doc body = Doc.concat(label, labeledBody);
-        if (leadingComments.isEmpty()) {
+        List<Doc> leading = new ArrayList<>(leadingComments.stream().map(Doc::text).toList());
+        leading.addAll(recovered);
+        if (leading.isEmpty()) {
             return body;
         }
-        return Doc.concat(
-            Doc.join(Doc.HARD_LINE, leadingComments.stream().map(Doc::text).toList()),
-            Doc.HARD_LINE,
-            body
-        );
+        return Doc.concat(Doc.join(Doc.HARD_LINE, leading), Doc.HARD_LINE, body);
     }
 
     private void consumeLabeledBodyLeadingLineComment(Statement statement) {
         comments.ownComment(statement, LineComment.class::isInstance);
+    }
+
+    /**
+     * {@code @collapsed}-only orphan-recovery fallback for a labeled statement's leading comments.
+     *
+     * <p>The two existing paths cover {@code @default}: {@link StatementRuleEnvelope} renders the {@link LabeledStmt}'s
+     * own/adjacent leading comments, and {@link #labeledStatementLeadingComments(LabeledStmt)} reproduces — verbatim from
+     * the raw source slice between the {@code :} and the nested statement — the leading comment lines (preserving author
+     * blank-line groups the AST cannot reconstruct). Under a whitespace collapse those leading comments re-bucket onto the
+     * {@code LabeledStmt} orphan pool, the label {@code SimpleName}'s own comment, and the nested
+     * {@link com.github.javaparser.ast.stmt.ForEachStmt ForEachStmt}'s own/orphan comments, and the now single-line raw
+     * slice no longer exposes them as comment-only lines, so they drop.
+     *
+     * <p>This fallback contributes only the comments the other two paths miss. It selects, source-order between the label
+     * and the body, the comments JavaParser parked on those buckets and then applies two dedupe seams:
+     *
+     * <ol>
+     *   <li><strong>string guard against the raw slice.</strong> The raw-slice path returns {@code List<String>} and never
+     *       claims through {@link CommentTracker}, so it cannot be deduped by comment identity. Any candidate whose
+     *       normalized text the raw slice already produced for this statement is excluded, comparing with the same
+     *       normalization the comment-presence net uses. At {@code @default} the raw slice produces every leading comment,
+     *       so this guard removes all candidates and the leading block is unchanged — {@code @default} stays
+     *       byte-identical by construction.
+     *   <li><strong>identity claim.</strong> Each surviving candidate is claimed by {@link CommentTracker#comment}, which
+     *       renders an already-claimed comment (e.g. one the envelope path printed as the {@code LabeledStmt}'s own
+     *       leading comment) as empty, so the envelope-path overlap is not double-printed.
+     * </ol>
+     */
+    private List<Doc> recoveredLabeledLeadingComments(LabeledStmt statement, List<String> rawSliceComments) {
+        Set<String> alreadyRendered = rawSliceComments.stream()
+                .map(StatementPrinter::normalizeCommentText)
+                .collect(java.util.stream.Collectors.toSet());
+        List<Doc> recovered = new ArrayList<>();
+        for (JavaCommentTrivia trivia : commentPlacement.gapCommentsBetween(
+            statement.getLabel(),
+            statement.getStatement(),
+            List.of(statement, statement.getLabel(), statement.getStatement())
+        )) {
+            if (alreadyRendered.contains(normalizeCommentText(trivia.comment()))) {
+                continue;
+            }
+            Doc rendered = comments.comment(trivia);
+            if (rendered != Doc.EMPTY) {
+                recovered.add(rendered);
+            }
+        }
+        return recovered;
+    }
+
+    /**
+     * Normalizes a comment's text to the same key the comment-presence net compares with, so the raw-slice string dedupe
+     * and the recovered-trivia dedupe agree. Mirrors {@code CommentPresenceDiagnosticTest.normalizeRawComment}: a line
+     * comment becomes its text after {@code //}, stripped; a block comment becomes its inner non-blank lines, each with a
+     * leading {@code *} removed and stripped, joined by newlines.
+     */
+    private static String normalizeCommentText(Comment comment) {
+        if (comment instanceof LineComment) {
+            return normalizeCommentText("//" + comment.getContent());
+        }
+        return normalizeCommentText("/*" + comment.getContent() + "*/");
+    }
+
+    private static String normalizeCommentText(String raw) {
+        String text = raw.strip();
+        if (text.startsWith("//")) {
+            return text.substring(2).strip();
+        }
+        String inner = text;
+        if (inner.startsWith("/*")) {
+            inner = inner.substring(2);
+        }
+        if (inner.endsWith("*/")) {
+            inner = inner.substring(0, inner.length() - 2);
+        }
+        List<String> lines = new ArrayList<>();
+        for (String rawLine : inner.split("\n", -1)) {
+            String line = rawLine.strip();
+            if (line.startsWith("*")) {
+                line = line.substring(1).strip();
+            }
+            if (!line.isEmpty()) {
+                lines.add(line);
+            }
+        }
+        return String.join("\n", lines);
     }
 
     private Doc labeledStatementBody(Statement statement) {
@@ -605,7 +691,7 @@ final class StatementPrinter {
         }
         if (statement.getFinallyBlock().isPresent()) {
             BlockStmt finallyBlock = statement.getFinallyBlock().orElseThrow();
-            Doc finallyPrefixComment = ownBlockCommentBeforeNode(finallyBlock);
+            Doc finallyPrefixComment = finallyPrefixBlockComment(statement, finallyBlock);
             docs.add(Doc.text(" "));
             if (finallyPrefixComment != Doc.EMPTY) {
                 docs.add(finallyPrefixComment);
@@ -891,6 +977,24 @@ final class StatementPrinter {
         return statement.getFinallyBlock();
     }
 
+    /**
+     * Recovers the block comment that sits before the {@code finally} block ({@code } /* note *}{@code / finally {}),
+     * independent of source shape.
+     *
+     * <p>At {@code @default} JavaParser attaches it as the finally {@link BlockStmt}'s own comment, so
+     * {@link #ownBlockCommentBeforeNode(Node)} renders it and the orphan fallback never runs. A whitespace perturbation
+     * that pushes the comment onto its own line re-buckets it as a {@link TryStmt} orphan; the own path then loses it, so
+     * we recover the {@code try} orphan block comments that begin before the finally block. Earlier-clause comments
+     * (a {@code catch} prefix) are already claimed by the time the finally prefix renders, so they cannot leak in here.
+     */
+    private Doc finallyPrefixBlockComment(TryStmt statement, BlockStmt finallyBlock) {
+        Doc own = ownBlockCommentBeforeNode(finallyBlock);
+        if (own != Doc.EMPTY) {
+            return own;
+        }
+        return Doc.concat(comments.blockCommentsBefore(List.of(statement), finallyBlock));
+    }
+
     private Doc ownBlockCommentBeforeNode(Node node) {
         return comments.ownComment(node, comment -> comment instanceof BlockComment
                 && comment.getRange()
@@ -1051,9 +1155,9 @@ final class StatementPrinter {
                         docs.add(emptyElseStatement(statement, elseStatement));
                         return;
                     }
-                    Doc elseLeadingLineComment = comments.ownComment(elseStatement, LineComment.class::isInstance);
+                    Doc elseLeadingLineComment = elseLeadingLineComment(statement, elseStatement);
                     Doc elseLeadingBlockComment = sameLineBlockCommentBeforeNode.apply(elseStatement);
-                    Doc elseTrailingLineComment = trailingLineComment(elseStatement);
+                    Doc elseTrailingLineComment = elseTrailingLineComment(statement, elseStatement);
                     docs.add(
                         elseChainSeparator(
                             statement,
@@ -1080,6 +1184,48 @@ final class StatementPrinter {
             docs.add(thenTrailingLineComment);
         }
         return Doc.concat(docs);
+    }
+
+    /**
+     * Recovers the line comment that leads the {@code else} keyword ({@code } // note\nelse}), independent of source
+     * shape.
+     *
+     * <p>At {@code @default} the comment is the else statement's own leading trivia, so
+     * {@link CommentTracker#ownComment(Node, java.util.function.Predicate)} renders it and the orphan fallback never
+     * runs. A whitespace perturbation that pushes the comment onto its own line between the then block and the
+     * {@code else} re-buckets it as a {@link IfStmt} orphan, so the own path loses it; we then recover the {@code if}
+     * orphan line comment that source-orders between the then block's end and the else node's begin (the same gap the
+     * {@code else}-leading slot owns). The recovered comment feeds the existing {@code elseLeadingLineComment} render
+     * slot unchanged.
+     */
+    private Doc elseLeadingLineComment(IfStmt statement, Statement elseStatement) {
+        Doc own = comments.ownComment(
+            elseStatement,
+            comment -> comment instanceof LineComment && CommentIndex.startsBefore(comment, elseStatement)
+        );
+        if (own != Doc.EMPTY) {
+            return own;
+        }
+        return Doc.concat(comments.gapLineCommentsBefore(statement.getThenStmt(), elseStatement, List.of(statement)));
+    }
+
+    /**
+     * Recovers the line comment that trails the {@code else} body ({@code } else {} // note}), independent of source
+     * shape.
+     *
+     * <p>This mirrors the try-clause {@link #clauseTrailingComment(TryStmt, Node, java.util.Optional)} recovery. At
+     * {@code @default} the comment sits on the else body's end line, so {@link CommentTracker#trailingLineComment(Node)}
+     * (via {@link #trailingLineComment(Node)}) owns it. When a collapse perturbation places it on the shared else
+     * {@code }} position so {@code startsAfterEndOf(elseStatement)} fails, JavaParser re-buckets it onto the
+     * {@link IfStmt} orphan pool; we then recover the {@code if} orphan line comment that source-orders after the else
+     * body ends (open to the statement's end, since the else is the last clause).
+     */
+    private Doc elseTrailingLineComment(IfStmt statement, Statement elseStatement) {
+        Doc own = trailingLineComment(elseStatement);
+        if (own != Doc.EMPTY) {
+            return own;
+        }
+        return comments.trailingLineCommentsAfter(statement, elseStatement, Optional.empty());
     }
 
     private Doc ifWithEmptyThenStatement(IfStmt statement) {
@@ -1118,13 +1264,32 @@ final class StatementPrinter {
         return String.join(" ", parts);
     }
 
+    /**
+     * Recovers the block comment that sits between the then branch's {@code }} and the {@code else} keyword
+     * ({@code } /* note *}{@code / else}), independent of source shape.
+     *
+     * <p>The own path keeps the original column arithmetic: at {@code @default} JavaParser attaches the comment to the
+     * else node as its own trivia, and the comment shares the then-end line immediately after {@code }} (within two
+     * columns) and lies before the {@code else} node on that line. That column window is what distinguishes a
+     * {@code } /* note *}{@code / else} comment from an {@code else /* note *}{@code / {} comment — both are the else
+     * node's own block comment on the same line, but only the former sits immediately after {@code }}. Keeping that
+     * window means {@code @default} renders byte-identically and the {@code else}-leading comment still falls through to
+     * {@link #ifStatement(IfStmt)}'s {@code elseLeadingBlockComment} slot.
+     *
+     * <p>A whitespace perturbation that pushes the {@code } /* note *}{@code / else} comment onto its own line below the
+     * {@code }} re-buckets it as a {@link IfStmt} orphan even though the AST is otherwise identical, so the own path's
+     * line/column predicates lose it. The orphan fallback then recovers the {@code if} orphan block comment that
+     * source-orders strictly between the then branch end and the else node begin. The fallback only sees orphans, so an
+     * {@code else}-leading comment (which stays the else node's own trivia under perturbation) is never claimed here and
+     * still renders through the {@code elseLeadingBlockComment} slot.
+     */
     private Doc blockCommentBetweenThenAndElse(IfStmt statement) {
         if (statement.getElseStmt().isEmpty()) {
             return Doc.EMPTY;
         }
         Statement thenStatement = statement.getThenStmt();
         Statement elseStatement = statement.getElseStmt().orElseThrow();
-        return statement.getAllContainedComments()
+        Doc own = statement.getAllContainedComments()
                 .stream()
                 .filter(BlockComment.class::isInstance)
                 .filter(comment -> comment.getRange()
@@ -1141,6 +1306,18 @@ final class StatementPrinter {
                 )
                 .findFirst()
                 .map(comments::comment)
+                .orElse(Doc.EMPTY);
+        if (own != Doc.EMPTY) {
+            return own;
+        }
+        return commentPlacement.orphanComments(statement)
+                .stream()
+                .filter(JavaCommentTrivia::isBlock)
+                .filter(comment -> comment.liesBetween(thenStatement, elseStatement))
+                .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
+                .findFirst()
+                .map(comments::comment)
+                .filter(doc -> doc != Doc.EMPTY)
                 .orElse(Doc.EMPTY);
     }
 
@@ -1431,17 +1608,11 @@ final class StatementPrinter {
     }
 
     private Doc doWhileTail(DoStmt statement) {
-        Optional<Comment> conditionComment = statement.getCondition().getComment().filter(
-            BlockComment.class::isInstance
-        );
-        if (
-            conditionComment.isPresent()
-            && conditionCommentStartsBeforeExpression(statement.getCondition(), conditionComment.orElseThrow())
-        ) {
-            Doc comment = comments.comment(conditionComment.orElseThrow());
+        Doc beforeWhileComment = doWhileBeforeWhileBlockComment(statement);
+        if (beforeWhileComment != Doc.EMPTY) {
             return Doc.text(
                 " "
-                    + commentText(comment)
+                    + commentText(beforeWhileComment)
                     + " while ("
                     + compactWithoutOwnComment.apply(statement.getCondition())
                     + ");"
@@ -1457,6 +1628,28 @@ final class StatementPrinter {
             ),
             Doc.text(";")
         );
+    }
+
+    /**
+     * Recovers the block comment that sits between a {@code do} body and its {@code while}
+     * ({@code } /* note *}{@code / while (...)}), independent of source shape.
+     *
+     * <p>At {@code @default} JavaParser attaches it as the condition's own comment, so the condition own path renders it.
+     * A whitespace perturbation that pushes the comment onto its own line re-buckets it as a {@link DoStmt} orphan; this
+     * query then recovers the {@code do} orphan block comments that begin before the condition. The rendering stays the
+     * same inline {@code note while (...)} shape used for the own-comment case.
+     */
+    private Doc doWhileBeforeWhileBlockComment(DoStmt statement) {
+        Optional<Comment> conditionComment = statement.getCondition().getComment().filter(
+            BlockComment.class::isInstance
+        );
+        if (
+            conditionComment.isPresent()
+            && conditionCommentStartsBeforeExpression(statement.getCondition(), conditionComment.orElseThrow())
+        ) {
+            return comments.comment(conditionComment.orElseThrow());
+        }
+        return Doc.concat(comments.blockCommentsBefore(List.of(statement), statement.getCondition()));
     }
 
     /**

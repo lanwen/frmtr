@@ -402,15 +402,39 @@ final class ArrayExpressionPrinter {
         return value.getAllContainedComments().stream().anyMatch(contained -> contained == comment.comment());
     }
 
+    /**
+     * Recovers the block comment that trails an array element after its comma
+     * ({@code value /* note *}{@code /, next}), independent of source shape.
+     *
+     * <p>At {@code @default} JavaParser attaches it as {@code next}'s own comment, so the own-comment path renders it. A
+     * whitespace perturbation that pushes the comment onto its own line re-buckets it as an {@link ArrayInitializerExpr}
+     * orphan; the own path then loses it, so we recover the initializer's orphan block comments that source-order between
+     * {@code value} and {@code next}. The recovered set is filtered to {@link CommentIndex#liesBetween(Comment, Node,
+     * Node)} so it claims exactly the gap comment and never a later element's trailing comment.
+     */
     private Doc trailingBlockComment(Expression value, Expression next) {
         if (next == null) {
             return Doc.EMPTY;
         }
-        return next.getComment()
+        Doc own = next.getComment()
                 .filter(BlockComment.class::isInstance)
                 .filter(comment -> CommentIndex.startsAfterNodeOnSameLine(value, comment))
                 .filter(comment -> CommentIndex.startsBeforeBeginLine(comment, next))
                 .map(comments::comment)
+                .orElse(Doc.EMPTY);
+        if (own != Doc.EMPTY) {
+            return own;
+        }
+        return value.getParentNode()
+                .filter(ArrayInitializerExpr.class::isInstance)
+                .map(arrayInitializer -> Doc.concat(
+                        commentPlacement.blockCommentsBefore(List.of(arrayInitializer), next)
+                                .stream()
+                                .filter(comment -> comment.liesBetween(value, next))
+                                .map(comments::comment)
+                                .filter(comment -> comment != Doc.EMPTY)
+                                .toList()
+                ))
                 .orElse(Doc.EMPTY);
     }
 

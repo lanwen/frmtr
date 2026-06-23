@@ -1,7 +1,7 @@
 <#macro siteNav>
       <nav class="site-nav" aria-label="Primary">
         <span class="brand">
-          <a class="mark" href="#"><span class="mark-accent">java</span>frmtr</a>
+          <a class="mark" href="#"><span class="mark-accent">java</span><span class="mark-name">frmtr</span></a>
           <sup class="brand-ver" title="Requires Java 21+">21+</sup>
         </span>
         <div class="nav-meta">

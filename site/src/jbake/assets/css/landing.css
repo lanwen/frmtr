@@ -109,6 +109,15 @@ pre {
   color: #fff;
 }
 
+/* Both logo parts get matching vertical room so the rainbow fill on the name
+   isn't clipped, while staying aligned with each other. */
+.mark-accent,
+.mark-name {
+  display: inline-block;
+  margin: -0.24em 0;
+  padding: 0.24em 0;
+}
+
 .brand {
   display: inline-flex;
   align-items: flex-start;
@@ -154,7 +163,7 @@ pre {
 
 .hero {
   display: grid;
-  grid-template-rows: minmax(420px, 52svh) minmax(480px, auto);
+  grid-template-rows: minmax(336px, 41.6svh) minmax(480px, auto);
   min-height: 100svh;
   background: #252527;
   color: #eef4ef;
@@ -267,6 +276,37 @@ html.dark .hero {
   font-size: clamp(72px, 10vw, 170px);
   font-weight: 900;
   line-height: 0.76;
+}
+
+/* Animated rainbow on hover for the logo name. */
+.mark:hover .mark-name {
+  background-image: linear-gradient(
+    90deg,
+    #ff0040,
+    #ff9500,
+    #ffe000,
+    #1fd655,
+    #18b6ff,
+    #7b2cff,
+    #ff0040);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: rainbow-slide 6s linear infinite;
+}
+
+@keyframes rainbow-slide {
+  to {
+    background-position: 200% 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mark:hover .mark-name {
+    animation: none;
+  }
 }
 
 .hero-summary {
@@ -489,11 +529,21 @@ html.dark .hero {
   line-height: 0.72;
 }
 
+.stamp-rule {
+  width: 136px;
+  height: 1px;
+  /* Sit below ZERO with a clear gap (its tight line-height puts the box bottom
+     near the glyphs, so push the line down rather than up). */
+  margin: 10px 0 2px;
+  background: currentColor;
+}
+
 .yellow-panel .stamp-sub {
   font-family: var(--font-display);
-  /* sized so "configuration" matches the width of the big ZERO above it */
-  font-size: 41.5px;
-  line-height: 0.88;
+  /* sized so the wider "sensible defaults" line fits on one line, about the
+     width of the big ZERO above it */
+  font-size: 32px;
+  line-height: 0.92;
   text-align: center;
 }
 

@@ -67,7 +67,8 @@
             <aside class="yellow-panel" aria-label="Zero configuration">
               <div class="stamp-stack">
                 <span class="stamp">ZERO</span>
-                <span class="stamp-sub">configuration<br>defaults</span>
+                <span class="stamp-rule" aria-hidden="true"></span>
+                <span class="stamp-sub">configuration<br>sensible defaults</span>
               </div>
               <p>Just plug and play &mdash; readable Java without the hassle.</p>
             </aside>

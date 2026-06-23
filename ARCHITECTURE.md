@@ -456,3 +456,22 @@ The test suite is module-scoped:
 Golden fixture strategy, frmtr-owned fixture conventions, glob-discovered JUnit fixture sources, and new-rule coverage
 expectations are documented in [docs/testing-strategy.md](docs/testing-strategy.md). Option-specific snapshots use
 fixture-owned output variants with sidecar option properties rather than Java test lists.
+
+### Corpus correctness harness (B3, Layer 3)
+
+A Layer-3 safety net lives in `:frmtr-tooling` as a dedicated `corpus` source set
+(`dev.lanwen.frmtr.tooling.corpus`) run only by the opt-in `corpusCheck` Gradle task. It fetches a real-world OSS
+codebase pinned to one immutable commit SHA (testcontainers-java; the pin is the single `CorpusPin` constant) and, for
+each cleanly-parsing `.java` file under `**/src/main/java/**`, asserts three invariants: parse-stability and
+AST-equivalence (both via the public `Frmtr.formatVerified`, which re-parses the output and compares it structurally
+to the input) plus one-pass idempotence (re-formatting the formatted output is a no-op). Files that do not parse
+cleanly as a compilation unit under the formatter's parser configuration are a legitimate skip, not a failure. The
+harness reuses only the public `Frmtr`/`FrmtrSession` API — one session per worker thread, since JavaParser is not
+thread-safe — and never repairs the formatter: surfaced violations are reported, not silenced.
+
+This harness is intentionally off the hot path. `corpusCheck` is not wired into `check`/`build`/`test`, lives in its
+own source set, detaches itself from the project-wide Jacoco finalizer (so it never drags `test` in), and is gated by
+the `frmtr.corpus.enabled` system property — without `-Pcorpus=true` the JUnit entry reports SKIPPED and never
+fetches, and a fetch failure (e.g. offline) also skips rather than fails. The fetched corpus is cached under
+`frmtr-tooling/build/corpus/` (gitignored) and is run on demand or nightly via `.github/workflows/corpus.yml`
+(`workflow_dispatch` + `schedule` only, no push/PR trigger).

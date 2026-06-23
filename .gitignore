@@ -6,6 +6,10 @@ bin/
 *.log
 .DS_Store
 
+# B3 corpus harness fetches a pinned OSS corpus here on demand; never commit it.
+# (Covered by build/ above; listed explicitly to document intent.)
+frmtr-tooling/build/corpus/
+
 # IDE
 .idea/
 *.iml

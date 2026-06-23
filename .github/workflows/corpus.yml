@@ -1,0 +1,40 @@
+name: Corpus
+
+# Opt-in Layer-3 corpus correctness harness. Runs ONLY on manual dispatch and on a nightly schedule — never on
+# pull_request or push — so it stays off the hot path. It formats a pinned real-world OSS codebase
+# (testcontainers-java) and asserts parse-stability, idempotence, and AST-equivalence per file.
+on:
+  workflow_dispatch:
+  schedule:
+    # Nightly at 03:17 UTC.
+    - cron: "17 3 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  corpus:
+    name: Corpus correctness harness
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Set up Java
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+
+      # Cache the fetched corpus keyed on the pinned SHA so the nightly run only downloads the tarball once per pin.
+      - name: Cache corpus
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: frmtr-tooling/build/corpus
+          key: corpus-deb78e1e6e47675f56e8d7b3f4747093d66f1baa
+
+      - name: Run corpus harness
+        run: ./gradlew :frmtr-tooling:corpusCheck -Pcorpus=true

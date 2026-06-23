@@ -165,8 +165,83 @@ final class MethodDeclarationPrinter {
                 )
             );
         }
-        docs.add(declaration.getBody().map(body -> Doc.concat(Doc.text(" "), block.apply(body))).orElse(Doc.text(";")));
+        Optional<Doc> gapComment = signatureToBodyGapComment(declaration);
+        docs.add(
+            declaration.getBody()
+                    .map(body -> gapComment
+                            .map(comment -> Doc.concat(Doc.HARD_LINE, comment, Doc.HARD_LINE, block.apply(body)))
+                            .orElseGet(() -> Doc.concat(Doc.text(" "), block.apply(body))))
+                    .orElse(Doc.text(";")));
         return Doc.concat(docs);
+    }
+
+    /**
+     * Recovers the {@code //} line comment written alone between a method signature's {@code )} and its body {@code {}
+     * — trivia that the structured {@link JavaPrinter} block rendering never emits — and renders it on its own line
+     * below the signature, preserving the source shape: a {@link Doc#HARD_LINE} before the comment drops it onto a fresh
+     * line at the member indent and a second {@link Doc#HARD_LINE} after it drops the {@code {} onto the line below.
+     *
+     * <p>This is the structured-path counterpart of the raw commented-signature fallback handled by
+     * {@link CommentedMethodSignaturePrinter}: methods with {@code >=2} statements stay on this structured path, where
+     * {@code block.apply(body)} drops the body block's own comment. The trailing {@link Doc#HARD_LINE} is mandatory — a
+     * line comment with the brace on the same line would comment the brace out. When no such gap comment exists the slot
+     * is empty and the body renders exactly as before, keeping comment-free methods byte-identical.
+     */
+    private Optional<Doc> signatureToBodyGapComment(MethodDeclaration declaration) {
+        return declaration.getBody()
+                .flatMap(body -> gapCommentTrivia(declaration, body))
+                .map(comments::comment)
+                .filter(comment -> comment != Doc.EMPTY);
+    }
+
+    /**
+     * Finds the line comment trivia in the {@code )}-to-{@code {} gap, looking in every bucket JavaParser may park it in.
+     *
+     * <p>The same source comment lands in a different parser bucket depending on the whitespace around it, so recovering
+     * only one bucket drops the comment under re-shaped layouts and breaks idempotence:
+     *
+     * <ul>
+     *   <li><b>body own comment</b> — the comment on its own line between {@code )} and {@code {} (the issue #23 source
+     *       shape) attaches as the body block's own trivia;</li>
+     *   <li><b>last-parameter own comment</b> — once this printer renders the comment back onto the signature line
+     *       ({@code ) // note} with {@code {} below), re-parsing that output re-buckets it onto the last parameter's own
+     *       trivia, so a second format pass must still find it there;</li>
+     *   <li><b>method orphan comment</b> — when the comment is isolated by blank lines on both sides (the
+     *       expanded-whitespace shape), JavaParser leaves it as an orphan of the method declaration.</li>
+     * </ul>
+     *
+     * <p>Every bucket is filtered to line comments that lie in the gap — after the parameter list ends and before
+     * {@code body} begins — so a leading comment before the signature or a comment trailing the body is never claimed.
+     * The body-own bucket needs no lower bound because JavaParser only attaches a leading line comment there.
+     */
+    private Optional<JavaCommentTrivia> gapCommentTrivia(MethodDeclaration declaration, BlockStmt body) {
+        Optional<JavaCommentTrivia> bodyOwn = commentPlacement.ownComment(body)
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.startsBefore(body));
+        if (bodyOwn.isPresent()) {
+            return bodyOwn;
+        }
+        return rebucketedGapComment(declaration, body);
+    }
+
+    /**
+     * Recovers the gap comment from the parameter and method-orphan buckets it migrates to when whitespace re-shapes the
+     * signature, bounding it to the source-order gap after the last parameter and before {@code body}.
+     */
+    private Optional<JavaCommentTrivia> rebucketedGapComment(MethodDeclaration declaration, BlockStmt body) {
+        NodeList<Parameter> parameters = declaration.getParameters();
+        if (parameters.isEmpty()) {
+            return Optional.empty();
+        }
+        Parameter lastParameter = parameters.get(parameters.size() - 1);
+        return java.util.stream.Stream.concat(
+                commentPlacement.ownComment(lastParameter).stream(),
+                commentPlacement.orphanComments(declaration).stream()
+        )
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.startsAfterEndOf(lastParameter))
+                .filter(comment -> comment.startsBefore(body))
+                .findFirst();
     }
 
     /**

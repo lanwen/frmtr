@@ -42,7 +42,7 @@ final class CommentedMethodSignaturePrinter {
     }
 
     private boolean hasCommentedMethodSignature(MethodDeclaration declaration, String rawMethod) {
-        int bodyStart = rawMethod.indexOf('{');
+        int bodyStart = bodyOpeningBrace(rawMethod);
         if (bodyStart < 0) {
             return false;
         }
@@ -125,24 +125,33 @@ final class CommentedMethodSignaturePrinter {
 
     private String formatCommentedMethod(String rawMethod) {
         String method = rawMethod.strip();
-        int bodyStart = method.indexOf('{');
-        int bodyEnd = method.lastIndexOf('}');
+        int bodyStart = bodyOpeningBrace(method);
+        int bodyEnd = bodyClosingBrace(method);
         if (bodyStart < 0 || bodyEnd < bodyStart) {
             return method;
         }
         String signature = method.substring(0, bodyStart).stripTrailing();
-        int close = signature.lastIndexOf(')');
+        int close = lastCloseParenOutsideComment(signature);
         int open = matchingOpenParenthesis(signature, close);
         if (open < 0 || close < open) {
             return method;
         }
         String body = method.substring(bodyStart + 1, bodyEnd);
+        // The text between the parameter-list `)` and the real body `{` is the gap comment(s) that JavaParser keeps in
+        // the token stream but does not expose structurally. Now that the body brace is found comment-aware, this region
+        // is no longer the swallowed body; carry any comment token here in a dedicated gap-comment channel, separate from
+        // the parameter-trailing suffix comments, so it renders on its own line between the signature and `{` (preserving
+        // the source shape) rather than being pulled up onto the signature line.
+        List<String> gapComments = signatureGapComments(signature.substring(close + 1));
         String prefix = CommentedTokenText.tokenLine(CommentedTokenText.tokens(signature.substring(0, open)));
         String parameters = signature.substring(open + 1, close);
         List<String> parameterLines = nonBlankLines(parameters);
         String inlineOpeningLineComment = inlineOpeningLineComment(parameters);
         if (parameterLines.isEmpty()) {
-            return formatMethodWithBody(prefix + "()", List.of(), inlineOpeningLineComment, body);
+            if (!gapComments.isEmpty()) {
+                return formatMethodWithBody(prefix + "()", List.of(), gapComments, "", body);
+            }
+            return formatMethodWithBody(prefix + "()", List.of(), List.of(), inlineOpeningLineComment, body);
         }
         // JavaParser can lose a single inline block comment before empty parentheses as header trivia, so keep it
         // attached to the method prefix instead of treating it like a parameter comment line. This only applies when the
@@ -154,7 +163,7 @@ final class CommentedMethodSignaturePrinter {
             && isBlockCommentOnlyLine(parameterLines.getFirst())
             && !parameters.contains("\n")
         ) {
-            return formatMethodWithBody(prefix + " " + parameterLines.getFirst() + "()", List.of(), "", body);
+            return formatMethodWithBody(prefix + " " + parameterLines.getFirst() + "()", List.of(), List.of(), "", body);
         }
         List<String> leadingComments = new ArrayList<>();
         int cursor = 0;
@@ -171,7 +180,13 @@ final class CommentedMethodSignaturePrinter {
             if (!inlineOpeningLineComment.isEmpty()) {
                 return formatMethodWithInlineOpeningComment(prefix + "()", inlineOpeningLineComment, body);
             }
-            return formatMethodWithBody(prefix + "()", parameterLines, inlineOpeningLineComment, body);
+            return formatMethodWithBody(
+                prefix + "()",
+                new ArrayList<>(parameterLines),
+                gapComments,
+                inlineOpeningLineComment,
+                body
+            );
         }
         List<String> formattedParameterLines = formattedParameterLines(parameterParts);
         // Comment-only lines at the edges of the parameter list stay outside the rebuilt parameter text so leading and
@@ -181,10 +196,10 @@ final class CommentedMethodSignaturePrinter {
             && formattedParameterLines.size() == 1
             && !containsLineComment(formattedParameterLines.getFirst())
         ) {
-            List<String> suffixComments = new ArrayList<>(trailingComments);
             return formatMethodWithBody(
                 prefix + "(" + formattedParameterLines.getFirst() + ")",
-                suffixComments,
+                new ArrayList<>(trailingComments),
+                gapComments,
                 "",
                 body
             );
@@ -194,7 +209,13 @@ final class CommentedMethodSignaturePrinter {
         leadingComments.forEach(comment -> lines.add("  " + comment));
         formattedParameterLines.forEach(parameterLine -> lines.add("  " + parameterLine));
         lines.add(")");
-        return formatMethodWithBody(String.join("\n", lines), trailingComments, "", body);
+        return formatMethodWithBody(
+            String.join("\n", lines),
+            new ArrayList<>(trailingComments),
+            gapComments,
+            "",
+            body
+        );
     }
 
     private List<String> formattedParameterLines(List<String> parameterParts) {
@@ -226,14 +247,31 @@ final class CommentedMethodSignaturePrinter {
         parameter.setLength(0);
     }
 
+    /**
+     * Assembles a commented method's signature, gap comments, parameter suffix comments, and body into the rendered
+     * lines.
+     *
+     * <p>Two distinct comment channels feed in. {@code suffixComments} are the parameter-trailing/leading {@code //}
+     * comments that JavaParser keeps attached to the parameter list; the first of them renders on the signature line
+     * (the source shape for {@code foo(int x) // note}). {@code gapComments} are the {@code //} comments written alone
+     * between the parameter-list {@code )} and the body {@code {}; preserving the issue #23 source shape, each renders on
+     * its own line below the signature, with the {@code {} dropped onto the next line. The opening brace must never share
+     * a line with a {@code //} gap comment or it would comment the brace out.
+     *
+     * <p>When {@code gapComments} is empty the rendering is exactly the historical behavior so every pre-existing golden
+     * stays byte-identical. A gap comment and an {@code inlineOpeningComment} are assumed not to co-occur (they originate
+     * from mutually exclusive source regions); if both are somehow present the gap comment wins its own line and the
+     * inline opening comment is dropped, since a brace-line {@code //} comment cannot be rendered safely.
+     */
     private String formatMethodWithBody(
             String signature,
             List<String> suffixComments,
+            List<String> gapComments,
             String inlineOpeningComment,
             String body
     ) {
         List<String> lines = new ArrayList<>();
-        if (suffixComments.isEmpty()) {
+        if (suffixComments.isEmpty() && gapComments.isEmpty()) {
             if (bodyIsEmpty(body)) {
                 lines.add(signature + " {}");
             } else if (inlineOpeningComment.isEmpty()) {
@@ -247,8 +285,14 @@ final class CommentedMethodSignaturePrinter {
             }
             return String.join("\n", lines);
         }
-        lines.add(signature + " " + suffixComments.getFirst());
-        lines.addAll(suffixComments.subList(1, suffixComments.size()));
+        if (suffixComments.isEmpty()) {
+            lines.add(signature);
+        } else {
+            lines.add(signature + " " + suffixComments.getFirst());
+            lines.addAll(suffixComments.subList(1, suffixComments.size()));
+        }
+        // Gap comments render on their own lines between the signature and `{`; the brace must stay off a `//` line.
+        lines.addAll(gapComments);
         if (bodyIsEmpty(body)) {
             lines.add("{}");
         } else {
@@ -386,6 +430,110 @@ final class CommentedMethodSignaturePrinter {
             indented.add(indentUnit + lines[i]);
         }
         return String.join("\n", indented);
+    }
+
+    /**
+     * Finds the first {@code &#123;} that opens the method body, skipping any {@code &#123;} that appears inside a line or
+     * block comment in the raw method text.
+     *
+     * <p>The signature-comment fallback runs on raw source where a {@code //} or {@code /* *}{@code /} comment can sit
+     * between the parameter-list {@code )} and the body {@code &#123;}, and that comment text may itself contain braces
+     * (for example {@code // marks &#123; the bit &#125;}). A plain {@code indexOf('&#123;')} would point at the comment's
+     * brace and de-comment the rest of the comment into the body, producing non-compiling output (issue #23). This scan
+     * is alignment-independent: it works on the possibly re-sliced signature string rather than mapping AST ranges, which
+     * are unreliable here. When no comment precedes the body brace it returns exactly the same offset as
+     * {@code indexOf('&#123;')}, so the normal case is byte-identical.
+     */
+    private int bodyOpeningBrace(String text) {
+        int cursor = 0;
+        while (cursor < text.length()) {
+            cursor = skipComment(text, cursor);
+            if (cursor >= text.length()) {
+                break;
+            }
+            if (text.charAt(cursor) == '{') {
+                return cursor;
+            }
+            cursor++;
+        }
+        return -1;
+    }
+
+    /**
+     * Finds the last {@code &#125;} that closes the method body, skipping any {@code &#125;} that appears inside a line or
+     * block comment. The counterpart to {@link #bodyOpeningBrace(String)} for the body's closing brace; when no comment
+     * contains a {@code &#125;} it returns exactly the same offset as {@code lastIndexOf('&#125;')}.
+     */
+    private int bodyClosingBrace(String text) {
+        int cursor = 0;
+        int lastBrace = -1;
+        while (cursor < text.length()) {
+            cursor = skipComment(text, cursor);
+            if (cursor >= text.length()) {
+                break;
+            }
+            if (text.charAt(cursor) == '}') {
+                lastBrace = cursor;
+            }
+            cursor++;
+        }
+        return lastBrace;
+    }
+
+    /**
+     * Advances past a comment that begins at {@code cursor}, returning the index just after it; returns {@code cursor}
+     * unchanged when no comment starts there. A {@code //} comment is consumed to end-of-line and a {@code /* *}{@code /}
+     * block to its closing {@code *}{@code /} (or end-of-text when unterminated), so brace scans never see braces that
+     * live inside comment spans.
+     */
+    private int skipComment(String text, int cursor) {
+        if (text.startsWith("//", cursor)) {
+            int newline = text.indexOf('\n', cursor + 2);
+            return newline < 0 ? text.length() : newline;
+        }
+        if (text.startsWith("/*", cursor)) {
+            int close = text.indexOf("*/", cursor + 2);
+            return close < 0 ? text.length() : close + 2;
+        }
+        return cursor;
+    }
+
+    /**
+     * Finds the last {@code )} that is not inside a line or block comment.
+     *
+     * <p>When a {@code //} or {@code /* *}{@code /} gap comment sits between the parameter list and the body it can carry
+     * its own {@code )} (for example {@code // table[code] |= (1 &lt;&lt; 3)}). A plain {@code lastIndexOf(')')} would then
+     * point at the comment's {@code )}, treating the comment text as the signature tail and de-commenting it. This scan
+     * skips comment spans, so it lands on the real parameter-list close paren; with no comment present it returns exactly
+     * the same offset as {@code lastIndexOf(')')}.
+     */
+    private int lastCloseParenOutsideComment(String text) {
+        int cursor = 0;
+        int lastClose = -1;
+        while (cursor < text.length()) {
+            int afterComment = skipComment(text, cursor);
+            if (afterComment != cursor) {
+                cursor = afterComment;
+                continue;
+            }
+            if (text.charAt(cursor) == ')') {
+                lastClose = cursor;
+            }
+            cursor++;
+        }
+        return lastClose;
+    }
+
+    /**
+     * Extracts the comment token(s) that sit between the parameter-list {@code )} and the body {@code &#123;}.
+     *
+     * <p>Once {@link #bodyOpeningBrace(String)} points at the real body brace, this region is the gap comment JavaParser
+     * keeps in the token stream but does not expose structurally. Returning it lets the caller carry it in the dedicated
+     * gap-comment channel so it renders verbatim on its own line between the signature and {@code &#123;}, preserving the
+     * source shape. Non-comment text here (there should be none for a well-formed signature) is ignored.
+     */
+    private List<String> signatureGapComments(String gap) {
+        return nonBlankLines(gap).stream().filter(this::isCommentOnlyLine).toList();
     }
 
     private int matchingOpenParenthesis(String signature, int close) {

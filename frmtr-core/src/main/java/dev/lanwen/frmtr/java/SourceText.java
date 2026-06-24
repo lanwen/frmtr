@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Maps JavaParser source positions to offset-based regions in the original source text.
@@ -121,6 +122,31 @@ final class SourceText {
             return "";
         }
         return source.substring(beginOffset, endOffset);
+    }
+
+    /**
+     * Returns the source position of the first {@code token} occurrence in the gap between two parsed ranges.
+     *
+     * <p>This locates an AST-invisible delimiter token — such as a lambda {@code ->} between the parameter clause and the
+     * body — by its source position rather than reconstructing it from token-range text, which a whitespace perturbation
+     * defeats. The search window is bounded by {@code before.end} and {@code after.begin}, so the token cannot be confused
+     * with an identical token inside either neighboring node. Returns empty when the gap does not contain {@code token}.
+     */
+    Optional<Position> firstTokenPositionBetween(Range before, Range after, String token) {
+        Objects.requireNonNull(before, "before");
+        Objects.requireNonNull(after, "after");
+        Objects.requireNonNull(token, "token");
+        int beginOffset = offsetAfter(before.end);
+        int endOffset = offset(after.begin);
+        if (endOffset < beginOffset) {
+            return Optional.empty();
+        }
+        int tokenIndex = source.indexOf(token, beginOffset);
+        if (tokenIndex < 0 || tokenIndex >= endOffset) {
+            return Optional.empty();
+        }
+        SourcePosition tokenPosition = positionAt(tokenIndex);
+        return Optional.of(new Position(tokenPosition.line(), tokenPosition.column()));
     }
 
     /**

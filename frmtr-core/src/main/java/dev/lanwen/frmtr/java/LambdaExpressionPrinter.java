@@ -1,5 +1,7 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.Position;
+import com.github.javaparser.Range;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.comments.BlockComment;
@@ -40,6 +42,10 @@ import java.util.function.ToIntFunction;
 final class LambdaExpressionPrinter {
 
     private final CommentTracker comments;
+
+    private final JavaCommentPlacementPolicy commentPlacement;
+
+    private final SourceText sourceText;
 
     private final ObjectCreationLayoutPolicy objectCreationLayoutPolicy;
 
@@ -83,6 +89,7 @@ final class LambdaExpressionPrinter {
 
     LambdaExpressionPrinter(
             CommentTracker comments,
+            JavaCommentPlacementPolicy commentPlacement,
             RawSource rawSource,
             SourceShapePolicy sourceShapePolicy,
             SourceText sourceText,
@@ -107,6 +114,8 @@ final class LambdaExpressionPrinter {
             BiPredicate<Comment, Node> startsOnSameLine
     ) {
         this.comments = comments;
+        this.commentPlacement = commentPlacement;
+        this.sourceText = sourceText;
         this.objectCreationLayoutPolicy = objectCreationLayoutPolicy;
         this.options = options;
         this.layoutWidth = layoutWidth;
@@ -679,6 +688,10 @@ final class LambdaExpressionPrinter {
         ) {
             return Optional.empty();
         }
+        Optional<Doc> bodyGapComment = bodyGapCommentedExpressionLambdaArgument(prefix, lambdaExpr);
+        if (bodyGapComment.isPresent()) {
+            return bodyGapComment;
+        }
         List<Comment> commentsAroundLambda = new ArrayList<>();
         expression.getOrphanComments()
                 .stream()
@@ -737,6 +750,122 @@ final class LambdaExpressionPrinter {
                 Doc.text(")")
             )
         );
+    }
+
+    /**
+     * Breaks a single expression-lambda argument whose body carries a comment in the gap between the {@code ->} and the
+     * body, rendering that comment on its own line before the body.
+     *
+     * <p>JavaParser wraps an expression-bodied lambda's body in an {@link com.github.javaparser.ast.stmt.ExpressionStmt}
+     * ({@link LambdaExpr#getBody()}), and a {@code //}/block comment that sits after the arrow but before the body token
+     * attaches to that wrapping statement as its own/adjacent-leading trivia. The expression-body render path unwraps to
+     * {@link LambdaExpr#getExpressionBody()} and dispatches through the expression envelope, which — unlike the statement
+     * envelope — never offers that statement's leading comments, so the gap comment is dropped. This path recovers it
+     * through the body statement's leading cluster and places it inline before the body, matching how a block-body lambda
+     * keeps the same comment via the statement renderer. It is deliberately scoped to the pure-gap case (no comments
+     * around the lambda boundary), so the existing boundary-comment reconstruction below stays the owner of those shapes.
+     */
+    private Optional<Doc> bodyGapCommentedExpressionLambdaArgument(String prefix, LambdaExpr lambdaExpr) {
+        if (hasBoundaryComments(lambdaExpr)) {
+            return Optional.empty();
+        }
+        List<JavaCommentTrivia> gapComments = lambdaBodyGapComments(lambdaExpr);
+        if (gapComments.isEmpty()) {
+            return Optional.empty();
+        }
+        List<Doc> renderedGapComments = gapComments.stream()
+                .map(trivia -> comments.comment(trivia, lambdaExpr.getBody(), OwnerSlot.LEADING))
+                .filter(doc -> doc != Doc.EMPTY)
+                .toList();
+        if (renderedGapComments.isEmpty()) {
+            return Optional.empty();
+        }
+        String parameters = lambdaParameters(lambdaExpr);
+        return Optional.of(
+            Doc.concat(
+                Doc.text(prefix + "("),
+                Doc.indent(
+                    Doc.concat(
+                        Doc.HARD_LINE,
+                        lambdaParameterHeaders.forHeader(lambdaExpr, parameters),
+                        Doc.text(" ->"),
+                        Doc.indent(
+                            Doc.concat(
+                                Doc.HARD_LINE,
+                                Doc.join(Doc.HARD_LINE, renderedGapComments),
+                                Doc.HARD_LINE,
+                                brokenLambdaExpressionBody(lambdaExpr)
+                            )
+                        )
+                    )
+                ),
+                Doc.HARD_LINE,
+                Doc.text(")")
+            )
+        );
+    }
+
+    /**
+     * Returns the comments that sit in the source gap between the lambda's {@code ->} and its expression body, in source
+     * order.
+     *
+     * <p>JavaParser attaches such a comment inconsistently across whitespace shapes — to the body's wrapping
+     * {@link com.github.javaparser.ast.stmt.ExpressionStmt} as own/adjacent-leading trivia at the {@code @default} shape,
+     * but to the {@link LambdaExpr} orphan pool once a collapse/expand perturbation moves it — so a shape-specific
+     * attachment query drops it on the moved shapes. This selects by source position instead: a comment contained in the
+     * lambda that begins after the {@code ->} token and before the body token, which is the same set regardless of layout.
+     * Comments inside the parameter clause begin before the arrow and comments inside or trailing the body begin at or
+     * after it, so both are excluded. The query never claims.
+     */
+    private List<JavaCommentTrivia> lambdaBodyGapComments(LambdaExpr lambdaExpr) {
+        if (lambdaExpr.getExpressionBody().isEmpty()) {
+            return List.of();
+        }
+        Node body = lambdaExpr.getBody();
+        Optional<Position> arrow = lambdaArrowPosition(lambdaExpr, body);
+        if (arrow.isEmpty()) {
+            return List.of();
+        }
+        Position arrowPosition = arrow.orElseThrow();
+        return commentPlacement.containedComments(lambdaExpr)
+                .stream()
+                .filter(trivia -> CommentIndex.startsAfter(trivia.comment(), arrowPosition))
+                .filter(trivia -> startsBefore.test(trivia.comment(), body))
+                .sorted(java.util.Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
+                .toList();
+    }
+
+    /**
+     * Locates the {@code ->} token between the lambda's parameter clause and its body, by source position.
+     *
+     * <p>The arrow has no AST node, so it is found in the source gap after the last parameter (or after the lambda's own
+     * begin for a parameterless lambda) and before the body. Selecting the gap comments by their position relative to
+     * this token is what keeps the selection shape-independent: a token-range string reconstruction cannot give the
+     * arrow's real position once whitespace moves a comment onto its own line.
+     */
+    private Optional<Position> lambdaArrowPosition(LambdaExpr lambdaExpr, Node body) {
+        Optional<Range> before = lambdaExpr.getParameters().isEmpty()
+            ? lambdaExpr.getRange()
+            : lambdaExpr.getParameter(lambdaExpr.getParameters().size() - 1).getRange();
+        return before.flatMap(
+            beforeRange -> body.getRange().flatMap(
+                bodyRange -> sourceText.firstTokenPositionBetween(beforeRange, bodyRange, "->")
+            )
+        );
+    }
+
+    /**
+     * Reports whether any comment is attached around the lambda boundary (call orphans, the lambda's own comment, or the
+     * method name), the shapes the boundary-comment reconstruction below already owns.
+     */
+    private boolean hasBoundaryComments(LambdaExpr lambdaExpr) {
+        return lambdaExpr.getComment().filter(this::isLineOrBlockComment).isPresent()
+            || lambdaExpr.getParentNode()
+                    .filter(MethodCallExpr.class::isInstance)
+                    .map(MethodCallExpr.class::cast)
+                    .map(call -> call.getOrphanComments().stream().anyMatch(this::isLineOrBlockComment)
+                            || call.getName().getComment().filter(this::isLineOrBlockComment).isPresent())
+                    .orElse(false);
     }
 
     private boolean isLineOrBlockComment(Comment comment) {

@@ -252,6 +252,7 @@ final class ExpressionPrinters {
             comments,
             commentPlacementPolicy,
             this::expression,
+            this::expressionWithoutOwnComment,
             this::expressionWithTail,
             compactSource::compact,
             this::blockStatementWidth,

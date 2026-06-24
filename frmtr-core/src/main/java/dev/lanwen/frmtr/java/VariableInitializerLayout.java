@@ -278,7 +278,7 @@ final class VariableInitializerLayout {
                 methodCallWithSemicolon.apply(methodCall)
             );
         }
-        Doc trailingLineComment = comments.trailingLineComment(variable);
+        Doc trailingLineComment = trailingDeclaratorLineComment(variable);
         Doc declaration = variable.getInitializer()
                 .map(initializer -> variableWithInitializer(variable, initializer, declarationPrefix))
                 .orElseGet(() -> Doc.text(variableName(variable)));
@@ -292,6 +292,30 @@ final class VariableInitializerLayout {
             semicolon,
             trailingLineComment(trailingLineComment)
         );
+    }
+
+    /**
+     * Recovers the {@code //} line comment that trails the declarator and renders after the closing {@code ;}, falling
+     * back to the initializer's own trailing line comment when the declarator slot is empty.
+     *
+     * <p>When a declarator's initializer collapses from a multi-line source shape onto one line, JavaParser parks a
+     * {@code } // note} comment that began after the initializer's last token (and after the {@code ;}) as the
+     * <em>initializer's</em> own trailing line comment rather than the declarator's. The declarator's own trailing slot
+     * ({@link CommentTracker#trailingLineComment(Node)} on the variable) is then empty, so that comment is dropped even
+     * though it genuinely trails the whole declaration. This fallback claims the initializer's own post-end trailing line
+     * comment in exactly that case, keying purely on source-order ownership rather than the collapsed-versus-multiline
+     * shape. At shapes where the declarator slot already holds the comment, the fallback is never consulted; at shapes
+     * where the comment is the field declaration's own trailing comment it is claimed earlier by the body envelope and
+     * this offer renders {@link Doc#EMPTY}, so unperturbed output is unchanged.
+     */
+    private Doc trailingDeclaratorLineComment(VariableDeclarator variable) {
+        Doc declaratorTrailing = comments.trailingLineComment(variable);
+        if (declaratorTrailing != Doc.EMPTY) {
+            return declaratorTrailing;
+        }
+        return variable.getInitializer()
+                .map(comments::trailingLineComment)
+                .orElse(Doc.EMPTY);
     }
 
     /**
@@ -447,21 +471,26 @@ final class VariableInitializerLayout {
             }
             return Doc.concat(Doc.text(commentedName + " = "), expressionWithoutOwnComment.apply(initializer));
         }
-        Optional<String> postEqualsBlockComment = postEqualsBlockComment(variable, initializer);
+        Optional<Doc> postEqualsBlockComment = postEqualsBlockComment(variable, initializer);
         if (postEqualsBlockComment.isPresent()) {
+            String commentText = commentText(postEqualsBlockComment.orElseThrow());
             String commentedFlat = declarationPrefix
                 + name
                 + " = "
-                + postEqualsBlockComment.orElseThrow()
+                + commentText
                 + " "
                 + compactWithoutOwnComment.apply(initializer)
                 + ";";
             if (layoutWidth.blockStatement(commentedFlat) > options.lineWidth()) {
                 return Doc.concat(
-                    Doc.text(name + " ="),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, expression.apply(initializer)))
+                    Doc.text(name + " = " + commentText),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, expressionWithoutOwnComment.apply(initializer)))
                 );
             }
+            return Doc.concat(
+                Doc.text(name + " = " + commentText + " "),
+                expressionWithoutOwnComment.apply(initializer)
+            );
         }
         Optional<Doc> leadingInitializerComments = leadingInitializerComments(variable, initializer);
         if (leadingInitializerComments.isPresent()) {
@@ -961,19 +990,24 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * Finds a block comment attached after {@code =}, preserving the source-side comment text as part of the flat-width
-     * check.
+     * Finds and claims a block comment attached after {@code =}, returning it as a rendered {@link Doc} so the caller can
+     * emit the comment text itself and render the initializer without its own comment.
+     *
+     * <p>Claiming here (via {@link CommentTracker#ownComment}) rather than reading {@code initializer.getComment()}
+     * directly mirrors {@link #preEqualsBlockComment}: the comment is the initializer's own block comment sitting in the
+     * {@code =}-to-initializer gap, and the shared expression renderer drops that own comment for some value kinds (for
+     * example method calls), so the caller must own the placement. For value kinds whose renderer already emits the
+     * comment the explicit text is byte-identical, and claiming it once keeps the comment accounted for either way.
      */
-    private Optional<String> postEqualsBlockComment(VariableDeclarator variable, Expression initializer) {
+    private Optional<Doc> postEqualsBlockComment(VariableDeclarator variable, Expression initializer) {
         String raw = rawSource.raw(variable);
         int equals = raw.indexOf('=');
         int blockComment = raw.indexOf("/*");
         if (blockComment < 0 || equals < 0 || blockComment < equals) {
             return Optional.empty();
         }
-        return initializer.getComment()
-                .filter(BlockComment.class::isInstance)
-                .map(comment -> comment.getTokenRange().map(Object::toString).orElseGet(comment::toString).strip());
+        Doc comment = comments.ownComment(initializer, BlockComment.class::isInstance);
+        return comment == Doc.EMPTY ? Optional.empty() : Optional.of(comment);
     }
 
     /**

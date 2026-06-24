@@ -1,6 +1,7 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
@@ -42,6 +43,8 @@ final class AssignmentExpressionPrinter {
 
     private final Function<Expression, Doc> expression;
 
+    private final Function<Expression, Doc> expressionWithoutOwnComment;
+
     private final ExpressionTailRenderer expressionWithTail;
 
     private final Function<Node, String> compact;
@@ -69,6 +72,7 @@ final class AssignmentExpressionPrinter {
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
             Function<Expression, Doc> expression,
+            Function<Expression, Doc> expressionWithoutOwnComment,
             ExpressionTailRenderer expressionWithTail,
             Function<Node, String> compact,
             ToIntFunction<String> blockStatementWidth,
@@ -84,6 +88,7 @@ final class AssignmentExpressionPrinter {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
         this.expression = expression;
+        this.expressionWithoutOwnComment = expressionWithoutOwnComment;
         this.expressionWithTail = expressionWithTail;
         this.compact = compact;
         this.conditionalProjection = new ConditionalExpressionLineProjection(compact::apply);
@@ -392,10 +397,39 @@ final class AssignmentExpressionPrinter {
     }
 
     private Doc flatAssignment(AssignExpr expression) {
+        Optional<String> gapBlockComment = gapBlockComment(expression);
+        if (gapBlockComment.isPresent()) {
+            return Doc.concat(
+                this.expression.apply(expression.getTarget()),
+                Doc.text(" " + expression.getOperator().asString() + " " + gapBlockComment.orElseThrow() + " "),
+                expressionWithoutOwnComment.apply(expression.getValue())
+            );
+        }
         return Doc.concat(
             this.expression.apply(expression.getTarget()),
             Doc.text(" " + expression.getOperator().asString() + " "),
             this.expression.apply(expression.getValue())
         );
+    }
+
+    /**
+     * Finds and claims a block comment that sits in the {@code =}-to-value gap as the value's own block comment.
+     *
+     * <p>This mirrors {@code VariableInitializerLayout.postEqualsBlockComment}: the comment is the assigned value's own
+     * block comment positioned after the operator, and the shared expression renderer drops that own comment for some
+     * value kinds (for example method calls and name expressions), so the assignment must own its placement. The
+     * operator-position check keys off the assignment's raw token text so a value's leading block comment that begins
+     * before the operator is left to the value renderer. For value kinds whose renderer already emits the comment the
+     * explicit text is byte-identical, and claiming it once keeps the comment accounted for either way.
+     */
+    private Optional<String> gapBlockComment(AssignExpr expression) {
+        String raw = expression.getTokenRange().map(Object::toString).orElseGet(expression::toString);
+        int operator = raw.indexOf(expression.getOperator().asString());
+        int blockComment = raw.indexOf("/*");
+        if (blockComment < 0 || operator < 0 || blockComment < operator) {
+            return Optional.empty();
+        }
+        Doc comment = comments.ownComment(expression.getValue(), BlockComment.class::isInstance);
+        return comment instanceof Doc.Text text ? Optional.of(text.value()) : Optional.empty();
     }
 }

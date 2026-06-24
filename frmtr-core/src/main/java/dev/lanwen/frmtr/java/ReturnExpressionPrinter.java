@@ -1,5 +1,6 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
@@ -10,6 +11,7 @@ import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -88,6 +90,8 @@ final class ReturnExpressionPrinter {
 
     private final BiFunction<Expression, Boolean, Doc> parenthesizedBreak;
 
+    private final BiFunction<Node, Expression, List<Doc>> trailingValueCommentsBeforeSemicolon;
+
     private final ReturnBinaryExpressionLayout binaryReturns;
 
     ReturnExpressionPrinter(
@@ -116,7 +120,8 @@ final class ReturnExpressionPrinter {
             BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
             BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression,
             BiFunction<Expression, Boolean, Doc> binaryLines,
-            BiFunction<Expression, Boolean, Doc> parenthesizedBreak
+            BiFunction<Expression, Boolean, Doc> parenthesizedBreak,
+            BiFunction<Node, Expression, List<Doc>> trailingValueCommentsBeforeSemicolon
     ) {
         this.options = options;
         this.layoutWidth = layoutWidth;
@@ -145,6 +150,7 @@ final class ReturnExpressionPrinter {
         this.conditionalExpression = conditionalExpression;
         this.binaryLines = binaryLines;
         this.parenthesizedBreak = parenthesizedBreak;
+        this.trailingValueCommentsBeforeSemicolon = trailingValueCommentsBeforeSemicolon;
         this.binaryReturns = new ReturnBinaryExpressionLayout(
             options,
             layoutWidth,
@@ -181,7 +187,44 @@ final class ReturnExpressionPrinter {
                 expressionWithTail.render(methodCall, ExpressionTail.SEMICOLON, lineBudget)
             );
         }
-        return Doc.concat(Doc.text("return "), returnExpression(expression, lineBudget), Doc.text(";"));
+        Doc preSemicolonComment = preSemicolonValueComment(expression);
+        Doc semicolon = preSemicolonComment == Doc.EMPTY
+            ? Doc.text(";")
+            : Doc.concat(Doc.HARD_LINE, Doc.text(";"));
+        return Doc.concat(
+            Doc.text("return "),
+            returnExpression(expression, lineBudget),
+            preSemicolonComment,
+            semicolon
+        );
+    }
+
+    /**
+     * Recovers the {@code //} line comment that trails a multi-line return value's last operand but begins before the
+     * closing {@code ;}, and renders it on its own continuation line so the {@code ;} can drop onto its own line below.
+     *
+     * <p>This is the {@code return value;} sibling of the field/local-variable initializer recovery
+     * ({@code VariableInitializerLayout.preSemicolonInitializerComment}). For a multi-line binary return value such as
+     * {@code return a + // a}{@code b + // b}{@code c; // c}, JavaParser parks the final {@code // c} as the last
+     * operand's own contained trivia, which begins after the whole value's last token. The binary printer's
+     * between-operand recovery only emits comments <em>between</em> operands, and there is no declarator trailing slot to
+     * fall back on here, so that comment is otherwise dropped. We claim exactly the line comments that begin after the
+     * return value ends and before the {@code ;} (keyed on source-order ownership through the shared
+     * {@code trailingInitializerCommentsBeforeSemicolon} query), indent them to the operand-continuation column the
+     * broken-binary lines already use, and let the caller drop the {@code ;} onto its own base-indent line below. When
+     * there is no such comment the result is {@link Doc#EMPTY}, so the terminator stays byte-identical to the prior
+     * {@code concat(value, ";")} for every return that does not carry a trailing pre-{@code ;} comment.
+     */
+    private Doc preSemicolonValueComment(Expression expression) {
+        Node semicolonOwner = expression.getParentNode().orElse(null);
+        if (semicolonOwner == null) {
+            return Doc.EMPTY;
+        }
+        List<Doc> recovered = trailingValueCommentsBeforeSemicolon.apply(semicolonOwner, expression);
+        if (recovered.isEmpty()) {
+            return Doc.EMPTY;
+        }
+        return Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, recovered)));
     }
 
     /**

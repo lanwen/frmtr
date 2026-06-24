@@ -314,7 +314,8 @@ final class ExpressionPrinters {
             objectCreations::objectCreationWithSuffix,
             conditionals::conditionalExpression,
             binaries::lines,
-            enclosedExpressions::parenthesizedBreak
+            enclosedExpressions::parenthesizedBreak,
+            comments::trailingInitializerCommentsBeforeSemicolon
         );
     }
 

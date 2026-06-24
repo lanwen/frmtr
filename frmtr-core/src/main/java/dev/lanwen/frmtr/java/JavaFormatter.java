@@ -653,7 +653,25 @@ public final class JavaFormatter {
                 .map(String::stripLeading)
                 .map(line -> " " + line)
                 .forEach(normalized::add);
-        normalized.add(" */");
+        normalized.add(normalizeClosingLine(lines.getLast()));
         return String.join(System.lineSeparator(), normalized);
+    }
+
+    /**
+     * Normalizes the closing line of a star-aligned block comment without eating author text.
+     *
+     * <p>When the closing {@code *&#47;} sits on its own line the canonical form is a single space-aligned
+     * {@code " *&#47;"}. But authors often share the closing delimiter with the last content line (e.g.
+     * {@code " * which require a group rebalance. *&#47;"}); re-aligning that line to a bare {@code " *&#47;"}
+     * would silently delete the sentence. So the bare-delimiter case is canonicalized while a line that carries
+     * any text before its closing delimiter is preserved verbatim under the same one-space alignment used for the
+     * middle rows.
+     */
+    private static String normalizeClosingLine(String lastLine) {
+        String stripped = lastLine.strip();
+        if (stripped.equals("*/")) {
+            return " */";
+        }
+        return " " + lastLine.stripLeading();
     }
 }

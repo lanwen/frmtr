@@ -8,6 +8,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -30,10 +31,56 @@ final class CommentTracker {
 
     private final Set<Comment> rawRendered = Collections.newSetFromMap(new IdentityHashMap<>());
 
+    /**
+     * The single slot each comment is allowed to render in, assigned once by {@link #assignOwnership(CompilationUnit)}
+     * before any printer claims a comment.
+     *
+     * <p>Keyed by JavaParser comment identity ({@link IdentityHashMap}), like {@link #printed}: two structurally equal
+     * comment nodes must stay distinct owners. A comment absent from this map is <em>unmigrated</em> — no role-specific
+     * pre-assignment exists for it, so {@link #ownsHere} lets every slot offer it and today's first-claim-wins behavior
+     * is preserved. Stage 1 of the B2 ownership consolidation populates only the {@link OwnerSlot#TRAILING} family.
+     */
+    private final Map<Comment, OwnerKey> ownership = new IdentityHashMap<>();
+
     private final JavaCommentPlacementPolicy commentPlacement;
 
     CommentTracker(JavaCommentPlacementPolicy commentPlacement) {
         this.commentPlacement = commentPlacement;
+    }
+
+    /**
+     * Assigns explicit comment ownership for the migrated families before any printer claims a comment.
+     *
+     * <p>Run once per format from {@link JavaPrinter#print(CompilationUnit)}, after the comment placement policy's run
+     * has been started (so {@link JavaCommentPlacementPolicy} can answer queries) and before the declaration printers
+     * begin. This is a <em>read-only</em> pre-pass: it asks the placement policy's ownership query directly (the
+     * non-claiming {@link JavaCommentPlacementPolicy#trailingLineComment(Node)} — <em>not</em> this tracker's
+     * claiming {@link #trailingLineComment(Node)} wrapper), so it records intent without consuming any claim. It walks
+     * every node in the compilation unit and, for each node that owns a trailing line comment, records that comment's
+     * single allowed slot as {@code (node, TRAILING)}.
+     *
+     * <p>Stage 1 deliberately migrates only the trailing family — the unique family a pure source-order rule reproduces
+     * byte-for-byte. Leading/adjacent/own/orphan/interleaved families are not assigned here, so they remain unmigrated
+     * (see {@link #ownsHere}) and keep today's claim-race behavior until a later stage with a traversal-order rule.
+     */
+    void assignOwnership(CompilationUnit unit) {
+        unit.walk(node -> commentPlacement.trailingLineComment(node)
+                .ifPresent(trivia -> ownership.put(trivia.comment(), new OwnerKey(node, OwnerSlot.TRAILING)))
+        );
+    }
+
+    /**
+     * Reports whether {@code trivia} may render in {@code node}'s {@code slot} according to the ownership pre-pass.
+     *
+     * <p>This is the migration ratchet. A comment the pre-pass assigned to a specific slot renders only there: a
+     * non-owner offer for a migrated family returns {@code false} and renders {@link Doc#EMPTY}, which today already
+     * loses the claim race, so the filter is output-neutral. A comment with no assignment ({@code owner == null}) is
+     * unmigrated and is allowed in every slot, preserving today's first-claim-wins behavior for families Stage 1 does
+     * not touch.
+     */
+    boolean ownsHere(JavaCommentTrivia trivia, Node node, OwnerSlot slot) {
+        OwnerKey owner = ownership.get(trivia.comment());
+        return owner == null || owner.equals(new OwnerKey(node, slot));
     }
 
     Doc leading(Node node) {
@@ -61,6 +108,7 @@ final class CommentTracker {
 
     Doc trailingLineComment(Node node) {
         return commentPlacement.trailingLineComment(node)
+                .filter(t -> ownsHere(t, node, OwnerSlot.TRAILING))
                 .filter(this::claim)
                 .map(JavaFormatter::commentDoc)
                 .orElse(Doc.EMPTY);

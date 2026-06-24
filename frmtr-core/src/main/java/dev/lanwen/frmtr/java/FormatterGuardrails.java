@@ -39,11 +39,33 @@ final class FormatterGuardrails {
      * still reaches the output exactly once. A "fail fast on the second claim" assertion therefore flags benign
      * speculative claims as errors even on golden fixtures that are correct.
      *
-     * <p>The strict invariant becomes satisfiable — and this property worth CI-enabling — only once roadmap <strong>B1</strong>
-     * (source-shape consolidation, so ownership no longer depends on layout) and <strong>B2</strong> ({@code lineSuffix},
-     * which retires most of the comment-placement machinery) land. Until then it is deferred and left off; the valuable
-     * half of the guardrail ({@link #assertAllCommentsAccounted} drop detection and the transform-identity check) runs in
-     * CI under {@link #ENABLED_PROPERTY} instead.
+     * <p>Roadmap <strong>B1</strong> (source-shape consolidation and shape-independent comment ownership) has landed and
+     * made the <em>drop</em> invariant hold — {@code CommentPresenceDiagnosticTest} is green and its {@code KNOWN_DROPS}
+     * list is empty. The stricter "claimed at most once" invariant still fails, though: a full-suite run with this toggle
+     * on yields ~205 violations, all benign speculative claims (zero drops, zero double-emits). The cause is the eager
+     * {@code Optional<Doc>} candidate ladders in {@code MethodCallPrinter}, {@code MethodCallChainPrinter},
+     * {@code VariableInitializerLayout}, and {@code LambdaExpressionPrinter}: they render a comment-bearing subtree to
+     * probe its layout fit, the probe claims the comment, and the losing candidate is then discarded — leaving the comment
+     * claimed once for a render that never reached the output and once for the chosen layout.
+     *
+     * <p>The strict invariant therefore becomes satisfiable — and this property worth CI-enabling — only once those probes
+     * are claim-free: a claim-suppressing render mode, or the <strong>B2</strong> {@code conditionalGroup}/{@code lineSuffix}
+     * migration that retires the candidate ladders entirely. Until then it is deferred and left off; the valuable half of
+     * the guardrail ({@link #assertAllCommentsAccounted} drop detection and the transform-identity check) runs in CI under
+     * {@link #ENABLED_PROPERTY} instead.
+     *
+     * <p><strong>B2 ownership consolidation, Stage 1 (landed).</strong> The trailing-line-comment family is now migrated
+     * to explicit ownership: a read-only pre-pass ({@link CommentTracker#assignOwnership}) assigns each trailing comment
+     * its single owning slot up front, and {@link CommentTracker#ownsHere} gates the trailing render on that assignment
+     * (see {@link OwnerSlot#TRAILING}). This makes trailing ownership deterministic and shape-independent rather than
+     * decided by the implicit first-claim-wins race; empirically a pure source-order rule reproduces the trailing family
+     * byte-for-byte (zero cross-node {@code ownsHere} rejections corpus-wide), which is why it is the first family to
+     * migrate. Stage 1 does <em>not</em> flip this toggle on: the residual that still violates the strict invariant is
+     * (a) the not-yet-migrated traversal-order families (leading/adjacent/own/orphan/interleaved), where a source-order
+     * rule diverges on the contested parent-interleaver-beats-child cases, and (b) the candidate-ladder probe re-claims
+     * described above — even within the migrated trailing slot, a comment-bearing subtree re-probed for layout fit
+     * re-claims its own owner's comment, which an ownership rule cannot dedupe. So strict-claims stays off until both the
+     * remaining families migrate and the probes render claim-free.
      */
     static final String STRICT_CLAIMS_PROPERTY = "dev.lanwen.frmtr.debug.guardrails.strict-claims";
 

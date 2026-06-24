@@ -309,7 +309,9 @@ dev aid only: the durable "no comment is dropped" CI gate is instead `CommentPre
 lexer comment-token multiset of each input against its formatted output over every golden fixture and every
 collapsed/expanded perturbation, failing on any genuine drop. The exclusion list it carries for known, tracked drops is
 currently empty, and the net also fails on a stale (no-longer-needed) exclusion. The stricter "each comment claimed at most once" invariant lives behind a separate off-by-default
-`dev.lanwen.frmtr.debug.guardrails.strict-claims` toggle, deferred until comment ownership is deterministic. All toggles
+`dev.lanwen.frmtr.debug.guardrails.strict-claims` toggle, deferred until comment ownership is deterministic; Stage 1 of
+the B2 ownership consolidation has migrated the `TRAILING` family to the explicit ownership pre-pass, and the residual
+is the traversal-order families plus the candidate-ladder probe re-claims. All toggles
 live behind `FormatterGuardrails`; see [docs/java-formatter-internals.md](docs/java-formatter-internals.md) for details.
 
 `JavaPrinter` creates one per-run `JavaFormatContext`, constructs shared type rendering, and coordinates the three
@@ -321,6 +323,13 @@ those collaborator boundaries and [docs/formatter-coverage.md](docs/formatter-co
 Comment preservation is centralized through a per-run `JavaCommentMap`, read-only `JavaCommentPlacementPolicy` queries,
 and stateful `CommentTracker` claims so adjacent leading clusters, line comments inside annotation arrays, and line
 comments before fluent-chain segments are printed once while syntax-specific printers keep the surrounding layout.
+Before any printer claims a comment, `JavaPrinter.print` runs `CommentTracker.assignOwnership(unit)`: a read-only
+pre-pass that walks the compilation unit, asks the placement policy who owns each comment, and records the single slot a
+comment may render in as an `OwnerKey(anchor, OwnerSlot)` (anchor compared by identity). `CommentTracker.ownsHere` then
+gates a slot's render on that assignment, with an unassigned comment allowed in every slot so unmigrated families keep
+today's first-claim-wins behavior. This is Stage 1 of the B2 comment-ownership consolidation: only the `TRAILING`
+family is assigned (the unique family a source-order rule reproduces byte-for-byte); leading/adjacent/own/orphan/
+interleaved families stay unmigrated until a later traversal-order rule.
 
 Complex Java layout rules are factored into dedicated helpers rather than embedded in broad dispatchers. `LayoutWidth`
 centralizes indentation baselines for width probes, source-shape helpers preserve meaningful existing multiline forms,

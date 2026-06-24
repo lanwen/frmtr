@@ -64,13 +64,22 @@ The biggest opportunities are therefore not "rewrite," but targeted leverage:
 ## 🟥 Big — architectural, high-leverage
 
 ### B1. Centralize source-shape coupling into one explicit policy
-**Status:** 🟣 Investigating · _focused proposal:_ [source-shape-policy-consolidation.md](source-shape-policy-consolidation.md)
+**Status:** ✅ Done — `SourceShapePolicy` consolidation + shape-independent comment ownership landed; the comment-drop backlog is drained (`CommentPresenceDiagnosticTest.KNOWN_DROPS` empty). One residual, reassigned to B2 and now **underway**: the `strict-claims` guardrail stays off. B2's ownership consolidation has begun — Stage 1 migrated the trailing-line-comment family to an explicit pre-claim ownership pre-pass + `ownsHere` filter (output-neutral; the trailing family is the unique one a source-order rule reproduces byte-for-byte). The residual that still keeps strict-claims off is the not-yet-migrated traversal-order families (leading/adjacent/own/interleaved/orphan, where a pure source-order rule diverges ~12% on contested leading/own comments — the parent-interleaver-beats-child cases) plus the eager `Optional<Doc>` candidate-ladder probe re-claims; enabling strict-claims needs both all families migrated and claim-free probe rendering (the B2 conditionalGroup/lineSuffix migration). · _focused proposal:_ [source-shape-policy-consolidation.md](source-shape-policy-consolidation.md)
 
 > **Investigation finding:** ~115 distinct source-peeking call sites (26 `sourceShape.*`, 41
 > `rawSource.*`, 43 `compactSource.*`, 5 hand-rolled blank-line probes) answer the same few
 > questions inconsistently. Proposes a per-run `SourceShapePolicy` on `JavaFormatContext`; first
 > slice = unify the "was this multiline?" definition. Positioned as the concrete first step of the
 > held `formatter-owned-syntax-view` proposal.
+>
+> **Closing note:** the consolidation is delivered — `SourceShapePolicy` and shape-independent
+> comment ownership landed, draining the comment-drop backlog. The only residual is enabling the
+> `strict-claims` guardrail, reassigned to B2, where the **ownership consolidation is now underway**:
+> Stage 1 migrated the trailing family to an explicit pre-claim ownership pre-pass + `ownsHere` filter
+> (output-neutral). strict-claims stays off until the remaining traversal-order families migrate (a
+> pure source-order rule reproduces trailing exactly but diverges on contested leading/own comments)
+> and the eager `Optional<Doc>` candidate-ladder probes render claim-free. See
+> `FormatterGuardrails.STRICT_CLAIMS_PROPERTY` and [comment-handling-findings.md](comment-handling-findings.md) bucket C.
 
 Formatting decisions currently read the original token layout in many places (`SourceShape`,
 `RawSource`, `CompactSourceText`, source-multiline predicates threaded through printers). Output
@@ -84,7 +93,7 @@ from reaching into raw source directly.
 - **Effort:** large, phased. Unblocks B2 and B3.
 
 ### B2. Enrich the Doc IR with the combinators printers are faking today
-**Status:** ✅ Done — all four primitives + group identity landed; consumer migration is limited (see outcomes) · _focused proposal:_ [doc-ir-combinators.md](doc-ir-combinators.md)
+**Status:** ✅ Doc-IR primitives done — all four primitives + group identity landed; consumer migration is limited (see outcomes). 🟢 Ownership consolidation underway — Stage 1 (trailing-comment family) landed via an explicit pre-claim ownership pre-pass + `ownsHere` filter (output-neutral); remaining families and probe-claim decoupling are the path to enabling `strict-claims`. · _focused proposal:_ [doc-ir-combinators.md](doc-ir-combinators.md)
 
 > **Outcome:** all four primitives — `LineSuffix`, `BreakParent`, `Fill`, `ConditionalGroup` — plus
 > the optional `Group`/`IfBreak` `groupId` landed on `main`, with renderer, width, debug, and
@@ -101,6 +110,20 @@ from reaching into raw source directly.
 > flat candidates + one final broken fallback), so `MethodCallChainPrinter` and `LayoutWidth` stay.
 > Enum-constant `Fill` packing was **declined** as an opinionated reflow at odds with frmtr's
 > source-shape-preservation bias.
+
+> **Ownership consolidation — Stage 1 (landed).** Separate from the Doc-IR primitives, B2 also owns
+> making comment ownership explicit so the `strict-claims` guardrail can eventually be enabled. Stage 1
+> introduces an explicit pre-claim ownership subsystem (`OwnerSlot` role enum, `OwnerKey(anchor, slot)`
+> identity-keyed record, a `CommentTracker.ownership` map populated by a read-only
+> `assignOwnership(unit)` pre-pass, and an `ownsHere` filter) and migrates **only** the
+> `trailingLineComment` family to it. This is output-neutral and proven so: the trailing family is the
+> unique one a pure source-order rule reproduces byte-for-byte (zero cross-node `ownsHere` rejections
+> corpus-wide; goldens byte-identical). The remaining families (leading/adjacent/own/interleaved/orphan)
+> need a **traversal-order** ownership rule — a pure source-order rule diverges ~12% on contested
+> leading/own comments (the parent-interleaver-beats-child cases) — so they stay on today's
+> first-claim-wins behavior. `strict-claims` stays off until all families migrate **and** the eager
+> `Optional<Doc>` candidate-ladder probes render claim-free (even the migrated trailing slot still
+> sees same-owner probe re-claims an ownership rule cannot dedupe).
 
 The IR had 9 primitives (`Text/Concat/Line/SoftLine/HardLine/Indent/Group/IfBreak/Label`); it gained
 the four it was missing most:

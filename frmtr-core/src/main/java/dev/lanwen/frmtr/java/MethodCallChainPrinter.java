@@ -2257,7 +2257,8 @@ final class MethodCallChainPrinter {
             expression,
             reserveStatementTerminator,
             compactSegmentWidth,
-            MethodCallChainTail.EMPTY
+            MethodCallChainTail.EMPTY,
+            false
         );
     }
 
@@ -2265,7 +2266,8 @@ final class MethodCallChainPrinter {
             MethodCallExpr expression,
             boolean reserveStatementTerminator,
             ToIntFunction<String> compactSegmentWidth,
-            MethodCallChainTail finalSegmentSuffix
+            MethodCallChainTail finalSegmentSuffix,
+            boolean segmentOnOwnLine
     ) {
         String typeArguments = expression.getTypeArguments()
                 .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
@@ -2336,7 +2338,8 @@ final class MethodCallChainPrinter {
                 expression,
                 reserveStatementTerminator,
                 compactSegment,
-                compactSegmentWidth
+                compactSegmentWidth,
+                segmentOnOwnLine
             )) {
             return brokenMethodCallSegment(expression, prefix, segmentPrefix, finalSegmentSuffix);
         }
@@ -2362,17 +2365,42 @@ final class MethodCallChainPrinter {
             MethodCallExpr expression,
             boolean reserveStatementTerminator,
             String compactSegment,
-            ToIntFunction<String> compactSegmentWidth
+            ToIntFunction<String> compactSegmentWidth,
+            boolean segmentOnOwnLine
     ) {
         if (
             reserveStatementTerminator
             && !singleSimpleMethodCallSegmentArgument(expression)
-            && methodCallSegmentWidth(expression, compactSegment, compactSegmentWidth) > options.lineWidth()
+            && finalSegmentRenderedWidth(expression, compactSegment, compactSegmentWidth, segmentOnOwnLine)
+                > options.lineWidth()
         ) {
             return true;
         }
         return overwideTypeLikeScopeSegment(expression)
             && compactSegmentWidth.applyAsInt(compactSegment) > options.lineWidth();
+    }
+
+    /**
+     * Measures where the final chain segment's compact form will actually land.
+     *
+     * <p>A segment that the chain places on its own continuation line is measured purely at that continuation
+     * indent ({@code compactSegmentWidth}), because nothing precedes it on the line. The source-column estimate in
+     * {@link #methodCallSegmentWidth} only describes a segment kept beside a preceding token on the same line, so
+     * applying it to a one-per-line segment overstates the width by the segment's stale source indentation. That
+     * over-measurement is what made an already-flat-fitting trailing call (such as {@code .collect(Collectors.toSet())})
+     * break apart on the first pass and then collapse on the second, so a standalone segment must ignore the source
+     * column to converge in one pass.
+     */
+    private int finalSegmentRenderedWidth(
+            MethodCallExpr expression,
+            String compactSegment,
+            ToIntFunction<String> compactSegmentWidth,
+            boolean segmentOnOwnLine
+    ) {
+        if (segmentOnOwnLine) {
+            return compactSegmentWidth.applyAsInt(compactSegment);
+        }
+        return methodCallSegmentWidth(expression, compactSegment, compactSegmentWidth);
     }
 
     private boolean singleSimpleMethodCallSegmentArgument(MethodCallExpr expression) {
@@ -2674,11 +2702,15 @@ final class MethodCallChainPrinter {
         List<Doc> segments = new ArrayList<>();
         for (int i = 0; i < calls.size(); i++) {
             Optional<MethodCallExpr> next = i + 1 < calls.size() ? Optional.of(calls.get(i + 1)) : Optional.empty();
+            // Every segment in this one-per-line layout renders alone on its own continuation line, so the final
+            // segment must be measured at the continuation indent rather than its stale source column.
             segments.add(
                 methodCallChainSegment(
                     calls.get(i),
                     next,
-                    next.isEmpty() ? finalSegmentSuffix : MethodCallChainTail.EMPTY
+                    next.isEmpty() ? finalSegmentSuffix : MethodCallChainTail.EMPTY,
+                    continuationStatementWidth,
+                    true
                 )
             );
         }
@@ -2703,8 +2735,24 @@ final class MethodCallChainPrinter {
             MethodCallChainTail finalSegmentSuffix,
             ToIntFunction<String> compactSegmentWidth
     ) {
+        return methodCallChainSegment(expression, nextCall, finalSegmentSuffix, compactSegmentWidth, false);
+    }
+
+    private Doc methodCallChainSegment(
+            MethodCallExpr expression,
+            Optional<MethodCallExpr> nextCall,
+            MethodCallChainTail finalSegmentSuffix,
+            ToIntFunction<String> compactSegmentWidth,
+            boolean segmentOnOwnLine
+    ) {
         MethodCallChainTail segmentSuffix = nextCall.isEmpty() ? finalSegmentSuffix : MethodCallChainTail.EMPTY;
-        Doc segment = methodCallChainSegment(expression, nextCall.isEmpty(), compactSegmentWidth, segmentSuffix);
+        Doc segment = methodCallChainSegment(
+            expression,
+            nextCall.isEmpty(),
+            compactSegmentWidth,
+            segmentSuffix,
+            segmentOnOwnLine
+        );
         Doc trailingComment = nextCall
                 .map(next -> trailingLineCommentBeforeNextSegment(expression, Optional.of(next)))
                 .orElseGet(() -> finalTrailingLineComment(expression));

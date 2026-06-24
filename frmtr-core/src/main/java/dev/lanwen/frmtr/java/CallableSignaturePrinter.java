@@ -13,6 +13,7 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.ReceiverParameter;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
+import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
@@ -94,21 +95,24 @@ final class CallableSignaturePrinter {
      * caller-provided force-break decision.
      */
     Doc parameters(NodeList<Parameter> parameters) {
-        return Doc.group(
-            Doc.concat(
-                Doc.text("("),
+        // A leading line comment on any parameter cannot share a line with parameter text, so it forces the list to
+        // break onto one parameter per line; see parameter(Parameter). Without the break a flat group would try to keep
+        // the parameters on one line where the rendered `//` would comment out everything that follows.
+        boolean lineComment = parameters.stream().anyMatch(this::parameterHasOwnLeadingLineComment);
+        Doc body = Doc.concat(
+            Doc.text("("),
+            Doc.indent(
                 Doc.indent(
-                    Doc.indent(
-                        Doc.concat(
-                            Doc.SOFT_LINE,
-                            Doc.joinComma(parameters.stream().map(this::parameter).toList())
-                        )
+                    Doc.concat(
+                        lineComment ? Doc.HARD_LINE : Doc.SOFT_LINE,
+                        Doc.joinComma(parameters.stream().map(this::parameter).toList())
                     )
-                ),
-                Doc.SOFT_LINE,
-                Doc.text(")")
-            )
+                )
+            ),
+            lineComment ? Doc.HARD_LINE : Doc.SOFT_LINE,
+            Doc.text(")")
         );
+        return lineComment ? body : Doc.group(body);
     }
 
     /**
@@ -125,9 +129,20 @@ final class CallableSignaturePrinter {
      * parameters may need to break to leave room for throws clauses or a following block.
      */
     Doc parameters(CallableDeclaration<?> declaration, boolean forceBreak) {
+        // A leading line comment on any parameter must render on its own line above that parameter, which is only safe
+        // once the whole list breaks one parameter per line. Force the break here even when the flat list would fit so
+        // the rendered `//` never lands mid-line and comment out the rest of the signature.
+        forceBreak = forceBreak || parametersHaveLeadingLineComment(declaration);
         List<Doc> parameters = new ArrayList<>();
-        declaration.getReceiverParameter().map(this::receiverParameter).ifPresent(parameters::add);
-        declaration.getParameters().stream().map(this::parameter).forEach(parameters::add);
+        Optional<Node> previous = declaration.getReceiverParameter()
+                .map(receiver -> {
+                    parameters.add(receiverParameter(receiver));
+                    return receiver;
+                });
+        for (Parameter parameter : declaration.getParameters()) {
+            parameters.add(parameter(declaration, previous, parameter));
+            previous = Optional.of(parameter);
+        }
         if (parameters.isEmpty()) {
             return Doc.text("()");
         }
@@ -167,6 +182,13 @@ final class CallableSignaturePrinter {
     }
 
     boolean parametersFitOnContinuation(CallableDeclaration<?> declaration) {
+        // The compact continuation layout renders every parameter on one line from flat text that carries no comment, so
+        // a leading line comment would be dropped there. Refuse the continuation when any parameter has one; the caller
+        // then falls back to the broken parameter list, which renders the comment on its own line. Block-comment-only
+        // parameters keep their existing continuation eligibility because a block comment can stay inline.
+        if (parametersHaveLeadingLineComment(declaration)) {
+            return false;
+        }
         String continuationLine = options.indentUnit().repeat(2) + callableParameterText(declaration);
         return currentIndentedWidth(continuationLine) <= options.lineWidth();
     }
@@ -305,6 +327,29 @@ final class CallableSignaturePrinter {
      * last callable parameter.
      */
     Doc parameter(Parameter parameter) {
+        return parameter(null, Optional.empty(), parameter);
+    }
+
+    /**
+     * Prints one ordinary parameter, prepending any {@code //} line comment that leads it in source order.
+     *
+     * <p>A leading line comment renders on its own line above the parameter, outside the per-parameter group so the
+     * trailing hard line never forces a breakable type's own group to break. The {@code parameters(...)} entry points
+     * already force the whole list to break when any parameter has one, so the hard line lands the comment on a fresh line
+     * at the parameter indent and the parameter text follows on the next line. The comment is recovered by source order
+     * ({@link #parameterLeadingLineComments}) so it stays owned by this parameter however whitespace lays the gap out,
+     * which is what keeps the same comment claimed once across the default layout and its collapsed/expanded shapes.
+     */
+    private Doc parameter(CallableDeclaration<?> declaration, Optional<Node> previous, Parameter parameter) {
+        List<Doc> rendered = new ArrayList<>();
+        for (Doc comment : parameterLeadingLineComments(declaration, previous, parameter)) {
+            rendered.add(Doc.concat(comment, Doc.HARD_LINE));
+        }
+        rendered.add(parameterCore(parameter));
+        return rendered.size() == 1 ? rendered.getFirst() : Doc.concat(rendered);
+    }
+
+    private Doc parameterCore(Parameter parameter) {
         if (!parameter.isVarArgs() && typeCanBreak.test(parameter.getType())) {
             List<Doc> parts = new ArrayList<>();
             parameterLeadingBlockComment(parameter).ifPresent(parts::add);
@@ -330,6 +375,86 @@ final class CallableSignaturePrinter {
             return Optional.empty();
         }
         return Optional.of(Doc.text(commentText.apply(leadingBlockComment) + " "));
+    }
+
+    /**
+     * Claims and renders the {@code //} line comments that lead {@code parameter} in source order, recovering them
+     * however whitespace re-bucketed them across the parameter's neighbors.
+     *
+     * <p>JavaParser attaches a line comment written above a parameter to that parameter's own trivia at the default
+     * layout, but a whitespace collapse/expand re-buckets the same comment onto the <em>previous</em> parameter (as its
+     * trailing own comment) even though the AST is unchanged. Selecting by JavaParser's attachment would therefore drop
+     * the comment under perturbation. This query is source-order instead: it asks {@link CommentTracker#gapLineCommentsBefore}
+     * for the line comments parked on the previous parameter (or receiver) that lie strictly between it and
+     * {@code parameter}, and adds {@code parameter}'s own leading line comment for the default layout (which the gap query
+     * intentionally excludes as {@code body}'s own trivia). Both paths claim by identity, so a comment is rendered exactly
+     * once; in the default layout the own path wins and the gap path returns empty, while under perturbation the gap path
+     * recovers the comment from the previous parameter and the own path is empty. The first ordinary parameter (no
+     * previous node) uses only the own path, which the default layout always populates.
+     */
+    private List<Doc> parameterLeadingLineComments(
+            CallableDeclaration<?> declaration,
+            Optional<Node> previous,
+            Parameter parameter
+    ) {
+        List<Doc> rendered = new ArrayList<>();
+        if (declaration != null && previous.isPresent()) {
+            // Scan both the previous parameter and the declaration itself: a whitespace collapse parks the comment as the
+            // previous parameter's trailing own comment, while a whitespace expand parks it as the declaration's orphan,
+            // so both buckets are needed to recover it regardless of shape. gapLineCommentsBefore selects only line
+            // comments that lie strictly between the previous parameter and this one and claims each by identity.
+            rendered.addAll(
+                comments.gapLineCommentsBefore(previous.orElseThrow(), parameter, List.of(previous.orElseThrow(), declaration))
+            );
+        }
+        Doc ownLeadingLineComment = comments.ownComment(
+            parameter,
+            comment -> comment instanceof LineComment && CommentIndex.startsBefore(comment, parameter)
+        );
+        if (ownLeadingLineComment != Doc.EMPTY) {
+            rendered.add(ownLeadingLineComment);
+        }
+        return rendered;
+    }
+
+    /**
+     * Reports whether any ordinary parameter of {@code declaration} is led by a {@code //} line comment in source order,
+     * used to force the parameter list to break. This is a pure source read over the declaration's contained comments and
+     * the parameter boundaries (the same source-order ownership {@link #parameterLeadingLineComments} renders from) and
+     * claims nothing, so it can be asked before the list layout is chosen without disturbing comment accounting. It is
+     * shape-independent: a comment the layout pushed onto the previous parameter still counts because it still lies in the
+     * gap before the parameter it leads.
+     */
+    private boolean parametersHaveLeadingLineComment(CallableDeclaration<?> declaration) {
+        List<Comment> lineComments = declaration.getAllContainedComments()
+                .stream()
+                .filter(LineComment.class::isInstance)
+                .toList();
+        if (lineComments.isEmpty()) {
+            return false;
+        }
+        Node previous = declaration.getReceiverParameter().map(Node.class::cast).orElse(null);
+        for (Parameter parameter : declaration.getParameters()) {
+            if (previous != null && leadsParameterInGap(lineComments, previous, parameter)) {
+                return true;
+            }
+            if (parameterHasOwnLeadingLineComment(parameter)) {
+                return true;
+            }
+            previous = parameter;
+        }
+        return false;
+    }
+
+    private boolean leadsParameterInGap(List<Comment> lineComments, Node previous, Parameter parameter) {
+        return lineComments.stream().anyMatch(comment -> CommentIndex.liesBetween(comment, previous, parameter));
+    }
+
+    private boolean parameterHasOwnLeadingLineComment(Parameter parameter) {
+        return parameter.getComment()
+                .filter(LineComment.class::isInstance)
+                .filter(comment -> CommentIndex.startsBefore(comment, parameter))
+                .isPresent();
     }
 
     private Doc parameterModifierAnnotationPrefix(Parameter parameter) {

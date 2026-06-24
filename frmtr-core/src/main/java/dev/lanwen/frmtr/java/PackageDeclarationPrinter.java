@@ -66,6 +66,15 @@ final class PackageDeclarationPrinter {
      * emitted exactly once: the detached header(s) raw, the attached comment via the leading slot. Files with a single
      * pre-{@code package} comment have no attached package leading comment, so the sweep still runs to the {@code package}
      * keyword and their output is unchanged.
+     *
+     * <p>The accumulated leading region is stripped of <em>both</em> leading and trailing whitespace before the
+     * comment-prefix check. A file/license block ({@code /* ... *}{@code /}) or line ({@code // ...}) comment that does not
+     * begin at byte 0 — for example a header preceded by a blank line, as in apache/camel {@code WeaviateVectorDbHeaders}
+     * — sweeps that blank-line whitespace token into the leading region, so the region starts with {@code "\n"}. Stripping
+     * only the trailing side would leave that leading newline in place, the {@code startsWith("/*")} /
+     * {@code startsWith("//")} guard would fail, and the header would be dropped. Stripping both sides recognizes the
+     * comment and emits it without the spurious leading blank line; the caller supplies the blank-line separation before
+     * {@code package}, so the emitted prefix stays a bare comment block and the result is idempotent across passes.
      */
     Doc sourceLeadingCommentsBeforePackage(CompilationUnit unit) {
         Optional<PackageDeclaration> packageDeclaration = unit.getPackageDeclaration();
@@ -94,7 +103,7 @@ final class PackageDeclarationPrinter {
         if (!foundBoundary) {
             return Doc.EMPTY;
         }
-        String leading = leadingTokens.toString().stripTrailing();
+        String leading = leadingTokens.toString().strip();
         if (leading.isEmpty() || (!leading.startsWith("/*") && !leading.startsWith("//"))) {
             return Doc.EMPTY;
         }

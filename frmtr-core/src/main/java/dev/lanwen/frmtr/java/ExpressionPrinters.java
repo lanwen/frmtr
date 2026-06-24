@@ -132,6 +132,7 @@ final class ExpressionPrinters {
         );
         this.lambdas = new LambdaExpressionPrinter(
             comments,
+            commentPlacementPolicy,
             rawSource,
             context.sourceShapePolicy,
             context.sourceText,

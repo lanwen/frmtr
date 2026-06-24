@@ -728,6 +728,14 @@ final class BinaryExpressionPrinter {
      * When such a comment exists we route the binary through the comment-aware multi-line render instead. The check is
      * intentionally conservative: it returns {@code false} for a comment-free binary and for the lone-left-comment binary
      * the flat shape already preserves, so neither case changes layout.
+     *
+     * <p>A contained comment counts as "already emitted by the flat shape" only when it is the <em>same</em> JavaParser
+     * node as {@code leftLineComment} — compared by parser identity ({@code comment() ==}), not by
+     * {@link JavaCommentTrivia#equals(Object)} value/structural equality. When a between-operand comment has the same
+     * text as a present left-operand comment (and there is no other distinct-text sibling), value equality would treat
+     * the duplicate-text comment as the already-printed left comment, keep the flat shape, and silently drop the
+     * between-operand comment. Identity comparison routes such a binary through the comment-aware multi-line render so
+     * both same-text comments survive — the same value-vs-identity hazard the chain printer dedups against.
      */
     private boolean flatRenderWouldDropLineComment(
             BinaryExpr expression,
@@ -735,7 +743,9 @@ final class BinaryExpressionPrinter {
     ) {
         return commentPlacement.containedComments(expression).stream()
                 .filter(JavaCommentTrivia::isLine)
-                .anyMatch(comment -> leftLineComment.filter(comment::equals).isEmpty());
+                .anyMatch(comment -> leftLineComment
+                        .filter(left -> left.comment() == comment.comment())
+                        .isEmpty());
     }
 
     private Doc binaryLeftOperand(BinaryExpr expression) {

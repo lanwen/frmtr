@@ -59,12 +59,15 @@ final class RawSource {
      * Collapses source text into a compact single-line form for syntax decisions that need source-equivalent text rather
      * than fully formatted docs.
      *
-     * <p>The assignment-{@code =} spacing rule is applied only to the text <em>between</em> string, character, and
-     * text-block literals; each literal span is copied through verbatim. A raw regex over the whole text cannot tell an
-     * assignment {@code =} from an {@code =} byte that happens to live inside {@code "useSSL="} or {@code '='}, and
-     * rewriting the latter to {@code " = "} would silently change the literal's value. Literal boundaries are tracked by
-     * a small hand scanner rather than a regex because a text block ({@code """..."""}) cannot be matched reliably with
-     * the same alternation that recognizes plain strings.
+     * <p>Whitespace collapsing and the assignment-{@code =} spacing rule are both applied only to the text
+     * <em>between</em> string, character, and text-block literals; each literal span is copied through verbatim. A raw
+     * regex over the whole text cannot tell an assignment {@code =} from an {@code =} byte that happens to live inside
+     * {@code "useSSL="} or {@code '='}, and rewriting the latter to {@code " = "} would silently change the literal's
+     * value. The same hazard applies to whitespace itself: a run of spaces or a tab inside {@code "            "} or
+     * {@code "\t"} is part of the literal's value, so collapsing it to a single space (as a whole-text {@code \s+}
+     * replacement would) is silent data corruption. Literal boundaries are tracked by a small hand scanner rather than a
+     * regex because a text block ({@code """..."""}) cannot be matched reliably with the same alternation that recognizes
+     * plain strings.
      *
      * <p>The {@code =} spacing regex also guards against the trailing {@code =} of a compound-assignment operator
      * ({@code ^=}, {@code |=}, {@code &=}, {@code +=}, {@code -=}, {@code *=}, {@code /=}, {@code %=}, {@code <<=},
@@ -78,16 +81,15 @@ final class RawSource {
         if (stripped.isEmpty()) {
             return "";
         }
-        String collapsed = WHITESPACE.matcher(stripped).replaceAll(" ");
-        String normalized = normalizeEqualsOutsideLiterals(collapsed);
-        return WHITESPACE.matcher(normalized).replaceAll(" ");
+        return normalizeOutsideLiterals(stripped);
     }
 
     /**
-     * Applies the assignment-{@code =} spacing normalization to non-literal regions only, emitting string, character,
-     * and text-block literal spans verbatim so an {@code =} inside a literal is never reinterpreted as an assignment.
+     * Applies whitespace collapsing and the assignment-{@code =} spacing normalization to non-literal regions only,
+     * emitting string, character, and text-block literal spans verbatim so whitespace or an {@code =} inside a literal is
+     * never rewritten.
      */
-    private String normalizeEqualsOutsideLiterals(String text) {
+    private String normalizeOutsideLiterals(String text) {
         StringBuilder result = new StringBuilder(text.length());
         StringBuilder outside = new StringBuilder();
         int index = 0;
@@ -106,11 +108,17 @@ final class RawSource {
         return result.toString();
     }
 
+    /**
+     * Normalizes one non-literal region: collapses whitespace runs to single spaces, applies the {@code =} spacing rule,
+     * then re-collapses because inserting {@code " = "} can produce a space adjacent to an existing one.
+     */
     private void flushOutside(StringBuilder result, StringBuilder outside) {
         if (outside.length() == 0) {
             return;
         }
-        result.append(ASSIGN_EQUALS.matcher(outside).replaceAll(" = "));
+        String collapsed = WHITESPACE.matcher(outside).replaceAll(" ");
+        String normalized = ASSIGN_EQUALS.matcher(collapsed).replaceAll(" = ");
+        result.append(WHITESPACE.matcher(normalized).replaceAll(" "));
         outside.setLength(0);
     }
 

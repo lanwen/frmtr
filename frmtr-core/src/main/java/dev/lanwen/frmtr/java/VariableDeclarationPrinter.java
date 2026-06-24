@@ -100,7 +100,7 @@ final class VariableDeclarationPrinter {
         docs.add(Doc.text(modifiers.apply(declaration)));
         String declarationPrefix = modifiers.apply(declaration);
         if (!declaration.getVariables().isEmpty()) {
-            Type type = declaration.getVariables().get(0).getType();
+            Type type = CStyleArrayDeclarators.sharedPrefixType(declaration.getVariables());
             String flatType = compactTypeLike.apply(type) + " ";
             declarationPrefix += flatType;
             if (localVariableTypeShouldBreak(type, declaration.getVariables(), declarationPrefix)) {

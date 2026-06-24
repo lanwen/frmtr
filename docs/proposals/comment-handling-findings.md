@@ -1,6 +1,6 @@
 # Comment-Handling Findings → B-Work Map
 
-**Status:** Implemented — reference/synthesis whose findings were actioned: S7 net + guardrail split landed, and all bucket-A comment-drop fixes landed on `main` so `CommentPresenceDiagnosticTest.KNOWN_DROPS` is empty; the bucket B/C/D strict-claims/accounting work stays deferred to B1/B2; see [Outcome](#outcome) · **As of:** commit `9a89f7eb` (S6 + S8 merged), 2026-06-20
+**Status:** Implemented — reference/synthesis whose findings were actioned: S7 net + guardrail split landed, and all bucket-A comment-drop fixes landed on `main` so `CommentPresenceDiagnosticTest.KNOWN_DROPS` is empty; the bucket B/C/D strict-claims/accounting work stays deferred to B1/B2, with B2's ownership consolidation now underway (Stage 1: the trailing family migrated to an explicit pre-claim ownership pre-pass, output-neutral, strict-claims still off); see [Outcome](#outcome) · **As of:** commit `9a89f7eb` (S6 + S8 merged), 2026-06-20
 
 This is the consolidated, evidence-backed map of every comment-handling finding surfaced by the S7 guardrail
 experiment and the output-level investigation behind it. Its job is to **route each finding to its fix and to the right
@@ -52,16 +52,27 @@ guardrail false-flags it. Centered on `block-lambda-arrow-parens-always`/`-avoid
 few labeled-statement / unnamed-variable shapes. Not a correctness bug; it is why the accounting guardrail cannot be the
 CI net. Disposition: do **not** chase 12 site fixes; they dissolve when comment rendering is unified under B2.
 
-### C. Benign duplicate-claims (~205) → strict-claims deferred to B2 (probe-claim decoupling); B1's ownership half is done
+### C. Benign duplicate-claims (~205) → strict-claims deferred to B2; ownership consolidation underway (Stage 1 trailing family landed)
 The speculative claim-then-skip pattern. Now **empirically confirmed** by a full-suite run with
 `dev.lanwen.frmtr.debug.guardrails.strict-claims=true`: ~205 failures, **all** duplicate-claims — zero drops, zero
 double-emits. The eager `Optional<Doc>` candidate ladders (MethodCallPrinter / MethodCallChainPrinter /
 VariableInitializerLayout / LambdaExpressionPrinter) render comment-bearing subtrees to probe layout fit, claim their
 comments, then discard the losing candidate. Disposition: the `claimComment` fail-fast moves behind an off-by-default
 `…strict-claims` property (S7 split, branch `impl/comment-guardrail-split`); B1's shape-independent ownership half is
-**done** (drop invariant holds, `KNOWN_DROPS` empty), so this residual reassigns to **B2 (probe-claim decoupling)** — it
-becomes satisfiable only once those probes render claim-free (a claim-suppressing render mode, or the B2
-conditionalGroup/lineSuffix migration that retires the ladders).
+**done** (drop invariant holds, `KNOWN_DROPS` empty), so this residual reassigned to **B2**, where the ownership
+consolidation is **now underway**.
+
+**B2 ownership consolidation — Stage 1 (landed).** An explicit pre-claim ownership subsystem (`OwnerSlot` role enum,
+identity-keyed `OwnerKey(anchor, slot)`, a `CommentTracker.ownership` map populated once per format by a read-only
+`assignOwnership(unit)` pre-pass, and an `ownsHere` filter) now decides comment ownership up front instead of via the
+implicit first-claim-wins race. Stage 1 migrates **only** the `trailingLineComment` family — empirically the unique
+family a pure source-order rule reproduces byte-for-byte (goldens byte-identical; zero cross-node `ownsHere` rejections
+across the whole fixture corpus). Stage 1 is **output-neutral** and does **not** enable strict-claims. Two residuals
+keep it off: (1) the remaining families (leading/adjacent/own/interleaved/orphan) need a **traversal-order** ownership
+rule — a pure source-order rule diverges ~12% on contested leading/own comments (the parent-interleaver-beats-child
+cases) — so they stay unmigrated; and (2) the candidate-ladder probe re-claims above, which even within the migrated
+trailing slot re-claim the same owner's comment, so they need claim-free probe rendering (a claim-suppressing render
+mode, or the conditionalGroup/lineSuffix migration that retires the ladders), not an ownership rule.
 
 ### D. AST-invisible orphan comments → B1/B2 evidence
 The dropped Guava copyright header has an empty AST attachment (`getAllContainedComments()` never returns it), which is
@@ -115,4 +126,7 @@ labeled-statement, try-resource, method-argument, switch, records/enums/conditio
 AST-invisible file-header orphan), so `CommentPresenceDiagnosticTest.KNOWN_DROPS` is **empty** and the net is green with
 no exclusions. The buckets B/C/D routing is unchanged and still deferred: the strict-claims (exactly-once) invariant and
 the accounting gaps dissolve only once comment ownership is fully unified under B1/B2, so the `…strict-claims` guardrail
-stays off by default. So the findings here are resolved or assigned, not open-ended.
+stays off by default. **B2's ownership consolidation has since begun:** Stage 1 migrated the trailing-comment family to
+an explicit pre-claim ownership pre-pass + `ownsHere` filter (output-neutral, goldens byte-identical), with the
+remaining traversal-order families and the probe-claim decoupling as the residual before strict-claims can flip on. So
+the findings here are resolved or assigned (and bucket C is now in progress), not open-ended.

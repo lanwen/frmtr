@@ -43,6 +43,7 @@ final class JavaPrinter {
 
     Doc print(CompilationUnit unit) {
         context.startCommentRun(unit);
+        context.comments.assignOwnership(unit);
         Doc doc = declarations.compilationUnit(unit);
         context.comments.assertAllCommentsAccounted(unit);
         return doc;

@@ -53,6 +53,19 @@ final class FormatterGuardrails {
      * migration that retires the candidate ladders entirely. Until then it is deferred and left off; the valuable half of
      * the guardrail ({@link #assertAllCommentsAccounted} drop detection and the transform-identity check) runs in CI under
      * {@link #ENABLED_PROPERTY} instead.
+     *
+     * <p><strong>B2 ownership consolidation, Stage 1 (landed).</strong> The trailing-line-comment family is now migrated
+     * to explicit ownership: a read-only pre-pass ({@link CommentTracker#assignOwnership}) assigns each trailing comment
+     * its single owning slot up front, and {@link CommentTracker#ownsHere} gates the trailing render on that assignment
+     * (see {@link OwnerSlot#TRAILING}). This makes trailing ownership deterministic and shape-independent rather than
+     * decided by the implicit first-claim-wins race; empirically a pure source-order rule reproduces the trailing family
+     * byte-for-byte (zero cross-node {@code ownsHere} rejections corpus-wide), which is why it is the first family to
+     * migrate. Stage 1 does <em>not</em> flip this toggle on: the residual that still violates the strict invariant is
+     * (a) the not-yet-migrated traversal-order families (leading/adjacent/own/orphan/interleaved), where a source-order
+     * rule diverges on the contested parent-interleaver-beats-child cases, and (b) the candidate-ladder probe re-claims
+     * described above — even within the migrated trailing slot, a comment-bearing subtree re-probed for layout fit
+     * re-claims its own owner's comment, which an ownership rule cannot dedupe. So strict-claims stays off until both the
+     * remaining families migrate and the probes render claim-free.
      */
     static final String STRICT_CLAIMS_PROPERTY = "dev.lanwen.frmtr.debug.guardrails.strict-claims";
 

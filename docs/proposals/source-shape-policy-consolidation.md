@@ -1,6 +1,6 @@
 # Centralize Source-Shape Coupling Into One Explicit Policy
 
-Status: Implemented (consolidation landed; strict-claims enablement deferred to B2-shaped probe-claim decoupling)
+Status: Implemented (consolidation landed; strict-claims enablement deferred to B2, where the ownership consolidation is now underway — Stage 1 migrated the trailing-comment family to an explicit pre-claim ownership pre-pass + `ownsHere` filter, output-neutral; remaining traversal-order families + probe-claim decoupling are the path to enabling strict-claims)
 
 ## Summary
 
@@ -291,3 +291,13 @@ Non-goals:
   B3 (which build on a single, auditable source-coupling surface — e.g. tightening idempotence guarantees and reducing
   remaining input-dependent behavior) operate on one object with a documented contract instead of ~115 scattered reads.
   B1 does not implement B2/B3; it makes them tractable and low-risk.
+
+- **Comment-ownership consolidation (B2, underway):** B1's residual — enabling the `strict-claims` guardrail — reassigned
+  to B2, where the comment-ownership consolidation has now begun. **Stage 1 landed:** an explicit pre-claim ownership
+  subsystem (`OwnerSlot` role enum, identity-keyed `OwnerKey(anchor, slot)`, a `CommentTracker.ownership` map populated
+  by a read-only `assignOwnership(unit)` pre-pass in `JavaPrinter.print`, and an `ownsHere` filter) migrates **only** the
+  trailing-comment family. It is output-neutral — the trailing family is the unique one a pure source-order rule
+  reproduces byte-for-byte (goldens byte-identical; zero cross-node `ownsHere` rejections corpus-wide). The remaining
+  families (leading/adjacent/own/interleaved/orphan) need a **traversal-order** ownership rule — a source-order rule
+  diverges ~12% on contested leading/own comments (the parent-interleaver-beats-child cases) — and the eager
+  `Optional<Doc>` candidate-ladder probes must render claim-free, so `strict-claims` stays off until both land.

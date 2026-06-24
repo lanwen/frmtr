@@ -640,7 +640,12 @@ final class BinaryExpressionPrinter {
     }
 
     private List<Doc> commentDocs(List<JavaCommentTrivia> sourceComments) {
+        // Operand comments can be reached from more than one binary render (a flat measurement render and the committed
+        // broken render share the same operand subtree). Skip comments already printed by an earlier traversal path so
+        // this render does not duplicate-claim them; output is unchanged because the first claimant placed the comment and
+        // a re-offer only ever rendered empty.
         return sourceComments.stream()
+                .filter(trivia -> !comments.isPrinted(trivia))
                 .map(comments::comment)
                 .filter(doc -> doc != Doc.EMPTY)
                 .toList();

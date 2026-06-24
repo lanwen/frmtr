@@ -43,7 +43,13 @@ final class JavaPrinter {
 
     Doc print(CompilationUnit unit) {
         context.startCommentRun(unit);
-        context.comments.assignOwnership(unit);
+        // Record-only dry-run: run the real print traversal once with comment claims recorded (not committed) so each
+        // comment's first claimant is captured as its (node, slot) owner. The produced document and its width-decision
+        // log are scratch and discarded; only the ownership map survives. The placement policy, comment map, and width
+        // caches were built once in startCommentRun above and are reused below, so this is ~2x print, not 2x parse.
+        context.comments.beginRecording();
+        declarations.compilationUnit(unit);
+        context.comments.endRecordingAndReset(context.layoutDecisions, context.formatterPragmas);
         Doc doc = declarations.compilationUnit(unit);
         context.comments.assertAllCommentsAccounted(unit);
         return doc;

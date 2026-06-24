@@ -388,6 +388,10 @@ final class ControlConditionPrinter {
         List<Doc> leadingComments = detachedConditionLineComments(expression)
                 .stream()
                 .filter(comment -> CommentIndex.beginLine(comment, Integer.MAX_VALUE) < contentLine)
+                // A detached condition line comment can also be offered by a neighboring condition render path; skip
+                // already-printed comments so this slot does not duplicate-claim them. Output is unchanged because the
+                // first claimant placed the comment and a re-offer only ever rendered empty.
+                .filter(comment -> !comments.isPrinted(JavaCommentTrivia.from(comment)))
                 .map(comments::comment)
                 .filter(comment -> comment != Doc.EMPTY)
                 .toList();

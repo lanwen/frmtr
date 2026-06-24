@@ -332,6 +332,7 @@ final class SwitchPrinter {
         }
         return Doc.concat(
             commentInterleaver.interleave(
+                owner,
                 entries,
                 orphanComments,
                 (previousSibling, current, index) -> Optional.of(switchEntry(current)),

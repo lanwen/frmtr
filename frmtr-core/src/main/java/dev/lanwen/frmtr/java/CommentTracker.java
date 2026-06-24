@@ -9,6 +9,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -32,51 +33,179 @@ final class CommentTracker {
     private final Set<Comment> rawRendered = Collections.newSetFromMap(new IdentityHashMap<>());
 
     /**
-     * The single slot each comment is allowed to render in, assigned once by {@link #assignOwnership(CompilationUnit)}
-     * before any printer claims a comment.
+     * The single slot each comment is allowed to render in, recorded once by the record-only dry-run pre-pass (see
+     * {@link #beginRecording()} / {@link #endRecordingAndReset()}) before the real render claims a comment.
      *
      * <p>Keyed by JavaParser comment identity ({@link IdentityHashMap}), like {@link #printed}: two structurally equal
-     * comment nodes must stay distinct owners. A comment absent from this map is <em>unmigrated</em> — no role-specific
-     * pre-assignment exists for it, so {@link #ownsHere} lets every slot offer it and today's first-claim-wins behavior
-     * is preserved. Stage 1 of the B2 ownership consolidation populates only the {@link OwnerSlot#TRAILING} family.
+     * comment nodes must stay distinct owners. A comment absent from this map is <em>unmigrated</em> — no first-claimant
+     * was recorded for it, so {@link #ownsHere} lets every slot offer it and today's first-claim-wins behavior is
+     * preserved. Stage 2a records the first claimant for <em>every</em> family during the dry-run; Stage 2bc then gates
+     * <em>every</em> family by {@link #ownsHere}, so only the recorded first claimant offers each comment. Output stays
+     * byte-identical because the recorded owner is the same forward-traversal first-claimant that wins the claim race
+     * today, and every suppressed non-owner offer already rendered {@link Doc#EMPTY}.
      */
     private final Map<Comment, OwnerKey> ownership = new IdentityHashMap<>();
 
+    /**
+     * Whether this tracker is in the record-only dry-run pass.
+     *
+     * <p>In record mode {@link #claim(JavaCommentTrivia, Node, OwnerSlot)} does not consume the real {@link #printed}
+     * set; instead it records the first {@code (node, slot)} that offers each comment into {@link #ownership} and
+     * returns the claim outcome from the {@code ownership} map itself, so candidate ladders see the identical
+     * (first offer wins, later offers lose) boolean sequence they see in the real pass. See {@link #beginRecording()}.
+     */
+    private boolean recording = false;
+
     private final JavaCommentPlacementPolicy commentPlacement;
 
-    CommentTracker(JavaCommentPlacementPolicy commentPlacement) {
+    /**
+     * The width-decision log and pragma range state are the two per-render side channels (besides the claim sets) that
+     * a print traversal mutates. {@link #speculatively} must roll them back together with the claim state when a
+     * discarded probe is abandoned, so the tracker holds them to snapshot/restore in lockstep — the same channels
+     * {@link #endRecordingAndReset} resets between the dry-run and the real pass.
+     */
+    private final LayoutDecisionLog layoutDecisions;
+
+    private final FormatterPragmas formatterPragmas;
+
+    CommentTracker(
+            JavaCommentPlacementPolicy commentPlacement,
+            LayoutDecisionLog layoutDecisions,
+            FormatterPragmas formatterPragmas
+    ) {
         this.commentPlacement = commentPlacement;
+        this.layoutDecisions = layoutDecisions;
+        this.formatterPragmas = formatterPragmas;
     }
 
     /**
-     * Assigns explicit comment ownership for the migrated families before any printer claims a comment.
+     * Builds a tracker that owns its own width-decision log and pragma state, for callers (mainly unit tests) that only
+     * exercise the claim/account paths and never run the speculative scope or the dry-run reset against a shared context.
+     */
+    CommentTracker(JavaCommentPlacementPolicy commentPlacement) {
+        this(commentPlacement, new LayoutDecisionLog(), new FormatterPragmas());
+    }
+
+    /**
+     * Enters the record-only dry-run pass that populates {@link #ownership} with each comment's first claimant.
      *
      * <p>Run once per format from {@link JavaPrinter#print(CompilationUnit)}, after the comment placement policy's run
-     * has been started (so {@link JavaCommentPlacementPolicy} can answer queries) and before the declaration printers
-     * begin. This is a <em>read-only</em> pre-pass: it asks the placement policy's ownership query directly (the
-     * non-claiming {@link JavaCommentPlacementPolicy#trailingLineComment(Node)} — <em>not</em> this tracker's
-     * claiming {@link #trailingLineComment(Node)} wrapper), so it records intent without consuming any claim. It walks
-     * every node in the compilation unit and, for each node that owns a trailing line comment, records that comment's
-     * single allowed slot as {@code (node, TRAILING)}.
+     * has been started (so {@link JavaCommentPlacementPolicy} can answer queries) and before the real declaration
+     * render. The dry-run runs the <em>same</em> print traversal as the real pass, but with {@link #recording} set:
+     * every {@link #claim(JavaCommentTrivia, Node, OwnerSlot)} records the offering {@code (node, slot)} for a comment
+     * the first time it is offered and skips the real {@link #printed} accounting, so the scratch document it produces
+     * is discarded without affecting comment state. The first claimant in print-traversal order is the emergent owner a
+     * pure source-order rule provably diverges from on the contested families, so reproducing it via the real traversal
+     * is what keeps a later filter byte-neutral.
      *
-     * <p>Stage 1 deliberately migrates only the trailing family — the unique family a pure source-order rule reproduces
-     * byte-for-byte. Leading/adjacent/own/orphan/interleaved families are not assigned here, so they remain unmigrated
-     * (see {@link #ownsHere}) and keep today's claim-race behavior until a later stage with a traversal-order rule.
+     * <p>Stage 2a records the first claimant for <em>every</em> family (trailing, leading, adjacent, own, orphan,
+     * interleaved). Stage 2bc consults {@link #ownsHere} for <em>all</em> of those families, so every comment renders
+     * only in its recorded slot. Recording the dry-run owner via the real traversal is what keeps that gating
+     * byte-neutral.
      */
-    void assignOwnership(CompilationUnit unit) {
-        unit.walk(node -> commentPlacement.trailingLineComment(node)
-                .ifPresent(trivia -> ownership.put(trivia.comment(), new OwnerKey(node, OwnerSlot.TRAILING)))
-        );
+    void beginRecording() {
+        recording = true;
+    }
+
+    /**
+     * Leaves the dry-run pass and clears the per-render mutable state so the real render starts clean.
+     *
+     * <p>The {@link #ownership} map is intentionally <em>kept</em> — it is the dry-run's product. Everything that
+     * accumulates <em>during</em> the print traversal must be reset so the real pass behaves exactly as a single render
+     * would:
+     * <ul>
+     *   <li>the {@link #printed} and {@link #rawRendered} identity sets (so the real pass re-claims and re-accounts
+     *       every comment itself);</li>
+     *   <li>the {@link LayoutDecisionLog} (so {@code --explain} width arithmetic is not double-filled by the scratch
+     *       pass);</li>
+     *   <li>the {@link FormatterPragmas} enabled/disabled range state (so an {@code @formatter:off} range the dry-run
+     *       left open does not start the real pass with formatting suppressed).</li>
+     * </ul>
+     *
+     * <p>The placement policy and comment map are built once in
+     * {@link JavaFormatContext#startCommentRun(CompilationUnit)}, and the policy's contained-comment / content-line
+     * caches are pure AST-derived memoization whose values are identical in both passes, so they are deliberately
+     * reused rather than reset — no re-parse and no recompute of those caches.
+     */
+    void endRecordingAndReset(LayoutDecisionLog layoutDecisions, FormatterPragmas formatterPragmas) {
+        recording = false;
+        printed.clear();
+        rawRendered.clear();
+        layoutDecisions.reset();
+        formatterPragmas.reset();
+    }
+
+    /**
+     * Runs {@code probe} inside a re-entrant speculative scope and rolls back every per-render side effect it made if its
+     * result is empty.
+     *
+     * <p>This is the decoupling primitive for the candidate-ladder probe pattern. Several printers eagerly build an
+     * {@code Optional<Doc>} for a layout candidate to measure its fit; building it claims any comments inside the
+     * candidate. The chosen candidate keeps its claims, but a <em>discarded</em> candidate has already committed its
+     * claims, so the next ladder rung re-claims the same comments — which the strict-claims guardrail (correctly) rejects
+     * as a duplicate. Wrapping a rung in this scope makes a discarded probe claim-free: on an empty result every claim it
+     * made is undone, so the eventual winner is the only path that claims each comment.
+     *
+     * <p><strong>Dry-run symmetry — the design's sharpest edge.</strong> A print traversal mutates different state in
+     * the two passes {@link JavaPrinter#print} runs. While {@link #recording}, {@link #claim} records owners into
+     * {@link #ownership}; otherwise it consumes the {@link #printed} (and, via {@code accountRaw*}, {@link #rawRendered})
+     * identity sets. The scope must roll back whichever set the <em>active</em> pass mutates: if it rolled back only
+     * {@link #printed} during the dry-run, a discarded probe would leave its losing {@code (node, slot)} recorded as the
+     * comment's owner, {@link #ownsHere} would then block the real winner, and the comment would silently drop. Rolling
+     * back {@link #ownership} during recording instead lets the dry-run record the <em>winner</em> as owner, keeping the
+     * gating byte-neutral. The {@link LayoutDecisionLog} and {@link FormatterPragmas} range state are rolled back in both
+     * passes — the same per-render channels {@link #endRecordingAndReset} resets — so a discarded probe leaves neither a
+     * phantom {@code --explain} wrap nor a stray open {@code @formatter:off} range.
+     *
+     * <p>Snapshots are element copies of the live maps/sets, so the fields stay {@code final} and nesting composes: a
+     * nested scope snapshots the partially-mutated state of its enclosing scope and restores exactly to it, which is what
+     * lets the chain/initializer/lambda ladders nest probes within probes. A present result keeps everything — the
+     * winning render's claims, wraps, and pragma state all stand.
+     */
+    <T> Optional<T> speculatively(java.util.function.Supplier<Optional<T>> probe) {
+        Map<Comment, OwnerKey> ownershipSnapshot = recording ? new IdentityHashMap<>(ownership) : null;
+        Set<Comment> printedSnapshot = recording ? null : copyIdentitySet(printed);
+        Set<Comment> rawRenderedSnapshot = recording ? null : copyIdentitySet(rawRendered);
+        int layoutDecisionsSnapshot = layoutDecisions.size();
+        boolean pragmasSnapshot = formatterPragmas.snapshot();
+        Optional<T> result = probe.get();
+        if (result.isEmpty()) {
+            if (recording) {
+                restoreIdentityMap(ownership, ownershipSnapshot);
+            } else {
+                restoreIdentitySet(printed, printedSnapshot);
+                restoreIdentitySet(rawRendered, rawRenderedSnapshot);
+            }
+            layoutDecisions.truncateTo(layoutDecisionsSnapshot);
+            formatterPragmas.restore(pragmasSnapshot);
+        }
+        return result;
+    }
+
+    private static Set<Comment> copyIdentitySet(Set<Comment> source) {
+        Set<Comment> copy = Collections.newSetFromMap(new IdentityHashMap<>());
+        copy.addAll(source);
+        return copy;
+    }
+
+    private static void restoreIdentitySet(Set<Comment> target, Set<Comment> snapshot) {
+        target.clear();
+        target.addAll(snapshot);
+    }
+
+    private static void restoreIdentityMap(Map<Comment, OwnerKey> target, Map<Comment, OwnerKey> snapshot) {
+        target.clear();
+        target.putAll(snapshot);
     }
 
     /**
      * Reports whether {@code trivia} may render in {@code node}'s {@code slot} according to the ownership pre-pass.
      *
      * <p>This is the migration ratchet. A comment the pre-pass assigned to a specific slot renders only there: a
-     * non-owner offer for a migrated family returns {@code false} and renders {@link Doc#EMPTY}, which today already
-     * loses the claim race, so the filter is output-neutral. A comment with no assignment ({@code owner == null}) is
-     * unmigrated and is allowed in every slot, preserving today's first-claim-wins behavior for families Stage 1 does
-     * not touch.
+     * non-owner offer returns {@code false} and renders {@link Doc#EMPTY}, which today already loses the claim race, so
+     * the filter is output-neutral. As of Stage 2bc every family consults this gate, so the only slot that offers a
+     * comment is the one the dry-run recorded. A comment with no assignment ({@code owner == null}) is unmigrated and is
+     * allowed in every slot, preserving first-claim-wins behavior for any comment the dry-run never reached.
      */
     boolean ownsHere(JavaCommentTrivia trivia, Node node, OwnerSlot slot) {
         OwnerKey owner = ownership.get(trivia.comment());
@@ -85,7 +214,8 @@ final class CommentTracker {
 
     Doc leading(Node node) {
         return commentPlacement.leadingComment(node)
-                .filter(this::claim)
+                .filter(t -> ownsHere(t, node, OwnerSlot.LEADING))
+                .filter(t -> claim(t, node, OwnerSlot.LEADING))
                 .map(JavaFormatter::commentDoc)
                 .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
                 .orElse(Doc.EMPTY);
@@ -95,7 +225,8 @@ final class CommentTracker {
         return Doc.concat(
             commentPlacement.adjacentLeadingLineComments(node)
                     .stream()
-                    .filter(this::claim)
+                    .filter(t -> ownsHere(t, node, OwnerSlot.ADJACENT_LEADING))
+                    .filter(t -> claim(t, node, OwnerSlot.ADJACENT_LEADING))
                     .map(JavaFormatter::commentDoc)
                     .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
                     .toList()
@@ -109,7 +240,7 @@ final class CommentTracker {
     Doc trailingLineComment(Node node) {
         return commentPlacement.trailingLineComment(node)
                 .filter(t -> ownsHere(t, node, OwnerSlot.TRAILING))
-                .filter(this::claim)
+                .filter(t -> claim(t, node, OwnerSlot.TRAILING))
                 .map(JavaFormatter::commentDoc)
                 .orElse(Doc.EMPTY);
     }
@@ -126,7 +257,8 @@ final class CommentTracker {
         return Doc.concat(
             commentPlacement.trailingLineCommentsAfter(owner, body, nextStructural)
                     .stream()
-                    .filter(this::claim)
+                    .filter(t -> ownsHere(t, owner, OwnerSlot.TRAILING))
+                    .filter(t -> claim(t, owner, OwnerSlot.TRAILING))
                     .map(JavaFormatter::commentDoc)
                     .toList()
         );
@@ -146,7 +278,8 @@ final class CommentTracker {
     List<Doc> trailingInitializerCommentsBeforeSemicolon(Node semicolonOwner, Node initializer) {
         return commentPlacement.trailingInitializerCommentsBeforeSemicolon(semicolonOwner, initializer)
                 .stream()
-                .filter(this::claim)
+                .filter(t -> ownsHere(t, semicolonOwner, OwnerSlot.TRAILING))
+                .filter(t -> claim(t, semicolonOwner, OwnerSlot.TRAILING))
                 .map(JavaFormatter::commentDoc)
                 .toList();
     }
@@ -163,7 +296,8 @@ final class CommentTracker {
     List<Doc> gapLineCommentsBefore(Node afterNode, Node body, Collection<? extends Node> attachmentBuckets) {
         return commentPlacement.gapLineCommentsBefore(afterNode, body, attachmentBuckets)
                 .stream()
-                .filter(this::claim)
+                .filter(t -> ownsHere(t, body, OwnerSlot.LEADING))
+                .filter(t -> claim(t, body, OwnerSlot.LEADING))
                 .map(JavaFormatter::commentDoc)
                 .toList();
     }
@@ -184,7 +318,8 @@ final class CommentTracker {
     List<Doc> blockCommentsBefore(Collection<? extends Node> attachmentBuckets, Node boundary) {
         return commentPlacement.blockCommentsBefore(attachmentBuckets, boundary)
                 .stream()
-                .filter(this::claim)
+                .filter(t -> ownsHere(t, boundary, OwnerSlot.ORPHAN))
+                .filter(t -> claim(t, boundary, OwnerSlot.ORPHAN))
                 .map(JavaFormatter::commentDoc)
                 .toList();
     }
@@ -198,7 +333,8 @@ final class CommentTracker {
             commentPlacement.orphanComments(node)
                     .stream()
                     .filter(trivia -> predicate.test(trivia.comment()))
-                    .filter(this::claim)
+                    .filter(t -> ownsHere(t, node, OwnerSlot.ORPHAN))
+                    .filter(t -> claim(t, node, OwnerSlot.ORPHAN))
                     .map(comment -> Doc.concat(JavaFormatter.commentDoc(comment), Doc.HARD_LINE))
                     .toList()
         );
@@ -212,7 +348,8 @@ final class CommentTracker {
         return commentPlacement.orphanComments(node)
                 .stream()
                 .filter(trivia -> predicate.test(trivia.comment()))
-                .filter(this::claim)
+                .filter(t -> ownsHere(t, node, OwnerSlot.ORPHAN))
+                .filter(t -> claim(t, node, OwnerSlot.ORPHAN))
                 .map(JavaFormatter::commentDoc)
                 .toList();
     }
@@ -221,23 +358,25 @@ final class CommentTracker {
         return commentPlacement.orphanComments(node)
                 .stream()
                 .filter(predicate)
-                .filter(this::claim)
+                .filter(t -> ownsHere(t, node, OwnerSlot.ORPHAN))
+                .filter(t -> claim(t, node, OwnerSlot.ORPHAN))
                 .map(JavaFormatter::commentDoc)
                 .toList();
     }
 
     Doc orphanCommentsBeforeLine(Node node, int line) {
-        return orphanComments(commentPlacement.orphanCommentsBeforeLine(node, line));
+        return orphanComments(node, commentPlacement.orphanCommentsBeforeLine(node, line));
     }
 
     Doc orphanCommentsAfterLine(Node node, int line) {
-        return orphanComments(commentPlacement.orphanCommentsAfterLine(node, line));
+        return orphanComments(node, commentPlacement.orphanCommentsAfterLine(node, line));
     }
 
-    private Doc orphanComments(List<JavaCommentTrivia> comments) {
+    private Doc orphanComments(Node node, List<JavaCommentTrivia> comments) {
         return Doc.concat(
             comments.stream()
-                    .filter(this::claim)
+                    .filter(t -> ownsHere(t, node, OwnerSlot.ORPHAN))
+                    .filter(t -> claim(t, node, OwnerSlot.ORPHAN))
                     .map(comment -> Doc.concat(JavaFormatter.commentDoc(comment), Doc.HARD_LINE))
                     .toList()
         );
@@ -246,7 +385,8 @@ final class CommentTracker {
     Doc ownComment(Node node, Predicate<Comment> predicate) {
         return commentPlacement.ownComment(node)
                 .filter(trivia -> predicate.test(trivia.comment()))
-                .filter(this::claim)
+                .filter(t -> ownsHere(t, node, OwnerSlot.OWN))
+                .filter(t -> claim(t, node, OwnerSlot.OWN))
                 .map(JavaFormatter::commentDoc)
                 .orElse(Doc.EMPTY);
     }
@@ -254,20 +394,64 @@ final class CommentTracker {
     Doc ownTriviaComment(Node node, Predicate<JavaCommentTrivia> predicate) {
         return commentPlacement.ownComment(node)
                 .filter(predicate)
-                .filter(this::claim)
+                .filter(t -> ownsHere(t, node, OwnerSlot.OWN))
+                .filter(t -> claim(t, node, OwnerSlot.OWN))
                 .map(JavaFormatter::commentDoc)
                 .orElse(Doc.EMPTY);
     }
 
+    /**
+     * Claims and renders {@code comment} as a comment the interleaver merged between an anchor's children by source
+     * position.
+     *
+     * <p>This overload exists so the source-order interleaver and the printers that hand a comment directly to the
+     * tracker can name the anchor node and {@link OwnerSlot} that offers the comment, which is what the record-only
+     * dry-run needs to record the first claimant. {@code anchor} is the node whose layout encloses the comment (the
+     * interleaved owner, or the printer's own node); {@code slot} is the role under which it is offered.
+     */
+    Doc comment(JavaCommentTrivia trivia, Node anchor, OwnerSlot slot) {
+        return ownsHere(trivia, anchor, slot) && claim(trivia, anchor, slot)
+            ? JavaFormatter.commentDoc(trivia)
+            : Doc.EMPTY;
+    }
+
+    Doc comment(Comment comment, Node anchor, OwnerSlot slot) {
+        return comment(JavaCommentTrivia.from(comment), anchor, slot);
+    }
+
+    /**
+     * Claims and renders {@code comment} when no anchor node is available to name; defaults to recording the offering
+     * node as the comment itself under {@link OwnerSlot#INTERLEAVED}.
+     *
+     * <p>Kept for the direct {@code comment(...)} call sites that do not (yet) thread an enclosing owner. The recorded
+     * anchor here is the comment node itself, so the dry-run records {@code (comment, INTERLEAVED)} and the real pass
+     * gates against that same key — record-slot equals enforce-slot, so the comment still renders from this path. Call
+     * sites that can name a real enclosing owner thread it through the {@link #comment(JavaCommentTrivia, Node,
+     * OwnerSlot)} overload instead.
+     */
     Doc comment(Comment comment) {
         return comment(JavaCommentTrivia.from(comment));
     }
 
     Doc comment(JavaCommentTrivia trivia) {
-        return claim(trivia) ? JavaFormatter.commentDoc(trivia) : Doc.EMPTY;
+        return comment(trivia, trivia.comment(), OwnerSlot.INTERLEAVED);
     }
 
-    private boolean claim(JavaCommentTrivia trivia) {
+    /**
+     * Records or consumes one comment claim, depending on whether this tracker is in the record-only dry-run pass.
+     *
+     * <p>In the real pass this is the unchanged {@link FormatterGuardrails#claimComment} call against {@link #printed};
+     * {@code node} and {@code slot} are ignored there. In the record pass it does not touch {@link #printed}: the first
+     * offer of a comment records {@code (node, slot)} as its owner in {@link #ownership} and returns {@code true}; every
+     * later offer of the same comment finds it already recorded and returns {@code false}. The {@code ownership} map
+     * thus plays the same once-only role {@code printed} plays in the real pass, so candidate ladders see the identical
+     * (first offer wins, later offers lose) boolean sequence in both passes and the recorded first claimant matches the
+     * real one.
+     */
+    private boolean claim(JavaCommentTrivia trivia, Node node, OwnerSlot slot) {
+        if (recording) {
+            return ownership.putIfAbsent(trivia.comment(), new OwnerKey(node, slot)) == null;
+        }
         return FormatterGuardrails.claimComment(trivia, printed);
     }
 

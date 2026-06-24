@@ -144,7 +144,11 @@ final class AssignmentExpressionPrinter {
                 this.expression.apply(expression.getTarget()),
                 Doc.text(" " + expression.getOperator().asString() + " "),
                 expressionWithTail.render(methodCall, ExpressionTail.SEMICOLON, LayoutWidth.LineBudget.BLOCK),
+                // When the assigned value is a method chain, the chain render above already claims and emits its own
+                // final trailing line comment. Re-offering that same comment here only ever rendered empty, so skip it
+                // when already printed to avoid a duplicate claim; output is unchanged because the chain render placed it.
                 assignmentValueTailLineComment(expression, methodCall)
+                        .filter(trivia -> !comments.isPrinted(trivia))
                         .map(comments::comment)
                         .filter(comment -> comment != Doc.EMPTY)
                         .map(comment -> Doc.concat(Doc.text(" "), comment))

@@ -362,6 +362,13 @@ final class ArrayExpressionPrinter {
         Doc valueDoc = arrayInitializerValueExpression(value, next, forceNestedArrayRows, suffix);
         List<Doc> trailingCommentLines = new ArrayList<>();
         for (JavaCommentTrivia comment : trailingLineComments) {
+            // When the element value is a method call (or other comment-bearing subtree), its own trailing line comment is
+            // already claimed and emitted inside the value render above. Re-offering it here only ever rendered empty, so
+            // skip already-printed comments to avoid a duplicate claim; output is unchanged because the value render
+            // placed it. Comments the value render left untouched are still placed by this element slot.
+            if (comments.isPrinted(comment)) {
+                continue;
+            }
             Doc commentDoc = comments.comment(comment);
             if (commentDoc == Doc.EMPTY) {
                 continue;

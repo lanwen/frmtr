@@ -75,6 +75,13 @@ former is unreliable, the latter deferred to B1/B2 — see [comment-handling-fin
   code but is not trustworthy enough to gate CI (12 FP / 3 FN). The lexer net is the gate.
 - The strict-claims invariant becomes CI-worthy only after B2 makes comment ownership deterministic
   ([comment-handling-findings.md](comment-handling-findings.md), bucket C).
+- **Update (B2 landed):** B2's ownership consolidation plus the Stage 3 candidate-ladder decoupling
+  (`CommentTracker.speculatively`) made the strict-claims invariant hold across the whole `frmtr-core` suite, so Stage 4
+  enabled `dev.lanwen.frmtr.debug.guardrails.strict-claims` **on by default** in `frmtr-core/build.gradle.kts` — it is now
+  a CI gate. `assertAllCommentsAccounted` (the comment-*drop* guardrail) remains off in the build, because a residual set
+  of raw-text-embedded comments (multi-catch union alternatives, for-loop variable comments, switch labels, labeled
+  statements, unnamed-variable patterns) reaches output as raw token text without being raw-accounted; CI-enabling it is a
+  separate follow-up. The `CommentPresenceDiagnosticTest` lexer net remains the durable no-drop gate.
 
 ## Outcome
 

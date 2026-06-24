@@ -8,12 +8,14 @@ package dev.lanwen.frmtr.java;
  * slot a comment is allowed to render in, decided once before any printer claims a comment, rather than being settled
  * implicitly by the first-claim-wins race between competing printer paths.
  *
- * <p>The enum is deliberately broader than what the current stage uses. Stage 1 of the B2 comment-ownership
- * consolidation migrates only the {@link #TRAILING} family — empirically the unique family a pure source-order
- * assignment rule reproduces byte-for-byte. The remaining roles are declared here so later stages can extend the
- * pre-pass without reshaping the key type, but they are intentionally not yet populated or consulted: a source-order
- * rule diverges on the contested leading/own families (the parent-interleaver-beats-child cases), so those families
- * still rely on today's claim-race behavior until a traversal-order ownership rule migrates them.
+ * <p>Stage 2a of the B2 comment-ownership consolidation populates <em>every</em> role from the record-only dry-run
+ * pre-pass (see {@link CommentTracker#beginRecording}): the dry-run records each comment's first claimant in print
+ * traversal order under the slot the offering wrapper names. Stage 2bc then <em>consults</em> {@link CommentTracker#ownsHere}
+ * for <em>every</em> role, so a comment renders only from the slot the dry-run recorded as its first claimant. Output
+ * stays byte-identical because the recorded owner is the same forward-traversal winner of today's first-claim-wins race,
+ * and every suppressed non-owner offer already rendered empty. The dry-run records the <em>real</em> traversal owner
+ * rather than a source-order approximation precisely because a pure source-order rule diverges on the contested
+ * leading/own families (the parent-interleaver-beats-child cases) while it matches on trailing.
  *
  * <p>This type owns only the role taxonomy. It does not decide which node anchors a comment, how the comment renders,
  * or when ownership is consulted; those stay with {@link JavaCommentPlacementPolicy} (anchoring) and
@@ -22,23 +24,23 @@ package dev.lanwen.frmtr.java;
 enum OwnerSlot {
 
     /**
-     * The comment is an own line comment that trails its anchor node in source order — the only role migrated to the
-     * explicit pre-pass in Stage 1. See {@link JavaCommentPlacementPolicy#trailingLineComment(com.github.javaparser.ast.Node)}.
+     * The comment is an own line comment that trails its anchor node in source order. Consulted by
+     * {@link CommentTracker#ownsHere}. See {@link JavaCommentPlacementPolicy#trailingLineComment(com.github.javaparser.ast.Node)}.
      */
     TRAILING,
 
-    /** Reserved for a later stage: a comment that leads its anchor node. Not yet populated or consulted. */
+    /** A comment that leads its anchor node. Populated by the dry-run; consulted by {@code ownsHere}. */
     LEADING,
 
-    /** Reserved for a later stage: a contiguous leading-comment cluster directly above the anchor. Not yet populated or consulted. */
+    /** A contiguous leading-comment cluster directly above the anchor. Populated by the dry-run; consulted by {@code ownsHere}. */
     ADJACENT_LEADING,
 
-    /** Reserved for a later stage: a comment JavaParser attached directly to the anchor as its own trivia. Not yet populated or consulted. */
+    /** A comment JavaParser attached directly to the anchor as its own trivia. Populated by the dry-run; consulted by {@code ownsHere}. */
     OWN,
 
-    /** Reserved for a later stage: a comment JavaParser parked as an orphan of the anchor. Not yet populated or consulted. */
+    /** A comment JavaParser parked as an orphan of the anchor. Populated by the dry-run; consulted by {@code ownsHere}. */
     ORPHAN,
 
-    /** Reserved for a later stage: a comment interleaved between an anchor's children by a parent sequence printer. Not yet populated or consulted. */
+    /** A comment interleaved between an anchor's children by a parent sequence printer. Populated by the dry-run; consulted by {@code ownsHere}. */
     INTERLEAVED
 }

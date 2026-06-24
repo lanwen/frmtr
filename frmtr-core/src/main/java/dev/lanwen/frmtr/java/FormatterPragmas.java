@@ -15,6 +15,39 @@ final class FormatterPragmas {
     private boolean formattingDisabled;
 
     /**
+     * Clears the persistent enabled/disabled range state so the next print traversal starts with formatting enabled.
+     *
+     * <p>This flag is mutated <em>during</em> the print traversal as {@code @formatter:off}/{@code on} (and the
+     * {@code frmtr-ignore-start}/{@code end}) range pragmas are encountered. The record-only dry-run pre-pass runs the
+     * whole traversal once and may leave a range open (e.g. a file with {@code @formatter:off} and no matching
+     * {@code on}); the real pass must restart from formatting-enabled, so {@link CommentTracker#endRecordingAndReset}
+     * calls this between the two passes. Single-pass {@code format(...)} runs never invoke it.
+     */
+    void reset() {
+        formattingDisabled = false;
+    }
+
+    /**
+     * Captures the current enabled/disabled range state so a speculative probe can be rolled back.
+     *
+     * <p>The speculative scope in {@link CommentTracker#speculatively} runs a candidate render that may cross an
+     * {@code @formatter:off}/{@code on} boundary and so flip this flag as a side effect. When that candidate is
+     * discarded the flag must be returned to its pre-probe value, otherwise the next rung would start from a formatter
+     * state the chosen layout never produced. This mirrors what {@link #reset} does between the dry-run and the real
+     * pass, but restores to an arbitrary captured value rather than always to enabled.
+     */
+    boolean snapshot() {
+        return formattingDisabled;
+    }
+
+    /**
+     * Restores the enabled/disabled range state captured by {@link #snapshot()}.
+     */
+    void restore(boolean formattingDisabled) {
+        this.formattingDisabled = formattingDisabled;
+    }
+
+    /**
      * Returns the print action for a body declaration after applying any pragma carried by that declaration.
      *
      * <p>Single-node ignore pragmas raw-pass only the declaration that carries them, while range pragmas update

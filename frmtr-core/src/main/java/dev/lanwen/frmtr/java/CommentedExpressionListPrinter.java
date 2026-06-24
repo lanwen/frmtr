@@ -62,6 +62,14 @@ final class CommentedExpressionListPrinter {
             List<Doc> inlineTrailingComments = new ArrayList<>();
             List<Doc> trailingCommentLines = new ArrayList<>();
             for (JavaCommentTrivia comment : trailingComments) {
+                // When the argument is rendered through the full expression renderer (argumentLine), a method-call
+                // argument's own trailing line comment is already claimed and emitted inside that render as the chain's
+                // final trailing comment. Re-offering it here only ever lost that first-claim race and rendered empty, so
+                // skip comments already printed by the argument render to avoid a duplicate claim. Comments the argument
+                // render left untouched (the comment-free compact path) are still offered and placed here.
+                if (comments.isPrinted(comment)) {
+                    continue;
+                }
                 Doc commentDoc = comments.comment(comment);
                 if (commentDoc == Doc.EMPTY) {
                     continue;

@@ -308,11 +308,18 @@ golden fixture is also AST-checked. The `dev.lanwen.frmtr.debug.guardrails` comm
 dev aid only: the durable "no comment is dropped" CI gate is instead `CommentPresenceDiagnosticTest`, which compares the
 lexer comment-token multiset of each input against its formatted output over every golden fixture and every
 collapsed/expanded perturbation, failing on any genuine drop. The exclusion list it carries for known, tracked drops is
-currently empty, and the net also fails on a stale (no-longer-needed) exclusion. The stricter "each comment claimed at most once" invariant lives behind a separate off-by-default
-`dev.lanwen.frmtr.debug.guardrails.strict-claims` toggle, deferred until comment ownership is deterministic; Stage 1 of
-the B2 ownership consolidation has migrated the `TRAILING` family to the explicit ownership pre-pass, and the residual
-is the traversal-order families plus the candidate-ladder probe re-claims. All toggles
-live behind `FormatterGuardrails`; see [docs/java-formatter-internals.md](docs/java-formatter-internals.md) for details.
+currently empty, and the net also fails on a stale (no-longer-needed) exclusion. The stricter "each comment claimed at
+most once" invariant lives behind a separate `dev.lanwen.frmtr.debug.guardrails.strict-claims` toggle. The B2 ownership
+consolidation migrated *every* comment family (trailing, leading, adjacent, own, orphan, interleaved) to the explicit
+ownership pre-pass and then (Stage 3) decoupled the candidate-ladder probe re-claims via `CommentTracker.speculatively`
+(described below), so the invariant now holds across the whole `frmtr-core` suite — golden fixtures, comment-presence
+diagnostics, and the whitespace-perturbed idempotence property test. Stage 4 turned the toggle **on by default** in
+`frmtr-core/build.gradle.kts`, making "each comment is claimed at most once" a CI gate alongside the AST-equivalence
+verify mode. (The separate `dev.lanwen.frmtr.debug.guardrails` comment-*drop* check is still off in the build: a residual
+set of raw-text-embedded comments — multi-catch union alternatives, for-loop variable comments, switch labels, labeled
+statements, unnamed-variable patterns — reaches output as raw token text without being raw-accounted, so enabling that
+check is a separate follow-up.) All toggles live behind `FormatterGuardrails`; see
+[docs/java-formatter-internals.md](docs/java-formatter-internals.md) for details.
 
 `JavaPrinter` creates one per-run `JavaFormatContext`, constructs shared type rendering, and coordinates the three
 printer composer groups: `ExpressionPrinters`, `DeclarationPrinters`, and `StatementPrinters`. Formatter ownership then
@@ -323,13 +330,38 @@ those collaborator boundaries and [docs/formatter-coverage.md](docs/formatter-co
 Comment preservation is centralized through a per-run `JavaCommentMap`, read-only `JavaCommentPlacementPolicy` queries,
 and stateful `CommentTracker` claims so adjacent leading clusters, line comments inside annotation arrays, and line
 comments before fluent-chain segments are printed once while syntax-specific printers keep the surrounding layout.
-Before any printer claims a comment, `JavaPrinter.print` runs `CommentTracker.assignOwnership(unit)`: a read-only
-pre-pass that walks the compilation unit, asks the placement policy who owns each comment, and records the single slot a
-comment may render in as an `OwnerKey(anchor, OwnerSlot)` (anchor compared by identity). `CommentTracker.ownsHere` then
-gates a slot's render on that assignment, with an unassigned comment allowed in every slot so unmigrated families keep
-today's first-claim-wins behavior. This is Stage 1 of the B2 comment-ownership consolidation: only the `TRAILING`
-family is assigned (the unique family a source-order rule reproduces byte-for-byte); leading/adjacent/own/orphan/
-interleaved families stay unmigrated until a later traversal-order rule.
+Before the real render, `JavaPrinter.print` populates comment ownership with a record-only dry-run pre-pass:
+`CommentTracker.beginRecording()` runs the same print traversal once with claims recorded but not committed, then
+`CommentTracker.endRecordingAndReset(...)` discards that scratch document and resets the per-render mutable state. In
+record mode each claim records the offering `OwnerKey(anchor, OwnerSlot)` (anchor compared by identity) the first time a
+comment is offered, using the `ownership` map itself as the once-only set, so the recorded owner is exactly the emergent
+first claimant of the real forward print traversal — which a pure source-order rule provably diverges from on the
+contested families, so the traversal is reproduced rather than approximated. `CommentTracker.ownsHere` then gates a
+slot's render on that recording, with an unrecorded comment allowed in every slot. The B2 ownership consolidation records
+the first claimant for *every* family (trailing, leading, adjacent, own, orphan, interleaved) and now gates *every*
+family through `ownsHere`, so only the recorded first claimant offers each comment. Output stays byte-identical because
+the recorded owner is the same forward-traversal winner of the implicit first-claim-wins race, and every suppressed
+non-owner offer already rendered empty. `endRecordingAndReset` clears exactly the state
+that accumulates during the traversal — `CommentTracker.printed`/`rawRendered`, the `LayoutDecisionLog`, and the
+`FormatterPragmas` enabled/disabled range state — while keeping the `JavaCommentPlacementPolicy` comment map and its
+pure AST-derived caches, so the dry-run costs roughly a second print but never a second parse.
+
+Width-deciding printers (`MethodCallPrinter`, `MethodCallChainPrinter`, and their helpers) choose a layout by eagerly
+building an `Optional<Doc>` candidate to measure its fit; building a candidate claims any comments inside it, and a
+*discarded* candidate would otherwise leave those comments claimed for a render that never reaches output, so the next
+ladder rung re-claims them. `CommentTracker.speculatively(Supplier<Optional<T>>)` wraps each such probe in a re-entrant
+scope: on entry it snapshots the per-render claim state — the `ownership` map while the dry-run is recording, the
+`printed`/`rawRendered` identity sets otherwise — plus the `LayoutDecisionLog` length and the `FormatterPragmas` range
+flag; if the probe returns empty it restores every snapshot, so a discarded probe contributes no claims, no phantom
+`--explain` width record, and no stray open `@formatter:off` range. The dry-run/real symmetry is the load-bearing
+detail: rolling back `ownership` while recording lets the dry-run record the eventual *winner* as each comment's owner
+rather than a discarded probe, which is what keeps the later `ownsHere` gating byte-neutral. Snapshots are element copies
+so the tracker's maps/sets stay `final` and nesting composes, which is what lets the chain/initializer ladders nest
+probes within probes. The remaining benign neighbor re-offers that are not discarded probes (a chain segment's name
+comment vs. its leading/trailing slot, an if/else between-clause block comment vs. the else-leading slot, an argument's
+inline trailing comment vs. its enclosing list or assignment, a comment shared by two adjacent empty blocks under
+whitespace perturbation) are made claim-once instead by giving the redundant offer a distinct `OwnerSlot` or by skipping
+it when the comment is already printed — never by a speculative rollback, which would drop the winning offer.
 
 Complex Java layout rules are factored into dedicated helpers rather than embedded in broad dispatchers. `LayoutWidth`
 centralizes indentation baselines for width probes, source-shape helpers preserve meaningful existing multiline forms,

@@ -687,12 +687,23 @@ final class BinaryExpressionPrinter {
      * <p>When a line comment is attached to the left operand, the operator stays on the first line with that comment
      * and the right operand moves to an indented continuation so the comment remains visually attached to the same
      * operand as it was in source.
+     *
+     * <p>The flat shape can only carry the single immediate-left operand line comment. A {@code //} comment that sits
+     * deeper in a same-operator chain — between any other neighboring operand pair, such as {@code a + // x}
+     * {@code b + // y} {@code c} — has no place in this layout and would otherwise be silently dropped. Whenever a
+     * contained line comment exists that this flat shape would not emit, we hand off to the comment-aware
+     * {@link #commentedBinaryLines(BinaryExpr)} multi-line render, which flattens the chain and offers every
+     * between-operand comment. A binary with no line comments (or whose only line comment is the immediate-left one the
+     * flat shape already prints) is untouched and renders byte-for-byte as before.
      */
     Doc binaryExpression(BinaryExpr expression) {
         Optional<JavaCommentTrivia> leftLineComment = commentPlacement.ownComment(
             expression.getLeft(),
             JavaCommentTrivia::isLine
         );
+        if (flatRenderWouldDropLineComment(expression, leftLineComment)) {
+            return linesWithComments(expression);
+        }
         if (leftLineComment.isEmpty()) {
             return Doc.concat(
                 binaryLeftOperand(expression),
@@ -706,6 +717,25 @@ final class BinaryExpressionPrinter {
             comments.comment(leftLineComment.orElseThrow()),
             Doc.indent(Doc.concat(Doc.HARD_LINE, binaryRightOperand(expression)))
         );
+    }
+
+    /**
+     * Reports whether the flat {@link #binaryExpression(BinaryExpr)} layout would drop a contained line comment.
+     *
+     * <p>The flat layout can render at most one line comment: the immediate-left operand's own comment
+     * ({@code leftLineComment}). Any other line comment contained in the chain — most commonly a between-operand
+     * comment that JavaParser attached to a deeper operand of a flattened same-operator chain — would have nowhere to go.
+     * When such a comment exists we route the binary through the comment-aware multi-line render instead. The check is
+     * intentionally conservative: it returns {@code false} for a comment-free binary and for the lone-left-comment binary
+     * the flat shape already preserves, so neither case changes layout.
+     */
+    private boolean flatRenderWouldDropLineComment(
+            BinaryExpr expression,
+            Optional<JavaCommentTrivia> leftLineComment
+    ) {
+        return commentPlacement.containedComments(expression).stream()
+                .filter(JavaCommentTrivia::isLine)
+                .anyMatch(comment -> leftLineComment.filter(comment::equals).isEmpty());
     }
 
     private Doc binaryLeftOperand(BinaryExpr expression) {

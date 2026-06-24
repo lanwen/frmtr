@@ -363,6 +363,17 @@ inline trailing comment vs. its enclosing list or assignment, a comment shared b
 whitespace perturbation) are made claim-once instead by giving the redundant offer a distinct `OwnerSlot` or by skipping
 it when the comment is already printed — never by a speculative rollback, which would drop the winning offer.
 
+Comment *text* rendering lives in `JavaFormatter.commentDoc`, which routes each comment by parser kind. Javadoc is
+canonically reflowed through `JavadocComment.toString()` so authors' `*` continuation rows re-align consistently — except
+for decorative banner dividers. JavaParser classifies any `/*`-comment whose opener carries three or more stars (e.g.
+`/*****`) as Javadoc, so a multi-line banner whose opener/closer rows are pure asterisk-art reaches the Javadoc branch;
+reflowing it would mutate those rows (a `*****` row becomes `* ***`), which is byte-invisible to AST-equivalence but
+registers as a dropped comment under the lexer-multiset comment-presence net. `commentDoc` therefore detects banners with
+the narrow `isBannerComment` predicate (opener is `/*` plus three-or-more bare stars, or closer is a bare three-or-more
+star run before the delimiter) and preserves them verbatim through the same star-aligned `normalizeBlockComment` path used
+for ordinary block comments, leaving normal Javadoc reflow unchanged. Single-line Javadoc (including single-line banners)
+is already emitted verbatim from its raw token text.
+
 Complex Java layout rules are factored into dedicated helpers rather than embedded in broad dispatchers. `LayoutWidth`
 centralizes indentation baselines for width probes, source-shape helpers preserve meaningful existing multiline forms,
 initializer helpers coordinate declaration-local wrapping, and chain helpers keep method-call source planning out of

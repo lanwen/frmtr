@@ -160,6 +160,7 @@ final class MemberBlockPrinter {
     private Doc memberContents(Node owner, NodeList<BodyDeclaration<?>> members, List<Doc> memberDocs) {
         return Doc.concat(
             commentInterleaver.interleave(
+                owner,
                 members,
                 commentPlacement.orphanCommentsInSourceOrder(owner),
                 (previous, current, index) -> Optional.of(memberDocs.get(index)),

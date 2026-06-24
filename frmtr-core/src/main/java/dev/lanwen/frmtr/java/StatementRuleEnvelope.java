@@ -71,13 +71,25 @@ final class StatementRuleEnvelope {
         if (action == FormatterPragmas.PrintAction.RAW) {
             return label(statement, rawStatement(statement));
         }
-        Doc trailing = statement instanceof TryStmt ? Doc.EMPTY : comments.trailingLineComment(statement);
+        // A statement's attached trailing line comment can already have been claimed and placed by an enclosing
+        // construct's own clause handling (e.g. an if/else chain that renders a nested statement's trailing comment).
+        // Skip the envelope offer when that comment is already printed so it is not duplicate-claimed; output is
+        // unchanged because the first claimant placed it and this re-offer only ever rendered empty.
+        Doc trailing = statement instanceof TryStmt || trailingLineCommentAlreadyPrinted(statement)
+            ? Doc.EMPTY
+            : comments.trailingLineComment(statement);
         Doc leading = leadingComment(statement, trailing);
         Doc body = statementContent.format(statement);
         return label(
             statement,
             Doc.concat(leading, body, trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing))
         );
+    }
+
+    private boolean trailingLineCommentAlreadyPrinted(Statement statement) {
+        return commentPlacement.trailingLineComment(statement)
+                .map(comments::isPrinted)
+                .orElse(false);
     }
 
     private Doc label(Statement statement, Doc doc) {

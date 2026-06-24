@@ -158,6 +158,7 @@ final class BlockPrinter {
 
     private List<Doc> blockContents(BlockStmt block, JavaFormatRule<Statement> statementRenderer) {
         return commentInterleaver.interleave(
+            block,
             block.getStatements(),
             blockOrphanComments(block),
             (previous, current, index) -> printableStatement(previous, current, index, statementRenderer),
@@ -410,16 +411,55 @@ final class BlockPrinter {
     }
 
     private Optional<Doc> emptyBlockCommentContent(BlockStmt block) {
-        List<Doc> blockComments = new ArrayList<>();
-        blockComments.addAll(emptyBlockCommentDocs(commentPlacement.orphanComments(block)));
-        blockComments.addAll(emptyBlockCommentDocs(commentPlacement.containedComments(block)));
-        List<Doc> visibleComments = blockComments.stream().filter(comment -> comment != Doc.EMPTY).toList();
+        List<JavaCommentTrivia> sourceComments =
+            dedupByCommentIdentity(commentPlacement.orphanComments(block), commentPlacement.containedComments(block));
+        List<Doc> visibleComments = emptyBlockCommentDocs(sourceComments).stream()
+                .filter(comment -> comment != Doc.EMPTY)
+                .toList();
         return visibleComments.isEmpty() ? Optional.empty() : Optional.of(Doc.join(Doc.HARD_LINE, visibleComments));
+    }
+
+    /**
+     * Merges an empty block's orphan and contained comment buckets into a single source-ordered list with no comment
+     * offered twice.
+     *
+     * <p>JavaParser parks an empty block's comments on either the block's orphan pool or its contained-comment set, and
+     * the two buckets overlap: a comment can appear in both. The previous shape rendered each bucket independently, so a
+     * comment in the overlap was offered to {@link CommentTracker#comment} twice — harmless under first-claim-wins
+     * (the second offer rendered {@link Doc#EMPTY}) but a duplicate claim once that invariant is enforced. De-duplicating
+     * by JavaParser comment identity before any claim is made offers each comment exactly once; {@link
+     * #emptyBlockCommentDocs} then restores source order so the rendered sequence is byte-identical to the old union.
+     */
+    private static List<JavaCommentTrivia> dedupByCommentIdentity(
+            List<JavaCommentTrivia> orphan,
+            List<JavaCommentTrivia> contained
+    ) {
+        java.util.Set<com.github.javaparser.ast.comments.Comment> seen =
+            java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        List<JavaCommentTrivia> merged = new ArrayList<>();
+        for (JavaCommentTrivia trivia : orphan) {
+            if (seen.add(trivia.comment())) {
+                merged.add(trivia);
+            }
+        }
+        for (JavaCommentTrivia trivia : contained) {
+            if (seen.add(trivia.comment())) {
+                merged.add(trivia);
+            }
+        }
+        return merged;
     }
 
     private List<Doc> emptyBlockCommentDocs(List<JavaCommentTrivia> sourceComments) {
         return sourceComments.stream()
                 .sorted((left, right) -> CommentIndex.sourceOrderComparator().compare(left.comment(), right.comment()))
+                // Under whitespace perturbation JavaParser can expose the same comment as an orphan of two adjacent empty
+                // blocks (e.g. an empty method body and an empty catch body whose ranges abut). The first empty block to
+                // render claims and places it; skip comments already printed so a neighboring empty block does not
+                // duplicate-claim them. Output is unchanged because the re-offer always lost the first-claim race and
+                // rendered empty. This is a skip of an already-claimed comment, not a speculative rollback, so it never
+                // drops the winning offer.
+                .filter(trivia -> !comments.isPrinted(trivia))
                 .map(comments::comment)
                 .toList();
     }

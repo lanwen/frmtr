@@ -27,8 +27,14 @@ final class SourceOrderedCommentInterleaver<T extends Node> {
 
     /**
      * Returns docs for {@code siblings} and {@code orphanComments}, preserving their source-line ordering.
+     *
+     * <p>{@code owner} is the node whose children are being interleaved (the enclosing block, member block, switch, or
+     * compilation unit). Each interleaved orphan comment is offered to the tracker under this anchor in the
+     * {@link OwnerSlot#INTERLEAVED} slot so the record-only dry-run can record the comment's first claimant as
+     * {@code (owner, INTERLEAVED)}; it does not change which comment renders.
      */
     List<Doc> interleave(
+            Node owner,
             List<T> siblings,
             List<JavaCommentTrivia> orphanComments,
             SiblingRenderer<T> siblingRenderer,
@@ -49,7 +55,7 @@ final class SourceOrderedCommentInterleaver<T extends Node> {
                 orphanIndex < orderedComments.size()
                 && orderedComments.get(orphanIndex).beginLine(Integer.MAX_VALUE) < currentBeginLine
             ) {
-                previous = appendComment(contents, orderedComments.get(orphanIndex++), previous, spacing);
+                previous = appendComment(owner, contents, orderedComments.get(orphanIndex++), previous, spacing);
             }
             Optional<Doc> siblingDoc = siblingRenderer.render(previousSibling, current, index);
             if (siblingDoc.isEmpty()) {
@@ -64,18 +70,19 @@ final class SourceOrderedCommentInterleaver<T extends Node> {
         }
 
         while (orphanIndex < orderedComments.size()) {
-            previous = appendComment(contents, orderedComments.get(orphanIndex++), previous, spacing);
+            previous = appendComment(owner, contents, orderedComments.get(orphanIndex++), previous, spacing);
         }
         return contents;
     }
 
     private PreviousEntry<T> appendComment(
+            Node owner,
             List<Doc> contents,
             JavaCommentTrivia comment,
             PreviousEntry<T> previous,
             Spacing<T> spacing
     ) {
-        Doc commentDoc = comments.comment(comment);
+        Doc commentDoc = comments.comment(comment, owner, OwnerSlot.INTERLEAVED);
         if (commentDoc == Doc.EMPTY) {
             return previous;
         }

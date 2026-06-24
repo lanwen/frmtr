@@ -248,76 +248,89 @@ final class MethodCallPrinter {
                 call
             );
         }
-        Optional<Doc> sourceMultilineExpressionLambda = sourceMultilineExpressionLambda(expression);
+        Optional<Doc> sourceMultilineExpressionLambda = comments.speculatively(
+            () -> sourceMultilineExpressionLambda(expression)
+        );
         if (sourceMultilineExpressionLambda.isPresent()) {
             return sourceMultilineExpressionLambda.orElseThrow();
         }
         if (!breakMode.isForced()) {
-            Optional<Doc> chain = methodCallChain(expression);
+            Optional<Doc> chain = comments.speculatively(() -> methodCallChain(expression));
             if (chain.isPresent()) {
                 return chain.orElseThrow();
             }
         } else if (methodCallChainIsSourceMultiline(expression)) {
-            Optional<Doc> chain = methodCallChain(expression, breakMode, "");
+            Optional<Doc> chain = comments.speculatively(() -> methodCallChain(expression, breakMode, ""));
             if (chain.isPresent()) {
                 return chain.orElseThrow();
             }
         }
-        Optional<Doc> sourceMultilineArguments = sourceMultilineArguments(expression);
+        Optional<Doc> sourceMultilineArguments = comments.speculatively(() -> sourceMultilineArguments(expression));
         if (sourceMultilineArguments.isPresent()) {
             return sourceMultilineArguments.orElseThrow();
         }
-        Optional<Doc> suffixedEnclosed = suffixedEnclosedMethodCall(expression, false);
+        Optional<Doc> suffixedEnclosed = comments.speculatively(() -> suffixedEnclosedMethodCall(expression, false));
         if (suffixedEnclosed.isPresent()) {
             return suffixedEnclosed.orElseThrow();
         }
         String prefix = methodCallPrefix(expression);
         if (expression.getArguments().isEmpty()) {
-            Optional<Doc> commentedArguments = emptyMethodCallArguments(prefix, expression);
+            Optional<Doc> commentedArguments = comments.speculatively(() -> emptyMethodCallArguments(prefix, expression));
             if (commentedArguments.isPresent()) {
                 return commentedArguments.orElseThrow();
             }
             return Doc.text(prefix + "()");
         }
-        Optional<Doc> huggableLambda = huggableBlockLambdaArguments.apply(prefix, expression.getArguments());
+        Optional<Doc> huggableLambda = comments.speculatively(
+            () -> huggableBlockLambdaArguments.apply(prefix, expression.getArguments())
+        );
         if (huggableLambda.isPresent()) {
             return huggableLambda.orElseThrow();
         }
-        Optional<Doc> commentedExpressionLambda = commentedExpressionLambdaArgument.apply(prefix, expression);
+        Optional<Doc> commentedExpressionLambda = comments.speculatively(
+            () -> commentedExpressionLambdaArgument.apply(prefix, expression)
+        );
         if (commentedExpressionLambda.isPresent()) {
             return commentedExpressionLambda.orElseThrow();
         }
-        Optional<Doc> huggableExpressionLambda = huggableExpressionLambdaArguments.apply(
-            prefix,
-            expression.getArguments()
+        Optional<Doc> huggableExpressionLambda = comments.speculatively(
+            () -> huggableExpressionLambdaArguments.apply(prefix, expression.getArguments())
         );
         if (huggableExpressionLambda.isPresent()) {
             return huggableExpressionLambda.orElseThrow();
         }
-        Optional<Doc> brokenExpressionLambdaArguments = brokenExpressionLambdaArgumentsForOverflow(prefix, expression);
+        Optional<Doc> brokenExpressionLambdaArguments = comments.speculatively(
+            () -> brokenExpressionLambdaArgumentsForOverflow(prefix, expression)
+        );
         if (brokenExpressionLambdaArguments.isPresent()) {
             return brokenExpressionLambdaArguments.orElseThrow();
         }
-        Optional<Doc> singleTextBlockArgument = singleTextBlockArgument(prefix, expression);
+        Optional<Doc> singleTextBlockArgument = comments.speculatively(
+            () -> singleTextBlockArgument(prefix, expression)
+        );
         if (singleTextBlockArgument.isPresent()) {
             return singleTextBlockArgument.orElseThrow();
         }
-        Optional<Doc> singleObjectCreationArgument = singleObjectCreationArgument(prefix, expression);
+        Optional<Doc> singleObjectCreationArgument = comments.speculatively(
+            () -> singleObjectCreationArgument(prefix, expression)
+        );
         if (singleObjectCreationArgument.isPresent()) {
             return singleObjectCreationArgument.orElseThrow();
         }
-        Optional<Doc> singleMethodCallArgument = singleMethodCallArgument(prefix, expression);
+        Optional<Doc> singleMethodCallArgument = comments.speculatively(
+            () -> singleMethodCallArgument(prefix, expression)
+        );
         if (singleMethodCallArgument.isPresent()) {
             return singleMethodCallArgument.orElseThrow();
         }
-        Optional<Doc> singleBinaryArgument = singleBinaryArgument(prefix, expression.getArguments(), breakMode);
+        Optional<Doc> singleBinaryArgument = comments.speculatively(
+            () -> singleBinaryArgument(prefix, expression.getArguments(), breakMode)
+        );
         if (singleBinaryArgument.isPresent()) {
             return singleBinaryArgument.orElseThrow();
         }
-        Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(
-            prefix,
-            expression,
-            expression.getArguments()
+        Optional<Doc> commentedArguments = comments.speculatively(
+            () -> commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments())
         );
         if (commentedArguments.isPresent()) {
             return commentedArguments.orElseThrow();
@@ -349,12 +362,16 @@ final class MethodCallPrinter {
         if (tail.isEmpty()) {
             return methodCall(expression, breakMode);
         }
-        Optional<Doc> chain = methodCallChain(expression, breakMode, tail.text(), lineBudget);
+        Optional<Doc> chain = comments.speculatively(
+            () -> methodCallChain(expression, breakMode, tail.text(), lineBudget)
+        );
         if (chain.isPresent()) {
             return chain.orElseThrow();
         }
         if (finalTrailingLineComments(expression).isEmpty()) {
-            Optional<Doc> unsuffixedChain = methodCallChain(expression, breakMode, "", lineBudget);
+            Optional<Doc> unsuffixedChain = comments.speculatively(
+                () -> methodCallChain(expression, breakMode, "", lineBudget)
+            );
             if (unsuffixedChain.isPresent()) {
                 return tail.appendTo(unsuffixedChain.orElseThrow());
             }

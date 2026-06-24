@@ -332,12 +332,14 @@ final class MethodCallChainPrinter {
         List<MethodCallExpr> calls = new ArrayList<>();
         Expression root = methodChainPlanner.methodCallChainRoot(expression, calls);
         SourceMultilineLambdaChainPlan sourceMultilineLambdaPlan = sourceMultilineLambdaChainPlan(root, calls);
-        Optional<Doc> sourceMultilineFirstExpressionLambda = sourceMultilineFirstExpressionLambdaChain(
-            expression,
-            root,
-            calls,
-            MethodCallChainTail.EMPTY,
-            sourceMultilineLambdaPlan
+        Optional<Doc> sourceMultilineFirstExpressionLambda = comments.speculatively(
+            () -> sourceMultilineFirstExpressionLambdaChain(
+                expression,
+                root,
+                calls,
+                MethodCallChainTail.EMPTY,
+                sourceMultilineLambdaPlan
+            )
         );
         if (sourceMultilineFirstExpressionLambda.isPresent()) {
             return sourceMultilineFirstExpressionLambda;
@@ -595,11 +597,15 @@ final class MethodCallChainPrinter {
             && !methodCallSegmentHasComment(calls.getFirst())
             && !analysis.rootHasBlockLambdaArgument()
         ) {
-            Optional<Doc> compactRootWithBrokenSegment = compactRootWithBrokenFinalSegment(
-                root,
-                calls.getFirst(),
-                finalSegmentSuffix,
-                lineBudget
+            Expression probeRoot = root;
+            List<MethodCallExpr> probeCalls = calls;
+            Optional<Doc> compactRootWithBrokenSegment = comments.speculatively(
+                () -> compactRootWithBrokenFinalSegment(
+                    probeRoot,
+                    probeCalls.getFirst(),
+                    finalSegmentSuffix,
+                    lineBudget
+                )
             );
             if (compactRootWithBrokenSegment.isPresent()) {
                 return compactRootWithBrokenSegment;
@@ -645,12 +651,17 @@ final class MethodCallChainPrinter {
         sourceMultilineLambdaPlan = sourceMultilineLambdaChainPlan(root, calls);
         Doc rootDoc = methodCallChainRootDoc(chainPlan, firstLineWidth);
         boolean firstSegmentAttachedToRoot = false;
-        Optional<Doc> sourceMultilineFirstExpressionLambda = sourceMultilineFirstExpressionLambdaChain(
-            expression,
-            root,
-            calls,
-            finalSegmentSuffix,
-            sourceMultilineLambdaPlan
+        Expression sourceMultilineProbeRoot = root;
+        List<MethodCallExpr> sourceMultilineProbeCalls = calls;
+        SourceMultilineLambdaChainPlan sourceMultilineProbePlan = sourceMultilineLambdaPlan;
+        Optional<Doc> sourceMultilineFirstExpressionLambda = comments.speculatively(
+            () -> sourceMultilineFirstExpressionLambdaChain(
+                expression,
+                sourceMultilineProbeRoot,
+                sourceMultilineProbeCalls,
+                finalSegmentSuffix,
+                sourceMultilineProbePlan
+            )
         );
         if (sourceMultilineFirstExpressionLambda.isPresent()) {
             return sourceMultilineFirstExpressionLambda;
@@ -742,25 +753,20 @@ final class MethodCallChainPrinter {
                     Doc.concat(rootDoc, chainContinuation(methodCallChainSegment(calls.getFirst(), finalSegmentSuffix)))
                 );
             }
+            MethodCallExpr probeCall = calls.getFirst();
             if (
                 !analysis.sourceMultilineChain()
                 && sourceShapePolicy.methodCallArgumentsSpanMultipleLines(calls.getFirst())
             ) {
-                Optional<Doc> compactRootWithBrokenSegment = compactRootWithBrokenFinalSegment(
-                    methodRoot,
-                    calls.getFirst(),
-                    finalSegmentSuffix,
-                    lineBudget
+                Optional<Doc> compactRootWithBrokenSegment = comments.speculatively(
+                    () -> compactRootWithBrokenFinalSegment(methodRoot, probeCall, finalSegmentSuffix, lineBudget)
                 );
                 if (compactRootWithBrokenSegment.isPresent()) {
                     return compactRootWithBrokenSegment;
                 }
             }
-            Optional<Doc> expressionLambdaRoot = expressionLambdaRootWithSingleSegment(
-                methodRoot,
-                calls.getFirst(),
-                finalSegmentSuffix,
-                lineBudget
+            Optional<Doc> expressionLambdaRoot = comments.speculatively(
+                () -> expressionLambdaRootWithSingleSegment(methodRoot, probeCall, finalSegmentSuffix, lineBudget)
             );
             if (expressionLambdaRoot.isPresent()) {
                 return expressionLambdaRoot;
@@ -771,17 +777,15 @@ final class MethodCallChainPrinter {
                     finalSegmentSuffix,
                     lineBudget
                 )) {
-                Optional<Doc> compactRootWithBrokenSegment = compactRootWithBrokenFinalSegment(
-                    methodRoot,
-                    calls.getFirst(),
-                    finalSegmentSuffix,
-                    lineBudget
+                Optional<Doc> compactRootWithBrokenSegment = comments.speculatively(
+                    () -> compactRootWithBrokenFinalSegment(methodRoot, probeCall, finalSegmentSuffix, lineBudget)
                 );
                 if (compactRootWithBrokenSegment.isPresent()) {
                     return compactRootWithBrokenSegment;
                 }
             }
-            Optional<Doc> sourceMultilineRoot = this.calls.sourceMultilineArguments(methodRoot);
+            Optional<Doc> sourceMultilineRoot =
+                comments.speculatively(() -> this.calls.sourceMultilineArguments(methodRoot));
             if (sourceMultilineRoot.isPresent()) {
                 return Optional.of(
                     Doc.concat(
@@ -976,16 +980,14 @@ final class MethodCallChainPrinter {
     ) {
         if (sourceMultilineLambdaPlan.isPresent()) {
             SourceMultilineLambdaCallLayout.AttachedFirstSegment plan = sourceMultilineLambdaPlan.orElseThrow();
-            Optional<Doc> sourceMultilineLambdaBody = sourceMultilineLambdaCalls.attachedFirstSegment(
-                root,
-                firstCall
+            Optional<Doc> sourceMultilineLambdaBody = comments.speculatively(
+                () -> sourceMultilineLambdaCalls.attachedFirstSegment(root, firstCall)
             );
             if (sourceMultilineLambdaBody.isPresent()) {
                 return sourceMultilineLambdaBody.orElseThrow();
             }
-            Optional<Doc> huggableExpressionLambda = huggableExpressionLambdaArguments.apply(
-                plan.chainSegmentPrefix(),
-                firstCall.getArguments()
+            Optional<Doc> huggableExpressionLambda = comments.speculatively(
+                () -> huggableExpressionLambdaArguments.apply(plan.chainSegmentPrefix(), firstCall.getArguments())
             );
             if (huggableExpressionLambda.isPresent()) {
                 return Doc.concat(expressionRenderer.apply(root), huggableExpressionLambda.orElseThrow());
@@ -1167,11 +1169,13 @@ final class MethodCallChainPrinter {
     }
 
     private Doc singleSegmentMethodRootDoc(MethodCallExpr methodRoot) {
-        Optional<Doc> sourceMultilineArguments = calls.sourceMultilineArguments(methodRoot);
+        Optional<Doc> sourceMultilineArguments =
+            comments.speculatively(() -> calls.sourceMultilineArguments(methodRoot));
         if (sourceMultilineArguments.isPresent()) {
             return sourceMultilineArguments.orElseThrow();
         }
-        Optional<Doc> brokenScopedMethodRoot = brokenTypeLikeScopedMethodRoot(methodRoot);
+        Optional<Doc> brokenScopedMethodRoot =
+            comments.speculatively(() -> brokenTypeLikeScopedMethodRoot(methodRoot));
         if (brokenScopedMethodRoot.isPresent()) {
             return brokenScopedMethodRoot.orElseThrow();
         }
@@ -1220,7 +1224,8 @@ final class MethodCallChainPrinter {
     }
 
     private Doc groupedPromotedMethodCall(MethodCallExpr expression) {
-        Optional<Doc> sourceMultilineArguments = calls.sourceMultilineArguments(expression);
+        Optional<Doc> sourceMultilineArguments =
+            comments.speculatively(() -> calls.sourceMultilineArguments(expression));
         if (sourceMultilineArguments.isPresent()) {
             return sourceMultilineArguments.orElseThrow();
         }
@@ -1230,7 +1235,8 @@ final class MethodCallChainPrinter {
         ) {
             return calls.brokenMethodCall(expression);
         }
-        Optional<Doc> huggableExpressionLambda = groupedPromotedExpressionLambda(expression);
+        Optional<Doc> huggableExpressionLambda =
+            comments.speculatively(() -> groupedPromotedExpressionLambda(expression));
         if (huggableExpressionLambda.isPresent()) {
             return huggableExpressionLambda.orElseThrow();
         }
@@ -1393,7 +1399,8 @@ final class MethodCallChainPrinter {
         if (!compactRootFirstLineFits(root, callPrefix, call.getArguments(), lineBudget)) {
             return Optional.empty();
         }
-        Optional<Doc> huggableLambda = huggableBlockLambdaArguments.apply(callPrefix, call.getArguments());
+        Optional<Doc> huggableLambda =
+            comments.speculatively(() -> huggableBlockLambdaArguments.apply(callPrefix, call.getArguments()));
         if (huggableLambda.isPresent()) {
             return Optional.of(Doc.concat(huggableLambda.orElseThrow(), finalSegmentSuffix.doc()));
         }
@@ -1405,9 +1412,8 @@ final class MethodCallChainPrinter {
             if (expressionLambdaPlan.isEmpty()) {
                 return Optional.empty();
             }
-            Optional<Doc> huggableExpressionLambda = huggableExpressionLambdaArguments.apply(
-                callPrefix,
-                call.getArguments()
+            Optional<Doc> huggableExpressionLambda = comments.speculatively(
+                () -> huggableExpressionLambdaArguments.apply(callPrefix, call.getArguments())
             );
             if (huggableExpressionLambda.isPresent()) {
                 if (
@@ -1962,7 +1968,8 @@ final class MethodCallChainPrinter {
             MethodCallExpr expression,
             ToIntFunction<String> firstLineWidth
     ) {
-        Optional<Doc> sourceMultilineArguments = calls.sourceMultilineArguments(expression);
+        Optional<Doc> sourceMultilineArguments =
+            comments.speculatively(() -> calls.sourceMultilineArguments(expression));
         if (sourceMultilineArguments.isPresent()) {
             return sourceMultilineArguments.orElseThrow();
         }
@@ -2039,10 +2046,8 @@ final class MethodCallChainPrinter {
         // Stream.concat(...) whose receiver sits on its own line under expand), route through the comment-aware
         // argument-list renderer so those comments survive. parenthesized() returns empty when there are no such
         // comments, so the comment-free path below stays byte-identical.
-        Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(
-            prefix,
-            expression,
-            expression.getArguments()
+        Optional<Doc> commentedArguments = comments.speculatively(
+            () -> commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments())
         );
         if (commentedArguments.isPresent()) {
             return commentedArguments.orElseThrow();
@@ -2185,12 +2190,14 @@ final class MethodCallChainPrinter {
                 objectRootContinuation(brokenMethodCallChainSegment(call, finalSegmentSuffix))
             );
         }
-        Optional<Doc> compactAttachedSegment = compactAttachedObjectRootSingleSegment(
-            rootDoc,
-            call,
-            finalSegmentSuffix,
-            compactSegmentWidth,
-            sourceMultilineChain
+        Optional<Doc> compactAttachedSegment = comments.speculatively(
+            () -> compactAttachedObjectRootSingleSegment(
+                rootDoc,
+                call,
+                finalSegmentSuffix,
+                compactSegmentWidth,
+                sourceMultilineChain
+            )
         );
         if (compactAttachedSegment.isPresent()) {
             return compactAttachedSegment.orElseThrow();
@@ -2266,25 +2273,26 @@ final class MethodCallChainPrinter {
         String prefix = "." + typeArguments + expression.getNameAsString();
         Doc segmentPrefix = methodCallSegmentPrefix(expression);
         if (expression.getArguments().isEmpty()) {
-            Optional<Doc> commentedArguments = calls.emptyMethodCallArguments(prefix, expression);
+            Optional<Doc> commentedArguments =
+                comments.speculatively(() -> calls.emptyMethodCallArguments(prefix, expression));
             if (commentedArguments.isPresent()) {
                 return Doc.concat(segmentPrefix, commentedArguments.orElseThrow(), finalSegmentSuffix.doc());
             }
             return Doc.concat(segmentPrefix, Doc.text(prefix + "()" + finalSegmentSuffix));
         }
-        Optional<Doc> sourceMultilineArguments = sourceMultilineMethodCallSegmentArguments(
-            prefix,
-            expression,
-            finalSegmentSuffix
+        Optional<Doc> sourceMultilineArguments = comments.speculatively(
+            () -> sourceMultilineMethodCallSegmentArguments(prefix, expression, finalSegmentSuffix)
         );
         if (sourceMultilineArguments.isPresent()) {
             return Doc.concat(segmentPrefix, sourceMultilineArguments.orElseThrow());
         }
-        Optional<Doc> huggableLambda = huggableBlockLambdaArguments.apply(prefix, expression.getArguments());
+        Optional<Doc> huggableLambda =
+            comments.speculatively(() -> huggableBlockLambdaArguments.apply(prefix, expression.getArguments()));
         if (huggableLambda.isPresent()) {
             return Doc.concat(segmentPrefix, huggableLambda.orElseThrow(), finalSegmentSuffix.doc());
         }
-        Optional<Doc> commentedExpressionLambda = commentedExpressionLambdaArgument.apply(prefix, expression);
+        Optional<Doc> commentedExpressionLambda =
+            comments.speculatively(() -> commentedExpressionLambdaArgument.apply(prefix, expression));
         if (commentedExpressionLambda.isPresent()) {
             return Doc.concat(segmentPrefix, commentedExpressionLambda.orElseThrow(), finalSegmentSuffix.doc());
         }
@@ -2292,16 +2300,17 @@ final class MethodCallChainPrinter {
             sourceShapePolicy.expressionLambdaStartsOnSelectorLine(expression)
             && expressionLambdaSpansMultipleLines(expression)
         ) {
-            Optional<Doc> huggableExpressionLambda = huggableExpressionLambdaArguments.apply(
-                prefix,
-                expression.getArguments()
+            Optional<Doc> huggableExpressionLambda = comments.speculatively(
+                () -> huggableExpressionLambdaArguments.apply(prefix, expression.getArguments())
             );
             if (huggableExpressionLambda.isPresent()) {
-                Optional<Doc> packedBodyChain = packedSegmentExpressionLambdaBodyChain(
-                    expression,
-                    prefix,
-                    compactSegmentWidth,
-                    finalSegmentSuffix
+                Optional<Doc> packedBodyChain = comments.speculatively(
+                    () -> packedSegmentExpressionLambdaBodyChain(
+                        expression,
+                        prefix,
+                        compactSegmentWidth,
+                        finalSegmentSuffix
+                    )
                 );
                 if (packedBodyChain.isPresent()) {
                     return Doc.concat(segmentPrefix, packedBodyChain.orElseThrow());
@@ -2312,10 +2321,8 @@ final class MethodCallChainPrinter {
                 return Doc.concat(segmentPrefix, huggableExpressionLambda.orElseThrow(), finalSegmentSuffix.doc());
             }
         }
-        Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(
-            prefix,
-            expression,
-            expression.getArguments()
+        Optional<Doc> commentedArguments = comments.speculatively(
+            () -> commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments())
         );
         if (commentedArguments.isPresent()) {
             return Doc.concat(segmentPrefix, commentedArguments.orElseThrow(), finalSegmentSuffix.doc());
@@ -2610,19 +2617,31 @@ final class MethodCallChainPrinter {
     }
 
     private Doc methodCallSegmentPrefix(MethodCallExpr expression) {
+        List<JavaCommentTrivia> leadingComments = leadingLineCommentsBeforeSegment(expression);
         Doc leading = Doc.concat(
-            leadingLineCommentsBeforeSegment(expression)
+            leadingComments
                     .stream()
                     .map(comments::comment)
                     .filter(comment -> comment != Doc.EMPTY)
                     .map(comment -> Doc.concat(comment, Doc.HARD_LINE))
                     .toList()
         );
+        // JavaParser attaches a line comment that sits between the scope and the selector to the selector name as its own
+        // comment, so the same comment can also be offered by a neighboring slot: the leading-line slot above (same prefix
+        // call) or the previous segment's between-segments trailing slot. The name comment is offered here under its own
+        // (expression, OWN) ownership key — distinct from the bare (comment, INTERLEAVED) key those neighbors use — so the
+        // dry-run records the true first-traversal claimant and {@code ownsHere} suppresses whichever offer lost. Output
+        // is unchanged because the suppressed offer already lost the first-claim race and rendered empty. The
+        // same-prefix leading offer is also excluded by identity here so the name slot never re-claims this segment's own
+        // leading comment.
         Optional<Comment> rawNameComment = expression.getName()
                 .getComment()
                 .filter(comment -> comment instanceof LineComment || comment instanceof BlockComment)
-                .filter(comment -> CommentIndex.startsBefore(comment, expression.getName()));
-        Doc nameComment = rawNameComment.map(comments::comment).orElse(Doc.EMPTY);
+                .filter(comment -> CommentIndex.startsBefore(comment, expression.getName()))
+                .filter(comment -> leadingComments.stream().noneMatch(leadingTrivia -> leadingTrivia.comment() == comment));
+        Doc nameComment = rawNameComment
+                .map(comment -> comments.comment(comment, expression, OwnerSlot.OWN))
+                .orElse(Doc.EMPTY);
         if (nameComment == Doc.EMPTY) {
             return leading;
         }
@@ -2746,8 +2765,13 @@ final class MethodCallChainPrinter {
      * Keeps a final segment's same-line comment after the rendered call, even when the call arguments break.
      */
     private Doc finalTrailingLineComment(MethodCallExpr expression) {
+        // The same final trailing line comment can be reached from neighboring chain renders (e.g. an outer segment's
+        // argument render and the chain's final-segment slot). Skip comments already printed by an earlier traversal path
+        // so this slot does not duplicate-claim them; output is unchanged because the first claimant placed the comment
+        // and a re-offer only ever rendered empty.
         List<Doc> sourceComments = finalTrailingLineComments(expression)
                 .stream()
+                .filter(trivia -> !comments.isPrinted(trivia))
                 .map(comments::comment)
                 .filter(comment -> comment != Doc.EMPTY)
                 .toList();

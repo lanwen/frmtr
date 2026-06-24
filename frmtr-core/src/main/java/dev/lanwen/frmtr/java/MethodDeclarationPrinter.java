@@ -300,9 +300,15 @@ final class MethodDeclarationPrinter {
     }
 
     private Doc annotationMethodGapComments(MethodDeclaration declaration) {
+        // A comment that sits between a method's annotations and its name is also offered by the shared annotation-prefix
+        // printer (DeclarationPrefixPrinter.postAnnotationComments), which renders first. This gap recovery offers each
+        // comment under its own (declaration, OWN) ownership key — distinct from the bare (comment, INTERLEAVED) key the
+        // prefix printer uses — so the dry-run records the true first-traversal claimant and {@code ownsHere} suppresses
+        // whichever offer lost. Output is unchanged because the suppressed offer already lost the first-claim race and
+        // rendered empty; when the prefix printer does not cover a gap comment this path remains its sole claimant.
         return Doc.concat(
             annotationMethodGapCommentTrivia(declaration)
-                    .map(comments::comment)
+                    .map(trivia -> comments.comment(trivia, declaration, OwnerSlot.OWN))
                     .filter(comment -> comment != Doc.EMPTY)
                     .map(comment -> Doc.concat(comment, Doc.HARD_LINE))
                     .toList()

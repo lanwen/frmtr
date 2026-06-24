@@ -239,6 +239,7 @@ final class CompilationUnitPrinter {
         }
         List<Doc> declarationDocs = declarations.stream().map(bodyDeclarations::format).toList();
         List<Doc> parts = commentInterleaver.interleave(
+            unit,
             declarations,
             betweenTypeComments,
             (previousSibling, current, index) -> Optional.of(declarationDocs.get(index)),

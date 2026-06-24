@@ -29,43 +29,44 @@ final class FormatterGuardrails {
 
     /**
      * Toggles the stricter "each comment is claimed at most once" invariant in {@link #claimComment}. Separate from
-     * {@link #ENABLED_PROPERTY} because, unlike comment-drop detection and the transform-identity check, this invariant
-     * does <em>not</em> hold under the formatter's current design and so must stay off in CI.
+     * {@link #ENABLED_PROPERTY} because it gates a different failure mode (a duplicate claim, not a dropped comment) and
+     * historically did not hold; as of roadmap <strong>B2</strong> it does, and it is now enabled as a CI gate (see
+     * {@code frmtr-core/build.gradle.kts}).
      *
      * <p>{@code CommentTracker} couples claim and render — every render path is
      * {@code commentPlacement.X(node).filter(this::claim)…} — so first-claim-wins both de-dupes and renders. Comment
      * ownership between adjacent constructs is inherently ambiguous, so several printer paths legitimately <em>offer</em>
-     * the same comment; the losing claim returns {@code false} and simply skips its (redundant) render, and the comment
-     * still reaches the output exactly once. A "fail fast on the second claim" assertion therefore flags benign
-     * speculative claims as errors even on golden fixtures that are correct.
+     * the same comment; before B2 the losing claim returned {@code false} and skipped its redundant render, so the comment
+     * still reached output once but a "fail fast on the second claim" assertion flagged the benign re-claim.
      *
-     * <p>Roadmap <strong>B1</strong> (source-shape consolidation and shape-independent comment ownership) has landed and
-     * made the <em>drop</em> invariant hold — {@code CommentPresenceDiagnosticTest} is green and its {@code KNOWN_DROPS}
-     * list is empty. The stricter "claimed at most once" invariant still fails, though: a full-suite run with this toggle
-     * on yields ~205 violations, all benign speculative claims (zero drops, zero double-emits). The cause is the eager
-     * {@code Optional<Doc>} candidate ladders in {@code MethodCallPrinter}, {@code MethodCallChainPrinter},
-     * {@code VariableInitializerLayout}, and {@code LambdaExpressionPrinter}: they render a comment-bearing subtree to
-     * probe its layout fit, the probe claims the comment, and the losing candidate is then discarded — leaving the comment
-     * claimed once for a render that never reached the output and once for the chosen layout.
+     * <p>Roadmap <strong>B1</strong> (source-shape consolidation and shape-independent comment ownership) made the
+     * <em>drop</em> invariant hold for {@code CommentPresenceDiagnosticTest} (its {@code KNOWN_DROPS} list is empty). The
+     * stricter "claimed at most once" invariant historically failed: the eager {@code Optional<Doc>} candidate ladders in
+     * {@code MethodCallPrinter}, {@code MethodCallChainPrinter}, {@code VariableInitializerLayout}, and the segment
+     * renderers rendered a comment-bearing subtree to probe its layout fit, the probe claimed the comment, and the losing
+     * candidate was then discarded — leaving the comment claimed once for a render that never reached output and once for
+     * the chosen layout.
      *
-     * <p>The strict invariant therefore becomes satisfiable — and this property worth CI-enabling — only once those probes
-     * are claim-free: a claim-suppressing render mode, or the <strong>B2</strong> {@code conditionalGroup}/{@code lineSuffix}
-     * migration that retires the candidate ladders entirely. Until then it is deferred and left off; the valuable half of
-     * the guardrail ({@link #assertAllCommentsAccounted} drop detection and the transform-identity check) runs in CI under
-     * {@link #ENABLED_PROPERTY} instead.
+     * <p><strong>B2 ownership consolidation (landed).</strong> Stage 2a/2bc migrated every comment family to explicit
+     * ownership populated by a record-only dry-run pre-pass ({@link CommentTracker#beginRecording} /
+     * {@link CommentTracker#endRecordingAndReset}): the dry-run runs the same print traversal once with claims recorded
+     * but not committed, capturing each comment's first claimant as its owning {@code (node, slot)}, and
+     * {@link CommentTracker#ownsHere} gates each render on that recording. Stage 3 then decoupled the discarded-probe
+     * claims: a re-entrant {@link CommentTracker#speculatively speculative scope} snapshots the per-render claim state
+     * (rolling back the dry-run {@code ownership} map while recording and the {@code printed}/{@code rawRendered} sets
+     * otherwise, plus the width-decision log and pragma range state) and restores it whenever a probe's
+     * {@code Optional<Doc>} comes back empty, so a discarded probe contributes no claims; the handful of reused-Doc
+     * neighbor offers (a chain segment's name comment vs. its leading/trailing comment, an if/else between-clause block
+     * comment vs. the else-leading slot, an argument's inline trailing comment vs. its enclosing list, etc.) are gated by
+     * a distinct ownership slot or skipped when already printed. The result is output-neutral and the invariant now holds
+     * across the whole suite (golden fixtures, comment-presence diagnostics, and the whitespace-perturbed idempotence
+     * property test), so Stage 4 turned this property on by default in the build as a CI gate.
      *
-     * <p><strong>B2 ownership consolidation, Stage 1 (landed).</strong> The trailing-line-comment family is now migrated
-     * to explicit ownership: a read-only pre-pass ({@link CommentTracker#assignOwnership}) assigns each trailing comment
-     * its single owning slot up front, and {@link CommentTracker#ownsHere} gates the trailing render on that assignment
-     * (see {@link OwnerSlot#TRAILING}). This makes trailing ownership deterministic and shape-independent rather than
-     * decided by the implicit first-claim-wins race; empirically a pure source-order rule reproduces the trailing family
-     * byte-for-byte (zero cross-node {@code ownsHere} rejections corpus-wide), which is why it is the first family to
-     * migrate. Stage 1 does <em>not</em> flip this toggle on: the residual that still violates the strict invariant is
-     * (a) the not-yet-migrated traversal-order families (leading/adjacent/own/orphan/interleaved), where a source-order
-     * rule diverges on the contested parent-interleaver-beats-child cases, and (b) the candidate-ladder probe re-claims
-     * described above — even within the migrated trailing slot, a comment-bearing subtree re-probed for layout fit
-     * re-claims its own owner's comment, which an ownership rule cannot dedupe. So strict-claims stays off until both the
-     * remaining families migrate and the probes render claim-free.
+     * <p>Note: this property only governs the duplicate-claim fail-fast. {@link #assertAllCommentsAccounted} (the
+     * comment-<em>drop</em> guardrail) is still gated on {@link #ENABLED_PROPERTY}, which is <em>not</em> enabled in the
+     * build: a residual set of raw-text-embedded comments (multi-catch union alternatives, for-loop variable comments,
+     * switch labels, labeled statements, unnamed-variable patterns) reach output as raw token text without being
+     * raw-accounted, so the drop guardrail is a separate follow-up.
      */
     static final String STRICT_CLAIMS_PROPERTY = "dev.lanwen.frmtr.debug.guardrails.strict-claims";
 
@@ -87,10 +88,10 @@ final class FormatterGuardrails {
      * whether or not the throw fires, so comment-drop detection keeps working with the fail-fast off.
      *
      * <p>The fail-fast is gated on {@value #STRICT_CLAIMS_PROPERTY}, <em>not</em> {@value #ENABLED_PROPERTY}: as
-     * documented on {@link #STRICT_CLAIMS_PROPERTY}, the "claimed at most once" invariant does not hold under the current
-     * claim/render-coupled design (benign speculative claims are expected), so it stays off in CI and is deferred to
-     * roadmap B1/B2. Comment-drop detection ({@link #assertAllCommentsAccounted}) and the transform-identity check stay
-     * on {@value #ENABLED_PROPERTY} and run in CI.
+     * documented on {@link #STRICT_CLAIMS_PROPERTY}, the "claimed at most once" invariant now holds after the roadmap B2
+     * ownership consolidation and is enabled as a CI gate in {@code frmtr-core/build.gradle.kts}. Comment-drop detection
+     * ({@link #assertAllCommentsAccounted}) and the transform-identity check are gated separately on
+     * {@value #ENABLED_PROPERTY}.
      */
     static boolean claimComment(JavaCommentTrivia trivia, Set<Comment> claimedComments) {
         boolean claimed = trivia.claim(claimedComments);

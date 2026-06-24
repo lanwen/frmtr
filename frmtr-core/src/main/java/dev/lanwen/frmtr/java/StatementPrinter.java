@@ -917,6 +917,10 @@ final class StatementPrinter {
     private Doc tryResourceOpenerCommentsDoc(List<JavaCommentTrivia> openerComments) {
         return Doc.concat(
             openerComments.stream()
+                    // A try-resource opener comment can also be reached from a neighboring resource render; skip
+                    // already-printed comments so this slot does not duplicate-claim them. Output is unchanged because the
+                    // first claimant placed the comment and a re-offer only ever rendered empty.
+                    .filter(trivia -> !comments.isPrinted(trivia))
                     .map(comments::comment)
                     .filter(doc -> doc != Doc.EMPTY)
                     .map(doc -> Doc.concat(Doc.text(" "), doc))
@@ -1171,7 +1175,15 @@ final class StatementPrinter {
                         return;
                     }
                     Doc elseLeadingLineComment = elseLeadingLineComment(statement, elseStatement);
-                    Doc elseLeadingBlockComment = sameLineBlockCommentBeforeNode.apply(elseStatement);
+                    // A block comment between the then-block close and else is recovered by blockCommentBetweenThenAndElse
+                    // above and takes priority in elseChainSeparator; for `} /* c */ else {` that same comment is also a
+                    // same-line block comment before the else statement. Only offer the else-leading block comment when
+                    // the between-then-and-else slot did not already claim it, so the comment is claimed once. Output is
+                    // unchanged because elseChainSeparator returns on the between slot before it ever reads the else
+                    // leading block comment.
+                    Doc elseLeadingBlockComment = betweenThenAndElseBlockComment == Doc.EMPTY
+                        ? sameLineBlockCommentBeforeNode.apply(elseStatement)
+                        : Doc.EMPTY;
                     Doc elseTrailingLineComment = elseTrailingLineComment(statement, elseStatement);
                     docs.add(
                         elseChainSeparator(
@@ -1706,7 +1718,16 @@ final class StatementPrinter {
     }
 
     private Doc trailingLineComment(Node node) {
-        Doc own = comments.trailingLineComment(node);
+        // An attached trailing line comment is claimed and rendered once by StatementRuleEnvelope.statement, which runs
+        // before this content renderer. When that node's trailing comment is already printed, re-offering it here would be
+        // a duplicate claim that only ever rendered empty. Skip the attached re-offer in that case and fall through to the
+        // unattached recovery below, which is this path's own responsibility (the envelope never offers unattached
+        // trailing comments). Output is unchanged: the attached comment is the envelope's, the unattached one is recovered
+        // here exactly as before.
+        boolean attachedAlreadyPrinted = commentPlacement.trailingLineComment(node)
+                .map(comments::isPrinted)
+                .orElse(false);
+        Doc own = attachedAlreadyPrinted ? Doc.EMPTY : comments.trailingLineComment(node);
         if (own != Doc.EMPTY) {
             return own;
         }
@@ -1720,7 +1741,12 @@ final class StatementPrinter {
      * node. The raw fallback keeps the same inline placement used by the empty statement fixtures.
      */
     private String trailingEmptyBodyBlockComment(Node node) {
+        // unattachedTrailingBlockComment parent-walks to recover a block comment after an empty-body semicolon, so the
+        // same comment can be reached from more than one anchor (e.g. the loop statement and its empty body). Skip an
+        // already-printed comment so the second anchor does not duplicate-claim it; output is unchanged because the first
+        // anchor placed it and the second only ever rendered empty.
         Doc unattached = commentPlacement.unattachedTrailingBlockComment(node)
+                .filter(trivia -> !comments.isPrinted(trivia))
                 .map(comments::comment)
                 .orElse(Doc.EMPTY);
         if (unattached != Doc.EMPTY) {
@@ -1736,7 +1762,14 @@ final class StatementPrinter {
     }
 
     private Doc unattachedTrailingLineComment(Node node) {
-        return commentPlacement.unattachedTrailingLineComment(node).map(comments::comment).orElse(Doc.EMPTY);
+        // The same unattached trailing line comment can be reached from more than one anchor node (the placement policy
+        // walks parents to recover it), so a sibling or enclosing statement may already have claimed and rendered it.
+        // Re-offering an already-printed comment only ever rendered empty, so skip it to avoid a duplicate claim; output
+        // is unchanged because the first claimant placed it.
+        return commentPlacement.unattachedTrailingLineComment(node)
+                .filter(trivia -> !comments.isPrinted(trivia))
+                .map(comments::comment)
+                .orElse(Doc.EMPTY);
     }
 
     private String forHeaderExpression(Expression expression) {

@@ -161,20 +161,106 @@ final class CommentedExpressionListPrinter {
     private List<List<JavaCommentTrivia>> argumentCommentGaps(Node container, NodeList<Expression> arguments) {
         List<List<JavaCommentTrivia>> gaps = new ArrayList<>();
         gaps.add(
-            commentPlacement.lineCommentsBeforeFirst(container, arguments.get(0))
-                    .stream()
-                    .filter(comment -> !comment.startsBeforeBeginLine(argumentListAnchor(container)))
-                    .toList()
+            new ArrayList<>(
+                commentPlacement.lineCommentsBeforeFirst(container, arguments.get(0))
+                        .stream()
+                        .filter(comment -> !comment.startsBeforeBeginLine(argumentListAnchor(container)))
+                        .toList()
+            )
         );
         for (int index = 0; index < arguments.size(); index++) {
             Expression argument = arguments.get(index);
             if (index + 1 < arguments.size()) {
-                gaps.add(commentPlacement.lineCommentsBetween(container, argument, arguments.get(index + 1)));
+                gaps.add(
+                    new ArrayList<>(commentPlacement.lineCommentsBetween(container, argument, arguments.get(index + 1)))
+                );
             } else {
-                gaps.add(trailingArgumentComments(container, argument));
+                gaps.add(new ArrayList<>(trailingArgumentComments(container, argument)));
             }
         }
+        addArgumentBlockComments(container, arguments, gaps);
         return gaps;
+    }
+
+    /**
+     * Adds the block comments that sit in the argument-list gaps, which the line-comment gap queries never gather.
+     *
+     * <p>JavaParser parks a {@code /* … *}{@code /} block in an argument list on several buckets depending on the
+     * surrounding node shape: a block trailing an argument (e.g. {@code update((byte) input /* >> 0 *}{@code /)}) lands as
+     * the call's contained / orphan trivia, while a block that leads the following argument (e.g.
+     * {@code confirm(true, /* note *}{@code / ledger)}) is attached to that argument as its own leading comment. Either
+     * way the policy's recursive {@link JavaCommentPlacementPolicy#containedComments(Node)} view of the call already holds
+     * every such block. The line-comment gap queries
+     * ({@code lineCommentsBeforeFirst}/{@code lineCommentsBetween}/{@code trailingArgumentComments}) only look at line
+     * comments, so none of these blocks is ever offered and {@link #parenthesized} drops them by falling through to the
+     * compact comment-free render. This recovers them and assigns each to the gap it belongs to.
+     *
+     * <p>Placement is decided purely by source order (see {@link CommentIndex#liesBetween(Comment, Node, Node)} and
+     * {@link CommentIndex#startsAfterEndOf(Node, Comment)}), not by source line, so a block keeps its gap whether the
+     * author wrote {@code arg /* note *}{@code /} on one line or a whitespace shape pushed the block onto its own line —
+     * the same shape-independence the line-comment gap queries rely on. A block that begins inside an argument's own range
+     * (rather than trailing it) is left to that argument's renderer, and a block trailing the whole completed call (past
+     * the closing {@code )}) is left to the enclosing syntax. Each block is placed in exactly one gap and deduped by
+     * JavaParser comment identity against the line comments already gathered, so a block JavaParser also exposed as the
+     * next argument's own leading trivia still renders once. The render loop in {@link #parenthesized} then chooses
+     * inline-versus-own-line placement from the same predicates it already applies to line comments, and
+     * {@link CommentTracker#comment(JavaCommentTrivia)} renders an already-claimed block as {@link Doc#EMPTY}, so a block
+     * some other path renders at {@code @default} is left untouched here.
+     */
+    private void addArgumentBlockComments(
+            Node container,
+            NodeList<Expression> arguments,
+            List<List<JavaCommentTrivia>> gaps
+    ) {
+        List<JavaCommentTrivia> placed = new ArrayList<>();
+        gaps.forEach(placed::addAll);
+        Node regionStart = argumentRegionStart(container, arguments.get(0));
+        commentPlacement.containedComments(container)
+                .stream()
+                .filter(JavaCommentTrivia::isBlock)
+                .filter(comment -> placed.stream().noneMatch(existing -> existing.comment() == comment.comment()))
+                .filter(comment -> arguments.stream().noneMatch(argument -> startsInside(argument, comment)))
+                .filter(comment -> comment.startsAfterEndOf(regionStart))
+                .filter(comment -> CommentIndex.startsBeforeEnd(comment.comment(), container))
+                .sorted(
+                    java.util.Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator())
+                )
+                .forEach(comment -> {
+                    gaps.get(blockCommentGapIndex(arguments, comment)).add(comment);
+                    placed.add(comment);
+                });
+    }
+
+    /**
+     * Reports whether a comment begins strictly inside {@code argument}'s own token range, i.e. after the argument's first
+     * token and before its last token.
+     *
+     * <p>A comment that begins before the argument is leading it, and a comment that begins after the argument ends is
+     * trailing it; both belong to an argument gap. Only a comment genuinely nested inside an argument's expression (e.g.
+     * {@code foo(bar(/* x *}{@code / baz))}) is the argument renderer's to print, so this is the source-order test that
+     * keeps such nested trivia out of the gap recovery — unlike a line-range test, it does not mistake a same-line
+     * leading-own block of the argument for nested content.
+     */
+    private boolean startsInside(Expression argument, JavaCommentTrivia comment) {
+        return !comment.startsBefore(argument)
+            && !comment.startsAfterEndOf(argument)
+            && CommentIndex.startsBeforeEnd(comment.comment(), argument);
+    }
+
+    /**
+     * Returns the argument-gap index a block comment belongs to, by source order: gap {@code 0} before the first
+     * argument, gap {@code i + 1} for a block in the source-order gap that follows {@code arguments[i]}.
+     */
+    private int blockCommentGapIndex(NodeList<Expression> arguments, JavaCommentTrivia comment) {
+        if (comment.startsBefore(arguments.get(0))) {
+            return 0;
+        }
+        for (int index = 0; index + 1 < arguments.size(); index++) {
+            if (comment.liesBetween(arguments.get(index), arguments.get(index + 1))) {
+                return index + 1;
+            }
+        }
+        return arguments.size();
     }
 
     /**
@@ -230,6 +316,26 @@ final class CommentedExpressionListPrinter {
 
     private Node argumentListAnchor(Node container) {
         return container instanceof MethodCallExpr methodCall ? methodCall.getName() : container;
+    }
+
+    /**
+     * Returns the node whose end marks the start of the argument-list region, used as the source-order lower bound when
+     * recovering block comments so trivia attached to the callee — a method-call selector, or an object-creation type —
+     * is not pulled into the argument gaps.
+     *
+     * <p>For a method call the region begins after the method name; for an object creation it begins after the created
+     * type (which ends just before the open parenthesis). Other containers fall back to the first argument, which keeps
+     * only genuinely after-{@code (} block comments since the first-argument gap (gap {@code 0}) still admits comments
+     * that begin before the first argument.
+     */
+    private Node argumentRegionStart(Node container, Expression first) {
+        if (container instanceof MethodCallExpr methodCall) {
+            return methodCall.getName();
+        }
+        if (container instanceof com.github.javaparser.ast.expr.ObjectCreationExpr objectCreation) {
+            return objectCreation.getType();
+        }
+        return first;
     }
 
     private boolean hasUnprintedComments(List<List<JavaCommentTrivia>> commentGaps) {

@@ -616,6 +616,10 @@ public final class JavaFormatter {
             if (raw.lines().count() == 1) {
                 return Doc.text(raw);
             }
+            if (isBannerComment(raw)) {
+                String normalized = normalizeBlockComment(raw);
+                return normalized.equals(raw.stripTrailing()) ? Doc.text(normalized) : lineDoc(normalized);
+            }
             return lineDoc(javadocComment.toString().stripTrailing());
         }
         if (trivia.isBlock()) {
@@ -630,6 +634,66 @@ public final class JavaFormatter {
     private static Doc lineDoc(String value) {
         List<Doc> lines = value.lines().map(Doc::text).toList();
         return Doc.join(Doc.HARD_LINE, lines);
+    }
+
+    /**
+     * Reports whether a multi-line Javadoc comment is a decorative {@code /*****} {@code ... *****&#47;} banner divider
+     * rather than prose Javadoc.
+     *
+     * <p>JavaParser classifies any {@code /*}-comment whose opener carries three or more leading stars (e.g.
+     * {@code /*****}) as Javadoc, so banner dividers reach the Javadoc branch alongside real documentation. The
+     * canonical Javadoc renderer ({@code JavadocComment.toString()}) reflows {@code *} rows to align them as prose
+     * continuation lines, which mutates a banner's asterisk-art (a {@code *****} row becomes {@code * ***}). That
+     * byte-level mutation is invisible to AST-equivalence checks but registers as a dropped comment under the
+     * lexer-multiset comment-presence net, so banners must be preserved verbatim instead of reflowed.
+     *
+     * <p>Detection is intentionally narrow so normal Javadoc is never treated as a banner: a comment qualifies only
+     * when its opener line is {@code /*} followed by three or more stars and nothing else (e.g. {@code /*****}), or its
+     * closer line is a pure run of three or more stars before {@code *&#47;} (e.g. {@code *****&#47;}). Normal Javadoc
+     * opens with exactly two stars ({@code /**}) and closes with a single-star {@code  *&#47;}, so neither condition can
+     * fire on it. The caller owns the verbatim-preserve decision; this predicate only identifies the asterisk-art shape.
+     */
+    private static boolean isBannerComment(String raw) {
+        List<String> lines = raw.stripTrailing().lines().toList();
+        if (lines.size() < 2) {
+            return false;
+        }
+        return isBannerOpener(lines.getFirst()) || isBannerCloser(lines.getLast());
+    }
+
+    /**
+     * Reports whether a line is a banner opener: {@code /*} immediately followed by three or more stars and only stars
+     * to the end of the line (e.g. {@code /*****}). A normal Javadoc opener is exactly {@code /**}, so it never matches.
+     */
+    private static boolean isBannerOpener(String line) {
+        String trimmed = line.strip();
+        if (!trimmed.startsWith("/**")) {
+            return false;
+        }
+        return isStarRun(trimmed.substring(1), 3);
+    }
+
+    /**
+     * Reports whether a line is a banner closer: a pure run of three or more stars immediately followed by {@code *&#47;}
+     * (e.g. {@code *****&#47;}), allowing leading whitespace and a leading continuation star. A normal Javadoc closer is
+     * {@code  *&#47;} (a single star), so it never matches.
+     */
+    private static boolean isBannerCloser(String line) {
+        String trimmed = line.strip();
+        if (!trimmed.endsWith("*/")) {
+            return false;
+        }
+        return isStarRun(trimmed.substring(0, trimmed.length() - 1), 3);
+    }
+
+    /**
+     * Reports whether {@code text} is a run of at least {@code minimum} {@code '*'} characters and nothing else.
+     */
+    private static boolean isStarRun(String text, int minimum) {
+        if (text.length() < minimum) {
+            return false;
+        }
+        return text.chars().allMatch(character -> character == '*');
     }
 
     private static String normalizeBlockComment(String value) {

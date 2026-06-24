@@ -63,6 +63,9 @@ class Version:
     def next_minor_snapshot(self) -> str:
         return f"{self.major}.{self.minor + 1}.0-SNAPSHOT"
 
+    def snapshot(self) -> str:
+        return f"{self}-SNAPSHOT"
+
     def __str__(self) -> str:
         return f"{self.major}.{self.minor}.{self.patch}"
 
@@ -101,6 +104,13 @@ def write_version(version: str) -> None:
     lines = Path("gradle.properties").read_text().splitlines()
     updated = [f"version={version}" if line.startswith("version=") else line for line in lines]
     Path("gradle.properties").write_text("\n".join(updated) + "\n")
+
+
+def required_value(args: argparse.Namespace, name: str, env_name: str) -> str:
+    value = getattr(args, name, "") or os.environ.get(env_name, "")
+    if not value:
+        raise ValueError(f"Expected --{name.replace('_', '-')} or {env_name}.")
+    return value
 
 
 def parse_semantic_title(title: str) -> SemanticTitle | None:
@@ -241,12 +251,12 @@ def should_include_entry(entry: PullRequestEntry) -> bool:
     return "javaparser" in dependency_context or "com.github.javaparser" in dependency_context
 
 
-def bump_level(entries: list[PullRequestEntry]) -> str:
+def bump_level(entries: list[PullRequestEntry], base_version: Version) -> str:
     for entry in entries:
         if entry.semantic and entry.semantic.breaking:
-            return "major"
+            return "minor" if base_version.major == 0 else "major"
         if "BREAKING CHANGE:" in entry.body or "BREAKING-CHANGE:" in entry.body:
-            return "major"
+            return "minor" if base_version.major == 0 else "major"
     if any(entry.semantic and entry.semantic.type in {"feat", "feature"} for entry in entries):
         return "minor"
     return "patch"
@@ -260,8 +270,37 @@ def release_version_from(entries: list[PullRequestEntry]) -> str:
     _, latest = latest_release_tag()
     if latest is None:
         return str(current_candidate)
-    required = latest.bump(bump_level(entries))
+    required = latest.bump(bump_level(entries, latest))
     return str(max(current_candidate, required))
+
+
+def parse_snapshot_version(value: str) -> Version:
+    if not value.endswith("-SNAPSHOT"):
+        raise ValueError(f"Expected snapshot version ending in -SNAPSHOT, got {value!r}")
+    return Version.parse(value.removesuffix("-SNAPSHOT"))
+
+
+def snapshot_target_from(entries: list[PullRequestEntry]) -> str | None:
+    current = read_version()
+    if not current.endswith("-SNAPSHOT"):
+        print(f"Current version {current} is already a release version; snapshot target is unchanged.")
+        return None
+    _, latest = latest_release_tag()
+    if latest is None:
+        print("No release tag exists yet; snapshot target is unchanged.")
+        return None
+    level = bump_level(entries, latest)
+    if level == "patch":
+        print("No feature or breaking-change PR requires a higher snapshot target.")
+        return None
+    required = latest.bump(level)
+    current_candidate = Version.parse(current.removesuffix("-SNAPSHOT"))
+    # The target is calculated from the latest release tag, not from each feature.
+    # Once the current snapshot reaches it, more features wait for the same release.
+    if current_candidate >= required:
+        print(f"Current snapshot {current} already covers required target {required.snapshot()}.")
+        return None
+    return required.snapshot()
 
 
 def extract_details(body: str) -> str:
@@ -281,6 +320,12 @@ def changelog_entry(entry: PullRequestEntry) -> str:
         indented = "\n".join(f"  {line}" if line else "" for line in details.splitlines())
         text = f"{text}\n{indented}"
     return text
+
+
+def requires_higher_snapshot_target(entry: PullRequestEntry) -> bool:
+    if entry.semantic and (entry.semantic.breaking or entry.semantic.type in {"feat", "feature"}):
+        return True
+    return "BREAKING CHANGE:" in entry.body or "BREAKING-CHANGE:" in entry.body
 
 
 def release_notes(version: str, entries: list[PullRequestEntry]) -> str:
@@ -329,7 +374,11 @@ def update_changelog_links(content: str, version: str) -> str:
 
 
 def release_pr_body(version: str, entries: list[PullRequestEntry]) -> str:
-    level = bump_level(entries)
+    current = read_version()
+    current_candidate = Version.parse(current.removesuffix("-SNAPSHOT")) if current.endswith("-SNAPSHOT") else Version.parse(current)
+    _, latest = latest_release_tag()
+    base_version = latest or current_candidate
+    level = bump_level(entries, base_version)
     bullets = "\n".join(f"- {entry.title} ([#{entry.number}]({entry.url}))" for entry in entries)
     return (
         f"## Release {version}\n\n"
@@ -343,6 +392,7 @@ def release_pr_body(version: str, entries: list[PullRequestEntry]) -> str:
 
 
 def prepare_release(args: argparse.Namespace) -> int:
+    body_file = required_value(args, "body_file", "RELEASE_PR_BODY_FILE")
     current = read_version()
     if not current.endswith("-SNAPSHOT"):
         print(f"Current version {current} is already a release version; nothing to prepare.")
@@ -354,8 +404,8 @@ def prepare_release(args: argparse.Namespace) -> int:
     version = release_version_from(entries)
     write_version(version)
     update_changelog(version, entries)
-    Path(args.body_file).parent.mkdir(parents=True, exist_ok=True)
-    Path(args.body_file).write_text(release_pr_body(version, entries))
+    Path(body_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(body_file).write_text(release_pr_body(version, entries))
     print(version)
     return 0
 
@@ -368,16 +418,58 @@ def snapshot_pr_body(snapshot_version: str, release_version: str) -> str:
 
 
 def prepare_snapshot(args: argparse.Namespace) -> int:
-    release_version = Version.parse(args.release_version)
+    release_version = Version.parse(required_value(args, "release_version", "RELEASE_VERSION"))
+    body_file = required_value(args, "body_file", "SNAPSHOT_PR_BODY_FILE")
     snapshot_version = release_version.next_minor_snapshot()
     write_version(snapshot_version)
-    Path(args.body_file).parent.mkdir(parents=True, exist_ok=True)
-    Path(args.body_file).write_text(snapshot_pr_body(snapshot_version, str(release_version)))
+    Path(body_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(body_file).write_text(snapshot_pr_body(snapshot_version, str(release_version)))
     print(snapshot_version)
     return 0
 
 
-def validate_release(args: argparse.Namespace) -> int:
+def snapshot_target_pr_body(snapshot_version: str, entries: list[PullRequestEntry]) -> str:
+    triggering_entries = [entry for entry in entries if requires_higher_snapshot_target(entry)]
+    bullets = "\n".join(f"- {entry.title} ([#{entry.number}]({entry.url}))" for entry in triggering_entries)
+    return (
+        f"## Snapshot target {snapshot_version}\n\n"
+        "This PR raises the snapshot version because merged feature or breaking-change PRs "
+        "now require a higher release target.\n\n"
+        "### Triggering PRs\n\n"
+        f"{bullets if bullets else '- No merged PRs found.'}\n"
+    )
+
+
+def manual_snapshot_target_pr_body(snapshot_version: str) -> str:
+    return (
+        f"## Snapshot target {snapshot_version}\n\n"
+        "This PR sets the snapshot version requested by manual workflow dispatch.\n"
+    )
+
+
+def prepare_snapshot_target(args: argparse.Namespace) -> int:
+    body_file = required_value(args, "body_file", "SNAPSHOT_PR_BODY_FILE")
+    requested_snapshot = getattr(args, "snapshot_version", "") or os.environ.get("SNAPSHOT_VERSION", "")
+    if requested_snapshot:
+        parse_snapshot_version(requested_snapshot)
+        write_version(requested_snapshot)
+        Path(body_file).parent.mkdir(parents=True, exist_ok=True)
+        Path(body_file).write_text(manual_snapshot_target_pr_body(requested_snapshot))
+        print(requested_snapshot)
+        return 0
+
+    entries = merged_prs_since_latest_tag()
+    snapshot_version = snapshot_target_from(entries)
+    if snapshot_version is None:
+        return 0
+    write_version(snapshot_version)
+    Path(body_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(body_file).write_text(snapshot_target_pr_body(snapshot_version, entries))
+    print(snapshot_version)
+    return 0
+
+
+def ensure_publishable_release_version(args: argparse.Namespace) -> int:
     version = read_version()
     output_path = os.environ.get("GITHUB_OUTPUT")
     outputs: dict[str, str] = {"version": version}
@@ -388,11 +480,7 @@ def validate_release(args: argparse.Namespace) -> int:
         return 0
 
     release_version = Version.parse(version)
-    tag = args.release_tag or f"v{version}"
-    expected_tag = f"v{version}"
-    if tag != expected_tag:
-        print(f"::error::Release tag {tag} does not match version {version}; expected {expected_tag}.", file=sys.stderr)
-        return 1
+    tag = f"v{version}"
 
     head_sha = run(["git", "rev-parse", "HEAD"]).stdout.strip()
     remote_tags = run(["git", "ls-remote", "origin", f"refs/tags/{tag}", f"refs/tags/{tag}^{{}}"], check=False).stdout
@@ -448,17 +536,21 @@ def main() -> int:
     check_pr_parser.set_defaults(func=check_pr)
 
     release = subparsers.add_parser("prepare-release")
-    release.add_argument("--body-file", required=True)
+    release.add_argument("--body-file", default="")
     release.set_defaults(func=prepare_release)
 
     snapshot = subparsers.add_parser("prepare-snapshot")
-    snapshot.add_argument("--release-version", required=True)
-    snapshot.add_argument("--body-file", required=True)
+    snapshot.add_argument("--release-version", default="")
+    snapshot.add_argument("--body-file", default="")
     snapshot.set_defaults(func=prepare_snapshot)
 
-    validate = subparsers.add_parser("validate-release")
-    validate.add_argument("--release-tag", default="")
-    validate.set_defaults(func=validate_release)
+    snapshot_target = subparsers.add_parser("prepare-snapshot-target")
+    snapshot_target.add_argument("--body-file", default="")
+    snapshot_target.add_argument("--snapshot-version", default="")
+    snapshot_target.set_defaults(func=prepare_snapshot_target)
+
+    validate = subparsers.add_parser("ensure-publishable-release-version")
+    validate.set_defaults(func=ensure_publishable_release_version)
 
     args = parser.parse_args()
     return args.func(args)

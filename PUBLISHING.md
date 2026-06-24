@@ -86,21 +86,23 @@ JReleaser deploys `frmtr-core` and `frmtr-tooling` to Maven Central and publishe
 release. The release workflow also publishes the Gradle plugin and Homebrew formula in separate GitHub environments.
 
 Release commits are normal protected-branch PRs. Automation never pushes commits directly to `main`; it creates or
-updates PR branches with a GitHub App token so PR workflows run normally.
+updates signed PR branches with `peter-evans/create-pull-request` and a GitHub App token so PR workflows run normally.
 
-1. Every merged PR to `main` refreshes the `release` PR. The release PR updates `CHANGELOG.md` and changes
-   `gradle.properties` from `*-SNAPSHOT` to the computed final version.
-2. Merging the release PR pushes a final version in `gradle.properties` to `main`. `.github/workflows/release.yml`
+1. Every push to `main` refreshes the `release` PR. The release PR updates `CHANGELOG.md` and changes
+   `gradle.properties` from `*-SNAPSHOT` to the computed final version, and carries the corpus check before merge.
+2. Feature or breaking-change merges to `main` can also open a `snapshot` PR that raises the current snapshot target;
+   the same workflow can be dispatched manually with an explicit `*-SNAPSHOT` target.
+3. Merging the release PR pushes a final version in `gradle.properties` to `main`. `.github/workflows/release.yml`
    detects that change and publishes the release.
-3. After release, the workflow opens a `snapshot` PR that restores the next `*-SNAPSHOT` version.
+4. After release, the workflow opens a `snapshot` PR that restores the next `*-SNAPSHOT` version.
 
 The release workflow validates that `gradle.properties` is non-`-SNAPSHOT`, derives the tag as `v<version>`, builds
 native distributions on Linux x64, macOS arm64, and Windows x64, creates the tag if it does not already exist, and
 publishes GitHub release assets plus Maven Central. If the tag already exists, it must point at the same `main` commit.
 
 Version bump and changelog rules are documented in [docs/release-automation.md](docs/release-automation.md). In short:
-breaking changes bump major, `feat`/`feature` bumps minor, and everything else bumps patch. Dependency bumps are skipped
-from release notes unless they mention JavaParser.
+breaking changes bump minor while frmtr is pre-1.0 and major after that, `feat`/`feature` bumps minor, and everything
+else bumps patch. Dependency bumps are skipped from release notes unless they mention JavaParser.
 
 Configure the GitHub App credentials as repository secrets available to the automation workflows:
 

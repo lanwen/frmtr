@@ -2,12 +2,12 @@ name: Release PR
 
 on:
   workflow_dispatch:
-  pull_request:
-    types: [closed]
+  push:
     branches:
       - main
 
 permissions:
+  # Allows checkout to read the current release state.
   contents: read
 
 concurrency:
@@ -17,7 +17,6 @@ concurrency:
 jobs:
   prepare:
     name: Prepare release PR
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - name: Generate GitHub App token
@@ -26,8 +25,11 @@ jobs:
         with:
           client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # Pushes the generated release branch.
           permission-contents: write
+          # Creates the release label if it does not exist.
           permission-issues: write
+          # Opens or updates the generated release PR.
           permission-pull-requests: write
 
       - name: Checkout
@@ -38,42 +40,33 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           persist-credentials: false
 
-      - name: Prepare release branch and PR
+      - name: Prepare release changes
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_PR_BODY_FILE: build/release-pr-body.md
         run: |
           set -euo pipefail
-          app_slug="${{ steps.app-token.outputs.app-slug }}"
-          app_user_id="$(gh api "/users/${app_slug}[bot]" --jq .id)"
-          git config user.name "${app_slug}[bot]"
-          git config user.email "${app_user_id}+${app_slug}[bot]@users.noreply.github.com"
-          gh auth setup-git
           gh label create release --color 0e8a16 --description "Release preparation PR" || true
-          git checkout -B automation/release origin/main
-          python3 .github/scripts/release_automation.py prepare-release --body-file build/release-pr-body.md
+          python3 .github/scripts/release_automation.py prepare-release
           release_version="$(sed -n 's/^version=//p' gradle.properties)"
-          if [[ "${release_version}" == *-SNAPSHOT ]]; then
-            echo "Main is still on a snapshot version; no release PR changes were prepared."
-            exit 0
+          mkdir -p "$(dirname "$RELEASE_PR_BODY_FILE")"
+          if [ ! -f "$RELEASE_PR_BODY_FILE" ]; then
+            printf 'No release changes were prepared.\n' > "$RELEASE_PR_BODY_FILE"
           fi
-          if git diff --quiet -- gradle.properties CHANGELOG.md; then
-            echo "Release PR is already up to date."
-            exit 0
-          fi
-          git add gradle.properties CHANGELOG.md
-          git commit -m "chore(release): prepare ${release_version}"
-          git push --force-with-lease origin automation/release
-          pr_number="$(gh pr list --head automation/release --state open --json number --jq '.[0].number')"
-          if [ -n "$pr_number" ]; then
-            gh pr edit "$pr_number" \
-              --title "chore(release): prepare ${release_version}" \
-              --body-file build/release-pr-body.md \
-              --add-label release
-          else
-            gh pr create \
-              --base main \
-              --head automation/release \
-              --title "chore(release): prepare ${release_version}" \
-              --body-file build/release-pr-body.md \
-              --label release
-          fi
+          echo "release_version=${release_version}" >> "$GITHUB_ENV"
+
+      - name: Open or update release PR
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          commit-message: "chore(release): prepare ${{ env.release_version }}"
+          sign-commits: true
+          branch: automation/release
+          base: main
+          delete-branch: true
+          add-paths: |
+            gradle.properties
+            CHANGELOG.md
+          title: "chore(release): prepare ${{ env.release_version }}"
+          body-path: build/release-pr-body.md
+          labels: release

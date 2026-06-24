@@ -7,13 +7,9 @@ on:
     paths:
       - gradle.properties
   workflow_dispatch:
-    inputs:
-      release_tag:
-        description: "Optional release tag override, for example v0.1.0. Must match gradle.properties."
-        required: false
-        type: string
 
 permissions:
+  # Allows checkout to read release sources and tags.
   contents: read
 
 concurrency:
@@ -22,7 +18,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Validate release version
+    name: Ensure publishable release version
     runs-on: ubuntu-latest
     outputs:
       release_tag: ${{ steps.release.outputs.release_tag }}
@@ -39,9 +35,9 @@ jobs:
       - name: Attach main branch
         run: git checkout -B main origin/main
 
-      - name: Validate release version and tag
+      - name: Ensure publishable release version
         id: release
-        run: python3 .github/scripts/release_automation.py validate-release --release-tag "${{ inputs.release_tag }}"
+        run: python3 .github/scripts/release_automation.py ensure-publishable-release-version
 
   native:
     name: Build ${{ matrix.classifier }}
@@ -116,6 +112,7 @@ jobs:
         with:
           client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # Creates the release tag and lets JReleaser publish GitHub release assets.
           permission-contents: write
 
       - name: Checkout
@@ -221,6 +218,7 @@ jobs:
         with:
           client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # Lets JReleaser read/update release repository metadata during Homebrew publication.
           permission-contents: write
 
       - name: Generate Homebrew tap token
@@ -231,6 +229,7 @@ jobs:
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
           repositories: homebrew-tap
+          # Commits the generated formula to the Homebrew tap.
           permission-contents: write
 
       - name: Checkout
@@ -281,8 +280,11 @@ jobs:
         with:
           client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # Pushes the generated snapshot branch.
           permission-contents: write
+          # Creates the snapshot label if it does not exist.
           permission-issues: write
+          # Opens or updates the generated snapshot PR.
           permission-pull-requests: write
 
       - name: Checkout
@@ -293,36 +295,28 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           persist-credentials: false
 
-      - name: Prepare snapshot PR
+      - name: Prepare snapshot changes
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          SNAPSHOT_PR_BODY_FILE: build/snapshot-pr-body.md
         run: |
           set -euo pipefail
-          app_slug="${{ steps.app-token.outputs.app-slug }}"
-          app_user_id="$(gh api "/users/${app_slug}[bot]" --jq .id)"
-          git config user.name "${app_slug}[bot]"
-          git config user.email "${app_user_id}+${app_slug}[bot]@users.noreply.github.com"
-          gh auth setup-git
-          git checkout -B automation/next-snapshot origin/main
-          python3 .github/scripts/release_automation.py prepare-snapshot \
-            --release-version "${{ needs.validate.outputs.version }}" \
-            --body-file build/snapshot-pr-body.md
+          python3 .github/scripts/release_automation.py prepare-snapshot
           snapshot_version="$(sed -n 's/^version=//p' gradle.properties)"
           gh label create snapshot --color 8250df --description "Next snapshot version PR" || true
-          git add gradle.properties
-          git commit -m "chore(snapshot): start ${snapshot_version}"
-          git push --force-with-lease origin automation/next-snapshot
-          pr_number="$(gh pr list --head automation/next-snapshot --state open --json number --jq '.[0].number')"
-          if [ -n "$pr_number" ]; then
-            gh pr edit "$pr_number" \
-              --title "chore(snapshot): start ${snapshot_version}" \
-              --body-file build/snapshot-pr-body.md \
-              --add-label snapshot
-          else
-            gh pr create \
-              --base main \
-              --head automation/next-snapshot \
-              --title "chore(snapshot): start ${snapshot_version}" \
-              --body-file build/snapshot-pr-body.md \
-              --label snapshot
-          fi
+          echo "snapshot_version=${snapshot_version}" >> "$GITHUB_ENV"
+
+      - name: Open or update snapshot PR
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          commit-message: "chore(snapshot): start ${{ env.snapshot_version }}"
+          sign-commits: true
+          branch: automation/next-snapshot
+          base: main
+          delete-branch: true
+          add-paths: gradle.properties
+          title: "chore(snapshot): start ${{ env.snapshot_version }}"
+          body-path: build/snapshot-pr-body.md
+          labels: snapshot

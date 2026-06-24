@@ -9,7 +9,9 @@ on:
     types: [checks_requested]
 
 permissions:
+  # Allows checkout to read gradle.properties.
   contents: read
+  # Allows the workflow to inspect release labels on pull requests.
   pull-requests: read
 
 jobs:

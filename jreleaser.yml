@@ -23,9 +23,47 @@ release:
     owner: lanwen
     name: frmtr
     branch: main
+    tagName: v{{projectVersion}}
+    releaseName: Release {{tagName}}
     skipTag: true
-    skipRelease: true
-    uploadAssets: NEVER
+    skipRelease: false
+    uploadAssets: ALWAYS
+    update:
+      enabled: true
+      sections:
+        - ASSETS
+
+distributions:
+  frmtr:
+    type: BINARY
+    artifacts:
+      - path: build/distributions/frmtr-{{projectVersion}}-linux-x86_64.zip
+        platform: linux-x86_64
+        extraProperties:
+          graalVMNativeImage: true
+      - path: build/distributions/frmtr-{{projectVersion}}-osx-aarch_64.zip
+        platform: osx-aarch_64
+        extraProperties:
+          graalVMNativeImage: true
+      - path: build/distributions/frmtr-{{projectVersion}}-windows-x86_64.zip
+        platform: windows-x86_64
+        extraProperties:
+          graalVMNativeImage: true
+
+packagers:
+  brew:
+    active: RELEASE
+    formulaName: Frmtr
+    multiPlatform: true
+    commitAuthor:
+      name: frmtr-release[bot]
+      email: frmtr-release[bot]@users.noreply.github.com
+    repository:
+      owner: lanwen
+      name: homebrew-tap
+      branch: main
+      branchPush: main
+      commitMessage: "frmtr {{tagName}}"
 
 deploy:
   maven:

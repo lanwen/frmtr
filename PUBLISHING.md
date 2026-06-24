@@ -82,8 +82,45 @@ After publishing a new snapshot with the same version, refresh Gradle's cached s
 
 ### Release
 
-JReleaser deploys only `frmtr-core` and `frmtr-tooling` to Maven Central. The Gradle plugin release goes to the Gradle
-Plugin Portal after those artifacts are available from Central.
+JReleaser deploys `frmtr-core` and `frmtr-tooling` to Maven Central and publishes native CLI archives to a GitHub
+release. The release workflow also publishes the Gradle plugin and Homebrew formula in separate GitHub environments.
+
+Release commits are normal protected-branch PRs. Automation never pushes commits directly to `main`; it creates or
+updates PR branches with a GitHub App token so PR workflows run normally.
+
+1. Every merged PR to `main` refreshes the `release` PR. The release PR updates `CHANGELOG.md` and changes
+   `gradle.properties` from `*-SNAPSHOT` to the computed final version.
+2. Merging the release PR pushes a final version in `gradle.properties` to `main`. `.github/workflows/release.yml`
+   detects that change and publishes the release.
+3. After release, the workflow opens a `snapshot` PR that restores the next `*-SNAPSHOT` version.
+
+The release workflow validates that `gradle.properties` is non-`-SNAPSHOT`, derives the tag as `v<version>`, builds
+native distributions on Linux x64, macOS arm64, and Windows x64, creates the tag if it does not already exist, and
+publishes GitHub release assets plus Maven Central. If the tag already exists, it must point at the same `main` commit.
+
+Version bump and changelog rules are documented in [docs/release-automation.md](docs/release-automation.md). In short:
+breaking changes bump major, `feat`/`feature` bumps minor, and everything else bumps patch. Dependency bumps are skipped
+from release notes unless they mention JavaParser.
+
+Configure the GitHub App credentials as repository secrets available to the automation workflows:
+
+- `RELEASE_APP_CLIENT_ID`
+- `RELEASE_APP_PRIVATE_KEY`
+
+Configure the `release` environment secrets for GitHub release and Maven Central publication:
+
+- `JRELEASER_GPG_SECRET_KEY`
+- `JRELEASER_GPG_PASSPHRASE`
+- `JRELEASER_MAVENCENTRAL_USERNAME`
+- `JRELEASER_MAVENCENTRAL_PASSWORD`
+
+Configure the `gradle` environment secrets for Gradle Plugin Portal publication:
+
+- `GRADLE_PUBLISH_KEY`
+- `GRADLE_PUBLISH_SECRET`
+
+The `brew` environment uses the GitHub App to mint a `JRELEASER_HOMEBREW_GITHUB_TOKEN` for `lanwen/homebrew-tap`; install
+the app on that repository with contents read/write access before enabling the workflow.
 
 Run release commands from the main checkout on `main`; JReleaser expects normal Git metadata and a GitHub `origin`.
 
@@ -91,20 +128,24 @@ Set a non-`-SNAPSHOT` root version in `gradle.properties`, then dry-run locally:
 
 ```bash
 ./gradlew clean stageCentralRelease
-op run --env-file ./publishing/.env.release -- ./gradlew jreleaserConfig --dryrun
-op run --env-file ./publishing/.env.release -- ./gradlew jreleaserDeploy --dryrun
+./gradlew :frmtr-cli:nativeDistributionZip
+op run --env-file ./publishing/.env.release -- ./gradlew jreleaserConfig --dryrun --select-current-platform
+op run --env-file ./publishing/.env.release -- ./gradlew jreleaserFullRelease --dryrun --select-current-platform
 op run --env-file ./publishing/.env.gradle -- ./gradlew :frmtr-gradle-plugin:publishPlugins --validate-only
 ```
 
-JReleaser also needs `JRELEASER_GPG_SECRET_KEY` and `JRELEASER_GPG_PASSPHRASE` in `publishing/.env.release`.
+On a local machine, pass `--select-current-platform` to `jreleaserConfig` and `jreleaserFullRelease` if only the host
+native archive exists. A full release dry-run needs all Linux, macOS, and Windows archives under `build/distributions`.
+JReleaser also needs `JRELEASER_GPG_SECRET_KEY` and `JRELEASER_GPG_PASSPHRASE` in `publishing/.env.release`; local
+GitHub release fallbacks also need `JRELEASER_GITHUB_TOKEN`, while GitHub Actions uses its repository `GITHUB_TOKEN`.
 
-Publish the Central release:
+Publish the release by merging the generated `release` PR. The local fallback is:
 
 ```bash
-op run --env-file ./publishing/.env.release -- ./gradlew jreleaserDeploy
+op run --env-file ./publishing/.env.release -- ./gradlew stageCentralRelease jreleaserFullRelease
 ```
 
-Publish the Gradle plugin release:
+Publish the Gradle plugin release after Central artifacts are available:
 
 ```bash
 op run --env-file ./publishing/.env.gradle -- ./gradlew :frmtr-gradle-plugin:publishPlugins

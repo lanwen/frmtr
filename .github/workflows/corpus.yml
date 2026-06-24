@@ -24,6 +24,10 @@ name: Corpus
 
 on:
   workflow_dispatch:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled]
+    branches:
+      - main
   release:
     types: [published]
 
@@ -44,6 +48,7 @@ env:
 jobs:
   check:
     name: Corpus correctness (CLI --write --verify + --check)
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'release')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

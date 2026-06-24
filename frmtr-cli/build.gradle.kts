@@ -1,4 +1,6 @@
 import java.time.Instant
+import java.util.Locale
+import org.gradle.api.tasks.bundling.Zip
 
 plugins {
     application
@@ -16,6 +18,16 @@ val runtimeJavaLauncher = javaToolchains.launcherFor {
 val nativeImageJavaLauncher = javaToolchains.launcherFor {
     languageVersion = JavaLanguageVersion.of(25)
     nativeImageCapable.set(true)
+}
+val nativeDistributionClassifier = providers.gradleProperty("frmtr.native.classifier").orElse(providers.provider {
+    defaultNativeClassifier()
+})
+val nativeExecutableName = providers.provider {
+    if (System.getProperty("os.name").lowercase(Locale.ROOT).contains("windows")) {
+        "frmtr.exe"
+    } else {
+        "frmtr"
+    }
 }
 
 val generateBuildInfo by tasks.registering {
@@ -100,6 +112,55 @@ graalvmNative {
     }
 }
 
+tasks.register<Zip>("nativeDistributionZip") {
+    group = "distribution"
+    description = "Packages the native executable as a JReleaser binary distribution."
+    dependsOn("nativeCompile")
+
+    archiveBaseName.set("frmtr")
+    archiveVersion.set(project.version.toString())
+    archiveClassifier.set(nativeDistributionClassifier)
+    destinationDirectory.set(rootProject.layout.buildDirectory.dir("distributions"))
+
+    into("frmtr-${project.version}") {
+        from(rootProject.layout.projectDirectory.file("LICENSE"))
+        from(rootProject.layout.projectDirectory.file("README.md")) {
+            rename { "README" }
+        }
+        into("bin") {
+            from(providers.provider {
+                layout.buildDirectory
+                    .file("native/nativeCompile/${nativeExecutableName.get()}")
+                    .get()
+                    .asFile
+            }) {
+                filePermissions {
+                    unix("755")
+                }
+            }
+        }
+    }
+}
+
 fun javaString(value: String): String = value
         .replace("\\", "\\\\")
         .replace("\"", "\\\"")
+
+fun defaultNativeClassifier(): String {
+    val osName = System.getProperty("os.name").lowercase(Locale.ROOT)
+    val os =
+            when {
+                osName.contains("mac") -> "osx"
+                osName.contains("windows") -> "windows"
+                osName.contains("linux") -> "linux"
+                else -> osName.replace(Regex("[^a-z0-9]+"), "_").trim('_')
+            }
+    val archName = System.getProperty("os.arch").lowercase(Locale.ROOT)
+    val arch =
+            when (archName) {
+                "aarch64", "arm64" -> "aarch_64"
+                "amd64", "x86_64" -> "x86_64"
+                else -> archName.replace(Regex("[^a-z0-9]+"), "_").trim('_')
+            }
+    return "$os-$arch"
+}

@@ -513,6 +513,18 @@ Build host and container choices are operational details owned by the README, Do
 configuration. Architecturally, native-image targets the build operating system and uses a native-image-capable JDK 25
 launcher; it does not raise the bytecode level of the JVM artifacts consumed by the image.
 
+`:frmtr-cli:nativeDistributionZip` wraps the platform-local native executable as a JReleaser `BINARY` distribution with
+`LICENSE`, `README`, and `bin/frmtr` or `bin/frmtr.exe` entries. The release workflow builds those archives on Linux
+x64, macOS arm64, and Windows x64 runners, then Linux publication jobs pass the collected archives to JReleaser for
+GitHub release asset upload, Maven Central deployment, and Homebrew formula publication. Gradle Plugin Portal
+publication runs as a separate job. Release version changes remain ordinary protected-branch PRs; the workflow creates
+only release tags, release assets, tap updates, and follow-up automation PRs.
+
+Release automation derives version bumps from Conventional Commits-style PR titles. `feat`/`feature` raises the release
+target to at least the next minor version, breaking-change markers raise it to the next major version, and all other
+included PRs default to patch. The schema and changelog marker contract are documented in
+[docs/release-automation.md](docs/release-automation.md).
+
 ## Tests
 
 The test suite is module-scoped:
@@ -533,14 +545,15 @@ fixture-owned output variants with sidecar option properties rather than Java te
 ### Real-World Corpus Check
 
 `.github/workflows/corpus.yml` runs a release-triggered correctness check against a pinned real-world corpus
-(`testcontainers/testcontainers-java` at a fixed SHA). It reuses the shipping CLI rather than a bespoke Java harness:
-the workflow fetches the pinned corpus into a throwaway checkout, runs `frmtr --write --verify` over the corpus main
-sources (parse-stability plus AST-equivalence), then `frmtr --check` over the now-formatted sources (one-pass
-idempotence). The two steps cover distinct invariants: `--write --verify` alone does not prove idempotence, and `--check
---verify` would not either, so the mutating `--write --verify` then read-only `--check` pairing is kept deliberately.
-The workflow reads the CLI's distinct exit codes: the `--write --verify` step distinguishes a verify violation (exit
-`3`, reported as a formatter bug) from a parse/IO failure (exit `2`), and the `--check` idempotence step fails on exit
-`1` (a file would still change). The read-only `--check --verify` capability exists for verifying non-throwaway targets;
-the corpus checkout is ephemeral, so mutating it buys nothing there. The pin, scope, and exclude globs live in the
-workflow's `env` block so they are easy to bump. Cadence is opt-in: `workflow_dispatch` plus `release: published`, not
-per-push or per-PR.
+(`testcontainers/testcontainers-java` at a fixed SHA). It also runs on PRs labeled `release` so the generated release PR
+can carry the corpus gate before merge. It reuses the shipping CLI rather than a bespoke Java harness: the workflow
+fetches the pinned corpus into a throwaway checkout, runs `frmtr --write --verify` over the corpus main sources
+(parse-stability plus AST-equivalence), then `frmtr --check` over the now-formatted sources (one-pass idempotence). The
+two steps cover distinct invariants: `--write --verify` alone does not prove idempotence, and `--check --verify` would
+not either, so the mutating `--write --verify` then read-only `--check` pairing is kept deliberately. The workflow reads
+the CLI's distinct exit codes: the `--write --verify` step distinguishes a verify violation (exit `3`, reported as a
+formatter bug) from a parse/IO failure (exit `2`), and the `--check` idempotence step fails on exit `1` (a file would
+still change). The read-only `--check --verify` capability exists for verifying non-throwaway targets; the corpus
+checkout is ephemeral, so mutating it buys nothing there. The pin, scope, and exclude globs live in the workflow's
+`env` block so they are easy to bump. Cadence is opt-in: `workflow_dispatch`, `release: published`, and labeled release
+PRs, not every ordinary PR.

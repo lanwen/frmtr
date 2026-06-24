@@ -15,7 +15,7 @@ final class RawSource {
 
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
-    private static final Pattern ASSIGN_EQUALS = Pattern.compile("(?<![=!<>])\\s*=\\s*(?![=])");
+    private static final Pattern ASSIGN_EQUALS = Pattern.compile("(?<![-+*/%^&|=!<>])\\s*=\\s*(?![=])");
 
     private final FormatterOptions options;
 
@@ -65,6 +65,13 @@ final class RawSource {
      * rewriting the latter to {@code " = "} would silently change the literal's value. Literal boundaries are tracked by
      * a small hand scanner rather than a regex because a text block ({@code """..."""}) cannot be matched reliably with
      * the same alternation that recognizes plain strings.
+     *
+     * <p>The {@code =} spacing regex also guards against the trailing {@code =} of a compound-assignment operator
+     * ({@code ^=}, {@code |=}, {@code &=}, {@code +=}, {@code -=}, {@code *=}, {@code /=}, {@code %=}, {@code <<=},
+     * {@code >>=}, {@code >>>=}) as well as the equality/relational operators ({@code ==}, {@code !=}, {@code <=},
+     * {@code >=}). Splitting a compound operator into {@code "^ ="} produces source that JavaParser tolerates but
+     * {@code javac} rejects, so the negative lookbehind excludes every operator character that can precede a single
+     * {@code =}.
      */
     String normalizeWhitespace(String text) {
         String stripped = text.strip();

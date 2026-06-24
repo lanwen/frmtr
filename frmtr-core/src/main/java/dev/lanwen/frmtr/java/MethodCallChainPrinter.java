@@ -15,8 +15,11 @@ import com.github.javaparser.ast.stmt.ExpressionStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.ToIntFunction;
@@ -2743,9 +2746,14 @@ final class MethodCallChainPrinter {
         commentPlacement.trailingLineComment(previous).ifPresent(candidates::add);
         candidates.addAll(commentPlacement.containedComments(previous));
         candidates.addAll(lineCommentCandidatesBeforeNextSegment(next));
+        // The three candidate sources overlap, so the same comment node can be offered more than once. Dedupe on
+        // JavaParser comment identity rather than the record's value equality: structurally equal but distinct comment
+        // nodes (e.g. two chain links carrying the same `// text`, or several empty `//` continuation markers) must each
+        // survive, while a genuine reference-equal repeat from the overlapping sources is still collapsed.
+        Set<Comment> seen = Collections.newSetFromMap(new IdentityHashMap<>());
         return candidates
                 .stream()
-                .distinct()
+                .filter(comment -> seen.add(comment.comment()))
                 .filter(comment -> comment.startsAfterNodeOnSameLine(previous))
                 .filter(comment -> comment.startsBeforeBeginLine(next.getName()))
                 .toList();

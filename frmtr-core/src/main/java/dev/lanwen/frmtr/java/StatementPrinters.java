@@ -104,6 +104,8 @@ final class StatementPrinters {
             compactSource::compactJoin,
             compactSource::compactTypeLike,
             types::compactJoinTypeLike,
+            declarations::modifiers,
+            expressions::annotationFlatText,
             expressions::huggableBlockLambdaArguments,
             expressions::sourceMultilineMethodCallStatement,
             expressions::forcedMethodCallChain,

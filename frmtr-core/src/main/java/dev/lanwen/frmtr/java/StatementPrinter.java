@@ -8,6 +8,7 @@ import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
@@ -15,6 +16,7 @@ import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.VariableDeclarationExpr;
+import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.stmt.AssertStmt;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.BreakStmt;
@@ -123,6 +125,10 @@ final class StatementPrinter {
 
     private final Function<List<? extends Node>, String> compactJoinTypeLike;
 
+    private final Function<NodeWithModifiers<?>, String> modifiers;
+
+    private final Function<AnnotationExpr, String> annotationFlatText;
+
     private final HuggableArgumentsRenderer huggableBlockLambdaArguments;
 
     private final BiFunction<MethodCallExpr, ExpressionStmt, Optional<Doc>> sourceMultilineMethodCallStatementRenderer;
@@ -180,6 +186,8 @@ final class StatementPrinter {
             Function<List<? extends Node>, String> compactJoin,
             Function<Node, String> compactTypeLike,
             Function<List<? extends Node>, String> compactJoinTypeLike,
+            Function<NodeWithModifiers<?>, String> modifiers,
+            Function<AnnotationExpr, String> annotationFlatText,
             HuggableArgumentsRenderer huggableBlockLambdaArguments,
             BiFunction<MethodCallExpr, ExpressionStmt, Optional<Doc>> sourceMultilineMethodCallStatementRenderer,
             BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Optional<Doc>> forcedMethodCallChainRenderer,
@@ -221,6 +229,8 @@ final class StatementPrinter {
         this.compactJoin = compactJoin;
         this.compactTypeLike = compactTypeLike;
         this.compactJoinTypeLike = compactJoinTypeLike;
+        this.modifiers = modifiers;
+        this.annotationFlatText = annotationFlatText;
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.sourceMultilineMethodCallStatementRenderer = sourceMultilineMethodCallStatementRenderer;
         this.forcedMethodCallChainRenderer = forcedMethodCallChainRenderer;
@@ -1785,12 +1795,32 @@ final class StatementPrinter {
             && variableDeclaration.getVariables().size() == 1
         ) {
             VariableDeclarator variable = variableDeclaration.getVariables().get(0);
-            return compactTypeLike.apply(variable.getType())
+            return forInitDeclarationPrefix(variableDeclaration)
+                + compactTypeLike.apply(variable.getType())
                 + " "
                 + variable.getNameAsString()
                 + variable.getInitializer().map(initializer -> " = " + compact.apply(initializer)).orElse("");
         }
         return compact.apply(expression);
+    }
+
+    /**
+     * Builds the flat annotation/modifier prefix for a single-declarator {@code for}-loop init declaration.
+     *
+     * <p>The for-header reconstructs the declaration as flat text (it never wraps), so the declaration-level annotations
+     * and modifiers that {@link #forHeaderExpression} would otherwise drop must be re-emitted inline here. Annotations
+     * use the shared inline annotation text and modifiers use the shared modifier-string policy so a {@code final}
+     * modifier or an annotation such as {@code @SuppressWarnings("unchecked")} on the init variable survives instead of
+     * being silently discarded.
+     */
+    private String forInitDeclarationPrefix(VariableDeclarationExpr declaration) {
+        String annotations = declaration.getAnnotations()
+                .stream()
+                .map(annotationFlatText)
+                .reduce((left, right) -> left + " " + right)
+                .map(text -> text + " ")
+                .orElse("");
+        return annotations + modifiers.apply(declaration);
     }
 
     @FunctionalInterface

@@ -40,10 +40,44 @@ final class JavaFormatterTest {
 
         assertThat(exception).isNotNull();
         assertThat(exception.internal()).isFalse();
+        assertThat(exception.verifyViolation()).isTrue();
         assertThat(exception.getMessage())
                 .contains("frmtr verify")
                 .contains("not AST-equivalent")
                 .contains("GREEN");
+    }
+
+    @Test
+    void verifySeamMarksNonParsingOutputAsVerifyViolation() {
+        JavaFormatter formatter = new JavaFormatter(FormatterOptions.defaults());
+        // Feed the seam output that cannot re-parse under the input's configuration: the refusal must be reported as a
+        // verify violation (a formatter bug), distinct from an ordinary parse failure of the input.
+        CompilationUnit input = parse("class Demo {}");
+
+        FormatterException exception = catchThrowableOfType(
+            FormatterException.class,
+            () -> formatter.assertOutputEquivalentOrThrow(input, "class Demo {")
+        );
+
+        assertThat(exception).isNotNull();
+        assertThat(exception.internal()).isFalse();
+        assertThat(exception.verifyViolation()).isTrue();
+        assertThat(exception.getMessage()).contains("frmtr verify").contains("did not parse");
+    }
+
+    @Test
+    void ordinaryParseFailureIsNotMarkedAsVerifyViolation() {
+        JavaFormatter formatter = new JavaFormatter(
+            FormatterOptions.defaults().withParseErrorBehavior(FormatterOptions.ParseErrorBehavior.FAIL)
+        );
+
+        FormatterException exception = catchThrowableOfType(
+            FormatterException.class,
+            () -> formatter.format("class {")
+        );
+
+        assertThat(exception).isNotNull();
+        assertThat(exception.verifyViolation()).isFalse();
     }
 
     @Test

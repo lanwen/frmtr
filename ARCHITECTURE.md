@@ -230,6 +230,15 @@ the existing document view and its layout decisions without letting the CLI own 
   through `FrmtrSession.formatVerified(...)`; when verification fails the non-internal `FormatterException` is thrown
   before any write, so the file is left untouched and reported as `FAILED`. The default write path is unchanged and pays
   no verification cost.
+- `FormatterRunner.checkVerified(...)` is the only path that scans formatted output for breakable over-width lines. It
+  threads a `reportOverWidth` flag into the shared `checkFile` step; when set, the formatted result is walked through
+  `dev.lanwen.frmtr.OverWidthLines`, whose `Scanner` masks literals/comments, carries text-block/block-comment state,
+  and tracks formatter-off / `frmtr-ignore` pragma ranges so lines the formatter emitted verbatim are never flagged; the
+  findings are attached to each `FormatFileResult.overWidthLines()`. The
+  findings are purely informational — they never touch a result's `changed`/`failed` status — and `check(...)`,
+  `write(...)`, and `writeVerified(...)` pass `false`, so only `--check --verify` populates them. `FormatFileResult`
+  gained the `overWidthLines` component additively (a back-compat constructor delegates with an empty list), so the
+  Gradle plugin and all existing call sites are unaffected.
 - Multi-file `check` and `write` runs process selected files on an explicit fixed-size worker pool capped by available
   processors and file count. Results are collected into input-order slots before the `FormatRunResult` is exposed, so
   CLI and Gradle output remains deterministic even when files finish out of order.
@@ -367,11 +376,34 @@ first, then the CLI may expose it by translating arguments into `FormatterOption
 presentation. The CLI currently exposes formatter policy for line width, indentation width, parser language level, and
 parse-error behavior.
 
-The `--verify` flag (off by default, rejected unless `--write` is present) exposes the API's `formatVerified(...)`
-safety valve through `FormatterRunner.writeVerified(...)`. It does not own the equivalence check; it only selects the
-verified write path, which fails closed with a non-internal diagnostic instead of overwriting a non-equivalent result.
-Default `--write`, stdin, explain, check mode, and the `dev.lanwen.frmtr.debug.verify` toggle are unchanged. A
-Gradle-plugin equivalent is a planned follow-up.
+The `--verify` flag (off by default, rejected only in stdin, explain, and print modes, and standalone without `--write`
+or `--check`) exposes the API's `formatVerified(...)` safety valve. It does not own the equivalence check; it only
+selects the verified format path. With `--write` it selects `FormatterRunner.writeVerified(...)`, which fails closed
+with a non-internal diagnostic instead of overwriting a non-equivalent result. With `--check` it selects
+`FormatterRunner.checkVerified(...)`, the read-only counterpart: each file is formatted in memory through
+`formatVerified`, would-change is reported exactly like a normal check, and nothing is ever written — a general
+capability for verifying AST-equivalence over non-throwaway targets. Default `--write`, stdin, explain, check mode, and
+the `dev.lanwen.frmtr.debug.verify` toggle are otherwise unchanged. A Gradle-plugin equivalent is a planned follow-up.
+
+`--check --verify` additionally surfaces breakable over-width output lines as informational warnings. `Main` reads each
+result's `overWidthLines()` and prints, per file, a gcc/clang-style summary to **stderr** (so stdout's status lines and
+diffs stay machine-readable), followed by a run total. The warnings are advisory: `Main.printOverWidthWarnings(...)`
+runs after the result loop and never feeds `hasChanges()`/`hasFailures()` or `failureExit(...)`, so the `0/1/2/3`
+exit-code contract is untouched. Pragma policy lives in `OverWidthLines` itself, not in the CLI: an over-width line
+inside a `@formatter:off`…`@formatter:on` or `frmtr-ignore-start`…`frmtr-ignore-end` range (or carrying a bare
+`frmtr-ignore`) is suppressed, because the formatter emitted it verbatim from source and warning there would contradict
+the opt-out. The same `OverWidthLines.Scanner` drives the test-only `SuspiciousLineWidthAudit` gate, so the CLI warning
+and the fixture audit share one pragma definition (the audit's single-line `frmtr-ignore` suppresses only the line
+carrying the marker; this is narrower than `FormatterPragmas`, which raw-passes the following node, but it is the
+over-width-specific policy and the audit allowlists any such kept line separately).
+
+The CLI maps run outcomes to four process exit codes, highest severity winning (`3 > 2 > 1 > 0`): `0` success (all
+clean / written / verified, or no files matched); `1` would-change in check modes (no failures); `2` parse failure, IO
+error, or usage/config error; and `3` a verify violation — a cleanly-parsed file whose formatted output was not
+AST-equivalent (or did not re-parse), i.e. a formatter bug. The verify-violation code is keyed on a principled
+discriminator rather than message matching: `FormatterException.verifyViolation()` is set true only at the two
+`JavaFormatter` verify throw sites, and `Main.failureExit(...)` promotes a failing run to `3` when any failed result
+carries such an exception, otherwise `2`. Usage and configuration errors stay `2`.
 
 Selector discovery is CLI-local because it depends on command-line concepts: default selectors, explicit files,
 directories, globs, comma-separated selector groups, `.gitignore`, and CLI excludes. Discovery uses selector-scoped,
@@ -461,8 +493,13 @@ fixture-owned output variants with sidecar option properties rather than Java te
 
 `.github/workflows/corpus.yml` runs a release-triggered correctness check against a pinned real-world corpus
 (`testcontainers/testcontainers-java` at a fixed SHA). It reuses the shipping CLI rather than a bespoke Java harness:
-the workflow fetches the pinned corpus, runs `frmtr --write --verify` over the corpus main sources (parse-stability plus
-AST-equivalence, non-zero exit on any violation), then `frmtr --check` over the now-formatted sources (one-pass
-idempotence, non-zero exit if any file would still change). The pin, scope, and exclude globs live in the workflow's
-`env` block so they are easy to bump. Cadence is opt-in: `workflow_dispatch` plus `release: published`, not per-push or
-per-PR.
+the workflow fetches the pinned corpus into a throwaway checkout, runs `frmtr --write --verify` over the corpus main
+sources (parse-stability plus AST-equivalence), then `frmtr --check` over the now-formatted sources (one-pass
+idempotence). The two steps cover distinct invariants: `--write --verify` alone does not prove idempotence, and `--check
+--verify` would not either, so the mutating `--write --verify` then read-only `--check` pairing is kept deliberately.
+The workflow reads the CLI's distinct exit codes: the `--write --verify` step distinguishes a verify violation (exit
+`3`, reported as a formatter bug) from a parse/IO failure (exit `2`), and the `--check` idempotence step fails on exit
+`1` (a file would still change). The read-only `--check --verify` capability exists for verifying non-throwaway targets;
+the corpus checkout is ephemeral, so mutating it buys nothing there. The pin, scope, and exclude globs live in the
+workflow's `env` block so they are easy to bump. Cadence is opt-in: `workflow_dispatch` plus `release: published`, not
+per-push or per-PR.

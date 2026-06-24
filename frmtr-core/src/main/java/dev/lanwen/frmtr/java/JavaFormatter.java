@@ -118,12 +118,12 @@ public final class JavaFormatter {
     void assertOutputEquivalentOrThrow(CompilationUnit inputUnit, String formatted) {
         JavaParseResult outputResult = parse(formatted);
         if (outputResult.hasParseProblems()) {
-            throw new FormatterException(
+            throw FormatterException.verifyViolation(
                 "frmtr verify: formatted output did not parse under the input's parser configuration"
             );
         }
         AstEquivalence.describeDifference(inputUnit, outputResult.compilationUnit()).ifPresent(difference -> {
-            throw new FormatterException(
+            throw FormatterException.verifyViolation(
                 "frmtr verify: formatted output is not AST-equivalent to the input — " + difference
             );
         });

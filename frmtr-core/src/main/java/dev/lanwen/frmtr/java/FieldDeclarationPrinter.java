@@ -191,7 +191,7 @@ final class FieldDeclarationPrinter {
         docs.add(Doc.text(modifiers.apply(declaration)));
         String declarationPrefix = modifiers.apply(declaration);
         if (!declaration.getVariables().isEmpty()) {
-            Type type = declaration.getVariables().get(0).getType();
+            Type type = CStyleArrayDeclarators.sharedPrefixType(declaration.getVariables());
             String flatType = inlineAnnotations.apply(declaration) + compactTypeLike.apply(type) + " ";
             declarationPrefix += flatType;
             if (fieldTypeShouldBreak(type, declaration.getVariables(), declarationPrefix)) {

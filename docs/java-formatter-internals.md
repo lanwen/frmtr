@@ -191,6 +191,14 @@ Declaration and type printers own Java declaration grammar after `BodyDeclaratio
   block-lambda openers, object-creation-root method-call opener grouping through the canonical method-call argument-list
   renderer, switch-expression body preservation, huggable block-lambda method-call initializers, first-statement comments
   inside block-lambda method-call arguments, comments around `=`, and initializer-specific width fallbacks.
+- `CStyleArrayDeclarators`: the legacy C-style array declarator concern shared by the field, local-variable, and
+  initializer-layout printers. A declarator whose brackets are written after the name (`String filters[]`) is modeled by
+  JavaParser as an `ArrayType` whose token range spans the name, so the naive shared type prefix would re-emit the name
+  and produce non-compiling `String filters[] filters`. This helper instead shares only the element type as the
+  declaration prefix and re-emits each C-style declarator's brackets after its own name, keeping the brackets in their
+  original source position. That position is preserved (not normalized to `String[] filters`) because the AST-equivalence
+  guardrail's `EqualsVisitor` treats the two bracket origins as structurally different; preserving the position keeps the
+  output both valid and AST-equivalent, including mixed-array-level declarations such as `int rowSpan[], columnCount`.
 - `ConstructorDeclarationPrinter`, `MethodDeclarationPrinter`, `InitializerDeclarationPrinter`,
   `CallableSignaturePrinter`, and `ThrowsClausePrinter`: callable headers, signatures, throws-clause placement,
   callable parameter annotation prefixes, body-versus-semicolon suffixes, and initializer bodies.

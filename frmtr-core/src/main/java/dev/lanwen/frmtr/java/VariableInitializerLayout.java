@@ -1753,11 +1753,15 @@ final class VariableInitializerLayout {
      * Keeps a block comment attached to the variable name rather than treating it as initializer trivia.
      */
     String variableName(VariableDeclarator variable) {
+        // A C-style declarator (brackets written after the name, e.g. String filters[]) keeps its brackets in that
+        // position; the shared type prefix carries only the element type. CStyleArrayDeclarators returns an empty
+        // suffix for canonical Type[] declarators and non-array declarators, so they are unaffected.
+        String name = variable.getNameAsString() + CStyleArrayDeclarators.declaratorBracketsAfterName(variable);
         Doc leadingBlockComment = comments.ownComment(variable, BlockComment.class::isInstance);
         if (leadingBlockComment == Doc.EMPTY) {
-            return variable.getNameAsString();
+            return name;
         }
-        return commentText(leadingBlockComment) + " " + variable.getNameAsString();
+        return commentText(leadingBlockComment) + " " + name;
     }
 
     /**

@@ -64,13 +64,19 @@ The biggest opportunities are therefore not "rewrite," but targeted leverage:
 ## 🟥 Big — architectural, high-leverage
 
 ### B1. Centralize source-shape coupling into one explicit policy
-**Status:** 🟣 Investigating · _focused proposal:_ [source-shape-policy-consolidation.md](source-shape-policy-consolidation.md)
+**Status:** ✅ Done — `SourceShapePolicy` consolidation + shape-independent comment ownership landed; the comment-drop backlog is drained (`CommentPresenceDiagnosticTest.KNOWN_DROPS` empty). One residual, reassigned to B2: the `strict-claims` guardrail stays off — ~205 benign speculative probe-claims (not drops or double-emits) remain because the eager `Optional<Doc>` candidate ladders render comment-bearing subtrees to probe layout fit and discard the loser after it claimed; enabling strict-claims needs claim-free probe rendering (the B2 conditionalGroup/lineSuffix migration). · _focused proposal:_ [source-shape-policy-consolidation.md](source-shape-policy-consolidation.md)
 
 > **Investigation finding:** ~115 distinct source-peeking call sites (26 `sourceShape.*`, 41
 > `rawSource.*`, 43 `compactSource.*`, 5 hand-rolled blank-line probes) answer the same few
 > questions inconsistently. Proposes a per-run `SourceShapePolicy` on `JavaFormatContext`; first
 > slice = unify the "was this multiline?" definition. Positioned as the concrete first step of the
 > held `formatter-owned-syntax-view` proposal.
+>
+> **Closing note:** the consolidation is delivered — `SourceShapePolicy` and shape-independent
+> comment ownership landed, draining the comment-drop backlog. The only residual is enabling the
+> `strict-claims` guardrail, reassigned to B2: it is blocked on claim-free probe rendering (the eager
+> `Optional<Doc>` candidate ladders claim during discarded layout-fit probes). See
+> `FormatterGuardrails.STRICT_CLAIMS_PROPERTY` and [comment-handling-findings.md](comment-handling-findings.md) bucket C.
 
 Formatting decisions currently read the original token layout in many places (`SourceShape`,
 `RawSource`, `CompactSourceText`, source-multiline predicates threaded through printers). Output

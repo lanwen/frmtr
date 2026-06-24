@@ -39,11 +39,20 @@ final class FormatterGuardrails {
      * still reaches the output exactly once. A "fail fast on the second claim" assertion therefore flags benign
      * speculative claims as errors even on golden fixtures that are correct.
      *
-     * <p>The strict invariant becomes satisfiable — and this property worth CI-enabling — only once roadmap <strong>B1</strong>
-     * (source-shape consolidation, so ownership no longer depends on layout) and <strong>B2</strong> ({@code lineSuffix},
-     * which retires most of the comment-placement machinery) land. Until then it is deferred and left off; the valuable
-     * half of the guardrail ({@link #assertAllCommentsAccounted} drop detection and the transform-identity check) runs in
-     * CI under {@link #ENABLED_PROPERTY} instead.
+     * <p>Roadmap <strong>B1</strong> (source-shape consolidation and shape-independent comment ownership) has landed and
+     * made the <em>drop</em> invariant hold — {@code CommentPresenceDiagnosticTest} is green and its {@code KNOWN_DROPS}
+     * list is empty. The stricter "claimed at most once" invariant still fails, though: a full-suite run with this toggle
+     * on yields ~205 violations, all benign speculative claims (zero drops, zero double-emits). The cause is the eager
+     * {@code Optional<Doc>} candidate ladders in {@code MethodCallPrinter}, {@code MethodCallChainPrinter},
+     * {@code VariableInitializerLayout}, and {@code LambdaExpressionPrinter}: they render a comment-bearing subtree to
+     * probe its layout fit, the probe claims the comment, and the losing candidate is then discarded — leaving the comment
+     * claimed once for a render that never reached the output and once for the chosen layout.
+     *
+     * <p>The strict invariant therefore becomes satisfiable — and this property worth CI-enabling — only once those probes
+     * are claim-free: a claim-suppressing render mode, or the <strong>B2</strong> {@code conditionalGroup}/{@code lineSuffix}
+     * migration that retires the candidate ladders entirely. Until then it is deferred and left off; the valuable half of
+     * the guardrail ({@link #assertAllCommentsAccounted} drop detection and the transform-identity check) runs in CI under
+     * {@link #ENABLED_PROPERTY} instead.
      */
     static final String STRICT_CLAIMS_PROPERTY = "dev.lanwen.frmtr.debug.guardrails.strict-claims";
 

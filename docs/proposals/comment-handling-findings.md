@@ -52,10 +52,16 @@ guardrail false-flags it. Centered on `block-lambda-arrow-parens-always`/`-avoid
 few labeled-statement / unnamed-variable shapes. Not a correctness bug; it is why the accounting guardrail cannot be the
 CI net. Disposition: do **not** chase 12 site fixes; they dissolve when comment rendering is unified under B2.
 
-### C. Benign duplicate-claims (172) → strict-claims deferred to B1/B2
-The speculative claim-then-skip pattern. Disposition: the `claimComment` fail-fast moves behind an off-by-default
-`…strict-claims` property (S7 split, branch `impl/comment-guardrail-split`); it becomes satisfiable — and worth
-CI-enabling — only after B1/B2 make comment ownership deterministic.
+### C. Benign duplicate-claims (~205) → strict-claims deferred to B2 (probe-claim decoupling); B1's ownership half is done
+The speculative claim-then-skip pattern. Now **empirically confirmed** by a full-suite run with
+`dev.lanwen.frmtr.debug.guardrails.strict-claims=true`: ~205 failures, **all** duplicate-claims — zero drops, zero
+double-emits. The eager `Optional<Doc>` candidate ladders (MethodCallPrinter / MethodCallChainPrinter /
+VariableInitializerLayout / LambdaExpressionPrinter) render comment-bearing subtrees to probe layout fit, claim their
+comments, then discard the losing candidate. Disposition: the `claimComment` fail-fast moves behind an off-by-default
+`…strict-claims` property (S7 split, branch `impl/comment-guardrail-split`); B1's shape-independent ownership half is
+**done** (drop invariant holds, `KNOWN_DROPS` empty), so this residual reassigns to **B2 (probe-claim decoupling)** — it
+becomes satisfiable only once those probes render claim-free (a claim-suppressing render mode, or the B2
+conditionalGroup/lineSuffix migration that retires the ladders).
 
 ### D. AST-invisible orphan comments → B1/B2 evidence
 The dropped Guava copyright header has an empty AST attachment (`getAllContainedComments()` never returns it), which is

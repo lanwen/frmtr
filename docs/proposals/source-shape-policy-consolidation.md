@@ -1,6 +1,6 @@
 # Centralize Source-Shape Coupling Into One Explicit Policy
 
-Status: Proposed
+Status: Implemented (consolidation landed; strict-claims enablement deferred to B2-shaped probe-claim decoupling)
 
 ## Summary
 

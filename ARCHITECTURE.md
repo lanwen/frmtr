@@ -230,6 +230,15 @@ the existing document view and its layout decisions without letting the CLI own 
   through `FrmtrSession.formatVerified(...)`; when verification fails the non-internal `FormatterException` is thrown
   before any write, so the file is left untouched and reported as `FAILED`. The default write path is unchanged and pays
   no verification cost.
+- `FormatterRunner.checkVerified(...)` is the only path that scans formatted output for breakable over-width lines. It
+  threads a `reportOverWidth` flag into the shared `checkFile` step; when set, the formatted result is walked through
+  `dev.lanwen.frmtr.OverWidthLines`, whose `Scanner` masks literals/comments, carries text-block/block-comment state,
+  and tracks formatter-off / `frmtr-ignore` pragma ranges so lines the formatter emitted verbatim are never flagged; the
+  findings are attached to each `FormatFileResult.overWidthLines()`. The
+  findings are purely informational — they never touch a result's `changed`/`failed` status — and `check(...)`,
+  `write(...)`, and `writeVerified(...)` pass `false`, so only `--check --verify` populates them. `FormatFileResult`
+  gained the `overWidthLines` component additively (a back-compat constructor delegates with an empty list), so the
+  Gradle plugin and all existing call sites are unaffected.
 - Multi-file `check` and `write` runs process selected files on an explicit fixed-size worker pool capped by available
   processors and file count. Results are collected into input-order slots before the `FormatRunResult` is exposed, so
   CLI and Gradle output remains deterministic even when files finish out of order.
@@ -375,6 +384,18 @@ with a non-internal diagnostic instead of overwriting a non-equivalent result. W
 `formatVerified`, would-change is reported exactly like a normal check, and nothing is ever written — a general
 capability for verifying AST-equivalence over non-throwaway targets. Default `--write`, stdin, explain, check mode, and
 the `dev.lanwen.frmtr.debug.verify` toggle are otherwise unchanged. A Gradle-plugin equivalent is a planned follow-up.
+
+`--check --verify` additionally surfaces breakable over-width output lines as informational warnings. `Main` reads each
+result's `overWidthLines()` and prints, per file, a gcc/clang-style summary to **stderr** (so stdout's status lines and
+diffs stay machine-readable), followed by a run total. The warnings are advisory: `Main.printOverWidthWarnings(...)`
+runs after the result loop and never feeds `hasChanges()`/`hasFailures()` or `failureExit(...)`, so the `0/1/2/3`
+exit-code contract is untouched. Pragma policy lives in `OverWidthLines` itself, not in the CLI: an over-width line
+inside a `@formatter:off`…`@formatter:on` or `frmtr-ignore-start`…`frmtr-ignore-end` range (or carrying a bare
+`frmtr-ignore`) is suppressed, because the formatter emitted it verbatim from source and warning there would contradict
+the opt-out. The same `OverWidthLines.Scanner` drives the test-only `SuspiciousLineWidthAudit` gate, so the CLI warning
+and the fixture audit share one pragma definition (the audit's single-line `frmtr-ignore` suppresses only the line
+carrying the marker; this is narrower than `FormatterPragmas`, which raw-passes the following node, but it is the
+over-width-specific policy and the audit allowlists any such kept line separately).
 
 The CLI maps run outcomes to four process exit codes, highest severity winning (`3 > 2 > 1 > 0`): `0` success (all
 clean / written / verified, or no files matched); `1` would-change in check modes (no failures); `2` parse failure, IO

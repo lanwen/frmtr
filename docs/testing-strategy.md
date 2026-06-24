@@ -72,6 +72,13 @@ constructs. It deliberately ignores text block contents, `@formatter:off` ranges
 `frmtr-ignore-start`/`frmtr-ignore-end` ranges, and the pragma line for single-node `frmtr-ignore`; it does not infer the
 extent of a single ignored AST node from rendered brace depth.
 
+The line-level predicate itself — the UTF-16 width measure, the string/char/text-block-literal and comment masking
+(including cross-line text blocks and block comments), and the breakable-construct detection — lives in the shared
+`dev.lanwen.frmtr.OverWidthLines` (frmtr-core main source), so there is exactly one definition of a "breakable
+over-width line." The audit delegates to it and layers on the test-only machinery the CLI must not share: pragma
+scanning, the TSV allowlist, and SHA hashing. The same predicate also backs the `--check --verify` CLI warnings, so the
+fixture gate and the CLI cannot drift apart.
+
 Current accepted or intentionally raw-preserved suspicious lines are recorded in
 `frmtr-core/src/test/resources/format/suspicious-line-width-allowlist.tsv`. Each row is keyed by output resource, line
 number or contiguous line range, and the SHA-256 of each exact physical line in that range, with a required reason. Add

@@ -4,6 +4,7 @@ import dev.lanwen.frmtr.ExplainResult;
 import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.Frmtr;
+import dev.lanwen.frmtr.OverWidthLines.OverWidthLine;
 import dev.lanwen.frmtr.tooling.DiagnosticSpan;
 import dev.lanwen.frmtr.tooling.DiagnosticStyle;
 import dev.lanwen.frmtr.tooling.DiagnosticText;
@@ -88,7 +89,8 @@ public final class Main implements Callable<Integer> {
     @Option(
         names = "--verify",
         description = "Re-parse each formatted file and assert AST-equivalence. Valid with --write (refuse "
-            + "non-equivalent overwrites) or --check (read-only, writes nothing). Off by default; doubles parse cost."
+            + "non-equivalent overwrites) or --check (read-only, writes nothing; also warns on stderr about breakable "
+            + "output lines over the line width without changing the exit code). Off by default; doubles parse cost."
     )
     boolean verify;
 
@@ -428,12 +430,55 @@ public final class Main implements Callable<Integer> {
         if (stacktrace) {
             printRunFailures(run);
         }
+        printOverWidthWarnings(run);
         printCheckSummary(run, excluded);
         out.flush();
         if (run.hasFailures()) {
             return failureExit(run);
         }
         return run.hasChanges() ? EXIT_CHANGED : EXIT_OK;
+    }
+
+    /**
+     * Prints informational warnings (to stderr, so stdout's status lines and diffs stay machine-readable) for breakable
+     * output lines that still overrun the configured width — populated only on the {@code --check --verify} path. These
+     * are advisory: they never feed {@link FormatRunResult#hasChanges()} / {@link FormatRunResult#hasFailures()} or the
+     * exit-code mapping, so the {@code 0/1/2/3} contract is untouched.
+     */
+    private void printOverWidthWarnings(FormatRunResult run) {
+        long totalLines = 0;
+        long fileCount = 0;
+        int limit = -1;
+        for (FormatFileResult result : run.results()) {
+            List<OverWidthLine> overWidth = result.overWidthLines();
+            if (overWidth.isEmpty()) {
+                continue;
+            }
+            fileCount++;
+            totalLines += overWidth.size();
+            limit = overWidth.getFirst().lineWidth();
+            String path = result.displayPath().toString();
+            err.println(styled(
+                "%s: %d %s over the %d-column limit that frmtr could break:".formatted(
+                    path,
+                    overWidth.size(),
+                    plural(overWidth.size(), "line"),
+                    overWidth.getFirst().lineWidth()
+                ),
+                Style.fg_yellow
+            ));
+            for (OverWidthLine line : overWidth) {
+                err.println("  %s:%d: line is %d columns".formatted(path, line.lineNumber(), line.width()));
+            }
+        }
+        if (totalLines > 0) {
+            err.println(styled(
+                "frmtr: %d breakable %s over the %d-column limit in %d %s (informational; does not affect exit code)."
+                    .formatted(totalLines, plural(totalLines, "line"), limit, fileCount, plural(fileCount, "file")),
+                Style.fg_yellow
+            ));
+        }
+        err.flush();
     }
 
     /**

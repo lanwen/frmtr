@@ -171,7 +171,7 @@ Exclude generated or fixture sources from a broad selector:
 | `--check` | Checks formatting without changing files. This is the default mode. |
 | `--write` | Formats files in place and prints a processed summary. |
 | `--write --verify` | Like `--write`, but re-parses each formatted file and refuses to overwrite it when the result is not AST-equivalent to the input. |
-| `--check --verify` | Like `--check`, but also re-parses each in-memory formatted result and asserts AST-equivalence. Read-only: it reports would-change and writes nothing, exiting 3 if any file's output is not AST-equivalent. |
+| `--check --verify` | Like `--check`, but also re-parses each in-memory formatted result and asserts AST-equivalence. Read-only: it reports would-change and writes nothing, exiting 3 if any file's output is not AST-equivalent. Additionally emits informational stderr warnings for breakable output lines that still exceed the configured line width (does not affect the exit code). |
 | `--stdin` | Reads Java source from stdin and writes formatted source to stdout. |
 | `--stdin --check` | Compares piped source against formatter output. |
 | `--stdin --diff` | Prints a unified diff between piped source and formatter output. |
@@ -187,6 +187,13 @@ nothing is ever written, the file is reported as would-change like a normal chec
 verify violation (exit 3). Verification doubles parse cost, which is why it stays off by default. The Gradle plugin does
 not yet have an equivalent flag.
 
+`--check --verify` also scans each file's formatted output and prints informational warnings to stderr for lines that
+both exceed the configured line width and still contain a breakable construct the formatter could have split further
+(binary/ternary operators, comma-heavy argument lists, fluent call chains, multi-type `throws` clauses, casts, or
+lambdas). Operators that live inside string, char, or text-block literals or comments are masked first, so prose
+comments and atomic over-long literals never warn. These warnings are advisory only — stdout (status lines and diffs)
+stays machine-readable, and the warnings never change the exit code.
+
 ### Exit Codes
 
 | Code | Meaning |
@@ -197,7 +204,8 @@ not yet have an equivalent flag.
 | `3` | Verify violation: a cleanly-parsed file's formatted output was not AST-equivalent to the input (or did not re-parse) — a formatter bug. |
 
 When a run produces a mix of outcomes, the highest-severity code wins: `3 > 2 > 1 > 0`. Usage and configuration errors
-stay `2`; there is no separate usage code.
+stay `2`; there is no separate usage code. The breakable over-width-line warnings emitted under `--check --verify` are
+purely informational and never change the exit code.
 
 ### Check Output
 

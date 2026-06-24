@@ -419,6 +419,83 @@ final class MainTest {
     }
 
     @Test
+    void checkVerifyWarnsOnBreakableOverWidthLineButKeepsExitZeroWhenClean(@TempDir Path dir) throws IOException {
+        // A frmtr-ignored binary expression is preserved verbatim at 126 columns: an over-width line still carrying a
+        // breakable `+` operator. The file is already formatted, so the run is clean (exit 0). The warning is purely
+        // informational and goes to stderr; it must not promote the exit code away from 0.
+        String formatted = """
+                class Ignored {
+
+                    // frmtr-ignore
+                    int total = aaaaaaaaaaaa + bbbbbbbbbbbb + cccccccccccc + dddddddddddd \
+                + eeeeeeeeeeee + ffffffffffff + gggggggggggg + hhhh;
+                }
+                """;
+        write(dir.resolve("src/Ignored.java"), formatted);
+
+        Result result = run(dir, null, "--check", "--verify", "--color", "never", "src");
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.out()).isEqualTo(
+            """
+                ✓ src/Ignored.java
+                Checked 1 file: 1 unchanged.
+                """
+        );
+        assertThat(result.err()).isEqualTo(
+            """
+                src/Ignored.java: 1 line over the 120-column limit that frmtr could break:
+                  src/Ignored.java:4: line is 126 columns
+                frmtr: 1 breakable line over the 120-column limit in 1 file (informational; does not affect exit code).
+                """
+        );
+        assertThat(Files.readString(dir.resolve("src/Ignored.java"))).isEqualTo(formatted);
+    }
+
+    @Test
+    void checkVerifyWarnsOnBreakableOverWidthLineButKeepsExitOneWhenWouldChange(@TempDir Path dir) throws IOException {
+        // The same breakable 126-column line, but the file is misformatted, so the run reports would-change (exit 1).
+        // The width warning must leave that exit code untouched — it never feeds the change/failure routing.
+        String original = """
+                class Ignored {
+                    // frmtr-ignore
+                    int total = aaaaaaaaaaaa + bbbbbbbbbbbb + cccccccccccc + dddddddddddd \
+                + eeeeeeeeeeee + ffffffffffff + gggggggggggg + hhhh;
+                }
+                """;
+        write(dir.resolve("src/Ignored.java"), original);
+
+        Result result = run(dir, null, "--check", "--verify", "--color", "never", "src");
+
+        assertThat(result.exitCode()).isEqualTo(1);
+        assertThat(result.out()).isEqualTo(
+            """
+                ✗ src/Ignored.java
+                Checked 1 file: 1 would change.
+                """
+        );
+        assertThat(result.err()).contains("frmtr could break:")
+                .contains("(informational; does not affect exit code).");
+        // Read-only: the file is never rewritten even though the warning fired.
+        assertThat(Files.readString(dir.resolve("src/Ignored.java"))).isEqualTo(original);
+    }
+
+    @Test
+    void checkVerifyDoesNotWarnOnUnbreakableOverWidthStringLiteral(@TempDir Path dir) throws IOException {
+        // A long string literal overruns the width but is atomic — the formatter cannot break it, and the operator-free
+        // continuation line must not register as breakable. The fixture is written in its already-formatted shape (the
+        // assignment broken onto its own line) so the run is clean: no warning, exit 0.
+        String literal = "x".repeat(130);
+        String formatted = "class Atom {\n\n    String s =\n        \"" + literal + "\";\n}\n";
+        write(dir.resolve("src/Atom.java"), formatted);
+
+        Result result = run(dir, null, "--check", "--verify", "--color", "never", "src");
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.err()).isEmpty();
+    }
+
+    @Test
     void readOnlyVerifyViolationMapsToExitThreeWithoutWriting(@TempDir Path dir) throws IOException {
         // The real formatter never emits non-AST-equivalent output, so the read-only verify violation is exercised at
         // the production decision seam: a FAILED result carrying a verify-violation FormatterException must map to

@@ -73,19 +73,6 @@ public record DocExplanation(
     }
 
     /**
-     * Strips the {@code java.*:} provenance prefix from a label, leaving the local rule name. Returns {@code group} for
-     * an unlabeled construct.
-     */
-    static String ruleName(Optional<String> label) {
-        return label
-                .map(name -> {
-                    int colon = name.indexOf(':');
-                    return colon >= 0 ? name.substring(colon + 1) : name;
-                })
-                .orElse("group");
-    }
-
-    /**
      * One renderer group decision and the arithmetic that produced it.
      *
      * <p>The label is the nearest enclosing {@link Doc.Label}, which carries formatter rule provenance such as
@@ -103,13 +90,6 @@ public record DocExplanation(
         int startColumn,
         boolean forcedBreak
     ) {
-        /**
-         * Returns the label's local rule name without the {@code java.*:} provenance prefix, or {@code group} for an
-         * unlabeled structural group.
-         */
-        public String ruleName() {
-            return DocExplanation.ruleName(label);
-        }
     }
 
     /**
@@ -126,10 +106,6 @@ public record DocExplanation(
     public record FillDecision(Optional<String> label, List<Separator> separators) {
         public FillDecision {
             separators = List.copyOf(separators);
-        }
-
-        public String ruleName() {
-            return DocExplanation.ruleName(label);
         }
 
         /**
@@ -181,10 +157,6 @@ public record DocExplanation(
             alternatives = List.copyOf(alternatives);
         }
 
-        public String ruleName() {
-            return DocExplanation.ruleName(label);
-        }
-
         /**
          * One probed alternative in a {@link Doc.ConditionalGroup}.
          *
@@ -205,9 +177,6 @@ public record DocExplanation(
      * the rendered layout. They are policy decisions, so there is no per-break width arithmetic to report.
      */
     public record ForcedBreak(Optional<String> label, int count) {
-        public String ruleName() {
-            return DocExplanation.ruleName(label);
-        }
     }
 
     /**
@@ -232,13 +201,6 @@ public record DocExplanation(
          */
         public boolean meaningful() {
             return label.isPresent() || decision.isPresent();
-        }
-
-        /**
-         * Returns the label's local rule name without the {@code java.*:} provenance prefix.
-         */
-        public String ruleName() {
-            return DocExplanation.ruleName(label);
         }
     }
 }

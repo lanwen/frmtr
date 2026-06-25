@@ -652,7 +652,14 @@ final class VariableInitializerLayout {
             && initializer instanceof MethodCallExpr methodCall
             && !initializerHasOwnBreak(initializer)
         ) {
-            if (methodCallChainRootIsObjectCreation.test(methodCall)) {
+            if (
+                methodCallChainRootIsObjectCreation.test(methodCall)
+                && methodCallChainInitializerShape.apply(methodCall).singleCall()
+            ) {
+                // Only single-segment object-creation roots (new X(args).onlyCall(...)) keep the call on the
+                // assignment line and break its argument list. Multi-segment constructor chains fall through to the
+                // one-per-line chain below so the root sits alone and every .call() gets its own line, instead of
+                // greedy-packing the root plus the leading calls onto the assignment line.
                 Optional<Doc> directObjectCreationCall = variableWithBrokenMethodCallArguments(
                     variable,
                     name,

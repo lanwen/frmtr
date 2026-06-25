@@ -239,11 +239,6 @@ public final class OverWidthLines {
             }
             return new MaskedLine(code.toString(), List.copyOf(commentBodies));
         }
-
-        /** Whether the scanner is currently inside an unclosed text block or block comment carried from a prior line. */
-        public boolean inRawRegion() {
-            return inTextBlock || inBlockComment;
-        }
     }
 
     /**

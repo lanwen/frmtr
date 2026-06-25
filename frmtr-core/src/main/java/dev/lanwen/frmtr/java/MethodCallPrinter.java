@@ -670,6 +670,13 @@ final class MethodCallPrinter {
      * name child as the name's own trivia. Recovering the name's own line comment too keeps the same comment owned by
      * the call regardless of layout. Each recovery is source-bounded to the inside of the parens (begins before the call
      * end), so a comment that actually trails the completed call stays out of this empty-argument path.
+     *
+     * <p>The orphan recovery additionally excludes any orphan that lies in the gap <em>between the scope and the
+     * selector name</em> — the between-links comment of a method chain (e.g. {@code .define(A) /** doc *}{@code / .util()}).
+     * That comment belongs before the selector, not inside its empty {@code ()}, and is recovered by
+     * {@link MethodCallChainPrinter}'s between-links slot. Both slots offer the orphan under the same
+     * {@code (expression, ORPHAN)} key, so claiming it here too would double-claim it; partitioning by source position
+     * (inside-parens orphans here, between-scope-and-name orphans there) keeps each orphan claimed exactly once.
      */
     Optional<Doc> emptyMethodCallArguments(String prefix, MethodCallExpr expression) {
         List<Doc> argumentComments = new ArrayList<>();
@@ -697,7 +704,9 @@ final class MethodCallPrinter {
         if (nameOwnComment != Doc.EMPTY) {
             argumentComments.add(nameOwnComment);
         }
-        argumentComments.addAll(comments.orphanCommentStatements(expression));
+        argumentComments.addAll(
+            comments.orphanCommentStatements(expression, comment -> !isInterspersedBeforeSelector(comment, expression))
+        );
         if (argumentComments.isEmpty()) {
             return Optional.empty();
         }
@@ -714,6 +723,19 @@ final class MethodCallPrinter {
     /** A line comment that begins before the call's source end, i.e. inside the parentheses rather than trailing it. */
     private static boolean isLineCommentInsideParens(Comment comment, MethodCallExpr expression) {
         return comment instanceof LineComment && CommentIndex.startsBeforeEnd(comment, expression);
+    }
+
+    /**
+     * A between-links chain comment: an orphan that sits in the source gap between the call's scope and its selector
+     * name (e.g. the {@code /** doc *}{@code /} in {@code .define(A) /** doc *}{@code / .util()}). Such a comment belongs
+     * before the selector, where {@link MethodCallChainPrinter}'s between-links slot recovers it, not inside the empty
+     * {@code ()} this empty-argument path renders. Excluding it here partitions the call's orphan pool by source
+     * position so the same comment is never claimed by both slots.
+     */
+    private static boolean isInterspersedBeforeSelector(Comment comment, MethodCallExpr expression) {
+        return expression.getScope()
+                .map(scope -> CommentIndex.liesBetween(comment, scope, expression.getName()))
+                .orElse(false);
     }
 
     /**

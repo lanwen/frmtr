@@ -3,7 +3,7 @@ public class ChainInterspersedCommentEmptyArgSelector {
     private ConfigDef config;
 
     public void configure() {
-        config =  new ConfigDef()
+        config = new ConfigDef()
                 .define(BROKER_ID_CONFIG, INT)
                 /** Javadoc link before the empty-argument build selector. */
                 .util()

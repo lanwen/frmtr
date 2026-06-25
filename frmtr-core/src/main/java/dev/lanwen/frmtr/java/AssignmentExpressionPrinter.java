@@ -421,6 +421,14 @@ final class AssignmentExpressionPrinter {
      * operator-position check keys off the assignment's raw token text so a value's leading block comment that begins
      * before the operator is left to the value renderer. For value kinds whose renderer already emits the comment the
      * explicit text is byte-identical, and claiming it once keeps the comment accounted for either way.
+     *
+     * <p>The {@code /*} probe only proves some block comment exists after the operator; it can also be an interspersed
+     * comment buried inside a multi-line method-call-chain value (for example {@code .define(A, INT) /* doc *}{@code /}).
+     * That comment belongs to a chain link, not to the value's own pre-render gap, so {@link CommentTracker#ownComment}
+     * returns {@link Doc#EMPTY} for it. Returning that empty text as a gap comment would interpolate an empty string
+     * between two single spaces and double-space the operator ({@code "=  "}). Mirroring
+     * {@code VariableInitializerLayout.postEqualsBlockComment}, treat {@link Doc#EMPTY} as "no gap comment" so only a
+     * genuine, non-empty own block comment in the gap is claimed here.
      */
     private Optional<String> gapBlockComment(AssignExpr expression) {
         String raw = expression.getTokenRange().map(Object::toString).orElseGet(expression::toString);
@@ -430,6 +438,11 @@ final class AssignmentExpressionPrinter {
             return Optional.empty();
         }
         Doc comment = comments.ownComment(expression.getValue(), BlockComment.class::isInstance);
-        return comment instanceof Doc.Text text ? Optional.of(text.value()) : Optional.empty();
+        if (comment == Doc.EMPTY) {
+            return Optional.empty();
+        }
+        return comment instanceof Doc.Text text && !text.value().isEmpty()
+            ? Optional.of(text.value())
+            : Optional.empty();
     }
 }

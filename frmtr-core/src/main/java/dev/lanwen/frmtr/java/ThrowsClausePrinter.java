@@ -44,45 +44,6 @@ final class ThrowsClausePrinter {
         this.currentIndentedWidth = currentIndentedWidth;
     }
 
-    /**
-     * Places {@code throws ...} on the current line when it fits, otherwise on its own indented continuation line.
-     *
-     * <p>If the parameter list already breaks, the caller will have printed the closing {@code )} on the current line,
-     * so the same-line check only measures {@code ) throws ...} plus the declaration suffix. If parameters stay flat,
-     * the check measures the complete flat signature because the throws clause competes with the whole header.
-     */
-    Doc throwsClause(
-            String prefix,
-            NodeList<Parameter> parameters,
-            NodeList<? extends Node> thrownExceptions,
-            String suffix
-    ) {
-        return throwsClause(prefix, parameters, thrownExceptions, suffix, false, parametersBreak(prefix, parameters));
-    }
-
-    /**
-     * Places {@code throws ...} on the current line or preserves a caller-detected source break before it.
-     *
-     * <p>When parameters already broke, the closing {@code )} owns the current line. In that shape a source break before
-     * {@code throws} is kept only if the compact {@code ) throws ...} continuation would overflow.
-     */
-    Doc throwsClause(
-            String prefix,
-            NodeList<Parameter> parameters,
-            NodeList<? extends Node> thrownExceptions,
-            String suffix,
-            boolean forceBreak
-    ) {
-        return throwsClause(
-            prefix,
-            parameters,
-            thrownExceptions,
-            suffix,
-            forceBreak,
-            parametersBreak(prefix, parameters)
-        );
-    }
-
     Doc throwsClause(
             String prefix,
             NodeList<Parameter> parameters,
@@ -132,12 +93,5 @@ final class ThrowsClausePrinter {
             parts.add(Doc.text(compact.apply(thrownExceptions.get(i))));
         }
         return Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.fill(parts)));
-    }
-
-    private boolean parametersBreak(String prefix, NodeList<Parameter> parameters) {
-        String flatParameters = "("
-            + parameters.stream().map(compact).reduce((left, right) -> left + ", " + right).orElse("")
-            + ")";
-        return currentIndentedWidth.applyAsInt(prefix + flatParameters) > options.lineWidth();
     }
 }

@@ -1,0 +1,24 @@
+name: PR Title
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+    branches:
+      - main
+
+permissions:
+  # Allows checkout to read the title-check script.
+  contents: read
+  # Allows the workflow to read pull request metadata from the event context.
+  pull-requests: read
+
+jobs:
+  check:
+    name: Semantic PR title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Check title
+        run: python3 .github/scripts/release_automation.py check-pr --event-file "$GITHUB_EVENT_PATH"

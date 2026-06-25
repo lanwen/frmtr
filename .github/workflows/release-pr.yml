@@ -1,0 +1,72 @@
+name: Release PR
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  # Allows checkout to read the current release state.
+  contents: read
+
+concurrency:
+  group: release-pr
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare release PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # Pushes the generated release branch.
+          permission-contents: write
+          # Creates the release label if it does not exist.
+          permission-issues: write
+          # Opens or updates the generated release PR.
+          permission-pull-requests: write
+
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
+
+      - name: Prepare release changes
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_PR_BODY_FILE: build/release-pr-body.md
+        run: |
+          set -euo pipefail
+          gh label create release --color 0e8a16 --description "Release preparation PR" || true
+          python3 .github/scripts/release_automation.py prepare-release
+          release_version="$(sed -n 's/^version=//p' gradle.properties)"
+          mkdir -p "$(dirname "$RELEASE_PR_BODY_FILE")"
+          if [ ! -f "$RELEASE_PR_BODY_FILE" ]; then
+            printf 'No release changes were prepared.\n' > "$RELEASE_PR_BODY_FILE"
+          fi
+          echo "release_version=${release_version}" >> "$GITHUB_ENV"
+
+      - name: Open or update release PR
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          commit-message: "chore(release): prepare ${{ env.release_version }}"
+          sign-commits: true
+          branch: automation/release
+          base: main
+          delete-branch: true
+          add-paths: |
+            gradle.properties
+            CHANGELOG.md
+          title: "chore(release): prepare ${{ env.release_version }}"
+          body-path: build/release-pr-body.md
+          labels: release

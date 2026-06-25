@@ -1,0 +1,40 @@
+name: Snapshot Version Guard
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review]
+    branches:
+      - main
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  # Allows checkout to read gradle.properties.
+  contents: read
+  # Allows the workflow to inspect release labels on pull requests.
+  pull-requests: read
+
+jobs:
+  check:
+    name: Require snapshot version except release PRs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Check gradle.properties version
+        env:
+          IS_RELEASE_PR: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release') }}
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version=//p' gradle.properties)"
+          if [[ "${version}" == *-SNAPSHOT ]]; then
+            echo "Snapshot version ${version} is allowed."
+            exit 0
+          fi
+          if [ "${IS_RELEASE_PR}" = "true" ]; then
+            echo "Release PR may carry final version ${version}."
+            exit 0
+          fi
+          echo "::error::Only release PRs may merge a non-SNAPSHOT gradle.properties version; found ${version}."
+          exit 1

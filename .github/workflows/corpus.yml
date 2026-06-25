@@ -1,10 +1,10 @@
 name: Corpus
 
-# Release-triggered corpus correctness check.
+# Release-PR corpus correctness check.
 #
 # Fetches a pinned real-world Java corpus into a throwaway checkout and runs the
-# frmtr CLI over its main sources to assert two DISTINCT invariants on every
-# release:
+# frmtr CLI over its main sources to assert two DISTINCT invariants before
+# publishing a release:
 #   1. parse-stability + AST-equivalence -- `frmtr --write --verify` re-parses
 #      each formatted file and refuses output that is not AST-equivalent to the
 #      input. The CLI's distinct exit codes let this step report a formatter bug
@@ -24,10 +24,13 @@ name: Corpus
 
 on:
   workflow_dispatch:
-  release:
-    types: [published]
+  pull_request:
+    types: [opened, reopened, synchronize, labeled]
+    branches:
+      - main
 
 permissions:
+  # Allows checkout to read the release PR sources.
   contents: read
 
 env:
@@ -44,6 +47,7 @@ env:
 jobs:
   check:
     name: Corpus correctness (CLI --write --verify + --check)
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'release')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

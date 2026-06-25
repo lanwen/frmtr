@@ -1,0 +1,322 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - gradle.properties
+  workflow_dispatch:
+
+permissions:
+  # Allows checkout to read release sources and tags.
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Ensure publishable release version
+    runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.release.outputs.release_tag }}
+      should_release: ${{ steps.release.outputs.should_release }}
+      tag_exists: ${{ steps.release.outputs.tag_exists }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Attach main branch
+        run: git checkout -B main origin/main
+
+      - name: Ensure publishable release version
+        id: release
+        run: python3 .github/scripts/release_automation.py ensure-publishable-release-version
+
+  native:
+    name: Build ${{ matrix.classifier }}
+    runs-on: ${{ matrix.runner }}
+    needs: validate
+    if: needs.validate.outputs.should_release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - classifier: linux-x86_64
+            runner: ubuntu-latest
+          - classifier: osx-aarch_64
+            runner: macos-15
+          - classifier: windows-x86_64
+            runner: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: main
+
+      - name: Set up GraalVM
+        uses: graalvm/setup-graalvm@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.0.0
+        with:
+          distribution: graalvm
+          java-version: "25"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+
+      - name: Build native distribution
+        if: runner.os != 'Windows'
+        run: ./gradlew :frmtr-cli:nativeDistributionZip -Pfrmtr.native.classifier=${{ matrix.classifier }}
+
+      - name: Build native distribution
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          call "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          gradlew.bat :frmtr-cli:nativeDistributionZip -Pfrmtr.native.classifier=${{ matrix.classifier }}
+
+      - name: Smoke test native binary
+        if: runner.os != 'Windows'
+        run: ./frmtr-cli/build/native/nativeCompile/frmtr --version
+
+      - name: Smoke test native binary
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: frmtr-cli\build\native\nativeCompile\frmtr.exe --version
+
+      - name: Upload native distribution
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: native-${{ matrix.classifier }}
+          path: build/distributions/frmtr-${{ needs.validate.outputs.version }}-${{ matrix.classifier }}.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release and Maven Central
+    runs-on: ubuntu-latest
+    needs:
+      - validate
+      - native
+    if: needs.validate.outputs.should_release == 'true'
+    environment: release
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.0.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # Creates the release tag and lets JReleaser publish GitHub release assets.
+          permission-contents: write
+
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
+
+      - name: Attach main branch
+        run: git checkout -B main origin/main
+
+      - name: Set up Java
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+
+      - name: Download native distributions
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: native-*
+          merge-multiple: true
+          path: build/distributions
+
+      - name: Verify native distributions
+        run: |
+          set -euo pipefail
+          ls -l build/distributions
+          test -f "build/distributions/frmtr-${{ needs.validate.outputs.version }}-linux-x86_64.zip"
+          test -f "build/distributions/frmtr-${{ needs.validate.outputs.version }}-osx-aarch_64.zip"
+          test -f "build/distributions/frmtr-${{ needs.validate.outputs.version }}-windows-x86_64.zip"
+
+      - name: Create release tag
+        if: needs.validate.outputs.tag_exists != 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          app_slug="${{ steps.app-token.outputs.app-slug }}"
+          app_user_id="$(gh api "/users/${app_slug}[bot]" --jq .id)"
+          git config user.name "${app_slug}[bot]"
+          git config user.email "${app_user_id}+${app_slug}[bot]@users.noreply.github.com"
+          gh auth setup-git
+          git tag -a "${{ needs.validate.outputs.release_tag }}" -m "Release ${{ needs.validate.outputs.release_tag }}"
+          git push origin "refs/tags/${{ needs.validate.outputs.release_tag }}"
+
+      - name: Publish with JReleaser
+        env:
+          JRELEASER_GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          JRELEASER_GPG_PASSPHRASE: ${{ secrets.JRELEASER_GPG_PASSPHRASE }}
+          JRELEASER_GPG_SECRET_KEY: ${{ secrets.JRELEASER_GPG_SECRET_KEY }}
+          JRELEASER_MAVENCENTRAL_PASSWORD: ${{ secrets.JRELEASER_MAVENCENTRAL_PASSWORD }}
+          JRELEASER_MAVENCENTRAL_USERNAME: ${{ secrets.JRELEASER_MAVENCENTRAL_USERNAME }}
+          JRELEASER_PACKAGERS_BREW_ACTIVE: NEVER
+        run: ./gradlew stageCentralRelease jreleaserFullRelease
+
+  gradle-plugin:
+    name: Publish Gradle Plugin Portal
+    runs-on: ubuntu-latest
+    needs:
+      - validate
+      - publish
+    if: needs.validate.outputs.should_release == 'true'
+    environment: gradle
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: main
+
+      - name: Set up Java
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+
+      - name: Publish Gradle plugin
+        env:
+          GRADLE_PUBLISH_KEY: ${{ secrets.GRADLE_PUBLISH_KEY }}
+          GRADLE_PUBLISH_SECRET: ${{ secrets.GRADLE_PUBLISH_SECRET }}
+        run: ./gradlew :frmtr-gradle-plugin:publishPlugins
+
+  homebrew:
+    name: Publish Homebrew tap
+    runs-on: ubuntu-latest
+    needs:
+      - validate
+      - publish
+    if: needs.validate.outputs.should_release == 'true'
+    environment: brew
+    steps:
+      - name: Generate release repository token
+        id: release-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.0.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # Lets JReleaser read/update release repository metadata during Homebrew publication.
+          permission-contents: write
+
+      - name: Generate Homebrew tap token
+        id: brew-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.0.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: homebrew-tap
+          # Commits the generated formula to the Homebrew tap.
+          permission-contents: write
+
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          ref: main
+          token: ${{ steps.release-token.outputs.token }}
+          persist-credentials: false
+
+      - name: Attach main branch
+        run: git checkout -B main origin/main
+
+      - name: Set up Java
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+
+      - name: Download native distributions
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: native-*
+          merge-multiple: true
+          path: build/distributions
+
+      - name: Publish Homebrew formula
+        env:
+          JRELEASER_GITHUB_TOKEN: ${{ steps.release-token.outputs.token }}
+          JRELEASER_HOMEBREW_GITHUB_TOKEN: ${{ steps.brew-token.outputs.token }}
+        run: ./gradlew jreleaserPublish
+
+  snapshot-pr:
+    name: Open next snapshot PR
+    runs-on: ubuntu-latest
+    needs:
+      - validate
+      - gradle-plugin
+      - homebrew
+    if: needs.validate.outputs.should_release == 'true'
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.0.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # Pushes the generated snapshot branch.
+          permission-contents: write
+          # Creates the snapshot label if it does not exist.
+          permission-issues: write
+          # Opens or updates the generated snapshot PR.
+          permission-pull-requests: write
+
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
+
+      - name: Prepare snapshot changes
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          SNAPSHOT_PR_BODY_FILE: build/snapshot-pr-body.md
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/release_automation.py prepare-snapshot
+          snapshot_version="$(sed -n 's/^version=//p' gradle.properties)"
+          gh label create snapshot --color 8250df --description "Next snapshot version PR" || true
+          echo "snapshot_version=${snapshot_version}" >> "$GITHUB_ENV"
+
+      - name: Open or update snapshot PR
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          commit-message: "chore(snapshot): start ${{ env.snapshot_version }}"
+          sign-commits: true
+          branch: automation/next-snapshot
+          base: main
+          delete-branch: true
+          add-paths: gradle.properties
+          title: "chore(snapshot): start ${{ env.snapshot_version }}"
+          body-path: build/snapshot-pr-body.md
+          labels: snapshot

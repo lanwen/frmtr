@@ -1552,10 +1552,39 @@ final class VariableInitializerLayout {
             MethodCallExpr methodCall
     ) {
         String callPrefix = methodCallPrefix.apply(methodCall);
-        if (variableWithHuggableBlockLambdaArguments(variable, name, flatName, methodCall, callPrefix).isPresent()) {
+        if (huggableBlockLambdaArgumentsFit(variable, name, flatName, methodCall, callPrefix)) {
             return Optional.empty();
         }
         return variableWithReceiverBreakBeforeHuggableBlockLambdaArguments(variable, name, flatName, methodCall);
+    }
+
+    /**
+     * Reports whether the plain (no receiver break) huggable block-lambda layout fits, used only to decide that the
+     * receiver-break shape is unnecessary.
+     *
+     * <p>Building the candidate {@link Doc} renders the lambda block, which claims the comments inside it. This probe
+     * never becomes the emitted layout — when it fits the caller returns {@link Optional#empty()} so the ordinary hug
+     * renders elsewhere, and when it does not the receiver-break path renders the call fresh. Both winners re-render the
+     * same lambda block, so the probe's claims must not stick or the winner would re-offer an already-claimed comment and
+     * drop it (the strict-claims invariant rejects the duplicate; first-claim-wins renders it {@link Doc#EMPTY}). Wrapping
+     * the render in {@link CommentTracker#speculatively} and always returning {@link Optional#empty()} from the scope rolls
+     * back every claim the probe made, leaving the eventual winner as the sole claimant. The presence flag is read out
+     * through a holder because the speculative result is intentionally discarded.
+     */
+    private boolean huggableBlockLambdaArgumentsFit(
+            VariableDeclarator variable,
+            String name,
+            String flatName,
+            MethodCallExpr methodCall,
+            String callPrefix
+    ) {
+        boolean[] fits = {false};
+        comments.speculatively(() -> {
+            fits[0] = variableWithHuggableBlockLambdaArguments(variable, name, flatName, methodCall, callPrefix)
+                    .isPresent();
+            return Optional.<Doc>empty();
+        });
+        return fits[0];
     }
 
     private Optional<Doc> variableWithReceiverBreakBeforeHuggableBlockLambdaArguments(

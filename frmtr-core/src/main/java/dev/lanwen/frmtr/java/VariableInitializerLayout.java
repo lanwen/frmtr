@@ -592,6 +592,10 @@ final class VariableInitializerLayout {
             if (
                 initializer instanceof MethodCallExpr methodCall
                 && methodCallChainInitializerShape.apply(methodCall).shouldForceSourceMultilineInitializerChain()
+                && !singleCallConvergesOnArgumentBreak(
+                    methodCall,
+                    argumentBreakOpenerFits(methodCall, declarationPrefix + variable.getNameAsString())
+                )
             ) {
                 Optional<Doc> forcedChain = variableWithForcedMethodCallChain(
                     variable,
@@ -679,7 +683,13 @@ final class VariableInitializerLayout {
             }
             MethodCallChainSourcePlanner.InitializerChainShape initializerChainShape =
                 methodCallChainInitializerShape.apply(methodCall);
-            if (initializerChainShape.shouldForceWideInitializerChain()) {
+            if (
+                initializerChainShape.shouldForceWideInitializerChain()
+                && !singleCallConvergesOnArgumentBreak(
+                    methodCall,
+                    argumentBreakOpenerFits(methodCall, declarationPrefix + variable.getNameAsString())
+                )
+            ) {
                 Optional<Doc> forcedChain = variableWithForcedMethodCallChain(
                     variable,
                     name,
@@ -1264,7 +1274,7 @@ final class VariableInitializerLayout {
             methodCallChainIsSourceMultiline.test(methodCall)
             && blockLambdaCall.isEmpty()
             && !methodCallHasBlockLambdaArgument(methodCall)
-            && !singleObjectCreationCallConvergesOnArgumentBreak(methodCall, openerFits)
+            && !singleCallConvergesOnArgumentBreak(methodCall, openerFits)
         ) {
             return Optional.empty();
         }
@@ -1281,25 +1291,62 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * Decides whether a single object-creation-rooted call should converge on the argument-break layout instead of
-     * deferring to the source-shape gate.
+     * Decides whether a single-selector method-call initializer should converge on the argument-break layout instead of
+     * deferring to the source-shape gates.
      *
-     * <p>For an over-width {@code NAME = new X(<ctorargs>).method(...)} chain with exactly one selector segment, two
-     * layouts can render within the line width: keeping {@code new X(<ctorargs>).method(} on the assignment line and
-     * breaking the argument list (the argument-break shape), or stranding {@code =} and collapsing the whole chain onto
-     * the continuation line. The source-shape gate above selects between them by reading whether the source broke before
-     * the selector, but the collapsing fallback erases that source feature, so a selector-broken input and its already
-     * collapsed re-format disagree and the formatter never reaches a fixed point.
+     * <p>For an over-width single-selector chain ({@code NAME = ROOT.method(args)}) with exactly one selector segment, two
+     * sub-width layouts compete: keeping {@code ROOT.method(} on the assignment line and breaking the argument list (the
+     * argument-break shape), or stranding {@code =} and collapsing the whole chain onto the continuation line. The
+     * source-shape gates select between them by reading whether the source broke before the selector, but the collapsing
+     * fallback erases that source feature, so a selector-broken input and its already collapsed re-format disagree and the
+     * formatter never reaches a fixed point.
      *
-     * <p>This predicate keys the decision on AST shape (object-creation root, single selector segment) and width (the
-     * argument-break opener fits) only, never on the source line breaks. When it holds, the argument-break shape is
-     * chosen on every pass, so the layout is idempotent. Multi-segment and non-object-creation chains, and openers that
-     * do not fit, are intentionally left to the source-shape gate and the forced-chain fallbacks.
+     * <p>This predicate keys the decision on AST shape (single selector segment, an attachable root) and width (the
+     * argument-break opener fits) only, never on the source line breaks. Two root kinds converge here:
+     * <ul>
+     *   <li>An object-creation root ({@code new X(ctorArgs).method(...)}) — the original #48 case.</li>
+     *   <li>A simple attachable name/type-like or field-access root ({@code Collections.newSetFromMap(...)},
+     *       {@code this.foo(...)}) — the deferred case where {@code shouldForceSourceMultilineInitializerChain}/
+     *       {@code shouldForceWideInitializerChain} would otherwise collapse a selector-broken source into the
+     *       break-after-{@code =} shape that the re-format then re-attaches.</li>
+     * </ul>
+     * When it holds, the argument-break shape is chosen on every pass, so the layout is idempotent. Multi-segment chains,
+     * method-call roots (which carry their own attach logic), and openers that do not fit are intentionally left to the
+     * source-shape gates and the forced-chain fallbacks.
      */
-    private boolean singleObjectCreationCallConvergesOnArgumentBreak(MethodCallExpr methodCall, boolean openerFits) {
-        return openerFits
-            && methodCallChainRootIsObjectCreation.test(methodCall)
-            && methodCallChainInitializerShape.apply(methodCall).singleCall();
+    private boolean singleCallConvergesOnArgumentBreak(MethodCallExpr methodCall, boolean openerFits) {
+        if (!openerFits || !methodCallChainInitializerShape.apply(methodCall).singleCall()) {
+            return false;
+        }
+        return methodCallChainRootIsObjectCreation.test(methodCall)
+            || singleCallHasSimpleAttachableRoot(methodCall);
+    }
+
+    /**
+     * Mirrors the {@code openerFits} check inside {@link #variableWithBrokenMethodCallArguments}: whether
+     * {@code NAME = ROOT.method(} still fits on the assignment line, so the argument-break shape is reachable. Computed
+     * here so the force-chain gates can ask the convergence predicate without first descending into that method.
+     */
+    private boolean argumentBreakOpenerFits(MethodCallExpr methodCall, String flatName) {
+        return layoutWidth.currentIndented(
+            flatName + " = " + methodCallPrefix.apply(methodCall) + "("
+        ) <= options.lineWidth();
+    }
+
+    /**
+     * Identifies a single-selector call whose root is a simple attachable scope that renders inline before the selector
+     * ({@code Collections.x(...)}, {@code this.x(...)}, {@code a.b.C.x(...)}). Method-call and object-creation roots are
+     * excluded: object creation is handled by {@link #singleCallConvergesOnArgumentBreak} directly, and a method-call root
+     * is itself a chain segment with its own attach handling, so collapsing it here would change unrelated layouts.
+     */
+    private boolean singleCallHasSimpleAttachableRoot(MethodCallExpr methodCall) {
+        return methodCall.getScope()
+                .filter(scope -> scope.isNameExpr()
+                        || scope.isThisExpr()
+                        || scope.isSuperExpr()
+                        || scope.isFieldAccessExpr())
+                .filter(scope -> !shouldPrintScopeAsDoc.test(scope))
+                .isPresent();
     }
 
     /**

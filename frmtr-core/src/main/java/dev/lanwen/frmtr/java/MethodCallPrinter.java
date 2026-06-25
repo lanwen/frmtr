@@ -563,10 +563,6 @@ final class MethodCallPrinter {
         return methodChains.compactMethodCallChainRoot(expression);
     }
 
-    Optional<Doc> compactRootWithBrokenFinalChainSegment(MethodCallExpr expression) {
-        return methodChains.compactRootWithBrokenFinalChainSegment(expression);
-    }
-
     Optional<Doc> compactRootWithBrokenFinalChainSegment(
             MethodCallExpr expression,
             LayoutWidth.LineBudget lineBudget
@@ -1042,14 +1038,6 @@ final class MethodCallPrinter {
      * <p>The ordinary expression renderer owns the flat spelling. Once the surrounding call list breaks, the expression
      * helper owns the continuation lines so breakable arguments do not collapse back onto an over-wide argument line.
      */
-    private Doc methodCallArgumentDoc(Expression argument) {
-        return methodCallArgumentDoc(argument, "", false, false);
-    }
-
-    private Doc methodCallArgumentDoc(Expression argument, String suffix) {
-        return methodCallArgumentDoc(argument, suffix, false, false);
-    }
-
     private Doc methodCallArgumentDoc(
             Expression argument,
             String suffix,

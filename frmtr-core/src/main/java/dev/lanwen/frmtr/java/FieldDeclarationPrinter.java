@@ -252,14 +252,6 @@ final class FieldDeclarationPrinter {
     }
 
     /**
-     * Prints one variable declarator without a declaration prefix, used when callers format a declarator outside a
-     * shared field prefix.
-     */
-    Doc variable(VariableDeclarator variable) {
-        return variable(variable, "");
-    }
-
-    /**
      * Prints one variable declarator with the already-flat declaration prefix available for line-width decisions.
      */
     Doc variable(VariableDeclarator variable, String declarationPrefix) {

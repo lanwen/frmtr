@@ -164,10 +164,6 @@ final class ReturnExpressionPrinter {
         );
     }
 
-    Doc returnStatement(Expression expression) {
-        return returnStatement(expression, LayoutWidth.LineBudget.BLOCK);
-    }
-
     Doc returnStatement(Expression expression, LayoutWidth.LineBudget lineBudget) {
         if (expression instanceof ObjectCreationExpr objectCreation) {
             if (
@@ -234,10 +230,6 @@ final class ReturnExpressionPrinter {
      * once it is placed inside a return statement. When the whole statement fits, expression dispatch keeps its ordinary
      * shape; only overflowing return lines enter the return-specific break tree.
      */
-    Doc returnExpression(Expression expression) {
-        return returnExpression(expression, LayoutWidth.LineBudget.BLOCK);
-    }
-
     private Doc returnExpression(Expression expression, LayoutWidth.LineBudget lineBudget) {
         Optional<BinaryExpr> sourceMultilineEnclosedBinary = sourceMultilineEnclosedBinary(expression);
         if (sourceMultilineEnclosedBinary.isPresent()) {

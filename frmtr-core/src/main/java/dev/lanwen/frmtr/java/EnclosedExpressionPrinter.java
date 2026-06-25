@@ -123,16 +123,6 @@ final class EnclosedExpressionPrinter {
     }
 
     /**
-     * Breaks an expression inside parentheses using the normal binary-continuation choice.
-     *
-     * <p>Return expressions use this entry point when the parenthesized value itself needs to move below {@code return},
-     * but no suffix token forces binary content to break more aggressively.
-     */
-    Doc parenthesizedBreak(Expression expression) {
-        return parenthesizedBreak(expression, false);
-    }
-
-    /**
      * Breaks an expression inside parentheses using the shared binary-continuation renderer.
      *
      * <p>The force flag is used by suffix callers that already know the enclosed scope is followed by another token, so

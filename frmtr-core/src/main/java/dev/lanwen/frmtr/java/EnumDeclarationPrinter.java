@@ -463,15 +463,6 @@ final class EnumDeclarationPrinter {
             EnumConstantDeclaration previous,
             EnumConstantDeclaration current,
             int fallback,
-            List<JavaCommentTrivia> gapComments
-    ) {
-        return enumEntryBeginLine(previous, current, fallback, gapComments, OptionalInt.empty());
-    }
-
-    private int enumEntryBeginLine(
-            EnumConstantDeclaration previous,
-            EnumConstantDeclaration current,
-            int fallback,
             List<JavaCommentTrivia> gapComments,
             OptionalInt recoveredGapBeginLine
     ) {

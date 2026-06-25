@@ -31,31 +31,6 @@ final class DocWidths {
     }
 
     /**
-     * Returns whether {@code doc} can be laid out flat within {@code remaining} columns.
-     *
-     * <p>A group fits only when its flat width is finite (no forced break) and no wider than the space left on the
-     * current line.
-     */
-    static boolean fits(Doc doc, int remaining) {
-        return measurement().fits(doc, remaining);
-    }
-
-    /**
-     * Measures the flat-mode display width of {@code doc}, or {@link #NO_FIT} when it contains a forced break
-     * ({@link Doc.HardLine} or {@link Doc.BreakParent}) and therefore cannot be laid out on a single line.
-     *
-     * <p>Indentation does not affect flat width, so it is intentionally not threaded here. Conditional {@link
-     * Doc.IfBreak} nodes always contribute their flat branch and nested groups always measure flat, because this
-     * measures the width a subtree would occupy if it were laid out on a single line. A {@link Doc.ConditionalGroup} is
-     * measured by its first (most-flat) alternative, the representative layout an enclosing group reasons about. A
-     * {@link Doc.LineSuffix} contributes zero width: its content is deferred to the line break, so it never widens the
-     * line it sits on or forces an enclosing group to break.
-     */
-    static int flatWidth(Doc doc) {
-        return measurement().flatWidth(doc);
-    }
-
-    /**
      * Per-render width measurement state.
      *
      * <p>The cache stores only complete flat widths, never the result of a bounded fit that stopped after overflow.

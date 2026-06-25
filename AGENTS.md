@@ -8,8 +8,10 @@
 ## Tests
 
 - Use AssertJ for assertions.
-- Before pushing changes, run the full Gradle test suite (`./gradlew test`) unless that exact suite has already been
-  run for the current change. Gradle cache and up-to-date results are acceptable.
+- Before pushing Java source, Gradle build logic, or formatter fixture changes, run the full Gradle test suite
+  (`./gradlew test`) unless that exact suite has already been run for the current change. Gradle cache and up-to-date
+  results are acceptable. For changes without Java code, such as docs-only, website-only, workflow, or release-automation
+  script changes, use targeted checks instead of the full suite.
 - Do not add tests that only prove properties can be assigned or copied. Tests should exercise behavior with meaningful
   logic behind it.
 - Formatter output regressions should be covered as `frmtr-core/src/test/resources/format/**` fixtures, not inline

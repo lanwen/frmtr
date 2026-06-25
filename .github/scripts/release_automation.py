@@ -32,6 +32,7 @@ ALLOWED_TYPES = {
 TITLE_PATTERN = re.compile(
     r"^(?P<type>[a-z]+)(?:\((?P<scope>[A-Za-z0-9._/-]+)\))?(?P<breaking>!)?: (?P<subject>.+)$")
 SEMVER_PATTERN = re.compile(r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)$")
+SITE_PROPERTIES = Path("site/src/jbake/jbake.properties")
 
 
 @dataclasses.dataclass(frozen=True, order=True)
@@ -104,6 +105,21 @@ def write_version(version: str) -> None:
     lines = Path("gradle.properties").read_text().splitlines()
     updated = [f"version={version}" if line.startswith("version=") else line for line in lines]
     Path("gradle.properties").write_text("\n".join(updated) + "\n")
+
+
+def write_site_version(version: str) -> None:
+    lines = SITE_PROPERTIES.read_text().splitlines()
+    found = False
+    updated = []
+    for line in lines:
+        if line.startswith("frmtr.version="):
+            found = True
+            updated.append(f"frmtr.version={version}")
+        else:
+            updated.append(line)
+    if not found:
+        raise ValueError(f"{SITE_PROPERTIES} does not contain a frmtr.version= line")
+    SITE_PROPERTIES.write_text("\n".join(updated) + "\n")
 
 
 def required_value(args: argparse.Namespace, name: str, env_name: str) -> str:
@@ -403,6 +419,7 @@ def prepare_release(args: argparse.Namespace) -> int:
         return 0
     version = release_version_from(entries)
     write_version(version)
+    write_site_version(version)
     update_changelog(version, entries)
     Path(body_file).parent.mkdir(parents=True, exist_ok=True)
     Path(body_file).write_text(release_pr_body(version, entries))

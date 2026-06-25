@@ -15,6 +15,7 @@ import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.InstanceOfExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
+import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
@@ -136,6 +137,19 @@ final class CompactSourceText {
         if (node instanceof MethodCallExpr methodCallExpr && methodCallExpr.getAllContainedComments().isEmpty()) {
             return compactMethodCall(methodCallExpr);
         }
+        if (
+            node instanceof ObjectCreationExpr objectCreationExpr
+            && objectCreationExpr.getAnonymousClassBody().isEmpty()
+            && objectCreationExpr.getAllContainedComments().isEmpty()
+        ) {
+            return compactObjectCreation(objectCreationExpr);
+        }
+        if (
+            node instanceof MethodReferenceExpr methodReferenceExpr
+            && methodReferenceExpr.getAllContainedComments().isEmpty()
+        ) {
+            return compactMethodReference(methodReferenceExpr);
+        }
         return compactTokenText(node);
     }
 
@@ -159,6 +173,48 @@ final class CompactSourceText {
                     .orElse("")
             + expression.getNameAsString();
         return prefix + "(" + compactJoin(expression.getArguments()) + ")";
+    }
+
+    /**
+     * Reconstructs an object creation that is already known to be comment-free and to carry no anonymous class body.
+     *
+     * <p>Mirrors {@link #compactMethodCall(MethodCallExpr)}: the optional outer scope of an {@code outer.new Inner(...)}
+     * creation, explicit constructor type arguments, the created type, and the constructor arguments are each routed
+     * through this helper's compact policy. Without this case object creations fell through to {@link
+     * #compactTokenText(Node)}, which only collapses whitespace runs and therefore leaked single interior spaces after
+     * {@code (}, before {@code )}, and around argument commas straight from source. The type uses the type-like compact
+     * path so generic angle-bracket spacing is normalized the same way the structured creation printers normalize it.
+     *
+     * <p>The caller's guards keep this path off comment-bearing creations (so contained comments are never dropped) and
+     * off anonymous-class-body creations (whose body cannot be meaningfully flattened to one line); both stay on the
+     * token-text fallback.
+     */
+    private String compactObjectCreation(ObjectCreationExpr expression) {
+        String prefix = expression.getScope().map(scope -> compact(scope) + ".").orElse("")
+            + "new "
+            + expression.getTypeArguments()
+                    .map(typeArguments -> "<" + compactJoinTypeLike(typeArguments) + ">")
+                    .orElse("")
+            + compactTypeLike(expression.getType());
+        return prefix + "(" + compactJoin(expression.getArguments()) + ")";
+    }
+
+    /**
+     * Reconstructs a method reference that is already known to have no contained comments.
+     *
+     * <p>Mirrors the method-reference normalization in {@link #commentFree(Expression)}: the scope is recursed through
+     * {@link #compact(Node)} so a call or object-creation scope (for example {@code a.b( c )::d}) also has its interior
+     * spacing normalized, and explicit type arguments keep the type-like compact spacing. Without this case method
+     * references fell through to {@link #compactTokenText(Node)}, which preserved the source interior spaces inside the
+     * scope's parentheses and the {@code ) ::} / {@code ) .} chain spacing.
+     *
+     * <p>The caller's guard keeps comment-bearing references on the token-text fallback so contained comments survive.
+     */
+    private String compactMethodReference(MethodReferenceExpr expression) {
+        String typeArguments = expression.getTypeArguments()
+                .map(arguments -> "<" + compactJoinTypeLike(arguments) + ">")
+                .orElse("");
+        return compact(expression.getScope()) + "::" + typeArguments + expression.getIdentifier();
     }
 
     /**

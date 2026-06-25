@@ -21,9 +21,7 @@ final class FieldInitializerArrayCreationEarlyOuts {
     void allocateBuckets() {
         ConfigurationDescriptor[] reservedDescriptorBuckets =
             new ConfigurationDescriptor[computedInitialReservedDescriptorBucketCapacityForBootstrap];
-        Registration<String>[] parameterizedHandlerRegistrations = new Registration<
-            String
-        >[] {
+        Registration<String>[] parameterizedHandlerRegistrations = new Registration<String>[] {
             primaryRegistration,
             secondaryRegistration,
         };

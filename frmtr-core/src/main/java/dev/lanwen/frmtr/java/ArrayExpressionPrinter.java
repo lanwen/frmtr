@@ -139,12 +139,14 @@ final class ArrayExpressionPrinter {
     /**
      * Attempts the fully compact {@code new T[] {...}} shape only for arrays with literal values and no comments.
      *
-     * <p>Array creation is rejected from the compact path when the element type itself must break, when the initializer
-     * contains any attached comments, or when a value is not a literal. Those cases need structured docs so comments,
-     * type-argument breaks, and nested expression formatting stay visible to the normal formatter pipeline.
+     * <p>Array creation is rejected from the compact path when the initializer contains any attached comments or when a
+     * value is not a literal. Those cases need structured docs so comments and nested expression formatting stay visible
+     * to the normal formatter pipeline. The element type is intentionally <em>not</em> rejected here: a generic type only
+     * breaks its arguments as a width-driven last resort (see {@link #arrayCreationTypeBreaks}), and the produced text is
+     * itself width-checked by the caller, so a fitting {@code new T<...>[] {...}} stays compact.
      */
     private Optional<String> compactArrayCreation(ArrayCreationExpr expression, ArrayInitializerExpr initializer) {
-        if (arrayCreationTypeBreaks(expression) || !initializer.getAllContainedComments().isEmpty()) {
+        if (!initializer.getAllContainedComments().isEmpty()) {
             return Optional.empty();
         }
         if (initializer.getValues().stream().anyMatch(value -> !value.isLiteralExpr())) {
@@ -220,12 +222,13 @@ final class ArrayExpressionPrinter {
     /**
      * Renders the array element type, breaking generic type arguments before array levels when needed.
      *
-     * <p>Only class/interface element types with type arguments and array levels take the broken path. This preserves
-     * the legacy {@code new Type<...>[]} readability fork without asking the broader type printer to own array-creation
-     * suffixes.
+     * <p>Only class/interface element types with type arguments and array levels can take the broken path, and only as a
+     * width-driven last resort: the broken {@code new Type<...>[]} shape is reached when the compact prefix overflows the
+     * line at the current indentation (see {@link #arrayCreationTypeBreaks}). Otherwise the element type stays compact and
+     * the surrounding initializer/assignment ladder breaks at the braces or {@code =}.
      */
     private Doc arrayCreationType(ArrayCreationExpr expression) {
-        if (!arrayCreationTypeBreaks(expression)) {
+        if (!arrayCreationTypeBreaks(expression, currentIndentedWidth)) {
             return Doc.text(compactTypeLike.apply(expression.getElementType()));
         }
         ClassOrInterfaceType type = expression.getElementType().asClassOrInterfaceType();
@@ -250,12 +253,27 @@ final class ArrayExpressionPrinter {
     }
 
     /**
-     * Reports whether an array creation type owns a generic type-argument break before its array-level suffixes.
+     * Reports whether an array creation type must break its generic type arguments before its array-level suffixes.
+     *
+     * <p>This is a <em>width-driven last resort</em>, not a structural rule. A generic array element type is eligible for
+     * the broken {@code new Type<...>[]} shape only when it is a class/interface type with type arguments and at least one
+     * array level. Eligibility alone is not enough: the fork fires only when the compact prefix
+     * ({@code new Type<...>[]}, plus a trailing open initializer brace when one follows) overflows the line at
+     * {@code widthAtContinuation}. For everything that fits, the type stays compact and the surrounding clean ladder
+     * breaks at the braces or {@code =} instead of shattering short generics. The width function is supplied by the caller
+     * because the relevant continuation indent differs between a standalone expression and a field/local initializer.
      */
-    boolean arrayCreationTypeBreaks(ArrayCreationExpr expression) {
-        return expression.getElementType().isClassOrInterfaceType()
-            && expression.getElementType().asClassOrInterfaceType().getTypeArguments().isPresent()
-            && !expression.getLevels().isEmpty();
+    boolean arrayCreationTypeBreaks(ArrayCreationExpr expression, ToIntFunction<String> widthAtContinuation) {
+        if (
+            !expression.getElementType().isClassOrInterfaceType()
+            || expression.getElementType().asClassOrInterfaceType().getTypeArguments().isEmpty()
+            || expression.getLevels().isEmpty()
+        ) {
+            return false;
+        }
+        String compactPrefix = arrayCreationPrefix(expression)
+            + (expression.getInitializer().isPresent() ? " {" : "");
+        return widthAtContinuation.applyAsInt(compactPrefix) > options.lineWidth();
     }
 
     Doc arrayInitializer(ArrayInitializerExpr expression) {

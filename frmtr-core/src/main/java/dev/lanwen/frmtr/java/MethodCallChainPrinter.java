@@ -4,6 +4,7 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
+import com.github.javaparser.ast.comments.JavadocComment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
@@ -2657,6 +2658,12 @@ final class MethodCallChainPrinter {
                     .map(comment -> Doc.concat(comment, Doc.HARD_LINE))
                     .toList()
         );
+        // A block or Javadoc comment interspersed between two chain links — e.g. `.define(A)` then `/** doc */` then
+        // `.define(B)` — is parked on the B selector depending on layout. Recover it from the orphan pool first (the
+        // expanded shape) so a single source-position query owns the slot for every whitespace shape, then fall through
+        // to the selector's own comment (the canonical/collapsed shape). Both are claimed under the same anchor by
+        // identity, so whichever shape applies, the comment renders exactly once.
+        Doc interspersedOrphans = interspersedOrphanCommentsBeforeSelector(expression);
         // JavaParser attaches a line comment that sits between the scope and the selector to the selector name as its own
         // comment, so the same comment can also be offered by a neighboring slot: the leading-line slot above (same prefix
         // call) or the previous segment's between-segments trailing slot. The name comment is offered here under its own
@@ -2664,17 +2671,21 @@ final class MethodCallChainPrinter {
         // dry-run records the true first-traversal claimant and {@code ownsHere} suppresses whichever offer lost. Output
         // is unchanged because the suppressed offer already lost the first-claim race and rendered empty. The
         // same-prefix leading offer is also excluded by identity here so the name slot never re-claims this segment's own
-        // leading comment.
+        // leading comment. A Javadoc selector comment is accepted alongside line and block comments because JavaParser
+        // parses a `/** ... */` between chain links as a Javadoc attached to the next selector, and dropping it on
+        // kind alone lost it in every shape.
         Optional<Comment> rawNameComment = expression.getName()
                 .getComment()
-                .filter(comment -> comment instanceof LineComment || comment instanceof BlockComment)
+                .filter(comment -> comment instanceof LineComment
+                        || comment instanceof BlockComment
+                        || comment instanceof JavadocComment)
                 .filter(comment -> CommentIndex.startsBefore(comment, expression.getName()))
                 .filter(comment -> leadingComments.stream().noneMatch(leadingTrivia -> leadingTrivia.comment() == comment));
         Doc nameComment = rawNameComment
                 .map(comment -> comments.comment(comment, expression, OwnerSlot.OWN))
                 .orElse(Doc.EMPTY);
         if (nameComment == Doc.EMPTY) {
-            return leading;
+            return Doc.concat(leading, interspersedOrphans);
         }
         Doc namePrefix = rawNameComment
                 .filter(comment -> comment instanceof BlockComment
@@ -2682,7 +2693,57 @@ final class MethodCallChainPrinter {
                 )
                 .map(ignored -> Doc.concat(nameComment, Doc.text(" ")))
                 .orElseGet(() -> Doc.concat(nameComment, Doc.HARD_LINE));
-        return Doc.concat(leading, namePrefix);
+        return Doc.concat(leading, interspersedOrphans, namePrefix);
+    }
+
+    /**
+     * Recovers a block or Javadoc comment that sits between this segment's scope and its selector but that JavaParser
+     * parked as an orphan of the call rather than as the selector's own trivia.
+     *
+     * <p>This is the orphan-bucket sibling of the selector's own-comment slot in {@link #methodCallSegmentPrefix}. At the
+     * canonical and collapsed shapes JavaParser attaches a {@code .define(A) /** doc *}{@code / .define(B)} comment to the
+     * {@code B} selector, so the own-comment slot renders it; an expanded whitespace shape re-buckets the identical
+     * comment onto the enclosing call's orphan pool even though the AST is otherwise unchanged, so the own slot no longer
+     * holds it and it is dropped. Selecting by source position from the orphan pool — strictly after the scope ends and
+     * strictly before the selector begins — keeps the comment owned by this between-links slot whatever the layout.
+     *
+     * <p>The orphan pool is read directly from the node ({@link Node#getOrphanComments()}) rather than through the
+     * comment-placement map, because the assignment/initializer renderers hand the chain printer a {@link Node#clone()
+     * clone} of the chain expression (see {@code ExpressionRuleEnvelope.expressionWithoutOwnComment}). A clone carries its
+     * orphan comments forward, but the identity-keyed placement map only knows the original parse node, so the map answers
+     * empty for the clone; the node's own orphan list is the one association that survives the clone. Line comments are
+     * deliberately excluded: they are already recovered by {@link #leadingLineCommentsBeforeSegment} and the
+     * between-segments trailing slot. Each comment is offered under {@link OwnerSlot#ORPHAN} and claimed once, so the
+     * canonical/collapsed shape — where the comment is the selector's own trivia and not in the orphan pool — is left
+     * byte-identical.
+     */
+    private Doc interspersedOrphanCommentsBeforeSelector(MethodCallExpr expression) {
+        Optional<Expression> scope = expression.getScope();
+        if (scope.isEmpty() || expression.getOrphanComments().isEmpty()) {
+            return Doc.EMPTY;
+        }
+        // An empty-argument selector ({@code .util()}) routes all of its orphan comments — including a between-links one
+        // parked on the call — through the empty-argument-list renderer ({@code MethodCallPrinter.emptyMethodCallArguments}),
+        // which already claims and emits them. Re-offering them here would double-claim, so leave empty-argument calls to
+        // that owner and recover only the orphan that no other slot reaches: the one parked on a call that still carries
+        // its own arguments.
+        if (expression.getArguments().isEmpty()) {
+            return Doc.EMPTY;
+        }
+        Expression scoped = scope.orElseThrow();
+        return Doc.concat(
+            expression.getOrphanComments()
+                    .stream()
+                    .map(JavaCommentTrivia::from)
+                    .filter(trivia -> trivia.isBlock() || trivia.isJavadoc())
+                    .filter(trivia -> trivia.liesBetween(scoped, expression.getName()))
+                    .sorted((left, right) ->
+                        CommentIndex.sourceOrderComparator().compare(left.comment(), right.comment()))
+                    .map(trivia -> comments.comment(trivia, expression, OwnerSlot.ORPHAN))
+                    .filter(comment -> comment != Doc.EMPTY)
+                    .map(comment -> Doc.concat(comment, Doc.HARD_LINE))
+                    .toList()
+        );
     }
 
     private List<JavaCommentTrivia> leadingLineCommentsBeforeSegment(MethodCallExpr expression) {

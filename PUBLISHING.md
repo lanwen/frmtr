@@ -104,9 +104,12 @@ Version bump and changelog rules are documented in [docs/release-automation.md](
 breaking changes bump minor while frmtr is pre-1.0 and major after that, `feat`/`feature` bumps minor, and everything
 else bumps patch. Dependency bumps are skipped from release notes unless they mention JavaParser.
 
-Configure the GitHub App credentials as repository secrets available to the automation workflows:
+Configure the GitHub App client ID as a repository variable available to the automation workflows:
 
 - `RELEASE_APP_CLIENT_ID`
+
+Configure the GitHub App private key as a repository secret:
+
 - `RELEASE_APP_PRIVATE_KEY`
 
 Configure the `release` environment secrets for GitHub release and Maven Central publication:

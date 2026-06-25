@@ -531,8 +531,8 @@ final class ExpressionPrinters {
         return arrays.arrayAccessWithBrokenEnclosedName(expression);
     }
 
-    boolean arrayCreationTypeBreaks(ArrayCreationExpr expression) {
-        return arrays.arrayCreationTypeBreaks(expression);
+    boolean arrayCreationTypeBreaks(ArrayCreationExpr expression, ToIntFunction<String> widthAtContinuation) {
+        return arrays.arrayCreationTypeBreaks(expression, widthAtContinuation);
     }
 
     String arrayCreationPrefix(ArrayCreationExpr expression) {

@@ -119,7 +119,7 @@ final class VariableInitializerLayout {
 
     private final Predicate<ConditionalExpr> shouldBreakBeforeConditionalInitializer;
 
-    private final Predicate<ArrayCreationExpr> arrayCreationTypeBreaks;
+    private final BiPredicate<ArrayCreationExpr, ToIntFunction<String>> arrayCreationTypeBreaks;
 
     private final Function<ArrayCreationExpr, String> arrayCreationPrefix;
 
@@ -182,7 +182,7 @@ final class VariableInitializerLayout {
             Function<Type, Doc> castType,
             Function<ConditionalExpr, Doc> brokenConditionalExpression,
             Predicate<ConditionalExpr> shouldBreakBeforeConditionalInitializer,
-            Predicate<ArrayCreationExpr> arrayCreationTypeBreaks,
+            BiPredicate<ArrayCreationExpr, ToIntFunction<String>> arrayCreationTypeBreaks,
             Function<ArrayCreationExpr, String> arrayCreationPrefix,
             BiFunction<ArrayInitializerExpr, Boolean, Doc> arrayInitializer,
             BiFunction<ArrayInitializerExpr, String, String> compactArrayInitializerWithSourceSpacing,
@@ -1021,17 +1021,26 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * Breaks array-creation initializers only after checking whether the array type or initializer already owns a more
-     * specific line-breaking shape.
+     * Breaks array-creation initializers via the clean {@code =}/brace-break ladder.
+     *
+     * <p>The element type is consulted only as a continuation-line last resort: this ladder keeps the compact
+     * {@code new Type<...>[]} prefix and breaks at the braces or {@code =} whenever that compact prefix fits the
+     * continuation line where option-3 below would place it, so short generics are no longer shattered into
+     * {@code new T<\narg\n>[]}. The bail is deliberately measured at the continuation baseline rather than the assignment
+     * line: when only the assignment line overflows this ladder can still break cleanly at {@code =} and keep every line
+     * within width, so it must not hand off to the type-argument shatter. Only when the compact prefix itself overflows
+     * the continuation line does this method bail, letting the shared array printer own the genuinely-too-long
+     * {@code new Type<...>[]} type-argument break.
      */
     private Optional<Doc> variableWithBrokenArrayCreation(
             String name,
             String flatName,
             ArrayCreationExpr arrayCreation
     ) {
+        ToIntFunction<String> continuationPrefixWidth = layoutWidth::continuationStatement;
         if (
             arrayCreation.getInitializer().isEmpty()
-            || arrayCreationTypeBreaks.test(arrayCreation)
+            || arrayCreationTypeBreaks.test(arrayCreation, continuationPrefixWidth)
             || !arrayCreation.getAllContainedComments().isEmpty()
         ) {
             return Optional.empty();
@@ -1971,10 +1980,19 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * Treats array initializers and broken array types as already owning the assignment continuation shape.
+     * Treats array initializers and genuinely-overflowing generic array types as already owning the assignment
+     * continuation shape.
+     *
+     * <p>An array with an initializer always owns its break (the initializer drives the layout). An array without an
+     * initializer only owns a break when its generic type arguments overflow at the continuation baseline and therefore
+     * take the width-driven last-resort break; a short generic array type whose compact prefix fits its continuation line
+     * does not claim an own-break and lets the surrounding assignment decide where to break. The continuation baseline is
+     * used so this stays consistent with {@link #variableWithBrokenArrayCreation}: a generic array type only reports an
+     * own-break when it would still overflow after the assignment cleanly broke at {@code =}.
      */
     private boolean arrayCreationHasOwnBreak(ArrayCreationExpr expression) {
-        return expression.getInitializer().isPresent() || arrayCreationTypeBreaks.test(expression);
+        return expression.getInitializer().isPresent()
+            || arrayCreationTypeBreaks.test(expression, layoutWidth::continuationStatement);
     }
 
     private String commentText(Doc comment) {

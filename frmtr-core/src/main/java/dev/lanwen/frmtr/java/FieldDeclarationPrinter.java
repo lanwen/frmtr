@@ -106,7 +106,7 @@ final class FieldDeclarationPrinter {
             Function<Type, Doc> castType,
             Function<ConditionalExpr, Doc> brokenConditionalExpression,
             Predicate<ConditionalExpr> shouldBreakBeforeConditionalInitializer,
-            Predicate<ArrayCreationExpr> arrayCreationTypeBreaks,
+            BiPredicate<ArrayCreationExpr, ToIntFunction<String>> arrayCreationTypeBreaks,
             Function<ArrayCreationExpr, String> arrayCreationPrefix,
             BiFunction<ArrayInitializerExpr, Boolean, Doc> arrayInitializer,
             BiFunction<ArrayInitializerExpr, String, String> compactArrayInitializerWithSourceSpacing,

@@ -2,9 +2,7 @@ class ArraySamples {
 
     boolean[] skip = new boolean[candidates.length];
 
-    Class<?> lookupTableClass = new CachedLookupTable<
-        RefreshPolicyKey
-    >[1].getClass();
+    Class<?> lookupTableClass = new CachedLookupTable<RefreshPolicyKey>[1].getClass();
 
     Class<?> rawLookupTableClass = new CachedLookupTable[1000000000000000000].getClass();
 

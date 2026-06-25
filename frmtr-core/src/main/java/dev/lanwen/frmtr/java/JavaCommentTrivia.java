@@ -115,13 +115,6 @@ record JavaCommentTrivia(Comment comment) {
     }
 
     /**
-     * Reports whether the comment begins on the same source line where {@code node} begins.
-     */
-    boolean startsOnSameLine(Node node) {
-        return CommentIndex.startsOnSameLine(comment, node);
-    }
-
-    /**
      * Reports whether the comment begins before the source line where {@code node} begins.
      */
     boolean startsBeforeBeginLine(Node node) {
@@ -147,13 +140,6 @@ record JavaCommentTrivia(Comment comment) {
      */
     boolean startsAfterNodeOnSameLine(Node node) {
         return CommentIndex.startsAfterNodeOnSameLine(node, comment);
-    }
-
-    /**
-     * Reports whether the comment begins immediately after {@code node} on the same source line.
-     */
-    boolean startsImmediatelyAfterNodeOnSameLine(Node node) {
-        return CommentIndex.startsImmediatelyAfterNodeOnSameLine(node, comment);
     }
 
     /**

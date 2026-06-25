@@ -110,18 +110,6 @@ final class ControlConditionPrinter {
         );
     }
 
-    /**
-     * Renders a parenthesized control condition without deciding the surrounding statement grammar.
-     *
-     * <p>The compact path includes attached block comments because conditions with a block comment before the value
-     * should keep the comment visible inside the parentheses. When the condition no longer fits, the caller-provided
-     * broken expression layout is used so binary conditions keep the same continuation policy as the rest of the
-     * formatter.
-     */
-    Doc controlCondition(Expression expression) {
-        return controlCondition(expression, "(", ") {}", currentIndentedWidth);
-    }
-
     Doc controlCondition(
             Expression expression,
             String opening,
@@ -346,14 +334,6 @@ final class ControlConditionPrinter {
 
     private boolean sourceMultilineMethodCallArguments(MethodCallExpr expression) {
         return methodCallLayout.sourceMultilineArgumentsStartAfterName(expression);
-    }
-
-    private String methodCallPrefix(MethodCallExpr expression) {
-        return expression.getScope().map(scope -> compact.apply(scope) + ".").orElse("")
-            + expression.getTypeArguments()
-                    .map(typeArguments -> "<" + compactJoin.apply(typeArguments) + ">")
-                    .orElse("")
-            + expression.getNameAsString();
     }
 
     private Doc brokenCondition(Expression expression) {

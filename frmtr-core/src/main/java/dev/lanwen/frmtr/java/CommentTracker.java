@@ -324,10 +324,6 @@ final class CommentTracker {
                 .toList();
     }
 
-    Doc orphanComments(Node node) {
-        return orphanComments(node, ignored -> true);
-    }
-
     Doc orphanComments(Node node, Predicate<Comment> predicate) {
         return Doc.concat(
             commentPlacement.orphanComments(node)
@@ -348,16 +344,6 @@ final class CommentTracker {
         return commentPlacement.orphanComments(node)
                 .stream()
                 .filter(trivia -> predicate.test(trivia.comment()))
-                .filter(t -> ownsHere(t, node, OwnerSlot.ORPHAN))
-                .filter(t -> claim(t, node, OwnerSlot.ORPHAN))
-                .map(JavaFormatter::commentDoc)
-                .toList();
-    }
-
-    List<Doc> orphanTriviaCommentStatements(Node node, Predicate<JavaCommentTrivia> predicate) {
-        return commentPlacement.orphanComments(node)
-                .stream()
-                .filter(predicate)
                 .filter(t -> ownsHere(t, node, OwnerSlot.ORPHAN))
                 .filter(t -> claim(t, node, OwnerSlot.ORPHAN))
                 .map(JavaFormatter::commentDoc)

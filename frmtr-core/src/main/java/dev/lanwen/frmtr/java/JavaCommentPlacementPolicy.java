@@ -357,13 +357,6 @@ final class JavaCommentPlacementPolicy {
     }
 
     /**
-     * Reports whether {@code node} has any direct orphan comments in the run map.
-     */
-    boolean hasOrphanComments(Node node) {
-        return !orphanComments(node).isEmpty();
-    }
-
-    /**
      * Returns JavaParser's recursive contained comments for {@code node}.
      */
     List<JavaCommentTrivia> containedComments(Node node) {
@@ -790,17 +783,6 @@ final class JavaCommentPlacementPolicy {
         }
         byLine.replaceAll((ignored, comments) -> List.copyOf(comments));
         return byLine.isEmpty() ? Map.of() : Collections.unmodifiableMap(byLine);
-    }
-
-    /**
-     * Finds the nearest block comment that source placed after {@code node} on the same line.
-     *
-     * <p>Unlike {@link #unattachedTrailingBlockComment(Node)}, this includes comments JavaParser attached to another
-     * nearby node. Record components use this when a same-line block comment visually belongs to the component name even
-     * if the parser associated it with the following component.
-     */
-    Optional<JavaCommentTrivia> trailingBlockCommentAfterNode(Node node) {
-        return trailingBlockCommentsAfterNode(node).stream().findFirst();
     }
 
     /**

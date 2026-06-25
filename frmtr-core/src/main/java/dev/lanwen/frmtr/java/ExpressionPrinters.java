@@ -375,10 +375,6 @@ final class ExpressionPrinters {
         return assignments.assignmentStatement(expression);
     }
 
-    Doc returnStatement(Expression expression) {
-        return returnExpressions.returnStatement(expression);
-    }
-
     Doc returnStatement(Expression expression, LayoutWidth.LineBudget lineBudget) {
         return returnExpressions.returnStatement(expression, lineBudget);
     }
@@ -541,10 +537,6 @@ final class ExpressionPrinters {
 
     String arrayCreationPrefix(ArrayCreationExpr expression) {
         return arrays.arrayCreationPrefix(expression);
-    }
-
-    Doc arrayInitializer(ArrayInitializerExpr expression) {
-        return arrays.arrayInitializer(expression);
     }
 
     Doc arrayInitializer(ArrayInitializerExpr expression, boolean forceBreak) {

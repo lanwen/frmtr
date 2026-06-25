@@ -89,40 +89,6 @@ final class CallableSignaturePrinter {
     }
 
     /**
-     * Prints a simple parameter list for syntax nodes that expose only ordinary parameters.
-     *
-     * <p>This keeps the compact group shape used by declaration-like nodes that do not have receiver parameters or a
-     * caller-provided force-break decision.
-     */
-    Doc parameters(NodeList<Parameter> parameters) {
-        // A leading line comment on any parameter cannot share a line with parameter text, so it forces the list to
-        // break onto one parameter per line; see parameter(Parameter). Without the break a flat group would try to keep
-        // the parameters on one line where the rendered `//` would comment out everything that follows.
-        boolean lineComment = parameters.stream().anyMatch(this::parameterHasOwnLeadingLineComment);
-        Doc body = Doc.concat(
-            Doc.text("("),
-            Doc.indent(
-                Doc.indent(
-                    Doc.concat(
-                        lineComment ? Doc.HARD_LINE : Doc.SOFT_LINE,
-                        Doc.joinComma(parameters.stream().map(this::parameter).toList())
-                    )
-                )
-            ),
-            lineComment ? Doc.HARD_LINE : Doc.SOFT_LINE,
-            Doc.text(")")
-        );
-        return lineComment ? body : Doc.group(body);
-    }
-
-    /**
-     * Prints a callable parameter list using the default soft-line grouping policy.
-     */
-    Doc parameters(CallableDeclaration<?> declaration) {
-        return parameters(declaration, false);
-    }
-
-    /**
      * Prints callable parameters, including an optional receiver parameter before ordinary parameters.
      *
      * <p>The force-break branch is chosen by the caller after it knows the full signature prefix and suffix, because
@@ -319,15 +285,6 @@ final class CallableSignaturePrinter {
                 Doc.indent(Doc.concat(Doc.LINE, Doc.join(Doc.LINE, trailingBounds)))
             )
         );
-    }
-
-    /**
-     * Prints ordinary parameters, preserving the source-layout cases that affect callable signatures: breakable generic
-     * types, varargs annotations before {@code ...}, leading own block comments, and trailing block comments after the
-     * last callable parameter.
-     */
-    Doc parameter(Parameter parameter) {
-        return parameter(null, Optional.empty(), parameter);
     }
 
     /**

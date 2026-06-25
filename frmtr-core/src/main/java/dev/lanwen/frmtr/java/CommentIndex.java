@@ -5,7 +5,6 @@ import com.github.javaparser.Range;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.comments.Comment;
 import java.util.Comparator;
-import java.util.List;
 
 /**
  * Indexes JavaParser comment ranges for formatter helpers that need source-position decisions before rendering.
@@ -23,40 +22,6 @@ final class CommentIndex {
     private static final Comparator<Comment> SOURCE_ORDER = Comparator.comparing(CommentIndex::beginPosition);
 
     private CommentIndex() {}
-
-    /**
-     * Reports whether JavaParser found any contained line comments under {@code node}.
-     */
-    static boolean hasContainedLineComments(Node node) {
-        return node.getAllContainedComments()
-                .stream()
-                .map(JavaCommentTrivia::from)
-                .anyMatch(JavaCommentTrivia::isLine);
-    }
-
-    /**
-     * Finds line comments that sit between two neighboring nodes in source order.
-     *
-     * <p>JavaParser attaches comments to nearby nodes instead of to operator or separator tokens. Callers use this range
-     * query when their syntax tree already knows two adjacent operands or elements and needs the comments whose source
-     * positions belong to the gap between them.
-     */
-    static List<Comment> lineCommentsBetween(Node container, Node previous, Node next) {
-        int previousLine = previous.getRange().map(range -> range.end.line).orElse(Integer.MIN_VALUE);
-        int nextLine = next.getRange().map(range -> range.begin.line).orElse(Integer.MAX_VALUE);
-        return container.getAllContainedComments()
-                .stream()
-                .map(JavaCommentTrivia::from)
-                .filter(JavaCommentTrivia::isLine)
-                .filter(comment -> comment.comment()
-                            .getRange()
-                            .map(range -> range.begin.line >= previousLine && range.begin.line < nextLine)
-                            .orElse(false)
-                )
-                .map(JavaCommentTrivia::comment)
-                .sorted(sourceOrderComparator())
-                .toList();
-    }
 
     /**
      * Returns the source start line for a node, using the caller's explicit fallback when JavaParser has no range.
@@ -105,16 +70,6 @@ final class CommentIndex {
      */
     static Comparator<Comment> sourceOrderComparator() {
         return SOURCE_ORDER;
-    }
-
-    /**
-     * Selects comments that begin on the same line where {@code node} ends.
-     *
-     * <p>For broken binary expressions with end-position operators, this preserves source comments that trailed an operand
-     * on that operand's printed line while leaving later gap comments to become standalone continuation lines.
-     */
-    static List<Comment> commentsStartingOnEndLine(Node node, List<Comment> comments) {
-        return comments.stream().filter(comment -> startsOnEndLine(node, comment)).toList();
     }
 
     /**

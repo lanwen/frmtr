@@ -287,13 +287,6 @@ final class ClassOrInterfaceDeclarationPrinter {
         return declaration.getMembers().isEmpty() && declaration.getOrphanComments().isEmpty();
     }
 
-    /**
-     * Returns the compact body width used by the flat-header fit check.
-     */
-    private int flatMemberBlockWidth(ClassOrInterfaceDeclaration declaration) {
-        return emptyMemberBlock(declaration) ? "{}".length() : "{".length();
-    }
-
     private int classOrInterfaceHeaderWidth(ClassOrInterfaceDeclaration declaration, String text) {
         return classOrInterfaceIndentWidth(declaration) + text.length();
     }

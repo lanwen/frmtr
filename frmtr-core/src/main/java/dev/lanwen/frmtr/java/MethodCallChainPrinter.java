@@ -2243,15 +2243,6 @@ final class MethodCallChainPrinter {
         );
     }
 
-    private String compactMethodCallChainSegmentOpener(MethodCallExpr expression) {
-        return "."
-            + expression.getTypeArguments()
-                    .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
-                    .orElse("")
-            + expression.getNameAsString()
-            + "(";
-    }
-
     private Doc methodCallChainSegment(
             MethodCallExpr expression,
             boolean reserveStatementTerminator,

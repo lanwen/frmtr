@@ -2722,14 +2722,13 @@ final class MethodCallChainPrinter {
         if (scope.isEmpty() || expression.getOrphanComments().isEmpty()) {
             return Doc.EMPTY;
         }
-        // An empty-argument selector ({@code .util()}) routes all of its orphan comments — including a between-links one
-        // parked on the call — through the empty-argument-list renderer ({@code MethodCallPrinter.emptyMethodCallArguments}),
-        // which already claims and emits them. Re-offering them here would double-claim, so leave empty-argument calls to
-        // that owner and recover only the orphan that no other slot reaches: the one parked on a call that still carries
-        // its own arguments.
-        if (expression.getArguments().isEmpty()) {
-            return Doc.EMPTY;
-        }
+        // Empty-argument selectors ({@code .util()}, {@code .build()}) are recovered here too. They route their inside-
+        // the-parens orphans through {@code MethodCallPrinter.emptyMethodCallArguments}, but that owner now excludes the
+        // between-links orphan (the one this slot selects: strictly after the scope ends and before the selector begins),
+        // so the two slots partition the call's orphan pool by source position and each orphan is claimed exactly once.
+        // Without this recovery the between-links comment before an empty-argument selector is dropped whenever the call
+        // reaches the printer as a clone (the assignment/initializer value path), because the clone's orphans survive on
+        // the node but not in the placement map the empty-argument owner reads.
         Expression scoped = scope.orElseThrow();
         return Doc.concat(
             expression.getOrphanComments()

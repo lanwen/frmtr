@@ -71,7 +71,8 @@ so multiple feature PRs before the next release still require only one minor sna
 
 - `pr-title.yml`: enforces the PR title schema.
 - `release-pr.yml`: on every `main` push, regenerates `automation/release`, updates `CHANGELOG.md` and
-  `gradle.properties`, and opens or updates a `release` PR.
+  `gradle.properties`, updates the JBake site version in `site/src/jbake/jbake.properties`, and opens or updates a
+  `release` PR.
 - `snapshot-target-pr.yml`: on every `main` push, raises the snapshot target when merged feature or breaking-change PRs
   require a higher release line; manual dispatch can set a specific snapshot target.
 - `snapshot-version-guard.yml`: fails PRs whose merged result has a non-`-SNAPSHOT` version unless the PR is labeled

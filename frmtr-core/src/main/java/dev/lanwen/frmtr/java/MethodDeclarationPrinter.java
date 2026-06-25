@@ -161,7 +161,7 @@ final class MethodDeclarationPrinter {
                     declaration.getThrownExceptions(),
                     declaration.getBody().isPresent() ? " {" : ";",
                     sourceShapePolicy.throwsStartsOnOwnLine(declaration),
-                    sourceParametersBreak || parametersBreak
+                    (sourceParametersBreak || parametersBreak) && callableSignatures.parametersCanBreak(declaration)
                 )
             );
         }

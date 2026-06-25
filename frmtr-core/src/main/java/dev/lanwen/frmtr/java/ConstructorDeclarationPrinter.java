@@ -90,7 +90,7 @@ final class ConstructorDeclarationPrinter {
                     declaration.getThrownExceptions(),
                     " {",
                     false,
-                    parametersBreak
+                    parametersBreak && callableSignatures.parametersCanBreak(declaration)
                 )
             );
         }

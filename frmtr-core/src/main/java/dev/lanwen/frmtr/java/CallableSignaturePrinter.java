@@ -198,6 +198,23 @@ final class CallableSignaturePrinter {
     }
 
     /**
+     * Reports whether the callable parameter list can actually break onto continuation lines.
+     *
+     * <p>This is distinct from {@link #parametersBreak(String, CallableDeclaration, String)}, which only asks whether the
+     * flat signature overflows the line width. An empty parameter list ({@code ()}, with no ordinary parameters and no
+     * receiver parameter) always renders inline and has no break group, so an overflowing signature cannot move a
+     * following clause onto a lower-column continuation line by breaking the parameters. The throws-clause width decision
+     * must consult this before treating the parameters as broken: when {@code ()} cannot break, the {@code )} stays at the
+     * end of the over-width signature, so the throws clause is measured against the full flat signature and wraps onto its
+     * own line instead of being rendered inline next to a {@code )} that never moved. Width-based decisions that do not
+     * depend on the parameters actually breaking (such as the multiline-return-type break) keep using
+     * {@link #parametersBreak(String, CallableDeclaration, String)} directly.
+     */
+    boolean parametersCanBreak(CallableDeclaration<?> declaration) {
+        return !declaration.getParameters().isEmpty() || declaration.getReceiverParameter().isPresent();
+    }
+
+    /**
      * Builds the flat parameter text used only for deciding whether the rendered parameter list should break.
      */
     String callableParameterText(CallableDeclaration<?> declaration) {

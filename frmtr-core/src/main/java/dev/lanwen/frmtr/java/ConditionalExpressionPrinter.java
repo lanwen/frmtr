@@ -293,12 +293,50 @@ final class ConditionalExpressionPrinter {
                     Doc.HARD_LINE,
                     Doc.text("? "),
                     conditionalBranch(expression.getThenExpr()),
+                    branchTailTrailingComment(expression.getThenExpr()),
                     Doc.HARD_LINE,
                     Doc.text(": "),
                     conditionalBranch(expression.getElseExpr())
                 )
             )
         );
+    }
+
+    /**
+     * Recovers a line comment that trails a ternary branch's last token but that the branch renderer drops, and renders
+     * it inline after the branch.
+     *
+     * <p>This covers the then-branch &rarr; {@code :} gap when the then-branch is a multi-line binary chain. JavaParser
+     * attaches a {@code base + offset // tuned} comment to the whole branch (its own comment, which
+     * {@link #commentedConditionalExpression} already routes through the {@code THEN_TRAILING} slot), but in
+     * {@code aaa + bbb // mid + ccc // tail} it instead parks the trailing {@code // tail} after the chain's last operand
+     * as that operand's leading trivia. The binary continuation renderer only offers comments <em>between</em> operands,
+     * so it reaches {@code // mid} but never a comment that begins after the whole chain's last token, and the ternary
+     * then-branch &rarr; {@code :} slot is owned by neither printer. This is the ternary then-branch analog of the
+     * after-initializer/before-{@code ;} slot recovered by
+     * {@link JavaCommentPlacementPolicy#trailingInitializerCommentsBeforeSemicolon(Node, Node)}.
+     *
+     * <p>Rendering happens here, on the branch's last printed line, rather than re-routing the whole conditional through
+     * {@link #commentedConditionalExpression}: that path renders branches with the own-comment-stripping clone renderer,
+     * which a multi-line branch's between-operand comments ({@code // mid}) cannot survive because a cloned node is absent
+     * from the per-run comment map. Keeping the branch on its existing {@link #conditionalBranch} renderer preserves every
+     * inner comment; only the genuinely-trailing tail comment is added back here.
+     *
+     * <p>The comment is claimed once by identity through {@link CommentTracker#comment(Comment)}: the binary renderer
+     * never offers it (it has no operand after the last to pin it between), so this is its only claimant. A branch with no
+     * such trailing comment — including the {@code @default} single-line then-branch whose comment is the branch's own
+     * trivia, not contained trivia after the branch end — yields {@link Doc#EMPTY} and leaves the layout unchanged.
+     */
+    private Doc branchTailTrailingComment(Expression branch) {
+        Optional<Comment> branchOwn = branch.getComment();
+        return branch.getAllContainedComments()
+                .stream()
+                .filter(LineComment.class::isInstance)
+                .filter(comment -> branchOwn.map(own -> own != comment).orElse(true))
+                .filter(comment -> CommentIndex.startsAfterEndOf(branch, comment))
+                .min(CommentIndex.sourceOrderComparator())
+                .map(comment -> Doc.concat(Doc.text(" "), comments.comment(comment)))
+                .orElse(Doc.EMPTY);
     }
 
     /**

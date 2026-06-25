@@ -164,14 +164,34 @@ final class MethodCallChainPrinter {
             MethodCallExpr expression,
             ToIntFunction<String> firstLineWidth
     ) {
-        return packedCompactMethodCallChain(
-            expression,
-            firstLineWidth,
-            continuationStatementWidth,
-            true
-        )
-                .map(this::packedMethodCallChainDoc)
-                .or(() -> packedBrokenObjectRootChain(expression, firstLineWidth));
+        // Multi-segment object-creation-rooted chains (new X(...).a().b()...) break one segment per line: constructor
+        // root alone, every .call() on its own continuation line. They skip the greedy packer, which would cram the root
+        // plus the leading calls onto the first line (the lopsided shape this fix removes), and go straight to the
+        // broken-object-root layout below. Name-rooted and factory-rooted chains, and single-segment object roots, still
+        // greedy-pack here so their existing layouts are unchanged.
+        if (!isGreedyPackedMultiSegmentObjectRoot(expression)) {
+            Optional<Doc> packed = packedCompactMethodCallChain(
+                expression,
+                firstLineWidth,
+                continuationStatementWidth,
+                true
+            ).map(this::packedMethodCallChainDoc);
+            if (packed.isPresent()) {
+                return packed;
+            }
+        }
+        return packedBrokenObjectRootChain(expression, firstLineWidth);
+    }
+
+    /**
+     * Identifies an object-creation-rooted chain with two or more {@code .call()} segments. Only these were greedy-packed
+     * onto the first line; single-segment object roots ({@code new X(...).onlyCall(...)}) keep their existing layout.
+     */
+    private boolean isGreedyPackedMultiSegmentObjectRoot(MethodCallExpr expression) {
+        if (!methodChainPlanner.rootIsObjectCreation(expression)) {
+            return false;
+        }
+        return methodCallChainAnalysis(expression).calls().size() >= 2;
     }
 
     private Optional<PackedMethodCallChainText> packedCompactMethodCallChain(
@@ -227,6 +247,20 @@ final class MethodCallChainPrinter {
         );
     }
 
+    /**
+     * Renders an object-creation-rooted chain that must break, with the {@code new X(...)} root alone on the first line
+     * and every {@code .call()} on its own indented continuation line.
+     *
+     * <p>This matches name-rooted chains (and prettier-java / google-java-format constructor roots), which already break
+     * one segment per line. The earlier greedy-pack path crammed the root and the first calls onto the first line, an
+     * inconsistent lopsided shape; for constructor roots that path is skipped so this layout owns them.
+     *
+     * <p>The multi-segment branch only needs the root opener to fit and the segments to stay flat. The unconditional
+     * single-segment case ({@code new X(...).onlyCall(...)}) is intentionally left to {@link #objectRootSingleSegmentChain},
+     * which keeps the call attached to the constructor close exactly like the name-rooted single-segment equivalent; its
+     * narrower guards (non-empty constructor arguments, a constructor that does not already fit on one line) stay
+     * unchanged so that single-segment routing is preserved.
+     */
     private Optional<Doc> packedBrokenObjectRootChain(
             MethodCallExpr expression,
             ToIntFunction<String> firstLineWidth
@@ -237,18 +271,19 @@ final class MethodCallChainPrinter {
             || analysis.hasBlockLambdaArgument()
             || !(analysis.root() instanceof ObjectCreationExpr objectCreation)
             || analysis.calls().isEmpty()
-            || objectCreation.getArguments().isEmpty()
             || objectCreation.getAnonymousClassBody().isPresent()
             || sourceShapePolicy.objectCreationArgumentsSpanMultipleLines(objectCreation)
             || analysis.calls().stream().anyMatch(call -> !compactMethodCallChainSegmentCanStayFlat(call))
-            || sourceShapePolicy.fitsOnOneLine(objectCreation, firstLineWidth)
             || firstLineWidth.applyAsInt(objectCreationPrefix.apply(objectCreation) + "(") > options.lineWidth()
         ) {
             return Optional.empty();
         }
-        Doc rootDoc = brokenObjectCreationRenderer.apply(objectCreation);
         List<MethodCallExpr> calls = analysis.calls();
         if (calls.size() == 1) {
+            if (objectCreation.getArguments().isEmpty() || sourceShapePolicy.fitsOnOneLine(objectCreation, firstLineWidth)) {
+                return Optional.empty();
+            }
+            Doc rootDoc = brokenObjectCreationRenderer.apply(objectCreation);
             return Optional.of(objectRootSingleSegmentChain(
                 objectCreation,
                 rootDoc,
@@ -260,24 +295,11 @@ final class MethodCallChainPrinter {
                 firstLineWidth
             ));
         }
-        Doc firstSegment = methodCallChainSegment(
-            calls.getFirst(),
-            Optional.of(calls.get(1)),
-            MethodCallChainTail.EMPTY,
-            segment -> layoutWidth.line(LayoutWidth.LineBudget.CURRENT, ")" + segment)
-        );
-        return Optional.of(
-            Doc.concat(
-                rootDoc,
-                firstSegment,
-                chainContinuation(
-                    Doc.join(
-                        Doc.HARD_LINE,
-                        methodCallChainSegments(calls.subList(1, calls.size()), MethodCallChainTail.EMPTY)
-                    )
-                )
-            )
-        );
+        // Multi-segment constructor chains break one segment per line through the shared chain machinery, which decides
+        // whether the constructor root stays compact or breaks its own argument list, then lays every .call() on its own
+        // continuation line. This is the same path name-rooted chains use, so the root-alone one-per-line shape and all
+        // its comment/width handling stay consistent across root kinds.
+        return forcedMethodCallChain(expression, firstLineWidth);
     }
 
     private record PackedMethodCallChainText(String firstLine, List<String> remainingSegments) {

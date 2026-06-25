@@ -82,7 +82,11 @@ public class ExpressionOperatorSamples {
     }
 
     public void printIf() {
-        Object activePrincipal = new SessionContext().getSingleton().getAuthentication().getCredentials().getRights()
+        Object activePrincipal = new SessionContext()
+                .getSingleton()
+                .getAuthentication()
+                .getCredentials()
+                .getRights()
                 .getName();
 
         if (

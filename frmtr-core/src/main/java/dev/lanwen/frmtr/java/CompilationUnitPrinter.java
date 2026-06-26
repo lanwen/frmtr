@@ -18,10 +18,12 @@ import java.util.function.Predicate;
 /**
  * Sequences the layout of a Java compilation unit after the parser has exposed package, import, module, and type nodes.
  *
- * <p>This helper owns only whole-file ordering: source-leading package comments, orphan comments before the first type,
- * the package line, an already-ordered import section, optional module declarations, top-level declarations, compact
- * unnamed-class member expansion, formatter pragma adjacency between top-level declarations, and trailing orphan
- * comments. It intentionally delegates package declaration text to {@link PackageDeclarationPrinter}, import sorting to
+ * <p>This helper owns only whole-file ordering: source-leading package comments, file-boundary orphan comments before
+ * the package, a first type's detached leading documentation (a Javadoc JavaParser left unattached because a blank line
+ * separated it from the type, kept above the type rather than floated to the package boundary; see #78), the package
+ * line, an already-ordered import section, optional module declarations, top-level declarations, compact unnamed-class
+ * member expansion, formatter pragma adjacency between top-level declarations, and trailing orphan comments. It
+ * intentionally delegates package declaration text to {@link PackageDeclarationPrinter}, import sorting to
  * {@link ImportSortTransform}, individual imports to {@link ImportDeclarationPrinter}, module declaration formatting to
  * {@link JavaPrinter}, and body declaration formatting back to {@link JavaPrinter}. It does not print statements,
  * expressions, raw body preservation, deterministic import ordering, or any single-node package/import behavior itself.
@@ -121,7 +123,20 @@ final class CompilationUnitPrinter {
             parts.add(Doc.HARD_LINE);
         }
         int firstTypeLine = firstTypeLine(unit);
-        Doc orphanComments = orphanCommentsBeforeFirstType(unit, firstTypeLine, importRawGapRegions);
+        // Orphan comments before the first type split at the structural prologue (package/imports/module): those at or
+        // above it stay file-boundary content, those below it document the first type (#78). With no structural prologue
+        // there is nothing to float above, so the boundary collapses to the first-type line, the type-leading region is
+        // empty, and the file-boundary slot keeps every before-type orphan exactly as it did before.
+        int structuralBoundaryLine = structuralBoundaryLine(unit);
+        int typeLeadingBoundaryLine = structuralBoundaryLine == Integer.MIN_VALUE
+            ? firstTypeLine
+            : structuralBoundaryLine;
+        Doc orphanComments = orphanCommentsBeforeFirstType(
+            unit,
+            firstTypeLine,
+            typeLeadingBoundaryLine,
+            importRawGapRegions
+        );
         if (orphanComments != Doc.EMPTY) {
             if (!parts.isEmpty()) {
                 parts.add(Doc.HARD_LINE);
@@ -155,9 +170,18 @@ final class CompilationUnitPrinter {
         hasStructuralParts = hasStructuralParts || module.isPresent();
         Optional<Doc> topLevelDeclarations = topLevelDeclarations(unit);
         if (topLevelDeclarations.isPresent()) {
+            Doc detachedTypeLeadingComments = detachedFirstTypeLeadingComments(
+                unit,
+                firstTypeLine,
+                typeLeadingBoundaryLine,
+                importRawGapRegions
+            );
             if (hasStructuralParts) {
                 parts.add(Doc.HARD_LINE);
                 parts.add(Doc.HARD_LINE);
+            }
+            if (detachedTypeLeadingComments != Doc.EMPTY) {
+                parts.add(detachedTypeLeadingComments);
             }
             parts.add(topLevelDeclarations.orElseThrow());
         }
@@ -171,17 +195,78 @@ final class CompilationUnitPrinter {
         return Doc.label("java.compilationUnit", Doc.concat(parts));
     }
 
+    /**
+     * Emits the orphan comments that belong to the file boundary — those before the first type that begin at or above the
+     * {@code typeLeadingBoundaryLine} (the last line of the package/imports/module prologue) — as the pre-{@code package}
+     * block.
+     *
+     * <p>An orphan comment that begins <em>below</em> the whole structural prologue but before the first type is the first
+     * type's detached leading documentation, not a file header: it is excluded here and emitted by
+     * {@link #detachedFirstTypeLeadingComments} so it stays attached to the type it documents (#78). The structural
+     * boundary is used rather than the first-type line because a comment between the package and the imports, or between
+     * two imports, is still file-boundary content; only a comment under the whole structural prologue and immediately
+     * before the first type is type documentation. When there is no structural prologue the caller collapses the boundary
+     * to the first-type line, so {@code beginLine < firstTypeLine} already implies {@code beginLine <= boundary} and this
+     * slot keeps every before-type orphan exactly as it did before this split existed.
+     */
     private Doc orphanCommentsBeforeFirstType(
             CompilationUnit unit,
             int firstTypeLine,
+            int typeLeadingBoundaryLine,
             List<RecoveredRawGapPrinter.RawGapRegion> importRawGapRegions
     ) {
-        if (importRawGapRegions.isEmpty()) {
-            return comments.orphanCommentsBeforeLine(unit, firstTypeLine);
-        }
         return comments.orphanComments(unit, comment -> CommentIndex.beginLine(comment, Integer.MAX_VALUE) < firstTypeLine
+                && CommentIndex.beginLine(comment, Integer.MAX_VALUE) <= typeLeadingBoundaryLine
                 && !isContainedByRawGap(comment, importRawGapRegions)
         );
+    }
+
+    /**
+     * Emits the orphan comments that document the first top-level type but that JavaParser left detached because a blank
+     * line separated the comment from the type, so the comment was never attached as the type's own leading trivia (#78).
+     *
+     * <p>Without this slot those comments fall into {@link #orphanCommentsBeforeFirstType} and are floated above the
+     * {@code package} statement, detaching a type's Javadoc from the type and producing non-idempotent blank-line
+     * accounting at the license/package boundary. Selecting orphans that begin strictly below {@code typeLeadingBoundaryLine}
+     * (the last line of the package/imports/module prologue) and before the first type keeps file headers and package docs
+     * at the boundary while returning the type's documentation to the type. The caller emits this immediately before the
+     * first type with a single hard line, mirroring an attached leading comment so a re-parse re-attaches it to the type
+     * and the output is idempotent.
+     *
+     * <p>When there is no structural prologue the caller collapses the boundary to the first-type line, which makes
+     * {@code beginLine > boundary && beginLine < firstTypeLine} unsatisfiable, so this slot stays empty and a leading
+     * comment above the first type renders through the file-boundary slot as before — there is no {@code package} for it to
+     * detach from in that shape.
+     */
+    private Doc detachedFirstTypeLeadingComments(
+            CompilationUnit unit,
+            int firstTypeLine,
+            int typeLeadingBoundaryLine,
+            List<RecoveredRawGapPrinter.RawGapRegion> importRawGapRegions
+    ) {
+        return comments.orphanComments(unit, comment -> CommentIndex.beginLine(comment, Integer.MAX_VALUE) < firstTypeLine
+                && CommentIndex.beginLine(comment, Integer.MIN_VALUE) > typeLeadingBoundaryLine
+                && !isContainedByRawGap(comment, importRawGapRegions)
+        );
+    }
+
+    /**
+     * Returns the last source line occupied by the structural prologue — the package declaration, imports, and module
+     * declaration — or {@link Integer#MIN_VALUE} when none of them is present. Comments that begin on a later line than
+     * this boundary and before the first type document that type rather than the file (#78).
+     */
+    private int structuralBoundaryLine(CompilationUnit unit) {
+        int boundary = Integer.MIN_VALUE;
+        if (unit.getPackageDeclaration().isPresent()) {
+            boundary = Math.max(boundary, CommentIndex.endLine(unit.getPackageDeclaration().orElseThrow(), boundary));
+        }
+        for (ImportDeclaration importDeclaration : unit.getImports()) {
+            boundary = Math.max(boundary, CommentIndex.endLine(importDeclaration, boundary));
+        }
+        if (unit.getModule().isPresent()) {
+            boundary = Math.max(boundary, CommentIndex.endLine(unit.getModule().orElseThrow(), boundary));
+        }
+        return boundary;
     }
 
     private boolean isContainedByRawGap(

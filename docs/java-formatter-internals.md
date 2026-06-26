@@ -175,7 +175,13 @@ Declaration and type printers own Java declaration grammar after `BodyDeclaratio
 
 - `CompilationUnitPrinter`: whole-file layout for source-leading package comments, orphan comments, package
   declarations, import sections, optional module declarations, formatter-pragma adjacency and separator rules between
-  top-level declarations, compact unnamed-class member expansion, and trailing orphan comments.
+  top-level declarations, compact unnamed-class member expansion, and trailing orphan comments. Orphan comments before
+  the first type are split at the structural prologue boundary (the last line of the package/imports/module): comments at
+  or above it stay file-boundary content rendered before `package`, while a comment below the whole prologue and before
+  the first type is that type's detached leading documentation — a Javadoc JavaParser left unattached because a blank line
+  separated it from the type — and is rendered immediately above the first type instead of floated to the package
+  boundary. With no structural prologue the boundary collapses to the first-type line, leaving the file-boundary slot's
+  pre-existing behavior unchanged.
 - `PackageDeclarationPrinter` and `ImportDeclarationPrinter`: package and import line rendering while compilation-unit
   ordering stays with `CompilationUnitPrinter` and import ordering stays with `ImportSortTransform`.
 - `ModuleDeclarationPrinter` and `ModuleBlockPrinter`: module headers, raw commented-module fallback selection,

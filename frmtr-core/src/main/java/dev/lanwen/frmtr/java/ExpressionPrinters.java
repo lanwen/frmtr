@@ -260,6 +260,8 @@ final class ExpressionPrinters {
             this::blockStatementWidth,
             enclosedSuffixes::suffixedEnclosedExpression,
             binaries::shouldKeepCastDivisionContinuationFlat,
+            binaries::hasLineComments,
+            binaries::linesWithComments,
             binaries::lines,
             objectCreations::brokenObjectCreation,
             methodCalls::assignmentWithBrokenMethodCallArguments,

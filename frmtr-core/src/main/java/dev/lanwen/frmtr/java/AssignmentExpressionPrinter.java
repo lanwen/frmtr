@@ -57,6 +57,10 @@ final class AssignmentExpressionPrinter {
 
     private final Predicate<BinaryExpr> shouldKeepCastDivisionContinuationFlat;
 
+    private final Predicate<BinaryExpr> binaryExpressionHasLineComments;
+
+    private final Function<BinaryExpr, Doc> binaryExpressionLinesWithComments;
+
     private final BiFunction<Expression, Boolean, Doc> binaryExpressionLines;
 
     private final Function<ObjectCreationExpr, Doc> brokenObjectCreation;
@@ -78,6 +82,8 @@ final class AssignmentExpressionPrinter {
             ToIntFunction<String> blockStatementWidth,
             BiFunction<Expression, Boolean, Optional<Doc>> suffixedEnclosedExpression,
             Predicate<BinaryExpr> shouldKeepCastDivisionContinuationFlat,
+            Predicate<BinaryExpr> binaryExpressionHasLineComments,
+            Function<BinaryExpr, Doc> binaryExpressionLinesWithComments,
             BiFunction<Expression, Boolean, Doc> binaryExpressionLines,
             Function<ObjectCreationExpr, Doc> brokenObjectCreation,
             BiFunction<AssignExpr, MethodCallExpr, Optional<Doc>> methodCallAssignment,
@@ -95,6 +101,8 @@ final class AssignmentExpressionPrinter {
         this.blockStatementWidth = blockStatementWidth;
         this.suffixedEnclosedExpression = suffixedEnclosedExpression;
         this.shouldKeepCastDivisionContinuationFlat = shouldKeepCastDivisionContinuationFlat;
+        this.binaryExpressionHasLineComments = binaryExpressionHasLineComments;
+        this.binaryExpressionLinesWithComments = binaryExpressionLinesWithComments;
         this.binaryExpressionLines = binaryExpressionLines;
         this.brokenObjectCreation = brokenObjectCreation;
         this.methodCallAssignment = methodCallAssignment;
@@ -113,6 +121,12 @@ final class AssignmentExpressionPrinter {
         List<Doc> gapLineComments = gapLineComments(expression);
         if (!gapLineComments.isEmpty()) {
             return assignmentWithGapLineComments(expression, gapLineComments);
+        }
+        if (
+            expression.getValue() instanceof BinaryExpr binaryValue
+            && binaryExpressionHasLineComments.test(binaryValue)
+        ) {
+            return assignmentWithLineCommentedBinaryValue(expression, binaryValue);
         }
         String flat = compact.apply(expression);
         if (
@@ -173,7 +187,48 @@ final class AssignmentExpressionPrinter {
                 return methodCallValue.orElseThrow();
             }
         }
-        return Doc.concat(assignment(expression), Doc.text(";"));
+        Doc preSemicolonBinaryComment = preSemicolonBinaryValueComment(expression);
+        return Doc.concat(assignment(expression), Doc.text(";"), preSemicolonBinaryComment);
+    }
+
+    /**
+     * Recovers the {@code //} line comment that trails a binary assignment value after its final operand and before the
+     * closing {@code ;}, deferring it past the {@code ;} as a {@link Doc#lineSuffix(Doc)} trailing comment.
+     *
+     * <p>This is the assignment-statement sibling of {@code VariableInitializerLayout.preSemicolonInitializerComment}.
+     * When a binary assignment value wraps one operator per line, the comment-free broken-binary render
+     * ({@code binaryExpressionLines}) emits operands only and never the comment JavaParser attaches to the final operand,
+     * while the statement-level trailing-comment slot only sees a comment attached to the {@link AssignExpr}/
+     * {@link ExpressionStmt} itself; the after-final-operand comment is therefore dropped both ways. We recover it through
+     * the shared {@link CommentTracker#trailingInitializerCommentsBeforeSemicolon(Node, Node)} query — the same bucket the
+     * variable/field initializer tail already uses — keyed on the enclosing {@link ExpressionStmt} as the semicolon owner
+     * and the assignment value as the initializer.
+     *
+     * <p>The recovered comment is emitted as a {@link Doc#lineSuffix(Doc)} after the {@code ;} so it trails on whichever
+     * line the {@code ;} lands on. Unlike the initializer tail, which drops the comment onto its own line above a bare
+     * {@code ;}, the line-suffix form keeps the comment attached to the statement's final line whether the binary value
+     * stays flat or breaks one operator per line. That keeps the render idempotent: a flat assignment whose binary value
+     * does not actually wrap (so the comment-free render already fit) re-emits {@code ... value; // note} on a second pass
+     * instead of pinning the comment onto a standalone line above a lone {@code ;} that the next pass would re-collapse.
+     *
+     * <p>The gate is intentionally narrow: only a {@link BinaryExpr} value can reach the comment-free broken-binary render
+     * that drops the comment, so non-binary values keep their existing terminator byte-for-byte. When the statement-level
+     * trailing slot already claimed the comment (the {@code value op = note} same-line shape) the claim-once query returns
+     * an empty list, so the result is {@link Doc#EMPTY} and the assignment statement renders exactly as before.
+     */
+    private Doc preSemicolonBinaryValueComment(AssignExpr expression) {
+        if (!(expression.getValue() instanceof BinaryExpr binaryValue)) {
+            return Doc.EMPTY;
+        }
+        Node owner = semicolonOwner(expression).orElse(null);
+        if (owner == null) {
+            return Doc.EMPTY;
+        }
+        List<Doc> recovered = comments.trailingInitializerCommentsBeforeSemicolon(owner, binaryValue);
+        if (recovered.isEmpty()) {
+            return Doc.EMPTY;
+        }
+        return Doc.lineSuffix(Doc.concat(Doc.text(" "), Doc.join(Doc.text(" "), recovered)));
     }
 
     private boolean methodCallNeedsStatementTerminatorTail(AssignExpr expression, MethodCallExpr methodCall) {
@@ -330,6 +385,55 @@ final class AssignmentExpressionPrinter {
                 Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines.apply(expression.getValue(), true)))
             )
         );
+    }
+
+    /**
+     * Lays out a binary assignment value whose operands carry {@code //} line comments one operator per line under the
+     * assignment's continuation indent, mirroring {@code VariableInitializerLayout}'s line-commented binary initializer.
+     *
+     * <p>A line comment on or between operands forces the binary to break one operator per line even when the
+     * comment-free statement would fit ({@link BinaryExpressionPrinter#binaryExpression} routes such a binary to its
+     * comment-aware multi-line render). The default expression dispatch that {@link #flatAssignment} relies on emits
+     * those comment-aware lines with no continuation indent, so the operands after the first stranded at the statement's
+     * own indent instead of sitting under the assignment like every other wrapped binary value. This branch claims that
+     * case up front so the continuation operands are wrapped in the assignment continuation {@link Doc#indent(Doc)} the
+     * same way the width-driven {@link #assignmentWithBinaryValue} path indents its operands.
+     *
+     * <p>The first operand stays on the {@code target op} line when it still fits there, matching the source shape the
+     * comment was annotating; otherwise the whole value drops below the operator. The trailing comment after the final
+     * operand is still recovered and deferred past the {@code ;} by {@link #preSemicolonBinaryValueComment} in
+     * {@link #assignmentStatement}, so this branch only owns operand indentation and never the after-final-operand
+     * comment placement.
+     */
+    private Doc assignmentWithLineCommentedBinaryValue(AssignExpr expression, BinaryExpr binaryValue) {
+        Doc target = this.expression.apply(expression.getTarget());
+        String operator = expression.getOperator().asString();
+        Doc lines = binaryExpressionLinesWithComments.apply(binaryValue);
+        if (lineCommentedBinaryCanKeepFirstOperandWithOperator(expression, binaryValue)) {
+            return Doc.concat(target, Doc.text(" " + operator + " "), Doc.indent(lines));
+        }
+        return Doc.concat(target, Doc.text(" " + operator), Doc.indent(Doc.concat(Doc.HARD_LINE, lines)));
+    }
+
+    /**
+     * Reports whether the first operand of a line-commented binary value still fits on the {@code target op} line, so the
+     * value can keep its source shape instead of dropping the whole binary below the operator.
+     */
+    private boolean lineCommentedBinaryCanKeepFirstOperandWithOperator(AssignExpr expression, BinaryExpr binaryValue) {
+        String firstOperandLine = compact.apply(expression.getTarget())
+            + " "
+            + expression.getOperator().asString()
+            + " "
+            + compact.apply(firstBinaryOperand(binaryValue));
+        return blockStatementWidth.applyAsInt(firstOperandLine) <= options.lineWidth();
+    }
+
+    private Expression firstBinaryOperand(BinaryExpr binaryValue) {
+        Expression left = binaryValue.getLeft();
+        while (left instanceof BinaryExpr leftBinary && leftBinary.getOperator() == binaryValue.getOperator()) {
+            left = leftBinary.getLeft();
+        }
+        return left;
     }
 
     /**

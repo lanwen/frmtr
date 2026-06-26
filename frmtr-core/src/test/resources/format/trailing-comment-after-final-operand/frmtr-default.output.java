@@ -8,8 +8,8 @@ class TrailingCommentAfterFinalOperand {
 
     int entrySize() {
         return 16 // header bytes
-        + 24 // payload bytes
-        + 8
+            + 24 // payload bytes
+            + 8
             // alignment padding
         ;
     }

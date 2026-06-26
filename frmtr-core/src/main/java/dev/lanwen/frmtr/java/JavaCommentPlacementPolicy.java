@@ -118,9 +118,15 @@ final class JavaCommentPlacementPolicy {
     }
 
     /**
-     * Recovers the line comments that trail a variable/field {@code initializer} after its last token but before the
-     * closing {@code ;}, which neither the initializer's own renderer nor the declarator's post-{@code ;} trailing slot
-     * prints.
+     * Recovers the line and block comments that trail a variable/field {@code initializer} after its last token but
+     * before the closing {@code ;}, which neither the initializer's own renderer nor the declarator's post-{@code ;}
+     * trailing slot prints.
+     *
+     * <p>The same after-last-token/before-{@code ;} slot holds an inline {@code /* ... *}{@code /} block comment that
+     * trails the final operand of a wrapped binary value ({@code return a == 1 /* x *}{@code / || a == 2 /* y *}{@code /;}
+     * — the issue #93 final-operand comment), so both kinds are recovered here; the {@code startsAfterEndOf} bound below
+     * keeps a between-operand block comment (which begins inside the initializer range and is the comment-aware binary
+     * renderer's to print) out of this bucket exactly as it keeps an inter-operand line comment out.
      *
      * <p>This is the after-initializer/before-{@code ;} sibling of the two trailing buckets that already cover a declared
      * initializer's comments, and exists because that slot is owned by neither. The initializer-contained renderer (e.g.
@@ -149,7 +155,7 @@ final class JavaCommentPlacementPolicy {
                 orphanComments(semicolonOwner).stream(),
                 containedComments(initializer).stream()
             )
-                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.isLine() || comment.isBlock())
                 .filter(comment -> comment.startsAfterEndOf(initializer))
                 .distinct()
                 .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
@@ -423,6 +429,33 @@ final class JavaCommentPlacementPolicy {
                 .filter(comment -> comment.liesBetween(previous, next))
                 .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
                 .toList();
+    }
+
+    /**
+     * Finds block comments that sit in the source-order gap between two neighboring nodes inside {@code container}.
+     *
+     * <p>This is the {@code /* ... *}{@code /} sibling of {@link #lineCommentsBetween(Node, Node, Node)}, for the
+     * between-operand slot of a binary chain. JavaParser parks an inline block comment that sits between two operands
+     * (e.g. {@code a /* note *}{@code / && b}) as the own comment of the operand that follows it, so the comment is
+     * {@code next}'s own trivia rather than a contained orphan of {@code container}; the gap query that recovers it must
+     * therefore union {@code next}'s own block comment with any block comment {@code container} holds as contained
+     * trivia. Both halves are filtered to the source-order gap (see {@link CommentIndex#liesBetween(Comment, Node,
+     * Node)}) so the query selects the same comment however whitespace lays the operands out. Like its line sibling the
+     * query never claims; the caller decides whether a recovered block comment trails {@code previous} on its printed
+     * line or stands on its own gap line.
+     */
+    List<JavaCommentTrivia> blockCommentsBetween(Node container, Node previous, Node next) {
+        return sourceOrderedDistinct(
+            java.util.stream.Stream.concat(
+                containedComments(container)
+                        .stream()
+                        .filter(JavaCommentTrivia::isBlock)
+                        .filter(comment -> comment.liesBetween(previous, next)),
+                ownComment(next, JavaCommentTrivia::isBlock)
+                        .filter(comment -> comment.liesBetween(previous, next))
+                        .stream()
+            ).toList()
+        );
     }
 
     /**

@@ -92,6 +92,18 @@ final class ReturnExpressionPrinter {
 
     private final BiFunction<Node, Expression, List<Doc>> trailingValueCommentsBeforeSemicolon;
 
+    private final BiFunction<Node, Expression, Boolean> trailingValueCommentsAreAllBlock;
+
+    private final BiFunction<Node, Expression, Integer> trailingValueBlockCommentInlineWidth;
+
+    private final Predicate<BinaryExpr> binaryHasLineComments;
+
+    private final Function<BinaryExpr, Doc> binaryLinesWithComments;
+
+    private final Function<BinaryExpr, Optional<Doc>> binaryFlatLineWithComments;
+
+    private final ToIntFunction<BinaryExpr> binaryFlatLineWithCommentsWidth;
+
     private final ReturnBinaryExpressionLayout binaryReturns;
 
     ReturnExpressionPrinter(
@@ -121,7 +133,13 @@ final class ReturnExpressionPrinter {
             BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression,
             BiFunction<Expression, Boolean, Doc> binaryLines,
             BiFunction<Expression, Boolean, Doc> parenthesizedBreak,
-            BiFunction<Node, Expression, List<Doc>> trailingValueCommentsBeforeSemicolon
+            BiFunction<Node, Expression, List<Doc>> trailingValueCommentsBeforeSemicolon,
+            BiFunction<Node, Expression, Boolean> trailingValueCommentsAreAllBlock,
+            BiFunction<Node, Expression, Integer> trailingValueBlockCommentInlineWidth,
+            Predicate<BinaryExpr> binaryHasLineComments,
+            Function<BinaryExpr, Doc> binaryLinesWithComments,
+            Function<BinaryExpr, Optional<Doc>> binaryFlatLineWithComments,
+            ToIntFunction<BinaryExpr> binaryFlatLineWithCommentsWidth
     ) {
         this.options = options;
         this.layoutWidth = layoutWidth;
@@ -151,6 +169,12 @@ final class ReturnExpressionPrinter {
         this.binaryLines = binaryLines;
         this.parenthesizedBreak = parenthesizedBreak;
         this.trailingValueCommentsBeforeSemicolon = trailingValueCommentsBeforeSemicolon;
+        this.trailingValueCommentsAreAllBlock = trailingValueCommentsAreAllBlock;
+        this.trailingValueBlockCommentInlineWidth = trailingValueBlockCommentInlineWidth;
+        this.binaryHasLineComments = binaryHasLineComments;
+        this.binaryLinesWithComments = binaryLinesWithComments;
+        this.binaryFlatLineWithComments = binaryFlatLineWithComments;
+        this.binaryFlatLineWithCommentsWidth = binaryFlatLineWithCommentsWidth;
         this.binaryReturns = new ReturnBinaryExpressionLayout(
             options,
             layoutWidth,
@@ -183,6 +207,9 @@ final class ReturnExpressionPrinter {
                 expressionWithTail.render(methodCall, ExpressionTail.SEMICOLON, lineBudget)
             );
         }
+        if (expression instanceof BinaryExpr binaryExpr && binaryHasLineComments.test(binaryExpr)) {
+            return commentBearingBinaryReturn(binaryExpr, lineBudget);
+        }
         Doc preSemicolonComment = preSemicolonValueComment(expression);
         Doc semicolon = preSemicolonComment == Doc.EMPTY
             ? Doc.text(";")
@@ -193,6 +220,73 @@ final class ReturnExpressionPrinter {
             preSemicolonComment,
             semicolon
         );
+    }
+
+    /**
+     * Renders a {@code return} whose binary value carries comments between (or trailing) its operands, keeping every
+     * comment inline beside its operand instead of detaching it.
+     *
+     * <p>This owns the comment-bearing binary return as a self-contained unit so it claims the value's comments before the
+     * default {@link #preSemicolonValueComment} path can route them onto their own lines. The default path produced two
+     * defects for an inline-block-comment chain: it wrapped the whole value in {@code return (\n … \n)} with a dangling
+     * {@code ;}, and it detached the final operand's trailing {@code /* ... *}{@code /} onto its own line. Here the value is
+     * rendered with the shared comment-aware binary layout (the same {@code binaryLinesWithComments} the {@code if}/
+     * assignment callers use) — flat when the whole {@code return value;} line still fits so a short chain such as
+     * {@code return a /* x *}{@code / || b /* y *}{@code /;} stays on one line, otherwise one operand per line under the
+     * normal binary continuation indent. The final-operand trailing comment, which JavaParser parks as an orphan of the
+     * enclosing {@code return} rather than inside the binary, is recovered through the shared
+     * {@code trailingInitializerCommentsBeforeSemicolon} bucket and appended inline before the {@code ;} so it reads
+     * {@code lastOperand /* note *}{@code /;}.
+     */
+    private Doc commentBearingBinaryReturn(BinaryExpr binaryExpr, LayoutWidth.LineBudget lineBudget) {
+        Node semicolonOwner = binaryExpr.getParentNode().orElse(null);
+        // A trailing comment after the final operand is an inline block comment only when source kept it before the ;
+        // (errorCode == 599 /* note */;); a // line comment must drop onto its own line above the ; because it runs to
+        // end-of-line and would otherwise swallow the ;. Peek the kind without claiming so the chosen terminator decides
+        // inline-versus-detached before the rendering query consumes the comment.
+        boolean trailingIsInlineBlock = semicolonOwner != null
+            && Boolean.TRUE.equals(trailingValueCommentsAreAllBlock.apply(semicolonOwner, binaryExpr));
+        // The committed value render claims the binary's between-operand comments, so only build the shape that is
+        // actually used: deciding the flat-versus-broken fit before rendering keeps the comment-aware render from claiming
+        // a comment in a flat shape we then discard, which would leave the broken render with an empty comment.
+        Doc value = commentBearingBinaryReturnFlatLineFits(binaryExpr, lineBudget)
+            ? binaryFlatLineWithComments.apply(binaryExpr).orElseGet(
+                () -> Doc.indent(binaryLinesWithComments.apply(binaryExpr))
+            )
+            : Doc.indent(binaryLinesWithComments.apply(binaryExpr));
+        if (trailingIsInlineBlock) {
+            Doc trailingComment = inlineTrailingComments(
+                trailingValueCommentsBeforeSemicolon.apply(semicolonOwner, binaryExpr)
+            );
+            return Doc.concat(Doc.text("return "), value, trailingComment, Doc.text(";"));
+        }
+        Doc preSemicolonComment = preSemicolonValueComment(binaryExpr);
+        Doc semicolon = preSemicolonComment == Doc.EMPTY
+            ? Doc.text(";")
+            : Doc.concat(Doc.HARD_LINE, Doc.text(";"));
+        return Doc.concat(Doc.text("return "), value, preSemicolonComment, semicolon);
+    }
+
+    private Doc inlineTrailingComments(List<Doc> recovered) {
+        if (recovered.isEmpty()) {
+            return Doc.EMPTY;
+        }
+        return Doc.concat(Doc.text(" "), Doc.join(Doc.text(" "), recovered));
+    }
+
+    private boolean commentBearingBinaryReturnFlatLineFits(BinaryExpr binaryExpr, LayoutWidth.LineBudget lineBudget) {
+        int valueWidth = binaryFlatLineWithCommentsWidth.applyAsInt(binaryExpr);
+        if (valueWidth == Integer.MAX_VALUE) {
+            return false;
+        }
+        Node semicolonOwner = binaryExpr.getParentNode().orElse(null);
+        // Account for the inline trailing block comment (errorCode == 401 /* note */;) the flat shape appends after the
+        // value but before the ;, so a value that fits on its own does not overflow once its trailing comment is added.
+        int trailingWidth = semicolonOwner == null
+            ? 0
+            : trailingValueBlockCommentInlineWidth.apply(semicolonOwner, binaryExpr);
+        String line = "return ".concat("x".repeat(valueWidth + trailingWidth)).concat(";");
+        return returnLineWidth(binaryExpr, line, lineBudget) <= options.lineWidth();
     }
 
     /**

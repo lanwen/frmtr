@@ -424,8 +424,32 @@ final class BinaryExpressionPrinter {
         }
     }
 
+    /**
+     * Reports whether a binary chain carries between-operand comments that only the comment-aware multi-line render can
+     * place, so callers route it through {@link #linesWithComments(BinaryExpr)} instead of the comment-stripped layouts.
+     *
+     * <p>Despite the name kept for the original line-comment gate this is the broader "would the plain shape drop a
+     * comment" question. It fires on any contained {@code //} line comment (the historic case) and, additionally, on an
+     * inline {@code /* ... *}{@code /} block comment that sits between two flattened operands. The block arm is what makes
+     * issue #93 route correctly: JavaParser parks such a block comment as the following operand's own trivia, which the
+     * comment-stripped {@code lines}/flat layouts discard, while {@link #commentedBinaryLines(BinaryExpr)} re-offers it on
+     * the operand boundary. A node's own leading or trailing-after-last block comment is not between two operands, so it
+     * is left to its existing slot and this gate stays {@code false} for it.
+     */
     boolean hasLineComments(BinaryExpr expression) {
-        return commentPlacement.hasContainedLineComments(expression);
+        return commentPlacement.hasContainedLineComments(expression)
+            || hasBetweenOperandBlockComments(expression);
+    }
+
+    private boolean hasBetweenOperandBlockComments(BinaryExpr expression) {
+        List<Expression> operands = new ArrayList<>();
+        flattenBinaryExpression(expression, expression.getOperator(), operands);
+        for (int i = 0; i < operands.size() - 1; i++) {
+            if (!commentPlacement.blockCommentsBetween(expression, operands.get(i), operands.get(i + 1)).isEmpty()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -437,6 +461,87 @@ final class BinaryExpressionPrinter {
      */
     Doc linesWithComments(BinaryExpr expression) {
         return Doc.join(Doc.HARD_LINE, commentedBinaryLines(expression));
+    }
+
+    /**
+     * Renders a comment-bearing binary chain flat on a single line when every between-operand comment is an inline
+     * {@code /* ... *}{@code /} block comment that trails its operand on the operand's own source line.
+     *
+     * <p>This is the flat sibling of {@link #linesWithComments(BinaryExpr)}: a chain whose only contained comments are
+     * inline block comments does not have to break, because a {@code /* ... *}{@code /} comment can sit on the line between
+     * two operands ({@code a /* x *}{@code / && b}) without swallowing the rest of the line the way a {@code //} comment
+     * would. Callers measure {@link #flatLineWithCommentsWidth(BinaryExpr)} first and use this only when the flat line
+     * fits; the same caller falls back to {@link #linesWithComments(BinaryExpr)} otherwise. Returns {@link Optional#empty()}
+     * when any comment cannot live inline (a {@code //} line comment, or a block comment that source placed on its own line
+     * rather than trailing its operand), so such a chain still breaks one operand per line.
+     */
+    Optional<Doc> flatLineWithComments(BinaryExpr expression) {
+        return flatCommentAwareDoc(expression, comments::comment);
+    }
+
+    /**
+     * Measures the rendered width of {@link #flatLineWithComments(BinaryExpr)} (comment-stripped operand text, operators,
+     * and the inline block-comment spellings exactly as they render), or {@link Integer#MAX_VALUE} when the chain cannot
+     * render flat with comments at all so the caller never picks the flat shape for it.
+     *
+     * <p>Measurement must not claim a comment, so it renders each inline comment through the non-claiming
+     * {@link JavaFormatter#commentDoc(JavaCommentTrivia)} rather than the claim-once {@link CommentTracker#comment} the doc
+     * builder uses; otherwise measuring the flat width would consume the comment before {@link #flatLineWithComments}
+     * re-offers it for the committed render, leaving the committed render with an empty comment.
+     */
+    int flatLineWithCommentsWidth(BinaryExpr expression) {
+        return flatCommentAwareDoc(expression, JavaFormatter::commentDoc)
+                .map(BinaryExpressionPrinter::flatDocWidth)
+                .orElse(Integer.MAX_VALUE);
+    }
+
+    private static int flatDocWidth(Doc doc) {
+        return switch (doc) {
+            case Doc.Text text -> text.value().length();
+            case Doc.Concat concat -> concat.docs().stream().mapToInt(BinaryExpressionPrinter::flatDocWidth).sum();
+            default -> Integer.MAX_VALUE;
+        };
+    }
+
+    /**
+     * Builds the flat comment-aware chain (operands joined by operators with each inline block comment trailing its
+     * operand on the same line), rendering comments through {@code commentRenderer}, or {@link Optional#empty()} when any
+     * operand carries a {@code //} line comment, a leading-first comment, or a between-operand comment that source did not
+     * place inline on the previous operand's end line — i.e. any comment that cannot live on one flat line. The renderer is
+     * a parameter so the committed render claims comments while the width measurement does not.
+     */
+    private Optional<Doc> flatCommentAwareDoc(
+            BinaryExpr expression,
+            Function<JavaCommentTrivia, Doc> commentRenderer
+    ) {
+        List<Expression> operands = new ArrayList<>();
+        flattenBinaryExpression(expression, expression.getOperator(), operands);
+        if (!lineCommentsBeforeFirstOperand(expression, operands.getFirst()).isEmpty()) {
+            return Optional.empty();
+        }
+        List<Doc> pieces = new ArrayList<>();
+        for (int i = 0; i < operands.size(); i++) {
+            Expression operand = operands.get(i);
+            if (operand.getAllContainedComments().stream().anyMatch(LineComment.class::isInstance)) {
+                return Optional.empty();
+            }
+            if (i > 0) {
+                pieces.add(Doc.text(" " + expression.getOperator().asString() + " "));
+            }
+            pieces.add(Doc.text(compactWithoutOwnComment.apply(operand)));
+            if (i < operands.size() - 1) {
+                List<JavaCommentTrivia> between = betweenOperandComments(expression, operand, operands.get(i + 1));
+                List<JavaCommentTrivia> inline = commentPlacement.commentsStartingOnEndLine(operand, between);
+                if (inline.size() != between.size() || inline.stream().anyMatch(JavaCommentTrivia::isLine)) {
+                    return Optional.empty();
+                }
+                for (JavaCommentTrivia comment : inline) {
+                    pieces.add(Doc.text(" "));
+                    pieces.add(commentRenderer.apply(comment));
+                }
+            }
+        }
+        return Optional.of(Doc.concat(pieces));
     }
 
     /**
@@ -456,14 +561,18 @@ final class BinaryExpressionPrinter {
         }
         for (int i = 0; i < operands.size(); i++) {
             Expression operand = operands.get(i);
-            Doc line = binaryLineOperandDoc(expression.getOperator(), operand, i, operands.size());
+            Doc operandDoc = binaryLineOperandBody(expression.getOperator(), operand);
             List<JavaCommentTrivia> between = i < operands.size() - 1
-                ? commentPlacement.lineCommentsBetween(expression, operand, operands.get(i + 1))
+                ? betweenOperandComments(expression, operand, operands.get(i + 1))
                 : List.of();
             List<JavaCommentTrivia> sameLineComments = commentPlacement.commentsStartingOnEndLine(operand, between);
-            for (JavaCommentTrivia comment : sameLineComments) {
-                line = Doc.concat(line, Doc.text(" "), comments.comment(comment));
-            }
+            Doc line = binaryLineWithOperatorAndComments(
+                expression.getOperator(),
+                operandDoc,
+                i,
+                operands.size(),
+                sameLineComments
+            );
             between = between.stream()
                     .filter(comment -> !sameLineComments.contains(comment))
                     .toList();
@@ -473,6 +582,79 @@ final class BinaryExpressionPrinter {
             }
         }
         return lines;
+    }
+
+    /**
+     * Assembles one broken binary line from its operand body, the operator slot, and the comments that trail the operand
+     * on its own source line.
+     *
+     * <p>The operator and the inline same-line comments interleave differently per operator position and per comment kind,
+     * which is the whole reason this is not a plain "operand then operator then comment" concat:
+     *
+     * <ul>
+     *   <li><b>Start position</b> ({@code || operand}): the operator is a prefix on this line and every same-line comment
+     *       trails the operand, so the line reads {@code || operand /* c *}{@code /}. Both comment kinds sit after the
+     *       operand identically.
+     *   <li><b>End position</b> ({@code operand ||}): an inline {@code /* ... *}{@code /} block comment keeps its source
+     *       position <em>before</em> the trailing operator ({@code operand /* c *}{@code / ||}), while a {@code //} line
+     *       comment must stay last on the line ({@code operand || // c}) because it runs to end-of-line and would
+     *       otherwise swallow the operator. That split is why block and line same-line comments are placed on opposite
+     *       sides of the end-position operator.
+     * </ul>
+     */
+    private Doc binaryLineWithOperatorAndComments(
+            BinaryExpr.Operator operator,
+            Doc operandDoc,
+            int index,
+            int operandCount,
+            List<JavaCommentTrivia> sameLineComments
+    ) {
+        boolean hasTrailingOperator =
+            options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.END
+            && index < operandCount - 1;
+        Doc line = options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.START
+            ? (index == 0 ? operandDoc : Doc.concat(Doc.text(operator.asString() + " "), operandDoc))
+            : operandDoc;
+        for (JavaCommentTrivia comment : sameLineComments) {
+            if (hasTrailingOperator && comment.isBlock()) {
+                line = Doc.concat(line, Doc.text(" "), comments.comment(comment));
+            }
+        }
+        if (hasTrailingOperator) {
+            line = Doc.concat(line, Doc.text(" " + operator.asString()));
+        }
+        for (JavaCommentTrivia comment : sameLineComments) {
+            if (!(hasTrailingOperator && comment.isBlock())) {
+                line = Doc.concat(line, Doc.text(" "), comments.comment(comment));
+            }
+        }
+        return line;
+    }
+
+    /**
+     * Collects the line <em>and</em> block comments that sit between two neighboring operands, in source order.
+     *
+     * <p>JavaParser attaches a {@code //} line comment between operands as a contained orphan of the chain, but it parks
+     * an inline {@code /* ... *}{@code /} block comment ({@code a == 1 /* note *}{@code / || a == 2}) as the own comment
+     * of the operand that follows it. The line-only {@link JavaCommentPlacementPolicy#lineCommentsBetween(Node, Node,
+     * Node)} query never sees that block comment, and {@link #binaryLineOperandDoc} renders the following operand from
+     * comment-stripped compact text, so the block comment is dropped on re-wrap. Unioning both kinds here surfaces them
+     * to the same between-operand placement {@link #commentedBinaryLines(BinaryExpr)} already uses for line comments:
+     * a comment that starts on {@code operand}'s end line trails it inline, otherwise it stands on its own line.
+     */
+    private List<JavaCommentTrivia> betweenOperandComments(BinaryExpr expression, Expression operand, Expression next) {
+        return java.util.stream.Stream.concat(
+                commentPlacement.lineCommentsBetween(expression, operand, next).stream(),
+                commentPlacement.blockCommentsBetween(expression, operand, next).stream()
+            )
+                .distinct()
+                .sorted(
+                    java.util.Comparator.comparing(
+                        JavaCommentTrivia::comment,
+                        CommentIndex.sourceOrderComparator()
+                    )
+                )
+                .toList();
     }
 
     private List<JavaCommentTrivia> lineCommentsBeforeFirstOperand(BinaryExpr expression, Expression firstOperand) {
@@ -527,13 +709,16 @@ final class BinaryExpressionPrinter {
         };
     }
 
-    private Doc binaryLineOperandDoc(
-            BinaryExpr.Operator operator,
-            Expression operand,
-            int index,
-            int operandCount
-    ) {
-        Doc operandDoc = nestedMixedOperatorOperandDoc(operator, operand)
+    /**
+     * Renders one operand's body for a comment-aware broken binary line, without the surrounding operator slot.
+     *
+     * <p>The operator (start prefix or end suffix) and the operand's inline same-line comments are interleaved by
+     * {@link #binaryLineWithOperatorAndComments} so an end-position block comment can keep its source position before the
+     * operator; this method only produces the operand text, recursing for nested mixed-operator sub-chains, enclosed
+     * leading-line-comment operands, and line-commented operands the same way the original line builder did.
+     */
+    private Doc binaryLineOperandBody(BinaryExpr.Operator operator, Expression operand) {
+        return nestedMixedOperatorOperandDoc(operator, operand)
             .or(() -> enclosedOperandWithLeadingLineComments(operand))
             .orElseGet(
                 () ->
@@ -541,12 +726,6 @@ final class BinaryExpressionPrinter {
                         ? expressionRenderer.format(operand)
                         : Doc.text(compactWithoutOwnComment.apply(operand))
             );
-        if (options.binaryOperatorPosition() == FormatterOptions.BinaryOperatorPosition.START) {
-            return index == 0 ? operandDoc : Doc.concat(Doc.text(operator.asString() + " "), operandDoc);
-        }
-        return index < operandCount - 1
-            ? Doc.concat(operandDoc, Doc.text(" " + operator.asString()))
-            : operandDoc;
     }
 
     /**
@@ -720,14 +899,14 @@ final class BinaryExpressionPrinter {
     }
 
     /**
-     * Reports whether the flat {@link #binaryExpression(BinaryExpr)} layout would drop a contained line comment.
+     * Reports whether the flat {@link #binaryExpression(BinaryExpr)} layout would drop a contained comment.
      *
-     * <p>The flat layout can render at most one line comment: the immediate-left operand's own comment
-     * ({@code leftLineComment}). Any other line comment contained in the chain — most commonly a between-operand
-     * comment that JavaParser attached to a deeper operand of a flattened same-operator chain — would have nowhere to go.
-     * When such a comment exists we route the binary through the comment-aware multi-line render instead. The check is
-     * intentionally conservative: it returns {@code false} for a comment-free binary and for the lone-left-comment binary
-     * the flat shape already preserves, so neither case changes layout.
+     * <p>The flat layout can render at most one comment: the immediate-left operand's own line comment
+     * ({@code leftLineComment}). Any other comment contained in the chain — most commonly a between-operand comment that
+     * JavaParser attached to a deeper operand of a flattened same-operator chain — would have nowhere to go. When such a
+     * comment exists we route the binary through the comment-aware multi-line render instead. The check is intentionally
+     * conservative: it returns {@code false} for a comment-free binary and for the lone-left-comment binary the flat shape
+     * already preserves, so neither case changes layout.
      *
      * <p>A contained comment counts as "already emitted by the flat shape" only when it is the <em>same</em> JavaParser
      * node as {@code leftLineComment} — compared by parser identity ({@code comment() ==}), not by
@@ -736,6 +915,13 @@ final class BinaryExpressionPrinter {
      * the duplicate-text comment as the already-printed left comment, keep the flat shape, and silently drop the
      * between-operand comment. Identity comparison routes such a binary through the comment-aware multi-line render so
      * both same-text comments survive — the same value-vs-identity hazard the chain printer dedups against.
+     *
+     * <p>The {@link #hasBetweenOperandBlockComments(BinaryExpr)} arm covers the issue #93 case: an inline
+     * {@code /* ... *}{@code /} block comment between operands ({@code a == 1 /* x *}{@code / || a == 2}) is parked by
+     * JavaParser as the following operand's own trivia and the flat shape renders that operand from comment-stripped
+     * compact text, so without this arm the block comment is dropped while the chain stays flat. Routing it to the
+     * comment-aware render keeps the established convention that any between-operand comment, line or block, makes the
+     * chain break one operand per line so each comment surfaces beside its operand.
      */
     private boolean flatRenderWouldDropLineComment(
             BinaryExpr expression,
@@ -745,7 +931,8 @@ final class BinaryExpressionPrinter {
                 .filter(JavaCommentTrivia::isLine)
                 .anyMatch(comment -> leftLineComment
                         .filter(left -> left.comment() == comment.comment())
-                        .isEmpty());
+                        .isEmpty())
+            || hasBetweenOperandBlockComments(expression);
     }
 
     private Doc binaryLeftOperand(BinaryExpr expression) {

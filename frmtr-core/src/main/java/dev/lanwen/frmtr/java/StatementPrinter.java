@@ -780,7 +780,7 @@ final class StatementPrinter {
         boolean trailingSemicolon = resourceShape.trailingSemicolon();
         String flatResources = statement.getResources()
                 .stream()
-                .map(compact)
+                .map(this::flatResourceText)
                 .reduce((left, right) -> left + "; " + right)
                 .orElse("");
         if (trailingSemicolon) {
@@ -789,8 +789,17 @@ final class StatementPrinter {
         List<JavaCommentTrivia> openerComments = tryResourceOpenerComments(statement);
         List<JavaCommentTrivia> trailingResourceComments = tryResourceTrailingComments(statement);
         String flat = "try (" + flatResources + ")";
+        // The flat-collapse decision must be width-driven, not source-shape-driven, or the section never converges.
+        //
+        // A single resource whose own initializer call was broken across lines makes the section "span multiple lines",
+        // but that is incidental to the initializer's argument layout, not a deliberate one-resource-per-line shape the
+        // author asked us to keep. Honoring spansMultipleLines for a single resource lets each pass re-observe the prior
+        // pass's break and refuse the flat form forever, so the section flip-flops between the opener-break and the
+        // attached-argument-break (see issue #98). For two or more resources, spansMultipleLines does capture a
+        // deliberate one-per-line layout, so it still gates the collapse there.
+        boolean preserveAuthorMultiline = statement.getResources().size() > 1 && resourceShape.spansMultipleLines();
         if (
-            !resourceShape.spansMultipleLines()
+            !preserveAuthorMultiline
             && openerComments.isEmpty()
             && !tryResourcesHaveLeadingComments(statement)
             && trailingResourceComments.isEmpty()
@@ -822,6 +831,51 @@ final class StatementPrinter {
             Doc.HARD_LINE,
             Doc.text(")")
         );
+    }
+
+    /**
+     * Builds the one-line text for a resource used when the whole resource section collapses flat.
+     *
+     * <p>The generic {@code compact} path reconstructs initializer expressions (method calls, object creations, …) with
+     * normalized spacing, but a {@link VariableDeclarationExpr} itself falls through to token-text normalization, which
+     * only collapses whitespace runs. When the author had broken the initializer's arguments across lines, that left
+     * single interior spaces after {@code (}, before {@code )}, and around commas (for example
+     * {@code new Resource( a, b )}) in the collapsed form. This helper rebuilds a comment-free declaration from its
+     * modifiers, type, and per-variable {@code name = compact(init)} pieces so the collapsed resource matches the spacing
+     * the formatter would have produced for a source-flat declaration, keeping the collapse idempotent and clean.
+     *
+     * <p>Resources carrying contained comments, or anything that is not a plain variable declaration, stay on the generic
+     * {@code compact} path: those either never reach the flat collapse (comments keep the section broken) or are already
+     * normalized by {@code compact}.
+     */
+    private String flatResourceText(Expression resource) {
+        if (
+            !(resource instanceof VariableDeclarationExpr declaration)
+            || !declaration.getAllContainedComments().isEmpty()
+            || declaration.getVariables().isEmpty()
+        ) {
+            return compact.apply(resource);
+        }
+        String prefix = declaration.getAnnotations()
+                .stream()
+                .map(annotationFlatText)
+                .map(text -> text + " ")
+                .reduce("", String::concat)
+            + modifiers.apply(declaration)
+            + compactTypeLike.apply(CStyleArrayDeclarators.sharedPrefixType(declaration.getVariables()))
+            + " ";
+        return prefix + declaration.getVariables()
+                .stream()
+                .map(this::flatVariableText)
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("");
+    }
+
+    private String flatVariableText(VariableDeclarator variable) {
+        String name = variable.getNameAsString() + CStyleArrayDeclarators.declaratorBracketsAfterName(variable);
+        return variable.getInitializer()
+                .map(initializer -> name + " = " + compact.apply(initializer))
+                .orElse(name);
     }
 
     /**
@@ -983,13 +1037,27 @@ final class StatementPrinter {
         );
     }
 
+    /**
+     * Reports whether any resource carries a line comment that lives inside the {@code try ( ... )} section.
+     *
+     * <p>A line comment on the line directly above {@code try (} is the try statement's own leading comment: JavaParser
+     * attaches it to the {@link TryStmt} and the enclosing block already renders it before {@code try}. It only looks
+     * "adjacent" to the first resource because the resource sits on the next source line. Counting it here forced the
+     * resource section to stay broken even when the flat {@code try (...) {} } form fit the width, which (together with the
+     * single-resource {@code spansMultipleLines} gate) made the section never converge across passes (issue #98).
+     * Filtering to comments that begin at or after the {@code try} keyword keeps genuine in-section comments — openers,
+     * inter-resource notes, and comments on a non-first resource — while ignoring the statement's own leading comment.
+     */
     private boolean tryResourcesHaveLeadingComments(TryStmt statement) {
         return statement.getResources()
                 .stream()
-                .anyMatch(resource -> !commentPlacement.adjacentLeadingLineComments(resource).isEmpty()
+                .anyMatch(resource -> commentPlacement.adjacentLeadingLineComments(resource)
+                                .stream()
+                                .anyMatch(comment -> !comment.startsBefore(statement))
                         || commentPlacement.leadingComment(resource)
                                 .filter(JavaCommentTrivia::isLine)
                                 .filter(comment -> comment.startsBeforeBeginLine(resource))
+                                .filter(comment -> !comment.startsBefore(statement))
                                 .isPresent()
                 );
     }

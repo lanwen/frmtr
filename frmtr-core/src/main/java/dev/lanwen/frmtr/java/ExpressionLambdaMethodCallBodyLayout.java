@@ -3,6 +3,7 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
@@ -24,8 +25,6 @@ import java.util.function.ToIntFunction;
  */
 final class ExpressionLambdaMethodCallBodyLayout {
 
-    private final SourceShapePolicy sourceShapePolicy;
-
     private final FormatterOptions options;
 
     private final JavaFormatRule<Expression> expressionRenderer;
@@ -43,7 +42,6 @@ final class ExpressionLambdaMethodCallBodyLayout {
     private final ToIntFunction<String> expressionFirstLineWidth;
 
     ExpressionLambdaMethodCallBodyLayout(
-            SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
             JavaFormatRule<Expression> expressionRenderer,
             Function<List<? extends Node>, String> compactJoin,
@@ -53,7 +51,6 @@ final class ExpressionLambdaMethodCallBodyLayout {
             BiFunction<String, MethodCallExpr, Optional<Doc>> packedMethodCallChainBodyRenderer,
             ToIntFunction<String> expressionFirstLineWidth
     ) {
-        this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
         this.expressionRenderer = expressionRenderer;
         this.compactJoin = compactJoin;
@@ -85,7 +82,18 @@ final class ExpressionLambdaMethodCallBodyLayout {
         if (scopeCall.getArguments().isEmpty()) {
             return Optional.empty();
         }
-        if (sourceShapePolicy.wasMultiline(scopeCall) && scopeCall.getArguments().size() <= 1) {
+        // Defer to the packed chain renderer when the single-argument scope call carries a lambda argument: a lambda
+        // body cannot be collapsed onto the single inlined continuation line this layout builds below, so that case
+        // belongs to the chain renderer that keeps the lambda multiline. This intentionally keys off a deterministic AST
+        // property (the argument kind) rather than whether the scope call happened to be multiline in the input. The
+        // earlier {@code wasMultiline(scopeCall)} read re-observed the previous pass's own broken shape, so this layout
+        // and the packed fallback alternated every pass for a near-boundary chain whose scope call broke on one pass and
+        // packed on the next, and the body never converged (#117). A simple non-lambda single argument (a name, literal,
+        // or short call) does inline cleanly here, so it keeps this fitting single-line continuation shape.
+        if (
+            scopeCall.getArguments().size() <= 1
+            && scopeCall.getArguments().stream().anyMatch(LambdaExpr.class::isInstance)
+        ) {
             return Optional.empty();
         }
         String opener = methodCallPrefix.apply(scopeCall) + "(";

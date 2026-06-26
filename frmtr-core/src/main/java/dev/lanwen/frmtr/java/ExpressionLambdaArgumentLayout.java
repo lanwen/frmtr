@@ -112,7 +112,6 @@ final class ExpressionLambdaArgumentLayout {
         this.textBlockArguments = new TextBlockArgumentSourceLayout(sourceText, options, rawSource::raw);
         this.closingLayout = new ExpressionLambdaClosingLayout();
         this.methodCallBodies = new ExpressionLambdaMethodCallBodyLayout(
-            sourceShapePolicy,
             options,
             expressionRenderer,
             compactJoin,

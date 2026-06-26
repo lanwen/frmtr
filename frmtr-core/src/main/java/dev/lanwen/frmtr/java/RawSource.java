@@ -17,6 +17,18 @@ final class RawSource {
 
     private static final Pattern ASSIGN_EQUALS = Pattern.compile("(?<![-+*/%^&|=!<>])\\s*=\\s*(?![=])");
 
+    // Drops the single space that whitespace-collapsing leaves immediately inside a delimiter pair when the author broke
+    // the bracketed content across lines: {@code foo(\n    arg\n)} collapses to {@code foo( arg )} but the canonical
+    // compact form is {@code foo(arg)}. Without this normalization a method call's compact width depended on whether a
+    // previous format pass had broken its argument list, so a near-boundary width gate could flip between {@code (arg)}
+    // (no interior spaces) and {@code ( arg )} (two interior spaces) on alternating passes and never converge. Anchoring
+    // on the opener/closer character keeps it a pure interior-spacing fix that never touches operator spacing (so cramped
+    // operands like {@code 42/42} are preserved) and never runs on literal content (string, character, and text-block
+    // spans are emitted verbatim and never reach this collapsed non-literal buffer).
+    private static final Pattern SPACE_AFTER_OPENER = Pattern.compile("([(\\[]) ");
+
+    private static final Pattern SPACE_BEFORE_CLOSER = Pattern.compile(" ([)\\]])");
+
     private final FormatterOptions options;
 
     RawSource(FormatterOptions options) {
@@ -179,7 +191,9 @@ final class RawSource {
         }
         String collapsed = WHITESPACE.matcher(outside).replaceAll(" ");
         String normalized = ASSIGN_EQUALS.matcher(collapsed).replaceAll(" = ");
-        result.append(WHITESPACE.matcher(normalized).replaceAll(" "));
+        String reCollapsed = WHITESPACE.matcher(normalized).replaceAll(" ");
+        String afterOpener = SPACE_AFTER_OPENER.matcher(reCollapsed).replaceAll("$1");
+        result.append(SPACE_BEFORE_CLOSER.matcher(afterOpener).replaceAll("$1"));
         outside.setLength(0);
     }
 

@@ -228,6 +228,7 @@ final class ExpressionPrinters {
             lambdas::commentedExpressionLambdaArgument,
             lambdas::huggableMethodCallExpressionLambdaArguments,
             lambdas::huggableExpressionLambdaArgumentPlan,
+            lambdas::huggedGapCommentedLambdaBody,
             lambdas::lambdaParameters,
             textBlocks::renderUnformattedTextBlock,
             this::brokenArgument,

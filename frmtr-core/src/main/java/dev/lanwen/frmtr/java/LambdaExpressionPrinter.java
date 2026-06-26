@@ -735,6 +735,7 @@ final class LambdaExpressionPrinter {
                 .stream()
                 .filter(this::isLineOrBlockComment)
                 .filter(comment -> !trailsCompletedCall(expression, comment))
+                .filter(comment -> !precedesCallSelector(expression, comment))
                 .forEach(commentsAroundLambda::add);
         lambdaExpr.getComment()
                 .filter(this::isLineOrBlockComment)
@@ -744,6 +745,7 @@ final class LambdaExpressionPrinter {
                 .getComment()
                 .filter(this::isLineOrBlockComment)
                 .filter(comment -> !trailsCompletedCall(expression, comment))
+                .filter(comment -> !precedesCallSelector(expression, comment))
                 .filter(comment -> startsBefore.test(comment, lambdaExpr))
                 .ifPresent(commentsAroundLambda::add);
         if (commentsAroundLambda.isEmpty()) {
@@ -867,6 +869,11 @@ final class LambdaExpressionPrinter {
             return Optional.empty();
         }
         String parameters = lambdaParameters(lambdaExpr);
+        if (!lambdaParameterHeaders.haveComments(lambdaExpr)) {
+            return Optional.of(
+                huggedGapCommentedExpressionLambdaArgument(prefix, lambdaExpr, parameters, renderedGapComments)
+            );
+        }
         return Optional.of(
             Doc.concat(
                 Doc.text(prefix + "("),
@@ -889,6 +896,74 @@ final class LambdaExpressionPrinter {
                 Doc.text(")")
             )
         );
+    }
+
+    /**
+     * Renders a single comment-carrying expression-lambda argument with the lambda hugging the call opener, i.e.
+     * {@code call(param ->} stays on one line, the gap comment(s) and body sit indented beneath it, and the call's closing
+     * parenthesis collapses onto the body's last line ({@code body)}) instead of stacking on its own.
+     *
+     * <p>This is the comment-carrying counterpart of the comment-free hug ({@link ExpressionLambdaArgumentLayout}). The
+     * comment forces the body to break, so the only choice is whether the lambda header breaks with it. Hugging keeps the
+     * argument shape stable: the closing parenthesis attaches to whatever the body's broken renderer already ends with
+     * ({@code ...))} for a broken nested call), which is exactly the shape that re-parses to the same gap-comment
+     * attachment, so the layout is idempotent. It is scoped to clean parameters (the caller already excluded boundary and
+     * parameter comments) so the parameter text can live on the opener line verbatim.
+     */
+    private Doc huggedGapCommentedExpressionLambdaArgument(
+            String prefix,
+            LambdaExpr lambdaExpr,
+            String parameters,
+            List<Doc> renderedGapComments
+    ) {
+        return Doc.concat(
+            Doc.text(prefix + "(" + parameters + " ->"),
+            huggedGapCommentedLambdaBody(lambdaExpr, renderedGapComments),
+            Doc.text(")")
+        );
+    }
+
+    private Doc huggedGapCommentedLambdaBody(LambdaExpr lambdaExpr, List<Doc> renderedGapComments) {
+        return Doc.indent(
+            Doc.concat(
+                Doc.HARD_LINE,
+                Doc.join(Doc.HARD_LINE, renderedGapComments),
+                Doc.HARD_LINE,
+                brokenLambdaExpressionBody(lambdaExpr)
+            )
+        );
+    }
+
+    /**
+     * Returns the indented gap-comment-and-body fragment for a comment-carrying expression lambda whose body comments sit
+     * in the {@code ->}-to-body gap (the innermost {@code parcel -> // note merge(...)} shape), or empty when the lambda
+     * has no such gap comments or has boundary/parameter comments another renderer owns.
+     *
+     * <p>The chain printer's flat-head hug reconstructs the lambda header text itself and only needs the part after the
+     * arrow; this hands back that fragment (the gap comment on its own indented line, then the broken body) without an
+     * opener or closer, so the chain printer can pack the header flat and collapse the call's closing parenthesis. It is
+     * the same fragment {@link #huggedGapCommentedExpressionLambdaArgument} emits, so both hug shapes stay consistent and
+     * idempotent.
+     */
+    Optional<Doc> huggedGapCommentedLambdaBody(LambdaExpr lambdaExpr) {
+        if (lambdaExpr.getExpressionBody().isEmpty() || hasBoundaryComments(lambdaExpr)) {
+            return Optional.empty();
+        }
+        if (lambdaParameterHeaders.haveComments(lambdaExpr)) {
+            return Optional.empty();
+        }
+        List<JavaCommentTrivia> gapComments = lambdaBodyGapComments(lambdaExpr);
+        if (gapComments.isEmpty()) {
+            return Optional.empty();
+        }
+        List<Doc> renderedGapComments = gapComments.stream()
+                .map(trivia -> comments.comment(trivia, lambdaExpr.getBody(), OwnerSlot.LEADING))
+                .filter(doc -> doc != Doc.EMPTY)
+                .toList();
+        if (renderedGapComments.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(huggedGapCommentedLambdaBody(lambdaExpr, renderedGapComments));
     }
 
     /**
@@ -960,6 +1035,20 @@ final class LambdaExpressionPrinter {
 
     private boolean trailsCompletedCall(MethodCallExpr expression, Comment comment) {
         return CommentIndex.startsAfterNodeOnSameLine(expression, comment);
+    }
+
+    /**
+     * Reports whether a comment sits before this call's own selector, i.e. it is a chain-link comment owned by the method
+     * chain rather than a comment around the lambda argument.
+     *
+     * <p>JavaParser parks a {@code // text} that precedes a fluent chain link (the {@code Optional.of(x) // note .map(y)}
+     * shape) on the {@code .map(...)} call's orphan pool, exactly where {@link #commentedExpressionLambdaArgument} reads
+     * its boundary comments. That comment begins before the call name, while a genuine leading comment on the lambda
+     * argument begins after the opening parenthesis. The method chain printer already renders the chain-link comment as a
+     * leading comment of the segment, so collecting it here too would claim it twice; excluding it keeps a single owner.
+     */
+    private boolean precedesCallSelector(MethodCallExpr expression, Comment comment) {
+        return CommentIndex.startsBefore(comment, expression.getName());
     }
 
     /**

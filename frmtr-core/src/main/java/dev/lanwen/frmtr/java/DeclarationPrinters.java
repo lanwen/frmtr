@@ -109,7 +109,12 @@ final class DeclarationPrinters {
             formatterPragmas::hasPragma
         );
         this.commentedMethodSignatures = new CommentedMethodSignaturePrinter(options);
-        PackageDeclarationPrinter packageDeclarations = new PackageDeclarationPrinter(comments, rawSource, options);
+        PackageDeclarationPrinter packageDeclarations = new PackageDeclarationPrinter(
+            comments,
+            rawSource,
+            options,
+            declarationPrefixes::annotations
+        );
         ImportDeclarationPrinter importDeclarations = new ImportDeclarationPrinter(comments);
         this.compilationUnits = new CompilationUnitPrinter(
             context,

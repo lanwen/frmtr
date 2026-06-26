@@ -33,7 +33,7 @@ Top-level AST ownership:
 | JavaParser AST kind | Primary owner | Notes |
 | --- | --- | --- |
 | `CompilationUnit` | `CompilationUnitPrinter` | Owns package/import/module/type ordering, pragma-sensitive top-level declaration separation, and orphan comment placement around the first and last type. |
-| `PackageDeclaration` | `PackageDeclarationPrinter` | Owns package line text and source-leading package comments. |
+| `PackageDeclaration` | `PackageDeclarationPrinter` | Owns package line text, package-level annotations (`package-info.java` shape, rendered through the shared declaration-annotation path), and source-leading package comments. |
 | `ImportDeclaration` | `ImportDeclarationPrinter` | Owns one import line. Import ordering is owned by `ImportSortTransform`; import block separation is owned by `CompilationUnitPrinter`. |
 | `ModuleDeclaration` | `ModuleDeclarationPrinter` and `ModuleBlockPrinter` | `ModuleDeclarationPrinter` owns header and raw commented-module fallback selection; `ModuleBlockPrinter` owns structured directives. |
 | Top-level `BodyDeclaration<?>` | `BodyDeclarationRuleEnvelope` then `BodyDeclarationDispatcher` | The envelope applies body-level pragma/raw/leading-comment gates; the dispatcher narrows formatted content to declaration printers. |

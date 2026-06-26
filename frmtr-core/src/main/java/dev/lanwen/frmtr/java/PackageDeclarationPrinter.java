@@ -8,9 +8,13 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
+import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.Comparator;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * Prints package declarations after the compilation-unit ordering rules have selected the package position.
@@ -32,10 +36,18 @@ final class PackageDeclarationPrinter {
 
     private final FormatterOptions options;
 
-    PackageDeclarationPrinter(CommentTracker comments, RawSource rawSource, FormatterOptions options) {
+    private final Function<NodeWithAnnotations<?>, Doc> annotations;
+
+    PackageDeclarationPrinter(
+            CommentTracker comments,
+            RawSource rawSource,
+            FormatterOptions options,
+            Function<NodeWithAnnotations<?>, Doc> annotations
+    ) {
         this.comments = comments;
         this.rawSource = rawSource;
         this.options = options;
+        this.annotations = annotations;
     }
 
     /**
@@ -104,9 +116,18 @@ final class PackageDeclarationPrinter {
         // so the raw sweep must stop before it. A LINE package leading comment is the trailing line of a multi-line `//`
         // header instead; that whole run belongs to the raw prefix, so the sweep runs through it to the `package` keyword
         // and the line comment is suppressed below rather than re-emitted by the leading slot.
-        Optional<Position> sweepBoundary = attachedLeadingComment
+        Optional<Position> commentBoundary = attachedLeadingComment
                 .filter(comment -> !(comment instanceof LineComment))
                 .flatMap(PackageDeclarationPrinter::commentBeginPosition);
+        // Package-level annotations (#84) are AST nodes rendered structurally by `packageDeclaration`, not raw text. The
+        // sweep must stop before the first annotation so its tokens are not dumped verbatim into the leading comment blob
+        // (which would also drop them when no preceding comment makes the blob start with `/*` or `//`). The earliest of
+        // the comment boundary and the first-annotation begin wins, so a file/package header still renders raw while the
+        // annotations are left to the structural annotation path.
+        Optional<Position> sweepBoundary = earliest(
+            commentBoundary,
+            firstAnnotationBegin(packageDeclaration.orElseThrow())
+        );
         Position sweepEnd = null;
         StringBuilder leadingTokens = new StringBuilder();
         boolean foundBoundary = false;
@@ -201,9 +222,46 @@ final class PackageDeclarationPrinter {
     }
 
     /**
-     * Prints one package declaration with its JavaParser-attributed leading comments.
+     * Returns the source begin position of the first package-level annotation, used as an additional raw-sweep boundary so
+     * annotation tokens are rendered structurally rather than dumped into the leading comment blob. Empty when the package
+     * carries no annotations or the first annotation has no range, leaving the sweep to fall back to the comment boundary
+     * or the {@code package} keyword stop.
+     */
+    private static Optional<Position> firstAnnotationBegin(PackageDeclaration declaration) {
+        return declaration.getAnnotations()
+                .stream()
+                .map(AnnotationExpr::getRange)
+                .flatMap(Optional::stream)
+                .map(range -> range.begin)
+                .min(Comparator.naturalOrder());
+    }
+
+    private static Optional<Position> earliest(Optional<Position> left, Optional<Position> right) {
+        if (left.isEmpty()) {
+            return right;
+        }
+        if (right.isEmpty()) {
+            return left;
+        }
+        return Optional.of(left.orElseThrow().isBefore(right.orElseThrow()) ? left.orElseThrow() : right.orElseThrow());
+    }
+
+    /**
+     * Prints one package declaration with its JavaParser-attributed leading comments and any package-level annotations.
+     *
+     * <p>Package-level annotations (the {@code package-info.java} shape, e.g. {@code @NullMarked} or a multi-argument
+     * {@code @XmlSchema(...)}) are AST nodes on the declaration, so they are rendered structurally through the shared
+     * declaration-annotation path — each on its own line above {@code package X;}, formatted and wrappable exactly like a
+     * type or field annotation. Without this they were silently dropped (an AST-equivalence loss): the only path that ever
+     * emitted them was the raw leading-comment sweep, which captured their tokens verbatim solely when a preceding
+     * file/package comment made the swept blob start with {@code /*} or {@code //}, and which {@code
+     * sourceLeadingCommentsBeforePackage} now stops before the first annotation.
      */
     Doc packageDeclaration(PackageDeclaration declaration) {
-        return Doc.concat(comments.leading(declaration), Doc.text("package " + declaration.getNameAsString() + ";"));
+        return Doc.concat(
+            comments.leading(declaration),
+            annotations.apply(declaration),
+            Doc.text("package " + declaration.getNameAsString() + ";")
+        );
     }
 }

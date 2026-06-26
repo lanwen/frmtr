@@ -184,6 +184,9 @@ Declaration and type printers own Java declaration grammar after `BodyDeclaratio
   pre-existing behavior unchanged.
 - `PackageDeclarationPrinter` and `ImportDeclarationPrinter`: package and import line rendering while compilation-unit
   ordering stays with `CompilationUnitPrinter` and import ordering stays with `ImportSortTransform`.
+  `PackageDeclarationPrinter` also renders package-level annotations (the `package-info.java` shape) through the shared
+  declaration-annotation path, stopping its raw source-leading-comment sweep before the first annotation so annotation
+  tokens are formatted structurally instead of dumped as raw text.
 - `ModuleDeclarationPrinter` and `ModuleBlockPrinter`: module headers, raw commented-module fallback selection,
   structured directive layout, and module body sequencing.
 - `TypePrinter`: shared type-clause rendering, declaration type-parameter flat text, compact type-list joining, and

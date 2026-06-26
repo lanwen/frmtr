@@ -10,6 +10,7 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.RecordDeclaration;
+import com.github.javaparser.ast.body.TypeDeclaration;
 import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
@@ -162,12 +163,19 @@ final class MemberBlockPrinter {
      * those comments back before, between, or after the already-rendered member docs.
      */
     private Doc memberContents(Node owner, NodeList<BodyDeclaration<?>> members, List<Doc> memberDocs) {
+        List<Doc> renderedMembers = new ArrayList<>(memberDocs);
+        List<JavaCommentTrivia> orphanComments = attachInlineTrailingMemberComments(
+            owner,
+            members,
+            renderedMembers,
+            commentPlacement.orphanCommentsInSourceOrder(owner)
+        );
         return Doc.concat(
             commentInterleaver.interleave(
                 owner,
                 members,
-                commentPlacement.orphanCommentsInSourceOrder(owner),
-                (previous, current, index) -> Optional.of(memberDocs.get(index)),
+                orphanComments,
+                (previous, current, index) -> Optional.of(renderedMembers.get(index)),
                 new SourceOrderedCommentInterleaver.Spacing<>() {
                     @Override
                     public int beginLine(BodyDeclaration<?> sibling) {
@@ -208,6 +216,68 @@ final class MemberBlockPrinter {
                 .map(comment -> comment.beginLine(declarationBeginLine))
                 .filter(commentBeginLine -> commentBeginLine < declarationBeginLine)
                 .orElse(declarationBeginLine);
+    }
+
+    /**
+     * Keeps a line comment that trails a nested type's closing brace on the same source line inline after that type
+     * instead of routing it to the next own line.
+     *
+     * <p>A {@code //} comment written immediately after a nested type's closing brace, e.g.
+     * {@code class Beacon { ... }} {@code // inner beacon}, conceptually belongs to that brace line, not to a standalone
+     * slot. JavaParser exposes it as an enclosing-body orphan rather than as the type's own trailing comment because type
+     * declarations do not claim trailing comments, so without this it would fall through to the source-order interleaver
+     * and render on the next line. This attaches each such comment as a {@link Doc#lineSuffix(Doc)} on the type it trails
+     * so it stays on the closing-brace line, and returns the remaining orphans for normal interleaving.
+     *
+     * <p>The scan is deliberately restricted to {@link TypeDeclaration} members: a method's or field's closing-brace
+     * trailing comment is left on its own line as before, because only a type's closing brace carries the
+     * "comment belongs to the brace line" convention this method restores. Only line comments that begin strictly after
+     * the type's end column on its end line qualify; block comments and comments that open their own line are left to the
+     * interleaver. The attached doc claims the comment under the same {@code (owner, INTERLEAVED)} anchor the interleaver
+     * would use, so claim ownership and idempotence are unchanged.
+     */
+    private List<JavaCommentTrivia> attachInlineTrailingMemberComments(
+            Node owner,
+            NodeList<BodyDeclaration<?>> members,
+            List<Doc> renderedMembers,
+            List<JavaCommentTrivia> orphanComments
+    ) {
+        List<JavaCommentTrivia> remaining = new ArrayList<>();
+        for (JavaCommentTrivia comment : orphanComments) {
+            int memberIndex = inlineTrailingTypeMemberIndex(members, comment);
+            if (memberIndex < 0) {
+                remaining.add(comment);
+                continue;
+            }
+            Doc commentDoc = comments.comment(comment, owner, OwnerSlot.INTERLEAVED);
+            if (commentDoc == Doc.EMPTY) {
+                continue;
+            }
+            renderedMembers.set(
+                memberIndex,
+                Doc.concat(
+                    renderedMembers.get(memberIndex),
+                    Doc.lineSuffix(Doc.concat(Doc.text(" "), commentDoc))
+                )
+            );
+        }
+        return remaining;
+    }
+
+    /**
+     * Finds the index of the nested type member that {@code comment} trails inline on the same source line, or {@code -1}
+     * when the comment is not an inline trailing line comment of any type member.
+     */
+    private int inlineTrailingTypeMemberIndex(NodeList<BodyDeclaration<?>> members, JavaCommentTrivia comment) {
+        if (!comment.isLine()) {
+            return -1;
+        }
+        for (int index = 0; index < members.size(); index++) {
+            if (members.get(index) instanceof TypeDeclaration && comment.startsAfterNodeOnSameLine(members.get(index))) {
+                return index;
+            }
+        }
+        return -1;
     }
 
     /**

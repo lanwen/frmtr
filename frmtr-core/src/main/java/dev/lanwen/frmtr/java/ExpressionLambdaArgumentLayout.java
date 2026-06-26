@@ -840,12 +840,22 @@ final class ExpressionLambdaArgumentLayout {
                 .orElse("");
     }
 
+    /**
+     * Reports whether an expression-lambda body can share or hug the call's opener line.
+     *
+     * <p>An object creation with an anonymous class body is deliberately excluded: the packed lambda-body shapes here only
+     * reconstruct the constructor opener and arguments and have no place to render the {@code { ... }} member block, so
+     * hugging such a body would drop the anonymous class entirely. Excluding it routes the call through the broken
+     * argument-list / source-multiline path, which renders the body through the full object-creation printer and stays
+     * idempotent regardless of the source line shape.
+     */
     private boolean huggableBody(Expression body) {
         if (body instanceof MethodCallExpr methodCall) {
             return !methodCall.getArguments().isEmpty() || sourceMultilineMethodCallBody(methodCall);
         }
         if (body instanceof ObjectCreationExpr objectCreation) {
-            return !objectCreation.getArguments().isEmpty();
+            return !objectCreation.getArguments().isEmpty()
+                && objectCreation.getAnonymousClassBody().isEmpty();
         }
         if (body instanceof ConditionalExpr) {
             return true;

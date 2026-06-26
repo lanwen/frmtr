@@ -159,6 +159,8 @@ final class StatementPrinter {
 
     private final BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList;
 
+    private final CommentedExpressionListPrinter commentedExpressionLists;
+
     private final ToIntFunction<String> currentIndentedWidth;
 
     StatementPrinter(
@@ -203,6 +205,7 @@ final class StatementPrinter {
             Function<Expression, String> compactWithOwnBlockComment,
             Function<Node, Doc> sameLineBlockCommentBeforeNode,
             BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList,
+            CommentedExpressionListPrinter commentedExpressionLists,
             ToIntFunction<String> currentIndentedWidth
     ) {
         this.comments = comments;
@@ -246,6 +249,7 @@ final class StatementPrinter {
         this.compactWithOwnBlockComment = compactWithOwnBlockComment;
         this.sameLineBlockCommentBeforeNode = sameLineBlockCommentBeforeNode;
         this.methodCallArgumentList = methodCallArgumentList;
+        this.commentedExpressionLists = commentedExpressionLists;
         this.currentIndentedWidth = currentIndentedWidth;
     }
 
@@ -579,6 +583,17 @@ final class StatementPrinter {
         Optional<Doc> huggableLambda = huggableBlockLambdaArguments.render(prefix, statement.getArguments());
         if (huggableLambda.isPresent()) {
             return huggableLambda.orElseThrow();
+        }
+        // super(...)/this(...) reach the plain argument list directly, so they otherwise miss the comment-aware
+        // breaking that method-call and object-creation printers get from CommentedExpressionListPrinter. Without it an
+        // interior argument's trailing line comment is dropped once the list breaks, because the compact join the plain
+        // path falls back to renders arguments comment-free. Offer the same broken layout first so each argument keeps
+        // its trailing comment, claimed once.
+        Optional<Doc> commentedArguments = comments.speculatively(
+            () -> commentedExpressionLists.parenthesized(prefix, statement, statement.getArguments())
+        );
+        if (commentedArguments.isPresent()) {
+            return commentedArguments.orElseThrow();
         }
         return Doc.group(
             Doc.concat(

@@ -88,12 +88,41 @@ final class RawSource {
      * Applies whitespace collapsing and the assignment-{@code =} spacing normalization to non-literal regions only,
      * emitting string, character, and text-block literal spans verbatim so whitespace or an {@code =} inside a literal is
      * never rewritten.
+     *
+     * <p>A {@code //} line comment is also copied verbatim and is always followed by a newline rather than collapsed into
+     * the surrounding whitespace run. A line comment runs to end-of-line in Java source, so collapsing the newline that
+     * terminates it would pull the next token (an element comma, a closing brace, the next operand) onto the comment line
+     * where {@code //} swallows it, producing non-compiling text. Keeping the terminating newline preserves that
+     * invariant: callers that width-gate this text see a multi-line (over-width) result and fall back to a structured
+     * layout, and any caller that emits the text directly still produces source where the trailing token survives.
      */
     private String normalizeOutsideLiterals(String text) {
         StringBuilder result = new StringBuilder(text.length());
         StringBuilder outside = new StringBuilder();
         int index = 0;
         while (index < text.length()) {
+            int blockCommentEnd = blockCommentSpanEnd(text, index);
+            if (blockCommentEnd >= 0) {
+                // A block comment does not run to end-of-line, so it keeps the previous behavior of being collapsed with
+                // the surrounding text. It is consumed as one span here only so a {@code //} sequence inside it (such as
+                // a {@code http://} URL) is not mistaken for a line comment by the line-comment check below.
+                outside.append(text, index, blockCommentEnd);
+                index = blockCommentEnd;
+                continue;
+            }
+            int lineCommentEnd = lineCommentSpanEnd(text, index);
+            if (lineCommentEnd >= 0) {
+                flushOutside(result, outside);
+                result.append(text, index, lineCommentEnd);
+                result.append('\n');
+                index = lineCommentEnd;
+                // Skip the newline run that already terminated the line comment in source; the explicit '\n' above
+                // stands in for it so a following token cannot be collapsed onto the comment line.
+                while (index < text.length() && (text.charAt(index) == '\n' || text.charAt(index) == '\r')) {
+                    index++;
+                }
+                continue;
+            }
             int literalEnd = literalSpanEnd(text, index);
             if (literalEnd < 0) {
                 outside.append(text.charAt(index));
@@ -106,6 +135,38 @@ final class RawSource {
         }
         flushOutside(result, outside);
         return result.toString();
+    }
+
+    /**
+     * Returns the exclusive end index of a {@code //} line comment that starts at {@code start} (the index of the first
+     * character past the comment content, i.e. the newline or end of text), or {@code -1} when no line comment begins
+     * there. The {@code //} prefix only opens a comment outside a string/character/text-block literal and outside a
+     * block comment, which the caller guarantees by checking {@link #literalSpanEnd(String, int)} and
+     * {@link #blockCommentSpanEnd(String, int)} spans before reaching this position.
+     */
+    private int lineCommentSpanEnd(String text, int start) {
+        if (!text.startsWith("//", start)) {
+            return -1;
+        }
+        int index = start + 2;
+        while (index < text.length() && text.charAt(index) != '\n' && text.charAt(index) != '\r') {
+            index++;
+        }
+        return index;
+    }
+
+    /**
+     * Returns the exclusive end index of a {@code /}{@code * ... *}{@code /} block comment that starts at {@code start},
+     * or {@code -1} when no block comment begins there. An unterminated block comment consumes the rest of the text. This
+     * span exists only to keep a {@code //} sequence inside a block comment from opening a spurious line comment; the
+     * caller still collapses the block comment's own whitespace like any other non-literal text.
+     */
+    private int blockCommentSpanEnd(String text, int start) {
+        if (!text.startsWith("/*", start)) {
+            return -1;
+        }
+        int closing = text.indexOf("*/", start + 2);
+        return closing < 0 ? text.length() : closing + 2;
     }
 
     /**

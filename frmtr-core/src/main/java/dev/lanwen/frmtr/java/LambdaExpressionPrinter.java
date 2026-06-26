@@ -8,6 +8,7 @@ import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.BinaryExpr;
+import com.github.javaparser.ast.expr.CastExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.LambdaExpr;
@@ -219,6 +220,7 @@ final class LambdaExpressionPrinter {
             + expressionBody.map(compact).orElseGet(() -> compact.apply(expression.getBody()));
         if (
             !parametersHaveComments
+            && expressionBody.filter(commentPlacement::hasContainedLineComments).isEmpty()
             && expressionBody.filter(expressionLambdaArguments::sourceMultilineLogicalBody).isEmpty()
             && expressionBody.filter(expressionLambdaArguments::sourceMultilineMethodCallBody).isEmpty()
             && expressionBody.filter(expressionLambdaArguments::sourceMultilineBinaryMethodCallBody).isEmpty()
@@ -249,6 +251,13 @@ final class LambdaExpressionPrinter {
                 lambdaParameterHeaders.forHeader(expression, parameters),
                 Doc.text(" -> "),
                 expressionRenderer.format(expression.getExpressionBody().orElseThrow())
+            );
+        }
+        if (!parametersHaveComments && expressionBody.filter(this::bodyEndsInBlock).isPresent()) {
+            return Doc.concat(
+                lambdaParameterHeaders.forHeader(expression, parameters),
+                Doc.text(" -> "),
+                expressionRenderer.format(expressionBody.orElseThrow())
             );
         }
         Optional<Doc> methodCallBodyWithOpener = expressionBody.filter(MethodCallExpr.class::isInstance)
@@ -386,6 +395,31 @@ final class LambdaExpressionPrinter {
         return body instanceof MethodCallExpr methodCall
             && methodCall.getArguments().isEmpty()
             && currentIndentedWidth.applyAsInt(") -> " + compact.apply(methodCall)) <= options.lineWidth();
+    }
+
+    /**
+     * Reports whether the lambda's expression body ultimately renders as a brace block, so the outer lambda should hug
+     * its arrow and let only the block break multi-line.
+     *
+     * <p>The block-bearing body always ends in a brace block whose own renderer breaks the body onto following lines,
+     * so breaking the outer lambda after {@code ->} would orphan the arrow above an already-multi-line block with
+     * no readability gain. This holds for a direct block-bodied lambda body and for one wrapped in a cast (the common
+     * {@code () -> (Iface) args -> { ... }} adapter shape), where the cast renderer prefixes the type and delegates the
+     * inner block-bodied lambda — which hugs its own arrow via the block-statement branch. The check unwraps casts and
+     * redundant parentheses but stays deliberately narrow: only a body that ends in a block qualifies, leaving every
+     * other body layout to the broken-after-arrow paths below.
+     */
+    private boolean bodyEndsInBlock(Expression body) {
+        if (body instanceof LambdaExpr lambda) {
+            return lambda.getBody().isBlockStmt();
+        }
+        if (body instanceof CastExpr cast) {
+            return bodyEndsInBlock(cast.getExpression());
+        }
+        if (body instanceof EnclosedExpr enclosed) {
+            return bodyEndsInBlock(enclosed.getInner());
+        }
+        return false;
     }
 
     /**

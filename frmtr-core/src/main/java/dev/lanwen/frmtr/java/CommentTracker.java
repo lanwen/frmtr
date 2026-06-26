@@ -4,6 +4,7 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.comments.Comment;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -300,6 +301,38 @@ final class CommentTracker {
                 .filter(t -> claim(t, body, OwnerSlot.LEADING))
                 .map(JavaFormatter::commentDoc)
                 .toList();
+    }
+
+    /**
+     * Claims and renders the full {@code //} comment block between {@code afterNode} and {@code body} as one cluster,
+     * each line on its own source-ordered line, anchored to {@code anchor}'s {@link OwnerSlot#LEADING} slot.
+     *
+     * <p>This is the {@code else}/{@code else if} counterpart of {@link #gapLineCommentsBefore(Node, Node, Collection)}.
+     * A multi-line block written before {@code else}/{@code else if} is split by JavaParser across {@code body}'s own
+     * trivia and the enclosing {@code if}'s orphan pool; this renderer claims every line under the enclosing-if
+     * {@code anchor} so the block renders once, together, in a single deterministic spot. Anchoring to the enclosing
+     * {@code if} rather than to {@code body} keeps a distinct {@link OwnerKey} from the nested {@code else if} body's own
+     * leading slot ({@code (body, LEADING)}): the dry-run runs this offer first (the separator is emitted before the
+     * nested body), so the block owns the lines here and the nested {@code else if}'s own leading cluster sees a
+     * different recorded owner and renders empty instead of double-claiming. See
+     * {@link JavaCommentPlacementPolicy#gapLeadingLineCommentBlock(Node, Node, Collection)}.
+     */
+    Doc gapLeadingLineCommentBlock(
+            Node anchor,
+            Node afterNode,
+            Node body,
+            Collection<? extends Node> attachmentBuckets
+    ) {
+        List<Doc> rendered = new ArrayList<>();
+        for (JavaCommentTrivia trivia : commentPlacement.gapLeadingLineCommentBlock(afterNode, body, attachmentBuckets)) {
+            if (ownsHere(trivia, anchor, OwnerSlot.LEADING) && claim(trivia, anchor, OwnerSlot.LEADING)) {
+                if (!rendered.isEmpty()) {
+                    rendered.add(Doc.HARD_LINE);
+                }
+                rendered.add(JavaFormatter.commentDoc(trivia));
+            }
+        }
+        return Doc.concat(rendered);
     }
 
     /**

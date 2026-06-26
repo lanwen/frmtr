@@ -5,6 +5,7 @@ import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.JavadocComment;
 import com.github.javaparser.ast.comments.LineComment;
+import com.github.javaparser.ast.comments.MarkdownComment;
 import java.util.Set;
 
 /**
@@ -39,6 +40,10 @@ record JavaCommentTrivia(Comment comment) {
         if (comment instanceof LineComment) {
             return JavaCommentKind.LINE;
         }
+        // MarkdownComment is a JavadocComment subclass (JEP 467), so it must be checked first.
+        if (comment instanceof MarkdownComment) {
+            return JavaCommentKind.MARKDOWN;
+        }
         if (comment instanceof JavadocComment) {
             return JavaCommentKind.JAVADOC;
         }
@@ -63,10 +68,22 @@ record JavaCommentTrivia(Comment comment) {
     }
 
     /**
-     * Reports whether this trivia is a Javadoc comment.
+     * Reports whether this trivia is a documentation comment, covering both traditional {@code /** ... *&#47;} Javadoc
+     * and JEP 467 {@code ///} Markdown documentation comments.
+     *
+     * <p>Both kinds are documentation comments for placement purposes (own a member's leading doc slot, force their own
+     * line), so callers that gate on "is this a doc comment" must see both. Rendering, which differs between the two,
+     * keys on {@link #kind()} / {@link #isMarkdown()} instead.
      */
     boolean isJavadoc() {
-        return kind() == JavaCommentKind.JAVADOC;
+        return kind() == JavaCommentKind.JAVADOC || kind() == JavaCommentKind.MARKDOWN;
+    }
+
+    /**
+     * Reports whether this trivia is a JEP 467 {@code ///} Markdown documentation comment.
+     */
+    boolean isMarkdown() {
+        return kind() == JavaCommentKind.MARKDOWN;
     }
 
     /**

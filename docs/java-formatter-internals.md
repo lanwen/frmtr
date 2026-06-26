@@ -296,9 +296,15 @@ the code token.
 `JavaCommentTrivia`, stores raw-preserved comment marks supplied by `RawPreservedSource`, and exposes the debug-only
 end-of-compilation-unit assertion that all JavaParser-visible comments were either printed or raw-accounted.
 
-`JavaCommentKind` and `JavaCommentTrivia` classify JavaParser comments as line, block, Javadoc, or unknown trivia, expose
-reusable source-position queries through `CommentIndex`, and let `CommentTracker` preserve identity-based printed-comment
-claims without making printers repeat raw subclass and range checks.
+`JavaCommentKind` and `JavaCommentTrivia` classify JavaParser comments as line, block, Javadoc, Markdown (JEP 467 `///`
+documentation comments), or unknown trivia, expose reusable source-position queries through `CommentIndex`, and let
+`CommentTracker` preserve identity-based printed-comment claims without making printers repeat raw subclass and range
+checks. `MarkdownComment` is a JavaParser `JavadocComment` subclass, so it is classified before Javadoc and still answers
+`isJavadoc()` for documentation-placement decisions, but `JavaFormatter.commentDoc` renders it through the `///`
+line-comment family rather than the reflowing Javadoc path: a contiguous `///` run is one multi-line node whose
+continuation lines carry their original source indentation, so each line's leading whitespace is stripped and re-emitted
+at the structural indent (mirroring a `//` block) to keep the rendering idempotent instead of drifting one indent level
+per format pass.
 
 `CommentIndex` centralizes read-only source-position classification for comments, including explicit-fallback begin/end
 line lookups, line/column comparisons, line-range containment, same-begin-line checks, source-order sorting, contained

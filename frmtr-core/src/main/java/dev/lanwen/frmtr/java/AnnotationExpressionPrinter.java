@@ -72,6 +72,12 @@ final class AnnotationExpressionPrinter {
      * <p>Normal annotations and single-member annotations have different width and breaking rules, while marker
      * annotations are only the compact name. A trailing line comment belongs after the complete annotation text, so it is
      * attached after the branch-specific doc has been built.
+     *
+     * <p>A trailing line comment is intentionally <em>not</em> attached here when the annotation is an element of an
+     * annotation array. The array-element slot ({@link #annotationArrayValueLine(Expression, List)}) owns the order of
+     * the element separator and its trailing comment: it must emit {@code @Elem(...), // note} so the comma is not
+     * swallowed by the {@code //} comment. Letting this method bake the comment inline first would leave the slot to
+     * append the comma <em>after</em> the comment, producing the non-compiling {@code @Elem(...) // note,}.
      */
     Doc annotation(AnnotationExpr annotation) {
         Doc formatted;
@@ -81,6 +87,9 @@ final class AnnotationExpressionPrinter {
             formatted = singleMemberAnnotation(singleMemberAnnotation);
         } else {
             formatted = Doc.text("@" + compact.apply(annotation.getName()));
+        }
+        if (isAnnotationArrayElement(annotation)) {
+            return formatted;
         }
         Doc trailing = comments.ownTriviaComment(
             annotation,
@@ -92,6 +101,10 @@ final class AnnotationExpressionPrinter {
             return Doc.concat(formatted, Doc.text(" "), trailing);
         }
         return formatted;
+    }
+
+    private static boolean isAnnotationArrayElement(AnnotationExpr annotation) {
+        return annotation.getParentNode().filter(ArrayInitializerExpr.class::isInstance).isPresent();
     }
 
     Doc annotationPreservingSourceBreaks(AnnotationExpr annotation) {

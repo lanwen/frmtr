@@ -158,7 +158,9 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
   acceptance, array-creation type breaks, forced initializer breaks, and initializer comments.
 - `AnnotationExpressionPrinter`: marker, normal, and single-member annotation shapes, annotation member pairs, compact
   annotation text, raw string-literal tokens inside compact annotation values, annotation array member values including
-  line comments between values, trailing line comments, and binary annotation-value continuations.
+  line comments between values, trailing line comments, and binary annotation-value continuations. An annotation that is
+  an annotation-array element leaves its trailing line comment to the array-element slot rather than baking it inline, so
+  the element-separator comma is emitted before the comment (`@Elem(...), // note`) and is not swallowed by the `//`.
 - `BinaryExpressionPrinter`: binary flattening, operator position, line comments before and between broken operands,
   precedence parentheses, end-position method-call operand breaks, and cast-division continuation decisions.
 - `CastExpressionPrinter`: cast type layout, line-width-aware intersection and generic type-body breaks, operand rendering,
@@ -254,7 +256,12 @@ already-computed source-derived text in `Doc.Text` while atomically accounting f
 including the variant where the node's own attached comment has already been emitted separately.
 
 `RawSource` centralizes JavaParser token-range text access and whitespace normalization used by printer rules when
-formatting requires raw source text or compact source-derived text. `CompactSourceText` centralizes source-equivalent
+formatting requires raw source text or compact source-derived text. Its whitespace normalization keeps the newline that
+terminates a `//` line comment instead of collapsing it into the surrounding whitespace run: a line comment runs to
+end-of-line in Java, so collapsing that newline would pull the next token (an element separator comma, a closing brace,
+the next operand) onto the comment line where `//` swallows it, producing non-compiling text. Compact text that contains
+a line comment is therefore multi-line, which makes flat-width probes reject it and fall back to a structured layout.
+`CompactSourceText` centralizes source-equivalent
 compact text: raw string-literal token spelling, recursive field-access reconstruction, comment-free expression
 reconstruction for anonymous-class headers, generic delimiter spacing cleanup for type-like snippets, comma joining, and
 clone-before-comment-removal behavior. `LayoutWidth` centralizes the indentation baselines used for flat-width probes so

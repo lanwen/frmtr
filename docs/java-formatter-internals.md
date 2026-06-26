@@ -296,6 +296,18 @@ comments that sit on the line directly above `try (` belong to the try statement
 enclosing block already renders them before `try`; the in-section leading-comment gate filters comments that begin before
 the `try` keyword so the statement's own leading comment no longer forces the section to stay broken.
 
+`BinaryExpressionPrinter`'s broken-binary method-call operand break is the same boundary for argument layout (issue
+#119, the third wrap-convergence regime after #98/#117). When a binary is laid out one operator per line, whether a
+method-call operand keeps its argument list flat or explodes it is decided purely from the flat operand's width on its
+broken line — `methodCallOperandShouldBreak` and its siblings (`methodCallBinaryOperandShouldBreak`,
+`leadingOperatorMethodCallBinaryOperandShouldNest`, `shouldBreakEndPositionMethodCallOperand`) deliberately do **not**
+consult `SourceShapePolicy.methodCallArgumentsSpanMultipleLines`. A call's arguments "span multiple lines" only because
+the author broke them, which is incidental to argument layout rather than an operand-shape the binary renderer should
+preserve; honoring it let an exploded operand re-observe its own broken shape every pass, so identical operands in one
+chain rendered differently and near the width boundary the operand never settled. The width-only decision means the same
+binary AST formats to one shape regardless of how the call's arguments were wrapped in source. (The comment-aware
+operand paths still route through the comment-between-operands queries, which are independent of this break decision.)
+
 `ObjectCreationLayoutPolicy` centralizes constructor-call source-shape decisions that several expression contexts share:
 when source-multiline constructor arguments are meaningful enough to preserve, when returned object creations should
 preserve source-multiline constructor arguments, and whether a constructor root may stay compact when a surrounding

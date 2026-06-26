@@ -214,6 +214,13 @@ final class BinaryExpressionPrinter {
         ) {
             return Doc.concat(Doc.text("("), nestedLines(binaryOperand, true), Doc.text(")"));
         }
+        if (leadingOperatorMethodCallBinarySuffixCanAlign(binaryLine, operand)) {
+            BinaryExpr binaryOperand = (BinaryExpr) operand;
+            return brokenMethodCallWithClosingLineRenderer.apply(
+                (MethodCallExpr) binaryOperand.getLeft(),
+                methodCallBinaryClosingLine(binaryLine, binaryOperand)
+            );
+        }
         if (
             operand instanceof BinaryExpr binaryOperand
             && leadingOperatorMethodCallBinaryOperandShouldNest(binaryLine, binaryOperand)
@@ -225,13 +232,6 @@ final class BinaryExpressionPrinter {
             && shouldParenthesizeNestedBinary(binaryLine.operator(), binaryOperand.getOperator())
         ) {
             return Doc.concat(Doc.text("("), expressionRenderer.format(binaryOperand), Doc.text(")"));
-        }
-        if (leadingOperatorMethodCallBinarySuffixCanAlign(binaryLine, operand)) {
-            BinaryExpr binaryOperand = (BinaryExpr) operand;
-            return brokenMethodCallWithClosingLineRenderer.apply(
-                (MethodCallExpr) binaryOperand.getLeft(),
-                methodCallBinaryClosingLine(binaryLine, binaryOperand)
-            );
         }
         if (operand instanceof MethodCallExpr && operand.getAllContainedComments().isEmpty()) {
             MethodCallExpr methodCall = (MethodCallExpr) operand;
@@ -252,6 +252,21 @@ final class BinaryExpressionPrinter {
         return expressionRenderer.format(operand);
     }
 
+    /**
+     * Reports whether a leading-operator binary operand whose left is a breaking method call can keep its trailing
+     * operator and right operand on the call's closing-paren line ({@code ) op rhs}) rather than nesting them onto a
+     * separate indented continuation.
+     *
+     * <p>This is the operand-level sibling of {@link ReturnBinaryExpressionLayout}'s direct-return method-call-left
+     * suffix: when {@code A && call(\n  args\n) > rhs} appears as a chain operand, the {@code > rhs} suffix should hug the
+     * closing paren the same way a bare {@code return call(...) > rhs} does. The caller checks this <em>before</em>
+     * {@link #leadingOperatorMethodCallBinaryOperandShouldNest}, so the closing-line suffix wins whenever it fits and the
+     * call and right operand carry no comments; the nest form remains the fallback when the suffix cannot align (the
+     * closing line would overflow) or comments force the operand through the comment-aware renderer. Keeping the suffix on
+     * the closing line is also what makes the layout width-deterministic: it no longer depends on whether the source had
+     * the call's argument list flat or pre-broken (issue #119), because both shapes converge on this single closing-line
+     * suffix.
+     */
     private boolean leadingOperatorMethodCallBinarySuffixCanAlign(BinaryExpressionLine binaryLine, Expression operand) {
         if (
             !binaryLine.hasLeadingOperator()
@@ -268,23 +283,43 @@ final class BinaryExpressionPrinter {
         ) <= options.lineWidth();
     }
 
+    /**
+     * Reports whether a broken-binary method-call operand should explode its argument list rather than render flat.
+     *
+     * <p>The decision is width- and AST-deterministic on purpose. A binary operand breaks its args only when the flat
+     * operand would overflow the available width on its broken line, or — for a nested continuation whose call carries
+     * breakable structure — when it sits within one indent unit of overflowing. It deliberately does <em>not</em> key off
+     * {@code sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall)}: that is a source-shape signal (true iff
+     * the call's args were already broken across lines in the input bytes), not a fixed property of the AST. Keying the
+     * break on it made the layout depend on the previous pass's incidental line shape, so once a pass exploded an
+     * operand's args the next pass re-observed the broken shape and re-exploded, producing two different stable outputs
+     * for the same tree (flat vs args-exploded) and, near the width boundary, a layout that never converged. This is the
+     * same source-shape-coupling root cause as the #98/#117 wrap-convergence family (issue #119); the fit decision must
+     * be computed from the flat width, not from how the author happened to wrap the call.
+     */
     private boolean methodCallOperandShouldBreak(
             BinaryExpressionLine binaryLine,
             MethodCallExpr methodCall,
             boolean nestedContinuationLine
     ) {
         String flat = compact.apply(methodCall);
-        return sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall)
-            || binaryLine.width(flat, nestedContinuationLine) > options.lineWidth()
+        return binaryLine.width(flat, nestedContinuationLine) > options.lineWidth()
             || (nestedContinuationLine
                 && methodCallHasBreakableStructure(methodCall)
                 && binaryLine.width(flat, nestedContinuationLine) > options.lineWidth() - options.indentUnit().length());
     }
 
+    /**
+     * Reports whether a leading-operator method-call binary operand should break its left call's argument list.
+     *
+     * <p>Like {@link #methodCallOperandShouldBreak}, this is width-deterministic and intentionally ignores the
+     * source-shape {@code methodCallArgumentsSpanMultipleLines} signal (see that method for the #119 rationale): the
+     * operand explodes its args only when the flat operand overflows the broken line, or sits at the boundary while the
+     * call carries breakable structure.
+     */
     private boolean methodCallBinaryOperandShouldBreak(BinaryExpressionLine binaryLine, BinaryExpr binaryOperand) {
         MethodCallExpr methodCall = (MethodCallExpr) binaryOperand.getLeft();
-        return sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall)
-            || binaryLine.width(compact.apply(binaryOperand)) > options.lineWidth()
+        return binaryLine.width(compact.apply(binaryOperand)) > options.lineWidth()
             || (methodCallHasBreakableStructure(methodCall)
                 && binaryLine.width(compact.apply(binaryOperand)) >= options.lineWidth());
     }
@@ -301,6 +336,22 @@ final class BinaryExpressionPrinter {
             || methodCall.getScope().filter(MethodCallExpr.class::isInstance).isPresent();
     }
 
+    /**
+     * Reports whether a leading-operator method-call binary operand should nest its inner chain rather than align its
+     * closing line with the trailing operator.
+     *
+     * <p>This break-shape decision is width-deterministic and intentionally ignores the source-shape
+     * {@code methodCallArgumentsSpanMultipleLines} signal (see {@link #methodCallOperandShouldBreak} for the #119
+     * rationale). The previous {@code !methodCallArgumentsSpanMultipleLines(...)} guard nested only when the call's args
+     * were <em>not</em> already broken in the input, so two identical trees nested differently depending on how the
+     * author had wrapped the call — the same source-shape coupling that prevented convergence. The operand now nests
+     * whenever it is a leading-operator multi-argument call that overflows the available width, independent of the input
+     * line shape.
+     *
+     * <p>This is the fallback for {@link #leadingOperatorMethodCallBinarySuffixCanAlign}, which the caller checks first:
+     * when the operator and right operand can ride the call's closing-paren line ({@code ) op rhs}) that suffix shape
+     * wins, and the operand only nests here when that suffix cannot align (the closing line would overflow).
+     */
     private boolean leadingOperatorMethodCallBinaryOperandShouldNest(
             BinaryExpressionLine binaryLine,
             BinaryExpr binaryOperand
@@ -308,7 +359,6 @@ final class BinaryExpressionPrinter {
         return binaryLine.hasLeadingOperator()
             && binaryOperand.getLeft() instanceof MethodCallExpr methodCall
             && methodCall.getArguments().size() > 1
-            && !sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall)
             && binaryLine.width(compact.apply(binaryOperand)) > options.lineWidth();
     }
 
@@ -356,12 +406,18 @@ final class BinaryExpressionPrinter {
      * <p>With trailing operators, a wide call followed by {@code +}, {@code &&}, or another binary operator can make the
      * operator appear visually separated from the operand. This check lets the binary renderer first break the call
      * arguments, then attach the operator after that broken operand.
+     *
+     * <p>The break fires only for a multi-argument call that overflows the available width. It deliberately does not key
+     * off {@code sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall)} (see
+     * {@link #methodCallOperandShouldBreak} for the #119 rationale): keying a single-argument call's break on whether the
+     * author had already wrapped its one argument made the operand shape depend on the input's incidental line shape
+     * rather than a fixed property of the AST. A single-argument overflowing call now falls through to the deterministic
+     * operand renderer instead.
      */
     private boolean shouldBreakEndPositionMethodCallOperand(BinaryExpressionLine binaryLine, Expression operand) {
         return binaryLine.hasTrailingOperator()
             && operand instanceof MethodCallExpr methodCall
-            && !methodCall.getArguments().isEmpty()
-            && (methodCall.getArguments().size() > 1 || sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall))
+            && methodCall.getArguments().size() > 1
             && binaryLine.width(compact.apply(methodCall)) > options.lineWidth();
     }
 

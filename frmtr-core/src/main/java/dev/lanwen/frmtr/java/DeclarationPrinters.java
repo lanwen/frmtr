@@ -290,7 +290,8 @@ final class DeclarationPrinters {
             compactSource::compactTypeLike,
             types::typeBody,
             expressions::expression,
-            this::body
+            this::body,
+            (members, owner) -> memberBlocks.memberBlock(members, owner, this::body)
         );
         BodyDeclarationDispatcher bodyDeclarationDispatcher = new BodyDeclarationDispatcher(
             rawPreservedSource,

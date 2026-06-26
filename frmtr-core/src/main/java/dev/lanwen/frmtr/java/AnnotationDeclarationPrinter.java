@@ -3,6 +3,7 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.GeneratedJavaParserConstants;
 import com.github.javaparser.JavaToken;
 import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.AnnotationMemberDeclaration;
 import com.github.javaparser.ast.body.BodyDeclaration;
@@ -16,6 +17,7 @@ import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 /**
@@ -60,6 +62,8 @@ final class AnnotationDeclarationPrinter {
 
     private final Function<BodyDeclaration<?>, Doc> memberRenderer;
 
+    private final BiFunction<NodeList<BodyDeclaration<?>>, Node, Doc> emptyMemberBlockRenderer;
+
     /**
      * Names the previous recovered annotation-body item so raw gaps and formatted members do not duplicate separators.
      */
@@ -84,7 +88,8 @@ final class AnnotationDeclarationPrinter {
             Function<Type, String> compactTypeLike,
             Function<Type, Doc> typeBody,
             Function<Expression, Doc> expression,
-            Function<BodyDeclaration<?>, Doc> memberRenderer
+            Function<BodyDeclaration<?>, Doc> memberRenderer,
+            BiFunction<NodeList<BodyDeclaration<?>>, Node, Doc> emptyMemberBlockRenderer
     ) {
         this.options = context.options;
         this.layoutWidth = context.layoutWidth;
@@ -101,6 +106,7 @@ final class AnnotationDeclarationPrinter {
         this.typeBody = typeBody;
         this.expression = expression;
         this.memberRenderer = memberRenderer;
+        this.emptyMemberBlockRenderer = emptyMemberBlockRenderer;
     }
 
     /**
@@ -120,6 +126,11 @@ final class AnnotationDeclarationPrinter {
      *
      * <p>Each member is rendered through the caller so nested declarations, pragmas, and comments use the shared body
      * formatting path instead of a local annotation-only shortcut.
+     *
+     * <p>An empty member list is delegated to the shared member-block renderer rather than collapsed locally to
+     * {@code {}}: an empty annotation body can still carry a brace-line or orphan comment, and that renderer is the
+     * single place that decides between a compact {@code {}} and a real block body preserving the comment, keeping the
+     * decision identical to empty class, interface, and enum bodies.
      */
     private Doc annotationMemberBlock(AnnotationDeclaration declaration) {
         Optional<RecoveredListPlanner.Plan<BodyDeclaration<?>>> recoveryPlan = recoveryPlan(declaration);
@@ -127,7 +138,7 @@ final class AnnotationDeclarationPrinter {
             return recoveredAnnotationMemberBlock(declaration, recoveryPlan.orElseThrow());
         }
         if (declaration.getMembers().isEmpty()) {
-            return Doc.text("{}");
+            return emptyMemberBlockRenderer.apply(declaration.getMembers(), declaration);
         }
         List<Doc> memberDocs = declaration.getMembers().stream().map(memberRenderer).toList();
         return Doc.concat(

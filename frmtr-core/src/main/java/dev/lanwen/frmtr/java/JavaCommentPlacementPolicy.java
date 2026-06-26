@@ -247,6 +247,38 @@ final class JavaCommentPlacementPolicy {
                 .toList();
     }
 
+    /**
+     * Recovers the line comments JavaParser parked between a {@code default} label's colon and its statement-group body
+     * when the entry has no label node to anchor the gap on.
+     *
+     * <p>{@link #gapLineCommentsBefore(Node, Node, Collection)} bounds its result with {@link CommentIndex#liesBetween}
+     * (after the anchor <em>ends</em>, before the body begins). For a colon {@code case X:} the anchor is the last label
+     * expression, so the bound is exact. A {@code default:} entry owns no label, so the only available anchor is the entry
+     * itself — and {@code liesBetween(entry, body)} never matches, because a comment between the colon and the body lies
+     * <em>inside</em> the entry's range, not after it ends, so every such comment is dropped once a whitespace perturbation
+     * moves it off the body statement's own trivia onto the entry's orphan pool. This query instead bounds the gap by the
+     * entry's <em>begin</em> position ({@code startsAfterBeginOf(entry)}, i.e. after the {@code default} keyword start) and
+     * the body's begin, excluding the body's own leading comment (the statement renderer prints that) and this entry's own
+     * leading comments (they begin before the entry, so the begin-position bound already excludes them). The result is the
+     * {@code default}-label counterpart of the {@code case}-label gap recovery, shape-independent the same way.
+     */
+    List<JavaCommentTrivia> defaultLabelGapLineCommentsBefore(
+            Node entry,
+            Node body,
+            Collection<? extends Node> attachmentBuckets
+    ) {
+        Optional<Comment> bodyOwn = ownComment(body).map(JavaCommentTrivia::comment);
+        return attachmentBuckets.stream()
+                .flatMap(bucket -> ownAndOrphanComments(bucket).stream())
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> startsAfterBeginOf(entry, comment))
+                .filter(comment -> comment.startsBefore(body))
+                .filter(comment -> bodyOwn.map(own -> own != comment.comment()).orElse(true))
+                .distinct()
+                .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
+                .toList();
+    }
+
     private List<JavaCommentTrivia> ownAndOrphanComments(Node node) {
         return java.util.stream.Stream.concat(ownComment(node).stream(), orphanComments(node).stream()).toList();
     }

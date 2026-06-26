@@ -597,7 +597,8 @@ final class SwitchPrinter {
                 label,
                 guard,
                 entry.getStatements(),
-                caseLabelTrailingComment(entry)
+                caseLabelTrailingComment(entry),
+                caseLabelLeadingBodyComments(entry)
             );
             case EMPTY_RULE -> Doc.concat(label, guard, Doc.text(" ->"));
             case COMMENTED_RULE_BODY -> commentedRuleBody(label, guard, entry.getStatements().get(0));
@@ -714,34 +715,100 @@ final class SwitchPrinter {
     }
 
     /**
-     * Offers the line comment(s) that trail a colon {@code case} label after the label list and before the
-     * statement-group body ({@code case 2: // note}).
+     * Offers the line comment(s) that trail a colon {@code case}/{@code default} label on the same source line as the label
+     * (or label list), before the statement-group body ({@code case 2: // note}).
      *
-     * <p>JavaParser attaches such a comment to the label expression (the {@code @default}/collapsed shape) or, under a
-     * whitespace perturbation that lifts it onto its own line, to the entry's orphan bucket, never to the entry's own
-     * trivia, so the entry-scoped trailing slot in {@link #switchEntry} never sees it and it was dropped. This recovers it
-     * shape-independently from the label/entry buckets bounded to the gap after the last label and before the body
-     * (see {@link JavaCommentPlacementPolicy#gapLineCommentsBefore}), which by construction excludes the body statement's
-     * own leading comment (the statement renderer prints that) and any later entry's leading comment (it lies past this
-     * entry's body). Each recovered comment is claimed under the entry's trailing slot exactly once and rendered as a
-     * {@link Doc#lineSuffix(Doc)} by {@link #switchStatementGroupEntry}, so it flushes at the colon line's break and the
-     * body still lays out on the next line, whatever line source put the comment on. Only old-style {@code case:}/
-     * {@code default:} statement groups reach this path; rule entries keep their own trailing handling.
+     * <p>JavaParser attaches such a comment to the label expression (the {@code @default}/collapsed shape) or to the
+     * entry's orphan bucket, never to the entry's own trivia, so the entry-scoped trailing slot in {@link #switchEntry}
+     * never sees it and it was dropped. This recovers it from the label/entry buckets bounded to the gap after the label
+     * and before the body (see {@link #caseLabelGapLineComments}), which by construction excludes the body statement's own
+     * leading comment (the statement renderer prints that) and any later entry's leading comment (it lies past this entry's
+     * body).
+     *
+     * <p>The gap recovery is partitioned by whether each comment begins on the label's own source line
+     * ({@link #caseLabelLine(SwitchEntry)} — the last label's line for {@code case X:}, the entry's begin line for
+     * {@code default:}). Only the same-line comments genuinely trail the label the way the author wrote them, so only those
+     * are offered here; they are claimed under the entry's trailing slot exactly once and rendered as a
+     * {@link Doc#lineSuffix(Doc)} by {@link #switchStatementGroupEntry}, flushing at the colon line's break with the body
+     * laid out on the next line. A {@code //} comment block the author placed on its own line(s) below the label is instead
+     * a leading comment of the body; {@link #caseLabelLeadingBodyComments} owns those so the printer no longer hoists the
+     * first such line onto the {@code case} line and joins it with the rest below it (issue #88). The partition is what
+     * keeps both shapes correct: a genuine trailing comment begins on the label line, an own-line leading block begins on a
+     * later line. Only old-style {@code case:}/{@code default:} statement groups reach this path; rule entries keep their
+     * own trailing handling.
      */
     private Doc caseLabelTrailingComment(SwitchEntry entry) {
-        Optional<Node> lastLabel = entry.getLabels().getLast().map(Node.class::cast);
-        Node afterNode = lastLabel.orElse(entry);
-        Node body = entry.getStatements().isEmpty() ? entry : entry.getStatements().get(0);
-        if (afterNode == body) {
-            return Doc.EMPTY;
-        }
-        List<Doc> commentDocs = commentPlacementPolicy
-                .gapLineCommentsBefore(afterNode, body, arrowLeadingCommentBuckets(entry))
+        int labelLine = caseLabelLine(entry);
+        List<Doc> commentDocs = caseLabelGapLineComments(entry)
                 .stream()
+                .filter(comment -> comment.beginLine(Integer.MIN_VALUE) == labelLine)
                 .map(comment -> comments.comment(comment, entry, OwnerSlot.TRAILING))
                 .filter(doc -> doc != Doc.EMPTY)
                 .toList();
         return commentDocs.isEmpty() ? Doc.EMPTY : Doc.join(Doc.text(" "), commentDocs);
+    }
+
+    /**
+     * Offers the leading {@code //} comment block JavaParser parked in the gap after a colon {@code case}/{@code default}
+     * label and before the statement-group body, when the author placed it on its own line(s) below the label rather than
+     * trailing the label line ({@code case X:} then {@code // note} on the next line).
+     *
+     * <p>This is the own-line counterpart of {@link #caseLabelTrailingComment}: it consumes the same gap recovery but keeps
+     * only the comments that do <em>not</em> begin on the label's own line ({@link #caseLabelLine(SwitchEntry)}).
+     * JavaParser splits such a block between the label expression (which owns the first line) and the body statement (which
+     * owns the rest), or — under a whitespace perturbation that pushes a genuine trailing comment onto its own line — parks
+     * the single line on the label expression or the entry orphan pool. In every such shape the comment is not the body
+     * statement's own leading trivia, so the body renderer never prints it; left unclaimed here it was dropped, and the
+     * older code that hoisted it onto the {@code case} line corrupted its attachment (issue #88). Rendering the recovered
+     * comments as their own lines at the statement indent before the body, claimed once under the entry's leading slot,
+     * places them exactly where leading comments render elsewhere and keeps the whole block together. The body's own
+     * leading comments still render through {@link #switchEntryStatements}; the gap recovery already excludes those (it
+     * never returns the body's own comment), so the two sets do not overlap.
+     */
+    private List<Doc> caseLabelLeadingBodyComments(SwitchEntry entry) {
+        int labelLine = caseLabelLine(entry);
+        return caseLabelGapLineComments(entry)
+                .stream()
+                .filter(comment -> comment.beginLine(Integer.MIN_VALUE) != labelLine)
+                .map(comment -> comments.comment(comment, entry, OwnerSlot.LEADING))
+                .filter(doc -> doc != Doc.EMPTY)
+                .toList();
+    }
+
+    /**
+     * Returns the source line the entry's label sits on so the gap recovery can tell a genuine trailing comment (same
+     * line) from an own-line leading block (later line): the last label's begin line for {@code case X:}, the entry's begin
+     * line for the label-less {@code default:}.
+     */
+    private int caseLabelLine(SwitchEntry entry) {
+        Node anchor = entry.getLabels().getLast().map(Node.class::cast).orElse(entry);
+        return CommentIndex.beginLine(anchor, Integer.MAX_VALUE);
+    }
+
+    /**
+     * Recovers the line comments JavaParser parked between a statement-group label's colon and the body, choosing the
+     * anchor by label kind: {@code case X:} entries bound the gap by the last label expression
+     * ({@link JavaCommentPlacementPolicy#gapLineCommentsBefore}), while the label-less {@code default:} bounds it by the
+     * entry's own begin position ({@link JavaCommentPlacementPolicy#defaultLabelGapLineCommentsBefore}) because there is no
+     * label node to anchor on and {@code liesBetween(entry, body)} would match nothing.
+     */
+    private List<JavaCommentTrivia> caseLabelGapLineComments(SwitchEntry entry) {
+        Node body = entry.getStatements().isEmpty() ? entry : entry.getStatements().get(0);
+        if (entry.getLabels().isEmpty()) {
+            if (body == entry) {
+                return List.of();
+            }
+            return commentPlacementPolicy.defaultLabelGapLineCommentsBefore(
+                entry,
+                body,
+                arrowLeadingCommentBuckets(entry)
+            );
+        }
+        Node afterNode = entry.getLabels().getLast().map(Node.class::cast).orElseThrow();
+        if (afterNode == body) {
+            return List.of();
+        }
+        return commentPlacementPolicy.gapLineCommentsBefore(afterNode, body, arrowLeadingCommentBuckets(entry));
     }
 
     private SwitchEntryLayout switchEntryLayout(SwitchEntry entry) {
@@ -1023,12 +1090,13 @@ final class SwitchPrinter {
             Doc label,
             Doc guard,
             NodeList<Statement> statements,
-            Doc labelTrailingComment
+            Doc labelTrailingComment,
+            List<Doc> labelLeadingBodyComments
     ) {
         Doc trailing = labelTrailingComment == Doc.EMPTY
             ? Doc.EMPTY
             : Doc.lineSuffix(Doc.concat(Doc.text(" "), labelTrailingComment));
-        if (statements.size() == 1 && statements.get(0).isBlockStmt()) {
+        if (statements.size() == 1 && statements.get(0).isBlockStmt() && labelLeadingBodyComments.isEmpty()) {
             return Doc.concat(
                 label,
                 guard,
@@ -1037,7 +1105,13 @@ final class SwitchPrinter {
                 switchStatementGroupBlock(statements.get(0).asBlockStmt())
             );
         }
-        return Doc.concat(label, guard, Doc.text(":"), trailing, switchEntryStatements(statements));
+        return Doc.concat(
+            label,
+            guard,
+            Doc.text(":"),
+            trailing,
+            switchEntryStatements(statements, labelLeadingBodyComments)
+        );
     }
 
     /**
@@ -1112,9 +1186,22 @@ final class SwitchPrinter {
         return blockRenderer.format(block);
     }
 
-    private Doc switchEntryStatements(NodeList<Statement> statements) {
+    /**
+     * Lays out a {@code case:} statement group's nested statements at the entry indent, prepending any
+     * {@code labelLeadingBodyComments} (the own-line {@code //} block the author placed under the label, recovered by
+     * {@link #caseLabelLeadingBodyComments}) as their own lines before the first statement so the whole leading block stays
+     * together above the body, matching how leading comments render elsewhere. When the entry has no nested statement the
+     * recovered comment block is the only body content, so it is laid out on its own indented line(s) without a trailing
+     * break.
+     */
+    private Doc switchEntryStatements(NodeList<Statement> statements, List<Doc> labelLeadingBodyComments) {
         if (statements.isEmpty()) {
-            return Doc.EMPTY;
+            if (labelLeadingBodyComments.isEmpty()) {
+                return Doc.EMPTY;
+            }
+            return Doc.indent(
+                Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, labelLeadingBodyComments))
+            );
         }
         List<Doc> docs = new ArrayList<>();
         Statement previous = null;
@@ -1125,7 +1212,10 @@ final class SwitchPrinter {
             docs.add(statementRenderer.format(current));
             previous = current;
         }
-        return Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.concat(docs)));
+        Doc leading = labelLeadingBodyComments.isEmpty()
+            ? Doc.EMPTY
+            : Doc.concat(Doc.join(Doc.HARD_LINE, labelLeadingBodyComments), Doc.HARD_LINE);
+        return Doc.indent(Doc.concat(Doc.HARD_LINE, leading, Doc.concat(docs)));
     }
 
     static boolean hasRecoverableSwitchEntryListProblem(SwitchStmt statement) {

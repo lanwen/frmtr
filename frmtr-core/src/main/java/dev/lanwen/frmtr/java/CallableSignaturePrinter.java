@@ -324,7 +324,15 @@ final class CallableSignaturePrinter {
     }
 
     private Doc parameterCore(Parameter parameter) {
-        if (!parameter.isVarArgs() && typeCanBreak.test(parameter.getType())) {
+        // A C-style array parameter (byte b[]) must render through the non-breaking text path: its after-name bracket
+        // shape has no group to break, and the breakable path would print the type body (name-spanning) followed by the
+        // name again, reproducing the duplicated-name bug. parameterTypeAndNameText handles the element-type prefix and
+        // after-name bracket suffix.
+        if (
+            !parameter.isVarArgs()
+            && !CStyleArrayDeclarators.parameterHasCStyleBrackets(parameter)
+            && typeCanBreak.test(parameter.getType())
+        ) {
             List<Doc> parts = new ArrayList<>();
             parameterLeadingBlockComment(parameter).ifPresent(parts::add);
             parts.add(parameterModifierAnnotationPrefix(parameter));
@@ -515,6 +523,16 @@ final class CallableSignaturePrinter {
     }
 
     private String parameterTypeAndNameText(Parameter parameter) {
+        // A C-style parameter (byte b[]) carries its brackets after the name, so the type node's token range spans the
+        // name and compact text already reads "byte b[]". Rendering the element type as the prefix and re-appending the
+        // brackets after the name keeps the name from being emitted twice while preserving the after-name bracket
+        // position the AST-equivalence guardrail requires (see CStyleArrayDeclarators).
+        if (CStyleArrayDeclarators.parameterHasCStyleBrackets(parameter)) {
+            return compactTypeLike.apply(CStyleArrayDeclarators.parameterElementType(parameter))
+                + " "
+                + parameter.getNameAsString()
+                + CStyleArrayDeclarators.parameterBracketsAfterName(parameter);
+        }
         List<String> parts = new ArrayList<>();
         String type = compact.apply(parameter.getType());
         if (parameter.isVarArgs()) {

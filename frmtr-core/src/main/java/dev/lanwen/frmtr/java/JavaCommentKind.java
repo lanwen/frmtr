@@ -26,6 +26,14 @@ enum JavaCommentKind {
     JAVADOC,
 
     /**
+     * A JEP 467 Markdown documentation comment: a contiguous run of {@code ///} lines that JavaParser exposes as a single
+     * multi-line node. It is a documentation comment like {@link #JAVADOC} for placement purposes, but its lines are
+     * rendered from the {@code ///} line family rather than reflowed as a {@code /* ... *&#47;} block, so the formatter
+     * gives it its own kind to drive that rendering choice.
+     */
+    MARKDOWN,
+
+    /**
      * A comment implementation outside JavaParser's standard Java comment subclasses; callers should preserve it through
      * the generic comment rendering path rather than assigning line, block, or Javadoc-specific layout meaning.
      */

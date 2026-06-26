@@ -19,6 +19,7 @@ import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.JavadocComment;
 import com.github.javaparser.ast.comments.LineComment;
+import com.github.javaparser.ast.comments.MarkdownComment;
 import com.github.javaparser.ast.modules.ModuleDeclaration;
 import com.github.javaparser.ast.modules.ModuleDirective;
 import com.github.javaparser.ast.stmt.BlockStmt;
@@ -610,6 +611,9 @@ public final class JavaFormatter {
             }
             return Doc.text("//" + lineComment.getContent().stripTrailing());
         }
+        if (trivia.isMarkdown()) {
+            return markdownCommentDoc((MarkdownComment) comment);
+        }
         if (trivia.isJavadoc()) {
             JavadocComment javadocComment = (JavadocComment) comment;
             String raw = comment.getTokenRange().map(Object::toString).orElseGet(javadocComment::toString).strip();
@@ -633,6 +637,27 @@ public final class JavaFormatter {
 
     private static Doc lineDoc(String value) {
         List<Doc> lines = value.lines().map(Doc::text).toList();
+        return Doc.join(Doc.HARD_LINE, lines);
+    }
+
+    /**
+     * Renders a JEP 467 {@code ///} Markdown documentation comment as a stack of {@code ///} lines at the call site's
+     * structural indent, mirroring how a {@code //} line-comment block is rendered.
+     *
+     * <p>JavaParser exposes a contiguous run of {@code ///} lines as a single multi-line {@link MarkdownComment} whose
+     * {@code toString()} carries each continuation line's <em>original source indentation</em> baked into the text. The
+     * generic Javadoc renderer ({@link #lineDoc(String)} over that text) would emit that baked-in leading whitespace and
+     * then the caller's {@link Doc#indent} would add the structural indent on top, so every format pass adds one more
+     * indent level and the comment never converges (the {@code ////}-prefix idempotence bug). Stripping each line's
+     * leading whitespace before the {@code ///} marker — exactly what a {@code //} block already does, since each line
+     * comment renders at its structural indent — makes the rendering a fixed point. Whitespace <em>after</em> the
+     * {@code ///} marker is preserved so Markdown content indentation (code blocks, nested lists) is not flattened.
+     */
+    private static Doc markdownCommentDoc(MarkdownComment comment) {
+        String raw = comment.getTokenRange().map(Object::toString).orElseGet(comment::toString).stripTrailing();
+        List<Doc> lines = raw.lines()
+                .map(line -> Doc.text(line.stripLeading().stripTrailing()))
+                .toList();
         return Doc.join(Doc.HARD_LINE, lines);
     }
 

@@ -1,5 +1,4 @@
-public @interface RouteContract {
-    // brace-line note kept on the opening line
+public @interface RouteContract { // brace-line note kept on the opening line
     String region() default "default";
 
     // own-line note between annotation members

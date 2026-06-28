@@ -113,6 +113,19 @@ final class MemberBlockPrinter {
             );
         }
         Doc contents = memberContents(owner, members, memberDocs);
+        // A line comment written on the same line as the opening brace conceptually belongs to that brace. Annotation
+        // bodies keep it inline after the brace (`@interface X { // note`); routing the comment to its own indented line
+        // would detach it from the brace it trailed in source. Other member-block owners keep their established own-line
+        // placement, so this stays scoped to annotation declarations.
+        if (openingBraceTrailingComment != Doc.EMPTY && owner instanceof AnnotationDeclaration) {
+            return Doc.concat(
+                Doc.text("{"),
+                Doc.lineSuffix(Doc.concat(Doc.text(" "), openingBraceTrailingComment)),
+                Doc.indent(Doc.concat(memberBlockOpeningBreak(owner), contents)),
+                Doc.HARD_LINE,
+                Doc.text("}")
+            );
+        }
         if (openingBraceTrailingComment != Doc.EMPTY) {
             contents = Doc.concat(openingBraceTrailingComment, Doc.HARD_LINE, contents);
         }

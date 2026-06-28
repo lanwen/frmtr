@@ -7,10 +7,12 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.comments.Comment;
+import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.modules.ModuleDeclaration;
 import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -183,9 +185,14 @@ final class CompilationUnitPrinter {
             if (detachedTypeLeadingComments != Doc.EMPTY) {
                 parts.add(detachedTypeLeadingComments);
             }
-            parts.add(topLevelDeclarations.orElseThrow());
+            Doc inlineFooterComment = inlineTrailingTypeFooterComment(unit);
+            parts.add(
+                inlineFooterComment == Doc.EMPTY
+                    ? topLevelDeclarations.orElseThrow()
+                    : Doc.concat(topLevelDeclarations.orElseThrow(), inlineFooterComment)
+            );
         }
-        Doc trailingOrphanComments = comments.orphanCommentsAfterLine(unit, lastTypeLine(unit));
+        Doc trailingOrphanComments = trailingOrphanComments(unit);
         if (trailingOrphanComments != Doc.EMPTY) {
             if (!parts.isEmpty()) {
                 parts.add(Doc.HARD_LINE);
@@ -588,6 +595,61 @@ final class CompilationUnitPrinter {
                 .max()
                 .orElse(Integer.MIN_VALUE);
         return lastSourceBackedLine == Integer.MIN_VALUE ? Integer.MAX_VALUE : lastSourceBackedLine;
+    }
+
+    /**
+     * Emits the file footer comments that begin on a line strictly below the final top-level type.
+     *
+     * <p>These footer orphans were always emitted here, each on its own line after the closing {@code }}. A {@code //}
+     * comment written on the <em>same</em> line as the last type's closing {@code }} is handled separately by
+     * {@link #inlineTrailingTypeFooterComment} so it stays inline on the brace line it trailed in source rather than being
+     * pushed to its own line.
+     */
+    private Doc trailingOrphanComments(CompilationUnit unit) {
+        int lastTypeLine = lastTypeLine(unit);
+        return comments.orphanComments(
+            unit,
+            comment -> CommentIndex.beginLine(comment, Integer.MIN_VALUE) > lastTypeLine
+        );
+    }
+
+    /**
+     * Emits, as a {@link Doc#lineSuffix(Doc)}, a {@code //} comment that trails the final top-level type's closing brace on
+     * the same source line — e.g. {@code }}{@code // RouteChannel}.
+     *
+     * <p>Such a comment belongs to no declaration slot: it begins on the last type's end line, so the strict after-line
+     * footer query excludes it, and no following sibling exists to claim it as leading trivia, so without recovery it is
+     * dropped (#97). It conceptually belongs to the closing-brace line, so it is attached after the top-level declarations
+     * as a line suffix and stays inline on the {@code }} line. On re-parse the comment again trails the closing brace on
+     * the same line and re-renders here, so the result is idempotent. Only line comments qualify; the column guard in
+     * {@link CommentIndex#startsAfterNodeOnSameLine} keeps a comment that opens before the closing brace out of this slot.
+     */
+    private Doc inlineTrailingTypeFooterComment(CompilationUnit unit) {
+        Optional<BodyDeclaration<?>> lastType = lastSourceBackedType(unit);
+        if (lastType.isEmpty()) {
+            return Doc.EMPTY;
+        }
+        List<Doc> inlineComments = comments.orphanCommentStatements(
+            unit,
+            comment -> comment instanceof LineComment
+                && CommentIndex.startsAfterNodeOnSameLine(lastType.orElseThrow(), comment)
+        );
+        if (inlineComments.isEmpty()) {
+            return Doc.EMPTY;
+        }
+        return Doc.lineSuffix(Doc.concat(Doc.text(" "), Doc.join(Doc.text(" "), inlineComments)));
+    }
+
+    /**
+     * Returns the top-level type whose source range ends last, i.e. the type the file footer follows. Types without a
+     * source range are skipped because a trailing footer comment can only be positioned relative to a source-backed type.
+     */
+    private Optional<BodyDeclaration<?>> lastSourceBackedType(CompilationUnit unit) {
+        return unit.getTypes()
+                .stream()
+                .filter(type -> type.getRange().isPresent())
+                .max(Comparator.comparingInt(type -> CommentIndex.endLine(type, Integer.MIN_VALUE)))
+                .map(type -> type);
     }
 
     /**

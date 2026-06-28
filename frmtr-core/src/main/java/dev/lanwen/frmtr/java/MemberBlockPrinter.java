@@ -4,6 +4,7 @@ import com.github.javaparser.GeneratedJavaParserConstants;
 import com.github.javaparser.JavaToken;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.body.AnnotationDeclaration;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
@@ -138,12 +139,15 @@ final class MemberBlockPrinter {
     /**
      * Chooses how much vertical space follows the opening brace before the first member.
      *
-     * <p>Records and interfaces are commonly written as compact declaration lists, so they skip the extra blank line
-     * that class, enum, and annotation bodies keep for the formatter's member-block style.
+     * <p>Records, interfaces, and annotation types are commonly written as compact declaration lists, so they skip the
+     * extra blank line that class and enum bodies keep for the formatter's member-block style. Annotation bodies join
+     * this compact group so that routing them through the shared member-block path preserves their established
+     * single-line gap after the opening brace instead of widening it.
      */
     private Doc memberBlockOpeningBreak(Node owner) {
         if (
             owner instanceof RecordDeclaration
+            || owner instanceof AnnotationDeclaration
             || (owner instanceof ClassOrInterfaceDeclaration declaration && declaration.isInterface())
         ) {
             return Doc.HARD_LINE;

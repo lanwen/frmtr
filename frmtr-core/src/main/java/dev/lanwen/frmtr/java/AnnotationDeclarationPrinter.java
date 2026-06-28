@@ -62,7 +62,7 @@ final class AnnotationDeclarationPrinter {
 
     private final Function<BodyDeclaration<?>, Doc> memberRenderer;
 
-    private final BiFunction<NodeList<BodyDeclaration<?>>, Node, Doc> emptyMemberBlockRenderer;
+    private final BiFunction<NodeList<BodyDeclaration<?>>, Node, Doc> memberBlockRenderer;
 
     /**
      * Names the previous recovered annotation-body item so raw gaps and formatted members do not duplicate separators.
@@ -89,7 +89,7 @@ final class AnnotationDeclarationPrinter {
             Function<Type, Doc> typeBody,
             Function<Expression, Doc> expression,
             Function<BodyDeclaration<?>, Doc> memberRenderer,
-            BiFunction<NodeList<BodyDeclaration<?>>, Node, Doc> emptyMemberBlockRenderer
+            BiFunction<NodeList<BodyDeclaration<?>>, Node, Doc> memberBlockRenderer
     ) {
         this.options = context.options;
         this.layoutWidth = context.layoutWidth;
@@ -106,7 +106,7 @@ final class AnnotationDeclarationPrinter {
         this.typeBody = typeBody;
         this.expression = expression;
         this.memberRenderer = memberRenderer;
-        this.emptyMemberBlockRenderer = emptyMemberBlockRenderer;
+        this.memberBlockRenderer = memberBlockRenderer;
     }
 
     /**
@@ -122,31 +122,22 @@ final class AnnotationDeclarationPrinter {
     }
 
     /**
-     * Chooses between the compact empty block and the member-list block with blank lines between rendered members.
+     * Chooses between the parse-error recovery block and the shared member-block renderer for the annotation body.
      *
-     * <p>Each member is rendered through the caller so nested declarations, pragmas, and comments use the shared body
-     * formatting path instead of a local annotation-only shortcut.
-     *
-     * <p>An empty member list is delegated to the shared member-block renderer rather than collapsed locally to
-     * {@code {}}: an empty annotation body can still carry a brace-line or orphan comment, and that renderer is the
-     * single place that decides between a compact {@code {}} and a real block body preserving the comment, keeping the
-     * decision identical to empty class, interface, and enum bodies.
+     * <p>Once parse-error recovery has been ruled out, both the empty and the populated member list are delegated to the
+     * shared member-block renderer rather than rendered locally. The shared renderer is the single place that preserves
+     * brace-line trailing comments and orphan comments that no member owns; rendering members locally dropped those
+     * comments because nothing scanned the annotation body trivia. Delegating keeps comment, pragma, and blank-line
+     * decisions identical to class, interface, enum, and record bodies, including the established single-line gap after
+     * the opening brace that {@link MemberBlockPrinter} now applies to annotation owners. Only the parse-error recovery
+     * branch stays local because it owns the annotation-specific raw-gap recovery contract.
      */
     private Doc annotationMemberBlock(AnnotationDeclaration declaration) {
         Optional<RecoveredListPlanner.Plan<BodyDeclaration<?>>> recoveryPlan = recoveryPlan(declaration);
         if (recoveryPlan.isPresent() && hasRawGap(recoveryPlan.orElseThrow())) {
             return recoveredAnnotationMemberBlock(declaration, recoveryPlan.orElseThrow());
         }
-        if (declaration.getMembers().isEmpty()) {
-            return emptyMemberBlockRenderer.apply(declaration.getMembers(), declaration);
-        }
-        List<Doc> memberDocs = declaration.getMembers().stream().map(memberRenderer).toList();
-        return Doc.concat(
-            Doc.text("{"),
-            Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE), memberDocs))),
-            Doc.HARD_LINE,
-            Doc.text("}")
-        );
+        return memberBlockRenderer.apply(declaration.getMembers(), declaration);
     }
 
     /**

@@ -39,8 +39,10 @@
 #
 set -euo pipefail
 
+# Progress goes to stderr so it shows immediately even when stdout is captured/buffered
+# (e.g. run in the background); stdout carries only the machine-readable summary lines.
 GREEN=$'\033[32m'; YELLOW=$'\033[33m'; RED=$'\033[31m'; RESET=$'\033[0m'
-msg()  { echo "${GREEN}==> $*${RESET}"; }
+msg()  { echo "${GREEN}==> $*${RESET}" >&2; }
 warn() { echo "${YELLOW}==> $*${RESET}" >&2; }
 err()  { echo "${RED}error: $*${RESET}" >&2; }
 
@@ -94,9 +96,29 @@ if [[ $VERIFY_ONLY -eq 0 && -z "$PUBKEY_LINE" ]]; then
     exit 1
 fi
 
-# Build the PR list.
+# Preflight: an abandoned `ssh-keygen -Y sign` (a Touch ID request that was never
+# approved) keeps holding the agent, so every later signature blocks behind it forever —
+# this is the classic "the script hangs" cause. Reap stuck signers and confirm the agent
+# answers, so we fail in seconds with a clear message instead of hanging per-PR.
+preflight_signing() {
+    for p in $(pgrep -f 'ssh-keygen -Y sign' 2>/dev/null || true); do
+        local secs; secs="$(ps -o etimes= -p "$p" 2>/dev/null | tr -d ' ')"
+        if [[ -n "$secs" && "$secs" -gt 60 ]]; then
+            warn "reaping stuck ssh-keygen sign (pid $p, ${secs}s old) — it was blocking the agent"
+            kill "$p" 2>/dev/null || true
+        fi
+    done
+    if ! timeout 8 ssh-add -l >/dev/null 2>&1; then
+        err "ssh-agent not responding (SSH_AUTH_SOCK=${SSH_AUTH_SOCK}). Start/forward it, then retry."
+        exit 1
+    fi
+}
+[[ $VERIFY_ONLY -eq 0 ]] && preflight_signing
+
+# Build the PR list. Descending order signs a number-ordered stack top-down, so each PR
+# signs only its own commit(s) before its base branch is rewritten (no rebase cascade).
 if [[ $ALL -eq 1 ]]; then
-    mapfile -t prs < <(gh pr list --repo "$GH_REPO" --state open --limit 200 --json number --jq '.[].number')
+    mapfile -t prs < <(gh pr list --repo "$GH_REPO" --state open --limit 200 --json number --jq '.[].number' | sort -rn)
 fi
 [[ ${#prs[@]} -gt 0 ]] || { err "no PRs given (pass PR numbers or --all)"; usage >&2; exit 2; }
 
@@ -121,7 +143,7 @@ for pr in "${prs[@]}"; do
     if [[ $VERIFY_ONLY -eq 1 ]]; then
         sha="$(gh pr view "$pr" --repo "$GH_REPO" --json headRefOid --jq .headRefOid)"
         v="$(verified_of "$sha")"
-        echo "#${pr} (${head}) ${sha:0:8}: verified=${v}"
+        echo "#${pr} (${head}) ${sha:0:8}: verified=${v}" >&2
         SUMMARY+=("#${pr}: verified=${v}"); continue
     fi
 
@@ -161,6 +183,7 @@ for pr in "${prs[@]}"; do
             warn "PR #${pr}: all ${#commits[@]} commit(s) already signed — skipping"; exit 31
         fi
 
+        warn "PR #${pr}: approve the Touch ID prompt on your Mac to sign ${#commits[@]} commit(s) (key: ${KEY_PATTERN})…"
         if [[ $SQUASH -eq 1 ]]; then
             msg "PR #${pr}: squashing ${#commits[@]} commit(s) into one signed commit"
             git reset --soft "$merge_base"
@@ -197,12 +220,15 @@ for pr in "${prs[@]}"; do
             SUMMARY+=("#${pr}: SIGNED ${newtip:0:8} verified=${v}") ;;
         31) SUMMARY+=("#${pr}: already signed") ;;
         30) SUMMARY+=("#${pr}: nothing to sign") ;;
-        *)  rc=1; SUMMARY+=("#${pr}: FAILED (left unchanged)") ;;
+        *)  rc=1; SUMMARY+=("#${pr}: FAILED (left unchanged)")
+            rm -rf "$TMPDIR"; CLEANUP_DIR=""
+            err "signing failed for #${pr} — aborting remaining PRs (fix Touch ID/Secretive and re-run; already-signed PRs are skipped)."
+            break ;;
     esac
     rm -rf "$TMPDIR"; CLEANUP_DIR=""
 done
 
-echo
+echo >&2
 msg "Summary:"
-printf '  %s\n' "${SUMMARY[@]}"
+printf '  %s\n' "${SUMMARY[@]}" >&2
 exit $rc

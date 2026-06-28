@@ -233,6 +233,10 @@ final class LambdaExpressionPrinter {
         ) {
             return Doc.text(flat);
         }
+        Optional<Doc> bodyLeadingCommentLambda = brokenLambdaWithLeadingBodyComment(expression, parameters);
+        if (bodyLeadingCommentLambda.isPresent()) {
+            return bodyLeadingCommentLambda.orElseThrow();
+        }
         if (parametersHaveComments && expression.getExpressionBody().isPresent()) {
             Expression body = expression.getExpressionBody().orElseThrow();
             if (currentIndentedWidth.applyAsInt(") -> " + compact.apply(body)) <= options.lineWidth()) {
@@ -782,6 +786,54 @@ final class LambdaExpressionPrinter {
                 Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, argumentLines))),
                 Doc.HARD_LINE,
                 Doc.text(")")
+            )
+        );
+    }
+
+    /**
+     * Breaks an expression-bodied lambda whose body is led by a comment block in the gap between the {@code ->} and the
+     * body, emitting that comment on its own line(s) at the body indent before the body.
+     *
+     * <p>{@link #bodyGapCommentedExpressionLambdaArgument} already recovers this comment when a method call directly owns
+     * a single lambda argument, but a lambda nested as another lambda's body (the kafka {@code forEach(... -> forEach(...
+     * -> // comment ... body))} shape) is rendered through the generic argument-list path, which dispatches the inner
+     * lambda straight into {@link #lambdaExpression} without that recovery — so the gap comment was dropped. This builds
+     * the broken lambda directly so every broken body shape, not only the direct method-call argument, keeps the comment.
+     *
+     * <p>It is deliberately scoped to the pure-gap case (no comments around the lambda boundary or in the parameter
+     * clause), leaving the boundary-comment and parameter-comment reconstructions as the owners of their shapes, and runs
+     * only after the flat path has been ruled out so a lambda whose body fits on one line is unaffected.
+     */
+    private Optional<Doc> brokenLambdaWithLeadingBodyComment(LambdaExpr expression, String parameters) {
+        if (
+            lambdaParameterHeaders.haveComments(expression)
+            || hasBoundaryComments(expression)
+        ) {
+            return Optional.empty();
+        }
+        List<JavaCommentTrivia> gapComments = lambdaBodyGapComments(expression);
+        if (gapComments.isEmpty()) {
+            return Optional.empty();
+        }
+        List<Doc> renderedGapComments = gapComments.stream()
+                .map(trivia -> comments.comment(trivia, expression.getBody(), OwnerSlot.LEADING))
+                .filter(doc -> doc != Doc.EMPTY)
+                .toList();
+        if (renderedGapComments.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(
+            Doc.concat(
+                lambdaParameterHeaders.forHeader(expression, parameters),
+                Doc.text(" ->"),
+                Doc.indent(
+                    Doc.concat(
+                        Doc.HARD_LINE,
+                        Doc.join(Doc.HARD_LINE, renderedGapComments),
+                        Doc.HARD_LINE,
+                        brokenLambdaExpressionBody(expression)
+                    )
+                )
             )
         );
     }

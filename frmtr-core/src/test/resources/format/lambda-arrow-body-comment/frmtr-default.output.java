@@ -20,4 +20,21 @@ class ShipmentLedger {
     void index(java.util.List<Parcel> parcels) {
         parcels.forEach(parcel -> registry.put(parcel.trackingCode(), parcel));
     }
+
+    void tally() {
+        manifest
+                .routes()
+                .forEach(
+                    route -> route.parcels().forEach(
+                        parcel ->
+                            // tracking code and destination are not always populated at the same point;
+                            // for example the inbound feed records the destination before the carrier scans it,
+                            // so the tally keeps both the tracking code and the destination to stay consistent.
+                            shipmentTotals.merge(
+                                new ParcelKey(route.routeId(), parcel.index(), route.carrier()),
+                                parcel.weight()
+                            )
+                    )
+                );
+    }
 }

@@ -1754,14 +1754,18 @@ final class StatementPrinter {
     }
 
     private Doc doWhileTail(DoStmt statement) {
+        Doc trailing = doWhileTrailingLineComment(statement);
         Doc beforeWhileComment = doWhileBeforeWhileBlockComment(statement);
         if (beforeWhileComment != Doc.EMPTY) {
-            return Doc.text(
-                " "
-                    + commentText(beforeWhileComment)
-                    + " while ("
-                    + compactWithoutOwnComment.apply(statement.getCondition())
-                    + ");"
+            return Doc.concat(
+                Doc.text(
+                    " "
+                        + commentText(beforeWhileComment)
+                        + " while ("
+                        + compactWithoutOwnComment.apply(statement.getCondition())
+                        + ");"
+                ),
+                trailing
             );
         }
         return Doc.concat(
@@ -1772,8 +1776,29 @@ final class StatementPrinter {
                 ") {}",
                 layoutWidth::blockStatement
             ),
-            Doc.text(";")
+            Doc.text(";"),
+            trailing
         );
+    }
+
+    /**
+     * Recovers the line comment that trails a {@code do ... while (cond);} statement after the closing {@code ;}.
+     *
+     * <p>At {@code @default} JavaParser attaches that comment to the {@link DoStmt}, so {@link StatementRuleEnvelope}
+     * claims and renders it through the shared statement trailing-comment slot. When the body is written across multiple
+     * source lines, JavaParser instead attaches the comment to the {@code while} condition expression, where the
+     * condition renderer (which prints the condition without its own comment) drops it. This query reclaims the comment
+     * from the condition's own trailing slot and re-emits it as a {@code lineSuffix} after the {@code ;}, matching how
+     * {@link #expressionStatementTrailingComment(ExpressionStmt)} and the {@code try} renderer place statement trailing
+     * comments. Claiming it here keeps the comment printed exactly once: when the envelope already owns the {@link DoStmt}
+     * comment the condition slot is empty, so this path adds nothing.
+     */
+    private Doc doWhileTrailingLineComment(DoStmt statement) {
+        Doc conditionTrailing = comments.trailingLineComment(statement.getCondition());
+        if (conditionTrailing == Doc.EMPTY) {
+            return Doc.EMPTY;
+        }
+        return Doc.lineSuffix(Doc.concat(Doc.text(" "), conditionTrailing));
     }
 
     /**

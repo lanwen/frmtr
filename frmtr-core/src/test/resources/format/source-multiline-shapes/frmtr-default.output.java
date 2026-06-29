@@ -108,14 +108,7 @@ class MultilineShapes {
     }
 
     void resources() {
-        try (
-            Resource handle = new Resource(
-                network,
-                auth,
-                service,
-                null
-            )
-        ) {
+        try (Resource handle = new Resource(network, auth, service, null)) {
             use(handle);
         }
         try (

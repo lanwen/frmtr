@@ -33,9 +33,7 @@ class ConstructorChainRoots {
             gamma
         ).connect(certificate);
 
-        try (ManagedEndpoint endpoint = new EndpointFactory(alpha, beta, gamma).connect(
-                certificate
-        )) {
+        try (ManagedEndpoint endpoint = new EndpointFactory(alpha, beta, gamma).connect(certificate)) {
             registry.attach(endpoint);
         }
     }

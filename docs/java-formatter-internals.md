@@ -282,6 +282,20 @@ than scanning an entire declaration or statement for delimiters and keywords. Th
 source-multiline method-call arguments, and logical control-condition source shape. Printers still decide what doc to
 build after a shape predicate is true.
 
+A printer that consumes a source-shape predicate still owns whether preserving the author's shape is meaningful for that
+construct. The try-with-resources resource section illustrates the boundary: `StatementPrinter` keeps the
+`spansMultipleLines` predicate for a section that holds two or more resources (the author's one-resource-per-line layout
+is deliberate and stable), but for a single resource it collapses the section to flat whenever the flat `try (...) {}`
+form fits the width. A single resource "spans multiple lines" only because its own initializer call was broken across
+lines, which is incidental to argument layout rather than a resource-section shape; honoring it would let each pass
+re-observe the prior pass's break and refuse the flat form forever, so the section flip-flops between the opener break and
+the attached-argument break (the issue #98 non-convergence). The collapse rebuilds the flat resource text through a
+comment-free declaration reconstruction (modifiers, type, and per-variable `name = compact(init)`) rather than
+token-text normalization, so a previously argument-broken declaration collapses with canonical interior spacing. Line
+comments that sit on the line directly above `try (` belong to the try statement, not the resource section, and the
+enclosing block already renders them before `try`; the in-section leading-comment gate filters comments that begin before
+the `try` keyword so the statement's own leading comment no longer forces the section to stay broken.
+
 `ObjectCreationLayoutPolicy` centralizes constructor-call source-shape decisions that several expression contexts share:
 when source-multiline constructor arguments are meaningful enough to preserve, when returned object creations should
 preserve source-multiline constructor arguments, and whether a constructor root may stay compact when a surrounding

@@ -1536,8 +1536,10 @@ final class StatementPrinter {
      *
      * <p>Empty if-blocks keep the two-line block shape used by existing fixtures, block bodies stay on the same line as
      * their header, and nested control statements break and indent so constructs such as single-line loops do not
-     * collapse into ambiguous header/body text. Switch bodies go back through the outer statement callback, where the
-     * rule envelope preserves statement gates before this printer selects the switch-statement branch again.
+     * collapse into ambiguous header/body text. A simple (non-control) body that carries a leading {@code //} line
+     * comment also breaks and indents, because a line comment cannot share the header line without swallowing the body
+     * text after it. Switch bodies go back through the outer statement callback, where the rule envelope preserves
+     * statement gates before this printer selects the switch-statement branch again.
      */
     private Doc nestedStatement(Statement statement) {
         if (
@@ -1560,7 +1562,103 @@ final class StatementPrinter {
         ) {
             return Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement)));
         }
-        return statementRenderer.format(statement);
+        return leadingLineCommentBody(statement).orElseGet(() -> statementRenderer.format(statement));
+    }
+
+    /**
+     * Renders a braceless {@code while}/{@code for}/{@code for-each} body that carries a {@code //} line comment between
+     * the loop header and the body, claiming the comment exactly once and placing it the same way the {@code if}
+     * close-paren path places a condition comment.
+     *
+     * <p>A braceless loop body normally collapses onto the header line ({@code while (cond) call();}). A line comment in
+     * the header-to-body gap cannot share that line with the body statement: the {@code //} would comment out everything
+     * after it. The comment's intended position is read from where it sits in source: a comment that begins on the same
+     * line as the header end ({@code while (cond) // note}) is a header-trailing comment and stays inline on the header
+     * line, exactly as {@link ControlConditions#closeParenTrailingLineComment} keeps an {@code if (cond) // note} inline;
+     * a comment on its own line below the header ({@code while (cond)\n // note\n body}) leads the body and moves above
+     * the indented body statement. Either way the body breaks to an indented next line.
+     *
+     * <p>The comment lives in a single grammar slot — the header-to-body gap — but JavaParser attaches it to different
+     * nodes depending on source whitespace: at the {@code @default} shape an own-line comment is the body's own leading
+     * trivia (the {@link #statementRenderer} envelope prints it); a collapse re-buckets it onto the header expression
+     * named by {@code afterNode} as that node's trailing trivia, and an expand re-buckets it onto the {@code controlStmt}
+     * as an orphan. {@link JavaCommentPlacementPolicy#gapLineCommentsBefore(Node, Node, java.util.Collection)} recovers
+     * the comment from whichever bucket holds it while deliberately excluding the body's own comment, and every recovered
+     * comment is claimed once under the body's leading slot — the same slot {@link CommentTracker#gapLineCommentsBefore}
+     * would claim it in — so exactly one of the two paths (gap recovery here, or the body renderer) prints it. It is
+     * therefore neither dropped under perturbation nor duplicated at {@code @default}. Returns {@link Optional#empty()}
+     * when no leading line comment is present in any bucket, leaving the caller's existing same-line collapse intact.
+     */
+    private Optional<Doc> bracelessLoopBody(Node controlStmt, Node afterNode, Statement body) {
+        if (body.isBlockStmt()) {
+            return Optional.empty();
+        }
+        List<JavaCommentTrivia> gapComments = commentPlacement.gapLineCommentsBefore(
+            afterNode,
+            body,
+            List.of(controlStmt, afterNode)
+        );
+        boolean bodyOwnsLeadingLineComment = commentPlacement.leadingComment(body)
+                .filter(JavaCommentTrivia::isLine)
+                .filter(trivia -> !trivia.startsAfterEndOf(body))
+                .isPresent();
+        if (gapComments.isEmpty() && !bodyOwnsLeadingLineComment) {
+            return Optional.empty();
+        }
+        List<Doc> headerTrailing = new ArrayList<>();
+        List<Doc> aboveBody = new ArrayList<>();
+        for (JavaCommentTrivia gapComment : gapComments) {
+            Doc rendered = comments.comment(gapComment, body, OwnerSlot.LEADING);
+            if (rendered == Doc.EMPTY) {
+                continue;
+            }
+            if (gapComment.startsOnEndLine(afterNode)) {
+                headerTrailing.add(rendered);
+            } else {
+                aboveBody.add(rendered);
+            }
+        }
+        List<Doc> indented = new ArrayList<>();
+        indented.add(Doc.HARD_LINE);
+        for (Doc aboveComment : aboveBody) {
+            indented.add(aboveComment);
+            indented.add(Doc.HARD_LINE);
+        }
+        indented.add(statementRenderer.format(body));
+        List<Doc> result = new ArrayList<>();
+        result.add(Doc.text(" "));
+        for (Doc inline : headerTrailing) {
+            result.add(inline);
+        }
+        result.add(Doc.indent(Doc.concat(indented)));
+        return Optional.of(Doc.concat(result));
+    }
+
+    /**
+     * Breaks and indents a braceless {@code if}/{@code else}/{@code do} body that carries its leading {@code //} line
+     * comment as its own trivia (the {@code @default} shape).
+     *
+     * <p>This is the body-own counterpart of {@link #bracelessLoopBody(Node, Node, Statement)}, used where the enclosing
+     * construct already recovers the perturbed attachments through another slot: the {@code if} close-paren trailing path
+     * ({@link ControlConditions#closeParenTrailingLineComment}) catches a comment a collapse moves onto the condition,
+     * and the {@code do-while} condition-leading path catches one an expand moves onto the condition. So those constructs
+     * only need the body-own slot handled here. The whole body — comment and statement — is rendered through
+     * {@link #statementRenderer}, whose envelope emits the body's leading comment exactly once before the statement;
+     * wrapping that in {@link Doc#indent} puts both at the body indent. Returns {@link Optional#empty()} when the body has
+     * no leading line comment, leaving the caller's existing same-line collapse intact.
+     */
+    private Optional<Doc> leadingLineCommentBody(Statement statement) {
+        if (statement.isBlockStmt()) {
+            return Optional.empty();
+        }
+        boolean hasLeadingLineComment = commentPlacement.leadingComment(statement)
+                .filter(JavaCommentTrivia::isLine)
+                .filter(trivia -> !trivia.startsAfterEndOf(statement))
+                .isPresent();
+        if (!hasLeadingLineComment) {
+            return Optional.empty();
+        }
+        return Optional.of(Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement))));
     }
 
     private Doc emptyControlBlock(BlockStmt block) {
@@ -1584,14 +1682,13 @@ final class StatementPrinter {
             );
         }
         Doc header = forEachHeader(statement);
-        Optional<Doc> lineComment = lineCommentBeforeNestedBody(statement);
-        if (lineComment.isPresent() && !statement.getBody().isBlockStmt()) {
-            return Doc.concat(
-                header,
-                Doc.text(" "),
-                lineComment.orElseThrow(),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement.getBody())))
-            );
+        Optional<Doc> commentedBracelessBody = bracelessLoopBody(
+            statement,
+            statement.getIterable(),
+            statement.getBody()
+        );
+        if (commentedBracelessBody.isPresent()) {
+            return Doc.concat(header, commentedBracelessBody.orElseThrow());
         }
         return Doc.concat(header, Doc.text(" "), nestedStatement(statement.getBody()));
     }
@@ -1629,25 +1726,6 @@ final class StatementPrinter {
             : compact.apply(statement.getVariable());
     }
 
-    /**
-     * Recovers a line comment that sits between a loop header and a non-block body.
-     *
-     * <p>JavaParser may attach that comment to the nested body rather than the loop, but visually it belongs between
-     * the header and the indented body statement.
-     */
-    private Optional<Doc> lineCommentBeforeNestedBody(Statement statement) {
-        String raw = statement.getTokenRange().map(Object::toString).orElse("");
-        int commentStart = raw.indexOf("//");
-        if (commentStart < 0) {
-            return Optional.empty();
-        }
-        int lineEnd = raw.indexOf('\n', commentStart);
-        if (lineEnd < 0) {
-            return Optional.empty();
-        }
-        return Optional.of(Doc.text(raw.substring(commentStart, lineEnd).stripTrailing()));
-    }
-
     private String forHeader(ForStmt statement) {
         String init = statement.getInitialization()
                 .stream()
@@ -1669,7 +1747,31 @@ final class StatementPrinter {
         if (statement.getBody() instanceof DoStmt) {
             return Doc.concat(Doc.text(forHeader(statement) + " "), statementRenderer.format(statement.getBody()));
         }
+        Optional<Doc> commentedBracelessBody = forHeaderEndNode(statement)
+                .flatMap(afterNode -> bracelessLoopBody(statement, afterNode, statement.getBody()));
+        if (commentedBracelessBody.isPresent()) {
+            return Doc.concat(Doc.text(forHeader(statement)), commentedBracelessBody.orElseThrow());
+        }
         return Doc.concat(Doc.text(forHeader(statement) + " "), nestedStatement(statement.getBody()));
+    }
+
+    /**
+     * Names the last node of a {@code for} header so the gap-comment recovery can bound "comments before the body" from
+     * the last header element it follows. The update, then the comparison, then the initialization run last to first; a
+     * fully-empty {@code for (;;)} header has no node, so the gap recovery is skipped and the body keeps its own-comment
+     * handling.
+     */
+    private Optional<Node> forHeaderEndNode(ForStmt statement) {
+        if (!statement.getUpdate().isEmpty()) {
+            return Optional.of(statement.getUpdate().get(statement.getUpdate().size() - 1));
+        }
+        if (statement.getCompare().isPresent()) {
+            return statement.getCompare().map(Node.class::cast);
+        }
+        if (!statement.getInitialization().isEmpty()) {
+            return Optional.of(statement.getInitialization().get(statement.getInitialization().size() - 1));
+        }
+        return Optional.empty();
     }
 
     private Doc whileStatement(WhileStmt statement) {
@@ -1694,17 +1796,24 @@ final class StatementPrinter {
                 commentedBody.orElseThrow()
             );
         }
-        return Doc.concat(
+        Doc whileHeader = Doc.concat(
             Doc.text("while "),
             controlConditions.controlCondition(
                 statement.getCondition(),
                 "while (",
                 ") {}",
                 layoutWidth::blockStatement
-            ),
-            Doc.text(" "),
-            nestedStatement(statement.getBody())
+            )
         );
+        Optional<Doc> commentedBracelessBody = bracelessLoopBody(
+            statement,
+            statement.getCondition(),
+            statement.getBody()
+        );
+        if (commentedBracelessBody.isPresent()) {
+            return Doc.concat(whileHeader, commentedBracelessBody.orElseThrow());
+        }
+        return Doc.concat(whileHeader, Doc.text(" "), nestedStatement(statement.getBody()));
     }
 
     /**

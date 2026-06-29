@@ -63,6 +63,44 @@ final class StatementPrinterTest {
         assertThat(withVerifyDisabled(() -> Frmtr.format(formatted))).isEqualTo(formatted);
     }
 
+    /**
+     * Regression for issue #134: a braceless {@code else} body whose leading {@code //} comments were dropped when the
+     * braceless {@code then} body carried two-or-more leading comments. With two then comments, the first bubbles up as
+     * the condition's trailing comment, which sent {@code elseChainSeparator} down its condition-trailing branch; that
+     * branch returned the bare separator and never rendered the else body's leading block, which the gap slot had already
+     * claimed, so those lines were dropped. This stays an inline assertion rather than a {@code format/**} fixture
+     * because the braceless-then trigger shape is not perturbation-stable under the corpus reshaping the fixture nets
+     * apply (the condition-trailing comment independently explodes the condition under whitespace collapse); the golden
+     * else-body-leading-comments fixture covers the perturbation-stable block-then variant.
+     */
+    @Test
+    void keepsBracelessElseBodyLeadingCommentsWhenThenHasTwoLeadingComments() {
+        String source = """
+            class Min {
+
+                int f(boolean b) {
+                    if (b)
+                        // keepA1
+                        // keepA2
+                        return 1;
+                    else
+                        // dropB1
+                        // dropB2
+                        return 2;
+                }
+            }
+            """;
+
+        String formatted = Frmtr.format(source);
+
+        assertThat(formatted)
+            .contains("// keepA1")
+            .contains("// keepA2")
+            .contains("// dropB1")
+            .contains("// dropB2");
+        assertThat(Frmtr.format(formatted)).isEqualTo(formatted);
+    }
+
     private static <T> T withVerifyDisabled(Supplier<T> action) {
         String previous = System.getProperty(FormatterGuardrails.VERIFY_PROPERTY);
         try {

@@ -125,7 +125,11 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
 - `ConditionalExpressionPrinter`: ternary layout for assignment values, variable initializers, comments around `?` and
   `:`, nested conditional branches, and binary condition wrapping.
 - `LambdaExpressionPrinter`: expression versus block bodies, parenthesized lambdas, broken logical bodies, and lambda
-  arguments that can be hugged by method calls or object creation. `LambdaParameterHeaderLayout` owns the canonical
+  arguments that can be hugged by method calls or object creation. A single comment-carrying expression-lambda argument
+  hugs the call opener (`call(param ->` stays on one line) with the comment(s) and body indented beneath it and the call's
+  closing parenthesis collapsed onto the body's last line, rather than breaking the lambda onto its own indented line with
+  a stacked closer; `huggedGapCommentedLambdaBody` exposes the gap-comment-and-body fragment so the chain printer can reuse
+  the same hugged shape. `LambdaParameterHeaderLayout` owns the canonical
   parameter/header rendering used by lambda and call layouts: parameter parentheses, commented parameter reconstruction,
   width-triggered header breaks, and source-multiline parameter detection. `ExpressionLambdaArgumentLayout` owns the
   call-argument side of expression lambdas: shared eligibility, first-line/body-opener planning, and packed method-call
@@ -144,7 +148,11 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
   clusters before chained segments, source-multiline first-segment lambda call attachment via
   `SourceMultilineLambdaCallLayout`, source-multiline single-object-creation call statements, field-root fluent-chain
   preservation for already-multiline statement chains, compact-root plus broken-final-segment calls, root promotion, and
-  final-segment tails.
+  final-segment tails. When a chain's only break-forcing comment is carried inside the final call's expression-lambda
+  argument (`manifest.routes().forEach(route -> route.parcels().forEach(parcel -> // note merge(...))))`), the head links
+  pack flat, each comment-carrying lambda hugs its selector line, and the closing parentheses collapse; an inter-link
+  comment between head links (the `Optional.of(x) // note .map(y)` shape) instead keeps the one-per-line layout with the
+  comment preserved above its segment.
 - `MethodReferencePrinter`: method references, type-argument suffix text, and parenthesized-scope suffixes.
 - `EnclosedSuffixDispatcher`: the bridge used when a broken enclosed expression may need a method-call or
   method-reference suffix preserved.

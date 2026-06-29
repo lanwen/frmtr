@@ -2,6 +2,8 @@ package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
+import com.github.javaparser.ast.comments.Comment;
+import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
@@ -129,6 +131,7 @@ final class ExpressionLambdaArgumentLayout {
         if (
             methodCall.getArguments().isEmpty()
             || methodCall.getScope().filter(sourceShapePolicy::wasMultiline).isPresent()
+            || openerWouldDropPrefixComment(methodCall)
         ) {
             return Optional.empty();
         }
@@ -148,6 +151,31 @@ final class ExpressionLambdaArgumentLayout {
                 Doc.text(")")
             )
         );
+    }
+
+    /**
+     * Reports whether reconstructing the call opener from compact text would drop a line comment the body carries.
+     *
+     * <p>The opener line is built from {@code methodCallPrefix} — the call scope and selector compacted to a single line —
+     * which strips comments, while only the argument list is rendered through a comment-preserving path. A line comment
+     * that sits between the body chain's scope and selector (the issue #94 shape, {@code Optional.of(x) // note .map(y)})
+     * therefore lives outside every argument subtree and would be silently dropped by this opener shape. Detecting that
+     * lets the caller fall through to the comment-preserving renderers (the source-multiline header shape and the broken
+     * body fallback, both of which render the body through the full chain printer). A comment that lies inside an argument
+     * is unaffected, so a body whose only comments are nested in a lambda argument keeps the compact opener layout.
+     */
+    private boolean openerWouldDropPrefixComment(MethodCallExpr methodCall) {
+        return methodCall.getAllContainedComments()
+                .stream()
+                .filter(LineComment.class::isInstance)
+                .anyMatch(comment -> !commentLiesInsideAnyArgument(methodCall, comment));
+    }
+
+    private boolean commentLiesInsideAnyArgument(MethodCallExpr methodCall, Comment comment) {
+        return methodCall.getArguments()
+                .stream()
+                .anyMatch(argument -> argument.getAllContainedComments().stream().anyMatch(contained -> contained == comment)
+                        || argument.getComment().filter(own -> own == comment).isPresent());
     }
 
     Optional<Doc> methodCallBodyWithHeader(String parameters, MethodCallExpr methodCall) {

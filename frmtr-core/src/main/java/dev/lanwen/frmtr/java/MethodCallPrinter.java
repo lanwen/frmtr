@@ -112,6 +112,7 @@ final class MethodCallPrinter {
                 NodeList<Expression>,
                 Optional<ExpressionLambdaArgumentLayout.Plan>
             > expressionLambdaArgumentPlan,
+            Function<LambdaExpr, Optional<Doc>> huggedGapCommentedLambdaBody,
             Function<LambdaExpr, String> lambdaParameters,
             Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer,
             Function<Expression, Optional<Doc>> brokenArgumentExpressionRenderer,
@@ -139,6 +140,7 @@ final class MethodCallPrinter {
             commentedExpressionLambdaArgument,
             huggableExpressionLambdaArguments,
             expressionLambdaArgumentPlan,
+            huggedGapCommentedLambdaBody,
             lambdaParameters,
             currentIndentedWidth,
             continuationStatementWidth,

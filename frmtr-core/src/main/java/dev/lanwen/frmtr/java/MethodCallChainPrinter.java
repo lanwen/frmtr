@@ -86,6 +86,10 @@ final class MethodCallChainPrinter {
 
     private final SourceMultilineLambdaCallLayout sourceMultilineLambdaCalls;
 
+    private final Function<LambdaExpr, String> lambdaParameters;
+
+    private final Function<LambdaExpr, Optional<Doc>> huggedGapCommentedLambdaBody;
+
     MethodCallChainPrinter(
             JavaFormatContext context,
             MethodCallPrinter calls,
@@ -103,6 +107,7 @@ final class MethodCallChainPrinter {
                 NodeList<Expression>,
                 Optional<ExpressionLambdaArgumentLayout.Plan>
             > expressionLambdaArgumentPlan,
+            Function<LambdaExpr, Optional<Doc>> huggedGapCommentedLambdaBody,
             Function<LambdaExpr, String> lambdaParameters,
             ToIntFunction<String> currentIndentedWidth,
             ToIntFunction<String> continuationStatementWidth,
@@ -131,6 +136,8 @@ final class MethodCallChainPrinter {
         this.continuationStatementWidth = continuationStatementWidth;
         this.blockStatementWidth = blockStatementWidth;
         this.layoutDecisions = context.layoutDecisions;
+        this.lambdaParameters = lambdaParameters;
+        this.huggedGapCommentedLambdaBody = huggedGapCommentedLambdaBody;
         this.sourceMultilineLambdaCalls = new SourceMultilineLambdaCallLayout(
             context.sourceShapePolicy,
             expressionRenderer,
@@ -607,6 +614,12 @@ final class MethodCallChainPrinter {
         if (singleStringLiteralCallWithSourceMultilineArguments(root, calls)) {
             return Optional.empty();
         }
+        Optional<Doc> flatHeadHuggedFinalLambda = comments.speculatively(
+            () -> flatHeadHuggedCommentLambdaChain(expression, analysis, finalSegmentSuffix)
+        );
+        if (flatHeadHuggedFinalLambda.isPresent()) {
+            return flatHeadHuggedFinalLambda;
+        }
         if (canBreakAfterCompactExpressionLambdaRoot(breakMode, root, calls, sourceMultilineLambdaPlan)) {
             return Optional.of(
                 Doc.concat(
@@ -642,6 +655,19 @@ final class MethodCallChainPrinter {
             Doc rootTrailingComment = rootTrailingLineCommentBeforeFirstSegment(methodRoot, calls);
             if (rootTrailingComment != Doc.EMPTY) {
                 rootDoc = Doc.concat(rootDoc, Doc.lineSuffix(Doc.concat(Doc.text(" "), rootTrailingComment)));
+            }
+            // A leading line comment on the only segment ({@code lookup(a)} then {@code // c1} on its own line then
+            // {@code .orElseThrow(x)}) must own its own continuation line so the comment stays above the segment selector.
+            // Attaching such a segment to the root close glued the comment onto the root's closing parenthesis
+            // ({@code lookup(a)// c1}); a scope-rooted chain already avoids this because its segments go one-per-line, so
+            // route the single-segment case the same way once the segment carries a leading comment.
+            if (methodCallSegmentHasLeadingLineComment(calls.getFirst())) {
+                return Optional.of(
+                    Doc.concat(
+                        rootDoc,
+                        chainContinuation(methodCallChainSegment(calls.getFirst(), finalSegmentSuffix))
+                    )
+                );
             }
             return Optional.of(
                 Doc.concat(
@@ -2315,6 +2341,12 @@ final class MethodCallChainPrinter {
         if (commentedExpressionLambda.isPresent()) {
             return Doc.concat(segmentPrefix, commentedExpressionLambda.orElseThrow(), finalSegmentSuffix.doc());
         }
+        Optional<Doc> huggedCommentedExpressionLambda = comments.speculatively(
+            () -> huggedCommentCarryingExpressionLambdaSegment(prefix, expression, finalSegmentSuffix)
+        );
+        if (huggedCommentedExpressionLambda.isPresent()) {
+            return Doc.concat(segmentPrefix, huggedCommentedExpressionLambda.orElseThrow());
+        }
         if (
             sourceShapePolicy.expressionLambdaStartsOnSelectorLine(expression)
             && expressionLambdaSpansMultipleLines(expression)
@@ -2435,6 +2467,237 @@ final class MethodCallChainPrinter {
     private boolean overwideTypeLikeScopeSegment(MethodCallExpr expression) {
         return expression.getArguments().size() > 1
             && expression.getScope().filter(methodChainPlanner::promotesFirstCall).isPresent();
+    }
+
+    /**
+     * Hugs a chain segment whose single argument is an expression lambda whose body carries comments, keeping the lambda
+     * opener on the selector line ({@code .or(() -> body}) and collapsing the call's closing parenthesis onto the body's
+     * last line ({@code …)}) instead of breaking the lambda onto its own indented line with a stacked closer.
+     *
+     * <p>This is the comment-carrying counterpart of {@link ExpressionLambdaArgumentLayout}'s comment-free chain-lambda
+     * hug, which deliberately refuses any lambda with contained comments. The comment forces the body to break, so the
+     * only remaining choice is whether the lambda header breaks with it. Hugging keeps the shape stable across re-formats:
+     * the body is rendered through the ordinary expression/chain renderer (which preserves the body's chain-link comments
+     * one-per-line and recurses into nested {@code .map(ref -> …)} segments so they hug too), and the closing parenthesis
+     * attaches to whatever the body renderer already ends with. A nested broken call ends with its own {@code )}, so the
+     * appended {@code )} collapses to {@code …))} — exactly the shape that re-parses to the same comment attachment, which
+     * is what makes the collapsed closer idempotent.
+     *
+     * <p>It is scoped to bodies/inner-lambdas that actually carry comments (the comment-free case stays with the existing
+     * width-driven hug) and to clean lambda parameters, so the parameter text and {@code ->} can live on the selector
+     * line verbatim. Object-creation bodies are excluded because an anonymous class body has no place in this opener
+     * shape; they keep the broken-segment fallback.
+     */
+    private Optional<Doc> huggedCommentCarryingExpressionLambdaSegment(
+            String prefix,
+            MethodCallExpr expression,
+            MethodCallChainTail finalSegmentSuffix
+    ) {
+        if (
+            expression.getArguments().size() != 1
+            || !(expression.getArgument(0) instanceof LambdaExpr lambdaExpr)
+        ) {
+            return Optional.empty();
+        }
+        Optional<String> header = commentCarryingLambdaHugHeader(lambdaExpr);
+        if (header.isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<Doc> tail = huggedCommentLambdaTail(lambdaExpr);
+        if (tail.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(
+            Doc.concat(
+                Doc.text(prefix + "(" + header.orElseThrow()),
+                tail.orElseThrow(),
+                Doc.text(")" + finalSegmentSuffix)
+            )
+        );
+    }
+
+    /**
+     * Renders everything after a hugged comment-carrying lambda's opener: the gap comment(s) plus body, or — when the body
+     * is itself a flat-headable comment-lambda chain — that nested hug, ready to follow the reconstructed {@code params ->}
+     * header and precede the collapsing closing parenthesis. Empty when the lambda is not a hug candidate.
+     *
+     * <p>The innermost lambda's {@code ->}-to-body gap comments (the {@code parcel -> // note merge(...)} shape) are
+     * rendered on their own indented lines before the body so they survive the hug. When the innermost body is instead a
+     * fluent chain whose scope links carry no inter-link comment and whose final call is another comment-carrying
+     * huggable lambda (the {@code route.parcels().forEach(parcel -> …)} shape), its scope links pack flat and the nested
+     * lambda hugs in turn, so the whole head stays on one line and only the comment-driven body breaks. An inter-link
+     * comment between scope links (the {@code #94} {@code Optional.of(x) // note .map(y)} shape) instead falls through to
+     * the ordinary chain renderer, which lays the scope one-per-line with that comment preserved.
+     */
+    private Optional<Doc> huggedCommentLambdaTail(LambdaExpr lambdaExpr) {
+        LambdaExpr innermost = lambdaExpr;
+        while (innermost.getExpressionBody().filter(LambdaExpr.class::isInstance).isPresent()) {
+            innermost = (LambdaExpr) innermost.getExpressionBody().orElseThrow();
+        }
+        Optional<Doc> gapBody = huggedGapCommentedLambdaBody.apply(innermost);
+        if (gapBody.isPresent()) {
+            return gapBody;
+        }
+        Expression body = innermost.getExpressionBody().orElseThrow();
+        if (body instanceof MethodCallExpr methodCall) {
+            Optional<Doc> flatHeaded = flatHeadedHuggedCommentLambdaChain(methodCall);
+            if (flatHeaded.isPresent()) {
+                return Optional.of(Doc.concat(Doc.text(" "), flatHeaded.orElseThrow()));
+            }
+        }
+        return Optional.of(Doc.concat(Doc.text(" "), expressionRenderer.apply(body)));
+    }
+
+    /**
+     * Packs a chain's scope links flat and hugs its final comment-carrying lambda, or empty when the chain is not a
+     * flat-headed hug candidate (no final comment-lambda, an inter-link comment in the scope, a non-flat scope link, or a
+     * head that overflows).
+     */
+    private Optional<Doc> flatHeadedHuggedCommentLambdaChain(MethodCallExpr methodCall) {
+        if (
+            methodCall.getArguments().size() != 1
+            || !(methodCall.getArgument(0) instanceof LambdaExpr lambdaExpr)
+        ) {
+            return Optional.empty();
+        }
+        Optional<String> header = commentCarryingLambdaHugHeader(lambdaExpr);
+        if (
+            header.isEmpty()
+            || methodCall.getScope().isEmpty()
+            || methodCallHasCommentOutsideLambdaArgument(methodCall, lambdaExpr)
+        ) {
+            return Optional.empty();
+        }
+        Optional<String> flatScope = flatChainScopeText(methodCall.getScope().orElseThrow());
+        if (flatScope.isEmpty()) {
+            return Optional.empty();
+        }
+        String opener = flatScope.orElseThrow()
+            + "."
+            + methodCallSegmentPrefixText(methodCall).substring(1)
+            + "(" + header.orElseThrow();
+        if (currentIndentedWidth.applyAsInt(opener) > options.lineWidth()) {
+            return Optional.empty();
+        }
+        Optional<Doc> tail = huggedCommentLambdaTail(lambdaExpr);
+        if (tail.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(
+            Doc.concat(
+                Doc.text(opener),
+                tail.orElseThrow(),
+                Doc.text(")")
+            )
+        );
+    }
+
+    /**
+     * Keeps an entire fluent chain's head flat when the only reason it must break is a comment carried inside the final
+     * call's expression-lambda argument — the {@code manifest.routes().forEach(route -> … )} shape. The head links pack
+     * onto the opener line, the final lambda hugs, and the comment-driven body is the only thing that breaks.
+     *
+     * <p>This is scoped to chains whose comments all live inside that final lambda (an inter-link comment between head
+     * links would instead force the one-per-line layout) and whose flat head fits the line, so a comment-free or
+     * width-driven chain keeps its existing one-per-line layout. The flat head plus the hugged lambda re-parses to the
+     * same chain and the same comment attachment, so the layout is idempotent.
+     */
+    private Optional<Doc> flatHeadHuggedCommentLambdaChain(
+            MethodCallExpr expression,
+            MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis,
+            MethodCallChainTail finalSegmentSuffix
+    ) {
+        if (
+            analysis.calls().isEmpty()
+            || analysis.sourceMultilineChain()
+            || analysis.rootHasComments()
+        ) {
+            return Optional.empty();
+        }
+        if (
+            expression.getArguments().size() != 1
+            || !(expression.getArgument(0) instanceof LambdaExpr lambdaExpr)
+            || chainHasCommentOutsideFinalLambda(expression, lambdaExpr)
+        ) {
+            return Optional.empty();
+        }
+        return flatHeadedHuggedCommentLambdaChain(expression)
+                .map(body -> appendFinalSegmentSuffix(body, finalSegmentSuffix));
+    }
+
+    /**
+     * Reports whether the chain rooted at {@code expression} carries any comment that is not nested inside the final
+     * call's lambda argument. Used to keep the flat-head hug scoped to purely tail-comment-driven chains.
+     */
+    private boolean chainHasCommentOutsideFinalLambda(MethodCallExpr expression, LambdaExpr finalLambda) {
+        return expression.getAllContainedComments()
+                .stream()
+                .anyMatch(comment -> finalLambda.getAllContainedComments().stream().noneMatch(inside -> inside == comment));
+    }
+
+    /**
+     * Reports whether a call carries a comment that is not nested inside its hugged lambda argument — a chain-link comment
+     * (the {@code Optional.of(x) // note .map(y)} name comment) that must force a one-per-line break rather than a flat
+     * head. Such a comment lives in the call's contained set but not in the lambda's, so flat-packing this link would drop
+     * or misplace it.
+     */
+    private boolean methodCallHasCommentOutsideLambdaArgument(MethodCallExpr methodCall, LambdaExpr lambdaExpr) {
+        return methodCall.getAllContainedComments()
+                .stream()
+                .anyMatch(comment -> lambdaExpr.getAllContainedComments().stream().noneMatch(inside -> inside == comment));
+    }
+
+    /**
+     * Returns the compact one-line text for a chain scope when every link can stay flat and carries no comment, or empty
+     * otherwise. This is the flat-head portion that precedes a hugged comment-carrying lambda's final selector.
+     */
+    private Optional<String> flatChainScopeText(Expression scope) {
+        if (!scope.getAllContainedComments().isEmpty() || sourceShapePolicy.wasMultiline(scope)) {
+            return Optional.empty();
+        }
+        if (scope instanceof MethodCallExpr methodCall) {
+            if (!compactMethodCallChainSegmentCanStayFlat(methodCall) || methodCall.getScope().isEmpty()) {
+                return Optional.empty();
+            }
+        }
+        return Optional.of(compactSource.compact(scope));
+    }
+
+    /**
+     * Builds the hug header ({@code params ->}, chained through nested expression lambdas as {@code params -> inner ->})
+     * for a comment-carrying expression-lambda argument, or empty when the lambda is not eligible to hug.
+     *
+     * <p>Eligibility mirrors the comment-free hug but inverted on comments: the lambda (or one of its nested lambdas) must
+     * carry a contained comment, the parameters must be comment-free so the header text is reconstructable verbatim, and
+     * the innermost body must be a method call (a chain or call whose comments the expression renderer can preserve while
+     * the appended closing parenthesis collapses). Boundary, parameter, and gap comments around the lambda itself are
+     * left to the dedicated comment-preserving renderers, so they exclude this hug.
+     */
+    private Optional<String> commentCarryingLambdaHugHeader(LambdaExpr lambdaExpr) {
+        if (
+            lambdaExpr.getExpressionBody().isEmpty()
+            || lambdaExpr.getAllContainedComments().isEmpty()
+            || !lambdaParameterHugCandidate(lambdaExpr)
+        ) {
+            return Optional.empty();
+        }
+        StringBuilder header = new StringBuilder(lambdaParameters.apply(lambdaExpr) + " ->");
+        Expression body = lambdaExpr.getExpressionBody().orElseThrow();
+        while (body instanceof LambdaExpr nested) {
+            if (nested.getExpressionBody().isEmpty() || !lambdaParameterHugCandidate(nested)) {
+                return Optional.empty();
+            }
+            header.append(' ').append(lambdaParameters.apply(nested)).append(" ->");
+            body = nested.getExpressionBody().orElseThrow();
+        }
+        if (!(body instanceof MethodCallExpr)) {
+            return Optional.empty();
+        }
+        return Optional.of(header.toString());
+    }
+
+    private boolean lambdaParameterHugCandidate(LambdaExpr lambdaExpr) {
+        return lambdaExpr.getParameters().stream().allMatch(parameter -> parameter.getAllContainedComments().isEmpty());
     }
 
     private Doc brokenMethodCallSegment(
@@ -2847,8 +3110,14 @@ final class MethodCallChainPrinter {
             return Doc.EMPTY;
         }
         MethodCallExpr next = nextCall.orElseThrow();
+        // A comment that sits on the same physical line as this segment's close can also be the same-line final-trailing
+        // comment of an inner chain nested in this segment's lambda argument (the collapsed {@code .orElseThrow(...)) //
+        // note .orElseGet(...)} shape, where the inner chain's last call and this outer link share a line). That inner
+        // render runs first and already claimed it, so skip already-printed comments here to keep a single claim; output is
+        // unchanged because a re-offer of a printed comment only ever rendered empty.
         List<Doc> sourceComments = trailingLineCommentsBeforeNextSegment(expression, next)
                 .stream()
+                .filter(trivia -> !comments.isPrinted(trivia))
                 .map(comments::comment)
                 .filter(comment -> comment != Doc.EMPTY)
                 .toList();

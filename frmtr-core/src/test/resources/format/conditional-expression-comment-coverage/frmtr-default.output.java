@@ -2,8 +2,8 @@ class Sample {
 
     String both(boolean cond, String thenValue, String elseValue) {
         return cond
-            ? // leading then
-              thenValue // trailing then
+            // leading then
+            ? thenValue // trailing then
             : elseValue;
     }
 
@@ -11,8 +11,8 @@ class Sample {
         String selected = a
             ? b
             : c
-                ? // before inner ternary
-                  d // inner then
+                // before inner ternary
+                ? d // inner then
                 : e;
         return selected;
     }

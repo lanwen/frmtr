@@ -125,6 +125,7 @@ final class StatementPrinters {
             controlConditions::compactWithOwnBlockComment,
             commentPlacement::ownSameLineBlockCommentBeforeNode,
             expressions::methodCallArgumentList,
+            new CommentedExpressionListPrinter(context, expressions::expression),
             this::currentIndentedWidth
         );
         this.statementRules = new StatementRuleEnvelope(

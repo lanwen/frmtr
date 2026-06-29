@@ -32,6 +32,19 @@ val bake by tasks.registering(JavaExec::class) {
     }
 }
 
+val serve by tasks.registering(JavaExec::class) {
+    group = "documentation"
+    description = "Bakes the site, then serves it with live re-bake on source changes (Ctrl+C to stop)."
+    classpath(files(logbackConfigDir), jbake)
+    mainClass = "org.jbake.launcher.Main"
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
+    // --bake then --server; together they enable JBake's watch mode (re-bakes on change).
+    args("--bake", "--server", jbakeSourceDir.asFile.absolutePath, jbakeOutputDir.get().asFile.absolutePath)
+
+    // Long-running server: no outputs/up-to-date tracking, and it must not block other work.
+    notCompatibleWithConfigurationCache("Runs a blocking dev server")
+}
+
 tasks.named("assemble") {
     dependsOn(bake)
 }

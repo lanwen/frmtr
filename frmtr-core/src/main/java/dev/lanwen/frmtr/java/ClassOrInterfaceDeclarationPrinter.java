@@ -4,6 +4,7 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
+import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
@@ -137,8 +138,11 @@ final class ClassOrInterfaceDeclarationPrinter {
         if (!declaration.getTypeParameters().isEmpty()) {
             header.add(callableSignatures.typeParameters(declaration.getTypeParameters()));
         }
+        header.add(clauseLeadingBlockComment(declaration.getExtendedTypes()));
         inlineExtendsTypes.apply(declaration.getExtendedTypes()).ifPresent(header::add);
+        header.add(clauseLeadingBlockComment(declaration.getImplementedTypes()));
         inlineImplementsTypes.apply(declaration.getImplementedTypes()).ifPresent(header::add);
+        header.add(clauseLeadingBlockComment(declaration.getPermittedTypes()));
         inlinePermitsTypes.apply(declaration.getPermittedTypes()).ifPresent(header::add);
         header.add(Doc.text(" "));
         header.add(memberBlock.apply(declaration));
@@ -200,6 +204,7 @@ final class ClassOrInterfaceDeclarationPrinter {
             header.add(callableSignatures.typeParameters(declaration.getTypeParameters()));
         }
         boolean breakClauses = classOrInterfaceHeaderClauses(declaration) > 1 || !breakTypeParameters;
+        header.add(clauseLeadingBlockComment(declaration.getExtendedTypes()));
         typeClause.print(
                     "extends",
                     declaration.getExtendedTypes(),
@@ -207,6 +212,7 @@ final class ClassOrInterfaceDeclarationPrinter {
                     text -> classOrInterfaceClauseWidth(declaration, text)
                 )
                 .ifPresent(header::add);
+        header.add(clauseLeadingBlockComment(declaration.getImplementedTypes()));
         typeClause.print(
                     "implements",
                     declaration.getImplementedTypes(),
@@ -214,6 +220,7 @@ final class ClassOrInterfaceDeclarationPrinter {
                     text -> classOrInterfaceClauseWidth(declaration, text)
                 )
                 .ifPresent(header::add);
+        header.add(clauseLeadingBlockComment(declaration.getPermittedTypes()));
         typeClause.print(
                     "permits",
                     declaration.getPermittedTypes(),
@@ -252,6 +259,31 @@ final class ClassOrInterfaceDeclarationPrinter {
             + declaration.getNameAsString()
             + flatTypeParameters.apply(declaration.getTypeParameters());
         return classOrInterfaceHeaderWidth(declaration, headerHead) > options.lineWidth();
+    }
+
+    /**
+     * Renders a block comment that JavaParser parked as the leading own comment of a header clause's first type.
+     *
+     * <p>A comment written between the declaration name and its {@code extends}/{@code implements}/{@code permits}
+     * keyword (for example {@code class Min/* note *&#47; implements Serializable}) attaches as the own comment of the
+     * clause's first {@link ClassOrInterfaceType} rather than to the name or the keyword. The clause text itself is
+     * rebuilt from the parsed type tree by {@code compactJoinTypeLike}, which never reads that comment, so without this
+     * hook the comment is silently dropped. Emitting it here, claimed once through {@link CommentTracker}, keeps the
+     * comment on the header line just before the clause keyword while leaving the clause text comment-free so the
+     * comment is rendered exactly once. Only the first type's leading comment is recovered, which is the name/clause
+     * boundary the surrounding header layout owns; later inter-type comments stay with the shared type-clause renderer.
+     */
+    private Doc clauseLeadingBlockComment(NodeList<ClassOrInterfaceType> types) {
+        if (types.isEmpty()) {
+            return Doc.EMPTY;
+        }
+        ClassOrInterfaceType firstType = types.get(0);
+        Doc comment = comments.ownComment(
+            firstType,
+            candidate -> candidate instanceof BlockComment
+                    && CommentIndex.startsBefore(candidate, firstType)
+        );
+        return comment == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), comment);
     }
 
     private Doc nameLeadingLineComment(ClassOrInterfaceDeclaration declaration) {

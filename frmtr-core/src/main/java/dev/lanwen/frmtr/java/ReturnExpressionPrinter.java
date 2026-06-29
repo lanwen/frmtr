@@ -323,6 +323,13 @@ final class ReturnExpressionPrinter {
      * <p>The gate checks the keyword and semicolon with the value because a value that fits by itself can still overflow
      * once it is placed inside a return statement. When the whole statement fits, expression dispatch keeps its ordinary
      * shape; only overflowing return lines enter the return-specific break tree.
+     *
+     * <p>The break decision for a method-call value is width-first: the flat {@code return value;} width is checked before
+     * the source-shape forced breaks. Only when the flat form genuinely overflows do the source-multiline signals
+     * ({@code methodCallChainIsSourceMultiline}, {@code wasMultiline}, {@code sourceMultilineExpressionLambdaBody}) act as
+     * a fallback that chooses the broken chain shape. This keeps the result a function of width rather than of the input's
+     * line shape, so a {@code return <call>} that fits stays flat whether the source wrote it on one line or across
+     * several, and the formatter reaches the same fixed point from either input.
      */
     private Doc returnExpression(Expression expression, LayoutWidth.LineBudget lineBudget) {
         Optional<BinaryExpr> sourceMultilineEnclosedBinary = sourceMultilineEnclosedBinary(expression);
@@ -350,6 +357,9 @@ final class ReturnExpressionPrinter {
                 return forcedChain.orElseThrow();
             }
         }
+        if (returnLineFits(expression, lineBudget)) {
+            return this.expression.apply(expression);
+        }
         if (
             expression instanceof MethodCallExpr methodCall
             && (methodCallChainIsSourceMultiline.test(methodCall)
@@ -360,9 +370,6 @@ final class ReturnExpressionPrinter {
             if (forcedChain.isPresent()) {
                 return forcedChain.orElseThrow();
             }
-        }
-        if (returnLineFits(expression, lineBudget)) {
-            return this.expression.apply(expression);
         }
         if (
             expression instanceof BinaryExpr binaryExpr

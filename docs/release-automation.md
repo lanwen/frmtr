@@ -50,25 +50,26 @@ Write the details for an end user reading the changelog, not for a reviewer read
 
 - Be concise and concrete about **how the change affects the formatted output**. One or two sentences is usually enough.
 - Do **not** include implementation details, the root cause, or why the old behavior was wrong.
-- Prefer a **minimal before/after snippet** of the visible effect over prose.
+- Prefer a **minimal before/after snippet** of the visible effect over prose, and put that snippet in a **fenced code
+  block** so the line breaks render — plain lines collapse into one paragraph in Markdown.
 
-For example, prefer:
+For example, a one-line summary followed by a fenced before/after:
 
-```text
 A line comment at the start of a braceless `else` body now stays indented inside the body instead of moving above `else`.
 
-Before:
+```java
+// before
 }
 // note
 else doThing();
 
-After:
+// after
 } else
     // note
     doThing();
 ```
 
-over a paragraph naming which printer changed or how the comment was previously dropped.
+Avoid a paragraph naming which printer changed or why the old behavior was wrong.
 
 The PR-title workflow rejects duplicate, unclosed, out-of-order marker pairs and Markdown headings inside the details
 (so do not start a line with `#`).

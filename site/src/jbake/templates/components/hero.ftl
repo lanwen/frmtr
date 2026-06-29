@@ -1,3 +1,4 @@
+<#include "quickstart-tabs.ftl">
 <#macro hero>
         <section class="hero" aria-labelledby="title">
           <div class="hero-paper">
@@ -16,32 +17,85 @@
           </div>
 
           <div class="hero-dark" id="start">
-            <input class="qs-radio" type="radio" name="quickstart" id="qs-gradle" checked>
-            <input class="qs-radio" type="radio" name="quickstart" id="qs-native">
-
             <p class="qs-word" aria-hidden="true">
               <span class="qs-w qs-w-gradle">GRADLE</span>
               <span class="qs-w qs-w-native">NATIVE</span>
             </p>
 
             <div class="quickstart">
-              <div class="qs-tabs" role="tablist" aria-label="Quick start">
-                <label class="qs-tab" for="qs-native">Native</label>
-                <label class="qs-tab" for="qs-gradle">Gradle</label>
-                <span class="qs-tab-bar" aria-hidden="true"></span>
-              </div>
+              <@quickstartTabs name="quickstart" label="Quick start" tabs=[
+                {"id": "qs-native", "label": "Native"},
+                {"id": "qs-gradle", "label": "Gradle", "checked": true}
+              ] />
 
               <div class="qs-right">
-                <div class="qs-panel qs-p-gradle">
-                  <pre><code><span class="cl"><span class="tok-comment">//build.gradle.kts</span></span>
-                    <span class="cl">&nbsp;</span>
-                    <span class="cl"><span class="tok-key">plugins</span> {</span>
-                    <span class="cl">    java</span>
-                    <span class="cl">    <span class="tok-fn">id</span>(<span class="tok-str">"dev.lanwen.frmtr"</span>) <span class="nowrap">version <span class="tok-str">"${config.frmtr_version!"dev"}"</span></span></span>
-                    <span class="cl">}</span>
-                    <span class="cl">&nbsp;</span>
-                    <span class="cl"><span class="tok-dim">$</span> ./gradlew <span class="tok-task">frmtrCheck</span></span>
-                    <span class="cl"><span class="tok-dim">$</span> ./gradlew <span class="tok-task">frmtrFormat</span></span></code></pre>
+                <div class="qs-panel qs-p-gradle" data-ex-carousel>
+                  <div class="ex-card">
+                    <div class="ex-frames">
+                      <div class="ex-frame is-active" role="group" aria-label="Single-module">
+                        <div class="ex-titlebar"><span class="win-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="ex-title">Single-module</span></div>
+                        <pre><code><span class="cl"><span class="tok-comment">// build.gradle.kts</span></span>
+                          <span class="cl">&nbsp;</span>
+                          <span class="cl"><span class="tok-key">plugins</span> {</span>
+                          <span class="cl">    java</span>
+                          <span class="cl">    <span class="tok-fn">id</span>(<span class="tok-str">"dev.lanwen.frmtr"</span>) <span class="nowrap">version <span class="tok-str">"${config.frmtr_version!"dev"}"</span></span></span>
+                          <span class="cl">}</span>
+                          <span class="cl">&nbsp;</span>
+                          <span class="cl"><span class="tok-dim">$</span> ./gradlew <span class="tok-task">frmtrCheck</span></span>
+                          <span class="cl"><span class="tok-dim">$</span> ./gradlew <span class="tok-task">frmtrFormat</span></span></code></pre>
+                      </div>
+
+                      <div class="ex-frame" role="group" aria-label="Multi-module">
+                        <div class="ex-titlebar"><span class="win-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="ex-title">Multi-module</span></div>
+                        <pre><code><span class="cl"><span class="tok-comment">// build.gradle.kts &mdash; root</span></span>
+                          <span class="cl">&nbsp;</span>
+                          <span class="cl"><span class="tok-key">plugins</span> {</span>
+                          <span class="cl">    <span class="tok-fn">id</span>(<span class="tok-str">"dev.lanwen.frmtr"</span>) <span class="nowrap">version <span class="tok-str">"${config.frmtr_version!"dev"}"</span> apply <span class="tok-key">false</span></span></span>
+                          <span class="cl">}</span>
+                          <span class="cl">&nbsp;</span>
+                          <span class="cl"><span class="tok-key">subprojects</span> {</span>
+                          <span class="cl">    pluginManager.<span class="tok-fn">withPlugin</span>(<span class="tok-str">"java"</span>) {</span>
+                          <span class="cl">        pluginManager.<span class="tok-fn">apply</span>(<span class="tok-str">"dev.lanwen.frmtr"</span>)</span>
+                          <span class="cl">    }</span>
+                          <span class="cl">}</span></code></pre>
+                      </div>
+
+                      <div class="ex-frame" role="group" aria-label="Multi-module with submodule override">
+                        <div class="ex-titlebar"><span class="win-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="ex-title">Multi-module &mdash; submodule override</span></div>
+                        <pre><code><span class="cl"><span class="tok-comment">// build.gradle.kts &mdash; root</span></span>
+                          <span class="cl">frmtr {</span>
+                          <span class="cl">    java {</span>
+                          <span class="cl">        <span class="tok-fn">include</span>(<span class="tok-str">"**/api/**/*.java"</span>)</span>
+                          <span class="cl">        <span class="tok-fn">exclude</span>(<span class="tok-str">"**/generated/**"</span>)</span>
+                          <span class="cl">    }</span>
+                          <span class="cl">}</span>
+                          <span class="cl">&nbsp;</span>
+                          <span class="cl"><span class="tok-comment">// service/build.gradle.kts &mdash; overrides root</span></span>
+                          <span class="cl">frmtr {</span>
+                          <span class="cl">    java {</span>
+                          <span class="cl">        <span class="tok-fn">include</span>(<span class="tok-str">"**/service/**/*.java"</span>)</span>
+                          <span class="cl">        <span class="tok-fn">exclude</span>(<span class="tok-str">"**/legacy/**"</span>)</span>
+                          <span class="cl">    }</span>
+                          <span class="cl">}</span></code></pre>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="ex-nav" aria-label="Gradle examples">
+                    <button class="ex-arrow ex-prev" type="button" aria-label="Previous example"><span class="chev" aria-hidden="true"></span></button>
+                    <div class="ex-dots" role="tablist" aria-label="Choose Gradle example">
+                      <button class="ex-dot is-active" type="button" role="tab" aria-selected="true" aria-label="Single-module">
+                        <svg class="ring" viewBox="0 0 20 20" aria-hidden="true"><circle class="ring-progress" cx="10" cy="10" r="5"></circle></svg>
+                      </button>
+                      <button class="ex-dot" type="button" role="tab" aria-selected="false" aria-label="Multi-module">
+                        <svg class="ring" viewBox="0 0 20 20" aria-hidden="true"><circle class="ring-progress" cx="10" cy="10" r="5"></circle></svg>
+                      </button>
+                      <button class="ex-dot" type="button" role="tab" aria-selected="false" aria-label="Multi-module with submodule override">
+                        <svg class="ring" viewBox="0 0 20 20" aria-hidden="true"><circle class="ring-progress" cx="10" cy="10" r="5"></circle></svg>
+                      </button>
+                    </div>
+                    <button class="ex-arrow ex-next" type="button" aria-label="Next example"><span class="chev" aria-hidden="true"></span></button>
+                  </div>
                 </div>
 
                 <div class="qs-panel qs-p-native">

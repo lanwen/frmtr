@@ -39,5 +39,6 @@
         <@hero />
       </main>
     </div>
+    <script src="${content.rootpath}js/quickstart.js" defer></script>
   </body>
 </html>

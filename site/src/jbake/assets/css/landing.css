@@ -443,17 +443,22 @@ html.dark .hero {
   justify-self: center;
 }
 
-/* Horizontal tabs pinned to the top-right of the content column. */
+/* Tab switcher (quickstart-tabs.ftl). Equal-width tabs sized to the widest
+   label keep the percentage-based indicator maths exact; the group shrinks to
+   its content (width: max-content) so the bar's 100%/N tracks the tabs, not the
+   surrounding column — which is what lets it stay aligned on mobile too. */
 .qs-tabs {
   position: absolute;
   top: 28px;
   right: clamp(22px, 3.4vw, 70px);
   z-index: 2;
   display: flex;
-  gap: 30px;
+  width: max-content;
 }
 
 .qs-tab {
+  box-sizing: border-box;
+  min-width: 5.4em;
   padding-top: 12px;
   border-top: 8px solid transparent;
   color: rgba(238, 244, 239, 0.5);
@@ -461,6 +466,7 @@ html.dark .hero {
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.02em;
+  text-align: center;
   cursor: pointer;
 }
 
@@ -468,8 +474,12 @@ html.dark .hero {
   color: rgba(238, 244, 239, 0.82);
 }
 
-.hero-dark:has(#qs-gradle:checked) .qs-tab[for="qs-gradle"],
-.hero-dark:has(#qs-native:checked) .qs-tab[for="qs-native"] {
+/* Active tab + indicator position both derive from the checked radio's index,
+   so the component works for any tab count without per-id rules. */
+.qs-tabs:has(.qs-radio:nth-of-type(1):checked) .qs-tab:nth-of-type(1),
+.qs-tabs:has(.qs-radio:nth-of-type(2):checked) .qs-tab:nth-of-type(2),
+.qs-tabs:has(.qs-radio:nth-of-type(3):checked) .qs-tab:nth-of-type(3),
+.qs-tabs:has(.qs-radio:nth-of-type(4):checked) .qs-tab:nth-of-type(4) {
   color: #eef4ef;
 }
 
@@ -477,33 +487,37 @@ html.dark .hero {
 .qs-tab-bar {
   position: absolute;
   top: 0;
+  left: 0;
+  width: calc(100% / var(--tab-count, 2));
   height: 8px;
   background: var(--yellow);
   transform-origin: center;
-  transition:
-    left 0.45s cubic-bezier(0.65, 0, 0.35, 1),
-    right 0.45s cubic-bezier(0.65, 0, 0.35, 1);
+  transition: left 0.45s cubic-bezier(0.65, 0, 0.35, 1);
 }
 
-.hero-dark:has(#qs-gradle:checked) .qs-tab-bar {
-  left: 145px;
-  right: 0;
-  animation: bar-slide-g 0.45s cubic-bezier(0.65, 0, 0.35, 1);
-}
-
-.hero-dark:has(#qs-native:checked) .qs-tab-bar {
+/* Distinct animation-names per index force the squish keyframe to restart on
+   each switch (an identical animation value would not re-trigger). */
+.qs-tabs:has(.qs-radio:nth-of-type(1):checked) .qs-tab-bar {
   left: 0;
-  right: 155px;
-  animation: bar-slide-n 0.45s cubic-bezier(0.65, 0, 0.35, 1);
+  animation: bar-slide-1 0.45s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.qs-tabs:has(.qs-radio:nth-of-type(2):checked) .qs-tab-bar {
+  left: calc(100% / var(--tab-count, 2));
+  animation: bar-slide-2 0.45s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.qs-tabs:has(.qs-radio:nth-of-type(3):checked) .qs-tab-bar {
+  left: calc(200% / var(--tab-count, 2));
+  animation: bar-slide-3 0.45s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.qs-tabs:has(.qs-radio:nth-of-type(4):checked) .qs-tab-bar {
+  left: calc(300% / var(--tab-count, 2));
+  animation: bar-slide-4 0.45s cubic-bezier(0.65, 0, 0.35, 1);
 }
 
-@keyframes bar-slide-g {
-  50% { transform: scaleX(0.6); }
-}
-
-@keyframes bar-slide-n {
-  50% { transform: scaleX(0.6); }
-}
+@keyframes bar-slide-1 { 50% { transform: scaleX(0.6); } }
+@keyframes bar-slide-2 { 50% { transform: scaleX(0.6); } }
+@keyframes bar-slide-3 { 50% { transform: scaleX(0.6); } }
+@keyframes bar-slide-4 { 50% { transform: scaleX(0.6); } }
 
 @media (prefers-reduced-motion: reduce) {
   .qs-tab-bar {
@@ -512,8 +526,10 @@ html.dark .hero {
   }
 }
 
-.hero-dark:has(#qs-gradle:focus-visible) .qs-tab[for="qs-gradle"],
-.hero-dark:has(#qs-native:focus-visible) .qs-tab[for="qs-native"] {
+.qs-tabs:has(.qs-radio:nth-of-type(1):focus-visible) .qs-tab:nth-of-type(1),
+.qs-tabs:has(.qs-radio:nth-of-type(2):focus-visible) .qs-tab:nth-of-type(2),
+.qs-tabs:has(.qs-radio:nth-of-type(3):focus-visible) .qs-tab:nth-of-type(3),
+.qs-tabs:has(.qs-radio:nth-of-type(4):focus-visible) .qs-tab:nth-of-type(4) {
   outline: 2px solid var(--yellow);
   outline-offset: 4px;
 }
@@ -559,6 +575,227 @@ html.dark .hero {
 
 .qs-p-gradle .nowrap {
   white-space: nowrap;
+}
+
+/* Gradle example carousel: a code card plus a right-hand dot navigator. The
+   active dot wears a countdown ring that drains over the dwell interval; when
+   it empties the carousel advances (see quickstart.js). The dark .qs-panel card
+   visuals move to .ex-card so the panel itself can be a flex row [card | nav]. */
+.qs-p-gradle {
+  overflow: visible;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  gap: 18px;
+  align-items: center;
+  /* Grid items default to min-width:auto; without this the flex row refuses to
+     shrink below the card's content width and the nav spills onto the yellow
+     panel in the cramped band just above the mobile breakpoint. */
+  min-width: 0;
+}
+
+.hero-dark:has(#qs-gradle:checked) .qs-p-gradle {
+  display: flex;
+}
+
+.ex-card {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #171719;
+  box-shadow: 0 20px 68px rgba(0, 0, 0, 0.55);
+  /* Height tracks the active frame (set in px by quickstart.js) and eases
+     between examples — so a short example doesn't reserve the tallest one's
+     height, which had pushed the whole hero past a single screen. */
+  transition: height 0.42s cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* Frames overlap (only the active one is in flow for measuring); the card's
+   explicit height is what's actually shown, so inactive frames never inflate it. */
+.ex-frames {
+  position: relative;
+  height: 100%;
+}
+
+.ex-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.4s ease;
+}
+
+.ex-frame.is-active {
+  opacity: 1;
+  visibility: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ex-card {
+    transition: none;
+  }
+}
+
+/* Window-style title bar: faint window dots + the example name, divided from
+   the code body so each frame reads like its own editor window. */
+.ex-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.win-dots {
+  display: inline-flex;
+  gap: 7px;
+}
+
+.win-dots i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.ex-title {
+  color: rgba(238, 244, 239, 0.72);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.ex-nav {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.ex-dots {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ex-arrow {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: rgba(238, 244, 239, 0.55);
+  cursor: pointer;
+}
+
+.ex-arrow:hover {
+  color: #eef4ef;
+}
+
+/* Pure-CSS chevron so it rotates cleanly to point up/down (desktop column)
+   or left/right (mobile row) without swapping glyphs. */
+.ex-arrow .chev {
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+}
+
+.ex-prev .chev {
+  margin-top: 4px;
+  transform: rotate(225deg);
+}
+
+.ex-next .chev {
+  margin-bottom: 4px;
+  transform: rotate(45deg);
+}
+
+.ex-dot {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+/* Solid white dot. The active one brightens; the ring is the only added mark,
+   so once the countdown drains there is nothing left beneath it. */
+.ex-dot::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.45);
+  transform: translate(-50%, -50%);
+  transition: background 0.2s ease;
+}
+
+.ex-dot.is-active::after {
+  background: #fff;
+}
+
+.ex-dot .ring {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  /* start the ring at 12 o'clock */
+  transform: rotate(-90deg);
+}
+
+/* Thin draining outline with a ~1px gap to the dot; no track circle behind it. */
+.ring-progress {
+  --ring-circ: 31.42; /* 2 * pi * r, r = 5 */
+  stroke: var(--yellow);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: var(--ring-circ);
+  stroke-dashoffset: var(--ring-circ); /* drained (invisible) until active */
+}
+
+.ex-dot.is-active .ring-progress {
+  animation: ex-ring-drain 15s linear forwards;
+}
+
+.qs-p-gradle.is-paused .ex-dot.is-active .ring-progress,
+.qs-p-gradle.is-tab-hidden .ex-dot.is-active .ring-progress {
+  animation-play-state: paused;
+}
+
+@keyframes ex-ring-drain {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: var(--ring-circ); }
+}
+
+.ex-dot:focus-visible,
+.ex-arrow:focus-visible {
+  outline: 2px solid var(--yellow);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ex-frame {
+    transition: none;
+  }
+
+  .ex-dot.is-active .ring-progress {
+    animation: none;
+  }
 }
 
 /* Schematic --render-line-width guide: a dotted ruler in the right margin,
@@ -928,11 +1165,41 @@ h2 {
 
   .qs-tabs {
     position: relative;
-    margin-bottom: 24px;
+    top: auto;
+    right: auto;
+    margin: 0 auto 24px;
   }
 
   .qs-right {
     padding-top: 0;
+  }
+
+  /* Stack the carousel: code first, dot navigator below as a centered row. */
+  .qs-p-gradle {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .ex-card {
+    width: 100%;
+  }
+
+  .ex-nav {
+    flex-direction: row;
+  }
+
+  .ex-dots {
+    flex-direction: row;
+  }
+
+  .ex-prev .chev {
+    margin: 0 0 0 4px;
+    transform: rotate(135deg);
+  }
+
+  .ex-next .chev {
+    margin: 0 4px 0 0;
+    transform: rotate(-45deg);
   }
 
   .content {

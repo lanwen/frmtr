@@ -83,6 +83,8 @@ final class SwitchPrinter {
 
     private final SourceOrderedCommentInterleaver<SwitchEntry> commentInterleaver;
 
+    private final SourceOrderedCommentInterleaver<Statement> statementCommentInterleaver;
+
     private final Function<NodeWithModifiers<?>, String> modifiers;
 
     private final ToIntFunction<String> currentIndentedWidth;
@@ -179,6 +181,7 @@ final class SwitchPrinter {
         this.compactSource = context.compactSource;
         this.commentPlacementPolicy = context.commentPlacementPolicy;
         this.commentInterleaver = new SourceOrderedCommentInterleaver<>(context.comments);
+        this.statementCommentInterleaver = new SourceOrderedCommentInterleaver<>(context.comments);
         this.modifiers = modifiers;
         this.currentIndentedWidth = currentIndentedWidth;
         this.blockStatementWidth = blockStatementWidth;
@@ -594,6 +597,7 @@ final class SwitchPrinter {
         Doc guard = switchEntryGuard(entry);
         Doc entryDoc = switch (switchEntryLayout(entry)) {
             case STATEMENT_GROUP -> switchStatementGroupEntry(
+                entry,
                 label,
                 guard,
                 entry.getStatements(),
@@ -1087,6 +1091,7 @@ final class SwitchPrinter {
     }
 
     private Doc switchStatementGroupEntry(
+            SwitchEntry entry,
             Doc label,
             Doc guard,
             NodeList<Statement> statements,
@@ -1110,7 +1115,7 @@ final class SwitchPrinter {
             guard,
             Doc.text(":"),
             trailing,
-            switchEntryStatements(statements, labelLeadingBodyComments)
+            switchEntryStatements(entry, statements, labelLeadingBodyComments)
         );
     }
 
@@ -1193,8 +1198,21 @@ final class SwitchPrinter {
      * together above the body, matching how leading comments render elsewhere. When the entry has no nested statement the
      * recovered comment block is the only body content, so it is laid out on its own indented line(s) without a trailing
      * break.
+     *
+     * <p>The nested statements are sequenced through {@link SourceOrderedCommentInterleaver} exactly like an ordinary
+     * statement block ({@code BlockPrinter}). The interleaver is what restores a standalone {@code //} comment the author
+     * placed between two statements in the case body: JavaParser parks such a comment as the {@code switch} entry's orphan
+     * trivia rather than as either neighbour's own trivia, so the plain statement-separator loop never offered it to a
+     * {@link CommentTracker} claim slot and it was dropped — most visibly when a blank line after the comment detaches it
+     * from the following statement (issue #133). Claim-coupling keeps the comments already placed by
+     * {@link #caseLabelTrailingComment} or {@link #caseLabelLeadingBodyComments} from rendering twice. Blank-line spacing
+     * between statements and around restored comments stays source-driven, matching the regular block path.
      */
-    private Doc switchEntryStatements(NodeList<Statement> statements, List<Doc> labelLeadingBodyComments) {
+    private Doc switchEntryStatements(
+            SwitchEntry entry,
+            NodeList<Statement> statements,
+            List<Doc> labelLeadingBodyComments
+    ) {
         if (statements.isEmpty()) {
             if (labelLeadingBodyComments.isEmpty()) {
                 return Doc.EMPTY;
@@ -1203,19 +1221,91 @@ final class SwitchPrinter {
                 Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, labelLeadingBodyComments))
             );
         }
-        List<Doc> docs = new ArrayList<>();
-        Statement previous = null;
-        for (Statement current : statements) {
-            if (previous != null) {
-                docs.add(statementSeparator.apply(previous, current));
-            }
-            docs.add(statementRenderer.format(current));
-            previous = current;
-        }
+        List<Doc> docs = switchEntryStatementContents(entry, statements);
         Doc leading = labelLeadingBodyComments.isEmpty()
             ? Doc.EMPTY
             : Doc.concat(Doc.join(Doc.HARD_LINE, labelLeadingBodyComments), Doc.HARD_LINE);
         return Doc.indent(Doc.concat(Doc.HARD_LINE, leading, Doc.concat(docs)));
+    }
+
+    /**
+     * Returns the entry orphan comments that belong <em>between or after</em> the case body statements, dropping any that
+     * begin before the first statement.
+     *
+     * <p>JavaParser parks a {@code default /*def*}{@code /:} block comment and an own-line {@code //} block stacked under
+     * the label in the same entry orphan bucket as a genuine inter-statement comment. The label-region comments are
+     * already rendered by the label printer ({@link #defaultSwitchEntryLabel} / {@link #commentPreservingCaseLabel}, which
+     * use raw token text and therefore never mark a {@link CommentTracker} claim) and by
+     * {@link #caseLabelLeadingBodyComments}. Bounding the interleaved set to comments that do not start before the first
+     * statement keeps the body interleaver from re-emitting a label-region comment a second time while still restoring the
+     * inter-statement orphan that the plain separator loop dropped (issue #133).
+     */
+    private List<JavaCommentTrivia> interStatementOrphanComments(SwitchEntry entry, NodeList<Statement> statements) {
+        List<JavaCommentTrivia> orphans = commentPlacementPolicy.orphanCommentsOutsideChildRanges(entry, statements);
+        if (statements.isEmpty()) {
+            return orphans;
+        }
+        Statement firstStatement = statements.get(0);
+        return orphans.stream()
+                .filter(comment -> !comment.startsBefore(firstStatement))
+                .toList();
+    }
+
+    /**
+     * Interleaves the case body's statements with the {@code switch} entry's orphan comments by source line, reusing the
+     * statement-block separator policy so blank lines and restored inter-statement comments space the same way they do in
+     * a plain block. Orphan comments that fall inside a nested statement's range stay with that statement's renderer; only
+     * comments the parser left outside every statement range are restored here.
+     */
+    private List<Doc> switchEntryStatementContents(SwitchEntry entry, NodeList<Statement> statements) {
+        return statementCommentInterleaver.interleave(
+            entry,
+            statements,
+            interStatementOrphanComments(entry, statements),
+            (previous, current, index) -> Optional.of(statementRenderer.format(current)),
+            new SourceOrderedCommentInterleaver.Spacing<>() {
+                @Override
+                public int beginLine(Statement sibling) {
+                    return CommentIndex.beginLine(sibling, Integer.MAX_VALUE);
+                }
+
+                @Override
+                public int endLine(Statement sibling) {
+                    return CommentIndex.endLine(sibling, beginLine(sibling));
+                }
+
+                @Override
+                public Doc separatorBeforeSibling(
+                        SourceOrderedCommentInterleaver.PreviousEntry<Statement> previous,
+                        Statement currentSibling
+                ) {
+                    if (previous.kind() == SourceOrderedCommentInterleaver.EntryKind.SIBLING) {
+                        return statementSeparator.apply(previous.sibling().orElseThrow(), currentSibling);
+                    }
+                    return switchEntrySourceLineSeparator(previous.endLine(), beginLine(currentSibling));
+                }
+
+                @Override
+                public Doc separatorBeforeComment(
+                        SourceOrderedCommentInterleaver.PreviousEntry<Statement> previous,
+                        JavaCommentTrivia comment
+                ) {
+                    return switchEntrySourceLineSeparator(previous.endLine(), comment.beginLine(Integer.MAX_VALUE));
+                }
+            }
+        );
+    }
+
+    /**
+     * Chooses a single or blank-line separator from the source line gap, used when an interleaved orphan comment sits
+     * beside a case-body statement so a blank line the author kept around the comment survives, matching the regular
+     * statement block's source-driven spacing.
+     */
+    private Doc switchEntrySourceLineSeparator(int previousEndLine, int currentBeginLine) {
+        if (previousEndLine == Integer.MIN_VALUE || currentBeginLine == Integer.MAX_VALUE) {
+            return Doc.HARD_LINE;
+        }
+        return currentBeginLine > previousEndLine + 1 ? Doc.concat(Doc.HARD_LINE, Doc.HARD_LINE) : Doc.HARD_LINE;
     }
 
     static boolean hasRecoverableSwitchEntryListProblem(SwitchStmt statement) {

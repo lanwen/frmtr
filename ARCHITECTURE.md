@@ -384,7 +384,13 @@ gate (`MethodCallChainPrinter`) measures with that in-scope `firstLineWidth` (de
 `lineWidth(lineBudget)` for prefix-less callers), and both the assignment value path (`MethodCallPrinter`'s broken
 method-call assignment) and the variable initializer path (`VariableInitializerLayout`) build the prefix-aware closure,
 so a chain that fits at the block indent but overflows once the assignment/initializer prefix is counted breaks instead
-of being emitted flat over width. A per-run `SourceShapePolicy` on `JavaFormatContext` is the consolidating home for
+of being emitted flat over width. The same `lineBudget`/`firstLineWidth` channel also carries nesting depth: when a
+chain is rendered as a wrapped call argument or a nested initializer it sits at its enclosing argument list's
+continuation indentation, deeper than the `CURRENT` budget the AUTO entry assumes, so the argument-list dispatcher
+(`MethodCallPrinter.methodCallArgumentDoc`) threads the `CONTINUATION` budget into the chain. When the resulting probe
+shows the chain over width but its short final segment (`.toRetry()`, `.build()`) has no arguments to wrap, the chain
+printer breaks the root's own argument list and glues the segment to its close, the same shape a source-multiline root
+already produces. A per-run `SourceShapePolicy` on `JavaFormatContext` is the consolidating home for
 "should the formatter respect the author's source shape here?" decisions, so printers ask one named question instead of
 re-deriving those reads from raw token text or `getRange()` arithmetic. It owns one canonical definition of each
 source-shape decision:

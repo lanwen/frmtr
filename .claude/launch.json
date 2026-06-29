@@ -3,9 +3,9 @@
   "configurations": [
     {
       "name": "site",
-      "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8347", "--directory", "site/build/jbake"],
-      "port": 8347
+      "runtimeExecutable": "./gradlew",
+      "runtimeArgs": ["--console=plain", ":site:serve"],
+      "port": 8820
     }
   ]
 }

@@ -1,5 +1,6 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.Position;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.comments.Comment;
@@ -348,8 +349,33 @@ final class CommentTracker {
             Node body,
             Collection<? extends Node> attachmentBuckets
     ) {
+        return gapLeadingLineCommentBlock(anchor, afterNode, body, attachmentBuckets, Optional.empty());
+    }
+
+    /**
+     * Bounded variant of {@link #gapLeadingLineCommentBlock(Node, Node, Node, Collection)} that, when
+     * {@code upperBound} is present, restricts the recovered block to the line comments that start strictly before that
+     * source position.
+     *
+     * <p>The bound exists for the {@code else} keyword: a braceless else body's own leading {@code //} block sits after
+     * the keyword and is owned by the braceless-body handler, while only the genuine then-{@code }}-to-{@code else}
+     * separator comment (before the keyword) belongs to this slot. With the bound absent this behaves exactly like the
+     * unbounded overload, so {@code else if} and block-else placement is unchanged. Bounding here, before {@link #claim},
+     * is what keeps the body block claimable by its own slot — an out-of-bound comment is never claimed under
+     * {@code anchor}.
+     */
+    Doc gapLeadingLineCommentBlock(
+            Node anchor,
+            Node afterNode,
+            Node body,
+            Collection<? extends Node> attachmentBuckets,
+            Optional<Position> upperBound
+    ) {
         List<Doc> rendered = new ArrayList<>();
         for (JavaCommentTrivia trivia : commentPlacement.gapLeadingLineCommentBlock(afterNode, body, attachmentBuckets)) {
+            if (upperBound.map(position -> !CommentIndex.startsBefore(trivia.comment(), position)).orElse(false)) {
+                continue;
+            }
             if (ownsHere(trivia, anchor, OwnerSlot.LEADING) && claim(trivia, anchor, OwnerSlot.LEADING)) {
                 if (!rendered.isEmpty()) {
                     rendered.add(Doc.HARD_LINE);

@@ -23,8 +23,9 @@
 - PR titles must follow the release automation schema in `docs/release-automation.md`. Prefer `feat`, `fix`,
   `chore(scope)`, and other Conventional Commits-style titles so release bumping and changelog generation remain
   predictable.
-- Put optional long-form release notes between `<!-- frmtr-changelog-details:start -->` and
-  `<!-- frmtr-changelog-details:end -->` in the PR body. Keep the marker content free of Markdown headings.
+- Optional long-form release notes go between `<!-- frmtr-changelog-details:start -->` and
+  `<!-- frmtr-changelog-details:end -->` in the PR body; read "Changelog Detail Markers" in
+  `docs/release-automation.md` for how to write good ones.
 
 ## Formatter helper comments
 

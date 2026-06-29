@@ -248,6 +248,52 @@ final class JavaCommentPlacementPolicy {
     }
 
     /**
+     * Recovers the full contiguous {@code //} comment block that sits between {@code afterNode} and {@code body}, no
+     * matter how JavaParser split that block across attachment buckets.
+     *
+     * <p>This is the {@code else}/{@code else if} leading-comment counterpart of
+     * {@link #gapLineCommentsBefore(Node, Node, Collection)}, which deliberately <em>excludes</em> the body's own
+     * comment. A multi-line {@code //} block written between a then branch's {@code }} and the {@code else} keyword is
+     * not attached to a single node by JavaParser: the trailing lines stay as the enclosing {@code if}'s orphan trivia
+     * while the line immediately above the {@code else}/{@code else if} node becomes that node's own leading trivia. The
+     * two halves then render from two unrelated slots (one above {@code else}, one folded into the nested {@code else
+     * if}'s leading cluster), which both mangles {@code else if} into {@code else //\n if} and rotates the lines across
+     * passes because re-parsing the rotated output re-splits the block onto different nodes.
+     *
+     * <p>Collecting the whole block as one source-ordered list lets the caller render it together in a single
+     * deterministic slot above {@code else} and claim every line there, so the nested {@code else if} can never reclaim a
+     * leading line. The query unions every line comment that lies in the gap across all the places JavaParser may have
+     * parked it: the body's own leading comment, {@code afterNode}'s own/orphan trivia (a collapse can re-attach a gap
+     * line onto the then branch's {@code }} line as the then block's own <em>trailing</em> comment), and the supplied
+     * {@code attachmentBuckets} (the enclosing {@code if}). It dedupes by identity and returns source order, so the
+     * {@code @default} shape — where the block is a single contiguous run — renders the same lines in the same order
+     * regardless of which node held each line, and a collapsed shape that splits the block across the then block, the
+     * enclosing {@code if}, and the {@code else} node still recovers every line.
+     */
+    List<JavaCommentTrivia> gapLeadingLineCommentBlock(
+            Node afterNode,
+            Node body,
+            Collection<? extends Node> attachmentBuckets
+    ) {
+        List<JavaCommentTrivia> block = new ArrayList<>();
+        ownComment(body)
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.liesBetween(afterNode, body))
+                .ifPresent(block::add);
+        java.util.stream.Stream.concat(
+                ownAndOrphanComments(afterNode).stream(),
+                attachmentBuckets.stream().flatMap(bucket -> ownAndOrphanComments(bucket).stream())
+            )
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.liesBetween(afterNode, body))
+                .forEach(block::add);
+        return block.stream()
+                .distinct()
+                .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
+                .toList();
+    }
+
+    /**
      * Recovers the line comments JavaParser parked between a {@code default} label's colon and its statement-group body
      * when the entry has no label node to anchor the gap on.
      *

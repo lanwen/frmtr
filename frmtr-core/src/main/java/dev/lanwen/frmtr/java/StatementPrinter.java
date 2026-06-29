@@ -1189,7 +1189,24 @@ final class StatementPrinter {
             return ifWithEmptyThenStatement(statement);
         }
         List<Doc> docs = new ArrayList<>();
-        Doc thenTrailingLineComment = trailingLineComment(statement.getThenStmt());
+        // A line comment on the then branch's `}` line that is followed by `else`/`else if` belongs to the else-leading
+        // gap block, not to a separate then-trailing slot: a collapse can re-attach such a gap line as the then block's
+        // own trailing comment, and claiming it here would let elseChainSeparator's then-trailing branch render it alone
+        // and drop the rest of the block. When the then is a block and an else follows, let the gap block (computed in
+        // the else branch below) own every gap line; only claim the standalone then-trailing slot otherwise.
+        boolean elseLeadingGapOwnsThenTrailing = statement.getThenStmt().isBlockStmt()
+            && statement.getElseStmt().filter(elseStatement -> !elseStatement.isEmptyStmt()).isPresent();
+        Doc thenTrailingLineComment = elseLeadingGapOwnsThenTrailing
+            ? Doc.EMPTY
+            : trailingLineComment(statement.getThenStmt());
+        // Claim the else-leading gap block before rendering the then branch so the dry-run records the whole block as the
+        // gap's own (in Doc-construction order, which is what the record-only pre-pass follows), even though it renders
+        // after the then branch's `}`. Otherwise a gap line that a collapse re-attached as the then block's own trailing
+        // comment would be claimed by the block printer first and render on the `}` line, splitting the block.
+        Doc elseLeadingLineComment = statement.getElseStmt()
+                .filter(elseStatement -> !elseStatement.isEmptyStmt())
+                .map(elseStatement -> elseLeadingLineComment(statement, elseStatement))
+                .orElse(Doc.EMPTY);
         Doc conditionTrailingLineComment = controlConditions.closeParenTrailingLineComment(statement.getCondition());
         Doc betweenThenAndElseBlockComment = blockCommentBetweenThenAndElse(statement);
         docs.add(ifCondition(statement));
@@ -1208,7 +1225,6 @@ final class StatementPrinter {
                         docs.add(emptyElseStatement(statement, elseStatement));
                         return;
                     }
-                    Doc elseLeadingLineComment = elseLeadingLineComment(statement, elseStatement);
                     // A block comment between the then-block close and else is recovered by blockCommentBetweenThenAndElse
                     // above and takes priority in elseChainSeparator; for `} /* c */ else {` that same comment is also a
                     // same-line block comment before the else statement. Only offer the else-leading block comment when
@@ -1248,26 +1264,27 @@ final class StatementPrinter {
     }
 
     /**
-     * Recovers the line comment that leads the {@code else} keyword ({@code } // note\nelse}), independent of source
-     * shape.
+     * Recovers the {@code //} comment block that leads the {@code else} keyword ({@code } // note\nelse}), independent of
+     * source shape, as a single together-rendered cluster.
      *
-     * <p>At {@code @default} the comment is the else statement's own leading trivia, so
-     * {@link CommentTracker#ownComment(Node, java.util.function.Predicate)} renders it and the orphan fallback never
-     * runs. A whitespace perturbation that pushes the comment onto its own line between the then block and the
-     * {@code else} re-buckets it as a {@link IfStmt} orphan, so the own path loses it; we then recover the {@code if}
-     * orphan line comment that source-orders between the then block's end and the else node's begin (the same gap the
-     * {@code else}-leading slot owns). The recovered comment feeds the existing {@code elseLeadingLineComment} render
-     * slot unchanged.
+     * <p>A multi-line block written between the then branch's {@code }} and {@code else}/{@code else if} is not held by a
+     * single node: JavaParser keeps the trailing lines as the enclosing {@code if}'s orphan trivia while the line
+     * directly above the {@code else}/{@code else if} node becomes that node's own leading trivia. Reading only one of
+     * those two slots (own first, orphan fallback) split the block — one line rendered above {@code else}, the rest
+     * folded into the nested {@code else if}'s leading cluster, which mangled {@code else if} into {@code else //\n if}
+     * and rotated the lines every pass because re-parsing re-split the block onto different nodes. We instead claim the
+     * whole gap block in one slot (see
+     * {@link JavaCommentPlacementPolicy#gapLeadingLineCommentBlock(Node, Node, java.util.Collection)}) so it renders once,
+     * together, above {@code else}, and the nested {@code else if} can no longer reclaim a leading line. At
+     * {@code @default} the block is a single contiguous run, so this renders the same lines in the same order.
      */
     private Doc elseLeadingLineComment(IfStmt statement, Statement elseStatement) {
-        Doc own = comments.ownComment(
+        return comments.gapLeadingLineCommentBlock(
+            statement,
+            statement.getThenStmt(),
             elseStatement,
-            comment -> comment instanceof LineComment && CommentIndex.startsBefore(comment, elseStatement)
+            List.of(statement)
         );
-        if (own != Doc.EMPTY) {
-            return own;
-        }
-        return Doc.concat(comments.gapLineCommentsBefore(statement.getThenStmt(), elseStatement, List.of(statement)));
     }
 
     /**

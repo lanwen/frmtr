@@ -60,7 +60,7 @@ class PatternMatchingCases {
     }
 
     int recordPatterns(MyRecord record) {
-        if (candidate instanceof OrderEvent( String code)) {
+        if (candidate instanceof OrderEvent(String code)) {
         }
         switch (candidate) {
             case final String label:

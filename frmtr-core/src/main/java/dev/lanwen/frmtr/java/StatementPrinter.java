@@ -1539,7 +1539,13 @@ final class StatementPrinter {
             Doc elseLeadingBlockComment
     ) {
         if (conditionTrailingLineComment != Doc.EMPTY && !statement.getThenStmt().isBlockStmt()) {
-            return Doc.concat(Doc.HARD_LINE, Doc.text("else "));
+            // The condition trailing comment is rendered on the `if` line by ifStatement; this slot only emits the
+            // separator. A braceless then whose first leading line comment bubbled up as the condition trailing comment
+            // does not silence the then-trailing and else-leading slots: the remaining then-leading lines can surface as
+            // the then statement's own trailing comment, and the else body's leading `//` block has already been claimed
+            // by the elseLeadingLineComment gap slot. Returning the bare separator would leave both already-claimed
+            // clusters unrendered and silently drop them, so emit whichever of them is present before `else`.
+            return separatorWithThenTrailingAndElseLeading(thenTrailingLineComment, elseLeadingLineComment);
         }
         if (thenTrailingLineComment != Doc.EMPTY) {
             return Doc.concat(Doc.HARD_LINE, thenTrailingLineComment, Doc.HARD_LINE, Doc.text("else "));
@@ -1557,6 +1563,32 @@ final class StatementPrinter {
             return Doc.concat(Doc.HARD_LINE, Doc.text("else "));
         }
         return Doc.text(" else ");
+    }
+
+    /**
+     * Builds the {@code else} separator for the condition-trailing-comment branch, carrying through both the then
+     * statement's own trailing line comment and the else body's already-claimed leading {@code //} block.
+     *
+     * <p>The two slots are distinct comment clusters that both survive elsewhere when no condition trailing comment is
+     * present (the then-trailing and elseLeadingLineComment branches below render them in turn). Once a braceless then's
+     * leading comment has bubbled onto the {@code if} line as the condition trailing comment, this branch is the only one
+     * reached, so it must render whichever of the two remaining clusters exist rather than dropping a cluster the dry-run
+     * already recorded as owned here. Each present cluster gets its own line above {@code else}, in source order
+     * (then-trailing first, else-leading second), matching the layout the no-condition-comment branches produce.
+     */
+    private Doc separatorWithThenTrailingAndElseLeading(Doc thenTrailingLineComment, Doc elseLeadingLineComment) {
+        List<Doc> docs = new ArrayList<>();
+        if (thenTrailingLineComment != Doc.EMPTY) {
+            docs.add(Doc.HARD_LINE);
+            docs.add(thenTrailingLineComment);
+        }
+        if (elseLeadingLineComment != Doc.EMPTY) {
+            docs.add(Doc.HARD_LINE);
+            docs.add(elseLeadingLineComment);
+        }
+        docs.add(Doc.HARD_LINE);
+        docs.add(Doc.text("else "));
+        return Doc.concat(docs);
     }
 
     /**

@@ -126,6 +126,9 @@ final class BinaryExpressionPrinter {
         if (!forceBreak && parenthesizedInnerWidth(compact.apply(binaryExpr)) <= options.lineWidth()) {
             return binaryExpression(binaryExpr);
         }
+        if (hasLineComments(binaryExpr)) {
+            return commentAwareLines(binaryExpr, nestedContinuation);
+        }
         List<Expression> operands = new ArrayList<>();
         flattenBinaryExpression(binaryExpr, binaryExpr.getOperator(), operands);
         if (
@@ -517,6 +520,39 @@ final class BinaryExpressionPrinter {
      */
     Doc linesWithComments(BinaryExpr expression) {
         return Doc.join(Doc.HARD_LINE, commentedBinaryLines(expression));
+    }
+
+    /**
+     * Renders the comment-aware broken binary lines for the forced/nested continuation entry points, choosing the join
+     * policy that matches the comment-free {@code lines}/{@code nestedLines} shape it replaces.
+     *
+     * <p>The broken {@code lines(...)} path (taken once the fit branch is ruled out — i.e. the caller forced a break or
+     * the flat shape overflows) builds the comment-<em>stripped</em> layout: it flattens operands and emits one operand
+     * per line without ever consulting {@link #betweenOperandComments(BinaryExpr, Expression, Expression)}. Only the fit
+     * branch routes through {@link #binaryExpression(BinaryExpr)} and its comment gate, so a binary forced to break by a
+     * lambda body or annotation member value (callers that always pass {@code forceBreak}) dropped every between-operand
+     * comment. Routing the broken path through {@link #commentedBinaryLines(BinaryExpr)} here lets all such callers
+     * preserve those comments without each re-checking the gate, the same way the field-initializer and
+     * enclosed-expression callers already do via {@link #linesWithComments(BinaryExpr)}. The check sits after the fit
+     * branch so a flat-fitting binary still delegates to {@link #binaryExpression(BinaryExpr)}, which keeps the
+     * lone-immediate-left line-comment binary on its flat-with-continuation shape unchanged.
+     *
+     * <p>The two forms differ only in indentation: the top-level join ({@link #linesWithComments(BinaryExpr)}) places
+     * every line at the same column, while the nested-continuation form indents every line after the first — mirroring
+     * the comment-free {@code nestedContinuation} branch of {@code lines(...)} and the nested broken sub-chain shape in
+     * {@link #nestedMixedOperatorOperandDoc}.
+     */
+    private Doc commentAwareLines(BinaryExpr expression, boolean nestedContinuation) {
+        if (!nestedContinuation) {
+            return linesWithComments(expression);
+        }
+        List<Doc> commentedLines = commentedBinaryLines(expression);
+        List<Doc> nestedLines = new ArrayList<>();
+        for (int i = 0; i < commentedLines.size(); i++) {
+            Doc line = commentedLines.get(i);
+            nestedLines.add(i == 0 ? line : Doc.indent(Doc.concat(Doc.HARD_LINE, line)));
+        }
+        return Doc.concat(nestedLines);
     }
 
     /**

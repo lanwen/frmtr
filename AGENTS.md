@@ -17,6 +17,9 @@
 - Formatter output regressions should be covered as `frmtr-core/src/test/resources/format/**` fixtures, not inline
   `Frmtr.format(...)` assertions. Keep inline tests for API/debug/error behavior or helper contracts that cannot be
   represented as a full-file formatter fixture.
+- Format fixtures should read like realistic code with meaningful names that hint at the scenario being tested. Don't pad
+  identifiers (e.g. `aaaa`/`Xxxx`/`Yyyy`) just to reach a column; pick realistic domain names whose natural length
+  demonstrates the width/wrapping behavior under test.
 
 ## Pull requests
 

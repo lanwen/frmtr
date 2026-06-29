@@ -310,14 +310,23 @@ final class StatementPrinter {
 
     private Doc breakStatement(BreakStmt statement) {
         Doc leadingBlockComment = comments.ownComment(statement, BlockComment.class::isInstance);
-        String prefix = leadingBlockComment == Doc.EMPTY ? "" : commentText(leadingBlockComment) + " ";
-        return Doc.text(
-            prefix
-                + "break"
+        Doc body = Doc.text(
+            "break"
                 + statement.getLabel().map(label -> " " + label.asString()).orElse("")
                 + ";"
                 + trailingStatementBlockComment(statement)
         );
+        if (leadingBlockComment == Doc.EMPTY) {
+            return body;
+        }
+        // A single-line block comment renders inline as `/* note */ break;`; commentText flattens that Doc.Text to a
+        // string. A multi-line block comment renders as a Doc.Concat that commentText cannot flatten, so place it on its
+        // own line(s) above the statement (the ordinary leading-comment shape) instead of dropping it and leaving a
+        // stray space.
+        if (leadingBlockComment instanceof Doc.Text) {
+            return Doc.concat(Doc.text(commentText(leadingBlockComment) + " "), body);
+        }
+        return Doc.concat(leadingBlockComment, Doc.HARD_LINE, body);
     }
 
     private Doc continueStatement(ContinueStmt statement) {

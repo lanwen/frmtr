@@ -240,6 +240,14 @@ final class MethodCallPrinter {
         }
         if (expression.getScope().filter(this::shouldPrintScopeAsDoc).isPresent()) {
             Expression scope = expression.getScope().orElseThrow();
+            if (scope instanceof TextBlockLiteralExpr) {
+                Optional<Doc> stableTextBlockCall = comments.speculatively(
+                    () -> textBlockScopedArgumentList(scope, expression)
+                );
+                if (stableTextBlockCall.isPresent()) {
+                    return stableTextBlockCall.orElseThrow();
+                }
+            }
             Doc call = methodCallWithoutScope(expression);
             if (scope instanceof TextBlockLiteralExpr) {
                 call = Doc.indent(call);
@@ -480,6 +488,62 @@ final class MethodCallPrinter {
                     .map(typeArguments -> "<" + compactSource.compactJoin(typeArguments) + ">")
                     .orElse("")
             + expression.getNameAsString();
+    }
+
+    /**
+     * Renders {@code """…""".name(arg, …)} with one stable argument indent regardless of whether the source already
+     * broke the argument list.
+     *
+     * <p>A multi-argument text-block-scoped call reaches one of two layouts depending only on the source shape of its
+     * arguments. When the argument list is already source-multiline, a {@code return} routes the call through
+     * {@link #sourceMultilineArguments} (via {@code ReturnExpressionPrinter}'s source-multiline-method-call hook), which
+     * lays the arguments one indent under the statement base with the closing paren on the statement-base column. When the
+     * source keeps the arguments flat, the scope branch instead width-fits {@link #methodCallWithoutScope} inside an extra
+     * {@link Doc#indent(Doc)}, so a width-driven break lands the same arguments one further indent in. The two shapes
+     * disagree by exactly one indent unit, which makes {@code format(format(x)) != format(x)} once a flat call overflows
+     * and the next pass re-reads the now source-multiline arguments. This method makes the flat-source overflow path emit
+     * the same forced one-indent shape {@link #sourceMultilineArguments} produces, so both source shapes converge on the
+     * source-multiline fixed point.
+     *
+     * <p>It intentionally yields ({@link Optional#empty()}) for the layouts the scope branch must keep owning unchanged.
+     * Single-argument calls are left alone: a lone text block, object creation, or method call hugs the opener so its own
+     * body breaks under it, and those shapes are stable across passes because they never take the source-multiline hook;
+     * only a list of two or more arguments drifts. A flat call whose compact closing line still fits stays flat, a
+     * huggable expression lambda keeps its hugged shape, and any contained comments defer to the commented-argument list,
+     * matching the cases {@link #sourceMultilineArguments} also declines so the convergence stays scoped to the plain
+     * breakable multi-argument list that would otherwise drift.
+     */
+    private Optional<Doc> textBlockScopedArgumentList(Expression scope, MethodCallExpr expression) {
+        if (
+            !(scope instanceof TextBlockLiteralExpr textBlockLiteralExpr)
+            || expression.getArguments().size() < 2
+            || !expression.getAllContainedComments().isEmpty()
+            || hasHuggableExpressionLambdaArgument(expression)
+        ) {
+            return Optional.empty();
+        }
+        String selector = methodCallSelector(expression);
+        String literal = unformattedTextBlockRenderer.apply(textBlockLiteralExpr);
+        String closingLine = literal.substring(literal.lastIndexOf('\n') + 1)
+            + "." + selector + "(" + compactSource.compactJoin(expression.getArguments()) + ")";
+        if (closingLine.length() <= options.lineWidth()) {
+            return Optional.empty();
+        }
+        String prefix = methodCallPrefix(expression);
+        return Optional.of(
+            Doc.concat(
+                expressionRenderer.apply(scope),
+                Doc.text("." + selector + "("),
+                Doc.indent(
+                    Doc.concat(
+                        Doc.HARD_LINE,
+                        methodCallArgumentList(prefix, expression.getArguments(), Doc.HARD_LINE)
+                    )
+                ),
+                Doc.HARD_LINE,
+                Doc.text(")")
+            )
+        );
     }
 
     Doc methodCallWithoutScope(MethodCallExpr expression) {

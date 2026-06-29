@@ -368,12 +368,78 @@ final class StatementPrinter {
     private Doc throwStatement(ThrowStmt statement) {
         Expression thrown = statement.getExpression();
         if (thrown instanceof ObjectCreationExpr objectCreation) {
-            return Doc.concat(Doc.text("throw "), objectCreationWithSuffix.apply(objectCreation, ";"));
+            return Doc.concat(
+                Doc.text("throw "),
+                objectCreationWithSuffix.apply(objectCreation, ";"),
+                throwObjectCreationTrailingComment(statement, objectCreation)
+            );
         }
         return Doc.concat(
             Doc.text("throw "),
             expressionWithTailRenderer.render(thrown, ExpressionTail.SEMICOLON, LayoutWidth.LineBudget.BLOCK)
         );
+    }
+
+    /**
+     * Recovers a line comment that trails {@code throw new X(...);} on the statement's end line.
+     *
+     * <p>When the constructor argument list re-wraps one-argument-per-line (because the call exceeds the line width, or
+     * because the source was already multi-line), {@link CommentedExpressionListPrinter} renders the broken list but
+     * deliberately leaves a comment that sits after the completed call to the enclosing syntax — its last-argument gap
+     * keeps {@code call(arg) // note} comments out so chain and statement printers own them. For an
+     * {@code ExpressionStmt} that owner is {@link #expressionStatementTrailingComment(ExpressionStmt)}; the analogous
+     * {@code MethodCallExpr} statement form recovers the same comment through
+     * {@code MethodCallPrinter#finalTrailingLineComments}. A {@code throw new X(...)} had no such recovery, so the
+     * trailing {@code //} comment vanished once the list broke.
+     *
+     * <p>The comment is offered under the throw statement's {@link OwnerSlot#TRAILING} slot and rendered inline as a
+     * {@code lineSuffix} after the {@code ;}, claimed once. JavaParser parks it on a different node depending on the
+     * source shape, so this gathers both shapes the {@link StatementRuleEnvelope}'s own
+     * {@link CommentTracker#trailingLineComment(Node)} (which sees only the {@code ThrowStmt}'s own trivia) misses:
+     *
+     * <ul>
+     *   <li>the original wide {@code throw new X(arg,} / {@code arg); // note} pre-wrap source attaches the comment to
+     *       the last constructor argument's interior node, so it surfaces as a contained line comment of the object
+     *       creation that begins after the whole creation on its end line; and</li>
+     *   <li>after this fix breaks the list, the re-emitted {@code ); // note} closing line re-parses with the comment
+     *       parked as a free orphan of the enclosing block on the statement's end line. Recovering that orphan here too
+     *       (claimed before the block interleaver would place it on its own line) keeps the inline form stable across a
+     *       re-format instead of drifting the comment below {@code );}.</li>
+     * </ul>
+     */
+    private Doc throwObjectCreationTrailingComment(ThrowStmt statement, ObjectCreationExpr objectCreation) {
+        Doc recovered = commentPlacement.containedComments(objectCreation)
+                .stream()
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.startsAfterNodeOnSameLine(objectCreation))
+                .map(comment -> comments.comment(comment, statement, OwnerSlot.TRAILING))
+                .filter(comment -> comment != Doc.EMPTY)
+                .findFirst()
+                .or(() -> throwStatementOrphanTrailingComment(statement))
+                .orElse(Doc.EMPTY);
+        return recovered == Doc.EMPTY ? Doc.EMPTY : Doc.lineSuffix(Doc.concat(Doc.text(" "), recovered));
+    }
+
+    /**
+     * Recovers the throw-statement trailing comment in the re-parse shape where JavaParser leaves it as a free orphan of
+     * the enclosing block, attached to nothing, sitting on the throw statement's end line just after the closing
+     * {@code );}. Claiming it under the throw statement here, before the block's source-order interleaver would emit it
+     * on its own line, is what keeps the inline {@code lineSuffix} placement idempotent.
+     */
+    private Optional<Doc> throwStatementOrphanTrailingComment(ThrowStmt statement) {
+        return statement.getParentNode()
+                .map(commentPlacement::orphanComments)
+                .stream()
+                .flatMap(List::stream)
+                .filter(JavaCommentTrivia::isLine)
+                .filter(comment -> comment.startsAfterNodeOnSameLine(statement))
+                .map(comment -> comments.comment(
+                    comment,
+                    statement,
+                    OwnerSlot.TRAILING
+                ))
+                .filter(comment -> comment != Doc.EMPTY)
+                .findFirst();
     }
 
     private Doc labeledStatement(LabeledStmt statement) {

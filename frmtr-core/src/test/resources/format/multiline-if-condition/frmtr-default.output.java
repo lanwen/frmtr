@@ -111,10 +111,7 @@ class MultilineIfConditionSample {
                 .publishes(
                     MessagePublishFilter.ALL,
                     publish -> {
-                        if (Arrays.equals(
-                                publish.getPayloadAsBytes(),
-                                "modified".getBytes(StandardCharsets.UTF_8)
-                            )) {
+                        if (Arrays.equals(publish.getPayloadAsBytes(), "modified".getBytes(StandardCharsets.UTF_8))) {
                             received.complete(null);
                         } else {
                             received.completeExceptionally(

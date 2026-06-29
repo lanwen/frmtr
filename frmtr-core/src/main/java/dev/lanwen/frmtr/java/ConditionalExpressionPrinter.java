@@ -16,10 +16,13 @@ import com.github.javaparser.ast.stmt.ExpressionStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -374,12 +377,14 @@ final class ConditionalExpressionPrinter {
             expression.getThenExpr(),
             expression.getElseExpr()
         );
-        Map<Region, Comment> byRegion = new EnumMap<>(Region.class);
+        Map<Region, List<Comment>> byRegion = new EnumMap<>(Region.class);
         for (Comment comment : candidates) {
-            byRegion.putIfAbsent(
-                classifyTernaryComment(expression, comment, questionPosition, colonPosition),
-                comment
-            );
+            byRegion
+                .computeIfAbsent(
+                    classifyTernaryComment(expression, comment, questionPosition, colonPosition),
+                    region -> new ArrayList<>()
+                )
+                .add(comment);
         }
         return Optional.of(
             Doc.concat(
@@ -470,10 +475,20 @@ final class ConditionalExpressionPrinter {
         };
     }
 
-    /** Renders a region's claimed comment to a Doc, or {@link Doc#EMPTY} when that region has no comment. */
-    private Doc regionComment(Map<Region, Comment> byRegion, Region region) {
-        Comment comment = byRegion.get(region);
-        return comment == null ? Doc.EMPTY : comments.comment(comment);
+    /**
+     * Renders every comment a region claimed to a Doc, or {@link Doc#EMPTY} when that region has no comment.
+     *
+     * <p>A single region can claim several line comments when the source stacks a multi-line {@code //} block in one slot
+     * (for example a comment block on its own lines before the {@code ?} branch). They are rendered in source order as a
+     * {@link Doc#HARD_LINE}-separated block so no line is dropped; a region with exactly one comment renders that comment
+     * alone, leaving the single-comment placement unchanged.
+     */
+    private Doc regionComment(Map<Region, List<Comment>> byRegion, Region region) {
+        List<Comment> regionComments = byRegion.get(region);
+        if (regionComments == null || regionComments.isEmpty()) {
+            return Doc.EMPTY;
+        }
+        return Doc.join(Doc.HARD_LINE, regionComments.stream().map(comments::comment).toList());
     }
 
     /**
@@ -482,21 +497,33 @@ final class ConditionalExpressionPrinter {
      *
      * <p>Comments from a nested conditional branch are excluded: they are already owned by the inner {@link
      * ConditionalExpr} and would otherwise be classified twice. Each candidate is included once even when it is reachable
-     * through more than one association.
+     * through more than one association. Dedup is by <em>object identity</em> rather than {@code equals}: after a
+     * whitespace collapse JavaParser can attach the <em>same</em> comment instance to two child expressions at once (for
+     * instance both the condition's and the then expression's own comment), and a content-based {@code contains} check
+     * would still admit that single instance twice. A comment claimed twice would render twice and trip the formatter's
+     * duplicate-claim guardrail, so the same node must be collected at most once however many associations reach it.
      */
     private List<Comment> ternaryBranchComments(ConditionalExpr expression) {
         List<Comment> candidates = new ArrayList<>();
-        ternaryOwnComment(expression.getCondition()).ifPresent(candidates::add);
-        ternaryOwnComment(expression.getThenExpr()).ifPresent(candidates::add);
-        ternaryOwnComment(expression.getElseExpr()).ifPresent(candidates::add);
+        Set<Comment> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+        ternaryOwnComment(expression.getCondition()).ifPresent(comment -> addCandidate(candidates, seen, comment));
+        ternaryOwnComment(expression.getThenExpr()).ifPresent(comment -> addCandidate(candidates, seen, comment));
+        ternaryOwnComment(expression.getElseExpr()).ifPresent(comment -> addCandidate(candidates, seen, comment));
         for (Comment orphan : expression.getOrphanComments()) {
-            if (orphan instanceof LineComment && !candidates.contains(orphan)) {
-                candidates.add(orphan);
+            if (orphan instanceof LineComment) {
+                addCandidate(candidates, seen, orphan);
             }
         }
         candidates.removeIf(comment -> belongsToNestedConditional(expression, comment));
         candidates.sort(CommentIndex.sourceOrderComparator());
         return candidates;
+    }
+
+    /** Appends {@code comment} unless that exact instance was already collected, keeping candidates identity-unique. */
+    private void addCandidate(List<Comment> candidates, Set<Comment> seen, Comment comment) {
+        if (seen.add(comment)) {
+            candidates.add(comment);
+        }
     }
 
     private Optional<Comment> ternaryOwnComment(Expression branch) {
@@ -595,6 +622,11 @@ final class ConditionalExpressionPrinter {
      * Prints one commented ternary branch after the surrounding classifier has decided whether the comment belongs
      * before or after the branch expression.
      *
+     * <p>A leading comment renders on its own line(s) <em>before</em> the operator token, matching the source shape where
+     * the comment block sits above the {@code ?} or {@code :}; the operator then leads its operand on the following line.
+     * When a region claimed several stacked line comments they arrive here already joined with {@link Doc#HARD_LINE}, so
+     * the whole block prints above the operator with no line dropped.
+     *
      * <p>A branch can carry both a leading and a trailing comment at once when a whitespace perturbation re-buckets
      * comments onto the branch's line; both are rendered so neither is lost. At the {@code @default} shape a branch never
      * holds both, so this leaves the unperturbed layout untouched while keeping the perturbed shapes comment-complete.
@@ -608,10 +640,9 @@ final class ConditionalExpressionPrinter {
         Doc trailing = trailingComment == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailingComment);
         if (leadingComment != Doc.EMPTY) {
             return Doc.concat(
-                Doc.text(operatorToken + " "),
                 leadingComment,
                 Doc.HARD_LINE,
-                Doc.text("  "),
+                Doc.text(operatorToken + " "),
                 expressionWithoutOwnCommentRenderer.apply(branch),
                 trailing
             );

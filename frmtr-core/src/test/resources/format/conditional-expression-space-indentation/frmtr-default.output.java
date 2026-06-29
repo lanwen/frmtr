@@ -52,20 +52,20 @@ class ConditionalExpression {
 
     void ternaryWithComments() {
         var first = a
-            ? // b
-              b
-            : // c
-              c;
+            // b
+            ? b
+            // c
+            : c;
         var second = a
-            ? // b
-              b
-            : // c
-              c;
+            // b
+            ? b
+            // c
+            : c;
         var third = a
-            ? // b
-              b
-            : // c
-              c;
+            // b
+            ? b
+            // c
+            : c;
         var fourth = a
             ? b // b
             : c; // c

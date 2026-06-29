@@ -596,6 +596,13 @@ final class MethodCallChainPrinter {
                 // caller threads that prefix through {@code firstLineWidth}; measuring with a prefix-blind width here would
                 // keep a chain flat whose real line overflows. {@code firstLineWidth} defaults to {@code lineWidth(lineBudget)},
                 // so prefix-less callers stay byte-identical to the old {@code layoutWidth.line(...)} probe.
+                //
+                // The same channel now also carries NESTING DEPTH: a chain rendered as a wrapped call argument or a
+                // nested initializer (e.g. {@code RetryPlan.create(...).toRetry()} as the argument of {@code .retryWhen(...)})
+                // sits at its enclosing argument list's continuation indentation, deeper than the {@code CURRENT} budget
+                // the AUTO entry assumes. The argument-list caller threads that deeper budget ({@code CONTINUATION}) as
+                // {@code lineBudget}, so {@code firstLineWidth} here measures the chain at its real column and breaks a
+                // chain whose flat line only fits the shallow budget but overflows where it actually renders.
                 && firstLineWidth.applyAsInt(compactSource.compact(expression)) <= options.lineWidth())
             || expression.getScope().isEmpty()
         ) {
@@ -855,6 +862,19 @@ final class MethodCallChainPrinter {
                 if (compactRootWithBrokenSegment.isPresent()) {
                     return compactRootWithBrokenSegment;
                 }
+                // The full chain (compact root plus the attached final segment) overflows at this line position, but the
+                // final segment has no arguments to break (e.g. {@code .toRetry()}/{@code .build()}), so the previous
+                // helper found nothing to wrap. When the root itself carries breakable arguments, break the root's
+                // argument list instead and glue the segment to its close: {@code Type.create(}\n args \n{@code ).toRetry()}.
+                // This is the same shape a source-multiline root already produces below; here it is reached for a flat
+                // source root that only overflows because it renders at a deep nesting column (a wrapped call argument or
+                // nested initializer), the column the caller threads through {@code lineBudget}/{@code firstLineWidth}.
+                Optional<Doc> brokenRootWithAttachedSegment = comments.speculatively(
+                    () -> brokenRootWithAttachedFinalSegment(methodRoot, probeCall, finalSegmentSuffix, lineBudget)
+                );
+                if (brokenRootWithAttachedSegment.isPresent()) {
+                    return brokenRootWithAttachedSegment;
+                }
             }
             Optional<Doc> sourceMultilineRoot =
                 comments.speculatively(() -> this.calls.sourceMultilineArguments(methodRoot));
@@ -956,6 +976,43 @@ final class MethodCallChainPrinter {
             + ")"
             + finalSegmentSuffix;
         return layoutWidth.line(lineBudget, compactLine) > options.lineWidth();
+    }
+
+    /**
+     * Breaks a method-call root's own argument list one argument per line and glues the single final segment to its
+     * closing parenthesis: {@code Type.create(}\n args \n{@code ).toRetry()}.
+     *
+     * <p>Reached when {@link #compactRootFinalSegmentLineOverflows} reports the whole chain over width at its rendered
+     * line position but the final segment has no arguments of its own to wrap ({@code .toRetry()}/{@code .build()}). It
+     * mirrors the shape a source-multiline root produces, but is reached for a flat source root that overflows only
+     * because it renders at a deep nesting column. Returns empty (leaving the existing flat layout) unless the root
+     * carries breakable arguments, is not already source-multiline, has no comments, and its opener {@code Type.create(}
+     * itself fits at {@code lineBudget}, so the broken shape is only chosen when it is both needed and valid.
+     */
+    private Optional<Doc> brokenRootWithAttachedFinalSegment(
+            MethodCallExpr methodRoot,
+            MethodCallExpr call,
+            MethodCallChainTail finalSegmentSuffix,
+            LayoutWidth.LineBudget lineBudget
+    ) {
+        if (
+            methodRoot.getArguments().isEmpty()
+            || !methodRoot.getAllContainedComments().isEmpty()
+            || sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodRoot)
+            || methodCallSegmentHasSourceMultilineBlockLambdaArgument(methodRoot)
+            || methodRoot.getArguments().stream().anyMatch(argument -> argument instanceof LambdaExpr)
+        ) {
+            return Optional.empty();
+        }
+        if (layoutWidth.line(lineBudget, calls.methodCallPrefix(methodRoot) + "(") > options.lineWidth()) {
+            return Optional.empty();
+        }
+        return Optional.of(
+            Doc.concat(
+                calls.brokenMethodCall(methodRoot),
+                methodCallChainSegmentAttachedToRootClose(call, finalSegmentSuffix, lineBudget)
+            )
+        );
     }
 
     private boolean methodCallSegmentHasNoOwnContainedComments(MethodCallExpr expression) {

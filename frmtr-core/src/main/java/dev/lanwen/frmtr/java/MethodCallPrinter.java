@@ -1140,6 +1140,20 @@ final class MethodCallPrinter {
                 return chain.orElseThrow();
             }
         }
+        // A method-call chain argument that fits the top-level chain probe but overflows once placed at this argument
+        // list's continuation indentation must break here rather than emit an over-width flat line. The flat fallbacks
+        // below render the chain through the AUTO chain printer with the CURRENT budget, which is blind to the argument's
+        // real (deeper) column; threading the CONTINUATION budget lets the chain printer's nesting-aware probe (#160/#161)
+        // break the chain at its actual position. A chain that still fits at this depth returns empty and falls through
+        // to the unchanged flat rendering, so non-overflowing arguments stay byte-identical.
+        if (argument instanceof MethodCallExpr methodCall) {
+            Optional<Doc> chain = comments.speculatively(
+                () -> methodCallChain(methodCall, MethodCallBreakMode.AUTO, suffix, LayoutWidth.LineBudget.CONTINUATION)
+            );
+            if (chain.isPresent()) {
+                return chain.orElseThrow();
+            }
+        }
         if (sourceMultilineList) {
             return breakableArguments.sourceMultilineArgument(argument, suffix);
         }

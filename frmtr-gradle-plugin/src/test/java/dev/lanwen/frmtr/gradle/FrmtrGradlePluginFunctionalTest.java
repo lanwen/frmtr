@@ -327,7 +327,7 @@ final class FrmtrGradlePluginFunctionalTest {
     }
 
     @Test
-    void rootPluginAggregatesJavaSubprojectTasks() {
+    void rootPluginDoesNotAutoApplyFrmtrTasksToJavaSubprojects() {
         writeSettings("api", "docs");
         writeBuildFile(
             """
@@ -347,17 +347,20 @@ final class FrmtrGradlePluginFunctionalTest {
         write("docs/build.gradle.kts", "");
         write("api/src/main/java/demo/Api.java", "package demo; class Api{int value;}");
 
-        BuildResult result = gradle("frmtrCheck").buildAndFail();
+        BuildResult apiTasks = gradle(":api:tasks", "--all").build();
+        BuildResult rootCheck = gradle("frmtrCheck").build();
 
-        assertThat(result.task(":api:frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.FAILED);
-        assertThat(result.getOutput())
-                .contains("✗ src/main/java/demo/Api.java")
-                .contains("frmtr found 1 unformatted Java file(s)");
+        assertThat(apiTasks.getOutput())
+                .doesNotContain("frmtrFormat")
+                .doesNotContain("frmtrCheck")
+                .doesNotContain("frmtrJavaFormat")
+                .doesNotContain("frmtrJavaCheck");
+        assertThat(rootCheck.task(":frmtrCheck").getOutcome()).isEqualTo(TaskOutcome.UP_TO_DATE);
     }
 
     @Test
-    void subprojectFrmtrBlockOverridesRootConventions() {
-        writeSettings("api", "service");
+    void explicitlyAppliedSubprojectFrmtrPluginInheritsRootConventions() {
+        writeSettings("api");
         writeBuildFile(
             """
                 plugins {
@@ -378,6 +381,34 @@ final class FrmtrGradlePluginFunctionalTest {
             """
                 plugins {
                     java
+                    id("dev.lanwen.frmtr")
+                }
+                """
+        );
+        write("api/src/main/java/demo/Api.java", "package demo; class Api{int value;}");
+
+        BuildResult inheritedRootConfig = gradle(":api:frmtrCheck").buildAndFail();
+
+        assertThat(inheritedRootConfig.getOutput())
+                .contains("✗ src/main/java/demo/Api.java")
+                .doesNotContain("diff --git");
+    }
+
+    @Test
+    void explicitlyAppliedSubprojectFrmtrBlockOverridesRootConventions() {
+        writeSettings("service");
+        writeBuildFile(
+            """
+                plugins {
+                    id("dev.lanwen.frmtr")
+                }
+
+                frmtr {
+                    check {
+                        print {
+                            diffs = false
+                        }
+                    }
                 }
                 """
         );
@@ -386,6 +417,7 @@ final class FrmtrGradlePluginFunctionalTest {
             """
                 plugins {
                     java
+                    id("dev.lanwen.frmtr")
                 }
 
                 frmtr {
@@ -397,22 +429,86 @@ final class FrmtrGradlePluginFunctionalTest {
                 }
                 """
         );
-        write("api/src/main/java/demo/Api.java", "package demo; class Api{int value;}");
         write("service/src/main/java/demo/Service.java", "package demo; class Service{int value;}");
 
-        BuildResult inheritedRootConfig = gradle(":api:frmtrCheck").buildAndFail();
         BuildResult overriddenModuleConfig = gradle(":service:frmtrCheck").buildAndFail();
 
-        assertThat(inheritedRootConfig.getOutput())
-                .contains("✗ src/main/java/demo/Api.java")
-                .doesNotContain("diff --git");
         assertThat(overriddenModuleConfig.getOutput())
                 .contains("✗ src/main/java/demo/Service.java")
                 .contains("diff --git origin frmtr");
     }
 
     @Test
-    void subprojectCanDisableFrmtrInheritedFromRootPlugin() {
+    void subprojectJavaFiltersReplaceInheritedRootConventionsPerProperty() {
+        writeSettings("service");
+        writeBuildFile(
+            """
+                plugins {
+                    id("dev.lanwen.frmtr")
+                }
+
+                frmtr {
+                    java {
+                        include("**/RootIncluded.java")
+                        exclude("**/RootExcluded.java")
+                    }
+                }
+                """
+        );
+        write(
+            "service/build.gradle.kts",
+            """
+                plugins {
+                    java
+                    id("dev.lanwen.frmtr")
+                }
+
+                frmtr {
+                    java {
+                        include("**/ModuleIncluded.java", "**/RootExcluded.java")
+                        exclude("**/ModuleExcluded.java")
+                    }
+                }
+                """
+        );
+        write("service/src/main/java/demo/RootIncluded.java", "package demo; class RootIncluded{int value;}");
+        write("service/src/main/java/demo/ModuleIncluded.java", "package demo; class ModuleIncluded{int value;}");
+        write("service/src/main/java/demo/RootExcluded.java", "package demo; class RootExcluded{int value;}");
+        write("service/src/main/java/demo/ModuleExcluded.java", "package demo; class ModuleExcluded{int value;}");
+        write("service/src/main/java/demo/Skipped.java", "package demo; class Skipped{int value;}");
+
+        BuildResult result = gradle(":service:frmtrFormat").build();
+
+        assertThat(result.task(":service:frmtrJavaFormat").getOutcome()).isEqualTo(TaskOutcome.SUCCESS);
+        assertThat(read("service/src/main/java/demo/RootIncluded.java"))
+                .isEqualTo("package demo; class RootIncluded{int value;}");
+        assertThat(read("service/src/main/java/demo/ModuleIncluded.java")).isEqualTo(
+            """
+                package demo;
+
+                class ModuleIncluded {
+
+                    int value;
+                }
+                """
+        );
+        assertThat(read("service/src/main/java/demo/RootExcluded.java")).isEqualTo(
+            """
+                package demo;
+
+                class RootExcluded {
+
+                    int value;
+                }
+                """
+        );
+        assertThat(read("service/src/main/java/demo/ModuleExcluded.java"))
+                .isEqualTo("package demo; class ModuleExcluded{int value;}");
+        assertThat(read("service/src/main/java/demo/Skipped.java")).isEqualTo("package demo; class Skipped{int value;}");
+    }
+
+    @Test
+    void explicitlyAppliedSubprojectCanDisableInheritedRootConventions() {
         writeSettings("api");
         writeBuildFile(
             """
@@ -426,6 +522,7 @@ final class FrmtrGradlePluginFunctionalTest {
             """
                 plugins {
                     java
+                    id("dev.lanwen.frmtr")
                 }
 
                 frmtr {
@@ -435,7 +532,7 @@ final class FrmtrGradlePluginFunctionalTest {
         );
         write("api/src/main/java/demo/Api.java", "package demo; class Api{int value;}");
 
-        BuildResult result = gradle("frmtrCheck").build();
+        BuildResult result = gradle(":api:frmtrCheck").build();
 
         assertThat(result.task(":api:frmtrJavaCheck").getOutcome()).isEqualTo(TaskOutcome.SKIPPED);
     }
@@ -452,14 +549,16 @@ final class FrmtrGradlePluginFunctionalTest {
 
                 frmtr {
                     java {
-                        include("**/Included.java")
-                        exclude("**/Excluded.java")
+                        include("**/Included.java", "**/AlsoIncluded.java")
+                        exclude("**/Excluded.java", "**/AlsoExcluded.java")
                     }
                 }
                 """
         );
         write("src/main/java/demo/Included.java", "package demo; class Included{int value;}");
+        write("src/main/java/demo/AlsoIncluded.java", "package demo; class AlsoIncluded{int value;}");
         write("src/main/java/demo/Excluded.java", "package demo; class Excluded{int value;}");
+        write("src/main/java/demo/AlsoExcluded.java", "package demo; class AlsoExcluded{int value;}");
         write("src/main/java/demo/Skipped.java", "package demo; class Skipped{int value;}");
 
         BuildResult result = gradle("frmtrFormat").build();
@@ -475,7 +574,19 @@ final class FrmtrGradlePluginFunctionalTest {
                 }
                 """
         );
+        assertThat(read("src/main/java/demo/AlsoIncluded.java")).isEqualTo(
+            """
+                package demo;
+
+                class AlsoIncluded {
+
+                    int value;
+                }
+                """
+        );
         assertThat(read("src/main/java/demo/Excluded.java")).isEqualTo("package demo; class Excluded{int value;}");
+        assertThat(read("src/main/java/demo/AlsoExcluded.java"))
+                .isEqualTo("package demo; class AlsoExcluded{int value;}");
         assertThat(read("src/main/java/demo/Skipped.java")).isEqualTo("package demo; class Skipped{int value;}");
     }
 

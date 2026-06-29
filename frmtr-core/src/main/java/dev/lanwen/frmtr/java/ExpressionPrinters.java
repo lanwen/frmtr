@@ -21,6 +21,7 @@ import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.type.Type;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.ToIntFunction;
@@ -318,7 +319,23 @@ final class ExpressionPrinters {
             conditionals::conditionalExpression,
             binaries::lines,
             enclosedExpressions::parenthesizedBreak,
-            comments::trailingInitializerCommentsBeforeSemicolon
+            comments::trailingInitializerCommentsBeforeSemicolon,
+            (semicolonOwner, value) -> {
+                List<JavaCommentTrivia> trailing = commentPlacementPolicy
+                        .trailingInitializerCommentsBeforeSemicolon(semicolonOwner, value);
+                return !trailing.isEmpty() && trailing.stream().allMatch(JavaCommentTrivia::isBlock);
+            },
+            (semicolonOwner, value) -> commentPlacementPolicy
+                    .trailingInitializerCommentsBeforeSemicolon(semicolonOwner, value)
+                    .stream()
+                    // One leading space joins each inline trailing comment to the value (" /* note */"); measure the
+                    // comment through the non-claiming renderer so width measurement never consumes the comment.
+                    .mapToInt(trivia -> 1 + inlineCommentWidth(JavaFormatter.commentDoc(trivia)))
+                    .sum(),
+            binaries::hasLineComments,
+            binaries::linesWithComments,
+            binaries::flatLineWithComments,
+            binaries::flatLineWithCommentsWidth
         );
     }
 
@@ -506,6 +523,14 @@ final class ExpressionPrinters {
         return binaries.linesWithComments(expression);
     }
 
+    Optional<Doc> binaryFlatLineWithComments(BinaryExpr expression) {
+        return binaries.flatLineWithComments(expression);
+    }
+
+    int binaryFlatLineWithCommentsWidth(BinaryExpr expression) {
+        return binaries.flatLineWithCommentsWidth(expression);
+    }
+
     Doc binaryLines(Expression expression) {
         return binaries.lines(expression);
     }
@@ -600,5 +625,17 @@ final class ExpressionPrinters {
 
     private int continuationStatementWidth(String text) {
         return context.layoutWidth.continuationStatement(text);
+    }
+
+    /**
+     * Measures the rendered width of a single-line comment doc for the inline trailing-comment fit check, treating any
+     * multi-line comment doc as unbounded so a comment that cannot stay on one line never lets the flat shape be picked.
+     */
+    private static int inlineCommentWidth(Doc doc) {
+        return switch (doc) {
+            case Doc.Text text -> text.value().length();
+            case Doc.Concat concat -> concat.docs().stream().mapToInt(ExpressionPrinters::inlineCommentWidth).sum();
+            default -> Integer.MAX_VALUE / 2;
+        };
     }
 }

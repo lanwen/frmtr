@@ -2,8 +2,8 @@ class WeightTotals {
 
     int summedFootprint() {
         return base // header
-        + base // header
-        + tail;
+            + base // header
+            + tail;
     }
 
     int branchedFootprint(boolean compact) {

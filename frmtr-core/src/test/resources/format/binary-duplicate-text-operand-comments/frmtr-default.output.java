@@ -2,10 +2,10 @@ class WeightTotals {
 
     int summedFootprint() {
         return base // header
-        + (
-            // header
-            tail
-        );
+            + (
+                // header
+                tail
+            );
     }
 
     int plainFootprint() {

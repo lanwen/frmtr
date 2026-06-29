@@ -45,7 +45,33 @@ Explain the user-visible behavior or migration note here.
 ```
 
 Only the text between the markers is copied into `CHANGELOG.md`; omit the markers when the title is enough.
-The PR-title workflow rejects duplicate, unclosed, out-of-order marker pairs and Markdown headings inside the details.
+
+Write the details for an end user reading the changelog, not for a reviewer reading the diff:
+
+- Be concise and concrete about **how the change affects the formatted output**. One or two sentences is usually enough.
+- Do **not** include implementation details, the root cause, or why the old behavior was wrong.
+- Prefer a **minimal before/after snippet** of the visible effect over prose.
+
+For example, prefer:
+
+```text
+A line comment at the start of a braceless `else` body now stays indented inside the body instead of moving above `else`.
+
+Before:
+}
+// note
+else doThing();
+
+After:
+} else
+    // note
+    doThing();
+```
+
+over a paragraph naming which printer changed or how the comment was previously dropped.
+
+The PR-title workflow rejects duplicate, unclosed, out-of-order marker pairs and Markdown headings inside the details
+(so do not start a line with `#`).
 
 ## Release Version Selection
 

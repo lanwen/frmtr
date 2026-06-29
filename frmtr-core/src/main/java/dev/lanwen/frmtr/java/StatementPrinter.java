@@ -1,5 +1,8 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.GeneratedJavaParserConstants;
+import com.github.javaparser.JavaToken;
+import com.github.javaparser.Position;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.BodyDeclaration;
@@ -1365,10 +1368,29 @@ final class StatementPrinter {
         // gap's own (in Doc-construction order, which is what the record-only pre-pass follows), even though it renders
         // after the then branch's `}`. Otherwise a gap line that a collapse re-attached as the then block's own trailing
         // comment would be claimed by the block printer first and render on the `}` line, splitting the block.
+        // A braceless (non-`else if`) else body owns its own leading `//` block through the braceless-body handler
+        // (the same family the then/while/for bodies use), so its leading comments are placed indented under `else`,
+        // not hoisted above the `else` keyword. The separator gap slot below is then bounded to the genuine
+        // then-`}`-to-`else` gap (comments that start before the `else` keyword), and the body block is claimed here so
+        // the two slots never double-own a line. The `else` keyword position is the boundary between the two slots: a
+        // comment before it is a separator comment, one after it leads the body.
+        Optional<Statement> bracelessElse = statement.getElseStmt()
+                .filter(elseStatement -> !elseStatement.isEmptyStmt())
+                .filter(elseStatement -> !elseStatement.isIfStmt())
+                .filter(elseStatement -> !elseStatement.isBlockStmt());
+        Optional<Position> elseKeyword = bracelessElse.isPresent() ? elseKeywordPosition(statement) : Optional.empty();
         Doc elseLeadingLineComment = statement.getElseStmt()
                 .filter(elseStatement -> !elseStatement.isEmptyStmt())
-                .map(elseStatement -> elseLeadingLineComment(statement, elseStatement))
+                .map(elseStatement -> elseLeadingLineComment(statement, elseStatement, elseKeyword))
                 .orElse(Doc.EMPTY);
+        // Render the braceless else body here, in Doc-construction order, before the then branch and the separator, so
+        // the dry-run records its leading `//` block under the else body's leading slot first: a collapse that
+        // re-buckets a body-leading line onto the if orphan pool then cannot let the separator slot reclaim it and split
+        // the block off the body it leads. This is the sole renderer for a braceless else body, so a separator comment
+        // that a collapse re-attaches as the body's own leading trivia does not trip the generic leading-comment body
+        // break in nestedStatement (it stays in the separator slot, the body collapses onto the `else` line).
+        Optional<Doc> bracelessElseBody = bracelessElse
+                .map(elseStatement -> bracelessElseBody(statement, elseStatement, elseKeyword));
         Doc conditionTrailingLineComment = controlConditions.closeParenTrailingLineComment(statement.getCondition());
         Doc betweenThenAndElseBlockComment = blockCommentBetweenThenAndElse(statement);
         docs.add(ifCondition(statement));
@@ -1408,11 +1430,18 @@ final class StatementPrinter {
                             elseLeadingBlockComment
                         )
                     );
-                    docs.add(
-                        elseStatement.isIfStmt()
-                            ? statementRenderer.format(elseStatement)
-                            : nestedStatement(elseStatement)
-                    );
+                    if (bracelessElseBody.isPresent()) {
+                        // A braceless (non-`else if`) else body is rendered entirely by bracelessElseBody (computed
+                        // above): it breaks and indents the body when an after-`else` leading `//` block is present and
+                        // otherwise collapses the body onto the `else` line, claiming the leading block exactly once.
+                        docs.add(bracelessElseBody.orElseThrow());
+                    } else {
+                        docs.add(
+                            elseStatement.isIfStmt()
+                                ? statementRenderer.format(elseStatement)
+                                : nestedStatement(elseStatement)
+                        );
+                    }
                     if (elseTrailingLineComment != Doc.EMPTY) {
                         docs.add(Doc.text(" "));
                         docs.add(elseTrailingLineComment);
@@ -1439,14 +1468,105 @@ final class StatementPrinter {
      * {@link JavaCommentPlacementPolicy#gapLeadingLineCommentBlock(Node, Node, java.util.Collection)}) so it renders once,
      * together, above {@code else}, and the nested {@code else if} can no longer reclaim a leading line. At
      * {@code @default} the block is a single contiguous run, so this renders the same lines in the same order.
+     *
+     * <p>{@code elseKeywordUpperBound}, when present, restricts this slot to the genuine separator gap — comments that
+     * start before the {@code else} keyword ({@code } // note\nelse}). It is supplied only for a braceless (non-{@code
+     * else if}) else body, whose own leading {@code //} block lives <em>after</em> the {@code else} keyword and is owned
+     * by {@link #bracelessElseBody(IfStmt, Statement, java.util.Optional)} instead. For an {@code else if} or a block
+     * else the bound is absent and this keeps recovering the whole gap block as before, so the #115 rotation fix and the
+     * block-else separator placement are unchanged.
      */
-    private Doc elseLeadingLineComment(IfStmt statement, Statement elseStatement) {
+    private Doc elseLeadingLineComment(IfStmt statement, Statement elseStatement, Optional<Position> elseKeywordUpperBound) {
         return comments.gapLeadingLineCommentBlock(
             statement,
             statement.getThenStmt(),
             elseStatement,
-            List.of(statement)
+            List.of(statement),
+            elseKeywordUpperBound
         );
+    }
+
+    /**
+     * Renders a braceless (non-{@code else if}) else body that carries a leading {@code //} block, claiming each line of
+     * that block exactly once under the else body's leading slot and placing it indented under {@code else}, above the
+     * body statement.
+     *
+     * <p>This is the else-body counterpart of {@link #bracelessLoopBody(Node, Node, Statement)}: a braceless else body
+     * normally collapses onto the {@code else} line ({@code else return 2;}), but a leading line comment cannot share
+     * that line without commenting out the body, so the body breaks to an indented next line with the comment kept above
+     * it. The leading block lives in the gap between the {@code else} keyword and the body, but JavaParser splits it: the
+     * line directly above the body is the body's own leading trivia (rendered by {@link #statementRenderer}); earlier
+     * lines re-bucket onto the enclosing {@code if}'s orphan pool or the then branch under whitespace perturbation. We
+     * recover the re-bucketed lines from those buckets through {@link JavaCommentPlacementPolicy#gapLineCommentsBefore},
+     * bounded to comments that start <em>after</em> the {@code else} keyword so a genuine then-{@code }}-to-{@code else}
+     * separator comment (owned by {@link #elseLeadingLineComment}) is never pulled into the body. Each recovered line is
+     * claimed once under the body's leading slot — the same slot the body renderer would claim its own line in — so the
+     * whole block is neither dropped under perturbation nor double-printed at {@code @default}.
+     *
+     * <p>This is the sole renderer for a braceless else body. When no after-{@code else} leading line comment is present
+     * it returns the body collapsed onto the {@code else} line, exactly as {@link #nestedStatement(Statement)} would, so
+     * a separator comment that a collapse re-attaches as the body's own leading trivia (it belongs to
+     * {@link #elseLeadingLineComment}, not the body) does not trip the generic leading-comment body break in
+     * {@link #nestedStatement(Statement)} on a later pass.
+     */
+    private Doc bracelessElseBody(IfStmt statement, Statement elseStatement, Optional<Position> elseKeyword) {
+        List<JavaCommentTrivia> aboveBodyComments = commentPlacement
+                .gapLineCommentsBefore(statement.getThenStmt(), elseStatement, List.of(statement, statement.getThenStmt()))
+                .stream()
+                .filter(trivia -> elseKeyword.map(position -> CommentIndex.startsAfter(trivia.comment(), position))
+                        .orElse(true))
+                .toList();
+        // The body's own leading comment counts only when it sits after the `else` keyword. A collapse can re-attach a
+        // genuine separator comment (one written before `else`) onto the else statement as its own leading trivia; that
+        // comment belongs to the separator slot, not the body, so the else-keyword bound keeps it from triggering a
+        // body break here.
+        boolean bodyOwnsLeadingLineComment = commentPlacement.leadingComment(elseStatement)
+                .filter(JavaCommentTrivia::isLine)
+                .filter(trivia -> !trivia.startsAfterEndOf(elseStatement))
+                .filter(trivia -> elseKeyword.map(position -> CommentIndex.startsAfter(trivia.comment(), position))
+                        .orElse(true))
+                .isPresent();
+        if (aboveBodyComments.isEmpty() && !bodyOwnsLeadingLineComment) {
+            return statementRenderer.format(elseStatement);
+        }
+        List<Doc> indented = new ArrayList<>();
+        indented.add(Doc.HARD_LINE);
+        for (JavaCommentTrivia aboveComment : aboveBodyComments) {
+            Doc rendered = comments.comment(aboveComment, elseStatement, OwnerSlot.LEADING);
+            if (rendered == Doc.EMPTY) {
+                continue;
+            }
+            indented.add(rendered);
+            indented.add(Doc.HARD_LINE);
+        }
+        indented.add(statementRenderer.format(elseStatement));
+        return Doc.indent(Doc.concat(indented));
+    }
+
+    /**
+     * Locates the source position of the {@code else} keyword that follows the then branch, scanning the {@code if}
+     * statement's token range for the {@code ELSE} token whose position is after the then branch ends.
+     *
+     * <p>The {@code else} keyword has no AST node of its own, so callers that must classify a comment as a separator
+     * (before {@code else}) or an else-body leading comment (after {@code else}) read its token position directly, the
+     * same way {@link ConditionalExpressionPrinter} reads the {@code ?}/{@code :} token positions. Returns
+     * {@link Optional#empty()} when the token range is unavailable, in which case callers fall back to treating the whole
+     * gap as the separator (the pre-existing behavior).
+     */
+    private Optional<Position> elseKeywordPosition(IfStmt statement) {
+        Optional<Position> thenEnd = statement.getThenStmt().getRange().map(range -> range.end);
+        return statement.getTokenRange().flatMap(tokenRange -> {
+            for (JavaToken token : tokenRange) {
+                if (token.getKind() != GeneratedJavaParserConstants.ELSE) {
+                    continue;
+                }
+                Optional<Position> tokenStart = token.getRange().map(range -> range.begin);
+                if (tokenStart.isPresent() && thenEnd.map(end -> tokenStart.orElseThrow().isAfter(end)).orElse(true)) {
+                    return tokenStart;
+                }
+            }
+            return Optional.empty();
+        });
     }
 
     /**

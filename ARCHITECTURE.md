@@ -490,10 +490,16 @@ The Gradle plugin is the build-tool adapter over the same formatter API and tool
 documents the plugin ID, task names, and DSL options; architecturally, the plugin owns Gradle model wiring, task
 registration, source-set discovery, incremental input declarations, cache semantics, and Gradle-native diagnostics.
 
-Applying the plugin creates project-local aggregate tasks and an extension. In multi-project builds, root application
-recursively applies the plugin to child projects so every module gets its own extension and aggregate tasks, while root
-aggregates depend on Java-capable child aggregates. Child extension values inherit parent conventions until a child sets
-its own value, and disabling a child keeps aggregation intact while skipping that child's Java formatter tasks.
+Applying the plugin creates project-local aggregate tasks and an extension only for that project. `frmtrCheck` and
+`frmtrFormat` are local lifecycle tasks over formatter tasks registered in the same project; they do not recursively
+apply the plugin to child projects and do not declare root aggregate dependencies on child tasks.
+
+Multi-project execution relies on Gradle's normal task-selector behavior. When several projects explicitly apply the
+plugin, running a selector such as `frmtrCheck` from the root schedules each matching project-local task, and
+`--continue` lets independent modules report their own failures. A root `apply false` declaration only centralizes plugin
+classpath and version. Parent extension values provide conventions only when the parent actually applies frmtr and a
+child explicitly applies frmtr after that extension exists; child values override those conventions, and inheritance does
+not imply root aggregation or automatic child participation.
 
 When the Gradle Java plugin is present, Java formatting is enabled by convention. The plugin builds one canonical file
 collection from Java source sets plus Gradle-style include/exclude filters, de-duplicates normalized paths, excludes the

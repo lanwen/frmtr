@@ -64,9 +64,98 @@ Available tasks:
 `frmtrJavaCheck` is cacheable and uses Gradle incremental source changes. `frmtrJavaFormat` remains
 non-cacheable because it rewrites source files in place.
 
-In a multi-project build, apply the plugin to the root project to register frmtr in Java subprojects too. Root
-`frmtrCheck` and `frmtrFormat` aggregate Java-capable modules, and each module can override inherited root
-configuration with its own `frmtr {}` block. Use `frmtr { enabled = false }` in a module to opt it out.
+In a multi-project build, apply frmtr to each project that should run it. A root `apply false` declaration can keep the
+plugin version central, while normal Gradle plugin application controls which modules participate:
+
+```kotlin
+plugins {
+    id("dev.lanwen.frmtr") apply false
+}
+
+subprojects {
+    pluginManager.withPlugin("java") {
+        pluginManager.apply("dev.lanwen.frmtr")
+    }
+}
+```
+
+To set shared frmtr defaults, apply the plugin to the root project too. Subprojects that apply frmtr after the root
+extension exists inherit root `frmtr {}` values as conventions:
+
+```kotlin
+plugins {
+    id("dev.lanwen.frmtr")
+}
+
+frmtr {
+    java {
+        exclude("**/generated/**")
+    }
+}
+
+subprojects {
+    pluginManager.withPlugin("java") {
+        pluginManager.apply("dev.lanwen.frmtr")
+    }
+}
+```
+
+Each participating project gets its own local `frmtrCheck` and `frmtrFormat` tasks. From the root, Gradle task selectors
+such as `./gradlew frmtrCheck` run matching tasks across projects; use `./gradlew frmtrCheck --continue` to check
+independent modules even after one module fails. A module can override inherited conventions or use
+`frmtr { enabled = false }` to opt out.
+
+Inherited include and exclude filters are conventions, not merged base lists. If a module defines its own `include(...)`,
+that module's include list replaces the inherited include list; `exclude(...)` works the same way independently. For
+example, if the root has:
+
+```kotlin
+frmtr {
+    java {
+        include("**/api/**/*.java")
+        exclude("**/generated/**")
+    }
+}
+```
+
+and a module has:
+
+```kotlin
+frmtr {
+    java {
+        include("**/service/**/*.java")
+        exclude("**/legacy/**")
+    }
+}
+```
+
+then that module checks only `**/service/**/*.java` and excludes only `**/legacy/**`. To keep both root and module
+filters, repeat both:
+
+```kotlin
+frmtr {
+    java {
+        include("**/api/**/*.java", "**/service/**/*.java")
+        exclude("**/generated/**", "**/legacy/**")
+    }
+}
+```
+
+Explicit module application is idempotent when the subproject hook also applies frmtr, and useful when module-specific
+Kotlin DSL configuration needs type-safe accessors. The module `frmtr {}` block overrides inherited root conventions:
+
+```kotlin
+plugins {
+    java
+    id("dev.lanwen.frmtr")
+}
+
+frmtr {
+    java {
+        exclude("**/generated/**")
+    }
+}
+```
 
 Optional configuration narrows Java source-set selection and check output:
 
@@ -76,8 +165,8 @@ import dev.lanwen.frmtr.gradle.FrmtrJavaLanguageLevel
 frmtr {
     enabled = true
     java {
-        include("**/*.java")
-        exclude("**/generated/**")
+        include("**/api/**/*.java", "**/service/**/*.java")
+        exclude("**/generated/**", "**/legacy/**")
         languageLevel = FrmtrJavaLanguageLevel.LATEST_AVAILABLE
     }
     check {
@@ -88,6 +177,7 @@ frmtr {
 }
 ```
 
+Java source include and exclude patterns use Gradle source-set filtering, so paths are relative to Java source roots.
 Java source files under the Gradle build directory are excluded by default. The Gradle parser language level defaults to `AUTO`, which uses the Java toolchain first, then `sourceCompatibility`, and otherwise falls back to `LATEST_AVAILABLE`. Set `LATEST_AVAILABLE` to ignore the Gradle project target and use JavaParser's bleeding-edge parser mode, or `UNDEFINED` for JavaParser raw mode. Check output prints changed and failed files; unified diffs for changed files are enabled by default and label sides as `origin` and `frmtr`. When files fail, Gradle renders outlined failure blocks with JavaParser source context when available before failing the task.
 
 To format this checkout with the current formatter implementation, use the root CLI wrapper tasks:

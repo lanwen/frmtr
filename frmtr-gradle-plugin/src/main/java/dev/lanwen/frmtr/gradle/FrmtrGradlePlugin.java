@@ -38,10 +38,6 @@ public final class FrmtrGradlePlugin implements Plugin<Project> {
         project.getTasks().named(LifecycleBasePlugin.CHECK_TASK_NAME).configure(task -> task.dependsOn(check));
 
         project.getPlugins().withType(JavaPlugin.class, plugin -> configureJava(project, extension, format, check));
-
-        if (project == project.getRootProject()) {
-            configureSubprojects(project, format, check);
-        }
     }
 
     private static void inheritParentConventions(Project project, FrmtrExtension extension) {
@@ -60,23 +56,6 @@ public final class FrmtrGradlePlugin implements Plugin<Project> {
         extension.getJava().getLineWidth().convention(parentExtension.getJava().getLineWidth());
         extension.getJava().getLanguageLevel().convention(parentExtension.getJava().getLanguageLevel());
         extension.getCheck().getPrint().getDiffs().convention(parentExtension.getCheck().getPrint().getDiffs());
-    }
-
-    private static void configureSubprojects(
-            Project project,
-            TaskProvider<Task> rootFormat,
-            TaskProvider<Task> rootCheck
-    ) {
-        for (Project subproject : project.getChildProjects().values()) {
-            subproject.getPluginManager().apply(FrmtrGradlePlugin.class);
-            subproject
-                    .getPlugins()
-                    .withType(JavaPlugin.class, plugin -> {
-                        rootFormat.configure(task -> task.dependsOn(subproject.getTasks().named("frmtrFormat")));
-                        rootCheck.configure(task -> task.dependsOn(subproject.getTasks().named("frmtrCheck")));
-                    });
-            configureSubprojects(subproject, rootFormat, rootCheck);
-        }
     }
 
     private static void configureJava(

@@ -377,7 +377,14 @@ is already emitted verbatim from its raw token text.
 Complex Java layout rules are factored into dedicated helpers rather than embedded in broad dispatchers. `LayoutWidth`
 centralizes indentation baselines for width probes, source-shape helpers preserve meaningful existing multiline forms,
 initializer helpers coordinate declaration-local wrapping, and chain helpers keep method-call source planning out of
-ordinary argument dispatch. A per-run `SourceShapePolicy` on `JavaFormatContext` is the consolidating home for
+ordinary argument dispatch. When a construct shares its first line with a prefix that the construct cannot see — an
+assignment `target op `, a declarator `name = ` — the caller threads that prefix into the construct's width probe as a
+`firstLineWidth` closure rather than measuring the bare construct at the block indent. The method-call chain stay-flat
+gate (`MethodCallChainPrinter`) measures with that in-scope `firstLineWidth` (defaulting to the prefix-blind
+`lineWidth(lineBudget)` for prefix-less callers), and both the assignment value path (`MethodCallPrinter`'s broken
+method-call assignment) and the variable initializer path (`VariableInitializerLayout`) build the prefix-aware closure,
+so a chain that fits at the block indent but overflows once the assignment/initializer prefix is counted breaks instead
+of being emitted flat over width. A per-run `SourceShapePolicy` on `JavaFormatContext` is the consolidating home for
 "should the formatter respect the author's source shape here?" decisions, so printers ask one named question instead of
 re-deriving those reads from raw token text or `getRange()` arithmetic. It owns one canonical definition of each
 source-shape decision:

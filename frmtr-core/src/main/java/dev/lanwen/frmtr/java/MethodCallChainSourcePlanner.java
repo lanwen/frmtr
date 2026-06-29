@@ -32,6 +32,8 @@ final class MethodCallChainSourcePlanner {
 
     private final SourceShapePolicy sourceShapePolicy;
 
+    private final SourceText sourceText;
+
     private final FormatterOptions options;
 
     private final ToIntFunction<String> currentIndentedWidth;
@@ -40,6 +42,7 @@ final class MethodCallChainSourcePlanner {
         this.objectCreationLayoutPolicy = context.objectCreationLayoutPolicy;
         this.compactSource = context.compactSource;
         this.sourceShapePolicy = context.sourceShapePolicy;
+        this.sourceText = context.sourceText;
         this.options = context.options;
         this.currentIndentedWidth = currentIndentedWidth;
     }
@@ -154,7 +157,8 @@ final class MethodCallChainSourcePlanner {
     ) {
         List<MethodCallExpr> calls = new ArrayList<>();
         Expression root = methodCallChainRoot(expression, calls);
-        boolean rootHasComments = sourceShapePolicy.hasContainedComments(root);
+        boolean rootHasComments = sourceShapePolicy.hasContainedComments(root)
+            || rootToFirstSelectorGapHasBlockComment(root, calls);
         boolean rootHasBlockLambdaArgument = root instanceof MethodCallExpr methodRoot
             && segmentHasBlockLambdaArgument.test(methodRoot);
         boolean hasTrailingLineComments = chainHasTrailingLineComments.test(calls);
@@ -294,6 +298,35 @@ final class MethodCallChainSourcePlanner {
                     .map(MethodCallExpr::getScope)
                     .flatMap(Optional::stream)
                     .anyMatch(this::promotesFirstCall);
+    }
+
+    /**
+     * Detects a block comment parked in the source gap between the chain root and its first selector, for example
+     * {@code root.create() /* doc *}{@code / .seal()}.
+     *
+     * <p>The chain stay-flat gate guards on {@link MethodCallChainAnalysis#hasComments()}, which is built from
+     * {@link SourceShapePolicy#hasContainedComments(Node)} on each parsed node. JavaParser does not attach a comment in
+     * the root-to-first-selector gap to either the root or the first selector reliably (it can be parked as an orphan of
+     * the enclosing statement), so {@code hasContainedComments} misses it. Left undetected, the gate keeps the chain flat
+     * and the comment is dropped or its leading space is mangled. We therefore slice the source between the root's end and
+     * the first selector's name and look for {@code /*}; a hit folds into {@code rootHasComments} so the gate forces the
+     * chain off the stay-flat path, where the comment-aware chain renderer preserves it. Keying on the raw source slice
+     * (the same technique as {@code AssignmentExpressionPrinter.gapBlockComment} and
+     * {@code ControlConditionPrinter.rawTrailingLineCommentText}) keeps the comment owned regardless of which AST node
+     * JavaParser happened to bucket it under.
+     */
+    private boolean rootToFirstSelectorGapHasBlockComment(Expression root, List<MethodCallExpr> calls) {
+        if (calls.isEmpty()) {
+            return false;
+        }
+        return root.getRange()
+                .flatMap(rootRange -> calls.getFirst()
+                            .getName()
+                            .getRange()
+                            .map(selectorRange -> sourceText.sliceBetween(rootRange, selectorRange))
+                )
+                .filter(gap -> gap.contains("/*"))
+                .isPresent();
     }
 
     Expression methodCallChainRoot(MethodCallExpr expression, List<MethodCallExpr> calls) {

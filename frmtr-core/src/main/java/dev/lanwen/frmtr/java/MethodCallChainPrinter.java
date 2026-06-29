@@ -591,7 +591,12 @@ final class MethodCallChainPrinter {
                 && !analysis.sourceMultilineChain()
                 && !sourceMultilineArguments
                 && !rootObjectCreationNeedsBreak
-                && layoutWidth.line(lineBudget, compactSource.compact(expression)) <= options.lineWidth())
+                // The stay-flat probe must measure the chain at the same line position it will actually occupy. When the
+                // chain shares its line with a prefix (an assignment target plus operator, an initializer name, etc.) the
+                // caller threads that prefix through {@code firstLineWidth}; measuring with a prefix-blind width here would
+                // keep a chain flat whose real line overflows. {@code firstLineWidth} defaults to {@code lineWidth(lineBudget)},
+                // so prefix-less callers stay byte-identical to the old {@code layoutWidth.line(...)} probe.
+                && firstLineWidth.applyAsInt(compactSource.compact(expression)) <= options.lineWidth())
             || expression.getScope().isEmpty()
         ) {
             return Optional.empty();
@@ -662,6 +667,21 @@ final class MethodCallChainPrinter {
             // ({@code lookup(a)// c1}); a scope-rooted chain already avoids this because its segments go one-per-line, so
             // route the single-segment case the same way once the segment carries a leading comment.
             if (methodCallSegmentHasLeadingLineComment(calls.getFirst())) {
+                return Optional.of(
+                    Doc.concat(
+                        rootDoc,
+                        chainContinuation(methodCallChainSegment(calls.getFirst(), finalSegmentSuffix))
+                    )
+                );
+            }
+            // A block comment parked in the gap between a method-call root and its only selector
+            // ({@code create() /* doc *}{@code / .seal()}) is missed by the stay-flat gate's contained-comment scan, so
+            // the chain reaches this single-segment branch. Gluing the segment to the root close
+            // ({@code methodCallChainSegmentAttachedToRootClose}) renders it flat and drops the source space before the
+            // comment ({@code create()/* doc *}{@code / .seal()}). Route it through the breaking continuation instead, the
+            // same escape the leading-line-comment case uses, so the selector's own segment prefix re-emits the comment
+            // with its space on its own continuation line. Other single-segment method roots keep the attached-flat shape.
+            if (methodCallSegmentHasLeadingGapBlockComment(methodRoot, calls.getFirst())) {
                 return Optional.of(
                     Doc.concat(
                         rootDoc,
@@ -1937,6 +1957,31 @@ final class MethodCallChainPrinter {
 
     private boolean methodCallSegmentHasLineComments(MethodCallExpr expression) {
         return commentedExpressionLists.hasLineComments(expression, expression.getArguments());
+    }
+
+    /**
+     * Reports whether the only selector of a method-call-rooted chain carries a block comment parked in the gap between
+     * the root and the selector, for example {@code create() /* doc *}{@code / .seal()}.
+     *
+     * <p>JavaParser attaches such a gap block comment to the selector's name (see {@code methodCallSegmentPrefix}), so the
+     * stay-flat gate's contained-comment scan on the root misses it and the chain reaches the single-segment branch. This
+     * predicate lets that branch break the segment onto its own continuation line, where the segment prefix re-emits the
+     * comment with its source space, instead of gluing it flat and dropping the space. It deliberately accepts only a
+     * block (or Javadoc) comment that starts after the root ends and before the selector name so an ordinary leading
+     * comment already handled elsewhere, or a comment that belongs to the root, is not re-claimed here.
+     */
+    private boolean methodCallSegmentHasLeadingGapBlockComment(Expression root, MethodCallExpr segment) {
+        return segment.getName()
+                .getComment()
+                .filter(comment -> comment instanceof BlockComment || comment instanceof JavadocComment)
+                .filter(comment -> CommentIndex.startsBefore(comment, segment.getName()))
+                .filter(comment -> root.getRange()
+                            .flatMap(rootRange -> comment.getRange()
+                                        .map(commentRange -> commentRange.begin.isAfter(rootRange.end))
+                            )
+                            .orElse(false)
+                )
+                .isPresent();
     }
 
     private boolean methodCallSegmentHasNameComment(MethodCallExpr expression) {

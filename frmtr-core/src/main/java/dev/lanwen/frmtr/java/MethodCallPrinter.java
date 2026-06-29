@@ -1299,37 +1299,48 @@ final class MethodCallPrinter {
             MethodCallExpr methodCall,
             String finalSegmentSuffix
     ) {
-        if (methodCall.getArguments().isEmpty() || !methodCall.getAllContainedComments().isEmpty()) {
-            return Optional.empty();
-        }
+        // The assignment knows the prefix that shares the value's first line ({@code target op }); a method-chain value
+        // must measure its stay-flat width against that prefix, not against the bare block indent. This mirrors
+        // VariableInitializerLayout.firstLineWidth, which threads {@code name = } into the chain so a chain that only
+        // overflows once the prefix is counted breaks instead of being emitted flat over width.
+        String assignmentPrefix = compactSource.compact(assignExpr.getTarget())
+            + " "
+            + assignExpr.getOperator().asString()
+            + " ";
+        ToIntFunction<String> prefixedFirstLineWidth = text -> blockStatementWidth.applyAsInt(assignmentPrefix + text);
         if (methodCallChainIsSourceMultiline(methodCall)) {
-            String assignmentPrefix = compactSource.compact(assignExpr.getTarget())
-                + " "
-                + assignExpr.getOperator().asString()
-                + " ";
             Optional<Doc> chain = methodCallChain(
                 methodCall,
                 MethodCallBreakMode.FORCED,
                 finalSegmentSuffix,
                 LayoutWidth.LineBudget.BLOCK,
-                text -> blockStatementWidth.applyAsInt(assignmentPrefix + text)
+                prefixedFirstLineWidth
             );
             if (chain.isPresent()) {
-                return Optional.of(
-                    Doc.concat(
-                        expressionRenderer.apply(assignExpr.getTarget()),
-                        Doc.text(" " + assignExpr.getOperator().asString() + " "),
-                        chain.orElseThrow()
-                    )
-                );
+                return assignmentValueChain(assignExpr, chain.orElseThrow());
             }
         }
-        String firstLine = compactSource.compact(assignExpr.getTarget())
-            + " "
-            + assignExpr.getOperator().asString()
-            + " "
-            + methodCallPrefix(methodCall)
-            + "(";
+        // A single-line source chain whose flat statement only overflows once the assignment prefix is counted (for
+        // example {@code routeTable = new X().setName(...).seal().commit().go();} at 121 columns under a 120-column
+        // budget) reaches here even when its final segment takes no arguments, so the empty-argument early return below
+        // would otherwise strand it flat over width. Route a genuinely breakable multi-segment chain through the
+        // prefix-aware forced chain first; the chain gate keeps a fitting chain flat, so a short value is unaffected.
+        if (prefixedFirstLineWidth.applyAsInt(compactSource.compact(methodCall) + finalSegmentSuffix) > options.lineWidth()) {
+            Optional<Doc> chain = methodCallChain(
+                methodCall,
+                MethodCallBreakMode.FORCED,
+                finalSegmentSuffix,
+                LayoutWidth.LineBudget.BLOCK,
+                prefixedFirstLineWidth
+            );
+            if (chain.isPresent()) {
+                return assignmentValueChain(assignExpr, chain.orElseThrow());
+            }
+        }
+        if (methodCall.getArguments().isEmpty() || !methodCall.getAllContainedComments().isEmpty()) {
+            return Optional.empty();
+        }
+        String firstLine = assignmentPrefix + methodCallPrefix(methodCall) + "(";
         if (blockStatementWidth.applyAsInt(firstLine) > options.lineWidth()) {
             return Optional.empty();
         }
@@ -1339,6 +1350,16 @@ final class MethodCallPrinter {
                 Doc.text(" " + assignExpr.getOperator().asString() + " "),
                 brokenMethodCall(methodCall),
                 Doc.text(finalSegmentSuffix)
+            )
+        );
+    }
+
+    private Optional<Doc> assignmentValueChain(AssignExpr assignExpr, Doc chain) {
+        return Optional.of(
+            Doc.concat(
+                expressionRenderer.apply(assignExpr.getTarget()),
+                Doc.text(" " + assignExpr.getOperator().asString() + " "),
+                chain
             )
         );
     }

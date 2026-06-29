@@ -20,7 +20,8 @@
   var dots = [].slice.call(root.querySelectorAll(".ex-dot"));
   var prevBtn = root.querySelector(".ex-prev");
   var nextBtn = root.querySelector(".ex-next");
-  var card = root.querySelector(".ex-card");
+  var framesBox = root.querySelector(".ex-frames");
+  var titleEl = root.querySelector(".ex-title");
   var count = frames.length;
   if (!count) return;
 
@@ -31,12 +32,20 @@
     return dot ? dot.querySelector(".ring-progress") : null;
   }
 
-  // The frames are absolutely positioned, so the card needs an explicit height.
-  // Tracking the active frame keeps a short example from reserving the tallest
-  // one's height (which had pushed the hero past one screen); .ex-card eases the
-  // change in CSS.
-  function syncCardHeight() {
-    if (card && frames[index]) card.style.height = frames[index].offsetHeight + "px";
+  // Natural height of the active frame's currently-visible code variant (the
+  // hidden Kotlin/Groovy variant measures 0).
+  function activeContentHeight() {
+    var pres = frames[index].querySelectorAll(".ex-code");
+    var max = 0;
+    for (var i = 0; i < pres.length; i++) max = Math.max(max, pres[i].offsetHeight);
+    return max;
+  }
+
+  // The code area tracks the active example (and Kotlin/Groovy variant) so a
+  // short example doesn't reserve a tall one's height; .ex-frames eases the
+  // change in CSS. Examples are sized to fit a single screen on their own.
+  function syncFramesHeight() {
+    if (framesBox && frames[index]) framesBox.style.height = activeContentHeight() + "px";
   }
 
   function render(restartRing) {
@@ -48,7 +57,8 @@
         dots[i].setAttribute("aria-selected", on ? "true" : "false");
       }
     }
-    syncCardHeight();
+    if (titleEl && frames[index]) titleEl.textContent = frames[index].getAttribute("data-title") || "";
+    syncFramesHeight();
     if (restartRing) {
       var progress = activeProgress();
       if (progress) {
@@ -94,11 +104,16 @@
     radio.addEventListener("change", syncTabVisibility);
   });
 
+  // Switching Kotlin/Groovy changes the visible code, hence the frame height.
+  [].slice.call(root.querySelectorAll(".flavor-radio")).forEach(function (radio) {
+    radio.addEventListener("change", syncFramesHeight);
+  });
+
   // Re-measure when wrapping changes (resize) or the code font finishes loading,
   // since either shifts the active frame's natural height.
-  window.addEventListener("resize", syncCardHeight);
+  window.addEventListener("resize", syncFramesHeight);
   if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(syncCardHeight);
+    document.fonts.ready.then(syncFramesHeight);
   }
 
   render(true);

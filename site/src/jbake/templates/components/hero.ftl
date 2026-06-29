@@ -31,10 +31,19 @@
               <div class="qs-right">
                 <div class="qs-panel qs-p-gradle" data-ex-carousel>
                   <div class="ex-card">
+                    <div class="ex-topbar">
+                      <span class="win-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                      <span class="ex-title">Single-module</span>
+                      <div class="ex-flavor" role="radiogroup" aria-label="Gradle DSL">
+                        <input class="flavor-radio" type="radio" name="gradle-flavor" id="flavor-kotlin" checked>
+                        <input class="flavor-radio" type="radio" name="gradle-flavor" id="flavor-groovy">
+                        <label class="flavor-opt" for="flavor-kotlin">Kotlin</label>
+                        <label class="flavor-opt" for="flavor-groovy">Groovy</label>
+                      </div>
+                    </div>
                     <div class="ex-frames">
-                      <div class="ex-frame is-active" role="group" aria-label="Single-module">
-                        <div class="ex-titlebar"><span class="win-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="ex-title">Single-module</span></div>
-                        <pre><code><span class="cl"><span class="tok-comment">// build.gradle.kts</span></span>
+                      <div class="ex-frame is-active" role="group" aria-label="Single-module" data-title="Single-module">
+                        <pre class="ex-code is-kotlin"><code><span class="cl"><span class="tok-comment">// build.gradle.kts</span></span>
                           <span class="cl">&nbsp;</span>
                           <span class="cl"><span class="tok-key">plugins</span> {</span>
                           <span class="cl">    java</span>
@@ -43,11 +52,19 @@
                           <span class="cl">&nbsp;</span>
                           <span class="cl"><span class="tok-dim">$</span> ./gradlew <span class="tok-task">frmtrCheck</span></span>
                           <span class="cl"><span class="tok-dim">$</span> ./gradlew <span class="tok-task">frmtrFormat</span></span></code></pre>
+                        <pre class="ex-code is-groovy"><code><span class="cl"><span class="tok-comment">// build.gradle</span></span>
+                          <span class="cl">&nbsp;</span>
+                          <span class="cl"><span class="tok-key">plugins</span> {</span>
+                          <span class="cl">    <span class="tok-fn">id</span> <span class="tok-str">'java'</span></span>
+                          <span class="cl">    <span class="tok-fn">id</span> <span class="nowrap"><span class="tok-str">'dev.lanwen.frmtr'</span> version <span class="tok-str">'${config.frmtr_version!"dev"}'</span></span></span>
+                          <span class="cl">}</span>
+                          <span class="cl">&nbsp;</span>
+                          <span class="cl"><span class="tok-dim">$</span> ./gradlew <span class="tok-task">frmtrCheck</span></span>
+                          <span class="cl"><span class="tok-dim">$</span> ./gradlew <span class="tok-task">frmtrFormat</span></span></code></pre>
                       </div>
 
-                      <div class="ex-frame" role="group" aria-label="Multi-module">
-                        <div class="ex-titlebar"><span class="win-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="ex-title">Multi-module</span></div>
-                        <pre><code><span class="cl"><span class="tok-comment">// build.gradle.kts &mdash; root</span></span>
+                      <div class="ex-frame" role="group" aria-label="Multi-module" data-title="Multi-module">
+                        <pre class="ex-code is-kotlin"><code><span class="cl"><span class="tok-comment">// build.gradle.kts &mdash; root</span></span>
                           <span class="cl">&nbsp;</span>
                           <span class="cl"><span class="tok-key">plugins</span> {</span>
                           <span class="cl">    <span class="tok-fn">id</span>(<span class="tok-str">"dev.lanwen.frmtr"</span>) <span class="nowrap">version <span class="tok-str">"${config.frmtr_version!"dev"}"</span> apply <span class="tok-key">false</span></span></span>
@@ -58,24 +75,37 @@
                           <span class="cl">        pluginManager.<span class="tok-fn">apply</span>(<span class="tok-str">"dev.lanwen.frmtr"</span>)</span>
                           <span class="cl">    }</span>
                           <span class="cl">}</span></code></pre>
+                        <pre class="ex-code is-groovy"><code><span class="cl"><span class="tok-comment">// build.gradle &mdash; root</span></span>
+                          <span class="cl">&nbsp;</span>
+                          <span class="cl"><span class="tok-key">plugins</span> {</span>
+                          <span class="cl">    <span class="tok-fn">id</span> <span class="nowrap"><span class="tok-str">'dev.lanwen.frmtr'</span> version <span class="tok-str">'${config.frmtr_version!"dev"}'</span> apply <span class="tok-key">false</span></span></span>
+                          <span class="cl">}</span>
+                          <span class="cl">&nbsp;</span>
+                          <span class="cl"><span class="tok-key">subprojects</span> {</span>
+                          <span class="cl">    pluginManager.<span class="tok-fn">withPlugin</span>(<span class="tok-str">'java'</span>) {</span>
+                          <span class="cl">        pluginManager.<span class="tok-fn">apply</span>(<span class="tok-str">'dev.lanwen.frmtr'</span>)</span>
+                          <span class="cl">    }</span>
+                          <span class="cl">}</span></code></pre>
                       </div>
 
-                      <div class="ex-frame" role="group" aria-label="Multi-module with submodule override">
-                        <div class="ex-titlebar"><span class="win-dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="ex-title">Multi-module &mdash; submodule override</span></div>
-                        <pre><code><span class="cl"><span class="tok-comment">// build.gradle.kts &mdash; root</span></span>
+                      <div class="ex-frame" role="group" aria-label="Multi-module with submodule override" data-title="Multi-module &mdash; submodule override">
+                        <pre class="ex-code is-kotlin"><code><span class="cl"><span class="tok-comment">// build.gradle.kts &mdash; root</span></span>
                           <span class="cl">frmtr {</span>
-                          <span class="cl">    java {</span>
-                          <span class="cl">        <span class="tok-fn">include</span>(<span class="tok-str">"**/api/**/*.java"</span>)</span>
-                          <span class="cl">        <span class="tok-fn">exclude</span>(<span class="tok-str">"**/generated/**"</span>)</span>
-                          <span class="cl">    }</span>
+                          <span class="cl">    java { <span class="tok-fn">exclude</span>(<span class="tok-str">"**/generated/**"</span>) }</span>
                           <span class="cl">}</span>
                           <span class="cl">&nbsp;</span>
                           <span class="cl"><span class="tok-comment">// service/build.gradle.kts &mdash; overrides root</span></span>
                           <span class="cl">frmtr {</span>
-                          <span class="cl">    java {</span>
-                          <span class="cl">        <span class="tok-fn">include</span>(<span class="tok-str">"**/service/**/*.java"</span>)</span>
-                          <span class="cl">        <span class="tok-fn">exclude</span>(<span class="tok-str">"**/legacy/**"</span>)</span>
-                          <span class="cl">    }</span>
+                          <span class="cl">    java { <span class="tok-fn">exclude</span>(<span class="tok-str">"**/legacy/**"</span>) }</span>
+                          <span class="cl">}</span></code></pre>
+                        <pre class="ex-code is-groovy"><code><span class="cl"><span class="tok-comment">// build.gradle &mdash; root</span></span>
+                          <span class="cl">frmtr {</span>
+                          <span class="cl">    java { <span class="tok-fn">exclude</span> <span class="tok-str">'**/generated/**'</span> }</span>
+                          <span class="cl">}</span>
+                          <span class="cl">&nbsp;</span>
+                          <span class="cl"><span class="tok-comment">// service/build.gradle &mdash; overrides root</span></span>
+                          <span class="cl">frmtr {</span>
+                          <span class="cl">    java { <span class="tok-fn">exclude</span> <span class="tok-str">'**/legacy/**'</span> }</span>
                           <span class="cl">}</span></code></pre>
                       </div>
                     </div>

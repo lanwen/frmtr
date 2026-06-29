@@ -163,7 +163,7 @@ pre {
 
 .hero {
   display: grid;
-  grid-template-rows: minmax(336px, 41.6svh) minmax(480px, auto);
+  grid-template-rows: minmax(336px, 41.6svh) minmax(440px, auto);
   min-height: 100svh;
   background: #252527;
   color: #eef4ef;
@@ -408,9 +408,9 @@ html.dark .hero {
   display: grid;
   align-items: center;
   min-width: 0;
-  /* Top padding exceeds the bottom by the tab-zone height (~92px) so the
-     centered card sits in the middle of the area below the tabs. */
-  padding: 142px clamp(22px, 3.4vw, 70px) 50px;
+  /* Top padding clears the tab row; bottom is smaller so the card sits just
+     below the tabs. Kept tight so the dark band stays within one screen. */
+  padding: 104px clamp(22px, 3.4vw, 70px) 40px;
 }
 
 /* Visually-hidden radios hold the active-tab state; :has() drives the view. */
@@ -606,17 +606,15 @@ html.dark .hero {
   border-radius: 8px;
   background: #171719;
   box-shadow: 0 20px 68px rgba(0, 0, 0, 0.55);
-  /* Height tracks the active frame (set in px by quickstart.js) and eases
-     between examples — so a short example doesn't reserve the tallest one's
-     height, which had pushed the whole hero past a single screen. */
-  transition: height 0.42s cubic-bezier(0.65, 0, 0.35, 1);
 }
 
-/* Frames overlap (only the active one is in flow for measuring); the card's
-   explicit height is what's actually shown, so inactive frames never inflate it. */
+/* Frames overlap (absolute) so a short example doesn't reserve the tallest
+   one's height, which had pushed the hero past one screen. The code area's
+   height is set in px by quickstart.js (active frame + current flavour) and
+   eases between examples; the top bar sits above it as a static sibling. */
 .ex-frames {
   position: relative;
-  height: 100%;
+  transition: height 0.42s cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 .ex-frame {
@@ -635,23 +633,25 @@ html.dark .hero {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ex-card {
+  .ex-frames {
     transition: none;
   }
 }
 
-/* Window-style title bar: faint window dots + the example name, divided from
-   the code body so each frame reads like its own editor window. */
-.ex-titlebar {
+/* Window-style top bar shared by all frames: faint window dots, the active
+   example name (set by quickstart.js), and the Kotlin/Groovy flavour toggle,
+   divided from the code body so the card reads like an editor window. */
+.ex-topbar {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 12px 18px;
+  padding: 10px 12px 10px 18px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.03);
 }
 
 .win-dots {
+  flex: 0 0 auto;
   display: inline-flex;
   gap: 7px;
 }
@@ -664,11 +664,79 @@ html.dark .hero {
 }
 
 .ex-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: rgba(238, 244, 239, 0.72);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+}
+
+/* Gradle DSL flavour toggle: a compact segmented control pinned to the right of
+   the top bar. Kotlin is the default; :has() swaps which code variant renders. */
+.ex-flavor {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.flavor-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.flavor-opt {
+  padding: 4px 12px;
+  border-radius: 999px;
+  color: rgba(238, 244, 239, 0.55);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.flavor-opt:hover {
+  color: rgba(238, 244, 239, 0.85);
+}
+
+.ex-card:has(#flavor-kotlin:checked) .flavor-opt[for="flavor-kotlin"],
+.ex-card:has(#flavor-groovy:checked) .flavor-opt[for="flavor-groovy"] {
+  color: #171719;
+  background: var(--yellow);
+}
+
+.ex-card:has(#flavor-kotlin:focus-visible) .flavor-opt[for="flavor-kotlin"],
+.ex-card:has(#flavor-groovy:focus-visible) .flavor-opt[for="flavor-groovy"] {
+  outline: 2px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+/* One code variant at a time; Kotlin shows by default. */
+.ex-code.is-groovy {
+  display: none;
+}
+
+.ex-card:has(#flavor-groovy:checked) .ex-code.is-kotlin {
+  display: none;
+}
+
+.ex-card:has(#flavor-groovy:checked) .ex-code.is-groovy {
+  display: block;
 }
 
 .ex-nav {

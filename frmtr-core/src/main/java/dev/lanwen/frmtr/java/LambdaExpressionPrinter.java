@@ -644,6 +644,9 @@ final class LambdaExpressionPrinter {
             return Optional.empty();
         }
         LambdaExpr lambdaExpr = (LambdaExpr) arguments.get(lambdaIndex);
+        if (hugWouldDropComment(lambdaExpr)) {
+            return Optional.empty();
+        }
         String parameters = lambdaParameters(lambdaExpr);
         if (lambdaParametersShouldBreak(lambdaExpr, parameters)) {
             return Optional.empty();
@@ -655,6 +658,64 @@ final class LambdaExpressionPrinter {
             + parameters
             + " -> {";
         return Optional.of(new HuggableBlockLambdaArgument(lambdaIndex, lambdaExpr, leadingArguments, firstLine));
+    }
+
+    /**
+     * Reports whether hugging the block lambda onto the call's opener line would silently drop a comment.
+     *
+     * <p>The hug reconstructs the call prefix and the lambda parameter header from compact, comment-stripped text and only
+     * renders the lambda <em>body block</em> through a comment-preserving path. A line or block comment that sits in the
+     * gap between the call opener and the lambda body — on the lambda argument itself, on the call's orphan slots, or on
+     * the call selector — therefore has no slot in this layout and would vanish when the source line it lived on is
+     * collapsed onto the opener.
+     *
+     * <p>JavaParser attaches such a comment differently depending on the source shape: a comment written on the line
+     * before the lambda becomes the lambda's own comment (the issue #131 shape,
+     * {@code forEach(\n  // note\n  (a, b) -> { ... })}), while collapsing the surrounding whitespace can re-home the same
+     * comment onto the call selector's {@code SimpleName}. Both shapes are caught here. When such a comment is present the
+     * hug is suppressed and the call falls through to the comment-preserving broken argument-list path, which prints the
+     * comment before the argument on its own line.
+     *
+     * <p>The selector slot is filtered with the same boundary rules {@link #commentedExpressionLambdaArgument} uses: a
+     * comment that {@linkplain #trailsCompletedCall trails a completed call} or {@linkplain #precedesCallSelector precedes
+     * this call's selector} is a chain-link comment owned by the surrounding method-chain printer, not part of this call's
+     * opener-to-lambda gap, so it must not suppress the hug. Without that filter a trailing comment on an earlier chain
+     * segment — which JavaParser parks on the next segment's selector {@code SimpleName} — would flip the hug off and back
+     * on across re-formats and break idempotence.
+     */
+    private boolean hugWouldDropComment(LambdaExpr lambdaExpr) {
+        if (lambdaExpr.getComment().filter(this::isLineOrBlockComment).isPresent()) {
+            return true;
+        }
+        return lambdaExpr.getParentNode()
+                .filter(MethodCallExpr.class::isInstance)
+                .map(MethodCallExpr.class::cast)
+                .map(this::callCarriesOpenerGapComment)
+                .orElse(false);
+    }
+
+    /**
+     * Reports whether the call's orphan pool or selector name carries a comment that belongs to the opener-to-lambda gap.
+     *
+     * <p>Expanding the source can detach the comment from the lambda and park it in the call's orphan pool, while
+     * collapsing it can re-home the comment onto the selector {@code SimpleName}; both slots are the ones
+     * {@link #commentedExpressionLambdaArgument} reads. A comment that trails a completed call or precedes this call's
+     * selector is a chain-link comment owned by the method-chain printer, not part of this call's opener-to-lambda gap, so
+     * it is excluded.
+     */
+    private boolean callCarriesOpenerGapComment(MethodCallExpr call) {
+        boolean orphanComment = call.getOrphanComments()
+                .stream()
+                .filter(this::isLineOrBlockComment)
+                .filter(comment -> !trailsCompletedCall(call, comment))
+                .anyMatch(comment -> !precedesCallSelector(call, comment));
+        boolean selectorComment = call.getName()
+                .getComment()
+                .filter(this::isLineOrBlockComment)
+                .filter(comment -> !trailsCompletedCall(call, comment))
+                .filter(comment -> !precedesCallSelector(call, comment))
+                .isPresent();
+        return orphanComment || selectorComment;
     }
 
     private boolean nonLambdaArgumentHasConstructorChainRootNeedingBreak(

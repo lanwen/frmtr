@@ -65,6 +65,8 @@ final class ControlConditionPrinter {
 
     private final ToIntFunction<String> blockStatementWidth;
 
+    private final LayoutWidth layoutWidth;
+
     private final LayoutDecisionLog layoutDecisions;
 
     ControlConditionPrinter(
@@ -82,6 +84,7 @@ final class ControlConditionPrinter {
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain,
             ToIntFunction<String> currentIndentedWidth,
             ToIntFunction<String> blockStatementWidth,
+            LayoutWidth layoutWidth,
             LayoutDecisionLog layoutDecisions
     ) {
         this.comments = comments;
@@ -98,6 +101,7 @@ final class ControlConditionPrinter {
         this.forcedMethodCallChain = forcedMethodCallChain;
         this.currentIndentedWidth = currentIndentedWidth;
         this.blockStatementWidth = blockStatementWidth;
+        this.layoutWidth = layoutWidth;
         this.layoutDecisions = layoutDecisions;
         this.methodCallLayout = new ControlConditionMethodCallLayout(
             sourceShapePolicy,
@@ -318,11 +322,24 @@ final class ControlConditionPrinter {
         return split < 0 ? flat : flat.substring(0, split).strip() + " …";
     }
 
+    /**
+     * Measures the flat {@code if (...) {}} line at the indentation it will actually render at, not at the source
+     * column of the condition.
+     *
+     * <p>The earlier estimate derived the line width from {@code range.begin.column}, but JavaParser counts a leading
+     * {@code \t} as a single column. A tab-indented over-width condition therefore under-measured, looked like it fit on
+     * pass one, and was emitted flat with the formatter's space indentation — at which point it genuinely overflowed and
+     * pass two broke it, so {@code format(format(x)) != format(x)}. Counting the enclosing block/type nesting through
+     * {@link LayoutWidth#nodeLine} reproduces the rendered indentation deterministically regardless of how the source
+     * was indented, so the fit/break decision is the same on every pass. The {@code currentIndentedWidth} floor is kept
+     * so a condition nested directly under a member (no enclosing block) is still measured against at least one
+     * indentation unit.
+     */
     private int ifConditionLineWidth(Expression expression, String line) {
-        int sourceWidth = expression.getRange()
-                .map(range -> Math.max(0, range.begin.column - "if (".length() + 1) + line.length())
-                .orElseGet(() -> blockStatementWidth.applyAsInt(line));
-        return Math.max(sourceWidth, currentIndentedWidth.applyAsInt(line));
+        return Math.max(
+            layoutWidth.nodeLine(expression, line),
+            currentIndentedWidth.applyAsInt(line)
+        );
     }
 
     private Optional<Doc> brokenMethodCallCondition(MethodCallExpr expression) {

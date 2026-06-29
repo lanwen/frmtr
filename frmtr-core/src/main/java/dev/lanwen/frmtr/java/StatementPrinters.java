@@ -65,6 +65,7 @@ final class StatementPrinters {
             expressions::forcedMethodCallChain,
             this::currentIndentedWidth,
             this::blockStatementWidth,
+            context.layoutWidth,
             context.layoutDecisions
         );
         this.switches = new SwitchPrinter(

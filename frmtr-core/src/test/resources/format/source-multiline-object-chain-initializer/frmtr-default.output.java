@@ -118,7 +118,9 @@ class SourceMultilineObjectChainInitializer {
 
     boolean objectRootInitializerOverflows(RouteCall methodCall, String flatName) {
         return methodCallChainRootIsObjectCreation.test(methodCall)
-            && layoutWidth.variableInitializer(variable, flatName + " = " + compact.apply(methodCall) + ";")
-                > options.lineWidth();
+            && layoutWidth.variableInitializer(
+                variable,
+                flatName + " = " + compact.apply(methodCall) + ";"
+            ) > options.lineWidth();
     }
 }

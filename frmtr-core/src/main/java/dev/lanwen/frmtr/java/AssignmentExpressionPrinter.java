@@ -110,6 +110,10 @@ final class AssignmentExpressionPrinter {
      * shape even when the value has sub-shapes that could break in other contexts.
      */
     Doc assignment(AssignExpr expression) {
+        List<Doc> gapLineComments = gapLineComments(expression);
+        if (!gapLineComments.isEmpty()) {
+            return assignmentWithGapLineComments(expression, gapLineComments);
+        }
         String flat = compact.apply(expression);
         if (
             expression.getValue() instanceof ConditionalExpr conditionalExpr
@@ -409,6 +413,63 @@ final class AssignmentExpressionPrinter {
             this.expression.apply(expression.getTarget()),
             Doc.text(" " + expression.getOperator().asString() + " "),
             this.expression.apply(expression.getValue())
+        );
+    }
+
+    /**
+     * Renders an assignment whose {@code =}-to-value gap carries one or more {@code //} line comments: the comments are
+     * emitted right after the operator on the {@code =} line and the value wraps onto its own indented line below.
+     *
+     * <p>The comments must move below-the-operator regardless of width because a {@code //} line comment would otherwise
+     * swallow the value text that follows it on the same line. The value is rendered with the same force-broken value
+     * shape the width-driven assignment branches use so a multi-operand right-hand side still breaks one operator per
+     * line under the comment, matching the source the comment was annotating.
+     */
+    private Doc assignmentWithGapLineComments(AssignExpr expression, List<Doc> gapComments) {
+        return Doc.concat(
+            this.expression.apply(expression.getTarget()),
+            Doc.text(" " + expression.getOperator().asString() + " "),
+            Doc.join(Doc.HARD_LINE, gapComments),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, gapCommentValue(expression)))
+        );
+    }
+
+    /**
+     * Picks the value shape rendered below the gap line comment, forcing a multi-operand binary value to break one
+     * operator per line so the wrapped right-hand side reads the same as in source.
+     *
+     * <p>Binary values route through the shared broken-binary lines (honoring the cast-division continuation exception)
+     * because the bare expression renderer keeps a top-level binary flat even when it overflows; every other value kind
+     * keeps its own internal layout via the shared expression renderer.
+     */
+    private Doc gapCommentValue(AssignExpr expression) {
+        Expression value = expression.getValue();
+        if (
+            value instanceof BinaryExpr binaryExpression
+            && !shouldKeepCastDivisionContinuationFlat.test(binaryExpression)
+        ) {
+            return binaryExpressionLines.apply(value, true);
+        }
+        return this.expression.apply(value);
+    }
+
+    /**
+     * Recovers and claims the {@code //} line comments that sit in the {@code =}-to-value gap of an assignment, gathering
+     * from whichever bucket JavaParser parked them in rather than from a single fixed association.
+     *
+     * <p>A {@code target = // note} comment lands on the assignment <em>target</em> as its own trailing line comment when
+     * the comment hugs the {@code =} line (the collapsed/default shape), but a whitespace perturbation that pushes the
+     * comment onto its own line re-buckets the identical comment onto the {@link AssignExpr} as an orphan instead. The
+     * shared target renderer surfaces neither bucket, so the assignment must claim and place the gap comment here or it is
+     * dropped entirely. Selecting purely by source position (strictly after the target ends, strictly before the value
+     * begins) keeps the same comment owned across both shapes; a comment that trails the whole assignment attaches to the
+     * value or the enclosing statement and lies outside the gap, so it is never claimed here.
+     */
+    private List<Doc> gapLineComments(AssignExpr expression) {
+        return comments.gapLineCommentsBefore(
+            expression.getTarget(),
+            expression.getValue(),
+            List.of(expression, expression.getTarget())
         );
     }
 

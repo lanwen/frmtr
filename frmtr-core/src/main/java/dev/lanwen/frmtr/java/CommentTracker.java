@@ -266,6 +266,31 @@ final class CommentTracker {
     }
 
     /**
+     * Claims and renders the {@code //} line comments that trail {@code body} but were parked as an orphan of
+     * {@code owner}, as one {@link Doc#HARD_LINE}-separated block rather than a single concatenated line.
+     *
+     * <p>This is the multi-line sibling of {@link #trailingLineCommentsAfter(Node, Node, java.util.Optional)}: that
+     * method {@link Doc#concat}s each recovered {@code //} line with no separator, which is correct for a single
+     * recovered comment but fuses a multi-line block ({@code // a}/{@code // b}) onto one physical line ({@code // a// b}).
+     * A multi-line comment written between two {@code catch} clauses is parked as a run of {@code TryStmt} orphans and
+     * handed into the following clause body, so each source line must stay on its own line (issue #128, the same
+     * comment-corruption family as the trailing-comment token-swallow fix). The lines are already source-ordered by
+     * {@link JavaCommentPlacementPolicy#trailingLineCommentsAfter(Node, Node, java.util.Optional)}; this method only
+     * changes how they are joined, so a single recovered line renders byte-identically to the concatenating sibling.
+     */
+    Doc trailingLineCommentBlockAfter(Node owner, Node body, java.util.Optional<? extends Node> nextStructural) {
+        return Doc.join(
+            Doc.HARD_LINE,
+            commentPlacement.trailingLineCommentsAfter(owner, body, nextStructural)
+                    .stream()
+                    .filter(t -> ownsHere(t, owner, OwnerSlot.TRAILING))
+                    .filter(t -> claim(t, owner, OwnerSlot.TRAILING))
+                    .map(JavaFormatter::commentDoc)
+                    .toList()
+        );
+    }
+
+    /**
      * Claims and renders the line comments that trail {@code initializer} after its last token but before the closing
      * {@code ;}, which JavaParser parked as an orphan of {@code semicolonOwner}.
      *

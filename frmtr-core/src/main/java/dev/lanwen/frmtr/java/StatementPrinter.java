@@ -733,7 +733,7 @@ final class StatementPrinter {
                     clause,
                     statement.getCatchClauses().size(),
                     statement.getFinallyBlock().isPresent(),
-                    Doc.concat(previousBlockTrailingComment, ownLineCommentBeforeNode(clause))
+                    clauseLeadingComment(previousBlockTrailingComment, ownLineCommentBeforeNode(clause))
                 )
             );
             previousBlockTrailingComment = trailingCommentAfterClause(statement, clause, firstFollowingClause(statement, i));
@@ -748,7 +748,10 @@ final class StatementPrinter {
             }
             docs.add(Doc.text("finally "));
             docs.add(
-                tryBlock(finallyBlock, Doc.concat(previousBlockTrailingComment, ownLineCommentBeforeNode(finallyBlock)))
+                tryBlock(
+                    finallyBlock,
+                    clauseLeadingComment(previousBlockTrailingComment, ownLineCommentBeforeNode(finallyBlock))
+                )
             );
         }
         Doc finalTrailingComment = statement.getFinallyBlock()
@@ -1076,15 +1079,40 @@ final class StatementPrinter {
      * <p>The handoff prefers {@code body}'s own trailing line comment ({@link CommentTracker#trailingLineComment(Node)}).
      * When the comment lands on the brace line that path recovers it. When a whitespace perturbation pushes the comment
      * onto the line below the brace, JavaParser re-buckets it as an orphan of the enclosing {@code try}, so the orphan
-     * recovery ({@link CommentTracker#trailingLineCommentsAfter(Node, Node, Optional)}) keeps the same ownership by
+     * recovery ({@link CommentTracker#trailingLineCommentBlockAfter(Node, Node, Optional)}) keeps the same ownership by
      * selecting the {@code try} orphans that source-order between this body's end and the next clause's begin.
+     *
+     * <p>The recovered slice can be a multi-line {@code //} block written between two {@code catch} clauses, so it is
+     * rendered as a {@link Doc#HARD_LINE}-separated block: handing it into the following clause body as a single fused
+     * line corrupts the comment (issue #128). A single recovered line renders identically either way.
      */
     private Doc clauseTrailingComment(TryStmt statement, Node body, Optional<? extends Node> next) {
         Doc own = comments.trailingLineComment(body);
         if (own != Doc.EMPTY) {
             return own;
         }
-        return comments.trailingLineCommentsAfter(statement, body, next);
+        return comments.trailingLineCommentBlockAfter(statement, body, next);
+    }
+
+    /**
+     * Combines the comment block handed off from the previous try/catch clause ({@code previousTrailing}) with the
+     * following clause's own leading line comment ({@code ownLeading}) into the single {@code leadingInside} doc that
+     * opens that clause's block body.
+     *
+     * <p>Both halves can be present at once: a multi-line {@code //} block written between two {@code catch} clauses is
+     * split by JavaParser into {@code try} orphans (recovered into {@code previousTrailing}) and a final line attached to
+     * the next clause (recovered into {@code ownLeading}). Concatenating them directly would fuse the orphan block's last
+     * line onto the clause's own line, so a {@link Doc#HARD_LINE} separates the two halves when both are non-empty
+     * (issue #128). When only one half is present the result is that half unchanged.
+     */
+    private Doc clauseLeadingComment(Doc previousTrailing, Doc ownLeading) {
+        if (previousTrailing == Doc.EMPTY) {
+            return ownLeading;
+        }
+        if (ownLeading == Doc.EMPTY) {
+            return previousTrailing;
+        }
+        return Doc.concat(previousTrailing, Doc.HARD_LINE, ownLeading);
     }
 
     /**

@@ -142,16 +142,28 @@ final class CommentedMethodSignaturePrinter {
         // is no longer the swallowed body; carry any comment token here in a dedicated gap-comment channel, separate from
         // the parameter-trailing suffix comments, so it renders on its own line between the signature and `{` (preserving
         // the source shape) rather than being pulled up onto the signature line.
-        List<String> gapComments = signatureGapComments(signature.substring(close + 1));
+        String gap = signature.substring(close + 1);
+        List<String> gapComments = signatureGapComments(gap);
+        // The same `)`-to-`{` gap that may carry comments also carries the `throws` clause. The comments are routed to
+        // their own gap-comment channel above; the remaining non-comment tokens (`throws Ex1, Ex2`) are signature content
+        // that must stay attached to the parameter-list `)`, or the method loses its checked-exception declaration and the
+        // output no longer compiles (issue #142).
+        String throwsClause = signatureThrowsClause(gap);
         String prefix = CommentedTokenText.tokenLine(CommentedTokenText.tokens(signature.substring(0, open)));
         String parameters = signature.substring(open + 1, close);
         List<String> parameterLines = nonBlankLines(parameters);
         String inlineOpeningLineComment = inlineOpeningLineComment(parameters);
         if (parameterLines.isEmpty()) {
             if (!gapComments.isEmpty()) {
-                return formatMethodWithBody(prefix + "()", List.of(), gapComments, "", body);
+                return formatMethodWithBody(withThrows(prefix + "()", throwsClause), List.of(), gapComments, "", body);
             }
-            return formatMethodWithBody(prefix + "()", List.of(), List.of(), inlineOpeningLineComment, body);
+            return formatMethodWithBody(
+                withThrows(prefix + "()", throwsClause),
+                List.of(),
+                List.of(),
+                inlineOpeningLineComment,
+                body
+            );
         }
         // JavaParser can lose a single inline block comment before empty parentheses as header trivia, so keep it
         // attached to the method prefix instead of treating it like a parameter comment line. This only applies when the
@@ -163,7 +175,13 @@ final class CommentedMethodSignaturePrinter {
             && isBlockCommentOnlyLine(parameterLines.getFirst())
             && !parameters.contains("\n")
         ) {
-            return formatMethodWithBody(prefix + " " + parameterLines.getFirst() + "()", List.of(), List.of(), "", body);
+            return formatMethodWithBody(
+                withThrows(prefix + " " + parameterLines.getFirst() + "()", throwsClause),
+                List.of(),
+                List.of(),
+                "",
+                body
+            );
         }
         List<String> leadingComments = new ArrayList<>();
         int cursor = 0;
@@ -178,10 +196,14 @@ final class CommentedMethodSignaturePrinter {
         List<String> parameterParts = parameterLines.subList(cursor, end);
         if (parameterParts.isEmpty()) {
             if (!inlineOpeningLineComment.isEmpty()) {
-                return formatMethodWithInlineOpeningComment(prefix + "()", inlineOpeningLineComment, body);
+                return formatMethodWithInlineOpeningComment(
+                    withThrows(prefix + "()", throwsClause),
+                    inlineOpeningLineComment,
+                    body
+                );
             }
             return formatMethodWithBody(
-                prefix + "()",
+                withThrows(prefix + "()", throwsClause),
                 new ArrayList<>(parameterLines),
                 gapComments,
                 inlineOpeningLineComment,
@@ -197,7 +219,7 @@ final class CommentedMethodSignaturePrinter {
             && !containsLineComment(formattedParameterLines.getFirst())
         ) {
             return formatMethodWithBody(
-                prefix + "(" + formattedParameterLines.getFirst() + ")",
+                withThrows(prefix + "(" + formattedParameterLines.getFirst() + ")", throwsClause),
                 new ArrayList<>(trailingComments),
                 gapComments,
                 "",
@@ -210,7 +232,7 @@ final class CommentedMethodSignaturePrinter {
         formattedParameterLines.forEach(parameterLine -> lines.add("  " + parameterLine));
         lines.add(")");
         return formatMethodWithBody(
-            String.join("\n", lines),
+            withThrows(String.join("\n", lines), throwsClause),
             new ArrayList<>(trailingComments),
             gapComments,
             "",
@@ -534,6 +556,34 @@ final class CommentedMethodSignaturePrinter {
      */
     private List<String> signatureGapComments(String gap) {
         return nonBlankLines(gap).stream().filter(this::isCommentOnlyLine).toList();
+    }
+
+    /**
+     * Extracts the {@code throws Ex1, Ex2} clause that sits between the parameter-list {@code )} and the body
+     * {@code &#123;}, dropping any comment tokens that share the gap.
+     *
+     * <p>The comment tokens in this gap are routed to {@link #signatureGapComments(String)} for their own line; the
+     * remaining tokens are the {@code throws} clause, which is real signature content. Dropping it (the prior behavior)
+     * removed the method's checked-exception declaration and produced non-compiling output (issue #142). The tokens are
+     * rebuilt through {@link CommentedTokenText#tokenLine(List)} so an over-wide or oddly spaced source {@code throws}
+     * clause is normalized to {@code throws A, B}; an empty result means the method declares no checked exceptions and the
+     * caller leaves the signature untouched.
+     */
+    private String signatureThrowsClause(String gap) {
+        List<String> tokens = CommentedTokenText.tokens(gap).stream()
+                .filter(token -> !CommentedTokenText.isComment(token))
+                .toList();
+        return CommentedTokenText.tokenLine(tokens);
+    }
+
+    /**
+     * Appends a {@code throws} clause to a rendered signature, immediately after the parameter-list {@code )} that ends
+     * it. A multi-line parameter signature ends with a {@code )} on its own last line, so the clause lands on that line as
+     * {@code ) throws A, B} — matching the structured throws-clause layout. An empty clause returns the signature
+     * unchanged so methods without checked exceptions stay byte-identical.
+     */
+    private String withThrows(String signature, String throwsClause) {
+        return throwsClause.isEmpty() ? signature : signature + " " + throwsClause;
     }
 
     private int matchingOpenParenthesis(String signature, int close) {

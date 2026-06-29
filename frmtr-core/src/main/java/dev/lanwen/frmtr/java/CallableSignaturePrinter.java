@@ -139,6 +139,9 @@ final class CallableSignaturePrinter {
         if (parameters.isEmpty()) {
             return Doc.text("()");
         }
+        // callableParameterText already carries each parameter-name block comment inline (via the non-claiming flat-text
+        // producer), so claim each one here to account for it exactly once; the visible text comes from the flat string.
+        declaration.getParameters().forEach(this::claimParameterNameBlockComment);
         return Doc.concat(
             Doc.text("("),
             Doc.indent(Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text(parameters)))),
@@ -333,17 +336,29 @@ final class CallableSignaturePrinter {
             && !CStyleArrayDeclarators.parameterHasCStyleBrackets(parameter)
             && typeCanBreak.test(parameter.getType())
         ) {
+            // The breakable branch emits the type body and the name as separate docs, so the between-type-and-name
+            // comment cannot ride along in the flat name text; claim and render it here, between the two, so it survives
+            // whether the type group stays flat or breaks.
             List<Doc> parts = new ArrayList<>();
             parameterLeadingBlockComment(parameter).ifPresent(parts::add);
             parts.add(parameterModifierAnnotationPrefix(parameter));
             parts.add(typeBody.apply(parameter.getType()));
-            parts.add(Doc.text(" " + parameter.getNameAsString() + parameterTrailingBlockCommentText(parameter)));
+            parts.add(Doc.text(
+                " "
+                    + claimParameterNameBlockComment(parameter).orElse("")
+                    + parameter.getNameAsString()
+                    + parameterTrailingBlockCommentText(parameter)
+            ));
             return Doc.group(
                 Doc.concat(
                     parts
                 )
             );
         }
+        // The non-breakable branch renders from flat text, where parameterTypeAndNameText already places the inline
+        // comment between the type and the name. Claim it here (discarding the rendered doc) so the comment is accounted
+        // exactly once; the visible text comes from the flat path.
+        claimParameterNameBlockComment(parameter);
         List<Doc> prefix = new ArrayList<>();
         parameterLeadingBlockComment(parameter).ifPresent(prefix::add);
         prefix.add(parameterModifierAnnotationPrefix(parameter));
@@ -357,6 +372,55 @@ final class CallableSignaturePrinter {
             return Optional.empty();
         }
         return Optional.of(Doc.text(commentText.apply(leadingBlockComment) + " "));
+    }
+
+    /**
+     * Selects the inline block comment JavaParser attaches to a parameter's <em>name</em> (the {@code /* c *​/} in
+     * {@code Type /* c *​/ name}) rather than to the {@link Parameter} node.
+     *
+     * <p>JavaParser parks such a comment on {@code parameter.getName().getComment()}, where the parameter-level
+     * leading/trailing recovery never looks, so it would be dropped. The selector is intentionally narrow: a block comment
+     * that begins before the name node, i.e. between the type and the name. A leading {@code //} line comment above the
+     * parameter is owned and rendered by {@link #parameterLeadingLineComments}, so it is excluded here.
+     */
+    private Optional<Comment> parameterNameBlockComment(Parameter parameter) {
+        return parameter.getName()
+                .getComment()
+                .filter(BlockComment.class::isInstance)
+                .filter(comment -> CommentIndex.startsBefore(comment, parameter.getName()));
+    }
+
+    /**
+     * Renders the parameter-name block comment as flat text without claiming it.
+     *
+     * <p>This feeds the shared flat-text producer ({@link #parameterTypeAndNameText}) so every render path that prints
+     * from flat text — the non-breakable parameter and the compact-continuation layout — keeps the comment inline, and so
+     * the width estimates account for its width. Claiming is intentionally left to the render entry points
+     * ({@link #parameterCore} and {@link #compactContinuationParameters}) because this producer is shared with the
+     * width-decision paths, which must not consume the single comment claim.
+     */
+    private String parameterNameBlockCommentText(Parameter parameter) {
+        return parameterNameBlockComment(parameter)
+                .map(comment -> commentText.apply(JavaFormatter.commentDoc(comment)) + " ")
+                .orElse("");
+    }
+
+    /**
+     * Claims the parameter-name block comment for accounting and returns its rendered text, or empty when there is none.
+     *
+     * <p>The render entry points call this exactly once per parameter so the comment is claimed a single time per print
+     * pass; the breakable branch uses the returned text directly while the flat-text branches discard it because the text
+     * already arrived through {@link #parameterNameBlockCommentText}.
+     */
+    private Optional<String> claimParameterNameBlockComment(Parameter parameter) {
+        if (parameterNameBlockComment(parameter).isEmpty()) {
+            return Optional.empty();
+        }
+        Doc comment = comments.ownComment(parameter.getName(), BlockComment.class::isInstance);
+        if (comment == Doc.EMPTY) {
+            return Optional.empty();
+        }
+        return Optional.of(commentText.apply(comment) + " ");
     }
 
     /**
@@ -540,7 +604,9 @@ final class CallableSignaturePrinter {
             type += varargsAnnotations.isEmpty() ? "..." : " " + varargsAnnotations + " ...";
         }
         parts.add(type);
-        parts.add(parameter.getNameAsString());
+        // An inline block comment JavaParser parked on the name node (Type /* c */ name) goes between the type and the
+        // name; parameterNameBlockCommentText reads it without claiming, leaving the single claim to the render paths.
+        parts.add(parameterNameBlockCommentText(parameter) + parameter.getNameAsString());
         return String.join(" ", parts);
     }
 

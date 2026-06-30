@@ -620,6 +620,10 @@ final class MethodCallPrinter {
         return methodChains.forcedMethodCallChain(expression, firstLineWidth);
     }
 
+    boolean shouldBreakChain(MethodCallExpr expression, ToIntFunction<String> firstLineWidth) {
+        return methodChains.shouldBreakChain(expression, firstLineWidth);
+    }
+
     Optional<Doc> packedMethodCallChain(
             MethodCallExpr expression,
             ToIntFunction<String> firstLineWidth

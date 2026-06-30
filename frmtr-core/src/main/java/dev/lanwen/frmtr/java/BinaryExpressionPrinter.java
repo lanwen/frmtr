@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.ToIntFunction;
 
@@ -54,6 +55,8 @@ final class BinaryExpressionPrinter {
 
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer;
 
+    private final BiPredicate<MethodCallExpr, ToIntFunction<String>> chainShouldBreak;
+
     private final SourceShapePolicy sourceShapePolicy;
 
     private final Function<Node, String> compact;
@@ -72,6 +75,7 @@ final class BinaryExpressionPrinter {
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
             BiFunction<MethodCallExpr, String, Doc> brokenMethodCallWithClosingLineRenderer,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer,
+            BiPredicate<MethodCallExpr, ToIntFunction<String>> chainShouldBreak,
             SourceShapePolicy sourceShapePolicy,
             Function<Node, String> compact,
             Function<Node, String> compactWithoutOwnComment,
@@ -85,6 +89,7 @@ final class BinaryExpressionPrinter {
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
         this.brokenMethodCallWithClosingLineRenderer = brokenMethodCallWithClosingLineRenderer;
         this.forcedMethodCallChainRenderer = forcedMethodCallChainRenderer;
+        this.chainShouldBreak = chainShouldBreak;
         this.sourceShapePolicy = sourceShapePolicy;
         this.compact = compact;
         this.compactWithoutOwnComment = compactWithoutOwnComment;
@@ -239,6 +244,16 @@ final class BinaryExpressionPrinter {
         if (operand instanceof MethodCallExpr && operand.getAllContainedComments().isEmpty()) {
             MethodCallExpr methodCall = (MethodCallExpr) operand;
             if (methodCallOperandShouldBreak(binaryLine, methodCall, nestedContinuationLine)) {
+                return forcedMethodCallChainRenderer.apply(methodCall)
+                        .orElseGet(() -> brokenMethodCallRenderer.apply(methodCall));
+            }
+            // A fluent chain operand of a broken binary must break one selector per line by the SAME rule the flat-binary
+            // path applies (issue #137). The flat path renders this operand through expression dispatch, which routes a
+            // chain through the link-count gate; the broken path used to take the width-only flat shortcut below and never
+            // consulted that rule, so a rule-breaking chain stayed flat here and broke there, flipping every pass
+            // depending on whether the enclosing binary happened to break. Consult the single chain-break decision at the
+            // operand's real broken-line column so both paths agree.
+            if (chainShouldBreak.test(methodCall, text -> binaryLine.width(text, nestedContinuationLine))) {
                 return forcedMethodCallChainRenderer.apply(methodCall)
                         .orElseGet(() -> brokenMethodCallRenderer.apply(methodCall));
             }

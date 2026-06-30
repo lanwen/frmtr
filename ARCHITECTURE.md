@@ -384,7 +384,14 @@ gate (`MethodCallChainPrinter`) decides chain wrapping from a width-independent 
 source line shape: `chainBreaksByRule` breaks a fluent chain one selector per line once its selector-link count reaches
 a root-kind threshold (a call/factory/constructor root breaks at two links; a plain receiver root at three), matching
 the prettier-java and google-java-format convention, so a chain written flat and the same chain pre-broken across source
-lines converge to identical output. The gate still keeps a chain broken when a non-final segment has a genuine
+lines converge to identical output. That structural-plus-width decision is exposed as the single authoritative
+`MethodCallChainPrinter.shouldBreakChain(chain, firstLineWidth)` predicate (`chainBreaksByRule` OR a flat first line that
+overflows at the supplied column), so a chain that appears as a broken binary operand asks the same question the flat
+path does: `BinaryExpressionPrinter.binaryExpressionLineOperand` consults it (via the `ExpressionPrinters`-wired
+`chainShouldBreak` collaborator, measured at the operand's broken-line column) before its width-only flat shortcut, so a
+fluent-chain operand of a binary renders identically whether the enclosing binary stays flat or breaks (issue #137) —
+it no longer flips between flat and one-selector-per-line depending on which side of the binary-break boundary the source
+happened to land on. The gate still keeps a chain broken when a non-final segment has a genuine
 author-broken argument list (`chainHasSourceMultilineArguments`), but a single argument that fits on one line does not
 count as such a list — it collapses to one line during formatting, so treating its transient source line breaks as a
 forced break would be non-idempotent; only two-or-more arguments spread across source lines, or a single argument that

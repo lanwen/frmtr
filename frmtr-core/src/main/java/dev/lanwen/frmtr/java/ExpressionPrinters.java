@@ -104,6 +104,7 @@ final class ExpressionPrinters {
             this::brokenMethodCall,
             this::brokenMethodCallWithClosingLine,
             this::forcedMethodCallChain,
+            this::shouldBreakChain,
             context.sourceShapePolicy,
             compactSource::compact,
             compactSource::compactWithoutOwnComment,
@@ -471,6 +472,10 @@ final class ExpressionPrinters {
             ToIntFunction<String> firstLineWidth
     ) {
         return methodCalls.forcedMethodCallChain(expression, firstLineWidth);
+    }
+
+    boolean shouldBreakChain(MethodCallExpr expression, ToIntFunction<String> firstLineWidth) {
+        return methodCalls.shouldBreakChain(expression, firstLineWidth);
     }
 
     Optional<Doc> packedMethodCallChain(

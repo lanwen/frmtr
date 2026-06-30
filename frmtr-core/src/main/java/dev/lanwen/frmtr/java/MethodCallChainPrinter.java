@@ -967,6 +967,29 @@ final class MethodCallChainPrinter {
         return callRootedLinks >= 3;
     }
 
+    /**
+     * Single source of truth for "render this chain one selector per line", consulted by any printer that has to decide
+     * whether a fluent chain breaks.
+     *
+     * <p>The decision is context-consistent: it depends only on the chain AST (the structural
+     * {@link #chainBreaksByRule(MethodCallChainSourcePlanner.MethodCallChainAnalysis)} link-count/root-kind rule) and on
+     * the chain's first line measured at the column it will REALLY render at (the caller-supplied {@code firstLineWidth}
+     * closure). It never keys off the chain's source line shape. That is what makes a chain render identically whether it
+     * is reached through the flat-binary operand path (which routes through {@code methodCallChain(AUTO)} and that same
+     * link-count gate) or through the broken-binary operand path (which previously fell back to a width-only flat probe):
+     * both now ask this one question, so a chain operand of a binary expression no longer flips between flat and broken
+     * depending on whether the enclosing binary happened to break (issue #137).
+     *
+     * <p>The width arm mirrors the stay-flat gate's own width arm: a chain whose flat first line overflows where it
+     * actually renders must break regardless of the structural rule. The structural arm fires first so a rule-breaking
+     * chain breaks even when it would have fit flat, keeping the flat-binary and broken-binary paths in lockstep.
+     */
+    boolean shouldBreakChain(MethodCallExpr chain, ToIntFunction<String> firstLineWidth) {
+        MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(chain);
+        return chainBreaksByRule(analysis)
+            || firstLineWidth.applyAsInt(compactSource.compact(chain)) > options.lineWidth();
+    }
+
     private boolean singleStringLiteralCallWithSourceMultilineArguments(
             Expression root,
             List<MethodCallExpr> calls

@@ -426,12 +426,29 @@ final class ReturnExpressionPrinter {
         return returnLineWidth(expression, line, lineBudget) > options.lineWidth();
     }
 
+    /**
+     * Measures a candidate {@code return value;} line at the indentation it will actually render at, not at the source
+     * column the value sat in.
+     *
+     * <p>The earlier estimate derived the second term from {@code expression.getRange().begin.column}, which is the
+     * value's <em>source</em> column. When a {@code return} was co-located after a label prefix
+     * ({@code case "x": return obj.getX();}), that column was large, so the estimate overshot 120, the value broke, and a
+     * later pass — with the {@code case} and {@code return} now on their own lines and the source column small — saw the
+     * estimate drop back under budget and collapsed it. That is the {@code begin.column}-driven break-then-collapse cycle
+     * tracked in #137. The return value always renders at a deterministic column: the statement's rendered indentation
+     * plus {@code "return "}. Counting the enclosing block/type nesting through {@link LayoutWidth#nodeLine} reproduces
+     * that indentation regardless of where the value sat in source, so the fit/break decision is identical on every pass
+     * (the same source-column-to-rendered-column correction made for {@code if} conditions in #155 and for hugged call
+     * openers in #161). The {@code currentIndentedWidth} floor is kept so a {@code return} nested directly under a member
+     * (no enclosing block) is still measured against at least one indentation unit.
+     */
     private int returnLineWidth(Expression expression, String line, LayoutWidth.LineBudget lineBudget) {
         int budgetWidth = layoutWidth.line(lineBudget, line);
-        int sourceColumnWidth = expression.getRange()
-                .map(range -> Math.max(0, range.begin.column - 1 - "return ".length()) + line.length())
-                .orElse(0);
-        return Math.max(budgetWidth, sourceColumnWidth);
+        int renderedColumnWidth = Math.max(
+            layoutWidth.nodeLine(expression, line),
+            currentIndentedWidth.applyAsInt(line)
+        );
+        return Math.max(budgetWidth, renderedColumnWidth);
     }
 
     /**

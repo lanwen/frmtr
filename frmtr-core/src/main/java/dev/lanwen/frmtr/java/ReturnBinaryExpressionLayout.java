@@ -198,12 +198,21 @@ final class ReturnBinaryExpressionLayout {
             && directBinaryReturnMethodCallClosingLineFits(binaryOperand);
     }
 
+    /**
+     * Measures a candidate binary {@code return value;} line at the indentation it will actually render at, not at the
+     * source column the value sat in.
+     *
+     * <p>This mirrors {@link ReturnExpressionPrinter}'s width gate: the earlier estimate derived the second term from
+     * {@code expression.getRange().begin.column}, the value's <em>source</em> column, so a {@code return} co-located
+     * after a label prefix overshot 120 on the first pass and collapsed once the {@code return} moved onto its own line —
+     * the {@code begin.column}-driven break-then-collapse cycle tracked in #137. {@link LayoutWidth#nodeLine} counts the
+     * enclosing block/type nesting to reproduce the deterministic rendered indentation ({@code "return "} at the block
+     * indent) regardless of source column, matching the source-column-to-rendered-column correction from #155/#161.
+     */
     private int returnLineWidth(Expression expression, String line, LayoutWidth.LineBudget lineBudget) {
         int budgetWidth = layoutWidth.line(lineBudget, line);
-        int sourceColumnWidth = expression.getRange()
-                .map(range -> Math.max(0, range.begin.column - 1 - "return ".length()) + line.length())
-                .orElse(0);
-        return Math.max(budgetWidth, sourceColumnWidth);
+        int renderedColumnWidth = layoutWidth.nodeLine(expression, line);
+        return Math.max(budgetWidth, renderedColumnWidth);
     }
 
     private boolean hasUnparenthesizedAndUnderOr(Expression expression) {

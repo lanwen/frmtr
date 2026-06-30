@@ -222,10 +222,14 @@ on by default** in `Frmtr.format`. Intended usage:
 > + parse-stability + eventual convergence** but *not* one-pass idempotence, because the formatter is genuinely not
 > one-pass idempotent on arbitrarily-reshaped input (a `return` collapsed onto one over-long line first wraps with its
 > binary chain flat and needs a second pass to break the chain). The convergence assertion is **eventual**: repeated
-> formatting must reach a *fixed point* within a small number of passes (currently 5). Empirically most reshaped inputs
-> reach a fixed point within a couple of passes; a couple need a third; and a few never converge at all — those are
-> recorded as findings (see below), including one non-terminating case whose output grows on every pass. (The earlier
-> claim that the formatter "converges in two passes" was empirically false and has been corrected.) **Convergence *to the
+> formatting must reach a *fixed point* within a small number of passes (the test allows up to 5). Empirically, a
+> strict-corpus sweep of five real-world repositories (Apache Camel, Kafka, Cayenne, ZooKeeper, Tomcat; ≈39k files)
+> found that **every input converges to a fixed point and none is non-terminating**: ≈99% are already one-pass
+> idempotent (`format(format(x)) == format(x)`), and of the ≈1% that are not, the large majority converge by the second
+> pass and the rest by the third or fourth (the worst observed was four). (Two earlier claims have been corrected: that
+> the formatter "converges in two passes" — a handful of real-world inputs need a third or fourth — and that "a few
+> inputs never converge" — the one previously-recorded non-terminating finding has since been fixed and
+> `EXCLUDED_AS_FINDINGS` is now empty.) **Convergence *to the
 > formatting of the original* (`format(perturbed(x)) == format(x)`) is deliberately never asserted**: the formatter
 > preserves intentional source shape, so two differently-shaped equivalent inputs may format differently, and asserting
 > otherwise would be wrong.

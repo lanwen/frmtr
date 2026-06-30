@@ -48,7 +48,9 @@ All Java subprojects compile their JVM bytecode with a Java 21 toolchain and `--
 library, shared tooling, Gradle plugin, JVM CLI, and native-image support metadata module, so published artifacts and
 the JVM CLI runtime stay loadable by Java 21 Gradle daemons. Native executable construction is the only Java 25 build
 path: `:frmtr-cli:nativeCompile` invokes GraalVM native-image through a native-image-capable JDK 25 launcher while
-consuming the same Java 21 CLI bytecode.
+consuming the same Java 21 CLI bytecode. Release automation may pass `-Pfrmtr.native.useEnvironmentHome=true` to let
+the GraalVM native-image plugin use the `GRAALVM_HOME`/`JAVA_HOME` installation prepared by CI when Gradle's
+native-image-capable toolchain detection does not recognize that installation.
 
 The root also owns repo-local helper tasks that run the current CLI over this checkout and exclude formatter fixture
 corpora that contain formatter-sensitive or intentionally invalid Java samples.

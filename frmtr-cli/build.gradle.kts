@@ -19,6 +19,9 @@ val nativeImageJavaLauncher = javaToolchains.launcherFor {
     languageVersion = JavaLanguageVersion.of(25)
     nativeImageCapable.set(true)
 }
+val nativeImageUsesEnvironmentHome = providers.gradleProperty("frmtr.native.useEnvironmentHome")
+        .map(String::toBoolean)
+        .orElse(false)
 val nativeDistributionClassifier = providers.gradleProperty("frmtr.native.classifier").orElse(providers.provider {
     defaultNativeClassifier()
 })
@@ -99,10 +102,12 @@ tasks.named<JavaExec>("run") {
 }
 
 graalvmNative {
-    toolchainDetection.set(true)
+    toolchainDetection.set(nativeImageUsesEnvironmentHome.map { !it })
     binaries {
         configureEach {
-            javaLauncher.set(nativeImageJavaLauncher)
+            if (!nativeImageUsesEnvironmentHome.get()) {
+                javaLauncher.set(nativeImageJavaLauncher)
+            }
         }
 
         named("main") {

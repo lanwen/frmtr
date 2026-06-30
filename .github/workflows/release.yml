@@ -72,15 +72,18 @@ jobs:
 
       - name: Build native distribution
         if: runner.os != 'Windows'
-        run: ./gradlew :frmtr-cli:nativeDistributionZip -Pfrmtr.native.classifier=${{ matrix.classifier }}
+        run: |
+          native-image --version
+          ./gradlew :frmtr-cli:nativeDistributionZip -Pfrmtr.native.classifier=${{ matrix.classifier }} -Pfrmtr.native.useEnvironmentHome=true
 
       - name: Build native distribution
         if: runner.os == 'Windows'
         shell: cmd
         run: |
-          call "%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+          if exist "%VSINSTALLDIR%VC\Auxiliary\Build\vcvars64.bat" call "%VSINSTALLDIR%VC\Auxiliary\Build\vcvars64.bat"
           set "PATH=%GRAALVM_HOME%\bin;%PATH%"
-          gradlew.bat "-Dorg.gradle.java.installations.paths=%GRAALVM_HOME%" :frmtr-cli:nativeDistributionZip -Pfrmtr.native.classifier=${{ matrix.classifier }}
+          native-image --version
+          gradlew.bat :frmtr-cli:nativeDistributionZip -Pfrmtr.native.classifier=${{ matrix.classifier }} -Pfrmtr.native.useEnvironmentHome=true
 
       - name: Smoke test native binary
         if: runner.os != 'Windows'

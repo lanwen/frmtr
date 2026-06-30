@@ -79,7 +79,7 @@ final class StatementRuleEnvelope {
             ? Doc.EMPTY
             : comments.trailingLineComment(statement);
         Doc leading = leadingComment(statement, trailing);
-        Doc body = statementContent.format(statement);
+        Doc body = statementContent.format(statement, LayoutContext.root());
         return label(
             statement,
             Doc.concat(leading, body, trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing))

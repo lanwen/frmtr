@@ -37,7 +37,7 @@ final class FieldAccessPrinter {
      * not inferred here from line width.
      */
     Doc fieldAccess(FieldAccessExpr expression) {
-        Doc scope = this.expression.format(expression.getScope());
+        Doc scope = this.expression.format(expression.getScope(), LayoutContext.root());
         Doc nameComment = comments.ownComment(
             expression.getName(),
             comment -> comment instanceof LineComment

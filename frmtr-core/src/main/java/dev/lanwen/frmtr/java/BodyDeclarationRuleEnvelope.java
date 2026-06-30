@@ -70,7 +70,7 @@ final class BodyDeclarationRuleEnvelope {
     private Doc formattedBody(BodyDeclaration<?> declaration) {
         Doc trailing = comments.trailingLineComment(declaration);
         Doc leading = trailing == Doc.EMPTY ? comments.leading(declaration) : Doc.EMPTY;
-        Doc body = bodyContent.format(declaration);
+        Doc body = bodyContent.format(declaration, LayoutContext.root());
         return Doc.concat(leading, body, trailing == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailing));
     }
 

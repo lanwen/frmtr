@@ -183,8 +183,8 @@ final class LambdaExpressionPrinter {
 
     private Doc lambdaExpressionBody(LambdaExpr expression) {
         return expression.getExpressionBody()
-                .map(expressionRenderer::format)
-                .orElseGet(() -> statementRenderer.format(expression.getBody()));
+                .map(node -> expressionRenderer.format(node, LayoutContext.root()))
+                .orElseGet(() -> statementRenderer.format(expression.getBody(), LayoutContext.root()));
     }
 
     Doc brokenExpressionLambda(LambdaExpr expression) {
@@ -202,7 +202,7 @@ final class LambdaExpressionPrinter {
             return Doc.concat(
                 lambdaParameterHeaders.forHeader(expression, parameters),
                 Doc.text(" -> "),
-                blockRenderer.format(expression.getBody().asBlockStmt())
+                blockRenderer.format(expression.getBody().asBlockStmt(), LayoutContext.root())
             );
         }
         boolean parametersHaveComments = lambdaParameterHeaders.haveComments(expression);
@@ -243,7 +243,7 @@ final class LambdaExpressionPrinter {
                 return Doc.concat(
                     lambdaParameterHeaders.forHeader(expression, parameters),
                     Doc.text(" -> "),
-                    expressionRenderer.format(body)
+                    expressionRenderer.format(body, LayoutContext.root())
                 );
             }
         }
@@ -254,14 +254,14 @@ final class LambdaExpressionPrinter {
             return Doc.concat(
                 lambdaParameterHeaders.forHeader(expression, parameters),
                 Doc.text(" -> "),
-                expressionRenderer.format(expression.getExpressionBody().orElseThrow())
+                expressionRenderer.format(expression.getExpressionBody().orElseThrow(), LayoutContext.root())
             );
         }
         if (!parametersHaveComments && expressionBody.filter(this::bodyEndsInBlock).isPresent()) {
             return Doc.concat(
                 lambdaParameterHeaders.forHeader(expression, parameters),
                 Doc.text(" -> "),
-                expressionRenderer.format(expressionBody.orElseThrow())
+                expressionRenderer.format(expressionBody.orElseThrow(), LayoutContext.root())
             );
         }
         Optional<Doc> methodCallBodyWithOpener = expressionBody.filter(MethodCallExpr.class::isInstance)
@@ -436,7 +436,7 @@ final class LambdaExpressionPrinter {
     private Doc brokenLambdaExpressionBody(LambdaExpr expression) {
         return expression.getExpressionBody()
                 .map(body -> binaryBodyDoc(body).orElseGet(() -> brokenNonBinaryLambdaBody(body)))
-                .orElseGet(() -> statementRenderer.format(expression.getBody()));
+                .orElseGet(() -> statementRenderer.format(expression.getBody(), LayoutContext.root()));
     }
 
     private Doc brokenNonBinaryLambdaBody(Expression body) {
@@ -452,7 +452,7 @@ final class LambdaExpressionPrinter {
         ) {
             return brokenMethodCallRenderer.apply(methodCall);
         }
-        return expressionRenderer.format(body);
+        return expressionRenderer.format(body, LayoutContext.root());
     }
 
     private boolean isLogicalBinaryOperator(BinaryExpr expression) {
@@ -613,7 +613,7 @@ final class LambdaExpressionPrinter {
             return Doc.concat(
                 lambdaParameterHeaders.forHeader(expression, parameters),
                 Doc.text(" -> "),
-                methodChainLambdaBlockRenderer.format(expression.getBody().asBlockStmt())
+                methodChainLambdaBlockRenderer.format(expression.getBody().asBlockStmt(), LayoutContext.root())
             );
         }
         return lambdaExpression(expression);

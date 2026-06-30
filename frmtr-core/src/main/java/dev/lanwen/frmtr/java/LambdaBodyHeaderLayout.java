@@ -85,7 +85,7 @@ final class LambdaBodyHeaderLayout {
             Doc.concat(
                 lambdaParametersForHeader.apply(lambda, parameters),
                 Doc.text(" -> "),
-                expressionRenderer.format(body)
+                expressionRenderer.format(body, LayoutContext.root())
             )
         );
     }

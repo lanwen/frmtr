@@ -81,7 +81,7 @@ final class DeclarationPrinters {
         this.declarationPrefixes = new DeclarationPrefixPrinter(
             comments,
             commentPlacementPolicy,
-            expressions::annotation,
+            (annotation, layout) -> expressions.annotation(annotation),
             expressions::annotationFlatText
         );
         this.moduleBlocks = new ModuleBlockPrinter(
@@ -120,8 +120,8 @@ final class DeclarationPrinters {
             context,
             packageDeclarations,
             importDeclarations,
-            moduleDeclarations::moduleDeclaration,
-            this::body
+            (moduleDeclaration, layout) -> moduleDeclarations.moduleDeclaration(moduleDeclaration),
+            (declaration, layout) -> body(declaration)
         );
         this.fields = new FieldDeclarationPrinter(
             comments,
@@ -197,7 +197,7 @@ final class DeclarationPrinters {
             compactSource::compact,
             compactSource::compactTypeLike,
             types::typeBody,
-            expressions::annotationPreservingSourceBreaks,
+            (annotation, layout) -> expressions.annotationPreservingSourceBreaks(annotation),
             expressions::annotationFlatText,
             declarationPrefixes::modifier,
             types::typeCanBreak,
@@ -284,7 +284,7 @@ final class DeclarationPrinters {
             types::compactJoinTypeLike,
             compactSource::compactTypeLike,
             types::typeBody,
-            expressions::annotationPreservingSourceBreaks,
+            (annotation, layout) -> expressions.annotationPreservingSourceBreaks(annotation),
             expressions::annotationFlatText,
             this::currentIndentedWidth,
             declaration -> memberBlocks.memberBlock(declaration.getMembers(), declaration, this::body)
@@ -302,16 +302,16 @@ final class DeclarationPrinters {
         BodyDeclarationDispatcher bodyDeclarationDispatcher = new BodyDeclarationDispatcher(
             rawPreservedSource,
             compactSource::compact,
-            classOrInterfaces::classOrInterface,
-            records::record,
-            enums::enumDeclaration,
-            annotationDeclarations::annotationDeclaration,
-            annotationDeclarations::annotationMember,
-            fields::field,
-            methods::method,
-            constructors::compactConstructor,
-            constructors::constructor,
-            initializers::initializer
+            (declaration, layout) -> classOrInterfaces.classOrInterface(declaration),
+            (declaration, layout) -> records.record(declaration),
+            (declaration, layout) -> enums.enumDeclaration(declaration),
+            (declaration, layout) -> annotationDeclarations.annotationDeclaration(declaration),
+            (declaration, layout) -> annotationDeclarations.annotationMember(declaration),
+            (declaration, layout) -> fields.field(declaration),
+            (declaration, layout) -> methods.method(declaration),
+            (declaration, layout) -> constructors.compactConstructor(declaration),
+            (declaration, layout) -> constructors.constructor(declaration),
+            (declaration, layout) -> initializers.initializer(declaration)
         );
         this.bodyDeclarations = new BodyDeclarationRuleEnvelope(
             comments,

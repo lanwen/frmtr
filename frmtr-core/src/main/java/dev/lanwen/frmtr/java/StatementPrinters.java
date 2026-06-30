@@ -46,7 +46,7 @@ final class StatementPrinters {
         RawSource rawSource = context.rawSource;
         CompactSourceText compactSource = context.compactSource;
         CommentPlacement commentPlacement = context.commentPlacement;
-        this.blocks = new BlockPrinter(context, this::statement, formatterPragmas::hasPragma);
+        this.blocks = new BlockPrinter(context, (statement, layout) -> statement(statement), formatterPragmas::hasPragma);
         this.controlConditions = new ControlConditionPrinter(
             comments,
             commentPlacementPolicy,
@@ -70,9 +70,9 @@ final class StatementPrinters {
         );
         this.switches = new SwitchPrinter(
             context,
-            this::statement,
+            (statement, layout) -> statement(statement),
             expressions::expressionWithTail,
-            this::block,
+            (block, layout) -> block(block),
             blocks::statementSeparator,
             controlConditions,
             expressions::binaryLines,
@@ -87,18 +87,18 @@ final class StatementPrinters {
             context.sourceShapePolicy,
             options,
             context.layoutWidth,
-            this::statement,
-            switches::switchStatement,
-            this::block,
+            (statement, layout) -> statement(statement),
+            (switchStatement, layout) -> switches.switchStatement(switchStatement),
+            (block, layout) -> block(block),
             blocks::blockWithLeading,
-            declarations::body,
-            expressions::expression,
+            (declaration, layout) -> declarations.body(declaration),
+            (expression, layout) -> expressions.expression(expression),
             expressions::expressionWithTail,
             expressions::assignmentStatement,
             expressions::returnStatement,
             expressions::objectCreationWithSuffix,
-            declarations::variableDeclaration,
-            declarations::variableDeclarationStatement,
+            (declaration, layout) -> declarations.variableDeclaration(declaration),
+            (declaration, layout) -> declarations.variableDeclarationStatement(declaration),
             declarations::parameterText,
             compactSource::compact,
             compactSource::compactWithoutOwnComment,
@@ -134,7 +134,7 @@ final class StatementPrinters {
             commentPlacementPolicy,
             formatterPragmas,
             context.rawPreservedSource,
-            statements::statement
+            (statement, layout) -> statements.statement(statement)
         );
     }
 
@@ -143,7 +143,7 @@ final class StatementPrinters {
     }
 
     Doc statement(Statement statement, LayoutWidth.LineBudget lineBudget) {
-        return statementRules.statement(statement, current -> statements.statement(current, lineBudget));
+        return statementRules.statement(statement, (current, layout) -> statements.statement(current, lineBudget));
     }
 
     Doc block(BlockStmt block) {
@@ -153,7 +153,7 @@ final class StatementPrinters {
     Doc methodChainLambdaBlock(BlockStmt block) {
         return blocks.block(
             block,
-            statement -> statement(statement, LayoutWidth.LineBudget.METHOD_CHAIN_LAMBDA_BODY)
+            (statement, layout) -> statement(statement, LayoutWidth.LineBudget.METHOD_CHAIN_LAMBDA_BODY)
         );
     }
 

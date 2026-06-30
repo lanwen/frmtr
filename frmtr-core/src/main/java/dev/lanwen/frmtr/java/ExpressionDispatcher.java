@@ -127,63 +127,63 @@ final class ExpressionDispatcher {
      * switch formatting stays in the switch slice. This dispatcher does not own switch selectors, labels, guards,
      * entries, or switch block layout.
      */
-    Doc expressionContent(Expression expression) {
+    Doc expressionContent(Expression expression, LayoutContext layout) {
         if (expression instanceof AssignExpr assignExpr) {
-            return assignments.format(assignExpr);
+            return assignments.format(assignExpr, layout);
         }
         if (expression instanceof ArrayAccessExpr arrayAccessExpr) {
-            return arrayAccesses.format(arrayAccessExpr);
+            return arrayAccesses.format(arrayAccessExpr, layout);
         }
         if (expression instanceof ArrayCreationExpr arrayCreationExpr) {
-            return arrayCreations.format(arrayCreationExpr);
+            return arrayCreations.format(arrayCreationExpr, layout);
         }
         if (expression instanceof ArrayInitializerExpr arrayInitializerExpr) {
-            return arrayInitializers.format(arrayInitializerExpr);
+            return arrayInitializers.format(arrayInitializerExpr, layout);
         }
         if (expression instanceof AnnotationExpr annotationExpr) {
-            return annotationExpressions.format(annotationExpr);
+            return annotationExpressions.format(annotationExpr, layout);
         }
         if (expression instanceof BinaryExpr binaryExpr) {
-            return binaries.format(binaryExpr);
+            return binaries.format(binaryExpr, layout);
         }
         if (expression instanceof CastExpr castExpr) {
-            return casts.format(castExpr);
+            return casts.format(castExpr, layout);
         }
         if (expression instanceof ClassExpr classExpr) {
-            return classExpressions.format(classExpr);
+            return classExpressions.format(classExpr, layout);
         }
         if (expression instanceof ConditionalExpr conditionalExpr) {
-            return conditionals.format(conditionalExpr);
+            return conditionals.format(conditionalExpr, layout);
         }
         if (expression instanceof EnclosedExpr enclosedExpr) {
-            return enclosedExpressions.format(enclosedExpr);
+            return enclosedExpressions.format(enclosedExpr, layout);
         }
         if (expression instanceof FieldAccessExpr fieldAccessExpr) {
-            return fieldAccesses.format(fieldAccessExpr);
+            return fieldAccesses.format(fieldAccessExpr, layout);
         }
         if (expression instanceof InstanceOfExpr instanceOfExpr) {
-            return instanceOfExpressions.format(instanceOfExpr);
+            return instanceOfExpressions.format(instanceOfExpr, layout);
         }
         if (expression instanceof LambdaExpr lambdaExpr) {
-            return lambdas.format(lambdaExpr);
+            return lambdas.format(lambdaExpr, layout);
         }
         if (expression instanceof MethodCallExpr methodCallExpr) {
-            return methodCalls.format(methodCallExpr);
+            return methodCalls.format(methodCallExpr, layout);
         }
         if (expression instanceof MethodReferenceExpr methodReferenceExpr) {
-            return methodReferences.format(methodReferenceExpr);
+            return methodReferences.format(methodReferenceExpr, layout);
         }
         if (expression instanceof ObjectCreationExpr objectCreationExpr) {
-            return objectCreations.format(objectCreationExpr);
+            return objectCreations.format(objectCreationExpr, layout);
         }
         if (expression instanceof SwitchExpr switchExpr) {
-            return switches.format(switchExpr);
+            return switches.format(switchExpr, layout);
         }
         if (expression instanceof TextBlockLiteralExpr textBlockLiteralExpr) {
-            return textBlocks.format(textBlockLiteralExpr);
+            return textBlocks.format(textBlockLiteralExpr, layout);
         }
         if (expression instanceof UnaryExpr unaryExpr) {
-            return unaries.format(unaryExpr);
+            return unaries.format(unaryExpr, layout);
         }
         return Doc.text(compactSource.compact(expression));
     }

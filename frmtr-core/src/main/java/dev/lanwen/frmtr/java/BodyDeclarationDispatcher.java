@@ -83,22 +83,27 @@ final class BodyDeclarationDispatcher {
     /**
      * Chooses the structured content rule for a declaration whose envelope has already allowed formatting.
      */
-    Doc bodyContent(BodyDeclaration<?> declaration) {
+    Doc bodyContent(BodyDeclaration<?> declaration, LayoutContext layout) {
         return switch (declaration) {
-            case ClassOrInterfaceDeclaration classDeclaration -> classOrInterfaces.format(classDeclaration);
-            case RecordDeclaration recordDeclaration -> records.format(recordDeclaration);
-            case EnumDeclaration enumDeclaration -> enums.format(enumDeclaration);
-            case AnnotationDeclaration annotationDeclaration -> annotationDeclarations.format(annotationDeclaration);
+            case ClassOrInterfaceDeclaration classDeclaration -> classOrInterfaces.format(classDeclaration, layout);
+            case RecordDeclaration recordDeclaration -> records.format(recordDeclaration, layout);
+            case EnumDeclaration enumDeclaration -> enums.format(enumDeclaration, layout);
+            case AnnotationDeclaration annotationDeclaration -> annotationDeclarations.format(
+                annotationDeclaration,
+                layout
+            );
             case AnnotationMemberDeclaration annotationMemberDeclaration -> annotationMembers.format(
-                annotationMemberDeclaration
+                annotationMemberDeclaration,
+                layout
             );
-            case FieldDeclaration fieldDeclaration -> fields.format(fieldDeclaration);
-            case MethodDeclaration methodDeclaration -> methods.format(methodDeclaration);
+            case FieldDeclaration fieldDeclaration -> fields.format(fieldDeclaration, layout);
+            case MethodDeclaration methodDeclaration -> methods.format(methodDeclaration, layout);
             case CompactConstructorDeclaration compactConstructorDeclaration -> compactConstructors.format(
-                compactConstructorDeclaration
+                compactConstructorDeclaration,
+                layout
             );
-            case ConstructorDeclaration constructorDeclaration -> constructors.format(constructorDeclaration);
-            case InitializerDeclaration initializerDeclaration -> initializers.format(initializerDeclaration);
+            case ConstructorDeclaration constructorDeclaration -> constructors.format(constructorDeclaration, layout);
+            case InitializerDeclaration initializerDeclaration -> initializers.format(initializerDeclaration, layout);
             default -> rawDeclaration(declaration);
         };
     }

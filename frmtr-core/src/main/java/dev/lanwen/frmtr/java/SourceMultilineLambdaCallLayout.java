@@ -82,7 +82,7 @@ final class SourceMultilineLambdaCallLayout {
                 Doc.text(prefix + "(" + (leadingArguments.isEmpty() ? "" : leadingArguments + ", ")),
                 lambdaHeaders.sourceMultilineForHeader(lambda),
                 Doc.text(" -> "),
-                lambdaBlockRenderer.format(lambda.getBody().asBlockStmt()),
+                lambdaBlockRenderer.format(lambda.getBody().asBlockStmt(), LayoutContext.root()),
                 Doc.text(")")
             )
         );

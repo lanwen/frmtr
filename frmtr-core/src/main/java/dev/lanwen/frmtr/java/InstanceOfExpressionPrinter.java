@@ -60,7 +60,7 @@ final class InstanceOfExpressionPrinter {
         if (currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
             return Doc.text(flat);
         }
-        Doc left = this.expression.format(expression.getExpression());
+        Doc left = this.expression.format(expression.getExpression(), LayoutContext.root());
         String right = expression.getPattern()
                 .map(compact)
                 .orElseGet(() -> compactTypeLike.apply(expression.getType()));

@@ -84,9 +84,9 @@ final class ArrayExpressionPrinter {
     Doc arrayAccess(ArrayAccessExpr expression) {
         return Doc.group(
             Doc.concat(
-                expressionRenderer.format(expression.getName()),
+                expressionRenderer.format(expression.getName(), LayoutContext.root()),
                 Doc.text("["),
-                Doc.indent(Doc.concat(Doc.SOFT_LINE, expressionRenderer.format(expression.getIndex()))),
+                Doc.indent(Doc.concat(Doc.SOFT_LINE, expressionRenderer.format(expression.getIndex(), LayoutContext.root()))),
                 Doc.SOFT_LINE,
                 Doc.text("]")
             )
@@ -105,7 +105,7 @@ final class ArrayExpressionPrinter {
         return Doc.concat(
             brokenEnclosedForSuffix.apply(enclosed, true),
             Doc.text("["),
-            expressionRenderer.format(expression.getIndex()),
+            expressionRenderer.format(expression.getIndex(), LayoutContext.root()),
             Doc.text("]")
         );
     }
@@ -358,7 +358,7 @@ final class ArrayExpressionPrinter {
             parts.add(objectCreationWithSuffix.apply(objectCreation, suffix));
             suffixAppended = true;
         } else {
-            parts.add(expressionRenderer.format(value));
+            parts.add(expressionRenderer.format(value, LayoutContext.root()));
         }
         if (trailingComment != Doc.EMPTY) {
             parts.add(Doc.text(" "));

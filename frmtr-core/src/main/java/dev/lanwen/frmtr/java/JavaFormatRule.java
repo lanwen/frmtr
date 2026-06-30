@@ -14,8 +14,12 @@ import dev.lanwen.frmtr.doc.Doc;
  * <p>Callers still own formatter pragma state, comment attachment, raw-source recovery, compact-source policy, and the
  * decision that a declaration, statement, or expression context has been reached. Implementations own only the layout
  * for the node shape they are handed.
+ *
+ * <p>The {@link LayoutContext} carries the node's positional context (where it sits relative to its parent) and is
+ * threaded down the descent. It is distinct from the run-scoped services on {@link JavaFormatContext} and from the
+ * per-type dispatch the dispatchers own. Rules receive it as a parameter; they never store or mutate it.
  */
 @FunctionalInterface
 interface JavaFormatRule<N extends Node> {
-    Doc format(N node);
+    Doc format(N node, LayoutContext layout);
 }

@@ -219,7 +219,7 @@ final class BlockPrinter {
         if (currentStatement instanceof EmptyStmt emptyStmt) {
             return blockEmptyStatementComment(emptyStmt);
         }
-        return Optional.of(statementRenderer.format(currentStatement));
+        return Optional.of(statementRenderer.format(currentStatement, LayoutContext.root()));
     }
 
     private Doc sourceLineSeparator(int previousEndLine, int currentBeginLine) {
@@ -313,7 +313,7 @@ final class BlockPrinter {
         if (currentStatement instanceof EmptyStmt emptyStmt) {
             return blockEmptyStatementComment(emptyStmt);
         }
-        return Optional.of(statementRenderer.format(currentStatement));
+        return Optional.of(statementRenderer.format(currentStatement, LayoutContext.root()));
     }
 
     private Optional<RecoveredListPlanner.Plan<Statement>> recoveryPlan(BlockStmt block) {

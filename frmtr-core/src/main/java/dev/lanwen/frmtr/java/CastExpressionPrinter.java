@@ -71,7 +71,7 @@ final class CastExpressionPrinter {
         return Doc.concat(
             castType(expression.getType(), expression.getExpression()),
             Doc.text(" "),
-            this.expression.format(expression.getExpression())
+            this.expression.format(expression.getExpression(), LayoutContext.root())
         );
     }
 

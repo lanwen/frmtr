@@ -84,7 +84,7 @@ final class DeclarationPrefixPrinter {
         List<Doc> docs = new ArrayList<>();
         for (int index = 0; index < annotations.size(); index++) {
             AnnotationExpr annotation = annotations.get(index);
-            docs.add(annotationRenderer.format(annotation));
+            docs.add(annotationRenderer.format(annotation, LayoutContext.root()));
             docs.add(Doc.HARD_LINE);
             if (index + 1 < annotations.size() && node instanceof Node owner) {
                 docs.add(interAnnotationComments(owner, annotation, annotations.get(index + 1)));

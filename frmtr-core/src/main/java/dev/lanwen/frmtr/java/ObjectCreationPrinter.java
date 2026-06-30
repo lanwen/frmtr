@@ -72,12 +72,12 @@ final class ObjectCreationPrinter {
         this.comments = context.comments;
         this.layoutPolicy = context.objectCreationLayoutPolicy;
         this.types = types;
-        this.commentedExpressionLists = new CommentedExpressionListPrinter(context, expressionRenderer::format);
+        this.commentedExpressionLists = new CommentedExpressionListPrinter(context, node -> expressionRenderer.format(node, LayoutContext.root()));
         this.expressionRenderer = expressionRenderer;
         this.breakableArguments = new BreakableArgumentExpressionPrinter(
             context.sourceShapePolicy,
             context.options,
-            expressionRenderer::format,
+            node -> expressionRenderer.format(node, LayoutContext.root()),
             brokenArgumentRenderer,
             compact::apply,
             context.layoutWidth::continuationStatement
@@ -240,7 +240,7 @@ final class ObjectCreationPrinter {
     private Doc anonymousObjectCreation(ObjectCreationExpr expression, String prefix) {
         Doc header = anonymousObjectCreationHeader(expression, prefix);
         List<BodyDeclaration<?>> declarations = expression.getAnonymousClassBody().orElseThrow();
-        List<Doc> members = declarations.stream().map(bodyRenderer::format).toList();
+        List<Doc> members = declarations.stream().map(node -> bodyRenderer.format(node, LayoutContext.root())).toList();
         if (members.isEmpty()) {
             return Doc.concat(header, Doc.text("{}"));
         }

@@ -623,7 +623,7 @@ final class SwitchPrinter {
             label,
             guard,
             Doc.text(" ->"),
-            Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement)))
+            Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement, LayoutContext.root())))
         );
     }
 
@@ -1129,7 +1129,7 @@ final class SwitchPrinter {
         if (block.getStatements().isEmpty() && block.getOrphanComments().isEmpty()) {
             return Doc.concat(Doc.text("{"), Doc.HARD_LINE, Doc.text("}"));
         }
-        return blockRenderer.format(block);
+        return blockRenderer.format(block, LayoutContext.root());
     }
 
     private boolean hasLeadingOwnComment(Statement statement) {
@@ -1175,7 +1175,7 @@ final class SwitchPrinter {
         if (statement instanceof ExpressionStmt expressionStmt) {
             return expressionWithTailRenderer.render(expressionStmt.getExpression(), ExpressionTail.SEMICOLON);
         }
-        return Doc.concat(statementRenderer.format(statement));
+        return Doc.concat(statementRenderer.format(statement, LayoutContext.root()));
     }
 
     /**
@@ -1188,7 +1188,7 @@ final class SwitchPrinter {
         if (block.getStatements().isEmpty() && block.getOrphanComments().isEmpty()) {
             return Doc.text("{}");
         }
-        return blockRenderer.format(block);
+        return blockRenderer.format(block, LayoutContext.root());
     }
 
     /**
@@ -1262,7 +1262,7 @@ final class SwitchPrinter {
             entry,
             statements,
             interStatementOrphanComments(entry, statements),
-            (previous, current, index) -> Optional.of(statementRenderer.format(current)),
+            (previous, current, index) -> Optional.of(statementRenderer.format(current, LayoutContext.root())),
             new SourceOrderedCommentInterleaver.Spacing<>() {
                 @Override
                 public int beginLine(Statement sibling) {

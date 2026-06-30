@@ -1297,11 +1297,15 @@ final class VariableInitializerLayout {
         if (!openerFits) {
             return Optional.empty();
         }
-        if (!methodCall.getAllContainedComments().isEmpty()) {
-            return Optional.of(Doc.concat(Doc.text(name + " = "), this.methodCall.apply(methodCall)));
-        }
+        // The hugged block-lambda layout already renders the lambda body through the comment-preserving block printer,
+        // which claims every comment inside the body. Returning it before the contained-comment fallback below keeps
+        // those claims as the winner; falling through to a fresh whole-call render here would re-offer comments the
+        // discarded hug build already claimed, and first-claim-wins would then drop them.
         if (blockLambdaCall.isPresent()) {
             return blockLambdaCall;
+        }
+        if (!methodCall.getAllContainedComments().isEmpty()) {
+            return Optional.of(Doc.concat(Doc.text(name + " = "), this.methodCall.apply(methodCall)));
         }
         return Optional.of(brokenMethodCallArgumentList(name, methodCall, callPrefix));
     }

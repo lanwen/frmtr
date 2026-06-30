@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - gradle.properties
+      - jreleaser.yml
+      - .github/workflows/release.yml
   workflow_dispatch:
 
 permissions:
@@ -153,6 +155,16 @@ jobs:
           test -f "build/distributions/frmtr-${{ needs.validate.outputs.version }}-osx-aarch_64.zip"
           test -f "build/distributions/frmtr-${{ needs.validate.outputs.version }}-windows-x86_64.zip"
 
+      - name: Stage release artifacts and validate JReleaser
+        env:
+          JRELEASER_GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          JRELEASER_GPG_PASSPHRASE: ${{ secrets.JRELEASER_GPG_PASSPHRASE }}
+          JRELEASER_GPG_SECRET_KEY: ${{ secrets.JRELEASER_GPG_SECRET_KEY }}
+          JRELEASER_MAVENCENTRAL_PASSWORD: ${{ secrets.JRELEASER_MAVENCENTRAL_PASSWORD }}
+          JRELEASER_MAVENCENTRAL_USERNAME: ${{ secrets.JRELEASER_MAVENCENTRAL_USERNAME }}
+          JRELEASER_PACKAGERS_BREW_ACTIVE: NEVER
+        run: ./gradlew stageCentralRelease jreleaserConfig
+
       - name: Create release tag
         if: needs.validate.outputs.tag_exists != 'true'
         env:
@@ -175,7 +187,7 @@ jobs:
           JRELEASER_MAVENCENTRAL_PASSWORD: ${{ secrets.JRELEASER_MAVENCENTRAL_PASSWORD }}
           JRELEASER_MAVENCENTRAL_USERNAME: ${{ secrets.JRELEASER_MAVENCENTRAL_USERNAME }}
           JRELEASER_PACKAGERS_BREW_ACTIVE: NEVER
-        run: ./gradlew stageCentralRelease jreleaserFullRelease
+        run: ./gradlew jreleaserFullRelease
 
   gradle-plugin:
     name: Publish Gradle Plugin Portal

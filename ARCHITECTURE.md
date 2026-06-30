@@ -61,6 +61,9 @@ Only the library modules that external adapters need, `:frmtr-core` and `:frmtr-
 `mavenJava` publications. The Gradle plugin uses Gradle's plugin development and publishing model for its plugin and
 marker publications. The CLI is distributed as an application/native executable rather than as a Maven library, and
 `:frmtr-native-image-support` stays a build-time companion visible only to native-image builds and native tests.
+JReleaser owns the GitHub release and binary-distribution metadata in `jreleaser.yml`, including the project-level
+copyright that mirrors the root MIT license. The release publish job stages Central artifacts and runs
+`jreleaserConfig` before creating the Git tag, so configuration validation happens before remote release state changes.
 
 `:frmtr-cli` generates a small `BuildInfo` source file during compilation so JVM and native binaries report the same
 project version, Git commit SHA, and build timestamp through Picocli's version provider.

@@ -67,8 +67,8 @@ copyright that mirrors the root MIT license. The release publish job stages Cent
 Homebrew publication runs through the reusable `Publish Homebrew` workflow and uses the separate `jreleaser-brew.yml`
 config so the tap job validates only GitHub release and Homebrew packaging metadata, not Maven Central deploy or PGP
 signing secrets.
-Release preparation updates both the Gradle project version and the JBake site version property so the generated site
-shows the same released coordinate as the published artifacts.
+Release preparation updates the Gradle project version, README Gradle plugin snippets, and the JBake site version
+property so published documentation shows the same released coordinate as the published artifacts.
 
 `:frmtr-cli` generates a small `BuildInfo` source file during compilation so JVM and native binaries report the same
 project version, Git commit SHA, and build timestamp through Picocli's version provider.
@@ -589,10 +589,11 @@ Release automation derives version bumps from Conventional Commits-style PR titl
 target to at least the next minor version, breaking-change markers raise it to the next minor version while the release
 line is `0.x` and to the next major version from 1.0 onward, and all other included PRs default to patch. Main-branch
 pushes refresh the generated release PR, and feature or breaking-change merges can also open a signed snapshot PR when
-the current `*-SNAPSHOT` version needs to move to a higher release target. The snapshot target workflow can also be
-dispatched manually with an explicit snapshot version. Snapshot target PRs and post-release next-snapshot PRs share the
-same reusable snapshot PR workflow, so their GitHub App token handling and signed PR creation stay identical. The schema
-and changelog marker contract are documented in [docs/release-automation.md](docs/release-automation.md).
+the current `*-SNAPSHOT` version needs to move to a higher release target. That snapshot PR also updates documented
+snapshot consumption versions in the README and publishing guide. The snapshot target workflow can be dispatched
+manually with an explicit snapshot version. Snapshot target PRs and post-release next-snapshot PRs share the same
+reusable snapshot PR workflow, so their GitHub App token handling and signed PR creation stay identical. The schema and
+changelog marker contract are documented in [docs/release-automation.md](docs/release-automation.md).
 
 ## Tests
 

@@ -45,6 +45,8 @@ packagers:
     active: RELEASE
     formulaName: Frmtr
     multiPlatform: true
+    skipTemplates:
+      - README.md.tpl
     commitAuthor:
       name: frmtr-release[bot]
       email: frmtr-release[bot]@users.noreply.github.com

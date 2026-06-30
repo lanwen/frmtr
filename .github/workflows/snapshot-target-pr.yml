@@ -119,7 +119,10 @@ jobs:
           branch: ${{ steps.snapshot.outputs.branch }}
           base: main
           delete-branch: true
-          add-paths: gradle.properties
+          add-paths: |
+            gradle.properties
+            README.md
+            PUBLISHING.md
           title: "chore(snapshot): ${{ steps.snapshot.outputs.subject }} ${{ steps.snapshot.outputs.version }}"
           body-path: build/snapshot-pr-body.md
           labels: snapshot

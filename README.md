@@ -10,7 +10,7 @@ The formatter parses Java source, adapts the parsed tree into formatter-owned sy
 
 ## Installation
 
-`frmtr` is pre-release software; install it by building from source.
+`frmtr` is pre-release software. Use the published Gradle plugin or native binary, or build it from source.
 
 Prerequisites:
 
@@ -43,9 +43,12 @@ Apply the Gradle plugin to a Java project to check formatting during `check` and
 ```kotlin
 plugins {
     java
-    id("dev.lanwen.frmtr")
+    id("dev.lanwen.frmtr") version "0.1.0"
 }
 ```
+
+Snapshot builds are published from `main`. Current snapshot: `0.1.1-SNAPSHOT`; see
+[Consuming Snapshots](PUBLISHING.md#consuming-snapshots) for the repository setup.
 
 The plugin follows Java source-set defaults with no required `frmtr {}` block:
 
@@ -69,7 +72,7 @@ plugin version central, while normal Gradle plugin application controls which mo
 
 ```kotlin
 plugins {
-    id("dev.lanwen.frmtr") apply false
+    id("dev.lanwen.frmtr") version "0.1.0" apply false
 }
 
 subprojects {
@@ -84,7 +87,7 @@ extension exists inherit root `frmtr {}` values as conventions:
 
 ```kotlin
 plugins {
-    id("dev.lanwen.frmtr")
+    id("dev.lanwen.frmtr") version "0.1.0"
 }
 
 frmtr {
@@ -147,7 +150,7 @@ Kotlin DSL configuration needs type-safe accessors. The module `frmtr {}` block 
 ```kotlin
 plugins {
     java
-    id("dev.lanwen.frmtr")
+    id("dev.lanwen.frmtr") version "0.1.0"
 }
 
 frmtr {
@@ -359,6 +362,14 @@ The formatter-wide default indentation is four spaces. Use `--indent-width` in t
 spaces per indentation level.
 
 ## Native Binary
+
+Install the published native CLI through the [Homebrew tap](https://github.com/lanwen/homebrew-tap):
+
+```bash
+brew install lanwen/tap/frmtr
+```
+
+Platform archives are also attached to the [latest GitHub release](https://github.com/lanwen/frmtr/releases/latest).
 
 The default native binary build is Linux via Docker:
 

@@ -67,10 +67,7 @@ final class FieldDeclarationPrinter {
     private final VariableInitializerLayout initializers;
 
     FieldDeclarationPrinter(
-            CommentTracker comments,
-            JavaCommentPlacementPolicy commentPlacement,
-            SourceShapePolicy sourceShapePolicy,
-            RawSource rawSource,
+            JavaFormatContext context,
             FormatterOptions options,
             LayoutWidth layoutWidth,
             Function<NodeWithAnnotations<?>, Doc> declarationAnnotations,
@@ -79,9 +76,6 @@ final class FieldDeclarationPrinter {
             Function<Node, String> compactTypeLike,
             Function<Type, Doc> typeBody,
             Predicate<Type> typeCanBreak,
-            Function<Node, String> compact,
-            Function<Node, String> compactWithoutOwnComment,
-            Function<List<? extends Node>, String> compactJoin,
             Function<Expression, Doc> expression,
             Function<Expression, Doc> expressionWithoutOwnComment,
             Predicate<BinaryExpr> binaryExpressionHasLineComments,
@@ -131,16 +125,7 @@ final class FieldDeclarationPrinter {
         this.typeBody = typeBody;
         this.typeCanBreak = typeCanBreak;
         this.initializers = new VariableInitializerLayout(
-            comments,
-            commentPlacement,
-            sourceShapePolicy,
-            rawSource,
-            options,
-            layoutWidth,
-            compactTypeLike,
-            compact,
-            compactWithoutOwnComment,
-            compactJoin,
+            context,
             expression,
             expressionWithoutOwnComment,
             binaryExpressionHasLineComments,

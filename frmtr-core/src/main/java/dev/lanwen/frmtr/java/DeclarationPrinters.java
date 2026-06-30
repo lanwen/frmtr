@@ -124,10 +124,7 @@ final class DeclarationPrinters {
             (declaration, layout) -> body(declaration)
         );
         this.fields = new FieldDeclarationPrinter(
-            comments,
-            commentPlacementPolicy,
-            context.sourceShapePolicy,
-            rawSource,
+            context,
             options,
             context.layoutWidth,
             declarationPrefixes::declarationAnnotations,
@@ -136,9 +133,6 @@ final class DeclarationPrinters {
             compactSource::compactTypeLike,
             types::typeBody,
             types::typeCanBreak,
-            compactSource::compact,
-            compactSource::compactWithoutOwnComment,
-            compactSource::compactJoin,
             expressions::expression,
             expressions::expressionWithoutOwnComment,
             expressions::binaryHasLineComments,

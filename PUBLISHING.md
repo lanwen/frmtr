@@ -74,7 +74,7 @@ Apply the snapshot plugin:
 ```kotlin
 // build.gradle.kts
 plugins {
-    id("dev.lanwen.frmtr") version "0.1.0-SNAPSHOT"
+    id("dev.lanwen.frmtr") version "0.1.1-SNAPSHOT"
 }
 ```
 
@@ -96,8 +96,9 @@ updates signed PR branches with `peter-evans/create-pull-request` and a GitHub A
 1. Every push to `main` refreshes the `release` PR. The release PR updates `CHANGELOG.md`, `README.md`, changes
    `gradle.properties` from `*-SNAPSHOT` to the computed final version, updates the JBake site version in
    `site/src/jbake/jbake.properties`, and carries the corpus check before merge.
-2. Feature or breaking-change merges to `main` can also open a `snapshot` PR that raises the current snapshot target;
-   the same workflow can be dispatched manually with an explicit `*-SNAPSHOT` target.
+2. Feature or breaking-change merges to `main` can also open a `snapshot` PR that raises the current snapshot target
+   and updates documented snapshot consumption versions; the same workflow can be dispatched manually with an explicit
+   `*-SNAPSHOT` target.
 3. Merging the release PR pushes a final version in `gradle.properties` to `main`. `.github/workflows/release.yml`
    detects that change and publishes the release.
 4. After release, the workflow opens a `snapshot` PR that restores the next `*-SNAPSHOT` version.

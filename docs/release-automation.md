@@ -90,9 +90,10 @@ whichever is higher, then removes `-SNAPSHOT`.
 
 On every `main` push, `snapshot-target-pr.yml` also checks whether merged feature or breaking-change PRs require a
 higher snapshot target. If `gradle.properties` is still on a lower `*-SNAPSHOT`, it opens or updates a signed `snapshot`
-PR that bumps the snapshot version. Manual dispatch may also pass an explicit `snapshot_version` such as
-`0.3.0-SNAPSHOT` to set the target directly. Automatic snapshot target bumps are calculated from the latest release tag,
-so multiple feature PRs before the next release still require only one minor snapshot bump.
+PR that bumps the snapshot version and documented snapshot consumption versions. Manual dispatch may also pass an
+explicit `snapshot_version` such as `0.3.0-SNAPSHOT` to set the target directly. Automatic snapshot target bumps are
+calculated from the latest release tag, so multiple feature PRs before the next release still require only one minor
+snapshot bump.
 
 ## Workflow Overview
 
@@ -101,8 +102,8 @@ so multiple feature PRs before the next release still require only one minor sna
   `README.md`, updates `gradle.properties`, updates the JBake site version in `site/src/jbake/jbake.properties`, and
   opens or updates a `release` PR.
 - `snapshot-target-pr.yml`: on every `main` push, raises the snapshot target when merged feature or breaking-change PRs
-  require a higher release line; manual dispatch can set a specific snapshot target. `release.yml` also calls it as a
-  reusable workflow to open the post-release next-snapshot PR.
+  require a higher release line and updates snapshot consumption snippets; manual dispatch can set a specific snapshot
+  target. `release.yml` also calls it as a reusable workflow to open the post-release next-snapshot PR.
 - `snapshot-version-guard.yml`: fails PRs whose merged result has a non-`-SNAPSHOT` version unless the PR is labeled
   `release`.
 - `corpus.yml`: runs on generated `release` PRs and by manual dispatch, so the release PR carries the corpus check

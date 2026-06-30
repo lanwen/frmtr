@@ -589,10 +589,11 @@ Release automation derives version bumps from Conventional Commits-style PR titl
 target to at least the next minor version, breaking-change markers raise it to the next minor version while the release
 line is `0.x` and to the next major version from 1.0 onward, and all other included PRs default to patch. Main-branch
 pushes refresh the generated release PR, and feature or breaking-change merges can also open a signed snapshot PR when
-the current `*-SNAPSHOT` version needs to move to a higher release target. The snapshot target workflow can also be
-dispatched manually with an explicit snapshot version. Snapshot target PRs and post-release next-snapshot PRs share the
-same reusable snapshot PR workflow, so their GitHub App token handling and signed PR creation stay identical. The schema
-and changelog marker contract are documented in [docs/release-automation.md](docs/release-automation.md).
+the current `*-SNAPSHOT` version needs to move to a higher release target. That snapshot PR also updates documented
+snapshot consumption versions in the README and publishing guide. The snapshot target workflow can be dispatched
+manually with an explicit snapshot version. Snapshot target PRs and post-release next-snapshot PRs share the same
+reusable snapshot PR workflow, so their GitHub App token handling and signed PR creation stay identical. The schema and
+changelog marker contract are documented in [docs/release-automation.md](docs/release-automation.md).
 
 ## Tests
 

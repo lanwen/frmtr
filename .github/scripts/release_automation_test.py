@@ -67,9 +67,11 @@ class PrepareReleaseTest(unittest.TestCase):
                 "# frmtr\n\n"
                 "```kotlin\n"
                 "plugins {\n"
-                "    id(\"dev.lanwen.frmtr\") version \"0.1.0-SNAPSHOT\"\n"
+                "    id(\"dev.lanwen.frmtr\") version \"0.1.0\"\n"
                 "}\n"
                 "```\n"
+                "\n"
+                "Snapshot builds are published from `main`. Current snapshot: `0.1.1-SNAPSHOT`.\n"
             )
 
             try:
@@ -97,6 +99,54 @@ class PrepareReleaseTest(unittest.TestCase):
             self.assertIn(
                 'id("dev.lanwen.frmtr") version "0.1.1"',
                 (workspace / "README.md").read_text(),
+            )
+            self.assertIn("Current snapshot: `0.1.1-SNAPSHOT`", (workspace / "README.md").read_text())
+
+
+class PrepareSnapshotTargetTest(unittest.TestCase):
+    def test_prepare_snapshot_target_updates_documented_snapshot_versions(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            cwd = Path.cwd()
+            workspace = Path(directory)
+            (workspace / "gradle.properties").write_text("version=0.1.1-SNAPSHOT\n")
+            (workspace / "README.md").write_text(
+                "# frmtr\n\n"
+                "Snapshot builds are published from `main`. Current snapshot: `0.1.1-SNAPSHOT`.\n"
+            )
+            (workspace / "PUBLISHING.md").write_text(
+                "# Publishing\n\n"
+                "```kotlin\n"
+                "plugins {\n"
+                "    id(\"dev.lanwen.frmtr\") version \"0.1.1-SNAPSHOT\"\n"
+                "}\n"
+                "```\n"
+            )
+
+            try:
+                os.chdir(workspace)
+                args = mock.Mock(body_file="build/snapshot-pr-body.md", snapshot_version="")
+                with (
+                    mock.patch.object(
+                        release_automation,
+                        "merged_prs_since_latest_tag",
+                        return_value=[pr_entry(1, "feat(core): add text block formatting")],
+                    ),
+                    mock.patch.object(
+                        release_automation,
+                        "latest_release_tag",
+                        return_value=("v0.1.0", release_automation.Version(0, 1, 0)),
+                    ),
+                    contextlib.redirect_stdout(io.StringIO()),
+                ):
+                    self.assertEqual(0, release_automation.prepare_snapshot_target(args))
+            finally:
+                os.chdir(cwd)
+
+            self.assertEqual("version=0.2.0-SNAPSHOT\n", (workspace / "gradle.properties").read_text())
+            self.assertIn("Current snapshot: `0.2.0-SNAPSHOT`", (workspace / "README.md").read_text())
+            self.assertIn(
+                'id("dev.lanwen.frmtr") version "0.2.0-SNAPSHOT"',
+                (workspace / "PUBLISHING.md").read_text(),
             )
 
 

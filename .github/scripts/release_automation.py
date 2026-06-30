@@ -34,7 +34,10 @@ TITLE_PATTERN = re.compile(
 SEMVER_PATTERN = re.compile(r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)$")
 SITE_PROPERTIES = Path("site/src/jbake/jbake.properties")
 README = Path("README.md")
-README_PLUGIN_VERSION_PATTERN = re.compile(r'(id\("dev\.lanwen\.frmtr"\) version ")([^"]+)(")')
+PUBLISHING = Path("PUBLISHING.md")
+README_RELEASE_PLUGIN_VERSION_PATTERN = re.compile(r'(id\("dev\.lanwen\.frmtr"\) version ")(?![^"]*-SNAPSHOT)([^"]+)(")')
+README_SNAPSHOT_VERSION_PATTERN = re.compile(r"(Current snapshot: `)([^`]+-SNAPSHOT)(`)")
+PUBLISHING_SNAPSHOT_PLUGIN_VERSION_PATTERN = re.compile(r'(id\("dev\.lanwen\.frmtr"\) version ")([^"]+-SNAPSHOT)(")')
 
 
 @dataclasses.dataclass(frozen=True, order=True)
@@ -126,10 +129,27 @@ def write_site_version(version: str) -> None:
 
 def write_readme_plugin_version(version: str) -> None:
     content = README.read_text()
-    updated, replacements = README_PLUGIN_VERSION_PATTERN.subn(rf"\g<1>{version}\g<3>", content)
+    updated, replacements = README_RELEASE_PLUGIN_VERSION_PATTERN.subn(rf"\g<1>{version}\g<3>", content)
     if replacements == 0:
-        raise ValueError(f"{README} does not contain a versioned dev.lanwen.frmtr plugin declaration")
+        raise ValueError(f"{README} does not contain a versioned release dev.lanwen.frmtr plugin declaration")
     README.write_text(updated)
+
+
+def write_snapshot_docs_version(version: str) -> None:
+    readme_content = README.read_text()
+    readme_updated, readme_replacements = README_SNAPSHOT_VERSION_PATTERN.subn(rf"\g<1>{version}\g<3>", readme_content)
+    if readme_replacements == 0:
+        raise ValueError(f"{README} does not contain a current snapshot version")
+    README.write_text(readme_updated)
+
+    publishing_content = PUBLISHING.read_text()
+    publishing_updated, publishing_replacements = PUBLISHING_SNAPSHOT_PLUGIN_VERSION_PATTERN.subn(
+        rf"\g<1>{version}\g<3>",
+        publishing_content,
+    )
+    if publishing_replacements == 0:
+        raise ValueError(f"{PUBLISHING} does not contain a snapshot dev.lanwen.frmtr plugin declaration")
+    PUBLISHING.write_text(publishing_updated)
 
 
 def required_value(args: argparse.Namespace, name: str, env_name: str) -> str:
@@ -450,6 +470,7 @@ def prepare_snapshot(args: argparse.Namespace) -> int:
     body_file = required_value(args, "body_file", "SNAPSHOT_PR_BODY_FILE")
     snapshot_version = release_version.next_minor_snapshot()
     write_version(snapshot_version)
+    write_snapshot_docs_version(snapshot_version)
     Path(body_file).parent.mkdir(parents=True, exist_ok=True)
     Path(body_file).write_text(snapshot_pr_body(snapshot_version, str(release_version)))
     print(snapshot_version)
@@ -481,6 +502,7 @@ def prepare_snapshot_target(args: argparse.Namespace) -> int:
     if requested_snapshot:
         parse_snapshot_version(requested_snapshot)
         write_version(requested_snapshot)
+        write_snapshot_docs_version(requested_snapshot)
         Path(body_file).parent.mkdir(parents=True, exist_ok=True)
         Path(body_file).write_text(manual_snapshot_target_pr_body(requested_snapshot))
         print(requested_snapshot)
@@ -491,6 +513,7 @@ def prepare_snapshot_target(args: argparse.Namespace) -> int:
     if snapshot_version is None:
         return 0
     write_version(snapshot_version)
+    write_snapshot_docs_version(snapshot_version)
     Path(body_file).parent.mkdir(parents=True, exist_ok=True)
     Path(body_file).write_text(snapshot_target_pr_body(snapshot_version, entries))
     print(snapshot_version)

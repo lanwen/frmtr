@@ -5,6 +5,7 @@ project:
   authors:
     - lanwen
   license: MIT
+  copyright: Copyright (c) 2026 lanwen
   links:
     homepage: https://github.com/lanwen/frmtr
   languages:

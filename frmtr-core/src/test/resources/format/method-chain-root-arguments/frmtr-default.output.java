@@ -7,7 +7,12 @@ class MethodChainRootArgumentsSample {
             handler.prepare(task).thenReturn(done())
         ).as(status(ctx, task.replyTo(), call("sample", task.id())));
         Registry.lookup(
-            List.of(Criteria.where("health").eq("READY").and("labels['sample']").eq("true"))
+            List.of(
+                Criteria.where("health")
+                        .eq("READY")
+                        .and("labels['sample']")
+                        .eq("true")
+            )
         ).toDebugString();
         registry.register(
             Builders.request().willReturn(

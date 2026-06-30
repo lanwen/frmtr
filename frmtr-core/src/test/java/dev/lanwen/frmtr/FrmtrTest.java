@@ -266,16 +266,31 @@ final class FrmtrTest {
     }
 
     @Test
-    void explainDoesNotAttributeASourceMultilineChainBreakToWidth() {
-        // A chain the developer already split across source lines stays split even at a wide budget, so width is not
-        // the cause of the break. The recorder must not manufacture a width wrap for it.
+    void explainDoesNotAttributeALinkCountChainBreakToWidth() {
+        // foo().bar().baz() is a call-rooted chain with two selector links, so the link-count rule breaks it one
+        // selector per line even though its flat form is far narrower than the budget. The break is structural, not
+        // width-driven, so the recorder must not manufacture a width wrap: explain reports it as laid out by rule.
         FormatterOptions wide = FormatterOptions.defaults().withLineWidth(120);
-        String source = "class A{\n void m(){\n  foo()\n   .bar()\n   .baz();\n }\n}\n";
+        String source = "class A{\n void m(){\n  foo().bar().baz();\n }\n}\n";
 
         ExplainResult result = Frmtr.explain(source, wide);
 
         assertThat(result.formatted().lines().filter(line -> line.contains(".")).count()).isGreaterThanOrEqualTo(2);
         assertThat(result.explanation().printerWraps()).isEmpty();
+    }
+
+    @Test
+    void linkCountChainBreakConvergesRegardlessOfSourceShape() {
+        // Because the chain break is decided by the structural link count rather than the author's source line shape,
+        // the same chain written flat on one line and pre-broken across source lines must produce identical output.
+        FormatterOptions wide = FormatterOptions.defaults().withLineWidth(120);
+        String flat = "class A{\n void m(){\n  foo().bar().baz();\n }\n}\n";
+        String preBroken = "class A{\n void m(){\n  foo()\n   .bar()\n   .baz();\n }\n}\n";
+
+        assertThat(Frmtr.format(preBroken, wide)).isEqualTo(Frmtr.format(flat, wide));
+        // The convergent output really did break across lines (the two selectors land on their own continuation lines).
+        assertThat(Frmtr.format(flat, wide).lines().filter(line -> line.startsWith("                .")).count())
+                .isEqualTo(2);
     }
 
     @Test

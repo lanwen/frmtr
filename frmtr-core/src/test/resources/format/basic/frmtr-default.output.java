@@ -43,8 +43,6 @@ class IndentationFixture {
                     customerAccountPreferenceMapperWithExternalAuditSnapshot
                 );
 
-        assertionCollector
-                .assertThat(customerAccountPreferenceMapperWithExternalAuditSnapshot)
-                .isEqualTo();
+        assertionCollector.assertThat(customerAccountPreferenceMapperWithExternalAuditSnapshot).isEqualTo();
     }
 }

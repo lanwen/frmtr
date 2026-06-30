@@ -380,7 +380,16 @@ initializer helpers coordinate declaration-local wrapping, and chain helpers kee
 ordinary argument dispatch. When a construct shares its first line with a prefix that the construct cannot see — an
 assignment `target op `, a declarator `name = ` — the caller threads that prefix into the construct's width probe as a
 `firstLineWidth` closure rather than measuring the bare construct at the block indent. The method-call chain stay-flat
-gate (`MethodCallChainPrinter`) measures with that in-scope `firstLineWidth` (defaulting to the prefix-blind
+gate (`MethodCallChainPrinter`) decides chain wrapping from a width-independent structural rule rather than the author's
+source line shape: `chainBreaksByRule` breaks a fluent chain one selector per line once its selector-link count reaches
+a root-kind threshold (a call/factory/constructor root breaks at two links; a plain receiver root at three), matching
+the prettier-java and google-java-format convention, so a chain written flat and the same chain pre-broken across source
+lines converge to identical output. The gate still keeps a chain broken when a non-final segment has a genuine
+author-broken argument list (`chainHasSourceMultilineArguments`), but a single argument that fits on one line does not
+count as such a list — it collapses to one line during formatting, so treating its transient source line breaks as a
+forced break would be non-idempotent; only two-or-more arguments spread across source lines, or a single argument that
+does not itself fit, are preserved. Width still breaks any chain that overflows regardless of link count: the gate
+measures with that in-scope `firstLineWidth` (defaulting to the prefix-blind
 `lineWidth(lineBudget)` for prefix-less callers), and both the assignment value path (`MethodCallPrinter`'s broken
 method-call assignment) and the variable initializer path (`VariableInitializerLayout`) build the prefix-aware closure,
 so a chain that fits at the block indent but overflows once the assignment/initializer prefix is counted breaks instead

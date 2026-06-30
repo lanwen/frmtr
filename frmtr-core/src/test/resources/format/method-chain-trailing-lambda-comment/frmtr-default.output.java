@@ -11,7 +11,9 @@ class MethodChainTrailingLambdaComment {
                     )
                 ) // keep polling while external state settles
                 .assertNext(items -> {
-                    assertThat(items).extracting(Item::state).containsOnly(State.READY);
+                    assertThat(items)
+                            .extracting(Item::state)
+                            .containsOnly(State.READY);
                 });
     }
 }

@@ -9,14 +9,20 @@ class SourceMultilineMethodRootChainInitializer {
 
     private static final Map<String, String> SOURCE_LABELS = Stream.of(
         PrimaryLabelFactory.DEFAULT_LABELS.entrySet().stream(),
-        SecondaryLabelRegistry.instance().getLabels().entrySet().stream()
+        SecondaryLabelRegistry.instance()
+                .getLabels()
+                .entrySet()
+                .stream()
     )
             .flatMap(Function.identity())
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
     private static final Map<String, String> DEFAULT_LABELS = Stream.of(
         PrimaryLabelFactory.DEFAULT_LABELS.entrySet().stream(),
-        SecondaryLabelRegistry.instance().getLabels().entrySet().stream()
+        SecondaryLabelRegistry.instance()
+                .getLabels()
+                .entrySet()
+                .stream()
     )
             .flatMap(Function.identity())
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));

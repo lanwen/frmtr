@@ -588,7 +588,7 @@ final class MethodCallChainPrinter {
             (!breakMode.isForced()
                 && !analysis.hasComments()
                 && !analysis.hasBlockLambdaArgument()
-                && !analysis.sourceMultilineChain()
+                && !chainBreaksByRule(analysis)
                 && !sourceMultilineArguments
                 && !rootObjectCreationNeedsBreak
                 // The stay-flat probe must measure the chain at the same line position it will actually occupy. When the
@@ -915,6 +915,58 @@ final class MethodCallChainPrinter {
         );
     }
 
+    /**
+     * Decides whether a fluent chain breaks one selector per line purely by its structural shape, independent of how the
+     * author laid it out in source and independent of width.
+     *
+     * <p>This is the structural replacement for the old {@code sourceMultilineChain} signal in the stay-flat gate. The
+     * author's source line breaks no longer decide chain wrapping: a chain written flat and the same chain pre-broken
+     * across source lines now converge to one output (the convergence goal of #137). The chain breaks when its fluent
+     * selector-link count reaches a threshold that depends on the CHAIN ROOT KIND, matching the prettier-java and
+     * google-java-format convention that a call/factory/constructor-rooted chain wraps sooner than a chain hung off a
+     * plain receiver:
+     *
+     * <ul>
+     *   <li><b>Call / factory / constructor root → threshold 2.</b> The base receiver is itself an invocation: a no-scope
+     *   method call ({@code from(...)}, {@code assertThat(x)}), a static/factory call on a type-like qualifier
+     *   ({@code Foo.builder()}, {@code CompletableFuture.allOf(...)}, {@code a.b.Type.check(...)}), or an object creation
+     *   ({@code new RouteTable()}). Two or more selectors applied after that invocation break the chain.</li>
+     *   <li><b>Plain receiver root → threshold 3.</b> The base receiver is a variable, field access, {@code this},
+     *   {@code super}, or other lowercase name ({@code config}, {@code members}, {@code this}). Three or more selectors
+     *   applied on that receiver break the chain.</li>
+     * </ul>
+     *
+     * <p>Link counting follows frmtr's existing chain analysis. {@link MethodCallChainSourcePlanner#methodCallChainRoot}
+     * folds a no-scope leading call and an object creation into {@code analysis.root()}, so every entry in
+     * {@code analysis.calls()} is a selector applied after such a root and {@code calls().size()} is the link count
+     * directly. A static/factory chain instead surfaces its type-like qualifier ({@code CompletableFuture},
+     * {@code Foo}, {@code a.b.Type}) as {@code analysis.root()} with the factory call sitting as the first entry of
+     * {@code analysis.calls()}; {@link MethodCallChainSourcePlanner#promotesFirstCall} already recognizes that qualifier,
+     * so we treat the first call as part of the root (the factory invocation) and count only the selectors after it. This
+     * keeps {@code Foo.builder().build()} at one link (flat) while {@code Foo.builder().a().build()} reaches two (breaks),
+     * consistent with the #76 root convention used by the {@code qualified-static-chain-root} and
+     * {@code constructor-chain-roots} fixtures.
+     *
+     * <p>There is intentionally no complexity hatch: lambda or text-block arguments do not on their own force a break. The
+     * companion {@code sourceMultilineArguments} signal in the gate (deliberately retained) still preserves an argument
+     * list the author broke across lines; this method only owns the selector-link count.
+     */
+    private boolean chainBreaksByRule(MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis) {
+        Expression root = analysis.root();
+        int callRootedLinks = analysis.calls().size();
+        if (root instanceof ObjectCreationExpr || root instanceof MethodCallExpr) {
+            // Constructor or no-scope-call root: every selector in calls() is a link applied after the invocation root.
+            return callRootedLinks >= 2;
+        }
+        if (methodChainPlanner.promotesFirstCall(root) && !analysis.calls().isEmpty()) {
+            // Static/factory root: the type-like qualifier is the root and its first call is the factory invocation, so
+            // links are the selectors after that factory call.
+            return callRootedLinks - 1 >= 2;
+        }
+        // Plain receiver root (variable / field / this / super / lowercase name): selectors hang directly off it.
+        return callRootedLinks >= 3;
+    }
+
     private boolean singleStringLiteralCallWithSourceMultilineArguments(
             Expression root,
             List<MethodCallExpr> calls
@@ -1212,7 +1264,7 @@ final class MethodCallChainPrinter {
         if (
             analysis.root() instanceof MethodCallExpr methodRoot
             && !analysis.calls().isEmpty()
-            && (sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodRoot)
+            && (callHasGenuineSourceMultilineArguments(methodRoot)
                 || sourceMultilineLambdaPlan.rootCanAttachExpressionLambdaBody())
         ) {
             return true;
@@ -1220,7 +1272,7 @@ final class MethodCallChainPrinter {
         for (int index = 0; index < Math.max(0, analysis.calls().size() - 1); index++) {
             MethodCallExpr call = analysis.calls().get(index);
             if (
-                sourceShapePolicy.methodCallArgumentsSpanMultipleLines(call)
+                callHasGenuineSourceMultilineArguments(call)
                 || methodCallSegmentHasSourceMultilineBlockLambdaArgument(call)
                 || sourceMultilineLambdaPlan.callCanAttachExpressionLambdaBody(index)
             ) {
@@ -1228,6 +1280,33 @@ final class MethodCallChainPrinter {
             }
         }
         return false;
+    }
+
+    /**
+     * Reports whether a chain segment's argument list is a <em>genuine</em> author-broken argument list — one worth
+     * preserving as a forced chain break — rather than a single argument the author merely happened to split across
+     * source lines.
+     *
+     * <p>The stay-flat gate keeps {@code !sourceMultilineArguments} so an argument list the author spread across lines
+     * stays broken (e.g. a two-argument call wrapped one argument per line). But a call with a <em>single</em> argument
+     * that fits on one line collapses to one line during formatting regardless of any chain decision, so its
+     * source line breaks are not a list the formatter can or should preserve. Counting that transient shape as
+     * "source-multiline arguments" would force the whole fluent chain to break on the first pass and then re-collapse on
+     * the next (the single argument is now compact, the signal vanishes, the link-count rule wins), which is
+     * non-idempotent. We therefore require either two or more arguments spread across source lines, or a single argument
+     * that does not itself fit on one line (it would break on width anyway), before treating the segment's arguments as
+     * a genuine multi-line list. Lambda and block-lambda arguments stay the caller's concern; this helper only refines
+     * the plain {@link SourceShapePolicy#methodCallArgumentsSpanMultipleLines} signal.
+     */
+    private boolean callHasGenuineSourceMultilineArguments(MethodCallExpr call) {
+        if (!sourceShapePolicy.methodCallArgumentsSpanMultipleLines(call)) {
+            return false;
+        }
+        if (call.getArguments().size() >= 2) {
+            return true;
+        }
+        Expression singleArgument = call.getArguments().get(0);
+        return !sourceShapePolicy.fitsOnOneLine(singleArgument, currentIndentedWidth);
     }
 
     private SourceMultilineLambdaChainPlan sourceMultilineLambdaChainPlan(

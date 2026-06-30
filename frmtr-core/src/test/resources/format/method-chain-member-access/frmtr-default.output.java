@@ -1,7 +1,9 @@
 public class MethodChainSamples {
 
     public void doSomething() {
-        return new RequestBuilder().something().more();
+        return new RequestBuilder()
+                .something()
+                .more();
     }
 
     public void doSomethingNewWithComment() {
@@ -98,7 +100,16 @@ public class MethodChainSamples {
     }
 
     public void doSomethingLongNew() {
-        return something().more().and().that().as().well().but().not().something().something();
+        return something()
+                .more()
+                .and()
+                .that()
+                .as()
+                .well()
+                .but()
+                .not()
+                .something()
+                .something();
     }
 
     public void doSomethingLongWithArgument() {
@@ -108,11 +119,28 @@ public class MethodChainSamples {
     }
 
     public void doSomethingLongNew2() {
-        return new RequestBuilder().something().more().and().that().as().well().but().not().something();
+        return new RequestBuilder()
+                .something()
+                .more()
+                .and()
+                .that()
+                .as()
+                .well()
+                .but()
+                .not()
+                .something();
     }
 
     public void doSomethingLongStatic() {
-        return RequestBuilder.something().more().and().that().as().well().but().not().something();
+        return RequestBuilder.something()
+                .more()
+                .and()
+                .that()
+                .as()
+                .well()
+                .but()
+                .not()
+                .something();
     }
 
     public void singleInvocationOnNewExpression() {
@@ -129,6 +157,9 @@ public class MethodChainSamples {
     }
 
     void methodReferences() {
-        userRecords.stream().map(UserRecord::toString).forEach(auditLog::info);
+        userRecords
+                .stream()
+                .map(UserRecord::toString)
+                .forEach(auditLog::info);
     }
 }

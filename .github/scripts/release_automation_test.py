@@ -63,6 +63,14 @@ class PrepareReleaseTest(unittest.TestCase):
                 "site.host=https://lanwen.github.io/frmtr\n"
                 "frmtr.version=0.0.0-dev\n"
             )
+            (workspace / "README.md").write_text(
+                "# frmtr\n\n"
+                "```kotlin\n"
+                "plugins {\n"
+                "    id(\"dev.lanwen.frmtr\") version \"0.1.0-SNAPSHOT\"\n"
+                "}\n"
+                "```\n"
+            )
 
             try:
                 os.chdir(workspace)
@@ -86,6 +94,10 @@ class PrepareReleaseTest(unittest.TestCase):
 
             self.assertEqual("version=0.1.1\n", (workspace / "gradle.properties").read_text())
             self.assertIn("frmtr.version=0.1.1\n", (workspace / "site/src/jbake/jbake.properties").read_text())
+            self.assertIn(
+                'id("dev.lanwen.frmtr") version "0.1.1"',
+                (workspace / "README.md").read_text(),
+            )
 
 
 if __name__ == "__main__":

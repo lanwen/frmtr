@@ -33,6 +33,8 @@ TITLE_PATTERN = re.compile(
     r"^(?P<type>[a-z]+)(?:\((?P<scope>[A-Za-z0-9._/-]+)\))?(?P<breaking>!)?: (?P<subject>.+)$")
 SEMVER_PATTERN = re.compile(r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)$")
 SITE_PROPERTIES = Path("site/src/jbake/jbake.properties")
+README = Path("README.md")
+README_PLUGIN_VERSION_PATTERN = re.compile(r'(id\("dev\.lanwen\.frmtr"\) version ")([^"]+)(")')
 
 
 @dataclasses.dataclass(frozen=True, order=True)
@@ -120,6 +122,14 @@ def write_site_version(version: str) -> None:
     if not found:
         raise ValueError(f"{SITE_PROPERTIES} does not contain a frmtr.version= line")
     SITE_PROPERTIES.write_text("\n".join(updated) + "\n")
+
+
+def write_readme_plugin_version(version: str) -> None:
+    content = README.read_text()
+    updated, replacements = README_PLUGIN_VERSION_PATTERN.subn(rf"\g<1>{version}\g<3>", content)
+    if replacements == 0:
+        raise ValueError(f"{README} does not contain a versioned dev.lanwen.frmtr plugin declaration")
+    README.write_text(updated)
 
 
 def required_value(args: argparse.Namespace, name: str, env_name: str) -> str:
@@ -420,6 +430,7 @@ def prepare_release(args: argparse.Namespace) -> int:
     version = release_version_from(entries)
     write_version(version)
     write_site_version(version)
+    write_readme_plugin_version(version)
     update_changelog(version, entries)
     Path(body_file).parent.mkdir(parents=True, exist_ok=True)
     Path(body_file).write_text(release_pr_body(version, entries))

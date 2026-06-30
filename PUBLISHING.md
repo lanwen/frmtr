@@ -30,6 +30,10 @@ Publish the current `-SNAPSHOT` artifacts:
 op run --env-file ./publishing/.env.snapshot -- ./gradlew publishAllPublicationsToCentralPortalSnapshotsRepository
 ```
 
+The snapshot version itself is maintained by `.github/workflows/snapshot-target-pr.yml`: it opens or updates a
+`snapshot` PR when merged feature or breaking-change PRs require a higher target, and it can be dispatched manually with
+an explicit `*-SNAPSHOT` version. See [Consuming Snapshots](#consuming-snapshots) for the Gradle plugin repository setup.
+
 #### Consuming Snapshots
 
 Add the Central snapshot repository to plugin resolution:
@@ -89,7 +93,7 @@ release. The release workflow also publishes the Gradle plugin and delegates Hom
 Release commits are normal protected-branch PRs. Automation never pushes commits directly to `main`; it creates or
 updates signed PR branches with `peter-evans/create-pull-request` and a GitHub App token so PR workflows run normally.
 
-1. Every push to `main` refreshes the `release` PR. The release PR updates `CHANGELOG.md`, changes
+1. Every push to `main` refreshes the `release` PR. The release PR updates `CHANGELOG.md`, `README.md`, changes
    `gradle.properties` from `*-SNAPSHOT` to the computed final version, updates the JBake site version in
    `site/src/jbake/jbake.properties`, and carries the corpus check before merge.
 2. Feature or breaking-change merges to `main` can also open a `snapshot` PR that raises the current snapshot target;

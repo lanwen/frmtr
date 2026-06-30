@@ -67,8 +67,8 @@ copyright that mirrors the root MIT license. The release publish job stages Cent
 Homebrew publication runs through the reusable `Publish Homebrew` workflow and uses the separate `jreleaser-brew.yml`
 config so the tap job validates only GitHub release and Homebrew packaging metadata, not Maven Central deploy or PGP
 signing secrets.
-Release preparation updates both the Gradle project version and the JBake site version property so the generated site
-shows the same released coordinate as the published artifacts.
+Release preparation updates the Gradle project version, README Gradle plugin snippets, and the JBake site version
+property so published documentation shows the same released coordinate as the published artifacts.
 
 `:frmtr-cli` generates a small `BuildInfo` source file during compilation so JVM and native binaries report the same
 project version, Git commit SHA, and build timestamp through Picocli's version provider.

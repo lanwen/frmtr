@@ -182,6 +182,7 @@ final class ExpressionPrinters {
         );
         this.unaries = new UnaryExpressionPrinter(
             options,
+            context.layoutWidth,
             compactSource::compact,
             this::currentIndentedWidth,
             enclosedExpressions::parenthesizedBreak

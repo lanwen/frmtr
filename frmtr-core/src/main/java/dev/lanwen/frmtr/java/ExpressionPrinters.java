@@ -233,10 +233,7 @@ final class ExpressionPrinters {
             lambdas::huggedGapCommentedLambdaBody,
             lambdas::lambdaParameters,
             textBlocks::renderUnformattedTextBlock,
-            this::brokenArgument,
-            this::currentIndentedWidth,
-            this::continuationStatementWidth,
-            this::blockStatementWidth
+            this::brokenArgument
         );
         this.arrays = new ArrayExpressionPrinter(
             comments,

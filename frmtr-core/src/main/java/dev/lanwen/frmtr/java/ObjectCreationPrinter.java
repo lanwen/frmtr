@@ -80,7 +80,7 @@ final class ObjectCreationPrinter {
             node -> expressionRenderer.format(node, LayoutContext.root()),
             brokenArgumentRenderer,
             compact::apply,
-            context.layoutWidth::continuationStatement
+            context.layoutWidth
         );
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.bodyRenderer = bodyRenderer;

@@ -76,12 +76,6 @@ final class MethodCallChainPrinter {
         Optional<ExpressionLambdaArgumentLayout.Plan>
     > expressionLambdaArgumentPlan;
 
-    private final ToIntFunction<String> currentIndentedWidth;
-
-    private final ToIntFunction<String> continuationStatementWidth;
-
-    private final ToIntFunction<String> blockStatementWidth;
-
     private final LayoutDecisionLog layoutDecisions;
 
     private final SourceMultilineLambdaCallLayout sourceMultilineLambdaCalls;
@@ -108,19 +102,16 @@ final class MethodCallChainPrinter {
                 Optional<ExpressionLambdaArgumentLayout.Plan>
             > expressionLambdaArgumentPlan,
             Function<LambdaExpr, Optional<Doc>> huggedGapCommentedLambdaBody,
-            Function<LambdaExpr, String> lambdaParameters,
-            ToIntFunction<String> currentIndentedWidth,
-            ToIntFunction<String> continuationStatementWidth,
-            ToIntFunction<String> blockStatementWidth
+            Function<LambdaExpr, String> lambdaParameters
     ) {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
         this.rawSource = context.rawSource;
         this.sourceShapePolicy = context.sourceShapePolicy;
-        this.methodChainPlanner = new MethodCallChainSourcePlanner(context, currentIndentedWidth);
         this.options = context.options;
         this.compactSource = context.compactSource;
         this.layoutWidth = context.layoutWidth;
+        this.methodChainPlanner = new MethodCallChainSourcePlanner(context, lineWidth(LayoutWidth.LineBudget.CURRENT));
         this.calls = calls;
         this.types = types;
         this.commentedExpressionLists = commentedExpressionLists;
@@ -132,9 +123,6 @@ final class MethodCallChainPrinter {
         this.commentedExpressionLambdaArgument = commentedExpressionLambdaArgument;
         this.huggableExpressionLambdaArguments = huggableExpressionLambdaArguments;
         this.expressionLambdaArgumentPlan = expressionLambdaArgumentPlan;
-        this.currentIndentedWidth = currentIndentedWidth;
-        this.continuationStatementWidth = continuationStatementWidth;
-        this.blockStatementWidth = blockStatementWidth;
         this.layoutDecisions = context.layoutDecisions;
         this.lambdaParameters = lambdaParameters;
         this.huggedGapCommentedLambdaBody = huggedGapCommentedLambdaBody;
@@ -180,7 +168,7 @@ final class MethodCallChainPrinter {
             Optional<Doc> packed = packedCompactMethodCallChain(
                 expression,
                 firstLineWidth,
-                continuationStatementWidth,
+                lineWidth(LayoutWidth.LineBudget.CONTINUATION),
                 true
             ).map(this::packedMethodCallChainDoc);
             if (packed.isPresent()) {
@@ -475,11 +463,11 @@ final class MethodCallChainPrinter {
     }
 
     private int expressionLambdaBodyLineWidth(String line) {
-        return blockStatementWidth.applyAsInt(options.indentUnit() + line);
+        return layoutWidth.line(LayoutWidth.LineBudget.BLOCK, options.indentUnit() + line);
     }
 
     private int packedExpressionLambdaBodyLineWidth(String line) {
-        return blockStatementWidth.applyAsInt(options.indentUnit().repeat(3) + line);
+        return layoutWidth.line(LayoutWidth.LineBudget.BLOCK, options.indentUnit().repeat(3) + line);
     }
 
     /**
@@ -767,7 +755,7 @@ final class MethodCallChainPrinter {
             && !methodCallSegmentHasComment(calls.getFirst())
             && methodCallSegmentHasBlockLambdaArgument(calls.getFirst())
             && blockLambdaSegmentFirstLine(compactSource.compact(methodRoot), calls.getFirst())
-                    .filter(firstLine -> blockStatementWidth.applyAsInt(firstLine) <= options.lineWidth())
+                    .filter(firstLine -> layoutWidth.line(LayoutWidth.LineBudget.BLOCK, firstLine) <= options.lineWidth())
                     .isPresent()
         ) {
             return Optional.empty();
@@ -819,7 +807,7 @@ final class MethodCallChainPrinter {
             if (
                 methodCallSegmentHasBlockLambdaArgument(calls.getFirst())
                 && blockLambdaSegmentFirstLine(compactSource.compact(methodRoot), calls.getFirst())
-                        .filter(firstLine -> blockStatementWidth.applyAsInt(firstLine) <= options.lineWidth())
+                        .filter(firstLine -> layoutWidth.line(LayoutWidth.LineBudget.BLOCK, firstLine) <= options.lineWidth())
                         .isPresent()
             ) {
                 return Optional.empty();
@@ -1097,8 +1085,8 @@ final class MethodCallChainPrinter {
         MethodCallExpr firstCall = calls.getFirst();
         return (
             !methodCallSegmentHasBlockLambdaArgument(firstCall)
-            && (sourceShapePolicy.fitsOnOneLine(firstCall, currentIndentedWidth)
-                || currentIndentedWidth.applyAsInt(this.calls.methodCallPrefix(firstCall) + "(") <= options.lineWidth())
+            && (sourceShapePolicy.fitsOnOneLine(firstCall, lineWidth(LayoutWidth.LineBudget.CURRENT))
+                || layoutWidth.line(LayoutWidth.LineBudget.CURRENT, this.calls.methodCallPrefix(firstCall) + "(") <= options.lineWidth())
         );
     }
 
@@ -1123,7 +1111,7 @@ final class MethodCallChainPrinter {
             }
             return Doc.concat(expressionRenderer.apply(root), methodCallChainSegment(firstCall));
         }
-        if (sourceShapePolicy.fitsOnOneLine(firstCall, currentIndentedWidth)) {
+        if (sourceShapePolicy.fitsOnOneLine(firstCall, lineWidth(LayoutWidth.LineBudget.CURRENT))) {
             return inlineMethodCall(firstCall);
         }
         return brokenFirstSegmentAttachedToSimpleRoot(root, firstCall);
@@ -1155,7 +1143,7 @@ final class MethodCallChainPrinter {
     }
 
     private String firstSegmentAttachedToSimpleRootFirstLine(Expression root, MethodCallExpr firstCall) {
-        if (sourceShapePolicy.fitsOnOneLine(firstCall, currentIndentedWidth)) {
+        if (sourceShapePolicy.fitsOnOneLine(firstCall, lineWidth(LayoutWidth.LineBudget.CURRENT))) {
             return compactSource.compact(firstCall);
         }
         String typeArguments = firstCall.getTypeArguments()
@@ -1309,7 +1297,7 @@ final class MethodCallChainPrinter {
             return brokenScopedMethodRoot.orElseThrow();
         }
         if (
-            currentIndentedWidth.applyAsInt(compactSourceWidthText(methodRoot)) > options.lineWidth()
+            layoutWidth.line(LayoutWidth.LineBudget.CURRENT, compactSourceWidthText(methodRoot)) > options.lineWidth()
             || methodCallRootScopeOverflows(methodRoot)
         ) {
             return methodCallChain(methodRoot, MethodCallBreakMode.FORCED).orElseGet(() -> expressionRenderer.apply(
@@ -1325,7 +1313,7 @@ final class MethodCallChainPrinter {
                 .map(MethodCallExpr.class::cast)
                 .filter(call -> call.getArguments().size() > 1)
                 .filter(call -> call.getScope().filter(methodChainPlanner::promotesFirstCall).isPresent())
-                .filter(call -> currentIndentedWidth.applyAsInt(compactSourceWidthText(call)) > options.lineWidth());
+                .filter(call -> layoutWidth.line(LayoutWidth.LineBudget.CURRENT, compactSourceWidthText(call)) > options.lineWidth());
         if (scopedCall.isEmpty()) {
             return Optional.empty();
         }
@@ -1341,7 +1329,7 @@ final class MethodCallChainPrinter {
         return methodRoot.getScope()
                 .filter(MethodCallExpr.class::isInstance)
                 .map(MethodCallExpr.class::cast)
-                .map(scopedCall -> currentIndentedWidth.applyAsInt(
+                .map(scopedCall -> layoutWidth.line(LayoutWidth.LineBudget.CURRENT, 
                         compactSourceWidthText(scopedCall)
                     ) > options.lineWidth()
                 )
@@ -1360,7 +1348,7 @@ final class MethodCallChainPrinter {
         }
         if (
             expression.getArguments().size() > 1
-            && !sourceShapePolicy.fitsOnOneLine(expression, currentIndentedWidth)
+            && !sourceShapePolicy.fitsOnOneLine(expression, lineWidth(LayoutWidth.LineBudget.CURRENT))
         ) {
             return calls.brokenMethodCall(expression);
         }
@@ -1371,7 +1359,7 @@ final class MethodCallChainPrinter {
         }
         if (methodCallSegmentHasBlockLambdaArgument(expression)) {
             return blockLambdaSegmentFirstLine(compactSource.compact(expression.getScope().orElseThrow()), expression)
-                    .filter(firstLine -> blockStatementWidth.applyAsInt(firstLine) <= options.lineWidth())
+                    .filter(firstLine -> layoutWidth.line(LayoutWidth.LineBudget.BLOCK, firstLine) <= options.lineWidth())
                     .map(ignored -> expressionRenderer.apply(expression))
                     .orElseGet(() -> Doc.concat(
                             expressionRenderer.apply(expression.getScope().orElseThrow()),
@@ -1416,7 +1404,7 @@ final class MethodCallChainPrinter {
     ) {
         if (methodCallSegmentHasBlockLambdaArgument(expression)) {
             return blockLambdaSegmentFirstLine(compactSource.compact(root), expression)
-                    .filter(firstLine -> blockStatementWidth.applyAsInt(firstLine) <= options.lineWidth())
+                    .filter(firstLine -> layoutWidth.line(LayoutWidth.LineBudget.BLOCK, firstLine) <= options.lineWidth())
                     .map(ignored -> Doc.concat(rootDoc, methodCallChainSegment(expression, finalSegmentSuffix)))
                     .orElseGet(() -> Doc.concat(
                             rootDoc,
@@ -1627,7 +1615,7 @@ final class MethodCallChainPrinter {
             NodeList<Expression> arguments
     ) {
         return expressionLambdaArgumentPlan.apply(callPrefix, arguments)
-                .filter(plan -> plan.bodyOpenerFitsOnContinuation(continuationStatementWidth, options.lineWidth()))
+                .filter(plan -> plan.bodyOpenerFitsOnContinuation(lineWidth(LayoutWidth.LineBudget.CONTINUATION), options.lineWidth()))
                 .filter(plan -> plan.bodyOpenerOverflows(
                         line -> compactRootLineWidth(root, line, LayoutWidth.LineBudget.CURRENT),
                         options.lineWidth()
@@ -1947,7 +1935,7 @@ final class MethodCallChainPrinter {
         if (promotedRootArgumentsShouldBreak(methodRoot, lineWidth(LayoutWidth.LineBudget.CURRENT))) {
             return Optional.of(prefix + "(");
         }
-        if (!sourceShapePolicy.fitsOnOneLine(methodRoot, currentIndentedWidth)) {
+        if (!sourceShapePolicy.fitsOnOneLine(methodRoot, lineWidth(LayoutWidth.LineBudget.CURRENT))) {
             return Optional.of(prefix + "(");
         }
         if (methodCallSegmentHasBlockLambdaArgument(methodRoot)) {
@@ -2106,7 +2094,7 @@ final class MethodCallChainPrinter {
     private int rootLineWidth(Expression root, String text) {
         return root.getRange()
                 .map(range -> Math.max(0, range.begin.column - 1) + text.length())
-                .orElseGet(() -> currentIndentedWidth.applyAsInt(text));
+                .orElseGet(() -> layoutWidth.line(LayoutWidth.LineBudget.CURRENT, text));
     }
 
     private Doc inlineMethodCall(MethodCallExpr expression) {
@@ -2175,7 +2163,7 @@ final class MethodCallChainPrinter {
             return false;
         }
         String compact = compactSource.compact(expression);
-        return currentIndentedWidth.applyAsInt(compact) > options.lineWidth()
+        return layoutWidth.line(LayoutWidth.LineBudget.CURRENT, compact) > options.lineWidth()
             || rootLineWidth(expression, compact) > options.lineWidth()
             || (methodChainPlanner.methodCallStartsAfterScopeLine(expression)
                 && selectorLineWidth(expression, compact) > options.lineWidth())
@@ -2191,7 +2179,7 @@ final class MethodCallChainPrinter {
         return expression.getName()
                 .getRange()
                 .map(range -> Math.max(0, range.begin.column - 1) + text.length())
-                .orElseGet(() -> currentIndentedWidth.applyAsInt(text));
+                .orElseGet(() -> layoutWidth.line(LayoutWidth.LineBudget.CURRENT, text));
     }
 
     private Doc brokenPromotedMethodCallRoot(MethodCallExpr expression) {
@@ -2228,7 +2216,7 @@ final class MethodCallChainPrinter {
     }
 
     private Doc methodCallChainSegment(MethodCallExpr expression, boolean reserveStatementTerminator) {
-        return methodCallChainSegment(expression, reserveStatementTerminator, continuationStatementWidth);
+        return methodCallChainSegment(expression, reserveStatementTerminator, lineWidth(LayoutWidth.LineBudget.CONTINUATION));
     }
 
     private Doc methodCallChainSegmentAttachedToRootClose(
@@ -2678,7 +2666,7 @@ final class MethodCallChainPrinter {
             + "."
             + methodCallSegmentPrefixText(methodCall).substring(1)
             + "(" + header.orElseThrow();
-        if (currentIndentedWidth.applyAsInt(opener) > options.lineWidth()) {
+        if (layoutWidth.line(LayoutWidth.LineBudget.CURRENT, opener) > options.lineWidth()) {
             return Optional.empty();
         }
         Optional<Doc> tail = huggedCommentLambdaTail(lambdaExpr);
@@ -2881,7 +2869,7 @@ final class MethodCallChainPrinter {
     ) {
         return expressionLambdaArgumentPlan.apply(prefix, expression.getArguments())
                 .filter(plan -> !plan.bodyFirstSourceLineFits())
-                .filter(plan -> plan.bodyOpenerFitsOnContinuation(continuationStatementWidth, options.lineWidth()))
+                .filter(plan -> plan.bodyOpenerFitsOnContinuation(lineWidth(LayoutWidth.LineBudget.CONTINUATION), options.lineWidth()))
                 .filter(plan -> plan.bodyOpenerOverflows(
                         line -> methodCallSegmentWidth(expression, line, compactSegmentWidth),
                         options.lineWidth()
@@ -3150,7 +3138,7 @@ final class MethodCallChainPrinter {
                     calls.get(i),
                     next,
                     next.isEmpty() ? finalSegmentSuffix : MethodCallChainTail.EMPTY,
-                    continuationStatementWidth,
+                    lineWidth(LayoutWidth.LineBudget.CONTINUATION),
                     true
                 )
             );
@@ -3167,7 +3155,7 @@ final class MethodCallChainPrinter {
             Optional<MethodCallExpr> nextCall,
             MethodCallChainTail finalSegmentSuffix
     ) {
-        return methodCallChainSegment(expression, nextCall, finalSegmentSuffix, continuationStatementWidth);
+        return methodCallChainSegment(expression, nextCall, finalSegmentSuffix, lineWidth(LayoutWidth.LineBudget.CONTINUATION));
     }
 
     private Doc methodCallChainSegment(

@@ -9,7 +9,6 @@ import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.Optional;
 import java.util.function.Function;
-import java.util.function.ToIntFunction;
 
 /**
  * Renders expression arguments that may need their own broken form inside a broken argument list.
@@ -36,7 +35,7 @@ final class BreakableArgumentExpressionPrinter {
 
     private final ConditionalExpressionLineProjection conditionalProjection;
 
-    private final ToIntFunction<String> continuationStatementWidth;
+    private final LayoutWidth layoutWidth;
 
     BreakableArgumentExpressionPrinter(
             SourceShapePolicy sourceShapePolicy,
@@ -44,7 +43,7 @@ final class BreakableArgumentExpressionPrinter {
             Function<Expression, Doc> expressionRenderer,
             Function<Expression, Optional<Doc>> brokenArgumentRenderer,
             Function<Expression, String> compact,
-            ToIntFunction<String> continuationStatementWidth
+            LayoutWidth layoutWidth
     ) {
         this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
@@ -52,7 +51,7 @@ final class BreakableArgumentExpressionPrinter {
         this.brokenArgumentRenderer = brokenArgumentRenderer;
         this.compact = compact;
         this.conditionalProjection = new ConditionalExpressionLineProjection(compact);
-        this.continuationStatementWidth = continuationStatementWidth;
+        this.layoutWidth = layoutWidth;
     }
 
     Doc argument(Expression argument) {
@@ -71,7 +70,8 @@ final class BreakableArgumentExpressionPrinter {
             broken.isPresent()
             && (sourceShapePolicy.wasMultiline(argument)
                 || conditionalArgumentLineOverflows(argument, suffix)
-                || continuationStatementWidth.applyAsInt(compact.apply(argument) + suffix) > options.lineWidth())
+                || layoutWidth.line(LayoutWidth.LineBudget.CONTINUATION, compact.apply(argument) + suffix)
+                    > options.lineWidth())
         ) {
             return Doc.ifBreak(broken.orElseThrow(), flat);
         }
@@ -93,7 +93,8 @@ final class BreakableArgumentExpressionPrinter {
             && (sourceShapePolicy.wasMultiline(argument)
                 || sourceMultilineMethodCallArguments(argument)
                 || conditionalArgumentLineOverflows(argument, suffix)
-                || continuationStatementWidth.applyAsInt(compact.apply(argument) + suffix) > options.lineWidth())
+                || layoutWidth.line(LayoutWidth.LineBudget.CONTINUATION, compact.apply(argument) + suffix)
+                    > options.lineWidth())
         ) {
             return broken.orElseThrow();
         }
@@ -112,7 +113,7 @@ final class BreakableArgumentExpressionPrinter {
             return false;
         }
         String line = conditionalProjection.line(conditionalExpr) + suffix;
-        return continuationStatementWidth.applyAsInt(line) > options.lineWidth();
+        return layoutWidth.line(LayoutWidth.LineBudget.CONTINUATION, line) > options.lineWidth();
     }
 
     private boolean sourceMultilineMethodCallArguments(Expression argument) {

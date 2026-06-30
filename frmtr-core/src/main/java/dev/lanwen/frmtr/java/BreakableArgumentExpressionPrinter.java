@@ -8,6 +8,7 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.Optional;
+import java.util.function.BiPredicate;
 import java.util.function.Function;
 import java.util.function.ToIntFunction;
 
@@ -38,13 +39,16 @@ final class BreakableArgumentExpressionPrinter {
 
     private final ToIntFunction<String> continuationStatementWidth;
 
+    private final BiPredicate<MethodCallExpr, ToIntFunction<String>> chainShouldBreak;
+
     BreakableArgumentExpressionPrinter(
             SourceShapePolicy sourceShapePolicy,
             FormatterOptions options,
             Function<Expression, Doc> expressionRenderer,
             Function<Expression, Optional<Doc>> brokenArgumentRenderer,
             Function<Expression, String> compact,
-            ToIntFunction<String> continuationStatementWidth
+            ToIntFunction<String> continuationStatementWidth,
+            BiPredicate<MethodCallExpr, ToIntFunction<String>> chainShouldBreak
     ) {
         this.sourceShapePolicy = sourceShapePolicy;
         this.options = options;
@@ -53,6 +57,7 @@ final class BreakableArgumentExpressionPrinter {
         this.compact = compact;
         this.conditionalProjection = new ConditionalExpressionLineProjection(compact);
         this.continuationStatementWidth = continuationStatementWidth;
+        this.chainShouldBreak = chainShouldBreak;
     }
 
     Doc argument(Expression argument) {
@@ -67,6 +72,16 @@ final class BreakableArgumentExpressionPrinter {
     Doc argument(Expression argument, String suffix) {
         Doc flat = expressionRenderer.apply(argument);
         Optional<Doc> broken = brokenArgument(argument);
+        if (broken.isPresent() && containsRuleBreakingChain(argument)) {
+            // A binary-wrapped fluent chain argument (for example {@code addRDN(CN, lookup().lookupClass()...() + suffix)})
+            // must pick its chain shape from the SAME context-consistent rule everywhere, never from the enclosing
+            // argument group's break state (issue #137). The {@code Doc.ifBreak(broken, flat)} arms below render the
+            // contained chain with DIFFERENT policies: the broken arm puts {@code + suffix} on its own line while the flat
+            // arm glues it to the last selector, so whichever arm the group selects flips the chain shape across passes.
+            // When the chain breaks by the single chain-break decision, commit to the deterministic broken shape so the
+            // argument no longer depends on the group, matching the FIXED broken/flat sourceMultilineArgument sibling.
+            return broken.orElseThrow();
+        }
         if (
             broken.isPresent()
             && (sourceShapePolicy.wasMultiline(argument)
@@ -76,6 +91,27 @@ final class BreakableArgumentExpressionPrinter {
             return Doc.ifBreak(broken.orElseThrow(), flat);
         }
         return flat;
+    }
+
+    /**
+     * Reports whether a binary-expression argument contains a fluent method-call operand that breaks one selector per
+     * line by the single chain-break decision (PR-1's {@code chainShouldBreak}). The chain renders at the argument's
+     * continuation column, so the chain's first line is measured there. Only {@code +}-joined operands and their
+     * parenthesized inners are inspected, mirroring {@link #binaryPlusContainsSourceMultilineMethodCallArgument}: a
+     * suffix glued to a breaking chain (the flip in issue #137) is always a string-concatenation tail.
+     */
+    private boolean containsRuleBreakingChain(Expression argument) {
+        if (argument instanceof BinaryExpr binaryExpr) {
+            return binaryExpr.getOperator() == BinaryExpr.Operator.PLUS
+                && (containsRuleBreakingChain(binaryExpr.getLeft())
+                    || containsRuleBreakingChain(binaryExpr.getRight()));
+        }
+        if (argument instanceof EnclosedExpr enclosedExpr) {
+            return containsRuleBreakingChain(enclosedExpr.getInner());
+        }
+        return argument instanceof MethodCallExpr methodCall
+            && methodCall.getAllContainedComments().isEmpty()
+            && chainShouldBreak.test(methodCall, continuationStatementWidth);
     }
 
     Doc sourceMultilineArgument(Expression argument) {

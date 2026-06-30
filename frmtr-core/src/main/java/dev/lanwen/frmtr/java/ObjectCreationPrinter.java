@@ -13,7 +13,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
 import java.util.function.Function;
+import java.util.function.ToIntFunction;
 
 /**
  * Renders object creation after broad expression dispatch has selected constructor syntax.
@@ -61,6 +63,7 @@ final class ObjectCreationPrinter {
             TypePrinter types,
             JavaFormatRule<Expression> expressionRenderer,
             Function<Expression, Optional<Doc>> brokenArgumentRenderer,
+            BiPredicate<MethodCallExpr, ToIntFunction<String>> chainShouldBreak,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,
             JavaFormatRule<BodyDeclaration<?>> bodyRenderer,
             Function<Node, String> compact,
@@ -80,7 +83,8 @@ final class ObjectCreationPrinter {
             expressionRenderer::format,
             brokenArgumentRenderer,
             compact::apply,
-            context.layoutWidth::continuationStatement
+            context.layoutWidth::continuationStatement,
+            chainShouldBreak
         );
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.bodyRenderer = bodyRenderer;

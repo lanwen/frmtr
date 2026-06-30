@@ -193,6 +193,7 @@ final class ExpressionPrinters {
             types,
             this::expression,
             this::brokenArgument,
+            this::shouldBreakChain,
             lambdas::huggableBlockLambdaArguments,
             bodyRenderer,
             compactSource::compact,

@@ -158,7 +158,8 @@ final class MethodCallPrinter {
             expressionRenderer,
             brokenArgumentExpressionRenderer,
             compactSource::compact,
-            continuationStatementWidth
+            continuationStatementWidth,
+            this::shouldBreakChain
         );
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.commentedExpressionLambdaArgument = commentedExpressionLambdaArgument;

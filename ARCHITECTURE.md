@@ -391,7 +391,14 @@ path does: `BinaryExpressionPrinter.binaryExpressionLineOperand` consults it (vi
 `chainShouldBreak` collaborator, measured at the operand's broken-line column) before its width-only flat shortcut, so a
 fluent-chain operand of a binary renders identically whether the enclosing binary stays flat or breaks (issue #137) —
 it no longer flips between flat and one-selector-per-line depending on which side of the binary-break boundary the source
-happened to land on. The gate still keeps a chain broken when a non-final segment has a genuine
+happened to land on. The same `chainShouldBreak` collaborator settles the binary-wrapped chain *argument* case:
+`BreakableArgumentExpressionPrinter.argument` (shared by method-call and constructor argument lists, the latter via the
+`ObjectCreationPrinter` wiring) used to render such an argument as `Doc.ifBreak(broken, flat)` whose arms place the
+concatenation suffix differently (its own line in the broken arm, glued to the last selector in the flat arm), so the
+chain shape tracked the enclosing argument group's break state and flipped across passes. When the contained chain breaks
+by `chainShouldBreak` (measured at the argument's continuation column), it now commits to the deterministic broken shape
+unconditionally, matching the already-fixed `sourceMultilineArgument` sibling; an argument with no rule-breaking chain
+keeps the existing `Doc.ifBreak` behavior. The gate still keeps a chain broken when a non-final segment has a genuine
 author-broken argument list (`chainHasSourceMultilineArguments`), but a single argument that fits on one line does not
 count as such a list — it collapses to one line during formatting, so treating its transient source line breaks as a
 forced break would be non-idempotent; only two-or-more arguments spread across source lines, or a single argument that

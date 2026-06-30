@@ -391,7 +391,12 @@ path does: `BinaryExpressionPrinter.binaryExpressionLineOperand` consults it (vi
 `chainShouldBreak` collaborator, measured at the operand's broken-line column) before its width-only flat shortcut, so a
 fluent-chain operand of a binary renders identically whether the enclosing binary stays flat or breaks (issue #137) —
 it no longer flips between flat and one-selector-per-line depending on which side of the binary-break boundary the source
-happened to land on. The gate still keeps a chain broken when a non-final segment has a genuine
+happened to land on. The binary's own flat-fit guard consults the same predicate before keeping a width-fitting binary on
+one line: `BinaryExpressionPrinter.lines` stays flat only when the binary fits *and* `anyOperandChainShouldBreak` finds no
+direct method-call operand that `shouldBreakChain` (measured at the flat-binary continuation column). When a contained
+chain operand breaks by rule the binary is broken one operand per line — the deterministic shape — so the binary can never
+emit a flat line wrapped around a chain that the rule then breaks via expression dispatch, which would have re-measured as
+broken on the next pass (issue #137). The gate still keeps a chain broken when a non-final segment has a genuine
 author-broken argument list (`chainHasSourceMultilineArguments`), but a single argument that fits on one line does not
 count as such a list — it collapses to one line during formatting, so treating its transient source line breaks as a
 forced break would be non-idempotent; only two-or-more arguments spread across source lines, or a single argument that

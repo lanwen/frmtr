@@ -128,7 +128,11 @@ final class BinaryExpressionPrinter {
         if (!(expression instanceof BinaryExpr binaryExpr)) {
             return expressionRenderer.format(expression);
         }
-        if (!forceBreak && parenthesizedInnerWidth(compact.apply(binaryExpr)) <= options.lineWidth()) {
+        if (
+            !forceBreak
+            && parenthesizedInnerWidth(compact.apply(binaryExpr)) <= options.lineWidth()
+            && !anyOperandChainShouldBreak(binaryExpr)
+        ) {
             return binaryExpression(binaryExpr);
         }
         if (hasLineComments(binaryExpr)) {
@@ -935,6 +939,31 @@ final class BinaryExpressionPrinter {
                 .map(comments::comment)
                 .filter(doc -> doc != Doc.EMPTY)
                 .toList();
+    }
+
+    /**
+     * Reports whether any operand of this binary is a method-call chain that the single chain-break decision says must
+     * break one selector per line (issue #137).
+     *
+     * <p>The flat-fit guard in {@link #lines(Expression, boolean, boolean)} may keep a width-fitting binary on one line
+     * only when this returns {@code false}. A chain operand that {@code chainShouldBreak} (by the link-count rule, even
+     * though it fits flat) renders broken whether it is reached through flat expression dispatch or through the broken
+     * binary operand path; if the binary stayed flat here, expression dispatch would still break that contained chain on
+     * the same pass, leaving an over-shape flat binary whose next pass re-measured the now-broken chain and re-decided —
+     * the non-idempotent flip. Forcing the binary to break when a contained chain breaks gives the deterministic
+     * one-operand-per-line shape, and the broken operand path then renders the chain broken consistently.
+     *
+     * <p>Each {@link MethodCallExpr} operand is measured through the same {@link #chainShouldBreak} collaborator the
+     * broken path uses, at the flat-binary continuation column ({@link #parenthesizedInnerWidth}) — the column the flat
+     * path itself would have placed the operand at — so the stay-flat and break decisions agree on the same width input.
+     */
+    private boolean anyOperandChainShouldBreak(BinaryExpr binaryExpr) {
+        List<Expression> operands = new ArrayList<>();
+        flattenBinaryExpression(binaryExpr, binaryExpr.getOperator(), operands);
+        return operands.stream()
+                .filter(MethodCallExpr.class::isInstance)
+                .map(MethodCallExpr.class::cast)
+                .anyMatch(methodCall -> chainShouldBreak.test(methodCall, this::parenthesizedInnerWidth));
     }
 
     /**

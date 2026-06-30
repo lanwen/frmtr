@@ -406,7 +406,15 @@ hugs stay unchanged. A `!(<binary>)` logical-complement initializer value whose 
 `name = !(` on the assignment line and breaks the parenthesized binary one operator per line inside the parentheses
 (`VariableInitializerLayout` reuses `EnclosedExpressionPrinter.parenthesizedBreak`, the same shape the `if (...)` condition
 and complement-`return` paths produce) instead of breaking after `=` and stranding `!(...)` flat on the continuation line;
-a complement that still fits inline stays flat. A per-run
+a complement that still fits inline stays flat. The return-expression
+width gate (`ReturnExpressionPrinter`, with the binary variant `ReturnBinaryExpressionLayout`) measures its candidate
+`return value;` line the same way: a `return` value always renders at the statement's rendered indentation plus
+`return `, so the gate measures there through `LayoutWidth.nodeLine` rather than at `expression.getRange().begin.column`.
+The earlier source-column estimate overshot when a `return` was co-located after a label prefix (`case "x": return …`):
+the value broke on the first pass and collapsed on the next once the `return` moved onto its own line and the source
+column shrank, the non-idempotent cycle tracked in #137. Counting the enclosing block/type nesting reproduces the same
+fit/break decision on every pass — the source-column-to-rendered-column correction first applied to `if` conditions
+(`ControlConditionPrinter.ifConditionLineWidth`, #155) and to hugged call openers (#161). A per-run
 `SourceShapePolicy` on `JavaFormatContext` is the consolidating home for
 "should the formatter respect the author's source shape here?" decisions, so printers ask one named question instead of
 re-deriving those reads from raw token text or `getRange()` arithmetic. It owns one canonical definition of each

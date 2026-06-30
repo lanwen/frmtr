@@ -101,13 +101,15 @@ so multiple feature PRs before the next release still require only one minor sna
   `gradle.properties`, updates the JBake site version in `site/src/jbake/jbake.properties`, and opens or updates a
   `release` PR.
 - `snapshot-target-pr.yml`: on every `main` push, raises the snapshot target when merged feature or breaking-change PRs
-  require a higher release line; manual dispatch can set a specific snapshot target.
+  require a higher release line; manual dispatch can set a specific snapshot target. `release.yml` also calls it as a
+  reusable workflow to open the post-release next-snapshot PR.
 - `snapshot-version-guard.yml`: fails PRs whose merged result has a non-`-SNAPSHOT` version unless the PR is labeled
   `release`.
 - `corpus.yml`: runs on generated `release` PRs and by manual dispatch, so the release PR carries the corpus check
   before merge without rerunning after publication.
 - `release.yml`: runs when `gradle.properties` changes on `main`; if the version is final, it builds native archives,
-  publishes GitHub/Maven Central, publishes the Gradle plugin, publishes Homebrew, and opens a signed `snapshot` PR.
+  publishes GitHub/Maven Central, publishes the Gradle plugin, publishes Homebrew, and calls the reusable snapshot PR
+  workflow.
 
 Automation-created PRs use `peter-evans/create-pull-request` with `sign-commits: true` and a GitHub App token so
 regular PR workflows run without the approval prompt that applies to PRs created with the repository `GITHUB_TOKEN`.

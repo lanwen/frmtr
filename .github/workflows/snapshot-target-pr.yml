@@ -1,6 +1,23 @@
-name: Snapshot Target PR
+name: Snapshot PR
 
 on:
+  workflow_call:
+    inputs:
+      mode:
+        description: Use target to raise the development snapshot target, or release to restore snapshots after a release.
+        required: true
+        type: string
+      release_version:
+        description: Final release version used by release mode.
+        required: false
+        type: string
+      snapshot_version:
+        description: Optional explicit snapshot version used by target mode.
+        required: false
+        type: string
+    secrets:
+      RELEASE_APP_PRIVATE_KEY:
+        required: true
   workflow_dispatch:
     inputs:
       snapshot_version:
@@ -21,7 +38,7 @@ concurrency:
 
 jobs:
   prepare:
-    name: Prepare snapshot target PR
+    name: Prepare snapshot PR
     runs-on: ubuntu-latest
     steps:
       - name: Generate GitHub App token
@@ -30,11 +47,11 @@ jobs:
         with:
           client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          # Pushes the generated snapshot target branch.
+          # Pushes the generated snapshot branch.
           permission-contents: write
           # Creates the snapshot label if it does not exist.
           permission-issues: write
-          # Opens or updates the generated snapshot target PR.
+          # Opens or updates the generated snapshot PR.
           permission-pull-requests: write
 
       - name: Checkout
@@ -45,33 +62,64 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           persist-credentials: false
 
-      - name: Prepare snapshot target changes
+      - name: Prepare snapshot changes
+        id: snapshot
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          SNAPSHOT_PR_BODY_FILE: build/snapshot-target-pr-body.md
-          SNAPSHOT_VERSION: ${{ github.event.inputs.snapshot_version }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SNAPSHOT_MODE: ${{ inputs.mode || 'target' }}
+          SNAPSHOT_PR_BODY_FILE: build/snapshot-pr-body.md
+          SNAPSHOT_VERSION: ${{ inputs.snapshot_version }}
         run: |
           set -euo pipefail
           gh label create snapshot --color 8250df --description "Next snapshot version PR" || true
-          python3 .github/scripts/release_automation.py prepare-snapshot-target \
-            --snapshot-version "$SNAPSHOT_VERSION"
+
+          # target raises the ongoing development version after feature/breaking merges.
+          # release restores snapshot development after a final release publishes.
+          case "$SNAPSHOT_MODE" in
+            target)
+              python3 .github/scripts/release_automation.py prepare-snapshot-target \
+                --snapshot-version "$SNAPSHOT_VERSION" \
+                --body-file "$SNAPSHOT_PR_BODY_FILE"
+              snapshot_branch=automation/snapshot-target
+              snapshot_subject=target
+              fallback_body="No snapshot target changes were prepared."
+              ;;
+            release)
+              python3 .github/scripts/release_automation.py prepare-snapshot \
+                --release-version "$RELEASE_VERSION" \
+                --body-file "$SNAPSHOT_PR_BODY_FILE"
+              snapshot_branch=automation/next-snapshot
+              snapshot_subject=start
+              fallback_body="No next snapshot changes were prepared."
+              ;;
+            *)
+              echo "::error::Unsupported snapshot mode ${SNAPSHOT_MODE}"
+              exit 1
+              ;;
+          esac
+
           snapshot_version="$(sed -n 's/^version=//p' gradle.properties)"
           mkdir -p "$(dirname "$SNAPSHOT_PR_BODY_FILE")"
           if [ ! -f "$SNAPSHOT_PR_BODY_FILE" ]; then
-            printf 'No snapshot target changes were prepared.\n' > "$SNAPSHOT_PR_BODY_FILE"
+            printf '%s\n' "$fallback_body" > "$SNAPSHOT_PR_BODY_FILE"
           fi
-          echo "snapshot_version=${snapshot_version}" >> "$GITHUB_ENV"
+          {
+            echo "version=${snapshot_version}"
+            echo "branch=${snapshot_branch}"
+            echo "subject=${snapshot_subject}"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Open or update snapshot target PR
+      - name: Open or update snapshot PR
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
           token: ${{ steps.app-token.outputs.token }}
-          commit-message: "chore(snapshot): target ${{ env.snapshot_version }}"
+          commit-message: "chore(snapshot): ${{ steps.snapshot.outputs.subject }} ${{ steps.snapshot.outputs.version }}"
           sign-commits: true
-          branch: automation/snapshot-target
+          branch: ${{ steps.snapshot.outputs.branch }}
           base: main
           delete-branch: true
           add-paths: gradle.properties
-          title: "chore(snapshot): target ${{ env.snapshot_version }}"
-          body-path: build/snapshot-target-pr-body.md
+          title: "chore(snapshot): ${{ steps.snapshot.outputs.subject }} ${{ steps.snapshot.outputs.version }}"
+          body-path: build/snapshot-pr-body.md
           labels: snapshot

@@ -405,7 +405,13 @@ constructor argument) apply the same prefix-aware width rule through `attachedOp
 hugged opener at the bare call indent, they add the value prefix that shares the call's first line, recovered as the
 call's source start column minus its enclosing statement's start column (a reindentation-invariant delta) over the
 statement's rendered indentation (`LayoutWidth.nodeIndentWidth`). An attached opener that fits at the assignment column is
-hugged; one that overflows once the prefix is counted breaks instead of being frozen over width. A per-run
+hugged; one that overflows once the prefix is counted breaks instead of being frozen over width. The expression-lambda
+packed-body opener gates (`ExpressionLambdaArgumentLayout`'s `packedBodyCall*` / `packedObjectCreation*` shapes, which
+keep `call(() -> inner(` on one opener when the author broke a lambda body) apply the same depth-aware rule through
+`openerOverflows`: they measure the opener at the lambda's rendered indentation (`LayoutWidth.nodeIndentWidth`, which
+counts every enclosing type and block) and take the wider of that and the historical shallow baseline, so a hug nested
+inside `if`/`for` bodies that overflows at its true depth breaks instead of being frozen over width while shallow fitting
+hugs stay unchanged. A per-run
 `SourceShapePolicy` on `JavaFormatContext` is the consolidating home for
 "should the formatter respect the author's source shape here?" decisions, so printers ask one named question instead of
 re-deriving those reads from raw token text or `getRange()` arithmetic. It owns one canonical definition of each

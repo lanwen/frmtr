@@ -347,7 +347,7 @@ final class ExpressionLambdaArgumentLayout {
         if (compactBody.isPresent()) {
             return compactBody;
         }
-        Optional<PackedLambdaBody> packedBody = packedLambdaBody(firstLine, bodyExpression);
+        Optional<PackedLambdaBody> packedBody = packedLambdaBody(lambdaExpr, firstLine, bodyExpression);
         if (packedBody.isPresent()) {
             return Optional.of(packedBody.orElseThrow().render(firstLine));
         }
@@ -454,8 +454,8 @@ final class ExpressionLambdaArgumentLayout {
         if (
             bodyExpression instanceof MethodCallExpr methodCall
             && methodCallBodyWithOpener(parameters, methodCall).isPresent()
-            && packedBodyCallWithoutClosingLine(firstLine, bodyExpression).isEmpty()
-            && packedBodyCallScopeWithoutClosingLine(firstLine, bodyExpression).isEmpty()
+            && packedBodyCallWithoutClosingLine(lambdaExpr, firstLine, bodyExpression).isEmpty()
+            && packedBodyCallScopeWithoutClosingLine(lambdaExpr, firstLine, bodyExpression).isEmpty()
             && !bodyFirstSourceLineFits(firstLine, bodyExpression)
         ) {
             return Optional.empty();
@@ -526,25 +526,29 @@ final class ExpressionLambdaArgumentLayout {
     /**
      * Picks the first body shape that can share the lambda opener and records who owns the closing call suffix.
      */
-    private Optional<PackedLambdaBody> packedLambdaBody(String firstLine, Expression bodyExpression) {
-        return packedObjectCreationWithoutClosingLine(firstLine, bodyExpression)
+    private Optional<PackedLambdaBody> packedLambdaBody(
+            LambdaExpr lambdaExpr,
+            String firstLine,
+            Expression bodyExpression
+    ) {
+        return packedObjectCreationWithoutClosingLine(lambdaExpr, firstLine, bodyExpression)
                 .map(doc -> PackedLambdaBody.closingOnOwnLine(doc, "))"))
-                .or(() -> packedBodyCallWithBlockLambda(firstLine, bodyExpression).map(
+                .or(() -> packedBodyCallWithBlockLambda(lambdaExpr, firstLine, bodyExpression).map(
                         doc -> PackedLambdaBody.attachedClosing(doc, "))")
                 ))
                 .or(() -> packedConditionalBody(firstLine, bodyExpression).map(
                         doc -> PackedLambdaBody.closingOnOwnLine(doc, ")")
                 ))
-                .or(() -> packedBodyCallWithoutClosingLine(firstLine, bodyExpression).map(
+                .or(() -> packedBodyCallWithoutClosingLine(lambdaExpr, firstLine, bodyExpression).map(
                         doc -> PackedLambdaBody.closingOnOwnLine(doc, "))")
                 ))
                 .or(() -> packedMethodCallChainBody(firstLine, bodyExpression).map(
                         doc -> PackedLambdaBody.closingOnOwnLine(doc, ")")
                 ))
-                .or(() -> packedBodyEmptyCallScope(firstLine, bodyExpression).map(
+                .or(() -> packedBodyEmptyCallScope(lambdaExpr, firstLine, bodyExpression).map(
                         doc -> PackedLambdaBody.closingOnOwnLine(doc, ")")
                 ))
-                .or(() -> packedBodyCallScopeWithoutClosingLine(firstLine, bodyExpression).map(
+                .or(() -> packedBodyCallScopeWithoutClosingLine(lambdaExpr, firstLine, bodyExpression).map(
                         doc -> PackedLambdaBody.closingOnOwnLine(doc, "))")
                 ));
     }
@@ -584,7 +588,11 @@ final class ExpressionLambdaArgumentLayout {
         );
     }
 
-    private Optional<Doc> packedBodyCallWithoutClosingLine(String firstLine, Expression bodyExpression) {
+    private Optional<Doc> packedBodyCallWithoutClosingLine(
+            LambdaExpr lambdaExpr,
+            String firstLine,
+            Expression bodyExpression
+    ) {
         if (
             !(bodyExpression instanceof MethodCallExpr methodCall)
             || methodCall.getArguments().isEmpty()
@@ -593,7 +601,7 @@ final class ExpressionLambdaArgumentLayout {
             return Optional.empty();
         }
         String opener = methodCallPrefix(methodCall) + "(";
-        if (expressionFirstLineWidth(firstLine + " " + opener) > options.lineWidth()) {
+        if (openerOverflows(lambdaExpr, firstLine + " " + opener)) {
             return Optional.empty();
         }
         return Optional.of(
@@ -605,6 +613,7 @@ final class ExpressionLambdaArgumentLayout {
     }
 
     private Optional<Doc> packedBodyCallWithBlockLambda(
+            LambdaExpr outerLambda,
             String firstLine,
             Expression bodyExpression
     ) {
@@ -626,7 +635,7 @@ final class ExpressionLambdaArgumentLayout {
         String parameters = lambdaParameters.apply(lambdaExpr);
         if (
             lambdaParametersShouldBreak.test(lambdaExpr, parameters)
-            || expressionFirstLineWidth(firstLine + " " + opener + parameters + " -> {") > options.lineWidth()
+            || openerOverflows(outerLambda, firstLine + " " + opener + parameters + " -> {")
         ) {
             return Optional.empty();
         }
@@ -655,7 +664,11 @@ final class ExpressionLambdaArgumentLayout {
         );
     }
 
-    private Optional<Doc> packedObjectCreationWithoutClosingLine(String firstLine, Expression bodyExpression) {
+    private Optional<Doc> packedObjectCreationWithoutClosingLine(
+            LambdaExpr lambdaExpr,
+            String firstLine,
+            Expression bodyExpression
+    ) {
         if (
             !(bodyExpression instanceof ObjectCreationExpr objectCreation)
             || objectCreation.getArguments().isEmpty()
@@ -663,7 +676,7 @@ final class ExpressionLambdaArgumentLayout {
             return Optional.empty();
         }
         String opener = objectCreationPrefix(objectCreation) + "(";
-        if (expressionFirstLineWidth(firstLine + " " + opener) > options.lineWidth()) {
+        if (openerOverflows(lambdaExpr, firstLine + " " + opener)) {
             return Optional.empty();
         }
         return Optional.of(
@@ -679,7 +692,11 @@ final class ExpressionLambdaArgumentLayout {
         );
     }
 
-    private Optional<Doc> packedBodyCallScopeWithoutClosingLine(String firstLine, Expression bodyExpression) {
+    private Optional<Doc> packedBodyCallScopeWithoutClosingLine(
+            LambdaExpr lambdaExpr,
+            String firstLine,
+            Expression bodyExpression
+    ) {
         if (
             !(bodyExpression instanceof MethodCallExpr methodCall)
             || methodCall.getScope().isEmpty()
@@ -691,7 +708,7 @@ final class ExpressionLambdaArgumentLayout {
         if (!bodyFirstLine.endsWith("(") && !bodyFirstLine.equals(scope)) {
             return Optional.empty();
         }
-        if (expressionFirstLineWidth(firstLine + " " + scope) > options.lineWidth()) {
+        if (openerOverflows(lambdaExpr, firstLine + " " + scope)) {
             return Optional.empty();
         }
         return Optional.of(
@@ -709,7 +726,11 @@ final class ExpressionLambdaArgumentLayout {
         );
     }
 
-    private Optional<Doc> packedBodyEmptyCallScope(String firstLine, Expression bodyExpression) {
+    private Optional<Doc> packedBodyEmptyCallScope(
+            LambdaExpr lambdaExpr,
+            String firstLine,
+            Expression bodyExpression
+    ) {
         if (
             !(bodyExpression instanceof MethodCallExpr methodCall)
             || methodCall.getScope().isEmpty()
@@ -723,10 +744,10 @@ final class ExpressionLambdaArgumentLayout {
             return Optional.empty();
         }
         String compactCall = scope + "." + methodCallSelector(methodCall) + "()";
-        if (expressionFirstLineWidth(firstLine + " " + compactCall) <= options.lineWidth()) {
+        if (!openerOverflows(lambdaExpr, firstLine + " " + compactCall)) {
             return Optional.of(Doc.text(compactCall));
         }
-        if (expressionFirstLineWidth(firstLine + " " + scope) > options.lineWidth()) {
+        if (openerOverflows(lambdaExpr, firstLine + " " + scope)) {
             return Optional.empty();
         }
         return Optional.of(
@@ -808,6 +829,27 @@ final class ExpressionLambdaArgumentLayout {
 
     private int expressionFirstLineWidth(String firstLine) {
         return blockStatementWidth.applyAsInt(options.indentUnit() + firstLine);
+    }
+
+    /**
+     * Reports whether a hugged-lambda opener ({@code call(args lambdaHeader -> innerCall(}) would push the call's first
+     * line past the line width once it is measured at the call's <em>real</em> rendered column.
+     *
+     * <p>The opener gates here historically probed {@link #expressionFirstLineWidth}, which assumes a fixed shallow
+     * nesting baseline (one block plus an indent unit) and is therefore blind to how deeply the call actually sits. A call
+     * nested inside an {@code if}/{@code for} body could attach an opener that visibly overflowed because the extra
+     * enclosing levels were never counted, and the over-wide shape was stable (idempotent but wrong). Measuring the opener
+     * at the lambda's rendered indentation ({@link LayoutWidth#nodeIndentWidth}, which counts every enclosing type and
+     * block) makes the hug-vs-break decision width-deterministic, mirroring the depth-aware first-line probe threaded into
+     * method-chain layout (#162) and the prefix/depth-aware single-argument hug gate (#164).
+     *
+     * <p>The probe takes the wider of the historical baseline and the real rendered column, so it can only ever break a
+     * hug that genuinely overflows at its true depth; it never relaxes the gate for shallow calls, keeping fitting hugs
+     * unchanged.
+     */
+    private boolean openerOverflows(LambdaExpr lambdaExpr, String openerLine) {
+        int renderedWidth = layoutWidth.nodeIndentWidth(lambdaExpr) + openerLine.length();
+        return Math.max(expressionFirstLineWidth(openerLine), renderedWidth) > options.lineWidth();
     }
 
     private int expressionLineWidth(String line, LambdaExpr lambdaExpr, String lambdaText) {

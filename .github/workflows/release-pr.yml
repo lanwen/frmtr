@@ -66,6 +66,7 @@ jobs:
           delete-branch: true
           add-paths: |
             gradle.properties
+            site/src/jbake/jbake.properties
             CHANGELOG.md
           title: "chore(release): prepare ${{ env.release_version }}"
           body-path: build/release-pr-body.md

@@ -402,7 +402,11 @@ keep `call(() -> inner(` on one opener when the author broke a lambda body) appl
 `openerOverflows`: they measure the opener at the lambda's rendered indentation (`LayoutWidth.nodeIndentWidth`, which
 counts every enclosing type and block) and take the wider of that and the historical shallow baseline, so a hug nested
 inside `if`/`for` bodies that overflows at its true depth breaks instead of being frozen over width while shallow fitting
-hugs stay unchanged. A per-run
+hugs stay unchanged. A `!(<binary>)` logical-complement initializer value whose inline assignment line overflows keeps
+`name = !(` on the assignment line and breaks the parenthesized binary one operator per line inside the parentheses
+(`VariableInitializerLayout` reuses `EnclosedExpressionPrinter.parenthesizedBreak`, the same shape the `if (...)` condition
+and complement-`return` paths produce) instead of breaking after `=` and stranding `!(...)` flat on the continuation line;
+a complement that still fits inline stays flat. A per-run
 `SourceShapePolicy` on `JavaFormatContext` is the consolidating home for
 "should the formatter respect the author's source shape here?" decisions, so printers ask one named question instead of
 re-deriving those reads from raw token text or `getRange()` arithmetic. It owns one canonical definition of each

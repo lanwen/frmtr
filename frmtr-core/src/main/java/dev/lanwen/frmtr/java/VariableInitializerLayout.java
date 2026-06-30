@@ -21,6 +21,7 @@ import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
+import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.IntersectionType;
@@ -83,6 +84,8 @@ final class VariableInitializerLayout {
     private final Predicate<BinaryExpr> shouldKeepCastDivisionContinuationFlat;
 
     private final BiFunction<Expression, Boolean, Doc> binaryExpressionLines;
+
+    private final BiFunction<Expression, Boolean, Doc> parenthesizedBreak;
 
     private final Function<MethodCallExpr, Doc> methodCall;
 
@@ -166,6 +169,7 @@ final class VariableInitializerLayout {
             Function<ArrayAccessExpr, Doc> arrayAccessWithBrokenEnclosedName,
             Predicate<BinaryExpr> shouldKeepCastDivisionContinuationFlat,
             BiFunction<Expression, Boolean, Doc> binaryExpressionLines,
+            BiFunction<Expression, Boolean, Doc> parenthesizedBreak,
             Function<MethodCallExpr, Doc> methodCall,
             Function<MethodCallExpr, Doc> brokenMethodCall,
             Function<MethodCallExpr, Optional<Doc>> mixedFieldMethodCallChain,
@@ -216,6 +220,7 @@ final class VariableInitializerLayout {
         this.arrayAccessWithBrokenEnclosedName = arrayAccessWithBrokenEnclosedName;
         this.shouldKeepCastDivisionContinuationFlat = shouldKeepCastDivisionContinuationFlat;
         this.binaryExpressionLines = binaryExpressionLines;
+        this.parenthesizedBreak = parenthesizedBreak;
         this.methodCall = methodCall;
         this.brokenMethodCall = brokenMethodCall;
         this.mixedFieldMethodCallChain = mixedFieldMethodCallChain;
@@ -606,6 +611,12 @@ final class VariableInitializerLayout {
                 if (forcedChain.isPresent()) {
                     return forcedChain.orElseThrow();
                 }
+            }
+            if (logicalComplementOfParenthesizedBinary(initializer) instanceof Expression inner) {
+                return Doc.concat(
+                    Doc.text(name + " = !"),
+                    parenthesizedBreak.apply(inner, true)
+                );
             }
             if (initializer instanceof BinaryExpr binaryExpr) {
                 if (binaryInitializerCanKeepFirstOperandWithEquals(variable, declarationPrefix, binaryExpr)) {
@@ -1949,6 +1960,29 @@ final class VariableInitializerLayout {
                     .orElseGet(() -> expression.apply(initializer));
         }
         return expression.apply(initializer);
+    }
+
+    /**
+     * Recognizes a {@code !(<binary>)} initializer value and hands back the parenthesized binary so the assignment line
+     * can keep {@code = !(} attached and break the binary by its operands inside the parentheses.
+     *
+     * <p>The shared expression renderer would otherwise break this complement after {@code =} and keep {@code !(...)}
+     * flat on the continuation line. When the inline assignment line overflows, the more readable shape keeps the
+     * negation opener on the assignment line ({@code name = !(}), breaks the inner binary one operator per line, and drops
+     * the closing {@code )} on its own line — the same parenthesized-binary break the {@code if (...)} condition and
+     * complement-{@code return} paths already use. Only the parenthesized-binary complement is recognized; any other unary
+     * value falls through to the shared expression renderer, which keeps the existing flat or break-after-{@code =} shapes.
+     */
+    private Expression logicalComplementOfParenthesizedBinary(Expression initializer) {
+        if (
+            initializer instanceof UnaryExpr unaryExpr
+            && unaryExpr.getOperator() == UnaryExpr.Operator.LOGICAL_COMPLEMENT
+            && unaryExpr.getExpression() instanceof EnclosedExpr enclosedExpr
+            && enclosedExpr.getInner() instanceof BinaryExpr binaryExpr
+        ) {
+            return binaryExpr;
+        }
+        return null;
     }
 
     /**

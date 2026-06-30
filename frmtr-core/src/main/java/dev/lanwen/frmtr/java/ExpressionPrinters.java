@@ -182,6 +182,7 @@ final class ExpressionPrinters {
         );
         this.unaries = new UnaryExpressionPrinter(
             options,
+            context.layoutWidth,
             compactSource::compact,
             this::currentIndentedWidth,
             enclosedExpressions::parenthesizedBreak
@@ -537,6 +538,10 @@ final class ExpressionPrinters {
 
     Doc binaryLines(Expression expression, boolean forceBreak) {
         return binaries.lines(expression, forceBreak);
+    }
+
+    Doc parenthesizedBreak(Expression expression, boolean forceBinaryBreak) {
+        return enclosedExpressions.parenthesizedBreak(expression, forceBinaryBreak);
     }
 
     Doc binaryConditionLines(Expression expression, boolean forceBreak) {

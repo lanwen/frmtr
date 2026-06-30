@@ -147,6 +147,7 @@ final class DeclarationPrinters {
             expressions::arrayAccessWithBrokenEnclosedName,
             expressions::shouldKeepCastDivisionContinuationFlat,
             expressions::binaryLines,
+            expressions::parenthesizedBreak,
             expressions::methodCall,
             expressions::brokenMethodCall,
             expressions::mixedFieldMethodCallChain,

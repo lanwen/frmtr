@@ -1,5 +1,6 @@
 package dev.lanwen.frmtr.java;
 
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
@@ -16,6 +17,7 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
+import com.github.javaparser.ast.stmt.Statement;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
@@ -887,7 +889,7 @@ final class MethodCallPrinter {
         }
         ObjectCreationExpr argument = (ObjectCreationExpr) expression.getArgument(0);
         String objectPrefix = compactSource.compact(argument).split("\\(", 2)[0];
-        if (currentIndentedWidth.applyAsInt(prefix + "(" + objectPrefix + "(") > options.lineWidth()) {
+        if (attachedOpenerOverflows(expression, prefix + "(" + objectPrefix + "(")) {
             return Optional.empty();
         }
         return Optional.of(Doc.concat(Doc.text(prefix + "("), objectCreationWithSuffix.apply(argument, ")")));
@@ -899,13 +901,64 @@ final class MethodCallPrinter {
         }
         MethodCallExpr argument = (MethodCallExpr) expression.getArgument(0);
         String argumentPrefix = methodCallPrefix(argument);
-        if (currentIndentedWidth.applyAsInt(prefix + "(" + argumentPrefix + "(") > options.lineWidth()) {
+        if (attachedOpenerOverflows(expression, prefix + "(" + argumentPrefix + "(")) {
             return Optional.empty();
         }
         return Optional.of(Doc.concat(
             Doc.text(prefix + "("),
             methodCallWithTail(argument, ExpressionTail.of(")"))
         ));
+    }
+
+    /**
+     * Reports whether attaching ("hugging") a single inner call/object-creation argument to this call's opener would push
+     * the shared first line ({@code outer(inner(}) past the line width, measured at the call's <em>real</em> rendered
+     * column rather than the bare block indent.
+     *
+     * <p>The single-argument hug gates used to probe {@link #currentIndentedWidth} on {@code prefix + "(" + innerPrefix +
+     * "("} alone, which is prefix-blind: when the call is the value of an initializer or assignment
+     * ({@code NAME = outer(inner(…))}) the {@code NAME = } prefix sharing the line is never counted, so the hug attaches
+     * even when the opener visibly overflows, and the over-wide shape is stable (idempotent but wrong). Making the
+     * decision width-deterministic — attach only when the hugged opener fits — mirrors the prefix-aware first-line probe
+     * threaded into method-chain layout for the assignment column (#161) and the chain arm's stay-flat rule (#163): the
+     * column where the value begins, not just its indentation, decides whether the flat shape is legal.
+     *
+     * <p>The value prefix that shares the call's first line is reconstructed from the source range: the call's start
+     * column minus its enclosing statement's start column is exactly the width of whatever precedes the call on that line
+     * (the {@code NAME = }, {@code target op }, {@code return }, …), and that delta is invariant under reindentation. The
+     * real first-line width is therefore the statement's rendered indentation plus that prefix delta plus the opener text,
+     * which is measured against the enclosing statement's nesting depth rather than the bare-call indent the prefix-blind
+     * probe assumed. The delta is taken only when the call and its statement begin on the same source line; a call that
+     * already starts its own line has no shared prefix, so the probe falls back to the plain indented width and preserves
+     * the previous behavior for those callers.
+     */
+    private boolean attachedOpenerOverflows(MethodCallExpr expression, String openerLine) {
+        return sharedFirstLineWidth(expression)
+                .map(prefixedIndent -> prefixedIndent + openerLine.length())
+                .orElseGet(() -> currentIndentedWidth.applyAsInt(openerLine))
+            > options.lineWidth();
+    }
+
+    private Optional<Integer> sharedFirstLineWidth(MethodCallExpr expression) {
+        return expression.getRange()
+                .flatMap(callRange -> enclosingStatement(expression)
+                        .filter(statement -> statement.getRange()
+                                .filter(statementRange -> statementRange.begin.line == callRange.begin.line)
+                                .isPresent())
+                        .map(statement -> layoutWidth.nodeIndentWidth(statement)
+                            + Math.max(0, callRange.begin.column - statement.getRange().orElseThrow().begin.column)));
+    }
+
+    private Optional<Statement> enclosingStatement(Node node) {
+        Optional<Node> ancestor = node.getParentNode();
+        while (ancestor.isPresent()) {
+            Node current = ancestor.orElseThrow();
+            if (current instanceof Statement statement) {
+                return Optional.of(statement);
+            }
+            ancestor = current.getParentNode();
+        }
+        return Optional.empty();
     }
 
     private boolean hasSingleAttachableObjectCreationArgument(MethodCallExpr expression) {

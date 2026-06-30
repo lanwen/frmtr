@@ -90,6 +90,18 @@ final class LayoutWidth {
     }
 
     /**
+     * Returns the rendered indentation width (in columns) of a line emitted at the node's nesting depth.
+     *
+     * <p>Callers that already know the visible width of everything after the indentation — for example a hugged
+     * {@code outer(inner(} opener plus a reindentation-invariant value prefix measured from source columns — add this
+     * baseline themselves instead of folding their fragment into {@link #nodeLine}, where {@code stripLeading} would
+     * discard any leading spaces they meant to count.
+     */
+    int nodeIndentWidth(Node node) {
+        return Math.max(1, renderedIndentLevels(node)) * options.indentUnit().length();
+    }
+
+    /**
      * Measures a variable initializer at the variable's actual nesting depth.
      *
      * <p>Field and local-variable initializer fallbacks need the enclosing type/block depth, not just the root printer's

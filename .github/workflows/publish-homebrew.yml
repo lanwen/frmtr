@@ -1,0 +1,82 @@
+name: Publish Homebrew
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Released version to publish to Homebrew.
+        required: true
+        type: string
+    secrets:
+      RELEASE_APP_PRIVATE_KEY:
+        required: true
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Released version to publish to Homebrew.
+        required: true
+        type: string
+
+permissions:
+  # Allows checkout and release asset download.
+  contents: read
+
+jobs:
+  homebrew:
+    name: Publish Homebrew tap
+    runs-on: ubuntu-latest
+    environment: brew
+    steps:
+      - name: Generate release repository token
+        id: release-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.0.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # Reads GitHub release assets for the selected version.
+          permission-contents: read
+
+      - name: Generate Homebrew tap token
+        id: brew-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.0.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: homebrew-tap
+          # Commits the generated formula to the Homebrew tap.
+          permission-contents: write
+
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: main
+          token: ${{ steps.release-token.outputs.token }}
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
+
+      - name: Download release distributions
+        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p build/distributions
+          gh release download "v${RELEASE_VERSION}" --repo "${{ github.repository }}" --pattern "frmtr-${RELEASE_VERSION}-*.zip" --dir build/distributions
+          test -f "build/distributions/frmtr-${RELEASE_VERSION}-linux-x86_64.zip"
+          test -f "build/distributions/frmtr-${RELEASE_VERSION}-osx-aarch_64.zip"
+          test -f "build/distributions/frmtr-${RELEASE_VERSION}-windows-x86_64.zip"
+
+      - name: Publish Homebrew formula
+        env:
+          JRELEASER_GITHUB_TOKEN: ${{ steps.release-token.outputs.token }}
+          JRELEASER_HOMEBREW_GITHUB_TOKEN: ${{ steps.brew-token.outputs.token }}
+        run: ./gradlew -Pversion="${{ inputs.version }}" -Pfrmtr.jreleaser.configFile=jreleaser-brew.yml jreleaserPublish --packager brew --distribution frmtr

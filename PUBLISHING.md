@@ -83,13 +83,15 @@ After publishing a new snapshot with the same version, refresh Gradle's cached s
 ### Release
 
 JReleaser deploys `frmtr-core` and `frmtr-tooling` to Maven Central and publishes native CLI archives to a GitHub
-release. The release workflow also publishes the Gradle plugin and Homebrew formula in separate GitHub environments.
+release. The release workflow also publishes the Gradle plugin and delegates Homebrew formula publication to the
+`Publish Homebrew` workflow in separate GitHub environments.
 
 Release commits are normal protected-branch PRs. Automation never pushes commits directly to `main`; it creates or
 updates signed PR branches with `peter-evans/create-pull-request` and a GitHub App token so PR workflows run normally.
 
-1. Every push to `main` refreshes the `release` PR. The release PR updates `CHANGELOG.md` and changes
-   `gradle.properties` from `*-SNAPSHOT` to the computed final version, and carries the corpus check before merge.
+1. Every push to `main` refreshes the `release` PR. The release PR updates `CHANGELOG.md`, changes
+   `gradle.properties` from `*-SNAPSHOT` to the computed final version, updates the JBake site version in
+   `site/src/jbake/jbake.properties`, and carries the corpus check before merge.
 2. Feature or breaking-change merges to `main` can also open a `snapshot` PR that raises the current snapshot target;
    the same workflow can be dispatched manually with an explicit `*-SNAPSHOT` target.
 3. Merging the release PR pushes a final version in `gradle.properties` to `main`. `.github/workflows/release.yml`
@@ -125,7 +127,9 @@ Configure the `gradle` environment secrets for Gradle Plugin Portal publication:
 - `GRADLE_PUBLISH_SECRET`
 
 The `brew` environment uses the GitHub App to mint a `JRELEASER_HOMEBREW_GITHUB_TOKEN` for `lanwen/homebrew-tap`; install
-the app on that repository with contents read/write access before enabling the workflow.
+the app on that repository with contents read/write access before enabling the workflow. Homebrew publishing runs through
+the reusable `Publish Homebrew` workflow and uses `jreleaser-brew.yml`, which omits Maven Central deploy and PGP signing
+config so the brew job does not need Maven or GPG secrets.
 
 Run release commands from the main checkout on `main`; JReleaser expects normal Git metadata and a GitHub `origin`.
 
@@ -154,4 +158,12 @@ Publish the Gradle plugin release after Central artifacts are available:
 
 ```bash
 op run --env-file ./publishing/.env.gradle -- ./gradlew :frmtr-gradle-plugin:publishPlugins
+```
+
+Retry only the Homebrew formula for an already-published GitHub release with the `Publish Homebrew` workflow dispatch,
+passing the released version. The release workflow calls the same workflow after GitHub release publication succeeds. The
+local equivalent expects the native release archives under `build/distributions`:
+
+```bash
+./gradlew -Pversion=0.1.0 -Pfrmtr.jreleaser.configFile=jreleaser-brew.yml jreleaserPublish --packager brew --distribution frmtr
 ```

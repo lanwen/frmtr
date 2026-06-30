@@ -1,0 +1,56 @@
+project:
+  name: frmtr
+  description: Java formatter.
+  longDescription: Java formatter.
+  authors:
+    - lanwen
+  license: MIT
+  copyright: Copyright (c) 2026 lanwen
+  links:
+    homepage: https://github.com/lanwen/frmtr
+  languages:
+    java:
+      groupId: dev.lanwen.frmtr
+      version: 25
+
+release:
+  github:
+    owner: lanwen
+    name: frmtr
+    branch: main
+    tagName: v{{projectVersion}}
+    releaseName: Release {{tagName}}
+    skipTag: true
+    skipRelease: true
+
+distributions:
+  frmtr:
+    type: BINARY
+    artifacts:
+      - path: build/distributions/frmtr-{{projectVersion}}-linux-x86_64.zip
+        platform: linux-x86_64
+        extraProperties:
+          graalVMNativeImage: true
+      - path: build/distributions/frmtr-{{projectVersion}}-osx-aarch_64.zip
+        platform: osx-aarch_64
+        extraProperties:
+          graalVMNativeImage: true
+      - path: build/distributions/frmtr-{{projectVersion}}-windows-x86_64.zip
+        platform: windows-x86_64
+        extraProperties:
+          graalVMNativeImage: true
+
+packagers:
+  brew:
+    active: RELEASE
+    formulaName: Frmtr
+    multiPlatform: true
+    commitAuthor:
+      name: frmtr-release[bot]
+      email: frmtr-release[bot]@users.noreply.github.com
+    repository:
+      owner: lanwen
+      name: homebrew-tap
+      branch: main
+      branchPush: main
+      commitMessage: "frmtr {{tagName}}"

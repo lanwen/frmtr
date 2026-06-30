@@ -7,7 +7,6 @@ on:
     paths:
       - gradle.properties
       - jreleaser.yml
-      - .github/workflows/release.yml
   workflow_dispatch:
 
 permissions:
@@ -220,65 +219,15 @@ jobs:
 
   homebrew:
     name: Publish Homebrew tap
-    runs-on: ubuntu-latest
     needs:
       - validate
       - publish
     if: needs.validate.outputs.should_release == 'true'
-    environment: brew
-    steps:
-      - name: Generate release repository token
-        id: release-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.0.0
-        with:
-          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          # Lets JReleaser read/update release repository metadata during Homebrew publication.
-          permission-contents: write
-
-      - name: Generate Homebrew tap token
-        id: brew-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.0.0
-        with:
-          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: homebrew-tap
-          # Commits the generated formula to the Homebrew tap.
-          permission-contents: write
-
-      - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          fetch-depth: 0
-          ref: main
-          token: ${{ steps.release-token.outputs.token }}
-          persist-credentials: false
-
-      - name: Attach main branch
-        run: git checkout -B main origin/main
-
-      - name: Set up Java
-        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
-        with:
-          distribution: temurin
-          java-version: "25"
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
-
-      - name: Download native distributions
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          pattern: native-*
-          merge-multiple: true
-          path: build/distributions
-
-      - name: Publish Homebrew formula
-        env:
-          JRELEASER_GITHUB_TOKEN: ${{ steps.release-token.outputs.token }}
-          JRELEASER_HOMEBREW_GITHUB_TOKEN: ${{ steps.brew-token.outputs.token }}
-        run: ./gradlew jreleaserPublish
+    uses: ./.github/workflows/publish-homebrew.yml
+    with:
+      version: ${{ needs.validate.outputs.version }}
+    secrets:
+      RELEASE_APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
   snapshot-pr:
     name: Open next snapshot PR

@@ -23,6 +23,7 @@ val centralMavenJavaProjects = setOf(":frmtr-core", ":frmtr-tooling")
 val centralSnapshotProjects = centralMavenJavaProjects + ":frmtr-gradle-plugin"
 val isSnapshotVersion = version.toString().endsWith("-SNAPSHOT")
 val jreleaserStagingRepositoryName = "jreleaserStaging"
+val jreleaserConfigFile = providers.gradleProperty("frmtr.jreleaser.configFile").orElse("jreleaser.yml")
 
 val frmtrCli = project(":frmtr-cli")
 val frmtrCliRuntimeClasspath = frmtrCli.provider {
@@ -78,7 +79,7 @@ tasks.register("stageCentralRelease") {
 }
 
 jreleaser {
-    configFile = layout.projectDirectory.file("jreleaser.yml")
+    configFile = layout.projectDirectory.file(jreleaserConfigFile.get())
     dependsOnAssemble = false
     gitRootSearch = true
 }

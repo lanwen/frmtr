@@ -64,6 +64,11 @@ marker publications. The CLI is distributed as an application/native executable 
 JReleaser owns the GitHub release and binary-distribution metadata in `jreleaser.yml`, including the project-level
 copyright that mirrors the root MIT license. The release publish job stages Central artifacts and runs
 `jreleaserConfig` before creating the Git tag, so configuration validation happens before remote release state changes.
+Homebrew publication runs through the reusable `Publish Homebrew` workflow and uses the separate `jreleaser-brew.yml`
+config so the tap job validates only GitHub release and Homebrew packaging metadata, not Maven Central deploy or PGP
+signing secrets.
+Release preparation updates both the Gradle project version and the JBake site version property so the generated site
+shows the same released coordinate as the published artifacts.
 
 `:frmtr-cli` generates a small `BuildInfo` source file during compilation so JVM and native binaries report the same
 project version, Git commit SHA, and build timestamp through Picocli's version provider.

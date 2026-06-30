@@ -81,9 +81,8 @@ jobs:
         shell: cmd
         run: |
           if exist "%VSINSTALLDIR%VC\Auxiliary\Build\vcvars64.bat" call "%VSINSTALLDIR%VC\Auxiliary\Build\vcvars64.bat"
-          set "PATH=%GRAALVM_HOME%\bin;%PATH%"
-          native-image --version
-          gradlew.bat :frmtr-cli:nativeDistributionZip -Pfrmtr.native.classifier=${{ matrix.classifier }} -Pfrmtr.native.useEnvironmentHome=true
+          call "%GRAALVM_HOME%\bin\native-image.cmd" --version
+          call gradlew.bat :frmtr-cli:nativeDistributionZip -Pfrmtr.native.classifier=${{ matrix.classifier }} -Pfrmtr.native.useEnvironmentHome=true
 
       - name: Smoke test native binary
         if: runner.os != 'Windows'

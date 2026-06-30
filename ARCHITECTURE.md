@@ -390,7 +390,14 @@ continuation indentation, deeper than the `CURRENT` budget the AUTO entry assume
 (`MethodCallPrinter.methodCallArgumentDoc`) threads the `CONTINUATION` budget into the chain. When the resulting probe
 shows the chain over width but its short final segment (`.toRetry()`, `.build()`) has no arguments to wrap, the chain
 printer breaks the root's own argument list and glues the segment to its close, the same shape a source-multiline root
-already produces. A per-run `SourceShapePolicy` on `JavaFormatContext` is the consolidating home for
+already produces. The single-attachable-argument hug gates (`MethodCallPrinter.singleMethodCallArgument` /
+`singleObjectCreationArgument`, which keep `outer(inner(` on one opener when the author broke a lone inner call or
+constructor argument) apply the same prefix-aware width rule through `attachedOpenerOverflows`: rather than measuring the
+hugged opener at the bare call indent, they add the value prefix that shares the call's first line, recovered as the
+call's source start column minus its enclosing statement's start column (a reindentation-invariant delta) over the
+statement's rendered indentation (`LayoutWidth.nodeIndentWidth`). An attached opener that fits at the assignment column is
+hugged; one that overflows once the prefix is counted breaks instead of being frozen over width. A per-run
+`SourceShapePolicy` on `JavaFormatContext` is the consolidating home for
 "should the formatter respect the author's source shape here?" decisions, so printers ask one named question instead of
 re-deriving those reads from raw token text or `getRange()` arithmetic. It owns one canonical definition of each
 source-shape decision:

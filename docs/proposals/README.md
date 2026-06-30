@@ -423,6 +423,7 @@ Drafted for this roadmap:
 | S8 | `--verify` safety valve (implemented) | [verify-on-write-safety-valve.md](verify-on-write-safety-valve.md) |
 | S9 | Fix comment data loss (implemented) | [comment-data-loss.md](comment-data-loss.md) |
 | S7/S9 | Comment-handling findings → B-work map | [comment-handling-findings.md](comment-handling-findings.md) |
+| B2/B3 | Context-dependent layout decision model (rank broken layouts; LDM-1…LDM-5) | [layout-decision-model.md](layout-decision-model.md) |
 
 Pre-existing, related:
 

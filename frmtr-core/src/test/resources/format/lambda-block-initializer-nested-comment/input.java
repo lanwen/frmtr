@@ -35,4 +35,15 @@ class LambdaBlockInitializerNestedComment {
             return false;
         });
     }
+
+    void resolveRecipeVersions(RecipeDownloader recipeDownloader, VersionCollector versionCollector) {
+        CompletableFuture<List<RecipeVersion>> springBootRecipeVersionsFuture = CompletableFuture.supplyAsync(() -> {
+            List<RecipeVersion> springBootRecipeVersions = recipeDownloader.resolveAvailableVersions(UPGRADE_GROUP_ID);
+            if (!springBootRecipeVersions.isEmpty()) {
+                // qualified-receiver hug keeps the call on the assignment line, dropping this comment pre-fix
+                versionCollector.addAll(recipeDownloader.resolveAvailableVersions(SPRING_BOOT_UPGRADE_GROUP_ID));
+            }
+            return springBootRecipeVersions;
+        });
+    }
 }

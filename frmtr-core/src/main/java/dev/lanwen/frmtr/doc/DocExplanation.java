@@ -28,6 +28,7 @@ public record DocExplanation(
     List<GroupDecision> decisions,
     List<FillDecision> fillDecisions,
     List<ConditionalGroupDecision> conditionalGroupDecisions,
+    List<BestFittingDecision> bestFittingDecisions,
     List<ForcedBreak> forcedBreaks,
     List<PrinterWrap> printerWraps,
     Node tree
@@ -36,6 +37,7 @@ public record DocExplanation(
         decisions = List.copyOf(decisions);
         fillDecisions = List.copyOf(fillDecisions);
         conditionalGroupDecisions = List.copyOf(conditionalGroupDecisions);
+        bestFittingDecisions = List.copyOf(bestFittingDecisions);
         forcedBreaks = List.copyOf(forcedBreaks);
         printerWraps = List.copyOf(printerWraps);
     }
@@ -62,6 +64,14 @@ public record DocExplanation(
      */
     public List<FillDecision> brokenFills() {
         return fillDecisions.stream().filter(FillDecision::anyBroke).toList();
+    }
+
+    /**
+     * Returns only the best-fitting nodes whose chosen alternative wraps across lines, in render order. A best-fitting
+     * node whose flattest alternative fit on one line is not a wrap and is excluded, like a flat group.
+     */
+    public List<BestFittingDecision> rankedBestFittings() {
+        return bestFittingDecisions.stream().filter(BestFittingDecision::chosenWraps).toList();
     }
 
     /**
@@ -166,6 +176,53 @@ public record DocExplanation(
          * measured and do not appear here.
          */
         public record Alternative(int index, int flatWidth, boolean fits) {}
+    }
+
+    /**
+     * A {@link Doc.BestFitting}'s ranked-alternative selection and the line-count arithmetic behind it.
+     *
+     * <p>A best-fitting node holds an ordered list of layout alternatives, flattest-first, and — unlike a
+     * {@link ConditionalGroupDecision}, which picks the first flat layout that fits — keeps the alternative that
+     * <em>minimizes rendered line count</em> at the current column, so it can rank multiple broken shapes against each
+     * other. {@code chosenIndex} is the selected alternative; each measured {@link Alternative} carries the line count
+     * and overflow the ranking computed for it, so the explanation can show why the flatter alternatives lost.
+     * {@code available} is the columns left and {@code startColumn} where the node began. Only the first
+     * {@link DocWidths#MAX_BEST_FITTING_ALTERNATIVES} alternatives are measured (and none are measured past
+     * {@link DocWidths#MAX_BEST_FITTING_DEPTH} nesting, where the node collapses to its first alternative), so the
+     * measured list may be shorter than the node's full alternative list. {@code label} is the nearest enclosing rule
+     * provenance, absent for an unlabeled structural best-fitting node.
+     */
+    public record BestFittingDecision(
+        Optional<String> label,
+        int chosenIndex,
+        int available,
+        int startColumn,
+        List<Alternative> alternatives
+    ) {
+        public BestFittingDecision {
+            alternatives = List.copyOf(alternatives);
+        }
+
+        /**
+         * Whether the chosen alternative wraps across lines. When the flattest layout fits on one line it is chosen and
+         * this is false; when every measured alternative wraps, the least-wrapping one is chosen and this is true. The
+         * CLI surfaces only wrapping best-fitting nodes as a wrap reason.
+         */
+        public boolean chosenWraps() {
+            return alternatives.stream()
+                    .filter(alternative -> alternative.index() == chosenIndex)
+                    .anyMatch(alternative -> alternative.lines() > 0);
+        }
+
+        /**
+         * One measured alternative in a {@link Doc.BestFitting}.
+         *
+         * <p>{@code index} is its position in the alternative list, {@code lines} the number of newlines it would render
+         * into at the node's start column, and {@code overflow} the total columns past the line width it would incur.
+         * The ranking keeps the alternative with the fewest lines, then the least overflow, then the earliest index.
+         * {@code chosen} marks the winner.
+         */
+        public record Alternative(int index, int lines, int overflow, boolean chosen) {}
     }
 
     /**

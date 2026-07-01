@@ -19,6 +19,22 @@ final class DocWidths {
     /** Sentinel flat width signalling that a document contains a forced break and cannot fit on one line. */
     static final int NO_FIT = Integer.MIN_VALUE;
 
+    /**
+     * Upper bound on how many alternatives of a {@link Doc.BestFitting} the renderer line-count-ranks (rule D16): only
+     * the first {@code min(size, MAX_BEST_FITTING_ALTERNATIVES)} are measured, so ranking stays linear and native-image
+     * friendly no matter how many alternatives a printer emits. The winner is always one of the measured prefix.
+     */
+    static final int MAX_BEST_FITTING_ALTERNATIVES = 8;
+
+    /**
+     * Maximum nesting depth at which a {@link Doc.BestFitting} is ranked (rule D16). A best-fitting node reached while
+     * ranking or rendering an outer one is at the next depth; once depth reaches this bound the inner node stops being
+     * ranked and collapses to its first (flattest) alternative, bounding total exploration to keep the walk linear.
+     * The renderer and the line-count simulation apply the identical bound through the shared {@link #chooseBestFitting}
+     * decision so the alternative rendered for real is always the alternative the ranking measured.
+     */
+    static final int MAX_BEST_FITTING_DEPTH = 4;
+
     /** Internal sentinel for bounded measurements that stopped after overflow before finding a complete width. */
     private static final int OVERFLOW = Integer.MIN_VALUE + 1;
 
@@ -41,7 +57,20 @@ final class DocWidths {
 
         private final IdentityHashMap<Doc, Integer> flatWidths = new IdentityHashMap<>();
 
+        /**
+         * Width of one indentation unit in columns, used only by the {@link #measureLineCount} simulation to reset the
+         * column after a newline exactly as {@link DocRenderer} does ({@code indentUnit().length() * indent}). It is
+         * width arithmetic, not indentation text, so it stays within this authority's boundary. Defaults to 0 so callers
+         * that only ask {@link #fits}/{@link #flatWidth} (which never see a newline) are unaffected; {@link DocRenderer}
+         * and {@link DocExplainRenderer} set it to the configured indent-unit width before ranking any best-fitting node.
+         */
+        private int indentWidth;
+
         private Measurement() {}
+
+        void indentWidth(int indentWidth) {
+            this.indentWidth = indentWidth;
+        }
 
         boolean fits(Doc doc, int remaining) {
             if (remaining < 0) {
@@ -77,6 +106,78 @@ final class DocWidths {
             return measure(doc, UNBOUNDED);
         }
 
+        /**
+         * Ranks a {@link Doc.BestFitting}'s alternatives by rendered line count at the live output column and returns the
+         * winning index (rule B8 + D16). This is the single decision {@link DocRenderer} and the {@link #measureLineCount}
+         * simulation both consult, so the alternative rendered for real is always the alternative the ranking measured —
+         * they cannot drift because there is one function, not two copies of the tie-break.
+         *
+         * <p>Only the first {@code min(size, MAX_BEST_FITTING_ALTERNATIVES)} alternatives are measured (linear-time
+         * bound). Beyond {@link #MAX_BEST_FITTING_DEPTH} nested best-fitting levels the node is not ranked at all and
+         * collapses to its first (flattest) alternative, so total exploration stays bounded. The tie-break (D16) is
+         * strict: an alternative wins only if it has <em>strictly fewer</em> lines, or equal lines and
+         * <em>strictly less</em> overflow; equal-lines-equal-overflow keeps the earlier (flatter) alternative, which
+         * makes the choice deterministic and therefore the reformat a fixpoint.
+         *
+         * @param depth the best-fitting nesting depth of this node (0 for a top-level node), used to apply the bound
+         */
+        int chooseBestFitting(List<Doc> alternatives, int indent, int startColumn, int lineWidth, int depth) {
+            if (depth >= MAX_BEST_FITTING_DEPTH || alternatives.size() == 1) {
+                return 0;
+            }
+            int limit = Math.min(alternatives.size(), MAX_BEST_FITTING_ALTERNATIVES);
+            int bestIndex = 0;
+            LineCount best = null;
+            for (int i = 0; i < limit; i++) {
+                // Rank each candidate as it would render at this column, resolving any nested best-fitting nodes at the
+                // next depth so the metric matches what the winner will actually emit.
+                LineCount candidate = measureLineCount(alternatives.get(i), indent, startColumn, lineWidth, depth + 1);
+                if (best == null || candidate.betterThan(best)) {
+                    best = candidate;
+                    bestIndex = i;
+                }
+            }
+            return bestIndex;
+        }
+
+        /**
+         * Counts the lines and overflow a document would render into at a given start column, without emitting anything
+         * or mutating this measurement's width cache. It is the ranking metric for {@link Doc.BestFitting} and a
+         * <em>side-effect-free mirror of {@link DocRenderer}'s rendering walk</em>: it reproduces the same newline, mode,
+         * {@link Doc.Fill} packing, {@link Doc.IfBreak}/{@code groupId}, {@link Doc.LineSuffix} flushing, and
+         * best-fitting selection so its line count equals the number of newlines the renderer emits. That equality is the
+         * load-bearing invariant, pinned directly by a congruence test ({@code measureLineCount(doc).lines()} ==
+         * newlines {@code render(doc)} emits) so the mirror can never silently drift from the renderer even though the
+         * two walks are separate code: the renderer emits text while this only accumulates counts, and unifying them
+         * would force the byte-identical hot path through a sink abstraction this foundation deliberately leaves intact.
+         *
+         * <p>The walk keeps its own scratch column, group-mode map, and line-suffix buffer — never the renderer's — so a
+         * ranking probe cannot perturb an in-progress render. Inner {@link Doc.Group} fit is answered through the shared
+         * memoized {@link #fits} cache (line counting is never written into that cache), and nested best-fitting nodes
+         * are resolved through the same {@link #chooseBestFitting} the renderer uses, under the same depth bound.
+         *
+         * @return the number of newlines emitted and {@code Σ max(0, column - lineWidth)} accumulated at each newline and
+         *     at end of the document
+         */
+        LineCount measureLineCount(Doc doc, int indent, int startColumn, int lineWidth) {
+            return measureLineCount(doc, indent, startColumn, lineWidth, 0);
+        }
+
+        /**
+         * The depth-parameterized {@link #measureLineCount}, exposed to {@link DocExplainRenderer} so the {@code
+         * --explain} trace can record the exact per-alternative line counts the ranking weighed at a nested
+         * best-fitting node's depth — the same numbers {@link #chooseBestFitting} used, so the explanation never reports
+         * a metric that differs from the one that picked the winner.
+         */
+        LineCount measureLineCount(Doc doc, int indent, int startColumn, int lineWidth, int bestFittingDepth) {
+            LineCountWalk walk = new LineCountWalk(lineWidth, bestFittingDepth);
+            walk.column = startColumn;
+            walk.walk(doc, indent, LineMode.BREAK);
+            walk.flushLineSuffixes();
+            walk.accountOverflowAtEnd();
+            return new LineCount(walk.lines, walk.overflow);
+        }
+
         private int measure(Doc doc, int remaining) {
             if (remaining < 0) {
                 return OVERFLOW;
@@ -93,6 +194,11 @@ final class DocWidths {
                 // renderer prefers when it fits.
                 case Doc.ConditionalGroup conditionalGroup ->
                     measure(conditionalGroup.alternatives().getFirst(), remaining);
+                // A best-fitting node is sized by its first (flattest) alternative — the representative flat width, the
+                // same convention as a conditional group. The renderer ranks the alternatives by rendered line count, but
+                // an enclosing group deciding its own flat/break mode only needs the flattest candidate's width.
+                case Doc.BestFitting bestFitting ->
+                    measure(bestFitting.alternatives().getFirst(), remaining);
                 case Doc.Line ignored -> 1;
                 case Doc.SoftLine ignored -> 0;
                 case Doc.HardLine ignored -> NO_FIT;
@@ -145,5 +251,182 @@ final class DocWidths {
         private boolean fitsWidth(int measured, int remaining) {
             return measured >= 0 && measured <= remaining;
         }
+
+        /**
+         * A side-effect-free replay of {@link DocRenderer}'s rendering walk that accumulates only a newline count and
+         * overflow instead of emitting text. Each walk carries its own column cursor, group-mode map, and line-suffix
+         * buffer so it never touches the enclosing render's state, and it consults the outer {@link Measurement}'s
+         * memoized {@link #fits}/{@link #chooseBestFitting} for the identical fit and best-fitting decisions. Kept as a
+         * per-walk instance because the cursor and buffers are mutable per replay, exactly like {@link DocRenderer}.
+         */
+        private final class LineCountWalk {
+
+            private final int lineWidth;
+
+            private final int bestFittingDepth;
+
+            private final java.util.Map<String, LineMode> groupModes = new java.util.HashMap<>();
+
+            private final List<BufferedSuffix> lineSuffixes = new java.util.ArrayList<>();
+
+            private int column;
+
+            private int lines;
+
+            private int overflow;
+
+            private LineCountWalk(int lineWidth, int bestFittingDepth) {
+                this.lineWidth = lineWidth;
+                this.bestFittingDepth = bestFittingDepth;
+            }
+
+            private void walk(Doc doc, int indent, LineMode mode) {
+                switch (doc) {
+                    case Doc.Text text -> advance(text.value());
+                    case Doc.Concat concat -> concat.docs().forEach(child -> walk(child, indent, mode));
+                    case Doc.Line ignored -> {
+                        if (mode == LineMode.FLAT) {
+                            advance(" ");
+                        } else {
+                            newline(indent);
+                        }
+                    }
+                    case Doc.SoftLine ignored -> {
+                        if (mode == LineMode.BREAK) {
+                            newline(indent);
+                        }
+                    }
+                    case Doc.HardLine ignored -> newline(indent);
+                    case Doc.BreakParent ignored -> {
+                        // Emits nothing and advances no column, exactly like DocRenderer.
+                    }
+                    case Doc.Indent indented -> walk(indented.doc(), indent + 1, mode);
+                    case Doc.Group group -> {
+                        LineMode next = fits(group.doc(), lineWidth - column) ? LineMode.FLAT : LineMode.BREAK;
+                        if (group.groupId() != null) {
+                            groupModes.put(group.groupId(), next);
+                        }
+                        walk(group.doc(), indent, next);
+                    }
+                    case Doc.Fill fill -> walkFill(fill.parts(), indent);
+                    case Doc.ConditionalGroup conditionalGroup -> walkConditionalGroup(conditionalGroup.alternatives(), indent);
+                    case Doc.BestFitting bestFitting -> {
+                        List<Doc> alternatives = bestFitting.alternatives();
+                        int chosen = chooseBestFitting(alternatives, indent, column, lineWidth, bestFittingDepth);
+                        walk(alternatives.get(chosen), indent, LineMode.BREAK);
+                    }
+                    case Doc.IfBreak conditional -> {
+                        LineMode effective = conditional.groupId() == null
+                            ? mode
+                            : groupModes.getOrDefault(conditional.groupId(), LineMode.FLAT);
+                        walk(effective == LineMode.BREAK ? conditional.breakDoc() : conditional.flatDoc(), indent, mode);
+                    }
+                    case Doc.Label label -> walk(label.doc(), indent, mode);
+                    case Doc.LineSuffix lineSuffix ->
+                        lineSuffixes.add(new BufferedSuffix(lineSuffix.content(), indent, mode));
+                }
+            }
+
+            /** Mirrors {@link DocRenderer#renderFill}: greedy per-separator packing via the shared fit authority. */
+            private void walkFill(List<Doc> parts, int indent) {
+                if (parts.isEmpty()) {
+                    return;
+                }
+                walk(parts.getFirst(), indent, LineMode.FLAT);
+                for (int i = 1; i + 1 < parts.size(); i += 2) {
+                    Doc separator = parts.get(i);
+                    Doc nextContent = parts.get(i + 1);
+                    LineMode separatorMode = separatorFitsFlat(separator, nextContent, lineWidth - column)
+                        ? LineMode.FLAT
+                        : LineMode.BREAK;
+                    walk(separator, indent, separatorMode);
+                    walk(nextContent, indent, LineMode.FLAT);
+                }
+            }
+
+            /** Mirrors {@link DocRenderer#renderConditionalGroup}: first flat fit wins, else the last in break mode. */
+            private void walkConditionalGroup(List<Doc> alternatives, int indent) {
+                for (Doc alternative : alternatives) {
+                    if (fits(alternative, lineWidth - column)) {
+                        walk(alternative, indent, LineMode.FLAT);
+                        return;
+                    }
+                }
+                walk(alternatives.getLast(), indent, LineMode.BREAK);
+            }
+
+            private void advance(String value) {
+                int lastLineBreak = value.lastIndexOf('\n');
+                if (lastLineBreak >= 0) {
+                    // A newline embedded in literal text closes a line just like an emitted break would.
+                    accountOverflow();
+                    lines++;
+                    column = value.length() - lastLineBreak - 1;
+                } else {
+                    column += value.length();
+                }
+            }
+
+            /**
+             * Mirrors {@link DocRenderer#newline}: flush buffered line suffixes onto the closing line (advancing the
+             * column, never adding a newline since suffix content is single-line), account the closing line's overflow,
+             * count the break, then reset the column to the indent. Trailing-whitespace trimming is a text concern with
+             * no effect on the line count, so it is intentionally not replayed here.
+             */
+            private void newline(int indent) {
+                flushLineSuffixes();
+                accountOverflow();
+                lines++;
+                column = indentWidth * indent;
+            }
+
+            private void flushLineSuffixes() {
+                while (!lineSuffixes.isEmpty()) {
+                    List<BufferedSuffix> pending = List.copyOf(lineSuffixes);
+                    lineSuffixes.clear();
+                    for (BufferedSuffix suffix : pending) {
+                        walk(suffix.content(), suffix.indent(), suffix.mode());
+                    }
+                }
+            }
+
+            private void accountOverflow() {
+                if (column > lineWidth) {
+                    overflow += column - lineWidth;
+                }
+            }
+
+            private void accountOverflowAtEnd() {
+                accountOverflow();
+            }
+        }
+
+        private record BufferedSuffix(Doc content, int indent, LineMode mode) {}
+    }
+
+    /**
+     * The result of a {@link Measurement#measureLineCount} probe: how many newlines a document renders into and the
+     * total overflow past the line width. Used to rank {@link Doc.BestFitting} alternatives (rule D16): the winner is
+     * the one with strictly fewer lines, then strictly less overflow, then the earliest (flattest) on a tie.
+     */
+    record LineCount(int lines, int overflow) {
+
+        /**
+         * Whether this count is strictly preferable to {@code other} under the D16 tie-break: fewer lines wins; on equal
+         * lines, less overflow wins. Equal lines and equal overflow is <em>not</em> strictly better, so an earlier
+         * alternative already chosen keeps its place — that strictness is what makes the ranking deterministic and the
+         * reformat a fixpoint.
+         */
+        boolean betterThan(LineCount other) {
+            if (lines != other.lines) {
+                return lines < other.lines;
+            }
+            return overflow < other.overflow;
+        }
+    }
+
+    private enum LineMode {
+        FLAT,
+        BREAK,
     }
 }

@@ -156,6 +156,19 @@ instead of building strings directly:
   **not** encode predicate-gated selection or ranking among multiple broken layouts, so it does not subsume the
   source/structural-predicate-gated `Optional<Doc>` layout dispatch in `MethodCallChainPrinter`. It is an additive
   primitive not yet adopted by any Java printer.
+- `BestFitting` holds an ordered, flattest-first list of layout alternatives and renders the one that **minimizes
+  rendered line count** at the live output column, with a deterministic tie-break. It is the capability `ConditionalGroup`
+  structurally lacks (layout-decision-model rule B8): a conditional group offers N flat candidates plus exactly one
+  broken fallback and chooses purely by flat fit, so it cannot rank two *broken* shapes against each other; a
+  best-fitting node can, which is why — unlike a conditional group — **a non-first alternative MAY contain a forced
+  break**. The last alternative must be renderable at any width, and the first (flattest) is the representative width an
+  enclosing group sizes the node by. The factory rejects an empty list; the "may contain a forced break" freedom is
+  intentionally not asserted (mirroring `ConditionalGroup`'s inverse note, to avoid inverting the `Doc` → renderer
+  layering). The tie-break (rule D16) is strict — fewer lines, then less overflow, then the earliest (flattest) index —
+  so it is deterministic and therefore idempotent. Ranking is bounded for linear time and native-image safety: only the
+  first `DocWidths.MAX_BEST_FITTING_ALTERNATIVES` (8) alternatives are measured, and a best-fitting node nested past
+  `DocWidths.MAX_BEST_FITTING_DEPTH` (4) collapses to its first alternative instead of being ranked. It is an additive
+  primitive not yet adopted by any Java printer, so the fixture corpus is byte-identical.
 - `IfBreak` selects different output for flat versus broken groups. With a null `groupId` it follows the ambient
   surrounding group (the common case); with a non-null `groupId` it follows the mode the identified `Group` recorded
   when it rendered earlier, so a closing delimiter can mirror the break/flat decision of an opener group it does not
@@ -183,12 +196,20 @@ in document order, immediately before each line break, so the deferred content p
 also keeps a per-render map from each identified group's `groupId` to the mode that group chose, populated as the group
 renders and reset per render; a `groupId`-bound `IfBreak` reads that map instead of the ambient mode, so the identified
 group must render before any `IfBreak` that targets it. For a `ConditionalGroup` it probes the alternatives in order with
-the same `DocWidths` fit authority and renders only the chosen one, so exactly one alternative reaches the output.
-`DocExplainRenderer` mirrors the suffix buffer, the group-mode map, and the conditional-group alternative selection so
-its replayed column cursor stays identical to what `DocRenderer` emits.
+the same `DocWidths` fit authority and renders only the chosen one, so exactly one alternative reaches the output. For a
+`BestFitting` it delegates the winner choice to `DocWidths.Measurement.chooseBestFitting`, which ranks the alternatives by
+rendered line count (via `measureLineCount`) at the live output column, then renders only the winner once — the ranking
+probes are side-effect-free, so they never touch the running output, column, group-mode map, or line-suffix buffer.
+`DocExplainRenderer` mirrors the suffix buffer, the group-mode map, the conditional-group alternative selection, and the
+best-fitting ranking (through the same `chooseBestFitting`) so its replayed column cursor and chosen alternative stay
+identical to what `DocRenderer` emits.
 `DocWidths` is the single flat-width authority: it owns the flat-width measurement and the fit test, so `DocRenderer`
 and any observer of its decisions compute fit identically and a fit decision can never diverge from the width number
-reported for it.
+reported for it. It also owns `measureLineCount`, a side-effect-free replay of the rendering walk that counts the
+newlines and overflow a document would render into — the metric for ranking `BestFitting` alternatives. `render`, the
+explain trace, and `measureLineCount` are separate walks that must agree; a congruence test pins
+`measureLineCount(doc).lines()` to the number of newlines `render(doc)` emits so the mirror cannot silently drift, and
+line counting is never written into the flat-width cache.
 
 `DocDebugRenderer` provides a stable structural dump of the document tree so formatter maintainers can inspect break
 opportunities, indentation scopes, groups, flat-vs-broken alternatives, and high-level formatter rule labels. Label
@@ -204,8 +225,11 @@ records the other two width-deciding primitives with the same arithmetic: a `Fil
 choices as a `FillDecision` (one entry per separator, each carrying the flat width of `separator + next content`, the
 columns left, and the column the separator started at), and a `ConditionalGroup`'s alternative selection as a
 `ConditionalGroupDecision` (the chosen index, whether it was the break-mode fallback, and each probed alternative's flat
-width and fit so the report can show why earlier alternatives were skipped). The CLI surfaces broken fills and break-mode
-conditional groups in the same width-break wording as group breaks.
+width and fit so the report can show why earlier alternatives were skipped), and a `BestFitting`'s ranked-alternative
+selection as a `BestFittingDecision` (the chosen index and each measured alternative's rendered line count and overflow,
+marking the winner, so the report can show why the flatter alternatives lost on line count). The CLI surfaces broken
+fills, break-mode conditional groups, and wrapping best-fitting layouts in the same "why it wrapped" section as group
+breaks.
 
 The renderer trace alone, however, cannot honestly explain the wraps developers debug most. Method chains, argument
 lists, ternaries, and control conditions are pre-measured by their Java printers and emitted as `Doc.HardLine`s, so the

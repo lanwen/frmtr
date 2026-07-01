@@ -242,6 +242,87 @@ final class DocExplainRendererTest {
     }
 
     @Test
+    void recordsBestFittingDecisionWithPerAlternativeLineCountsAndMarksTheChosenWinner() {
+        // At 20 columns the flattest alternative (a 24-wide argument group) fans out to more lines than the two-line
+        // broken alternative, so the ranking chooses index 1. The recorded decision carries each measured alternative's
+        // line count and marks the winner, mirroring how a ConditionalGroupDecision records its probes.
+        Doc flat = Doc.group(
+            Doc.concat(
+                Doc.text("call("),
+                Doc.indent(Doc.concat(
+                    Doc.SOFT_LINE, Doc.text("alpha"), Doc.text(","), Doc.LINE, Doc.text("beta"), Doc.text(","), Doc.LINE, Doc.text("gamma")
+                )),
+                Doc.SOFT_LINE,
+                Doc.text(")")
+            )
+        );
+        Doc twoLineBroken = Doc.concat(Doc.text("header()"), Doc.HARD_LINE, Doc.text(".tail()"));
+        Doc conditional = Doc.label(
+            "java.expression:MethodCallExpr",
+            Doc.bestFitting(List.of(flat, twoLineBroken))
+        );
+
+        DocExplanation explanation = explain(20, conditional);
+
+        assertThat(explanation.bestFittingDecisions()).singleElement().satisfies(decision -> {
+            assertThat(decision.label()).contains("java.expression:MethodCallExpr");
+            assertThat(decision.chosenIndex()).isEqualTo(1);
+            assertThat(decision.available()).isEqualTo(20);
+            assertThat(decision.chosenWraps()).isTrue();
+            assertThat(decision.alternatives()).hasSize(2);
+
+            DocExplanation.BestFittingDecision.Alternative flatCandidate = decision.alternatives().get(0);
+            assertThat(flatCandidate.index()).isEqualTo(0);
+            assertThat(flatCandidate.chosen()).isFalse();
+            assertThat(flatCandidate.lines()).isGreaterThan(1);
+
+            DocExplanation.BestFittingDecision.Alternative winner = decision.alternatives().get(1);
+            assertThat(winner.index()).isEqualTo(1);
+            assertThat(winner.chosen()).isTrue();
+            assertThat(winner.lines()).isEqualTo(1);
+        });
+        assertThat(explanation.rankedBestFittings()).containsExactly(explanation.bestFittingDecisions().getFirst());
+    }
+
+    @Test
+    void bestFittingExplainTraceChoosesTheSameAlternativeTheRendererEmits() {
+        // The --explain trace is an observer that must never diverge from the render: the alternative it records as
+        // chosen must be exactly the one DocRenderer emits. This is the best-fitting analog of "explain().formatted()
+        // equals format()". Two broken shapes with different line counts force a genuine ranking decision.
+        Doc twoLineBroken = Doc.concat(Doc.text("root()"), Doc.HARD_LINE, Doc.text(".chain()"));
+        Doc threeLineFanout = Doc.concat(
+            Doc.text("root()"),
+            Doc.HARD_LINE,
+            Doc.text(".alpha()"),
+            Doc.HARD_LINE,
+            Doc.text(".beta()")
+        );
+        Doc doc = Doc.bestFitting(List.of(threeLineFanout, twoLineBroken));
+
+        FormatterOptions options = TestFormatterOptions.forLayout(
+            20,
+            FormatterOptions.IndentStyle.SPACE,
+            2,
+            FormatterOptions.LineEnding.LF,
+            false
+        );
+        String rendered = new DocRenderer(options).render(doc);
+        int chosen = new DocExplainRenderer(options).explain(doc, List.of())
+                .bestFittingDecisions()
+                .getFirst()
+                .chosenIndex();
+
+        // The two-line alternative (index 1) wraps less than the three-line fan-out (index 0), so the renderer emits it
+        // and the trace must record the same winner.
+        assertThat(rendered).isEqualTo(
+            """
+                root()
+                .chain()"""
+        );
+        assertThat(chosen).isEqualTo(1);
+    }
+
+    @Test
     void prunesStructuralWrappersButKeepsLabelsAndGroups() {
         Doc doc = Doc.concat(
             Doc.text("prefix "),

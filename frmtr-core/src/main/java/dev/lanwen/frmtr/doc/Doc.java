@@ -6,6 +6,7 @@ import java.util.List;
 
 public sealed interface Doc
     permits
+        Doc.BestFitting,
         Doc.BreakParent,
         Doc.Concat,
         Doc.ConditionalGroup,
@@ -204,6 +205,41 @@ public sealed interface Doc
     }
 
     /**
+     * Builds a ranked-broken-layout node: an ordered list of layout alternatives from which the renderer selects the one
+     * that minimizes <em>rendered line count</em> (with a deterministic tie-break) at the current output column, rather
+     * than the first that fits flat. It is the capability {@link #conditionalGroup(List) conditionalGroup} structurally
+     * lacks — the layout-decision-model's rule B8: a conditional group offers N flat candidates plus exactly one final
+     * broken fallback and chooses purely by flat fit, so it can never <em>rank two broken shapes against each other</em>;
+     * a best-fitting node can. A construct with several acceptable broken shapes (a method chain's all-flat /
+     * break-last-call / fan-out, say) emits them here and lets the renderer keep the one that wraps the least in this
+     * context.
+     *
+     * <p>The alternatives are ordered <strong>flattest-first</strong>: the earliest alternative is the layout that wraps
+     * least when everything fits, and later alternatives progressively concede to breaks. Unlike a conditional group,
+     * <strong>a non-first alternative MAY contain a forced break</strong> ({@link HardLine} or {@link #BREAK_PARENT}) —
+     * that is the whole point, since ranking broken shapes is exactly what this node is for. The <strong>last
+     * alternative must be renderable at any width</strong> (the always-valid fallback), because when even it overflows it
+     * is still the layout the renderer falls back to. An enclosing {@link Group} sizes a best-fitting node by its first
+     * (flattest) alternative — the representative-width convention {@link ConditionalGroup} and Prettier both use — so
+     * the first alternative should be the narrowest flat layout.
+     *
+     * <p>The "a non-first alternative may contain a forced break" allowance is <em>not</em> asserted here, mirroring the
+     * reasoning on {@link #conditionalGroup(List)}: detecting a forced break would require calling into
+     * {@link DocWidths}/{@code DocRenderer}, inverting the {@code Doc} → renderer layering into a circular dependency.
+     * Where a conditional group leaves the inverse invariant ("no forced break before the last alternative") unasserted,
+     * this node leaves the freedom unconstrained; either way the renderer decides layout, not the factory.
+     *
+     * <p>A singleton list is valid and degenerate — with one alternative there is nothing to rank, so it renders like
+     * that lone layout. An empty list is rejected: "render nothing" is never a valid layout-choice intent; use
+     * {@link #EMPTY} to render nothing deliberately.
+     *
+     * @throws IllegalArgumentException if {@code alternatives} is empty
+     */
+    static Doc bestFitting(List<Doc> alternatives) {
+        return new BestFitting(alternatives);
+    }
+
+    /**
      * Defers {@code content} to the end of the current line: it renders nothing at this position and flushes just before
      * the next line break (or at end of document). Used for trailing comments so the code preceding them is laid out and
      * width-measured as if the comment were absent — the comment can never push that code over the line width or change
@@ -247,6 +283,25 @@ public sealed interface Doc
             if (alternatives.isEmpty()) {
                 throw new IllegalArgumentException(
                     "conditionalGroup requires at least one alternative; 'render nothing' is not a valid layout choice"
+                );
+            }
+            alternatives = List.copyOf(alternatives);
+        }
+    }
+
+    /** Ranked broken-layout alternatives; the renderer keeps the one minimizing line count. See {@link #bestFitting}. */
+    record BestFitting(List<Doc> alternatives) implements Doc {
+        /**
+         * Rejects an empty alternative list and defensively copies the rest, so the "at least one alternative" invariant
+         * holds for every {@code BestFitting} no matter how it is constructed — including a direct in-package
+         * {@code new BestFitting(...)} that bypasses the {@link #bestFitting(List)} factory. "Render nothing" is never a
+         * valid layout-choice intent; use {@link #EMPTY} to render nothing deliberately. The "a non-first alternative
+         * may contain a forced break" freedom is intentionally not enforced here (see {@link #bestFitting(List)}).
+         */
+        public BestFitting {
+            if (alternatives.isEmpty()) {
+                throw new IllegalArgumentException(
+                    "bestFitting requires at least one alternative; 'render nothing' is not a valid layout choice"
                 );
             }
             alternatives = List.copyOf(alternatives);

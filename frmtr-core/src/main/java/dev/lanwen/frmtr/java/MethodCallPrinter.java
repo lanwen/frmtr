@@ -62,7 +62,7 @@ final class MethodCallPrinter {
 
     private final MethodCallChainPrinter methodChains;
 
-    private final Function<Expression, Doc> expressionRenderer;
+    private final JavaFormatRule<Expression> expressionRenderer;
 
     private final BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix;
 
@@ -93,7 +93,7 @@ final class MethodCallPrinter {
     MethodCallPrinter(
             JavaFormatContext context,
             TypePrinter types,
-            Function<Expression, Doc> expressionRenderer,
+            JavaFormatRule<Expression> expressionRenderer,
             BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix,
             Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer,
             BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
@@ -119,7 +119,10 @@ final class MethodCallPrinter {
         this.options = context.options;
         this.layoutWidth = context.layoutWidth;
         this.compactSource = context.compactSource;
-        this.commentedExpressionLists = new CommentedExpressionListPrinter(context, expressionRenderer);
+        this.commentedExpressionLists = new CommentedExpressionListPrinter(
+            context,
+            node -> expressionRenderer.format(node, LayoutContext.root())
+        );
         this.methodChains = new MethodCallChainPrinter(
             context,
             this,
@@ -143,7 +146,7 @@ final class MethodCallPrinter {
         this.breakableArguments = new BreakableArgumentExpressionPrinter(
             context.sourceShapePolicy,
             context.options,
-            expressionRenderer,
+            node -> expressionRenderer.format(node, LayoutContext.root()),
             brokenArgumentExpressionRenderer,
             compactSource::compact,
             context.layoutWidth
@@ -244,7 +247,7 @@ final class MethodCallPrinter {
                 call = Doc.indent(call);
             }
             return Doc.concat(
-                expressionRenderer.apply(scope),
+                expressionRenderer.format(scope, LayoutContext.root()),
                 Doc.text("."),
                 call
             );
@@ -523,7 +526,7 @@ final class MethodCallPrinter {
         String prefix = methodCallPrefix(expression);
         return Optional.of(
             Doc.concat(
-                expressionRenderer.apply(scope),
+                expressionRenderer.format(scope, LayoutContext.root()),
                 Doc.text("." + selector + "("),
                 Doc.indent(
                     Doc.concat(
@@ -1091,7 +1094,7 @@ final class MethodCallPrinter {
                 .map(MethodCallExpr.class::cast)
                 .filter(sourceShapePolicy::wasMultiline)
                 .map(scope -> Doc.concat(
-                        expressionRenderer.apply(scope),
+                        expressionRenderer.format(scope, LayoutContext.root()),
                         Doc.text("." + methodCallSelector(expression) + "(")
                 ));
     }
@@ -1332,7 +1335,7 @@ final class MethodCallPrinter {
                     Doc.concat(
                         Doc.HARD_LINE,
                         brokenArgumentExpressionRenderer.apply(binaryExpr)
-                                .orElseGet(() -> expressionRenderer.apply(binaryExpr))
+                                .orElseGet(() -> expressionRenderer.format(binaryExpr, LayoutContext.root()))
                     )
                 ),
                 Doc.HARD_LINE,
@@ -1405,7 +1408,7 @@ final class MethodCallPrinter {
         }
         return Optional.of(
             Doc.concat(
-                expressionRenderer.apply(assignExpr.getTarget()),
+                expressionRenderer.format(assignExpr.getTarget(), LayoutContext.root()),
                 Doc.text(" " + assignExpr.getOperator().asString() + " "),
                 brokenMethodCall(methodCall),
                 Doc.text(finalSegmentSuffix)
@@ -1416,7 +1419,7 @@ final class MethodCallPrinter {
     private Optional<Doc> assignmentValueChain(AssignExpr assignExpr, Doc chain) {
         return Optional.of(
             Doc.concat(
-                expressionRenderer.apply(assignExpr.getTarget()),
+                expressionRenderer.format(assignExpr.getTarget(), LayoutContext.root()),
                 Doc.text(" " + assignExpr.getOperator().asString() + " "),
                 chain
             )

@@ -56,7 +56,7 @@ final class MethodCallChainPrinter {
 
     private final CommentedExpressionListPrinter commentedExpressionLists;
 
-    private final Function<Expression, Doc> expressionRenderer;
+    private final JavaFormatRule<Expression> expressionRenderer;
 
     private final Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer;
 
@@ -89,7 +89,7 @@ final class MethodCallChainPrinter {
             MethodCallPrinter calls,
             TypePrinter types,
             CommentedExpressionListPrinter commentedExpressionLists,
-            Function<Expression, Doc> expressionRenderer,
+            JavaFormatRule<Expression> expressionRenderer,
             Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer,
             Function<ObjectCreationExpr, String> objectCreationPrefix,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,
@@ -128,7 +128,7 @@ final class MethodCallChainPrinter {
         this.huggedGapCommentedLambdaBody = huggedGapCommentedLambdaBody;
         this.sourceMultilineLambdaCalls = new SourceMultilineLambdaCallLayout(
             context.sourceShapePolicy,
-            expressionRenderer,
+            node -> expressionRenderer.format(node, LayoutContext.root()),
             lambdaParameters,
             calls::methodCallPrefix,
             this::methodCallSegmentPrefixText,
@@ -698,7 +698,7 @@ final class MethodCallChainPrinter {
         ) {
             return Optional.of(
                 Doc.concat(
-                    expressionRenderer.apply(methodRoot),
+                    expressionRenderer.format(methodRoot, LayoutContext.root()),
                     chainContinuation(
                         appendFinalSegmentSuffix(
                             fieldAccessMethodCallSegment(fieldAccess, calls.getFirst()),
@@ -837,6 +837,23 @@ final class MethodCallChainPrinter {
             );
             if (expressionLambdaRoot.isPresent()) {
                 return expressionLambdaRoot;
+            }
+            // LDM-3 (B8/D16): when the final segment carries breakable arguments the compact-with-broken-segment shape and
+            // the one-segment-per-line fan-out are both legal broken layouts that differ in rendered line count, so rank
+            // them with a single Doc.bestFitting and let the renderer keep whichever wraps least at the real output column,
+            // rather than committing to a shape via the fixed-column LayoutWidth probe below. Only width-driven,
+            // comment-free, non-source-shaped chains reach the ranker (promotion, source-multiline, and every
+            // comment-guarded branch already returned above); it defers back to this imperative tail otherwise.
+            Optional<Doc> rankedSingleSegment = rankedSingleSegmentChain(
+                methodRoot,
+                probeCall,
+                finalSegmentSuffix,
+                chainPlan.rootRendering(),
+                analysis,
+                lineBudget
+            );
+            if (rankedSingleSegment.isPresent()) {
+                return rankedSingleSegment;
             }
             if (compactRootFinalSegmentLineOverflows(
                     methodRoot,
@@ -1003,6 +1020,69 @@ final class MethodCallChainPrinter {
         );
     }
 
+    /**
+     * LDM-3 (B8/D16): emits one ranked {@link Doc#bestFitting(java.util.List) bestFitting} for a comment-free,
+     * width-driven single-segment method-call chain whose final segment carries breakable arguments, replacing the
+     * {@link LayoutWidth}-probe gate that hand-picked the broken shape. The two alternatives are ordered flattest-first —
+     * (1) the compact shape that keeps the root and selector on one line and breaks only the final segment's argument list
+     * ({@code root.selector(}\n args \n{@code )}), and (2) the one-segment-per-line fan-out ({@code root}\n
+     * {@code .selector(...)}) — and the renderer keeps whichever wraps the fewest rendered lines at the real output
+     * column. This is reached only inside the broken-chain branch (the stay-flat gate already proved the flat form
+     * overflows), so a break is required; between the two broken shapes the compact one keeps the root and selector
+     * together and therefore wraps at least as few lines as the fan-out, which is the line-count decision the
+     * fixed-indent {@code LayoutWidth} probe could not make and the reason the renderer, not a probe, now owns it.
+     *
+     * <p><strong>Source-shape gates run before ranking.</strong> Returns {@link Optional#empty()} — deferring to the
+     * imperative tail below — unless the chain is chosen purely on width: the root renders through ordinary expression
+     * dispatch ({@link MethodCallChainSourcePlanner.ChainRootRendering#EXPRESSION_RENDERER}, so promoted / builder /
+     * broken-object-creation roots stay imperative), the chain and root arguments were not split across source lines, and
+     * the final segment carries breakable, non-lambda arguments. It also defers when {@link #compactRootWithBrokenFinalSegment}
+     * cannot build the compact shape (its opener does not fit), because then only the imperative broken-root fallback
+     * applies and there is nothing to rank. A deliberately-multiline chain or a promoted root is a source-preserved shape,
+     * never a width-ranked alternative, so ranking can never override it.
+     *
+     * <p><strong>Comment-bearing chains never reach here.</strong> The {@code !analysis.hasComments()} gate keeps them on
+     * the imperative ladder, whose {@code comments.speculatively(...)} rollbacks own the first-builder-wins claim; building
+     * both alternatives eagerly (as this does) would double-claim comments and trip the strict-claims guardrail.
+     */
+    private Optional<Doc> rankedSingleSegmentChain(
+            MethodCallExpr methodRoot,
+            MethodCallExpr call,
+            MethodCallChainTail finalSegmentSuffix,
+            MethodCallChainSourcePlanner.ChainRootRendering rootRendering,
+            MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis,
+            LayoutWidth.LineBudget lineBudget
+    ) {
+        if (
+            rootRendering != MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER
+            || analysis.hasComments()
+            || analysis.sourceMultilineChain()
+            || sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodRoot)
+            || methodCallSegmentHasSourceMultilineBlockLambdaArgument(methodRoot)
+            || call.getArguments().isEmpty()
+            || call.getArguments().stream().anyMatch(LambdaExpr.class::isInstance)
+            || methodCallSegmentHasBlockLambdaArgument(call)
+        ) {
+            return Optional.empty();
+        }
+        // Alternative 1 (flattest): keep the root and the selector on one line, breaking only the final segment's own
+        // argument group. compactRootWithBrokenFinalSegment builds the same shape the imperative O5 path does; if its
+        // guards reject the chain there is nothing width-driven to rank, so defer to the imperative tail.
+        Optional<Doc> compactBrokenSegment =
+            compactRootWithBrokenFinalSegment(methodRoot, call, finalSegmentSuffix, lineBudget);
+        if (compactBrokenSegment.isEmpty()) {
+            return Optional.empty();
+        }
+        // Alternative 2 (fallback, always legal): the one-segment-per-line fan-out — the root alone, then the selector on
+        // its own continuation line. This is the shape Branch P produces for a broken chain; here it competes on line
+        // count with the compact shape rather than being reached only after a width probe.
+        Doc fanOut = Doc.concat(
+            expressionRenderer.format(methodRoot, LayoutContext.root()),
+            chainContinuation(methodCallChainSegment(call, finalSegmentSuffix))
+        );
+        return Optional.of(Doc.bestFitting(List.of(compactBrokenSegment.orElseThrow(), fanOut)));
+    }
+
     private boolean methodCallSegmentHasNoOwnContainedComments(MethodCallExpr expression) {
         List<Comment> containedComments = expression.getAllContainedComments();
         if (containedComments.isEmpty()) {
@@ -1107,9 +1187,9 @@ final class MethodCallChainPrinter {
                 () -> huggableExpressionLambdaArguments.apply(plan.chainSegmentPrefix(), firstCall.getArguments())
             );
             if (huggableExpressionLambda.isPresent()) {
-                return Doc.concat(expressionRenderer.apply(root), huggableExpressionLambda.orElseThrow());
+                return Doc.concat(expressionRenderer.format(root, LayoutContext.root()), huggableExpressionLambda.orElseThrow());
             }
-            return Doc.concat(expressionRenderer.apply(root), methodCallChainSegment(firstCall));
+            return Doc.concat(expressionRenderer.format(root, LayoutContext.root()), methodCallChainSegment(firstCall));
         }
         if (sourceShapePolicy.fitsOnOneLine(firstCall, lineWidth(LayoutWidth.LineBudget.CURRENT))) {
             return inlineMethodCall(firstCall);
@@ -1158,7 +1238,7 @@ final class MethodCallChainPrinter {
                 .orElse("");
         String prefix = "." + typeArguments + expression.getNameAsString();
         return Doc.concat(
-            expressionRenderer.apply(root),
+            expressionRenderer.format(root, LayoutContext.root()),
             Doc.text(prefix + "("),
             Doc.indent(
                 Doc.indent(
@@ -1255,10 +1335,10 @@ final class MethodCallChainPrinter {
         return switch (chainPlan.rootRendering()) {
             case INLINE_PROMOTED_METHOD_CALL -> chainPlan.root() instanceof MethodCallExpr methodCall
                 ? promotedMethodCallRoot(methodCall, firstLineWidth)
-                : expressionRenderer.apply(chainPlan.root());
+                : expressionRenderer.format(chainPlan.root(), LayoutContext.root());
             case GROUPED_PROMOTED_METHOD_CALL -> chainPlan.root() instanceof MethodCallExpr methodCall
                 ? groupedPromotedMethodCall(methodCall)
-                : expressionRenderer.apply(chainPlan.root());
+                : expressionRenderer.format(chainPlan.root(), LayoutContext.root());
             case BROKEN_OBJECT_CREATION -> brokenObjectCreationRenderer.apply((ObjectCreationExpr) chainPlan.root());
             case EXPRESSION_RENDERER -> expressionRenderedChainRoot(chainPlan.root(), firstLineWidth);
         };
@@ -1277,7 +1357,7 @@ final class MethodCallChainPrinter {
         ) {
             return calls.brokenMethodCall(methodCall);
         }
-        return expressionRenderer.apply(root);
+        return expressionRenderer.format(root, LayoutContext.root());
     }
 
     private boolean sourceMultilineTypeLikeRoot(MethodCallExpr methodCall) {
@@ -1300,11 +1380,10 @@ final class MethodCallChainPrinter {
             layoutWidth.line(LayoutWidth.LineBudget.CURRENT, compactSourceWidthText(methodRoot)) > options.lineWidth()
             || methodCallRootScopeOverflows(methodRoot)
         ) {
-            return methodCallChain(methodRoot, MethodCallBreakMode.FORCED).orElseGet(() -> expressionRenderer.apply(
-                    methodRoot
-            ));
+            return methodCallChain(methodRoot, MethodCallBreakMode.FORCED)
+                    .orElseGet(() -> expressionRenderer.format(methodRoot, LayoutContext.root()));
         }
-        return expressionRenderer.apply(methodRoot);
+        return expressionRenderer.format(methodRoot, LayoutContext.root());
     }
 
     private Optional<Doc> brokenTypeLikeScopedMethodRoot(MethodCallExpr methodRoot) {
@@ -1360,20 +1439,20 @@ final class MethodCallChainPrinter {
         if (methodCallSegmentHasBlockLambdaArgument(expression)) {
             return blockLambdaSegmentFirstLine(compactSource.compact(expression.getScope().orElseThrow()), expression)
                     .filter(firstLine -> layoutWidth.line(LayoutWidth.LineBudget.BLOCK, firstLine) <= options.lineWidth())
-                    .map(ignored -> expressionRenderer.apply(expression))
+                    .map(ignored -> expressionRenderer.format(expression, LayoutContext.root()))
                     .orElseGet(() -> Doc.concat(
-                            expressionRenderer.apply(expression.getScope().orElseThrow()),
+                            expressionRenderer.format(expression.getScope().orElseThrow(), LayoutContext.root()),
                             chainContinuation(methodCallChainSegment(expression))
                     ));
         }
         return expression.getScope()
                 .map(scope -> Doc.group(
                         Doc.concat(
-                            expressionRenderer.apply(scope),
+                            expressionRenderer.format(scope, LayoutContext.root()),
                             softChainContinuation(methodCallChainSegment(expression))
                         )
                 ))
-                .orElseGet(() -> expressionRenderer.apply(expression));
+                .orElseGet(() -> expressionRenderer.format(expression, LayoutContext.root()));
     }
 
     private Optional<Doc> groupedPromotedExpressionLambda(MethodCallExpr expression) {
@@ -1649,7 +1728,7 @@ final class MethodCallChainPrinter {
         }
         return Optional.of(
             Doc.concat(
-                expressionRenderer.apply(root.orElseThrow()),
+                expressionRenderer.format(root.orElseThrow(), LayoutContext.root()),
                 chainContinuation(Doc.join(Doc.HARD_LINE, segments))
             )
         );
@@ -1976,7 +2055,7 @@ final class MethodCallChainPrinter {
         return Optional.of(
             Doc.concat(
                 Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, expressionRenderer.apply(methodRoot.getArgument(0)))),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, expressionRenderer.format(methodRoot.getArgument(0), LayoutContext.root()))),
                 Doc.HARD_LINE,
                 Doc.text(")"),
                 methodCallChainSegmentAttachedToRootClose(call, finalSegmentSuffix, lineBudget)
@@ -2108,7 +2187,9 @@ final class MethodCallChainPrinter {
     }
 
     private Doc inlineMethodCall(MethodCallExpr expression) {
-        Doc scope = expression.getScope().map(expressionRenderer).orElse(Doc.EMPTY);
+        Doc scope = expression.getScope()
+                .map(node -> expressionRenderer.format(node, LayoutContext.root()))
+                .orElse(Doc.EMPTY);
         String typeArguments = expression.getTypeArguments()
                 .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
                 .orElse("");
@@ -2135,7 +2216,7 @@ final class MethodCallChainPrinter {
                     .map(scope -> promotedFieldAccessRootMethodCall(scope, expression))
                     .or(() -> expression.getScope().map(
                             scope -> Doc.concat(
-                                expressionRenderer.apply(scope),
+                                expressionRenderer.format(scope, LayoutContext.root()),
                                 chainContinuation(methodCallChainSegment(expression))
                             )
                     ))
@@ -2645,7 +2726,7 @@ final class MethodCallChainPrinter {
                 return Optional.of(Doc.concat(Doc.text(" "), flatHeaded.orElseThrow()));
             }
         }
-        return Optional.of(Doc.concat(Doc.text(" "), expressionRenderer.apply(body)));
+        return Optional.of(Doc.concat(Doc.text(" "), expressionRenderer.format(body, LayoutContext.root())));
     }
 
     /**

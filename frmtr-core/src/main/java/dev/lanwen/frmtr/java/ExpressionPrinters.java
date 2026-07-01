@@ -181,10 +181,7 @@ final class ExpressionPrinters {
             conditionals::conditionalExpression
         );
         this.unaries = new UnaryExpressionPrinter(
-            options,
-            context.layoutWidth,
             compactSource::compact,
-            this::currentIndentedWidth,
             enclosedExpressions::parenthesizedBreak
         );
         this.objectCreations = new ObjectCreationPrinter(

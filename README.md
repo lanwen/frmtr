@@ -47,7 +47,7 @@ plugins {
 }
 ```
 
-Snapshot builds are published from `main`. Current snapshot: `0.1.1-SNAPSHOT`; see
+Snapshot builds are published from `main`. Current snapshot: `0.2.0-SNAPSHOT`; see
 [Consuming Snapshots](PUBLISHING.md#consuming-snapshots) for the repository setup.
 
 The plugin follows Java source-set defaults with no required `frmtr {}` block:

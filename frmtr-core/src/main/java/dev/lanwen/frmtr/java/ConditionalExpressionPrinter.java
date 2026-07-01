@@ -61,6 +61,10 @@ final class ConditionalExpressionPrinter {
 
     private final CompactSourceText compactSource;
 
+    private final LayoutWidth layoutWidth;
+
+    private final LayoutDecisionLog layoutDecisions;
+
     private final Function<Expression, Doc> expressionRenderer;
 
     private final Function<Expression, Doc> expressionWithoutOwnCommentRenderer;
@@ -129,6 +133,8 @@ final class ConditionalExpressionPrinter {
         this.sourceShapePolicy = context.sourceShapePolicy;
         this.rawSource = context.rawSource;
         this.compactSource = context.compactSource;
+        this.layoutWidth = context.layoutWidth;
+        this.layoutDecisions = context.layoutDecisions;
         this.expressionRenderer = expressionRenderer;
         this.expressionWithoutOwnCommentRenderer = expressionWithoutOwnCommentRenderer;
         this.blockStatementWidth = blockStatementWidth;
@@ -230,7 +236,13 @@ final class ConditionalExpressionPrinter {
         }
         // A caller-forced context and a source-multiline conditional both print the broken ternary shape unconditionally:
         // those are caller and source-shape decisions, not width decisions, so they never consult the renderer's column.
+        // This is the imperative path: the broken shape is built directly as HardLines, so the renderer only ever sees a
+        // forced break and cannot narrate the width arithmetic. When the caller forced this conditional apart *because*
+        // its flat form overflowed (an assignment/initializer whose one-line ternary was too wide), record that width
+        // decision so --explain can attribute the wrap to width. Recording runs after the broken shape is chosen and
+        // never influences the produced Doc, so output stays byte-identical.
         if (breakMode.isForced() || sourceShapePolicy.wasMultiline(expression)) {
+            recordTernaryWidthBreak(expression);
             return brokenConditionalExpression(expression);
         }
         // Auto path: defer the flat-versus-broken width decision to the renderer, which measures the flat arm at the
@@ -261,6 +273,44 @@ final class ConditionalExpressionPrinter {
             );
         }
         return Doc.text(compactSource.compact(expression));
+    }
+
+    /**
+     * Records the ternary's flat-width decision when the imperative (caller-forced or source-multiline) path breaks a
+     * conditional whose single-line form overflowed the line budget, so explain can attribute the wrap to width rather
+     * than to an opaque forced break.
+     *
+     * <p>This fires only for genuine width breaks: a conditional forced apart for nesting or a source-multiline shape
+     * while its flat form would still fit is not a width decision and is left unrecorded, so it stays reported as a
+     * rule-driven break. The auto path does not call this — it defers the flat-versus-broken choice to
+     * {@link Doc#conditionalGroup}, whose {@code ConditionalGroupDecision} self-explains the same width arithmetic; a
+     * recorder there would double-report the {@code java.expression:ConditionalExpr} label. Recording runs after the
+     * broken shape is chosen and appends only to the observational {@link LayoutDecisionLog}, so it never changes which
+     * {@link Doc} is built or the rendered output.
+     */
+    private void recordTernaryWidthBreak(ConditionalExpr expression) {
+        String flat = compactSource.compact(expression);
+        int flatWidth = layoutWidth.currentIndented(flat);
+        if (flatWidth <= options.lineWidth()) {
+            return;
+        }
+        layoutDecisions.recordWidthBreak(
+            "ternary",
+            "java.expression:" + expression.getClass().getSimpleName(),
+            ternaryPreview(flat),
+            flatWidth,
+            options.lineWidth(),
+            0
+        );
+    }
+
+    /**
+     * Builds a short headline snippet of the ternary up to and including the {@code ?}, so the reader recognizes the
+     * conditional without seeing both branches.
+     */
+    private String ternaryPreview(String flat) {
+        int question = flat.indexOf('?');
+        return question < 0 ? flat : flat.substring(0, question + 1) + " …";
     }
 
     private Doc brokenConditionalExpression(ConditionalExpr expression) {

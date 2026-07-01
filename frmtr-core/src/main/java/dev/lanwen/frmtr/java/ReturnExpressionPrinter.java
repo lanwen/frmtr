@@ -48,8 +48,6 @@ final class ReturnExpressionPrinter {
 
     private final Function<Expression, String> compact;
 
-    private final ConditionalExpressionLineProjection conditionalProjection;
-
     private final ToIntFunction<String> currentIndentedWidth;
 
     private final ToIntFunction<String> continuationStatementWidth;
@@ -149,7 +147,6 @@ final class ReturnExpressionPrinter {
         this.expressionWithTail = expressionWithTail;
         this.brokenLambdaExpression = brokenLambdaExpression;
         this.compact = compact;
-        this.conditionalProjection = new ConditionalExpressionLineProjection(compact);
         this.currentIndentedWidth = currentIndentedWidth;
         this.continuationStatementWidth = continuationStatementWidth;
         this.sourceMultilineExpressionLambda = sourceMultilineExpressionLambda;
@@ -188,10 +185,10 @@ final class ReturnExpressionPrinter {
         );
     }
 
-    Doc returnStatement(Expression expression, LayoutWidth.LineBudget lineBudget) {
+    Doc returnStatement(Expression expression, LayoutContext layout) {
         if (expression instanceof ObjectCreationExpr objectCreation) {
             if (
-                returnLineOverflows(objectCreation, lineBudget)
+                returnLineOverflows(objectCreation, layout)
                 || objectCreationLayoutPolicy.shouldPreserveReturnSourceMultilineArguments(objectCreation)
             ) {
                 return Doc.concat(Doc.text("return "), brokenObjectCreation.apply(objectCreation), Doc.text(";"));
@@ -204,22 +201,49 @@ final class ReturnExpressionPrinter {
         ) {
             return Doc.concat(
                 Doc.text("return "),
-                expressionWithTail.render(methodCall, ExpressionTail.SEMICOLON, lineBudget)
+                expressionWithTail.render(methodCall, ExpressionTail.SEMICOLON, layout.widthBudget())
             );
         }
         if (expression instanceof BinaryExpr binaryExpr && binaryHasLineComments.test(binaryExpr)) {
-            return commentBearingBinaryReturn(binaryExpr, lineBudget);
+            return commentBearingBinaryReturn(binaryExpr, layout);
         }
         Doc preSemicolonComment = preSemicolonValueComment(expression);
-        Doc semicolon = preSemicolonComment == Doc.EMPTY
-            ? Doc.text(";")
-            : Doc.concat(Doc.HARD_LINE, Doc.text(";"));
-        return Doc.concat(
-            Doc.text("return "),
-            returnExpression(expression, lineBudget),
-            preSemicolonComment,
-            semicolon
-        );
+        if (preSemicolonComment != Doc.EMPTY) {
+            // A pre-semicolon line comment forces the terminator onto its own line, so the whole return already breaks.
+            // The value's flat-versus-broken choice here is made by the imperative oracle exactly as before (the trailing
+            // comment does not enter its width gate), keeping this comment-bearing shape byte-identical.
+            return Doc.concat(
+                Doc.text("return "),
+                returnExpression(expression, layout),
+                preSemicolonComment,
+                Doc.concat(Doc.HARD_LINE, Doc.text(";"))
+            );
+        }
+        // Source-shape entries and branches whose broken shape is itself chosen by width (object creation, enclosed or
+        // direct binary continuations, object-creation-rooted chains) keep the imperative oracle for that broken-shape
+        // ranking (LDM-3); they pre-empt the renderer-measured gate below.
+        Optional<Doc> preempted = preemptedReturnValue(expression, layout);
+        if (preempted.isPresent()) {
+            return Doc.concat(Doc.text("return "), preempted.orElseThrow(), Doc.text(";"));
+        }
+        if (expression.getComment().isPresent() || !expression.getAllContainedComments().isEmpty()) {
+            // A comment-bearing value cannot use the conditional group: both arms build the value, and rendering a value
+            // claims its comments (identity-based, first-builder-wins), so the comment would be owned by whichever arm is
+            // built first while the renderer independently picks an arm by width. When those disagree the comment is
+            // dropped and the two passes diverge. The imperative oracle renders the value exactly once, so comment-bearing
+            // returns stay on it (byte-identical to before); only comment-free returns move to the renderer-measured gate.
+            return Doc.concat(Doc.text("return "), returnExpression(expression, layout), Doc.text(";"));
+        }
+        // Judge "does `return value;` fit on one line" at the true rendered column: build the flat return line and the
+        // broken return line and let the renderer choose via Doc.conditionalGroup. The earlier gate compared a
+        // reconstructed nodeLine/budget width, which could disagree with the column write reaches (the #137/#155
+        // width-at-wrong-column family) and print a genuinely over-width return flat, then break it on a later pass. The
+        // broken arm keeps the ranked/imperative broken-shape selection (forced chain, forced ternary, lambda break,
+        // logical-complement break, parenthesized/binary continuation); the conditional group only moves the
+        // flat-versus-broken verdict to the renderer.
+        Doc flatReturn = Doc.concat(Doc.text("return "), this.expression.apply(expression), Doc.text(";"));
+        Doc brokenReturn = Doc.concat(Doc.text("return "), brokenReturnValue(expression, layout), Doc.text(";"));
+        return Doc.conditionalGroup(List.of(flatReturn, brokenReturn));
     }
 
     /**
@@ -238,7 +262,7 @@ final class ReturnExpressionPrinter {
      * {@code trailingInitializerCommentsBeforeSemicolon} bucket and appended inline before the {@code ;} so it reads
      * {@code lastOperand /* note *}{@code /;}.
      */
-    private Doc commentBearingBinaryReturn(BinaryExpr binaryExpr, LayoutWidth.LineBudget lineBudget) {
+    private Doc commentBearingBinaryReturn(BinaryExpr binaryExpr, LayoutContext layout) {
         Node semicolonOwner = binaryExpr.getParentNode().orElse(null);
         // A trailing comment after the final operand is an inline block comment only when source kept it before the ;
         // (errorCode == 599 /* note */;); a // line comment must drop onto its own line above the ; because it runs to
@@ -249,7 +273,7 @@ final class ReturnExpressionPrinter {
         // The committed value render claims the binary's between-operand comments, so only build the shape that is
         // actually used: deciding the flat-versus-broken fit before rendering keeps the comment-aware render from claiming
         // a comment in a flat shape we then discard, which would leave the broken render with an empty comment.
-        Doc value = commentBearingBinaryReturnFlatLineFits(binaryExpr, lineBudget)
+        Doc value = commentBearingBinaryReturnFlatLineFits(binaryExpr, layout)
             ? binaryFlatLineWithComments.apply(binaryExpr).orElseGet(
                 () -> Doc.indent(binaryLinesWithComments.apply(binaryExpr))
             )
@@ -274,7 +298,7 @@ final class ReturnExpressionPrinter {
         return Doc.concat(Doc.text(" "), Doc.join(Doc.text(" "), recovered));
     }
 
-    private boolean commentBearingBinaryReturnFlatLineFits(BinaryExpr binaryExpr, LayoutWidth.LineBudget lineBudget) {
+    private boolean commentBearingBinaryReturnFlatLineFits(BinaryExpr binaryExpr, LayoutContext layout) {
         int valueWidth = binaryFlatLineWithCommentsWidth.applyAsInt(binaryExpr);
         if (valueWidth == Integer.MAX_VALUE) {
             return false;
@@ -286,7 +310,7 @@ final class ReturnExpressionPrinter {
             ? 0
             : trailingValueBlockCommentInlineWidth.apply(semicolonOwner, binaryExpr);
         String line = "return ".concat("x".repeat(valueWidth + trailingWidth)).concat(";");
-        return returnLineWidth(binaryExpr, line, lineBudget) <= options.lineWidth();
+        return returnLineWidth(binaryExpr, line, layout) <= options.lineWidth();
     }
 
     /**
@@ -318,55 +342,85 @@ final class ReturnExpressionPrinter {
     }
 
     /**
-     * Prints the return value flat unless the complete {@code return value;} line is too wide.
+     * Renders the return value on the comment-bearing terminator path, where a pre-semicolon comment already forces the
+     * statement to break, so the flat-versus-broken verdict stays on the imperative oracle.
      *
-     * <p>The gate checks the keyword and semicolon with the value because a value that fits by itself can still overflow
-     * once it is placed inside a return statement. When the whole statement fits, expression dispatch keeps its ordinary
-     * shape; only overflowing return lines enter the return-specific break tree.
-     *
-     * <p>The break decision for a method-call value is width-first: the flat {@code return value;} width is checked before
-     * the source-shape forced breaks. Only when the flat form genuinely overflows do the source-multiline signals
-     * ({@code methodCallChainIsSourceMultiline}, {@code wasMultiline}, {@code sourceMultilineExpressionLambdaBody}) act as
-     * a fallback that chooses the broken chain shape. This keeps the result a function of width rather than of the input's
-     * line shape, so a {@code return <call>} that fits stays flat whether the source wrote it on one line or across
-     * several, and the formatter reaches the same fixed point from either input.
+     * <p>This reproduces the historical branch order — the source-shape/width-ranked pre-empt branches, then the
+     * {@link #returnLineFits} width gate, then the imperative broken tree — so a return that carries a trailing pre-{@code
+     * ;} comment is byte-identical to before. The renderer-measured gate that replaces {@code returnLineFits} lives in
+     * {@link #returnStatement}, on the ordinary (no pre-{@code ;} comment) path where the whole {@code return value;} line
+     * can be handed to a {@link Doc#conditionalGroup(java.util.List)}.
      */
-    private Doc returnExpression(Expression expression, LayoutWidth.LineBudget lineBudget) {
+    private Doc returnExpression(Expression expression, LayoutContext layout) {
+        Optional<Doc> preempted = preemptedReturnValue(expression, layout);
+        if (preempted.isPresent()) {
+            return preempted.orElseThrow();
+        }
+        if (returnLineFits(expression, layout)) {
+            return this.expression.apply(expression);
+        }
+        return brokenReturnValue(expression, layout);
+    }
+
+    /**
+     * Renders the return value for the branches whose choice of broken shape is itself decided by width (LDM-3), so they
+     * cannot be expressed as a two-arm flat-versus-broken group and keep their imperative oracle.
+     *
+     * <p>These are the source-multiline enclosed binary (broken through the width-ranked direct-binary layout), the
+     * source-multiline object creation, and an object-creation-rooted method-call chain whose first line is measured to
+     * pick the broken chain shape. Each internally decides flat-versus-broken and, when broken, which broken shape to use;
+     * the renderer-measured gate cannot express that ranking, so these pre-empt it. Everything else falls through to the
+     * flat-versus-broken conditional group in {@link #returnStatement}.
+     */
+    private Optional<Doc> preemptedReturnValue(Expression expression, LayoutContext layout) {
         Optional<BinaryExpr> sourceMultilineEnclosedBinary = sourceMultilineEnclosedBinary(expression);
         if (sourceMultilineEnclosedBinary.isPresent()) {
             BinaryExpr binaryExpr = sourceMultilineEnclosedBinary.orElseThrow();
-            return binaryReturns.directBinaryReturn(binaryExpr, expression, lineBudget).orElseGet(
-                () -> parenthesizedBreak.apply(binaryExpr, true)
+            // LDM-3: the enclosed-binary broken shape is ranked by width (direct-binary continuation versus parenthesized
+            // break), so this stays on the imperative oracle rather than the renderer-measured flat-versus-broken group.
+            return Optional.of(
+                binaryReturns.directBinaryReturn(binaryExpr, expression, layout).orElseGet(
+                    () -> parenthesizedBreak.apply(binaryExpr, true)
+                )
             );
         }
         if (sourceMultilineObjectCreation(expression)) {
-            return brokenObjectCreation.apply((ObjectCreationExpr) expression);
-        }
-        if (
-            expression instanceof ConditionalExpr conditionalExpr
-            && conditionalReturnLineOverflows(conditionalExpr, lineBudget)
-        ) {
-            return conditionalExpression.apply(conditionalExpr, true);
+            return Optional.of(brokenObjectCreation.apply((ObjectCreationExpr) expression));
         }
         if (
             expression instanceof MethodCallExpr methodCall
-            && objectCreationRootMethodCallReturnLineOverflows(methodCall, lineBudget)
+            && objectCreationRootMethodCallReturnLineOverflows(methodCall, layout)
         ) {
-            Optional<Doc> forcedChain = returnWithForcedMethodCallChain(methodCall, lineBudget);
+            // LDM-3: an object-creation-rooted chain measures its own first line to choose the broken chain shape, a
+            // ranking a two-arm group cannot express, so this width gate stays imperative.
+            Optional<Doc> forcedChain = returnWithForcedMethodCallChain(methodCall, layout);
             if (forcedChain.isPresent()) {
-                return forcedChain.orElseThrow();
+                return forcedChain;
             }
         }
-        if (returnLineFits(expression, lineBudget)) {
-            return this.expression.apply(expression);
-        }
+        return Optional.empty();
+    }
+
+    /**
+     * Builds the broken return value used as the {@link Doc#conditionalGroup(java.util.List)} fallback in
+     * {@link #returnStatement}: the shape the return takes once the renderer has judged the flat {@code return value;}
+     * too wide for the columns left.
+     *
+     * <p>This keeps the historical ranked/imperative broken-shape selection reached when the old {@code returnLineFits}
+     * gate failed: a source-multiline or lambda-bodied method-call value forces its chain shape, a string concatenation
+     * around a source-multiline call argument stays on ordinary expression dispatch, and everything else routes through
+     * {@link #brokenReturnExpression} (forced chain, forced ternary, lambda break, logical-complement break,
+     * parenthesized/binary continuation). The flat arm is ordinary expression dispatch; only the flat-versus-broken
+     * verdict moved to the renderer.
+     */
+    private Doc brokenReturnValue(Expression expression, LayoutContext layout) {
         if (
             expression instanceof MethodCallExpr methodCall
             && (methodCallChainIsSourceMultiline.test(methodCall)
                 || sourceSpansMultipleLines(methodCall)
                 || sourceMultilineExpressionLambdaBody.test(methodCall))
         ) {
-            Optional<Doc> forcedChain = returnWithForcedMethodCallChain(methodCall, lineBudget);
+            Optional<Doc> forcedChain = returnWithForcedMethodCallChain(methodCall, layout);
             if (forcedChain.isPresent()) {
                 return forcedChain.orElseThrow();
             }
@@ -377,24 +431,19 @@ final class ReturnExpressionPrinter {
         ) {
             return this.expression.apply(binaryExpr);
         }
-        return brokenReturnExpression(expression, lineBudget).orElseGet(() -> this.expression.apply(expression));
+        return brokenReturnExpression(expression, layout).orElseGet(() -> this.expression.apply(expression));
     }
 
     private boolean objectCreationRootMethodCallReturnLineOverflows(
             MethodCallExpr expression,
-            LayoutWidth.LineBudget lineBudget
+            LayoutContext layout
     ) {
         Optional<Expression> scope = expression.getScope();
         if (scope.filter(ObjectCreationExpr.class::isInstance).isEmpty()) {
             return false;
         }
         String line = "return " + methodCallPrefix.apply(expression) + "(";
-        return returnLineWidth(expression, line, lineBudget) > options.lineWidth();
-    }
-
-    private boolean conditionalReturnLineOverflows(ConditionalExpr expression, LayoutWidth.LineBudget lineBudget) {
-        String line = "return " + conditionalProjection.line(expression) + ";";
-        return returnLineWidth(expression, line, lineBudget) > options.lineWidth();
+        return returnLineWidth(expression, line, layout) > options.lineWidth();
     }
 
     private Optional<BinaryExpr> sourceMultilineEnclosedBinary(Expression expression) {
@@ -417,13 +466,13 @@ final class ReturnExpressionPrinter {
         return sourceShapePolicy.wasMultiline(expression);
     }
 
-    private boolean returnLineFits(Expression expression, LayoutWidth.LineBudget lineBudget) {
-        return !returnLineOverflows(expression, lineBudget);
+    private boolean returnLineFits(Expression expression, LayoutContext layout) {
+        return !returnLineOverflows(expression, layout);
     }
 
-    private boolean returnLineOverflows(Expression expression, LayoutWidth.LineBudget lineBudget) {
+    private boolean returnLineOverflows(Expression expression, LayoutContext layout) {
         String line = "return " + compact.apply(expression) + ";";
-        return returnLineWidth(expression, line, lineBudget) > options.lineWidth();
+        return returnLineWidth(expression, line, layout) > options.lineWidth();
     }
 
     /**
@@ -441,9 +490,13 @@ final class ReturnExpressionPrinter {
      * (the same source-column-to-rendered-column correction made for {@code if} conditions in #155 and for hugged call
      * openers in #161). The {@code currentIndentedWidth} floor is kept so a {@code return} nested directly under a member
      * (no enclosing block) is still measured against at least one indentation unit.
+     *
+     * <p>The fixed-budget term reads its {@link LayoutWidth.LineBudget} from the return value's {@link LayoutContext}
+     * rather than a loose parameter threaded from the statement dispatcher (LDM-2 / #198). {@code widthBudget()}
+     * reproduces exactly the budget the statement carried, so this stays byte-identical to the prior parameter form.
      */
-    private int returnLineWidth(Expression expression, String line, LayoutWidth.LineBudget lineBudget) {
-        int budgetWidth = layoutWidth.line(lineBudget, line);
+    private int returnLineWidth(Expression expression, String line, LayoutContext layout) {
+        int budgetWidth = layoutWidth.line(layout.widthBudget(), line);
         int renderedColumnWidth = Math.max(
             layoutWidth.nodeLine(expression, line),
             currentIndentedWidth.applyAsInt(line)
@@ -458,8 +511,8 @@ final class ReturnExpressionPrinter {
      * the whole expression. Parenthesized-looking values are handled next so the long part moves inside parentheses
      * instead of leaving a wide value directly after {@code return}.
      */
-    private Optional<Doc> brokenReturnExpression(Expression expression, LayoutWidth.LineBudget lineBudget) {
-        Optional<Doc> methodCallChain = returnWithForcedMethodCallChain(expression, lineBudget);
+    private Optional<Doc> brokenReturnExpression(Expression expression, LayoutContext layout) {
+        Optional<Doc> methodCallChain = returnWithForcedMethodCallChain(expression, layout);
         if (methodCallChain.isPresent()) {
             return methodCallChain;
         }
@@ -475,13 +528,16 @@ final class ReturnExpressionPrinter {
         if (logicalComplementBreak.isPresent()) {
             return logicalComplementBreak;
         }
-        return returnWithParenthesizedValueBreak(expression, lineBudget);
+        return returnWithParenthesizedValueBreak(expression, layout);
     }
 
-    private Optional<Doc> returnWithForcedMethodCallChain(Expression expression, LayoutWidth.LineBudget lineBudget) {
+    private Optional<Doc> returnWithForcedMethodCallChain(Expression expression, LayoutContext layout) {
         if (!(expression instanceof MethodCallExpr methodCall)) {
             return Optional.empty();
         }
+        // The chain callees keep their LineBudget signatures (LDM-3 pilot, #190), so read the budget back from the
+        // return value's context to feed them.
+        LayoutWidth.LineBudget lineBudget = layout.widthBudget();
         Optional<Doc> expressionLambda = sourceMultilineExpressionLambda.apply(methodCall);
         if (expressionLambda.isPresent()) {
             return expressionLambda;
@@ -494,18 +550,18 @@ final class ReturnExpressionPrinter {
         }
         if (methodCallChainIsSourceMultiline.test(methodCall)) {
             return forcedMethodCallChainWithFirstLine
-                    .apply(methodCall, text -> returnLineWidth(methodCall, "return " + text, lineBudget))
+                    .apply(methodCall, text -> returnLineWidth(methodCall, "return " + text, layout))
                     .or(() -> forcedMethodCallChain.apply(methodCall, lineBudget));
         }
         if (methodCall.getScope().filter(ObjectCreationExpr.class::isInstance).isPresent()) {
             return forcedMethodCallChainWithFirstLine
-                    .apply(methodCall, text -> returnLineWidth(methodCall, "return " + text, lineBudget))
+                    .apply(methodCall, text -> returnLineWidth(methodCall, "return " + text, layout))
                     .or(() -> forcedMethodCallChain.apply(methodCall, lineBudget));
         }
         return compactRootWithBrokenFinalChainSegment.apply(methodCall, lineBudget)
                 .or(() -> forcedMethodCallChainWithFirstLine.apply(
                         methodCall,
-                        text -> returnLineWidth(methodCall, "return " + text, lineBudget)
+                        text -> returnLineWidth(methodCall, "return " + text, layout)
                 ))
                 .or(() -> forcedMethodCallChain.apply(methodCall, lineBudget))
                 .or(() -> Optional.of(brokenMethodCall.apply(methodCall)));
@@ -553,10 +609,10 @@ final class ReturnExpressionPrinter {
      * the binary-expression policy directly unless comments inside the binary need the parenthesized shape to keep their
      * ownership obvious.
      */
-    private Optional<Doc> returnWithParenthesizedValueBreak(Expression expression, LayoutWidth.LineBudget lineBudget) {
+    private Optional<Doc> returnWithParenthesizedValueBreak(Expression expression, LayoutContext layout) {
         if (expression instanceof EnclosedExpr enclosedExpr) {
             if (enclosedExpr.getInner() instanceof BinaryExpr binaryExpr) {
-                Optional<Doc> directBinary = binaryReturns.directBinaryReturn(binaryExpr, enclosedExpr, lineBudget);
+                Optional<Doc> directBinary = binaryReturns.directBinaryReturn(binaryExpr, enclosedExpr, layout);
                 if (directBinary.isPresent()) {
                     return directBinary;
                 }
@@ -564,7 +620,7 @@ final class ReturnExpressionPrinter {
             return Optional.of(parenthesizedBreak.apply(enclosedExpr.getInner(), false));
         }
         if (expression instanceof BinaryExpr binaryExpr) {
-            Optional<Doc> directBinary = binaryReturns.directBinaryReturn(binaryExpr, lineBudget);
+            Optional<Doc> directBinary = binaryReturns.directBinaryReturn(binaryExpr, layout);
             if (directBinary.isPresent()) {
                 return directBinary;
             }

@@ -124,7 +124,6 @@ final class ExpressionPrinters {
             context,
             this::expression,
             this::expressionWithoutOwnComment,
-            this::currentIndentedWidth,
             this::blockStatementWidth,
             this::continuationStatementWidth,
             binaries::lines,
@@ -181,10 +180,7 @@ final class ExpressionPrinters {
             conditionals::conditionalExpression
         );
         this.unaries = new UnaryExpressionPrinter(
-            options,
-            context.layoutWidth,
             compactSource::compact,
-            this::currentIndentedWidth,
             enclosedExpressions::parenthesizedBreak
         );
         this.objectCreations = new ObjectCreationPrinter(
@@ -393,8 +389,8 @@ final class ExpressionPrinters {
         return assignments.assignmentStatement(expression);
     }
 
-    Doc returnStatement(Expression expression, LayoutWidth.LineBudget lineBudget) {
-        return returnExpressions.returnStatement(expression, lineBudget);
+    Doc returnStatement(Expression expression, LayoutContext layout) {
+        return returnExpressions.returnStatement(expression, layout);
     }
 
     Doc objectCreationWithSuffix(ObjectCreationExpr expression, String suffix) {

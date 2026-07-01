@@ -108,7 +108,7 @@ final class StatementPrinter {
 
     private final Function<AssignExpr, Doc> assignmentStatementRenderer;
 
-    private final BiFunction<Expression, LayoutWidth.LineBudget, Doc> returnStatementRenderer;
+    private final BiFunction<Expression, LayoutContext, Doc> returnStatementRenderer;
 
     private final BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix;
 
@@ -181,7 +181,7 @@ final class StatementPrinter {
             JavaFormatRule<Expression> expressionRenderer,
             ExpressionTailRenderer expressionWithTailRenderer,
             Function<AssignExpr, Doc> assignmentStatementRenderer,
-            BiFunction<Expression, LayoutWidth.LineBudget, Doc> returnStatementRenderer,
+            BiFunction<Expression, LayoutContext, Doc> returnStatementRenderer,
             BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
             JavaFormatRule<VariableDeclarationExpr> variableDeclarationRenderer,
             JavaFormatRule<VariableDeclarationExpr> variableDeclarationStatementRenderer,
@@ -363,8 +363,14 @@ final class StatementPrinter {
     }
 
     private Doc returnStatement(ReturnStmt statement, LayoutWidth.LineBudget lineBudget) {
+        // Build the positional context for the returned value: it sits in RETURN_VALUE position and owns its own first
+        // column after the "return " keyword. widthBudget carries the statement's line budget so the return width helpers
+        // read it back from the context instead of the loose parameter that used to be threaded here (LDM-2 / #198). This
+        // is the first LayoutContext read in the codebase; the value it carries reproduces the prior lineBudget exactly,
+        // so the returned Doc is byte-identical.
+        LayoutContext layout = new LayoutContext(EnclosingConstruct.RETURN_VALUE, "", lineBudget);
         return statement.getExpression()
-                .map(expression -> returnStatementRenderer.apply(expression, lineBudget))
+                .map(expression -> returnStatementRenderer.apply(expression, layout))
                 .orElse(Doc.text("return;" + trailingStatementBlockComment(statement)));
     }
 

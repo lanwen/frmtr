@@ -65,8 +65,6 @@ final class ConditionalExpressionPrinter {
 
     private final Function<Expression, Doc> expressionWithoutOwnCommentRenderer;
 
-    private final ToIntFunction<String> currentIndentedWidth;
-
     private final ToIntFunction<String> blockStatementWidth;
 
     private final ToIntFunction<String> continuationStatementWidth;
@@ -76,8 +74,6 @@ final class ConditionalExpressionPrinter {
     private final BiFunction<Expression, Boolean, Doc> nestedBinaryExpressionLinesRenderer;
 
     private final Predicate<Expression> expressionHasParenthesizedNestedBinary;
-
-    private final LayoutDecisionLog layoutDecisions;
 
     /**
      * Names whether conditional-expression layout is caller-forced or selected by local width and comment checks.
@@ -122,7 +118,6 @@ final class ConditionalExpressionPrinter {
             JavaFormatContext context,
             Function<Expression, Doc> expressionRenderer,
             Function<Expression, Doc> expressionWithoutOwnCommentRenderer,
-            ToIntFunction<String> currentIndentedWidth,
             ToIntFunction<String> blockStatementWidth,
             ToIntFunction<String> continuationStatementWidth,
             BiFunction<Expression, Boolean, Doc> binaryExpressionLinesRenderer,
@@ -136,13 +131,11 @@ final class ConditionalExpressionPrinter {
         this.compactSource = context.compactSource;
         this.expressionRenderer = expressionRenderer;
         this.expressionWithoutOwnCommentRenderer = expressionWithoutOwnCommentRenderer;
-        this.currentIndentedWidth = currentIndentedWidth;
         this.blockStatementWidth = blockStatementWidth;
         this.continuationStatementWidth = continuationStatementWidth;
         this.binaryExpressionLinesRenderer = binaryExpressionLinesRenderer;
         this.nestedBinaryExpressionLinesRenderer = nestedBinaryExpressionLinesRenderer;
         this.expressionHasParenthesizedNestedBinary = expressionHasParenthesizedNestedBinary;
-        this.layoutDecisions = context.layoutDecisions;
     }
 
     /**
@@ -235,57 +228,39 @@ final class ConditionalExpressionPrinter {
         if (commented.isPresent()) {
             return commented.orElseThrow();
         }
-        String flat = compactSource.compact(expression);
-        if (!breakMode.isForced() && sourceShapePolicy.wasMultiline(expression)) {
+        // A caller-forced context and a source-multiline conditional both print the broken ternary shape unconditionally:
+        // those are caller and source-shape decisions, not width decisions, so they never consult the renderer's column.
+        if (breakMode.isForced() || sourceShapePolicy.wasMultiline(expression)) {
             return brokenConditionalExpression(expression);
         }
-        int flatWidth = currentIndentedWidth.applyAsInt(flat);
-        if (!breakMode.isForced() && flatWidth <= options.lineWidth()) {
-            if (expressionHasParenthesizedNestedBinary.test(expression)) {
-                return Doc.concat(
-                    conditionalCondition(expression),
-                    Doc.text(" ? "),
-                    conditionalBranch(expression.getThenExpr()),
-                    Doc.text(" : "),
-                    conditionalBranch(expression.getElseExpr())
-                );
-            }
-            return Doc.text(flat);
-        }
-        recordTernaryWidthBreak(expression, flat, flatWidth);
-        return brokenConditionalExpression(expression);
-    }
-
-    /**
-     * Records the ternary's flat-width decision when the conditional breaks because its single-line form overflowed the
-     * line budget, so explain can attribute the wrap to width rather than to an opaque forced break.
-     *
-     * <p>This fires on both the auto path and the caller-forced path, but only when the ternary's own flat form is
-     * genuinely too wide for its budget: a conditional forced apart for nesting or comments while its flat form would
-     * still fit is not a width decision and is left unrecorded. Recording runs after the broken shape is chosen, so it
-     * does not change the produced layout.
-     */
-    private void recordTernaryWidthBreak(Expression expression, String flat, int flatWidth) {
-        if (flatWidth <= options.lineWidth()) {
-            return;
-        }
-        layoutDecisions.recordWidthBreak(
-            "ternary",
-            "java.expression:" + expression.getClass().getSimpleName(),
-            ternaryPreview(flat),
-            flatWidth,
-            options.lineWidth(),
-            0
+        // Auto path: defer the flat-versus-broken width decision to the renderer, which measures the flat arm at the
+        // true running column via Doc.conditionalGroup. The earlier gate probed a reconstructed indented width, which
+        // disagreed with the column write reaches (the #137/#155 width-at-wrong-column family); a disagreement could
+        // print a genuinely over-width ternary flat and let a later pass break it. Measuring at the real column removes
+        // that reconstruction, and DocExplainRenderer already reports the group decision at available = lineWidth -
+        // column, so no separate width-break recorder is needed.
+        return Doc.conditionalGroup(
+            List.of(flatConditionalExpression(expression), brokenConditionalExpression(expression))
         );
     }
 
     /**
-     * Builds a short headline snippet of the ternary up to and including the {@code ?}, so the reader recognizes the
-     * conditional without seeing both branches.
+     * Builds the single-line ternary layout the renderer renders when the flat form fits the columns left.
+     *
+     * <p>A ternary whose condition holds a parenthesized nested binary is rebuilt from its parts so the condition passes
+     * through the binary continuation policy even in flat form; every other ternary is the compact source text.
      */
-    private String ternaryPreview(String flat) {
-        int question = flat.indexOf('?');
-        return question < 0 ? flat : flat.substring(0, question + 1) + " …";
+    private Doc flatConditionalExpression(ConditionalExpr expression) {
+        if (expressionHasParenthesizedNestedBinary.test(expression)) {
+            return Doc.concat(
+                conditionalCondition(expression),
+                Doc.text(" ? "),
+                conditionalBranch(expression.getThenExpr()),
+                Doc.text(" : "),
+                conditionalBranch(expression.getElseExpr())
+            );
+        }
+        return Doc.text(compactSource.compact(expression));
     }
 
     private Doc brokenConditionalExpression(ConditionalExpr expression) {

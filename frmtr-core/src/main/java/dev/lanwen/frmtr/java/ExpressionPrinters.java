@@ -100,7 +100,7 @@ final class ExpressionPrinters {
             comments,
             commentPlacementPolicy,
             options,
-            this::expression,
+            (expression, layout) -> expression(expression),
             this::brokenMethodCall,
             this::brokenMethodCallWithClosingLine,
             this::forcedMethodCallChain,
@@ -114,7 +114,7 @@ final class ExpressionPrinters {
             comments,
             commentPlacementPolicy,
             options,
-            this::expression,
+            (expression, layout) -> expression(expression),
             binaries::nestedLines,
             compactSource::compact,
             this::currentIndentedWidth
@@ -140,7 +140,7 @@ final class ExpressionPrinters {
             context.objectCreationLayoutPolicy,
             options,
             context.layoutWidth,
-            this::expression,
+            (expression, layout) -> expression(expression),
             this::brokenObjectCreation,
             statementRenderer,
             blockRenderer,
@@ -159,7 +159,7 @@ final class ExpressionPrinters {
         );
         this.casts = new CastExpressionPrinter(
             options,
-            this::expression,
+            (expression, layout) -> expression(expression),
             compactSource::compactTypeLike,
             compactSource::compact,
             types::typeBody,
@@ -190,7 +190,7 @@ final class ExpressionPrinters {
         this.objectCreations = new ObjectCreationPrinter(
             context,
             types,
-            this::expression,
+            (expression, layout) -> expression(expression),
             this::brokenArgument,
             lambdas::huggableBlockLambdaArguments,
             bodyRenderer,
@@ -203,12 +203,12 @@ final class ExpressionPrinters {
         this.textBlocks = new TextBlockPrinter(context.rawSource);
         this.instanceOfExpressions = new InstanceOfExpressionPrinter(
             options,
-            this::expression,
+            (expression, layout) -> expression(expression),
             compactSource::compact,
             compactSource::compactTypeLike,
             this::currentIndentedWidth
         );
-        this.fieldAccesses = new FieldAccessPrinter(comments, this::expression);
+        this.fieldAccesses = new FieldAccessPrinter(comments, (expression, layout) -> expression(expression));
         this.methodReferences = new MethodReferencePrinter(
             options,
             compactSource::compact,
@@ -233,16 +233,13 @@ final class ExpressionPrinters {
             lambdas::huggedGapCommentedLambdaBody,
             lambdas::lambdaParameters,
             textBlocks::renderUnformattedTextBlock,
-            this::brokenArgument,
-            this::currentIndentedWidth,
-            this::continuationStatementWidth,
-            this::blockStatementWidth
+            this::brokenArgument
         );
         this.arrays = new ArrayExpressionPrinter(
             comments,
             commentPlacementPolicy,
             options,
-            this::expression,
+            (expression, layout) -> expression(expression),
             enclosedExpressions::brokenEnclosedForSuffix,
             (methodCall, tail) -> expressionWithTail(methodCall, tail),
             objectCreations::objectCreationWithSuffix,
@@ -271,25 +268,25 @@ final class ExpressionPrinters {
             conditionals::assignmentWithConditionalValue
         );
         ExpressionDispatcher expressionDispatcher = new ExpressionDispatcher(
-            assignments::assignment,
-            arrays::arrayAccess,
-            arrays::arrayCreation,
-            arrays::arrayInitializer,
-            annotationExpressions::annotation,
-            binaries::binaryExpression,
-            casts::castExpression,
-            classExpressions::classExpression,
-            conditionals::conditionalExpression,
-            enclosedExpressions::enclosedExpression,
-            fieldAccesses::fieldAccess,
-            instanceOfExpressions::instanceOfExpression,
-            lambdas::lambdaExpression,
-            methodCalls::methodCall,
-            methodReferences::methodReference,
-            objectCreations::objectCreation,
+            (expression, layout) -> assignments.assignment(expression),
+            (expression, layout) -> arrays.arrayAccess(expression),
+            (expression, layout) -> arrays.arrayCreation(expression),
+            (expression, layout) -> arrays.arrayInitializer(expression),
+            (expression, layout) -> annotationExpressions.annotation(expression),
+            (expression, layout) -> binaries.binaryExpression(expression),
+            (expression, layout) -> casts.castExpression(expression),
+            (expression, layout) -> classExpressions.classExpression(expression),
+            (expression, layout) -> conditionals.conditionalExpression(expression),
+            (expression, layout) -> enclosedExpressions.enclosedExpression(expression),
+            (expression, layout) -> fieldAccesses.fieldAccess(expression),
+            (expression, layout) -> instanceOfExpressions.instanceOfExpression(expression),
+            (expression, layout) -> lambdas.lambdaExpression(expression),
+            (expression, layout) -> methodCalls.methodCall(expression),
+            (expression, layout) -> methodReferences.methodReference(expression),
+            (expression, layout) -> objectCreations.objectCreation(expression),
             switchExpressionRenderer,
-            textBlocks::textBlockLiteral,
-            unaries::unaryExpression,
+            (expression, layout) -> textBlocks.textBlockLiteral(expression),
+            (expression, layout) -> unaries.unaryExpression(expression),
             compactSource
         );
         this.expressionRules = new ExpressionRuleEnvelope(expressionDispatcher::expressionContent);

@@ -121,7 +121,7 @@ final class ExpressionLambdaMethodCallBodyLayout {
         return Optional.of(
             Doc.concat(
                 Doc.text(parameters + " -> "),
-                expressionRenderer.format(scopeCall.getScope().orElseThrow()),
+                expressionRenderer.format(scopeCall.getScope().orElseThrow(), LayoutContext.root()),
                 Doc.indent(
                     Doc.indent(
                         Doc.concat(

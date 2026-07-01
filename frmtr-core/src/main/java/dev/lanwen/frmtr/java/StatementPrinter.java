@@ -269,7 +269,7 @@ final class StatementPrinter {
 
     Doc statement(Statement statement, LayoutWidth.LineBudget lineBudget) {
         return switch (statement) {
-            case BlockStmt blockStmt -> blockRenderer.format(blockStmt);
+            case BlockStmt blockStmt -> blockRenderer.format(blockStmt, LayoutContext.root());
             case ReturnStmt returnStmt -> returnStatement(returnStmt, lineBudget);
             case ThrowStmt throwStmt -> throwStatement(throwStmt);
             case YieldStmt yieldStmt -> yieldStatement(yieldStmt);
@@ -285,10 +285,10 @@ final class StatementPrinter {
             case LabeledStmt labeledStmt -> labeledStatement(labeledStmt);
             case LocalClassDeclarationStmt localClassDeclaration -> bodyRenderer.format(
                 localClassDeclaration.getClassDeclaration()
-            );
+            , LayoutContext.root());
             case LocalRecordDeclarationStmt localRecordDeclaration -> bodyRenderer.format(
                 localRecordDeclaration.getRecordDeclaration()
-            );
+            , LayoutContext.root());
             case IfStmt ifStmt -> ifStatement(ifStmt);
             case WhileStmt whileStmt -> whileStatement(whileStmt);
             case DoStmt doStmt -> doStatement(doStmt);
@@ -302,11 +302,11 @@ final class StatementPrinter {
                     layoutWidth::blockStatement
                 ),
                 Doc.text(" "),
-                blockRenderer.format(synchronizedStmt.getBody())
+                blockRenderer.format(synchronizedStmt.getBody(), LayoutContext.root())
             );
             case ForStmt forStmt -> forStatement(forStmt);
             case ForEachStmt forEachStmt -> forEachStatement(forEachStmt);
-            case SwitchStmt switchStmt -> switchStatementRenderer.format(switchStmt);
+            case SwitchStmt switchStmt -> switchStatementRenderer.format(switchStmt, LayoutContext.root());
             default -> Doc.text(compact.apply(statement));
         };
     }
@@ -582,9 +582,9 @@ final class StatementPrinter {
             return trailing == Doc.EMPTY ? emptyFor : Doc.concat(emptyFor, Doc.text(" "), trailing);
         }
         if (statement instanceof BlockStmt blockStmt) {
-            return blockRenderer.format(blockStmt);
+            return blockRenderer.format(blockStmt, LayoutContext.root());
         }
-        return statementRenderer.format(statement);
+        return statementRenderer.format(statement, LayoutContext.root());
     }
 
     private List<String> labeledStatementLeadingComments(LabeledStmt statement) {
@@ -693,7 +693,7 @@ final class StatementPrinter {
         Doc trailing = expressionStatementTrailingComment(statement);
         if (expression instanceof VariableDeclarationExpr variableDeclaration) {
             return Doc.concat(
-                variableDeclarationStatementRenderer.format(variableDeclaration),
+                variableDeclarationStatementRenderer.format(variableDeclaration, LayoutContext.root()),
                 variableDeclarationTrailingComment(variableDeclaration),
                 trailing
             );
@@ -1018,7 +1018,7 @@ final class StatementPrinter {
         Doc leading = Doc.concat(comments.adjacentLeadingLineComments(resource), comments.leading(resource));
         Doc body;
         if (sourceShapePolicy.wasMultiline(resource) && resource instanceof VariableDeclarationExpr declaration) {
-            body = variableDeclarationRenderer.format(declaration);
+            body = variableDeclarationRenderer.format(declaration, LayoutContext.root());
         } else {
             body = Doc.text(compact.apply(resource));
         }
@@ -1438,7 +1438,7 @@ final class StatementPrinter {
                     } else {
                         docs.add(
                             elseStatement.isIfStmt()
-                                ? statementRenderer.format(elseStatement)
+                                ? statementRenderer.format(elseStatement, LayoutContext.root())
                                 : nestedStatement(elseStatement)
                         );
                     }
@@ -1527,7 +1527,7 @@ final class StatementPrinter {
                         .orElse(true))
                 .isPresent();
         if (aboveBodyComments.isEmpty() && !bodyOwnsLeadingLineComment) {
-            return statementRenderer.format(elseStatement);
+            return statementRenderer.format(elseStatement, LayoutContext.root());
         }
         List<Doc> indented = new ArrayList<>();
         indented.add(Doc.HARD_LINE);
@@ -1539,7 +1539,7 @@ final class StatementPrinter {
             indented.add(rendered);
             indented.add(Doc.HARD_LINE);
         }
-        indented.add(statementRenderer.format(elseStatement));
+        indented.add(statementRenderer.format(elseStatement, LayoutContext.root()));
         return Doc.indent(Doc.concat(indented));
     }
 
@@ -1712,7 +1712,7 @@ final class StatementPrinter {
         if (statement.getThenStmt().isBlockStmt()) {
             return Doc.concat(Doc.HARD_LINE, ifThenStatement(statement));
         }
-        return Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement.getThenStmt())));
+        return Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement.getThenStmt(), LayoutContext.root())));
     }
 
     private Doc elseChainSeparator(
@@ -1797,7 +1797,7 @@ final class StatementPrinter {
             return emptyControlBlock(statement.asBlockStmt());
         }
         if (statement.isBlockStmt()) {
-            return statementRenderer.format(statement);
+            return statementRenderer.format(statement, LayoutContext.root());
         }
         if (
             statement.isIfStmt()
@@ -1806,9 +1806,9 @@ final class StatementPrinter {
             || statement.isWhileStmt()
             || statement.isDoStmt()
         ) {
-            return Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement)));
+            return Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement, LayoutContext.root())));
         }
-        return leadingLineCommentBody(statement).orElseGet(() -> statementRenderer.format(statement));
+        return leadingLineCommentBody(statement).orElseGet(() -> statementRenderer.format(statement, LayoutContext.root()));
     }
 
     /**
@@ -1870,7 +1870,7 @@ final class StatementPrinter {
             indented.add(aboveComment);
             indented.add(Doc.HARD_LINE);
         }
-        indented.add(statementRenderer.format(body));
+        indented.add(statementRenderer.format(body, LayoutContext.root()));
         List<Doc> result = new ArrayList<>();
         result.add(Doc.text(" "));
         for (Doc inline : headerTrailing) {
@@ -1904,7 +1904,7 @@ final class StatementPrinter {
         if (!hasLeadingLineComment) {
             return Optional.empty();
         }
-        return Optional.of(Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement))));
+        return Optional.of(Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement, LayoutContext.root()))));
     }
 
     private Doc emptyControlBlock(BlockStmt block) {
@@ -1991,7 +1991,7 @@ final class StatementPrinter {
             return loopWithEmptyBody(forHeader(statement), statement);
         }
         if (statement.getBody() instanceof DoStmt) {
-            return Doc.concat(Doc.text(forHeader(statement) + " "), statementRenderer.format(statement.getBody()));
+            return Doc.concat(Doc.text(forHeader(statement) + " "), statementRenderer.format(statement.getBody(), LayoutContext.root()));
         }
         Optional<Doc> commentedBracelessBody = forHeaderEndNode(statement)
                 .flatMap(afterNode -> bracelessLoopBody(statement, afterNode, statement.getBody()));
@@ -2076,7 +2076,7 @@ final class StatementPrinter {
         if (comment == Doc.EMPTY) {
             return Optional.empty();
         }
-        Doc commentedStatement = Doc.concat(comment, Doc.text(" "), statementRenderer.format(body));
+        Doc commentedStatement = Doc.concat(comment, Doc.text(" "), statementRenderer.format(body, LayoutContext.root()));
         if (CommentIndex.sameBeginLine(loop, body)) {
             return Optional.of(Doc.concat(Doc.text(" "), commentedStatement));
         }
@@ -2105,7 +2105,7 @@ final class StatementPrinter {
         if (leadingBlockComment == Doc.EMPTY) {
             return nestedStatement(body);
         }
-        return Doc.concat(leadingBlockComment, Doc.text(" "), blockRenderer.format(body.asBlockStmt()));
+        return Doc.concat(leadingBlockComment, Doc.text(" "), blockRenderer.format(body.asBlockStmt(), LayoutContext.root()));
     }
 
     private Doc doWhileTail(DoStmt statement) {

@@ -32,7 +32,7 @@ final class ExpressionRuleEnvelope {
         requireFullyParsed(expression);
         return Doc.label(
             "java.expression:" + expression.getClass().getSimpleName(),
-            expressionContent.format(expression)
+            expressionContent.format(expression, LayoutContext.root())
         );
     }
 

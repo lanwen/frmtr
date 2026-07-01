@@ -88,12 +88,6 @@ final class MethodCallPrinter {
 
     private final TextBlockArgumentSourceLayout textBlockArguments;
 
-    private final ToIntFunction<String> currentIndentedWidth;
-
-    private final ToIntFunction<String> continuationStatementWidth;
-
-    private final ToIntFunction<String> blockStatementWidth;
-
     private final LayoutDecisionLog layoutDecisions;
 
     MethodCallPrinter(
@@ -117,10 +111,7 @@ final class MethodCallPrinter {
             Function<LambdaExpr, Optional<Doc>> huggedGapCommentedLambdaBody,
             Function<LambdaExpr, String> lambdaParameters,
             Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer,
-            Function<Expression, Optional<Doc>> brokenArgumentExpressionRenderer,
-            ToIntFunction<String> currentIndentedWidth,
-            ToIntFunction<String> continuationStatementWidth,
-            ToIntFunction<String> blockStatementWidth
+            Function<Expression, Optional<Doc>> brokenArgumentExpressionRenderer
     ) {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
@@ -143,10 +134,7 @@ final class MethodCallPrinter {
             huggableExpressionLambdaArguments,
             expressionLambdaArgumentPlan,
             huggedGapCommentedLambdaBody,
-            lambdaParameters,
-            currentIndentedWidth,
-            continuationStatementWidth,
-            blockStatementWidth
+            lambdaParameters
         );
         this.expressionRenderer = expressionRenderer;
         this.brokenEnclosedForSuffix = brokenEnclosedForSuffix;
@@ -158,7 +146,7 @@ final class MethodCallPrinter {
             expressionRenderer,
             brokenArgumentExpressionRenderer,
             compactSource::compact,
-            continuationStatementWidth
+            context.layoutWidth
         );
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.commentedExpressionLambdaArgument = commentedExpressionLambdaArgument;
@@ -170,10 +158,11 @@ final class MethodCallPrinter {
             context.options,
             unformattedTextBlockRenderer
         );
-        this.currentIndentedWidth = currentIndentedWidth;
-        this.continuationStatementWidth = continuationStatementWidth;
-        this.blockStatementWidth = blockStatementWidth;
         this.layoutDecisions = context.layoutDecisions;
+    }
+
+    private ToIntFunction<String> lineWidth(LayoutWidth.LineBudget lineBudget) {
+        return text -> layoutWidth.line(lineBudget, text);
     }
 
     Doc methodCall(MethodCallExpr expression) {
@@ -447,7 +436,7 @@ final class MethodCallPrinter {
     private void recordArgumentListWidthBreak(MethodCallExpr expression, String prefix) {
         String compactArguments = compactSource.compactJoin(expression.getArguments());
         String compactCall = prefix + "(" + compactArguments + ")";
-        int flatWidth = currentIndentedWidth.applyAsInt(compactCall);
+        int flatWidth = layoutWidth.line(LayoutWidth.LineBudget.CURRENT, compactCall);
         if (flatWidth <= options.lineWidth()) {
             return;
         }
@@ -589,7 +578,8 @@ final class MethodCallPrinter {
                 .filter(EnclosedExpr.class::isInstance)
                 .map(EnclosedExpr.class::cast)
                 .filter(scope -> leadingBreak
-                        || blockStatementWidth.applyAsInt(compactSource.compact(expression) + ";") > options.lineWidth()
+                        || layoutWidth.line(LayoutWidth.LineBudget.BLOCK, compactSource.compact(expression) + ";")
+                            > options.lineWidth()
                 )
                 .map(scope -> Doc.concat(
                         brokenEnclosedForSuffix.apply(scope, leadingBreak),
@@ -915,7 +905,7 @@ final class MethodCallPrinter {
      * the shared first line ({@code outer(inner(}) past the line width, measured at the call's <em>real</em> rendered
      * column rather than the bare block indent.
      *
-     * <p>The single-argument hug gates used to probe {@link #currentIndentedWidth} on {@code prefix + "(" + innerPrefix +
+     * <p>The single-argument hug gates used to probe the {@code CURRENT} line budget on {@code prefix + "(" + innerPrefix +
      * "("} alone, which is prefix-blind: when the call is the value of an initializer or assignment
      * ({@code NAME = outer(inner(…))}) the {@code NAME = } prefix sharing the line is never counted, so the hug attaches
      * even when the opener visibly overflows, and the over-wide shape is stable (idempotent but wrong). Making the
@@ -935,7 +925,7 @@ final class MethodCallPrinter {
     private boolean attachedOpenerOverflows(MethodCallExpr expression, String openerLine) {
         return sharedFirstLineWidth(expression)
                 .map(prefixedIndent -> prefixedIndent + openerLine.length())
-                .orElseGet(() -> currentIndentedWidth.applyAsInt(openerLine))
+                .orElseGet(() -> layoutWidth.line(LayoutWidth.LineBudget.CURRENT, openerLine))
             > options.lineWidth();
     }
 
@@ -1035,14 +1025,14 @@ final class MethodCallPrinter {
             ExpressionLambdaArgumentLayout.Plan argument
     ) {
         return !argument.bodyFirstSourceLineFits()
-            && argument.bodyOpenerFitsOnContinuation(continuationStatementWidth, options.lineWidth())
+            && argument.bodyOpenerFitsOnContinuation(lineWidth(LayoutWidth.LineBudget.CONTINUATION), options.lineWidth())
             && argument.bodyOpenerOverflows(line -> methodCallRootLineWidth(expression, line), options.lineWidth());
     }
 
     private int methodCallRootLineWidth(MethodCallExpr expression, String firstLine) {
         return expression.getRange()
                 .map(range -> Math.max(0, range.begin.column + 1) + firstLine.length())
-                .orElseGet(() -> currentIndentedWidth.applyAsInt(firstLine));
+                .orElseGet(() -> layoutWidth.line(LayoutWidth.LineBudget.CURRENT, firstLine));
     }
 
     private boolean hasHuggableExpressionLambdaArgument(MethodCallExpr expression) {
@@ -1256,7 +1246,7 @@ final class MethodCallPrinter {
         String code =
             (trailingComments.isEmpty() ? compactSource.compact(expression) : compactSource.commentFree(expression))
             + suffix;
-        if (continuationStatementWidth.applyAsInt(code) > options.lineWidth()) {
+        if (layoutWidth.line(LayoutWidth.LineBudget.CONTINUATION, code) > options.lineWidth()) {
             return Optional.empty();
         }
         List<Doc> renderedTrailing = trailingComments.stream()
@@ -1328,7 +1318,8 @@ final class MethodCallPrinter {
         }
         if (
             !breakMode.isForced()
-            && currentIndentedWidth.applyAsInt(
+            && layoutWidth.line(
+                LayoutWidth.LineBudget.CURRENT,
                 prefix + "(" + compactSource.compact(binaryExpr) + ")"
             ) <= options.lineWidth()
         ) {
@@ -1374,7 +1365,8 @@ final class MethodCallPrinter {
             + " "
             + assignExpr.getOperator().asString()
             + " ";
-        ToIntFunction<String> prefixedFirstLineWidth = text -> blockStatementWidth.applyAsInt(assignmentPrefix + text);
+        ToIntFunction<String> prefixedFirstLineWidth =
+            text -> layoutWidth.line(LayoutWidth.LineBudget.BLOCK, assignmentPrefix + text);
         if (methodCallChainIsSourceMultiline(methodCall)) {
             Optional<Doc> chain = methodCallChain(
                 methodCall,
@@ -1408,7 +1400,7 @@ final class MethodCallPrinter {
             return Optional.empty();
         }
         String firstLine = assignmentPrefix + methodCallPrefix(methodCall) + "(";
-        if (blockStatementWidth.applyAsInt(firstLine) > options.lineWidth()) {
+        if (layoutWidth.line(LayoutWidth.LineBudget.BLOCK, firstLine) > options.lineWidth()) {
             return Optional.empty();
         }
         return Optional.of(

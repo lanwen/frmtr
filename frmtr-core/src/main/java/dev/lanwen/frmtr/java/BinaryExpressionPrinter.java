@@ -121,7 +121,7 @@ final class BinaryExpressionPrinter {
      */
     private Doc lines(Expression expression, boolean forceBreak, boolean nestedContinuation) {
         if (!(expression instanceof BinaryExpr binaryExpr)) {
-            return expressionRenderer.format(expression);
+            return expressionRenderer.format(expression, LayoutContext.root());
         }
         if (!forceBreak && parenthesizedInnerWidth(compact.apply(binaryExpr)) <= options.lineWidth()) {
             return binaryExpression(binaryExpr);
@@ -138,9 +138,9 @@ final class BinaryExpressionPrinter {
             && parenthesizedInnerWidth(compact.apply(instanceOfExpr)) > options.lineWidth()
         ) {
             return Doc.concat(
-                expressionRenderer.format(instanceOfExpr),
+                expressionRenderer.format(instanceOfExpr, LayoutContext.root()),
                 Doc.text(" && "),
-                expressionRenderer.format(operands.getLast())
+                expressionRenderer.format(operands.getLast(), LayoutContext.root())
             );
         }
         BinaryExpressionLine firstLine = binaryExpressionLine(binaryExpr.getOperator(), 0, operands.size());
@@ -159,7 +159,7 @@ final class BinaryExpressionPrinter {
             return Doc.concat(
                 brokenMethodCallRenderer.apply(methodCall),
                 Doc.text(" " + binaryExpr.getOperator().asString() + " "),
-                expressionRenderer.format(operands.getLast())
+                expressionRenderer.format(operands.getLast(), LayoutContext.root())
             );
         }
         List<Doc> lines = new ArrayList<>();
@@ -207,7 +207,7 @@ final class BinaryExpressionPrinter {
             ) {
                 return Doc.concat(Doc.text("("), nestedLines(binaryOperand, true), Doc.text(")"));
             }
-            return Doc.concat(Doc.text("("), expressionRenderer.format(binaryOperand), Doc.text(")"));
+            return Doc.concat(Doc.text("("), expressionRenderer.format(binaryOperand, LayoutContext.root()), Doc.text(")"));
         }
         if (
             operand instanceof EnclosedExpr enclosedOperand
@@ -234,7 +234,7 @@ final class BinaryExpressionPrinter {
             operand instanceof BinaryExpr binaryOperand
             && shouldParenthesizeNestedBinary(binaryLine.operator(), binaryOperand.getOperator())
         ) {
-            return Doc.concat(Doc.text("("), expressionRenderer.format(binaryOperand), Doc.text(")"));
+            return Doc.concat(Doc.text("("), expressionRenderer.format(binaryOperand, LayoutContext.root()), Doc.text(")"));
         }
         if (operand instanceof MethodCallExpr && operand.getAllContainedComments().isEmpty()) {
             MethodCallExpr methodCall = (MethodCallExpr) operand;
@@ -247,12 +247,12 @@ final class BinaryExpressionPrinter {
                 return Doc.text(flat);
             }
             if (!binaryLine.hasLeadingOperator()) {
-                return expressionRenderer.format(operand);
+                return expressionRenderer.format(operand, LayoutContext.root());
             }
             return forcedMethodCallChainRenderer.apply(methodCall)
                     .orElseGet(() -> brokenMethodCallRenderer.apply(methodCall));
         }
-        return expressionRenderer.format(operand);
+        return expressionRenderer.format(operand, LayoutContext.root());
     }
 
     /**
@@ -815,7 +815,7 @@ final class BinaryExpressionPrinter {
             .orElseGet(
                 () ->
                     operand.getAllContainedComments().stream().anyMatch(LineComment.class::isInstance)
-                        ? expressionRenderer.format(operand)
+                        ? expressionRenderer.format(operand, LayoutContext.root())
                         : Doc.text(compactWithoutOwnComment.apply(operand))
             );
     }
@@ -901,7 +901,7 @@ final class BinaryExpressionPrinter {
                     Doc.HARD_LINE,
                     java.util.stream.Stream.concat(
                         commentDocs(leading).stream(),
-                        java.util.stream.Stream.of(expressionRenderer.format(enclosedOperand.getInner()))
+                        java.util.stream.Stream.of(expressionRenderer.format(enclosedOperand.getInner(), LayoutContext.root()))
                     ).toList()
                 )
             )),
@@ -1033,9 +1033,9 @@ final class BinaryExpressionPrinter {
             && (shouldParenthesizeLeftBinary(expression.getOperator(), leftBinary.getOperator())
                 || shouldParenthesizeNestedBinary(expression.getOperator(), leftBinary.getOperator()))
         ) {
-            return Doc.concat(Doc.text("("), expressionRenderer.format(leftBinary), Doc.text(")"));
+            return Doc.concat(Doc.text("("), expressionRenderer.format(leftBinary, LayoutContext.root()), Doc.text(")"));
         }
-        return expressionRenderer.format(expression.getLeft());
+        return expressionRenderer.format(expression.getLeft(), LayoutContext.root());
     }
 
     private Doc binaryRightOperand(BinaryExpr expression) {
@@ -1043,9 +1043,9 @@ final class BinaryExpressionPrinter {
             expression.getRight() instanceof BinaryExpr rightBinary
             && shouldParenthesizeNestedBinary(expression.getOperator(), rightBinary.getOperator())
         ) {
-            return Doc.concat(Doc.text("("), expressionRenderer.format(rightBinary), Doc.text(")"));
+            return Doc.concat(Doc.text("("), expressionRenderer.format(rightBinary, LayoutContext.root()), Doc.text(")"));
         }
-        return expressionRenderer.format(expression.getRight());
+        return expressionRenderer.format(expression.getRight(), LayoutContext.root());
     }
 
     /**

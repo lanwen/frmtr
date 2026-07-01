@@ -251,7 +251,7 @@ final class RecordDeclarationPrinter {
         if (recordComponentAnnotationsShouldBreak(parameter)) {
             parameter.getAnnotations()
                     .stream()
-                    .map(annotation::format)
+                    .map(node -> annotation.format(node, LayoutContext.root()))
                     .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
                     .forEach(parts::add);
         } else if (!parameter.getAnnotations().isEmpty()) {
@@ -360,7 +360,7 @@ final class RecordDeclarationPrinter {
                 Doc.text(" "),
                 parameter.getAnnotations()
                         .stream()
-                        .map(annotation::format)
+                        .map(node -> annotation.format(node, LayoutContext.root()))
                         .toList()
             ),
             Doc.text(" ")

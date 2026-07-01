@@ -227,7 +227,7 @@ final class ExpressionLambdaArgumentLayout {
                     Doc.concat(
                         Doc.HARD_LINE,
                         Doc.text(operator + " "),
-                        expressionRenderer.format(right)
+                        expressionRenderer.format(right, LayoutContext.root())
                     )
                 )
             )
@@ -505,7 +505,7 @@ final class ExpressionLambdaArgumentLayout {
         ) {
             return brokenObjectCreationRenderer.apply(objectCreation);
         }
-        return expressionRenderer.format(bodyExpression);
+        return expressionRenderer.format(bodyExpression, LayoutContext.root());
     }
 
     private Optional<Doc> compactBodyWithClosingLine(String firstLine, Expression bodyExpression) {
@@ -578,10 +578,10 @@ final class ExpressionLambdaArgumentLayout {
                     Doc.concat(
                         Doc.HARD_LINE,
                         Doc.text("? "),
-                        expressionRenderer.format(conditionalExpr.getThenExpr()),
+                        expressionRenderer.format(conditionalExpr.getThenExpr(), LayoutContext.root()),
                         Doc.HARD_LINE,
                         Doc.text(": "),
-                        expressionRenderer.format(conditionalExpr.getElseExpr())
+                        expressionRenderer.format(conditionalExpr.getElseExpr(), LayoutContext.root())
                     )
                 )
             )
@@ -652,7 +652,7 @@ final class ExpressionLambdaArgumentLayout {
                                         .asBlockStmt()
                                         .getStatements()
                                         .stream()
-                                        .map(statementRenderer::format)
+                                        .map(node -> statementRenderer.format(node, LayoutContext.root()))
                                         .toList()
                             )
                         )

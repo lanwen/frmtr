@@ -550,7 +550,7 @@ final class CallableSignaturePrinter {
     }
 
     private Doc parameterPrefixPartDoc(ParameterPrefixPart part) {
-        return part.annotation().map(annotation::format).orElseGet(() -> Doc.text(part.flatText()));
+        return part.annotation().map(node -> annotation.format(node, LayoutContext.root())).orElseGet(() -> Doc.text(part.flatText()));
     }
 
     private int rangeBeginLine(Optional<Range> range) {

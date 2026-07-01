@@ -151,16 +151,7 @@ final class VariableInitializerLayout {
     private final Function<LambdaExpr, Doc> lambdaExpression;
 
     VariableInitializerLayout(
-            CommentTracker comments,
-            JavaCommentPlacementPolicy commentPlacement,
-            SourceShapePolicy sourceShapePolicy,
-            RawSource rawSource,
-            FormatterOptions options,
-            LayoutWidth layoutWidth,
-            Function<Node, String> compactTypeLike,
-            Function<Node, String> compact,
-            Function<Node, String> compactWithoutOwnComment,
-            Function<List<? extends Node>, String> compactJoin,
+            JavaFormatContext context,
             Function<Expression, Doc> expression,
             Function<Expression, Doc> expressionWithoutOwnComment,
             Predicate<BinaryExpr> binaryExpressionHasLineComments,
@@ -201,17 +192,17 @@ final class VariableInitializerLayout {
             BiPredicate<LambdaExpr, String> lambdaParametersShouldBreak,
             Function<LambdaExpr, Doc> lambdaExpression
     ) {
-        this.comments = comments;
-        this.commentPlacement = commentPlacement;
-        this.sourceShapePolicy = sourceShapePolicy;
-        this.rawSource = rawSource;
-        this.options = options;
-        this.layoutWidth = layoutWidth;
-        this.compactTypeLike = compactTypeLike;
-        this.compact = compact;
-        this.conditionalProjection = new ConditionalExpressionLineProjection(compact::apply);
-        this.compactWithoutOwnComment = compactWithoutOwnComment;
-        this.compactJoin = compactJoin;
+        this.comments = context.comments;
+        this.commentPlacement = context.commentPlacementPolicy;
+        this.sourceShapePolicy = context.sourceShapePolicy;
+        this.rawSource = context.rawSource;
+        this.options = context.options;
+        this.layoutWidth = context.layoutWidth;
+        this.compactTypeLike = context.compactSource::compactTypeLike;
+        this.compact = context.compactSource::compact;
+        this.conditionalProjection = new ConditionalExpressionLineProjection(context.compactSource::compact);
+        this.compactWithoutOwnComment = context.compactSource::compactWithoutOwnComment;
+        this.compactJoin = context.compactSource::compactJoin;
         this.expression = expression;
         this.expressionWithoutOwnComment = expressionWithoutOwnComment;
         this.binaryExpressionHasLineComments = binaryExpressionHasLineComments;

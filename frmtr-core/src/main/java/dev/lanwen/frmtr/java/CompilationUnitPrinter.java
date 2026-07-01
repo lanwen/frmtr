@@ -167,7 +167,7 @@ final class CompilationUnitPrinter {
                 parts.add(Doc.HARD_LINE);
                 parts.add(Doc.HARD_LINE);
             }
-            parts.add(moduleDeclarations.format(moduleDeclaration));
+            parts.add(moduleDeclarations.format(moduleDeclaration, LayoutContext.root()));
         });
         hasStructuralParts = hasStructuralParts || module.isPresent();
         Optional<Doc> topLevelDeclarations = topLevelDeclarations(unit);
@@ -299,7 +299,7 @@ final class CompilationUnitPrinter {
             return joinedTopLevelDeclarations(
                 members,
                 members.stream()
-                        .map(bodyDeclarations::format)
+                        .map(node -> bodyDeclarations.format(node, LayoutContext.root()))
                         .toList()
             );
         }
@@ -327,9 +327,9 @@ final class CompilationUnitPrinter {
     private Optional<Doc> interleavedTopLevelDeclarations(CompilationUnit unit, List<BodyDeclaration<?>> declarations) {
         List<JavaCommentTrivia> betweenTypeComments = betweenTypeOrphanComments(unit, declarations);
         if (betweenTypeComments.isEmpty()) {
-            return joinedTopLevelDeclarations(declarations, declarations.stream().map(bodyDeclarations::format).toList());
+            return joinedTopLevelDeclarations(declarations, declarations.stream().map(node -> bodyDeclarations.format(node, LayoutContext.root())).toList());
         }
-        List<Doc> declarationDocs = declarations.stream().map(bodyDeclarations::format).toList();
+        List<Doc> declarationDocs = declarations.stream().map(node -> bodyDeclarations.format(node, LayoutContext.root())).toList();
         List<Doc> parts = commentInterleaver.interleave(
             unit,
             declarations,
@@ -413,7 +413,7 @@ final class CompilationUnitPrinter {
                         previousDeclaration,
                         currentDeclaration
                     );
-                    contents.add(bodyDeclarations.format(currentDeclaration));
+                    contents.add(bodyDeclarations.format(currentDeclaration, LayoutContext.root()));
                     previousDeclaration = currentDeclaration;
                     previousEntry = EntryKind.VALID_DECLARATION;
                 }

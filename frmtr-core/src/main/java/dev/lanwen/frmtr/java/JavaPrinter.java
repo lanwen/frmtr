@@ -24,11 +24,11 @@ final class JavaPrinter {
         this.expressions = new ExpressionPrinters(
             context,
             types,
-            this::statement,
-            this::block,
-            this::methodChainLambdaBlock,
-            this::body,
-            this::switchExpression,
+            (statement, layout) -> statement(statement),
+            (block, layout) -> block(block),
+            (block, layout) -> methodChainLambdaBlock(block),
+            (declaration, layout) -> body(declaration),
+            (expression, layout) -> switchExpression(expression),
             this::commentText
         );
         this.declarations = new DeclarationPrinters(

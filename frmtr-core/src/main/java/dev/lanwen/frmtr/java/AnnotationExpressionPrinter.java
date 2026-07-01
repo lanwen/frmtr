@@ -270,7 +270,7 @@ final class AnnotationExpressionPrinter {
         if (value instanceof BinaryExpr) {
             return nestedBinaryLines.apply(value, true);
         }
-        return expressionRenderer.format(value);
+        return expressionRenderer.format(value, LayoutContext.root());
     }
 
     private boolean annotationValueMustBreak(Expression value) {
@@ -341,7 +341,7 @@ final class AnnotationExpressionPrinter {
         ) {
             return nestedBinaryLines.apply(binaryExpr, true);
         }
-        return expressionRenderer.format(value);
+        return expressionRenderer.format(value, LayoutContext.root());
     }
 
     private boolean annotationArrayAnnotationLineOverflows(AnnotationExpr annotation) {
@@ -360,7 +360,7 @@ final class AnnotationExpressionPrinter {
                 annotationValue(singleMemberAnnotation.getMemberValue())
             );
         }
-        return expressionRenderer.format(annotation);
+        return expressionRenderer.format(annotation, LayoutContext.root());
     }
 
     private boolean sourceSpansMultipleLines(Node node) {

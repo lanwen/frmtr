@@ -124,7 +124,6 @@ final class ExpressionPrinters {
             context,
             this::expression,
             this::expressionWithoutOwnComment,
-            this::currentIndentedWidth,
             this::blockStatementWidth,
             this::continuationStatementWidth,
             binaries::lines,

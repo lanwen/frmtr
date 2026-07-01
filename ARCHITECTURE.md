@@ -465,7 +465,21 @@ The earlier source-column estimate overshot when a `return` was co-located after
 the value broke on the first pass and collapsed on the next once the `return` moved onto its own line and the source
 column shrank, the non-idempotent cycle tracked in #137. Counting the enclosing block/type nesting reproduces the same
 fit/break decision on every pass — the source-column-to-rendered-column correction first applied to `if` conditions
-(`ControlConditionPrinter.ifConditionLineWidth`, #155) and to hugged call openers (#161). A per-run
+(`ControlConditionPrinter.ifConditionLineWidth`, #155) and to hugged call openers (#161). The variable/field initializer
+master over-width gate (`VariableInitializerLayout`) goes one step further and hands the flat-versus-broken verdict
+itself to the renderer (#215, the initializer analogue of the return/unary/ternary LDM-2 measurement parity): its ~10
+repeated `LayoutWidth.variableInitializer(variable, flat) > lineWidth` tests (a fixed AST-nesting-depth baseline)
+collapse into a single `Doc.conditionalGroup([flat, broken])`, so `DocRenderer` measures the flat form's fit at the true
+running column and picks the existing construct-kind broken shape only when it does not fit — a fixpoint by construction
+rather than by tuning the depth baseline. The gate carries the same-line terminator (`;`) into both arms so the
+measurement counts the one column the old `compact + ";"` gate did. It applies only to comment-free initializers whose
+flat rendering is a single line: comment-bearing initializers (both arms would claim the same comments), self-breaking
+ones (arrays/switch/anonymous-class own their break), source-multiline-preserved shapes, and casts stay on the historical
+imperative cascade (`variableInitializerCommentAndSourceShapeTier`, the initializer analogue of
+`ReturnExpressionPrinter.preemptedReturnValue`), which renders the initializer exactly once and is byte-identical to
+before. The fan-out-versus-argument-break single-call convergence (`singleCallConvergesOnArgumentBreak`) stays imperative
+by design: its idempotence-critical work is the opener-fit gate, which `Doc.bestFitting`'s line-count-first metric cannot
+express (it would keep an argument-break whose opener overflows). A per-run
 `SourceShapePolicy` on `JavaFormatContext` is the consolidating home for
 "should the formatter respect the author's source shape here?" decisions, so printers ask one named question instead of
 re-deriving those reads from raw token text or `getRange()` arithmetic. It owns one canonical definition of each

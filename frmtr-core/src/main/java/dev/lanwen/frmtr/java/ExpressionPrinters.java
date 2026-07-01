@@ -389,8 +389,8 @@ final class ExpressionPrinters {
         return assignments.assignmentStatement(expression);
     }
 
-    Doc returnStatement(Expression expression, LayoutWidth.LineBudget lineBudget) {
-        return returnExpressions.returnStatement(expression, lineBudget);
+    Doc returnStatement(Expression expression, LayoutContext layout) {
+        return returnExpressions.returnStatement(expression, layout);
     }
 
     Doc objectCreationWithSuffix(ObjectCreationExpr expression, String suffix) {

@@ -61,16 +61,16 @@ final class ReturnBinaryExpressionLayout {
         this.methodCallPrefix = methodCallPrefix;
     }
 
-    Optional<Doc> directBinaryReturn(BinaryExpr binaryExpr, LayoutWidth.LineBudget lineBudget) {
-        return directBinaryReturn(binaryExpr, binaryExpr, lineBudget, true);
+    Optional<Doc> directBinaryReturn(BinaryExpr binaryExpr, LayoutContext layout) {
+        return directBinaryReturn(binaryExpr, binaryExpr, layout, true);
     }
 
     Optional<Doc> directBinaryReturn(
             BinaryExpr binaryExpr,
             Expression widthAnchor,
-            LayoutWidth.LineBudget lineBudget
+            LayoutContext layout
     ) {
-        return directBinaryReturn(binaryExpr, widthAnchor, lineBudget, false);
+        return directBinaryReturn(binaryExpr, widthAnchor, layout, false);
     }
 
     /**
@@ -85,21 +85,21 @@ final class ReturnBinaryExpressionLayout {
     private Optional<Doc> directBinaryReturn(
             BinaryExpr binaryExpr,
             Expression widthAnchor,
-            LayoutWidth.LineBudget lineBudget,
+            LayoutContext layout,
             boolean allowSourceMultilineOverflowContinuation
     ) {
         if (!binaryExpr.getAllContainedComments().isEmpty()) {
             return Optional.empty();
         }
-        if (directBinaryReturnLineFits(binaryExpr, widthAnchor, lineBudget)) {
+        if (directBinaryReturnLineFits(binaryExpr, widthAnchor, layout)) {
             return Optional.of(expressionRenderer.apply(binaryExpr));
         }
-        Optional<Doc> methodCallLeft = directBinaryReturnWithMethodCallLeft(binaryExpr, lineBudget);
+        Optional<Doc> methodCallLeft = directBinaryReturnWithMethodCallLeft(binaryExpr, layout);
         if (methodCallLeft.isPresent()) {
             return methodCallLeft;
         }
         if (
-            directBinaryReturnFirstLineFits(binaryExpr, widthAnchor, lineBudget)
+            directBinaryReturnFirstLineFits(binaryExpr, widthAnchor, layout)
             && directBinaryReturnContinuationFits(binaryExpr, allowSourceMultilineOverflowContinuation)
         ) {
             return Optional.of(Doc.indent(binaryLines.apply(binaryExpr, true)));
@@ -110,15 +110,15 @@ final class ReturnBinaryExpressionLayout {
     private boolean directBinaryReturnLineFits(
             BinaryExpr expression,
             Expression widthAnchor,
-            LayoutWidth.LineBudget lineBudget
+            LayoutContext layout
     ) {
         String line = "return " + compact.apply(expression) + ";";
-        return returnLineWidth(widthAnchor, line, lineBudget) <= options.lineWidth();
+        return returnLineWidth(widthAnchor, line, layout) <= options.lineWidth();
     }
 
     private Optional<Doc> directBinaryReturnWithMethodCallLeft(
             BinaryExpr binaryExpr,
-            LayoutWidth.LineBudget lineBudget
+            LayoutContext layout
     ) {
         if (
             !(binaryExpr.getLeft() instanceof MethodCallExpr methodCall)
@@ -126,7 +126,7 @@ final class ReturnBinaryExpressionLayout {
             || (methodCall.getArguments().size() == 1 && !sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall))
             || !methodCall.getAllContainedComments().isEmpty()
             || !binaryExpr.getRight().getAllContainedComments().isEmpty()
-            || !directBinaryReturnMethodCallFirstLineFits(methodCall, lineBudget)
+            || !directBinaryReturnMethodCallFirstLineFits(methodCall, layout)
             || !directBinaryReturnMethodCallClosingLineFits(binaryExpr)
         ) {
             return Optional.empty();
@@ -138,10 +138,10 @@ final class ReturnBinaryExpressionLayout {
 
     private boolean directBinaryReturnMethodCallFirstLineFits(
             MethodCallExpr methodCall,
-            LayoutWidth.LineBudget lineBudget
+            LayoutContext layout
     ) {
         String line = "return " + methodCallPrefix.apply(methodCall) + "(";
-        return layoutWidth.line(lineBudget, line) <= options.lineWidth();
+        return layoutWidth.line(layout.widthBudget(), line) <= options.lineWidth();
     }
 
     private boolean directBinaryReturnMethodCallClosingLineFits(BinaryExpr binaryExpr) {
@@ -157,10 +157,10 @@ final class ReturnBinaryExpressionLayout {
     private boolean directBinaryReturnFirstLineFits(
             BinaryExpr expression,
             Expression widthAnchor,
-            LayoutWidth.LineBudget lineBudget
+            LayoutContext layout
     ) {
         String line = "return " + compact.apply(firstBinaryOperand(expression));
-        return returnLineWidth(widthAnchor, line, lineBudget) <= options.lineWidth();
+        return returnLineWidth(widthAnchor, line, layout) <= options.lineWidth();
     }
 
     private boolean directBinaryReturnContinuationFits(
@@ -208,9 +208,13 @@ final class ReturnBinaryExpressionLayout {
      * the {@code begin.column}-driven break-then-collapse cycle tracked in #137. {@link LayoutWidth#nodeLine} counts the
      * enclosing block/type nesting to reproduce the deterministic rendered indentation ({@code "return "} at the block
      * indent) regardless of source column, matching the source-column-to-rendered-column correction from #155/#161.
+     *
+     * <p>The fixed-budget term reads its {@link LayoutWidth.LineBudget} from the return value's {@link LayoutContext}
+     * rather than a loose parameter (LDM-2 / #198); {@code widthBudget()} reproduces the prior budget exactly, so this
+     * stays byte-identical.
      */
-    private int returnLineWidth(Expression expression, String line, LayoutWidth.LineBudget lineBudget) {
-        int budgetWidth = layoutWidth.line(lineBudget, line);
+    private int returnLineWidth(Expression expression, String line, LayoutContext layout) {
+        int budgetWidth = layoutWidth.line(layout.widthBudget(), line);
         int renderedColumnWidth = layoutWidth.nodeLine(expression, line);
         return Math.max(budgetWidth, renderedColumnWidth);
     }

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.lanwen.frmtr.ExplainResult;
 import dev.lanwen.frmtr.doc.DocExplanation;
+import dev.lanwen.frmtr.doc.DocExplanation.BestFittingDecision;
 import dev.lanwen.frmtr.doc.DocExplanation.ConditionalGroupDecision;
 import dev.lanwen.frmtr.doc.DocExplanation.Decision;
 import dev.lanwen.frmtr.doc.DocExplanation.FillDecision;
@@ -35,11 +36,20 @@ final class ExplainViewTest {
         List<FillDecision> fills,
         List<ConditionalGroupDecision> conditionalGroups
     ) {
+        return explanationWith(fills, conditionalGroups, List.of());
+    }
+
+    private static DocExplanation explanationWith(
+        List<FillDecision> fills,
+        List<ConditionalGroupDecision> conditionalGroups,
+        List<BestFittingDecision> bestFittings
+    ) {
         return new DocExplanation(
             80,
             List.of(),
             fills,
             conditionalGroups,
+            bestFittings,
             List.of(),
             List.of(),
             new Node(Optional.empty(), Optional.empty(), 0, List.of())
@@ -90,6 +100,49 @@ final class ExplainViewTest {
                 .contains("alternative 0: flat width 25 > 20 available (from column 10)")
                 // The break-mode fallback contains a hard line break, so it reads as forced rather than a huge sentinel.
                 .contains("alternative 1: forced (contains a hard line break)");
+    }
+
+    @Test
+    void rendersRankedLineCountsForABestFittingLayoutThatWrapped() {
+        // The flattest alternative fans out to four lines with three columns of overflow; the second wraps to two lines
+        // and is chosen. The report shows each measured alternative's line count and marks the winner.
+        BestFittingDecision bestFitting = new BestFittingDecision(
+            Optional.of("java.expression:MethodCallExpr"),
+            1,
+            20,
+            0,
+            List.of(
+                new BestFittingDecision.Alternative(0, 4, 3, false),
+                new BestFittingDecision.Alternative(1, 2, 0, true)
+            )
+        );
+
+        String why = renderWhy(explanationWith(List.of(), List.of(), List.of(bestFitting)));
+
+        assertThat(why)
+                .contains("method chain wrapped (ranked by line count, chose alternative 1):")
+                .contains("alternative 0: 4 lines (3 over)")
+                .contains("alternative 1: 2 lines <- chosen");
+    }
+
+    @Test
+    void aBestFittingLayoutThatChoseAOneLineAlternativeIsNotReportedAsAWrap() {
+        // The flattest alternative fit on one line (zero newlines) and was chosen, so the node did not wrap and stays
+        // out of "why it wrapped".
+        BestFittingDecision bestFitting = new BestFittingDecision(
+            Optional.of("java.expression:MethodCallExpr"),
+            0,
+            80,
+            0,
+            List.of(
+                new BestFittingDecision.Alternative(0, 0, 0, true),
+                new BestFittingDecision.Alternative(1, 2, 0, false)
+            )
+        );
+
+        String why = renderWhy(explanationWith(List.of(), List.of(), List.of(bestFitting)));
+
+        assertThat(why).contains("Nothing wrapped").doesNotContain("method chain");
     }
 
     @Test

@@ -2,6 +2,7 @@ package dev.lanwen.frmtr.cli;
 
 import dev.lanwen.frmtr.ExplainResult;
 import dev.lanwen.frmtr.doc.DocExplanation;
+import dev.lanwen.frmtr.doc.DocExplanation.BestFittingDecision;
 import dev.lanwen.frmtr.doc.DocExplanation.ConditionalGroupDecision;
 import dev.lanwen.frmtr.doc.DocExplanation.Decision;
 import dev.lanwen.frmtr.doc.DocExplanation.FillDecision;
@@ -93,10 +94,12 @@ final class ExplainView {
                 .stream()
                 .filter(ConditionalGroupDecision::chosenInBreakMode)
                 .toList();
+        List<BestFittingDecision> rankedBestFittings = explanation.rankedBestFittings();
         boolean hasMeasuredReason = !printerWraps.isEmpty()
             || !rendererBreaks.isEmpty()
             || !brokenFills.isEmpty()
-            || !brokenConditionalGroups.isEmpty();
+            || !brokenConditionalGroups.isEmpty()
+            || !rankedBestFittings.isEmpty();
         List<ForcedBreak> causalForced = causalForcedBreaks(explanation, hasMeasuredReason);
 
         if (!hasMeasuredReason && causalForced.isEmpty()) {
@@ -119,6 +122,9 @@ final class ExplainView {
         }
         for (ConditionalGroupDecision conditionalGroup : brokenConditionalGroups) {
             appendConditionalGroupBreak(out, conditionalGroup);
+        }
+        for (BestFittingDecision bestFitting : rankedBestFittings) {
+            appendBestFittingBreak(out, bestFitting);
         }
         for (ForcedBreak forcedBreak : causalForced) {
             appendCausalForcedBreak(out, forcedBreak);
@@ -320,6 +326,44 @@ final class ExplainView {
         if (verbose) {
             out.append("    ")
                     .append(styler.style(Role.FADE, conditionalGroup.label().orElse("conditional group")))
+                    .append('\n');
+        }
+    }
+
+    /**
+     * Renders a {@link BestFittingDecision} whose chosen alternative wraps across lines. A best-fitting node ranks its
+     * alternatives by rendered line count rather than flat fit, so the report shows each measured alternative's line
+     * count (and overflow past the line width) and marks the winner, letting the developer see why the flatter
+     * alternatives lost.
+     */
+    private void appendBestFittingBreak(StringBuilder out, BestFittingDecision bestFitting) {
+        out.append("  ")
+                .append(styler.style(Role.LABEL, friendlyLabel(bestFitting.label().orElse("best-fitting layout"))))
+                .append(" wrapped")
+                .append(
+                    styler.style(
+                        Role.FADE,
+                        " (ranked by line count, chose alternative " + bestFitting.chosenIndex() + ")"
+                    )
+                )
+                .append(":\n");
+        for (BestFittingDecision.Alternative alternative : bestFitting.alternatives()) {
+            out.append("    alternative ")
+                    .append(styler.style(Role.NUMBER, alternative.index() + ""))
+                    .append(": ")
+                    .append(styler.style(Role.NUMBER, alternative.lines() + ""))
+                    .append(alternative.lines() == 1 ? " line" : " lines");
+            if (alternative.overflow() > 0) {
+                out.append(styler.style(Role.FADE, " (" + alternative.overflow() + " over)"));
+            }
+            if (alternative.chosen()) {
+                out.append(styler.style(Role.FADE, " <- chosen"));
+            }
+            out.append('\n');
+        }
+        if (verbose) {
+            out.append("    ")
+                    .append(styler.style(Role.FADE, bestFitting.label().orElse("best-fitting layout")))
                     .append('\n');
         }
     }

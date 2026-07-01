@@ -163,7 +163,13 @@ final class DocWidths {
             return measureLineCount(doc, indent, startColumn, lineWidth, 0);
         }
 
-        private LineCount measureLineCount(Doc doc, int indent, int startColumn, int lineWidth, int bestFittingDepth) {
+        /**
+         * The depth-parameterized {@link #measureLineCount}, exposed to {@link DocExplainRenderer} so the {@code
+         * --explain} trace can record the exact per-alternative line counts the ranking weighed at a nested
+         * best-fitting node's depth — the same numbers {@link #chooseBestFitting} used, so the explanation never reports
+         * a metric that differs from the one that picked the winner.
+         */
+        LineCount measureLineCount(Doc doc, int indent, int startColumn, int lineWidth, int bestFittingDepth) {
             LineCountWalk walk = new LineCountWalk(lineWidth, bestFittingDepth);
             walk.column = startColumn;
             walk.walk(doc, indent, LineMode.BREAK);

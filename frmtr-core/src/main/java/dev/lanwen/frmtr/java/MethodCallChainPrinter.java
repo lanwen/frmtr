@@ -838,6 +838,23 @@ final class MethodCallChainPrinter {
             if (expressionLambdaRoot.isPresent()) {
                 return expressionLambdaRoot;
             }
+            // LDM-3 (B8/D16): when the final segment carries breakable arguments the compact-with-broken-segment shape and
+            // the one-segment-per-line fan-out are both legal broken layouts that differ in rendered line count, so rank
+            // them with a single Doc.bestFitting and let the renderer keep whichever wraps least at the real output column,
+            // rather than committing to a shape via the fixed-column LayoutWidth probe below. Only width-driven,
+            // comment-free, non-source-shaped chains reach the ranker (promotion, source-multiline, and every
+            // comment-guarded branch already returned above); it defers back to this imperative tail otherwise.
+            Optional<Doc> rankedSingleSegment = rankedSingleSegmentChain(
+                methodRoot,
+                probeCall,
+                finalSegmentSuffix,
+                chainPlan.rootRendering(),
+                analysis,
+                lineBudget
+            );
+            if (rankedSingleSegment.isPresent()) {
+                return rankedSingleSegment;
+            }
             if (compactRootFinalSegmentLineOverflows(
                     methodRoot,
                     calls.getFirst(),
@@ -1001,6 +1018,69 @@ final class MethodCallChainPrinter {
                 methodCallChainSegmentAttachedToRootClose(call, finalSegmentSuffix, lineBudget)
             )
         );
+    }
+
+    /**
+     * LDM-3 (B8/D16): emits one ranked {@link Doc#bestFitting(java.util.List) bestFitting} for a comment-free,
+     * width-driven single-segment method-call chain whose final segment carries breakable arguments, replacing the
+     * {@link LayoutWidth}-probe gate that hand-picked the broken shape. The two alternatives are ordered flattest-first —
+     * (1) the compact shape that keeps the root and selector on one line and breaks only the final segment's argument list
+     * ({@code root.selector(}\n args \n{@code )}), and (2) the one-segment-per-line fan-out ({@code root}\n
+     * {@code .selector(...)}) — and the renderer keeps whichever wraps the fewest rendered lines at the real output
+     * column. This is reached only inside the broken-chain branch (the stay-flat gate already proved the flat form
+     * overflows), so a break is required; between the two broken shapes the compact one keeps the root and selector
+     * together and therefore wraps at least as few lines as the fan-out, which is the line-count decision the
+     * fixed-indent {@code LayoutWidth} probe could not make and the reason the renderer, not a probe, now owns it.
+     *
+     * <p><strong>Source-shape gates run before ranking.</strong> Returns {@link Optional#empty()} — deferring to the
+     * imperative tail below — unless the chain is chosen purely on width: the root renders through ordinary expression
+     * dispatch ({@link MethodCallChainSourcePlanner.ChainRootRendering#EXPRESSION_RENDERER}, so promoted / builder /
+     * broken-object-creation roots stay imperative), the chain and root arguments were not split across source lines, and
+     * the final segment carries breakable, non-lambda arguments. It also defers when {@link #compactRootWithBrokenFinalSegment}
+     * cannot build the compact shape (its opener does not fit), because then only the imperative broken-root fallback
+     * applies and there is nothing to rank. A deliberately-multiline chain or a promoted root is a source-preserved shape,
+     * never a width-ranked alternative, so ranking can never override it.
+     *
+     * <p><strong>Comment-bearing chains never reach here.</strong> The {@code !analysis.hasComments()} gate keeps them on
+     * the imperative ladder, whose {@code comments.speculatively(...)} rollbacks own the first-builder-wins claim; building
+     * both alternatives eagerly (as this does) would double-claim comments and trip the strict-claims guardrail.
+     */
+    private Optional<Doc> rankedSingleSegmentChain(
+            MethodCallExpr methodRoot,
+            MethodCallExpr call,
+            MethodCallChainTail finalSegmentSuffix,
+            MethodCallChainSourcePlanner.ChainRootRendering rootRendering,
+            MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis,
+            LayoutWidth.LineBudget lineBudget
+    ) {
+        if (
+            rootRendering != MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER
+            || analysis.hasComments()
+            || analysis.sourceMultilineChain()
+            || sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodRoot)
+            || methodCallSegmentHasSourceMultilineBlockLambdaArgument(methodRoot)
+            || call.getArguments().isEmpty()
+            || call.getArguments().stream().anyMatch(LambdaExpr.class::isInstance)
+            || methodCallSegmentHasBlockLambdaArgument(call)
+        ) {
+            return Optional.empty();
+        }
+        // Alternative 1 (flattest): keep the root and the selector on one line, breaking only the final segment's own
+        // argument group. compactRootWithBrokenFinalSegment builds the same shape the imperative O5 path does; if its
+        // guards reject the chain there is nothing width-driven to rank, so defer to the imperative tail.
+        Optional<Doc> compactBrokenSegment =
+            compactRootWithBrokenFinalSegment(methodRoot, call, finalSegmentSuffix, lineBudget);
+        if (compactBrokenSegment.isEmpty()) {
+            return Optional.empty();
+        }
+        // Alternative 2 (fallback, always legal): the one-segment-per-line fan-out — the root alone, then the selector on
+        // its own continuation line. This is the shape Branch P produces for a broken chain; here it competes on line
+        // count with the compact shape rather than being reached only after a width probe.
+        Doc fanOut = Doc.concat(
+            expressionRenderer.format(methodRoot, LayoutContext.root()),
+            chainContinuation(methodCallChainSegment(call, finalSegmentSuffix))
+        );
+        return Optional.of(Doc.bestFitting(List.of(compactBrokenSegment.orElseThrow(), fanOut)));
     }
 
     private boolean methodCallSegmentHasNoOwnContainedComments(MethodCallExpr expression) {

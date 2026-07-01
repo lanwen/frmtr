@@ -155,7 +155,7 @@ instead of building strings directly:
   ("render nothing" is not a layout choice) and treats a singleton as an unconditional flat-or-break fallback. It does
   **not** encode predicate-gated selection or ranking among multiple broken layouts, so it does not subsume the
   source/structural-predicate-gated `Optional<Doc>` layout dispatch in `MethodCallChainPrinter`. It is an additive
-  primitive not yet adopted by any Java printer.
+  primitive; `MethodCallChainPrinter` adopts `BestFitting` (below), not `ConditionalGroup`.
 - `BestFitting` holds an ordered, flattest-first list of layout alternatives and renders the one that **minimizes
   rendered line count** at the live output column, with a deterministic tie-break. It is the capability `ConditionalGroup`
   structurally lacks (layout-decision-model rule B8): a conditional group offers N flat candidates plus exactly one
@@ -167,8 +167,13 @@ instead of building strings directly:
   layering). The tie-break (rule D16) is strict — fewer lines, then less overflow, then the earliest (flattest) index —
   so it is deterministic and therefore idempotent. Ranking is bounded for linear time and native-image safety: only the
   first `DocWidths.MAX_BEST_FITTING_ALTERNATIVES` (8) alternatives are measured, and a best-fitting node nested past
-  `DocWidths.MAX_BEST_FITTING_DEPTH` (4) collapses to its first alternative instead of being ranked. It is an additive
-  primitive not yet adopted by any Java printer, so the fixture corpus is byte-identical.
+  `DocWidths.MAX_BEST_FITTING_DEPTH` (4) collapses to its first alternative instead of being ranked. `MethodCallChainPrinter`
+  is the first Java printer to emit it (layout-decision-model milestone LDM-3): a comment-free, width-driven single-segment
+  chain whose final segment carries breakable arguments emits `bestFitting([compact-with-broken-segment, one-per-line
+  fan-out])` and lets the renderer rank the two broken shapes at the real output column instead of committing to one via a
+  fixed-column `LayoutWidth` probe. The emission is gated to width-driven, source-shape-neutral chains only (see
+  `MethodCallChainPrinter` below), and because the ranking agrees with the retained probes at the real column the fixture
+  corpus stays byte-identical.
 - `IfBreak` selects different output for flat versus broken groups. With a null `groupId` it follows the ambient
   surrounding group (the common case); with a non-null `groupId` it follows the mode the identified `Group` recorded
   when it rendered earlier, so a closing delimiter can mirror the break/flat decision of an opener group it does not
@@ -424,7 +429,19 @@ continuation indentation, deeper than the `CURRENT` budget the AUTO entry assume
 (`MethodCallPrinter.methodCallArgumentDoc`) threads the `CONTINUATION` budget into the chain. When the resulting probe
 shows the chain over width but its short final segment (`.toRetry()`, `.build()`) has no arguments to wrap, the chain
 printer breaks the root's own argument list and glues the segment to its close, the same shape a source-multiline root
-already produces. The single-attachable-argument hug gates (`MethodCallPrinter.singleMethodCallArgument` /
+already produces. Layout-decision-model milestone LDM-3 routes one slice of this single-segment cluster through the
+`BestFitting` primitive instead of that fixed-column probe: `MethodCallChainPrinter.rankedSingleSegmentChain` emits
+`bestFitting([compact-with-broken-segment, one-per-line fan-out])` and lets the renderer rank the two broken shapes by
+rendered line count at the real output column. Two invariants keep the emission safe. First, **source-shape eligibility
+runs before ranking** — the ranker fires only for the width-driven, source-neutral case (root rendered through ordinary
+expression dispatch, chain and root arguments not split across source lines, a final segment with breakable non-lambda
+arguments); a promoted/builder/broken-object-creation root or a deliberately-multiline chain is a source-preserved shape
+selected by the gates above and is never a width-ranked alternative, so ranking cannot override it. Second, the emission
+is gated on the chain being **comment-free** (`!MethodCallChainAnalysis.hasComments()`): a comment-bearing chain stays on
+the imperative `speculatively` ladder whose first-builder-wins rollback owns the comment claim, because building both
+`bestFitting` alternatives eagerly would double-claim comments and trip the strict-claims guardrail. Because the ranking
+agrees with the retained probe at the real column, the fixture corpus is byte-identical. The single-attachable-argument
+hug gates (`MethodCallPrinter.singleMethodCallArgument` /
 `singleObjectCreationArgument`, which keep `outer(inner(` on one opener when the author broke a lone inner call or
 constructor argument) apply the same prefix-aware width rule through `attachedOpenerOverflows`: rather than measuring the
 hugged opener at the bare call indent, they add the value prefix that shares the call's first line, recovered as the

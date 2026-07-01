@@ -128,6 +128,53 @@ final class FrmtrTest {
     }
 
     @Test
+    void methodCallChainEmitsARankedBestFittingForAWidthDrivenCommentFreeChain() {
+        // LDM-3 (#208): a comment-free single-segment method-call chain whose final segment carries breakable arguments
+        // and whose flat form overflows the budget is laid out by a ranked Doc.bestFitting, not the old Optional<Doc>
+        // width-probe ladder. At 120 columns the compact-with-broken-segment shape (root and selector on one line, the
+        // argument list fanned) wraps the fewest rendered lines, so the renderer keeps it — and reformatting is a
+        // fixpoint because re-ranking the same alternatives at the same column picks the same winner.
+        FormatterOptions defaults = FormatterOptions.defaults();
+        String chain =
+            "class Router {\n"
+                + "  void register() {\n"
+                + "    ConnectionPlanner.between(primaryDataCenter, secondaryDataCenter)"
+                + ".establishRoute(activeSessionToken, fallbackSessionToken);\n"
+                + "  }\n"
+                + "}\n";
+
+        String formatted = Frmtr.format(chain, defaults);
+
+        assertThat(Frmtr.debugDoc(chain, defaults)).contains("BestFitting");
+        assertThat(formatted).contains(
+            "ConnectionPlanner.between(primaryDataCenter, secondaryDataCenter).establishRoute("
+        );
+        assertThat(Frmtr.format(formatted, defaults)).isEqualTo(formatted);
+    }
+
+    @Test
+    void methodCallChainKeepsACommentBearingChainOffTheRankedBestFittingPath() {
+        // The bestFitting emission is gated on the chain being comment-free: building every alternative eagerly to rank
+        // them would double-claim the receiver comment (first-builder-wins plus the strict-claims guardrail). The same
+        // chain with a trailing comment on the receiver therefore stays on the imperative comment-aware ladder — no
+        // BestFitting node is produced — while the comment survives in the formatted output.
+        FormatterOptions defaults = FormatterOptions.defaults();
+        String commentedChain =
+            "class Router {\n"
+                + "  void register() {\n"
+                + "    ConnectionPlanner.between(primaryDataCenter, secondaryDataCenter) // keep receiver note\n"
+                + "        .establishRoute(activeSessionToken, fallbackSessionToken);\n"
+                + "  }\n"
+                + "}\n";
+
+        String formatted = Frmtr.format(commentedChain, defaults);
+
+        assertThat(Frmtr.debugDoc(commentedChain, defaults)).doesNotContain("BestFitting");
+        assertThat(formatted).contains("// keep receiver note");
+        assertThat(Frmtr.format(formatted, defaults)).isEqualTo(formatted);
+    }
+
+    @Test
     void debugDocUsesFormatterOptionsThatAffectPrinterShape() {
         String source = """
                 class Demo {

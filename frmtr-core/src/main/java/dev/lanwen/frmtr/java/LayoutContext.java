@@ -24,19 +24,37 @@ package dev.lanwen.frmtr.java;
  *     this node. The end state measures fit at the node's real rendered column via the renderer, so this selector is a
  *     crutch and is removed when measurement parity (LDM-2 / C10) lands; until then it reproduces today's fixed
  *     baselines so no probe value changes
+ * @param trailingContent same-line content the <em>caller</em> will emit immediately after this node, which node-local
+ *     IR cannot see but a width gate must account for. The canonical case is a declaration header's throws clause: its
+ *     width has to include the {@code " {"} (body) or {@code ";"} (abstract) opener the caller appends on the same
+ *     line, so the gate is fed that opener here rather than guessing it node-locally. The empty string when no
+ *     same-line content follows (the common case, e.g. a statement or a return value that ends its own line). It is a
+ *     positional fact — <em>where</em> this node sits relative to what the caller emits after it — and so lives on the
+ *     context, distinct from the node's own rendered text
  */
 record LayoutContext(
     EnclosingConstruct enclosing,
     String leftEdgePrefix,
-    LayoutWidth.LineBudget widthBudget
+    LayoutWidth.LineBudget widthBudget,
+    String trailingContent
 ) {
 
     /**
-     * The compilation-unit-level starting context: at the root, with no left-edge prefix and the current-line width
-     * budget. This reproduces the defaults every call site assumed before {@code LayoutContext} existed, so threading
-     * it through changes no formatting decision.
+     * The compilation-unit-level starting context: at the root, with no left-edge prefix, no caller-emitted trailing
+     * content, and the current-line width budget. This reproduces the defaults every call site assumed before
+     * {@code LayoutContext} existed, so threading it through changes no formatting decision.
      */
     static LayoutContext root() {
-        return new LayoutContext(EnclosingConstruct.ROOT, "", LayoutWidth.LineBudget.CURRENT);
+        return new LayoutContext(EnclosingConstruct.ROOT, "", LayoutWidth.LineBudget.CURRENT, "");
+    }
+
+    /**
+     * Derives a copy of this context whose caller will emit {@code trailingContent} on the same line immediately after
+     * the node — for example a declaration header handing its throws-clause gate the {@code " {"} body opener it is
+     * about to append. Every other positional fact is preserved. Following the {@code LayoutContext} discipline this
+     * produces a fresh value rather than mutating; the original is unchanged.
+     */
+    LayoutContext withTrailingContent(String trailingContent) {
+        return new LayoutContext(enclosing, leftEdgePrefix, widthBudget, trailingContent);
     }
 }

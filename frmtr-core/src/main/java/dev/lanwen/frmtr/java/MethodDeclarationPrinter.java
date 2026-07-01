@@ -159,7 +159,7 @@ final class MethodDeclarationPrinter {
                     prefix,
                     declaration.getParameters(),
                     declaration.getThrownExceptions(),
-                    declaration.getBody().isPresent() ? " {" : ";",
+                    LayoutContext.root().withTrailingContent(declaration.getBody().isPresent() ? " {" : ";"),
                     sourceShapePolicy.throwsStartsOnOwnLine(declaration),
                     (sourceParametersBreak || parametersBreak) && callableSignatures.parametersCanBreak(declaration)
                 )
@@ -416,7 +416,7 @@ final class MethodDeclarationPrinter {
                 String prefix,
                 NodeList<Parameter> parameters,
                 NodeList<? extends Node> thrownExceptions,
-                String suffix,
+                LayoutContext layout,
                 boolean forceBreak,
                 boolean parametersBreak
         );

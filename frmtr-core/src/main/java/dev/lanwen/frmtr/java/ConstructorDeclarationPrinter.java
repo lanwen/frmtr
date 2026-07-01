@@ -88,7 +88,7 @@ final class ConstructorDeclarationPrinter {
                     prefix,
                     declaration.getParameters(),
                     declaration.getThrownExceptions(),
-                    " {",
+                    LayoutContext.root().withTrailingContent(" {"),
                     false,
                     parametersBreak && callableSignatures.parametersCanBreak(declaration)
                 )
@@ -117,7 +117,14 @@ final class ConstructorDeclarationPrinter {
         docs.add(Doc.text(declaration.getNameAsString()));
         if (!declaration.getThrownExceptions().isEmpty()) {
             docs.add(
-                throwsClause.render(prefix, NodeList.nodeList(), declaration.getThrownExceptions(), " {", false, false)
+                throwsClause.render(
+                    prefix,
+                    NodeList.nodeList(),
+                    declaration.getThrownExceptions(),
+                    LayoutContext.root().withTrailingContent(" {"),
+                    false,
+                    false
+                )
             );
         }
         docs.add(Doc.text(" "));
@@ -156,7 +163,7 @@ final class ConstructorDeclarationPrinter {
                 String prefix,
                 NodeList<Parameter> parameters,
                 NodeList<? extends Node> thrownExceptions,
-                String suffix,
+                LayoutContext layout,
                 boolean forceBreak,
                 boolean parametersBreak
         );

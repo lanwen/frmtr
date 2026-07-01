@@ -195,6 +195,13 @@ final class CallableSignaturePrinter {
     /**
      * Decides whether the callable parameter list must break before later signature clauses are appended.
      */
+    // C10 (#218): this gate still takes the caller's same-line prefix and suffix ("throws … {"/";") as ad-hoc string
+    // parameters and measures them at the fixed one-indent-level `currentIndentedWidth` baseline. Migrating it to source
+    // the trailer from LayoutContext.trailingContent() and measure at the real rendered column (a Doc.group/
+    // conditionalGroup, mirroring the LDM-2 gates) is deferred: threading a LayoutContext through parametersBreak and
+    // its callers is more invasive than the ThrowsClausePrinter seam, and the rendered-column measurement is a
+    // rebaselining C10 slice rather than part of this byte-identical enabler. Only the ThrowsClausePrinter gate was
+    // migrated to the new trailing-content field in #218.
     boolean parametersBreak(String prefix, CallableDeclaration<?> declaration, String suffix) {
         String parameters = callableParameterText(declaration);
         return currentIndentedWidth(prefix + "(" + parameters + ")" + suffix) > options.lineWidth();

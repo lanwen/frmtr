@@ -489,7 +489,23 @@ gates (`StatementPrinter.tryOpenerLineWidth`, feeding both the whole-section fla
 method-call resource) measure the same way: the `try (…) {` opener renders at the statement's rendered block/type depth,
 so counting that nesting through `LayoutWidth.nodeLine` (floored by the `CURRENT` baseline) replaces the fixed one-unit
 budget that under-counted every non-top-level `try` and collapsed a resource list flat over width when nested inside a
-method body or deeper (#219). A per-run
+method body or deeper (#219).
+
+The per-node *positional* facts a width gate needs — distinct from the run-scoped `JavaFormatContext` services and
+from per-type dispatch — travel in an immutable `LayoutContext` record threaded down the descent
+(`EnclosingConstruct` position, `leftEdgePrefix`, a transitional `LayoutWidth.LineBudget` selector, and the
+`trailingContent` the caller will emit on the same line after the node). `trailingContent` carries the one fact
+node-local IR cannot see: the same-line opener a header appends after a clause. The canonical case is the throws
+clause — a declaration header's `throws …` width has to include the `" {"` (body) or `";"` (abstract) the caller
+glues on that line — so `MethodDeclarationPrinter`/`ConstructorDeclarationPrinter` thread that opener as
+`LayoutContext.root().withTrailingContent(" {"/";")` and `ThrowsClausePrinter` reads it from the context
+(`layout.trailingContent()`) rather than receiving an ad-hoc `suffix` string, keeping the trailer a positional fact
+about where the clause sits instead of a loose parameter (#218). The record stays a plain record with a `root()`
+default of no trailer and a `withTrailingContent` derivation, so it is native-image safe and every non-header call
+site is unaffected. Moving the throws gate's *measurement* off the fixed one-indent-level `currentIndented` baseline
+onto a rendered-column `Doc.group`/`conditionalGroup` (the C10 parity the LDM-2 unary/ternary/return gates already
+have) is a separate rebaselining slice; the `parametersBreak` and breakable-argument width gates still take their
+same-line prefix/suffix as ad-hoc strings and carry `// C10:` notes pointing at #218. A per-run
 `SourceShapePolicy` on `JavaFormatContext` is the consolidating home for
 "should the formatter respect the author's source shape here?" decisions, so printers ask one named question instead of
 re-deriving those reads from raw token text or `getRange()` arithmetic. It owns one canonical definition of each

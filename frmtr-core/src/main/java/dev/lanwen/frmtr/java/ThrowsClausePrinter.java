@@ -48,16 +48,27 @@ final class ThrowsClausePrinter {
             String prefix,
             NodeList<Parameter> parameters,
             NodeList<? extends Node> thrownExceptions,
-            String suffix,
+            LayoutContext layout,
             boolean forceBreak,
             boolean parametersBreak
     ) {
+        // The same-line content the caller emits after the throws clause — the "{" of a body or the ";" of an abstract
+        // declaration — is carried on the context as trailing content rather than passed as a loose suffix string, so
+        // the width gate reads "what follows me on this line" from its position (LayoutContext #218) instead of the
+        // caller re-describing it here.
+        String suffix = layout.trailingContent();
         String exceptions = compactJoin.apply(thrownExceptions);
         String throwsText = "throws " + exceptions;
         String flatParameters = "("
             + parameters.stream().map(compact).reduce((left, right) -> left + ", " + right).orElse("")
             + ")";
         String flatSignature = prefix + flatParameters;
+        // C10 (#218): this still measures the same-line width at the fixed one-indent-level `currentIndented` baseline
+        // rather than the real rendered column. Sourcing the trailer from the context (above) is byte-identical — it
+        // reproduces the old `suffix` string exactly. Moving the measurement itself onto a rendered-column
+        // Doc.group/conditionalGroup (so nested-class members are measured at their true column) is a separate,
+        // rebaselining C10 slice mirroring the LDM-2 unary/ternary/return gates, deferred out of this byte-identical
+        // enabler.
         int sameLineWidth = parametersBreak
             ? currentIndentedWidth.applyAsInt(") " + throwsText + suffix)
             : currentIndentedWidth.applyAsInt(flatSignature + " " + throwsText + suffix);

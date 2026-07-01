@@ -48,8 +48,6 @@ final class ReturnExpressionPrinter {
 
     private final Function<Expression, String> compact;
 
-    private final ConditionalExpressionLineProjection conditionalProjection;
-
     private final ToIntFunction<String> currentIndentedWidth;
 
     private final ToIntFunction<String> continuationStatementWidth;
@@ -149,7 +147,6 @@ final class ReturnExpressionPrinter {
         this.expressionWithTail = expressionWithTail;
         this.brokenLambdaExpression = brokenLambdaExpression;
         this.compact = compact;
-        this.conditionalProjection = new ConditionalExpressionLineProjection(compact);
         this.currentIndentedWidth = currentIndentedWidth;
         this.continuationStatementWidth = continuationStatementWidth;
         this.sourceMultilineExpressionLambda = sourceMultilineExpressionLambda;
@@ -211,15 +208,42 @@ final class ReturnExpressionPrinter {
             return commentBearingBinaryReturn(binaryExpr, layout);
         }
         Doc preSemicolonComment = preSemicolonValueComment(expression);
-        Doc semicolon = preSemicolonComment == Doc.EMPTY
-            ? Doc.text(";")
-            : Doc.concat(Doc.HARD_LINE, Doc.text(";"));
-        return Doc.concat(
-            Doc.text("return "),
-            returnExpression(expression, layout),
-            preSemicolonComment,
-            semicolon
-        );
+        if (preSemicolonComment != Doc.EMPTY) {
+            // A pre-semicolon line comment forces the terminator onto its own line, so the whole return already breaks.
+            // The value's flat-versus-broken choice here is made by the imperative oracle exactly as before (the trailing
+            // comment does not enter its width gate), keeping this comment-bearing shape byte-identical.
+            return Doc.concat(
+                Doc.text("return "),
+                returnExpression(expression, layout),
+                preSemicolonComment,
+                Doc.concat(Doc.HARD_LINE, Doc.text(";"))
+            );
+        }
+        // Source-shape entries and branches whose broken shape is itself chosen by width (object creation, enclosed or
+        // direct binary continuations, object-creation-rooted chains) keep the imperative oracle for that broken-shape
+        // ranking (LDM-3); they pre-empt the renderer-measured gate below.
+        Optional<Doc> preempted = preemptedReturnValue(expression, layout);
+        if (preempted.isPresent()) {
+            return Doc.concat(Doc.text("return "), preempted.orElseThrow(), Doc.text(";"));
+        }
+        if (expression.getComment().isPresent() || !expression.getAllContainedComments().isEmpty()) {
+            // A comment-bearing value cannot use the conditional group: both arms build the value, and rendering a value
+            // claims its comments (identity-based, first-builder-wins), so the comment would be owned by whichever arm is
+            // built first while the renderer independently picks an arm by width. When those disagree the comment is
+            // dropped and the two passes diverge. The imperative oracle renders the value exactly once, so comment-bearing
+            // returns stay on it (byte-identical to before); only comment-free returns move to the renderer-measured gate.
+            return Doc.concat(Doc.text("return "), returnExpression(expression, layout), Doc.text(";"));
+        }
+        // Judge "does `return value;` fit on one line" at the true rendered column: build the flat return line and the
+        // broken return line and let the renderer choose via Doc.conditionalGroup. The earlier gate compared a
+        // reconstructed nodeLine/budget width, which could disagree with the column write reaches (the #137/#155
+        // width-at-wrong-column family) and print a genuinely over-width return flat, then break it on a later pass. The
+        // broken arm keeps the ranked/imperative broken-shape selection (forced chain, forced ternary, lambda break,
+        // logical-complement break, parenthesized/binary continuation); the conditional group only moves the
+        // flat-versus-broken verdict to the renderer.
+        Doc flatReturn = Doc.concat(Doc.text("return "), this.expression.apply(expression), Doc.text(";"));
+        Doc brokenReturn = Doc.concat(Doc.text("return "), brokenReturnValue(expression, layout), Doc.text(";"));
+        return Doc.conditionalGroup(List.of(flatReturn, brokenReturn));
     }
 
     /**
@@ -318,48 +342,78 @@ final class ReturnExpressionPrinter {
     }
 
     /**
-     * Prints the return value flat unless the complete {@code return value;} line is too wide.
+     * Renders the return value on the comment-bearing terminator path, where a pre-semicolon comment already forces the
+     * statement to break, so the flat-versus-broken verdict stays on the imperative oracle.
      *
-     * <p>The gate checks the keyword and semicolon with the value because a value that fits by itself can still overflow
-     * once it is placed inside a return statement. When the whole statement fits, expression dispatch keeps its ordinary
-     * shape; only overflowing return lines enter the return-specific break tree.
-     *
-     * <p>The break decision for a method-call value is width-first: the flat {@code return value;} width is checked before
-     * the source-shape forced breaks. Only when the flat form genuinely overflows do the source-multiline signals
-     * ({@code methodCallChainIsSourceMultiline}, {@code wasMultiline}, {@code sourceMultilineExpressionLambdaBody}) act as
-     * a fallback that chooses the broken chain shape. This keeps the result a function of width rather than of the input's
-     * line shape, so a {@code return <call>} that fits stays flat whether the source wrote it on one line or across
-     * several, and the formatter reaches the same fixed point from either input.
+     * <p>This reproduces the historical branch order — the source-shape/width-ranked pre-empt branches, then the
+     * {@link #returnLineFits} width gate, then the imperative broken tree — so a return that carries a trailing pre-{@code
+     * ;} comment is byte-identical to before. The renderer-measured gate that replaces {@code returnLineFits} lives in
+     * {@link #returnStatement}, on the ordinary (no pre-{@code ;} comment) path where the whole {@code return value;} line
+     * can be handed to a {@link Doc#conditionalGroup(java.util.List)}.
      */
     private Doc returnExpression(Expression expression, LayoutContext layout) {
+        Optional<Doc> preempted = preemptedReturnValue(expression, layout);
+        if (preempted.isPresent()) {
+            return preempted.orElseThrow();
+        }
+        if (returnLineFits(expression, layout)) {
+            return this.expression.apply(expression);
+        }
+        return brokenReturnValue(expression, layout);
+    }
+
+    /**
+     * Renders the return value for the branches whose choice of broken shape is itself decided by width (LDM-3), so they
+     * cannot be expressed as a two-arm flat-versus-broken group and keep their imperative oracle.
+     *
+     * <p>These are the source-multiline enclosed binary (broken through the width-ranked direct-binary layout), the
+     * source-multiline object creation, and an object-creation-rooted method-call chain whose first line is measured to
+     * pick the broken chain shape. Each internally decides flat-versus-broken and, when broken, which broken shape to use;
+     * the renderer-measured gate cannot express that ranking, so these pre-empt it. Everything else falls through to the
+     * flat-versus-broken conditional group in {@link #returnStatement}.
+     */
+    private Optional<Doc> preemptedReturnValue(Expression expression, LayoutContext layout) {
         Optional<BinaryExpr> sourceMultilineEnclosedBinary = sourceMultilineEnclosedBinary(expression);
         if (sourceMultilineEnclosedBinary.isPresent()) {
             BinaryExpr binaryExpr = sourceMultilineEnclosedBinary.orElseThrow();
-            return binaryReturns.directBinaryReturn(binaryExpr, expression, layout).orElseGet(
-                () -> parenthesizedBreak.apply(binaryExpr, true)
+            // LDM-3: the enclosed-binary broken shape is ranked by width (direct-binary continuation versus parenthesized
+            // break), so this stays on the imperative oracle rather than the renderer-measured flat-versus-broken group.
+            return Optional.of(
+                binaryReturns.directBinaryReturn(binaryExpr, expression, layout).orElseGet(
+                    () -> parenthesizedBreak.apply(binaryExpr, true)
+                )
             );
         }
         if (sourceMultilineObjectCreation(expression)) {
-            return brokenObjectCreation.apply((ObjectCreationExpr) expression);
-        }
-        if (
-            expression instanceof ConditionalExpr conditionalExpr
-            && conditionalReturnLineOverflows(conditionalExpr, layout)
-        ) {
-            return conditionalExpression.apply(conditionalExpr, true);
+            return Optional.of(brokenObjectCreation.apply((ObjectCreationExpr) expression));
         }
         if (
             expression instanceof MethodCallExpr methodCall
             && objectCreationRootMethodCallReturnLineOverflows(methodCall, layout)
         ) {
+            // LDM-3: an object-creation-rooted chain measures its own first line to choose the broken chain shape, a
+            // ranking a two-arm group cannot express, so this width gate stays imperative.
             Optional<Doc> forcedChain = returnWithForcedMethodCallChain(methodCall, layout);
             if (forcedChain.isPresent()) {
-                return forcedChain.orElseThrow();
+                return forcedChain;
             }
         }
-        if (returnLineFits(expression, layout)) {
-            return this.expression.apply(expression);
-        }
+        return Optional.empty();
+    }
+
+    /**
+     * Builds the broken return value used as the {@link Doc#conditionalGroup(java.util.List)} fallback in
+     * {@link #returnStatement}: the shape the return takes once the renderer has judged the flat {@code return value;}
+     * too wide for the columns left.
+     *
+     * <p>This keeps the historical ranked/imperative broken-shape selection reached when the old {@code returnLineFits}
+     * gate failed: a source-multiline or lambda-bodied method-call value forces its chain shape, a string concatenation
+     * around a source-multiline call argument stays on ordinary expression dispatch, and everything else routes through
+     * {@link #brokenReturnExpression} (forced chain, forced ternary, lambda break, logical-complement break,
+     * parenthesized/binary continuation). The flat arm is ordinary expression dispatch; only the flat-versus-broken
+     * verdict moved to the renderer.
+     */
+    private Doc brokenReturnValue(Expression expression, LayoutContext layout) {
         if (
             expression instanceof MethodCallExpr methodCall
             && (methodCallChainIsSourceMultiline.test(methodCall)
@@ -389,11 +443,6 @@ final class ReturnExpressionPrinter {
             return false;
         }
         String line = "return " + methodCallPrefix.apply(expression) + "(";
-        return returnLineWidth(expression, line, layout) > options.lineWidth();
-    }
-
-    private boolean conditionalReturnLineOverflows(ConditionalExpr expression, LayoutContext layout) {
-        String line = "return " + conditionalProjection.line(expression) + ";";
         return returnLineWidth(expression, line, layout) > options.lineWidth();
     }
 

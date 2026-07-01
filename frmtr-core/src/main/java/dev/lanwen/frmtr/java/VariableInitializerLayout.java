@@ -275,11 +275,22 @@ final class VariableInitializerLayout {
             );
         }
         Doc trailingLineComment = trailingDeclaratorLineComment(variable);
-        Doc declaration = variable.getInitializer()
-                .map(initializer -> variableWithInitializer(variable, initializer, declarationPrefix))
-                .orElseGet(() -> Doc.text(variableName(variable)));
         Doc preSemicolonInitializerComment = preSemicolonInitializerComment(variable);
-        Doc semicolon = preSemicolonInitializerComment == Doc.EMPTY
+        // When the terminating `;` stays on the declaration line (no pre-`;` comment forcing it down), thread it into the
+        // initializer so the (A) conditional group measures the flat form's fit *with* its `;` at the true column — the
+        // same one column the old `compact + ";"` gate counted. When a pre-`;` comment drops the `;` onto its own line the
+        // group terminator is empty and the initializer stays on the imperative cascade, with the HARD_LINE + `;` appended
+        // after the shape exactly as before.
+        boolean semicolonOnDeclarationLine = preSemicolonInitializerComment == Doc.EMPTY;
+        Doc groupTerminator = semicolonOnDeclarationLine ? Doc.text(";") : Doc.EMPTY;
+        Doc declaration = variable.getInitializer()
+                .map(initializer -> variableWithInitializer(variable, initializer, declarationPrefix, groupTerminator))
+                .orElseGet(() -> Doc.text(variableName(variable)));
+        if (semicolonOnDeclarationLine && variable.getInitializer().isPresent()) {
+            // The initializer shape already carries the `;` (threaded as the group terminator above).
+            return Doc.concat(declaration, trailingLineComment(trailingLineComment));
+        }
+        Doc semicolon = semicolonOnDeclarationLine
             ? Doc.text(";")
             : Doc.concat(Doc.HARD_LINE, Doc.text(";"));
         return Doc.concat(
@@ -441,16 +452,96 @@ final class VariableInitializerLayout {
     }
 
     /**
-     * Chooses the initializer shape while preserving comments around {@code =}, source-leading initializer comments,
-     * and construct-specific break rules before falling back to the shared expression renderer.
+     * Chooses the initializer shape for a declarator whose terminator is emitted separately (a non-last multi-declarator
+     * variable, whose {@code ,} the joining printer inserts). Passing {@link Doc#EMPTY} as the group terminator keeps this
+     * path on the historical imperative cascade, byte-identical to before the {@code (A)} renderer-measured gate.
      */
     Doc variableWithInitializer(
             VariableDeclarator variable,
             Expression initializer,
             String declarationPrefix
     ) {
+        return variableWithInitializer(variable, initializer, declarationPrefix, Doc.EMPTY);
+    }
+
+    /**
+     * Chooses the initializer shape while preserving comments around {@code =}, source-leading initializer comments,
+     * and construct-specific break rules before falling back to the shared expression renderer.
+     *
+     * <p>{@code groupTerminator} is the same-line terminator ({@code ;}) that the caller would otherwise append after the
+     * whole declaration. When it is non-{@link Doc#EMPTY} and the initializer is eligible (see
+     * {@link #canMeasureInitializerAtRenderedColumn}), it is folded into both arms of the {@code (A)} conditional group so
+     * the renderer measures the flat form's fit <em>with</em> its terminator at the true column — reproducing the old
+     * {@code compact + ";"} gate width. Otherwise it is appended after the imperative shape, exactly as before.
+     */
+    Doc variableWithInitializer(
+            VariableDeclarator variable,
+            Expression initializer,
+            String declarationPrefix,
+            Doc groupTerminator
+    ) {
         String flat = declarationPrefix + variable.getNameAsString() + " = " + compact.apply(initializer) + ";";
         String name = variableName(variable);
+        // Comment-around-`=`, source-leading comments, and the source-shape/self-breaking preempts run first and, when one
+        // fires, own the whole shape. They are terminator-agnostic, so the caller's same-line terminator is appended after
+        // whichever shape they return (byte-identical to the historical `concat(declaration, ";")`). Only when none fires
+        // does control reach the (A) renderer-measured gate below.
+        Optional<Doc> commentOrPreempt = variableInitializerCommentAndSourceShapeTier(
+            variable,
+            initializer,
+            name,
+            declarationPrefix,
+            flat
+        );
+        if (commentOrPreempt.isPresent()) {
+            return Doc.concat(commentOrPreempt.orElseThrow(), groupTerminator);
+        }
+        // (A) Master over-width gate at the real rendered column. The ~10 repeated
+        // `variableInitializer(variable, flat) > lineWidth` tests below (all comparing the same reconstructed
+        // AST-nesting-depth baseline) collapse into a single Doc.conditionalGroup: the renderer decides flat-versus-broken
+        // at the true running column. The flat arm is ordinary expression dispatch; the broken arm is the existing
+        // construct-kind broken-shape dispatch (the same cascade bodies, only reached now when the renderer judges the
+        // flat form too wide). The earlier reconstructed baseline could disagree with the column write reaches (the
+        // #137/#155 width-at-wrong-column family) and print a genuinely over-width initializer flat, then break it on a
+        // later pass; measuring at the real column makes the decision a fixpoint by construction rather than by tuning.
+        if (canMeasureInitializerAtRenderedColumn(initializer, groupTerminator)) {
+            Doc flatInitializer = Doc.concat(
+                Doc.text(name + " = "),
+                expression.apply(initializer),
+                groupTerminator
+            );
+            Doc brokenInitializer = Doc.concat(
+                variableInitializerBrokenOrFlat(variable, initializer, name, declarationPrefix, flat, true),
+                groupTerminator
+            );
+            return Doc.conditionalGroup(List.of(flatInitializer, brokenInitializer));
+        }
+        return Doc.concat(
+            variableInitializerBrokenOrFlat(variable, initializer, name, declarationPrefix, flat, false),
+            groupTerminator
+        );
+    }
+
+    /**
+     * Runs the comment-around-{@code =}, source-leading-comment, and source-shape/self-breaking preempt tier, returning the
+     * chosen shape when one branch owns the initializer or {@link Optional#empty()} to fall through to the {@code (A)}
+     * renderer-measured gate.
+     *
+     * <p>This is the initializer's analogue of {@code ReturnExpressionPrinter}'s {@code preemptedReturnValue}: everything
+     * whose broken shape is chosen by width-ranking or by a preserved source shape (a source-multiline object creation or
+     * chain, a conditional whose broken ternary shape is ranked, a block-lambda-argument receiver break, an over-width
+     * {@code blockStatement}-gated array/object/binary/complement break) is decided here, imperatively, exactly as before.
+     * Keeping this tier untouched means the {@code (A)} conditional group only ever moves the flat-versus-broken verdict
+     * for the residual, single-line-flat, comment-free initializers — never a ranked or source-preserved shape. The
+     * returned shape carries no trailing terminator; the caller appends it.
+     */
+    private Optional<Doc> variableInitializerCommentAndSourceShapeTier(
+            VariableDeclarator variable,
+            Expression initializer,
+            String name,
+            String declarationPrefix,
+            String flat
+    ) {
         Optional<Doc> preEqualsBlockComment = preEqualsBlockComment(variable, initializer);
         if (preEqualsBlockComment.isPresent()) {
             String commentedName = name + " " + commentText(preEqualsBlockComment.orElseThrow());
@@ -460,12 +551,14 @@ final class VariableInitializerLayout {
                 + compactWithoutOwnComment.apply(initializer)
                 + ";";
             if (layoutWidth.blockStatement(commentedFlat) > options.lineWidth()) {
-                return Doc.concat(
+                return Optional.of(Doc.concat(
                     Doc.text(commentedName + " ="),
                     Doc.indent(Doc.concat(Doc.HARD_LINE, expressionWithoutOwnComment.apply(initializer)))
-                );
+                ));
             }
-            return Doc.concat(Doc.text(commentedName + " = "), expressionWithoutOwnComment.apply(initializer));
+            return Optional.of(
+                Doc.concat(Doc.text(commentedName + " = "), expressionWithoutOwnComment.apply(initializer))
+            );
         }
         Optional<Doc> postEqualsBlockComment = postEqualsBlockComment(variable, initializer);
         if (postEqualsBlockComment.isPresent()) {
@@ -478,19 +571,19 @@ final class VariableInitializerLayout {
                 + compactWithoutOwnComment.apply(initializer)
                 + ";";
             if (layoutWidth.blockStatement(commentedFlat) > options.lineWidth()) {
-                return Doc.concat(
+                return Optional.of(Doc.concat(
                     Doc.text(name + " = " + commentText),
                     Doc.indent(Doc.concat(Doc.HARD_LINE, expressionWithoutOwnComment.apply(initializer)))
-                );
+                ));
             }
-            return Doc.concat(
+            return Optional.of(Doc.concat(
                 Doc.text(name + " = " + commentText + " "),
                 expressionWithoutOwnComment.apply(initializer)
-            );
+            ));
         }
         Optional<Doc> leadingInitializerComments = leadingInitializerComments(variable, initializer);
         if (leadingInitializerComments.isPresent()) {
-            return Doc.concat(
+            return Optional.of(Doc.concat(
                 Doc.text(name + " ="),
                 Doc.indent(
                     Doc.concat(
@@ -500,26 +593,28 @@ final class VariableInitializerLayout {
                         expression.apply(initializer)
                     )
                 )
-            );
+            ));
         }
         if (initializer instanceof BinaryExpr binaryExpr && binaryExpressionHasLineComments.test(binaryExpr)) {
             if (binaryInitializerCanKeepFirstOperandWithEquals(variable, declarationPrefix, binaryExpr)) {
-                return Doc.concat(
+                return Optional.of(Doc.concat(
                     Doc.text(name + " = "),
                     Doc.indent(binaryExpressionLinesWithComments.apply(binaryExpr))
-                );
+                ));
             }
-            return Doc.concat(
+            return Optional.of(Doc.concat(
                 Doc.text(name + " ="),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLinesWithComments.apply(binaryExpr)))
-            );
+            ));
         }
         if (
             initializer instanceof ConditionalExpr conditionalExpr
             && conditionalInitializerLineOverflows(variable, declarationPrefix, conditionalExpr)
             && !initializerHasOwnBreak(initializer)
         ) {
-            return conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr);
+            return Optional.of(
+                conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr)
+            );
         }
         if (
             initializer instanceof MethodCallExpr methodCall
@@ -534,7 +629,7 @@ final class VariableInitializerLayout {
                 methodCall
             );
             if (receiverBreakCall.isPresent()) {
-                return receiverBreakCall.orElseThrow();
+                return Optional.of(receiverBreakCall.orElseThrow());
             }
         }
         if (
@@ -548,22 +643,26 @@ final class VariableInitializerLayout {
                 methodCall
             );
             if (brokenCall.isPresent()) {
-                return brokenCall.orElseThrow();
+                return Optional.of(brokenCall.orElseThrow());
             }
         }
         if (layoutWidth.blockStatement(flat) > options.lineWidth()) {
             Optional<Doc> suffixedEnclosedInitializer = suffixedEnclosedExpression.apply(initializer, true);
             if (suffixedEnclosedInitializer.isPresent()) {
-                return Doc.concat(Doc.text(name + " = "), suffixedEnclosedInitializer.orElseThrow());
+                return Optional.of(Doc.concat(Doc.text(name + " = "), suffixedEnclosedInitializer.orElseThrow()));
             }
             if (initializer instanceof ConditionalExpr conditionalExpr && !initializerHasOwnBreak(initializer)) {
-                return conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr);
+                return Optional.of(
+                    conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr)
+                );
             }
             if (
                 initializer instanceof ArrayAccessExpr arrayAccessExpr
                 && arrayAccessExpr.getName().isEnclosedExpr()
             ) {
-                return Doc.concat(Doc.text(name + " = "), arrayAccessWithBrokenEnclosedName.apply(arrayAccessExpr));
+                return Optional.of(
+                    Doc.concat(Doc.text(name + " = "), arrayAccessWithBrokenEnclosedName.apply(arrayAccessExpr))
+                );
             }
             if (initializer instanceof ArrayCreationExpr arrayCreationExpr) {
                 Optional<Doc> arrayCreation = variableWithBrokenArrayCreation(
@@ -572,7 +671,7 @@ final class VariableInitializerLayout {
                     arrayCreationExpr
                 );
                 if (arrayCreation.isPresent()) {
-                    return arrayCreation.orElseThrow();
+                    return Optional.of(arrayCreation.orElseThrow());
                 }
             }
             if (initializer instanceof ObjectCreationExpr objectCreationExpr) {
@@ -582,7 +681,7 @@ final class VariableInitializerLayout {
                     objectCreationExpr
                 );
                 if (objectCreation.isPresent()) {
-                    return objectCreation.orElseThrow();
+                    return Optional.of(objectCreation.orElseThrow());
                 }
             }
             if (
@@ -600,42 +699,102 @@ final class VariableInitializerLayout {
                     methodCall
                 );
                 if (forcedChain.isPresent()) {
-                    return forcedChain.orElseThrow();
+                    return Optional.of(forcedChain.orElseThrow());
                 }
             }
             if (logicalComplementOfParenthesizedBinary(initializer) instanceof Expression inner) {
-                return Doc.concat(
+                return Optional.of(Doc.concat(
                     Doc.text(name + " = !"),
                     parenthesizedBreak.apply(inner, true)
-                );
+                ));
             }
             if (initializer instanceof BinaryExpr binaryExpr) {
                 if (binaryInitializerCanKeepFirstOperandWithEquals(variable, declarationPrefix, binaryExpr)) {
-                    return Doc.concat(
+                    return Optional.of(Doc.concat(
                         Doc.text(name + " = "),
                         Doc.indent(binaryExpressionLines.apply(initializer, true))
-                    );
+                    ));
                 }
                 if (shouldKeepCastDivisionContinuationFlat.test(binaryExpr)) {
-                    return Doc.concat(
+                    return Optional.of(Doc.concat(
                         Doc.text(name + " ="),
                         Doc.indent(Doc.concat(Doc.HARD_LINE, expression.apply(binaryExpr)))
-                    );
+                    ));
                 }
-                return Doc.concat(
+                return Optional.of(Doc.concat(
                     Doc.text(name + " ="),
                     Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines.apply(initializer, true)))
-                );
+                ));
             }
         }
         if (
             initializer instanceof MethodCallExpr methodCall
             && methodCall.getScope().filter(TextBlockLiteralExpr.class::isInstance).isPresent()
         ) {
-            return Doc.concat(Doc.text(name + " = "), this.methodCall.apply(methodCall));
+            return Optional.of(Doc.concat(Doc.text(name + " = "), this.methodCall.apply(methodCall)));
         }
+
+        return Optional.empty();
+    }
+
+    /**
+     * Decides whether a comment-free initializer's flat-versus-broken verdict may be handed to the renderer-measured
+     * {@link Doc#conditionalGroup} (A), or must stay on the historical imperative cascade to remain byte-identical.
+     *
+     * <p>The conditional group measures its flat arm at the real running column and picks the broken arm when the flat
+     * arm does not fit. That only reproduces the old {@code variableInitializer(variable, compact + ";")} gate when two
+     * conditions hold, so both are required here:
+     *
+     * <ul>
+     *   <li><b>The flat arm is a single line.</b> The old gate measured the <em>compact</em> (single-line) projection,
+     *       whereas the group measures the actual flat {@link Doc}. For a construct that renders its own internal breaks
+     *       even when narrow — an own-break initializer (array/switch/anonymous-class), a source-multiline shape the
+     *       policy preserves, or a cast wrapping either — the flat {@code Doc} carries a forced break, so the group would
+     *       read it as never-fitting and always pick the broken arm, diverging from the old compact-measured verdict. A
+     *       comment-bearing initializer is excluded for a different reason (both arms would claim its comments), so the
+     *       comment guard is folded in here too. These stay on the imperative cascade, which renders the initializer
+     *       exactly once via {@code expression.apply} (its own break intact) and reproduces the old per-branch gate.</li>
+     *   <li><b>The trailing terminator is measurable inline.</b> The {@code ;} (or {@code ,}) that follows the initializer
+     *       on the same line is one column the old gate counted (its {@code flat} ended with {@code ;}); the group only
+     *       counts it when it is part of the measured arm. The statement-terminator caller threads {@code Doc.text(";")}
+     *       here so both arms carry it; the multi-declarator comma path and the pre-{@code ;}-comment path pass
+     *       {@link Doc#EMPTY} and stay imperative, where the terminator is appended after the shape exactly as before.</li>
+     * </ul>
+     */
+    private boolean canMeasureInitializerAtRenderedColumn(Expression initializer, Doc groupTerminator) {
+        return groupTerminator != Doc.EMPTY
+            && initializer.getComment().isEmpty()
+            && initializer.getAllContainedComments().isEmpty()
+            && !initializerHasOwnBreak(initializer)
+            && !(initializer instanceof CastExpr)
+            && !sourceShapePolicy.wasMultiline(initializer);
+    }
+
+    /**
+     * Dispatches the construct-specific broken initializer shape, reached from the {@code (A)} master gate's broken arm
+     * (and, unchanged, from the comment-bearing imperative path).
+     *
+     * <p>{@code forceBroken} carries the renderer's flat-versus-broken verdict into what used to be ~10 repeated
+     * {@code variableInitializer(variable, flat) > lineWidth} tests. When the caller is the {@link Doc#conditionalGroup}
+     * broken arm it passes {@code true} — the renderer already judged the flat form too wide, so every branch that used to
+     * gate on that reconstructed width now gates on the real column instead. When the caller is the comment-bearing path
+     * it passes {@code false}, reproducing the historical per-branch width gate exactly so that path stays byte-identical.
+     * Each branch's broken shape is unchanged: the master gate only moves the flat-versus-broken decision, not which
+     * broken shape a construct takes when it is broken. A construct that owns its own break (arrays, switch, anonymous
+     * object creation) falls through to the final flat dispatch in both modes, because {@code expression.apply} already
+     * renders its internal break.
+     */
+    private Doc variableInitializerBrokenOrFlat(
+            VariableDeclarator variable,
+            Expression initializer,
+            String name,
+            String declarationPrefix,
+            String flat,
+            boolean forceBroken
+    ) {
+        boolean overWidth = forceBroken || layoutWidth.variableInitializer(variable, flat) > options.lineWidth();
         if (
-            layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+            overWidth
             && initializer instanceof MethodCallExpr methodCall
             && initializerHasOwnBreak(initializer)
         ) {
@@ -650,7 +809,7 @@ final class VariableInitializerLayout {
             }
         }
         if (
-            layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+            overWidth
             && initializer instanceof MethodCallExpr methodCall
             && !initializerHasOwnBreak(initializer)
         ) {
@@ -692,6 +851,24 @@ final class VariableInitializerLayout {
             }
             MethodCallChainSourcePlanner.InitializerChainShape initializerChainShape =
                 methodCallChainInitializerShape.apply(methodCall);
+            // C10 (B) — left imperative deliberately. The intent was to replace this fan-out-versus-argument-break choice
+            // with Doc.bestFitting([argumentBreak, fanOut]) and let the renderer rank them. Analysis of the shipped
+            // bestFitting metric shows that is not a safe swap here:
+            //  * argument-break keeps `NAME = ROOT.call(` on the assignment line, so for a single-selector call it always
+            //    wraps into strictly fewer lines than the one-per-line fan-out. bestFitting ranks flattest-first by line
+            //    count, so it would ALWAYS pick argument-break — the ranking never selects fan-out, so it adds no
+            //    behavior over "prefer argument-break when it is offered".
+            //  * The real, idempotence-critical work is deciding *whether argument-break is offered at all*:
+            //    singleCallConvergesOnArgumentBreak gates on the opener fitting (argumentBreakOpenerFits) and an
+            //    attachable root. DocWidths.LineCount#betterThan prioritizes line count over overflow, so a bestFitting
+            //    node would keep an argument-break whose opener overflows (fewer lines) instead of the fan-out — exactly
+            //    the regression field-init-typelike-root-idempotence's `qualifiedRootProviders` locks against. bestFitting
+            //    cannot express the opener-fit gate, so it cannot replace this predicate without reintroducing it.
+            //  * Both arms render the call, so a bestFitting would double-claim comments for this method's comment-bearing
+            //    caller (variableInitializerBrokenOrFlat is also reached from the imperative comment path).
+            // The predicate already keys purely on AST shape + measured width (never source line breaks), so it is
+            // idempotent by construction; leaving it imperative keeps that guarantee. (LDM-3/B8 territory once the ranking
+            // metric grows an overflow-first tie-break that can decline an overflowing opener.)
             if (
                 initializerChainShape.shouldForceWideInitializerChain()
                 && !singleCallConvergesOnArgumentBreak(
@@ -770,7 +947,7 @@ final class VariableInitializerLayout {
             }
         }
         if (
-            layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+            overWidth
             && initializer instanceof CastExpr castExpr
             && castExpr.getExpression() instanceof MethodCallExpr methodCall
             && !initializerHasOwnBreak(initializer)
@@ -783,7 +960,7 @@ final class VariableInitializerLayout {
             );
         }
         if (
-            layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+            overWidth
             && initializer instanceof CastExpr castExpr
             && castTypeNeedsBreak(declarationPrefix + variable.getNameAsString(), castExpr.getType())
             && !initializerHasOwnBreak(initializer)
@@ -791,14 +968,14 @@ final class VariableInitializerLayout {
             return variableWithCastTypeBreak(name, declarationPrefix + variable.getNameAsString(), castExpr);
         }
         if (
-            layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+            overWidth
             && initializer instanceof ConditionalExpr conditionalExpr
             && !initializerHasOwnBreak(initializer)
         ) {
             return conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr);
         }
         if (
-            layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+            overWidth
             && initializer instanceof LambdaExpr lambdaExpr
             && !initializerHasOwnBreak(initializer)
         ) {
@@ -829,7 +1006,7 @@ final class VariableInitializerLayout {
             }
         }
         if (
-            layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+            overWidth
             && initializer instanceof StringLiteralExpr
         ) {
             return Doc.concat(
@@ -838,14 +1015,14 @@ final class VariableInitializerLayout {
             );
         }
         if (
-            layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+            overWidth
             && initializer instanceof ArrayInitializerExpr arrayInitializerExpr
             && sourceSpansMultipleLines(arrayInitializerExpr)
         ) {
             return Doc.concat(Doc.text(name + " = "), arrayInitializer.apply(arrayInitializerExpr, true));
         }
         if (
-            layoutWidth.variableInitializer(variable, flat) > options.lineWidth()
+            overWidth
             && !(initializer instanceof StringLiteralExpr)
             && !(initializer instanceof TextBlockLiteralExpr)
             && !initializerHasOwnBreak(initializer)

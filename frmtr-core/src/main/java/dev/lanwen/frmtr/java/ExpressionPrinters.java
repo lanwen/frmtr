@@ -215,7 +215,7 @@ final class ExpressionPrinters {
         this.methodCalls = new MethodCallPrinter(
             context,
             types,
-            this::expression,
+            (expression, layout) -> expression(expression),
             enclosedExpressions::brokenEnclosedForSuffix,
             objectCreations::brokenObjectCreation,
             objectCreations::objectCreationWithSuffix,

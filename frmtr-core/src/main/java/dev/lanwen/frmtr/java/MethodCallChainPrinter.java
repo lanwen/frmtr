@@ -56,7 +56,7 @@ final class MethodCallChainPrinter {
 
     private final CommentedExpressionListPrinter commentedExpressionLists;
 
-    private final Function<Expression, Doc> expressionRenderer;
+    private final JavaFormatRule<Expression> expressionRenderer;
 
     private final Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer;
 
@@ -89,7 +89,7 @@ final class MethodCallChainPrinter {
             MethodCallPrinter calls,
             TypePrinter types,
             CommentedExpressionListPrinter commentedExpressionLists,
-            Function<Expression, Doc> expressionRenderer,
+            JavaFormatRule<Expression> expressionRenderer,
             Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer,
             Function<ObjectCreationExpr, String> objectCreationPrefix,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,
@@ -128,7 +128,7 @@ final class MethodCallChainPrinter {
         this.huggedGapCommentedLambdaBody = huggedGapCommentedLambdaBody;
         this.sourceMultilineLambdaCalls = new SourceMultilineLambdaCallLayout(
             context.sourceShapePolicy,
-            expressionRenderer,
+            node -> expressionRenderer.format(node, LayoutContext.root()),
             lambdaParameters,
             calls::methodCallPrefix,
             this::methodCallSegmentPrefixText,
@@ -698,7 +698,7 @@ final class MethodCallChainPrinter {
         ) {
             return Optional.of(
                 Doc.concat(
-                    expressionRenderer.apply(methodRoot),
+                    expressionRenderer.format(methodRoot, LayoutContext.root()),
                     chainContinuation(
                         appendFinalSegmentSuffix(
                             fieldAccessMethodCallSegment(fieldAccess, calls.getFirst()),
@@ -1107,9 +1107,9 @@ final class MethodCallChainPrinter {
                 () -> huggableExpressionLambdaArguments.apply(plan.chainSegmentPrefix(), firstCall.getArguments())
             );
             if (huggableExpressionLambda.isPresent()) {
-                return Doc.concat(expressionRenderer.apply(root), huggableExpressionLambda.orElseThrow());
+                return Doc.concat(expressionRenderer.format(root, LayoutContext.root()), huggableExpressionLambda.orElseThrow());
             }
-            return Doc.concat(expressionRenderer.apply(root), methodCallChainSegment(firstCall));
+            return Doc.concat(expressionRenderer.format(root, LayoutContext.root()), methodCallChainSegment(firstCall));
         }
         if (sourceShapePolicy.fitsOnOneLine(firstCall, lineWidth(LayoutWidth.LineBudget.CURRENT))) {
             return inlineMethodCall(firstCall);
@@ -1158,7 +1158,7 @@ final class MethodCallChainPrinter {
                 .orElse("");
         String prefix = "." + typeArguments + expression.getNameAsString();
         return Doc.concat(
-            expressionRenderer.apply(root),
+            expressionRenderer.format(root, LayoutContext.root()),
             Doc.text(prefix + "("),
             Doc.indent(
                 Doc.indent(
@@ -1255,10 +1255,10 @@ final class MethodCallChainPrinter {
         return switch (chainPlan.rootRendering()) {
             case INLINE_PROMOTED_METHOD_CALL -> chainPlan.root() instanceof MethodCallExpr methodCall
                 ? promotedMethodCallRoot(methodCall, firstLineWidth)
-                : expressionRenderer.apply(chainPlan.root());
+                : expressionRenderer.format(chainPlan.root(), LayoutContext.root());
             case GROUPED_PROMOTED_METHOD_CALL -> chainPlan.root() instanceof MethodCallExpr methodCall
                 ? groupedPromotedMethodCall(methodCall)
-                : expressionRenderer.apply(chainPlan.root());
+                : expressionRenderer.format(chainPlan.root(), LayoutContext.root());
             case BROKEN_OBJECT_CREATION -> brokenObjectCreationRenderer.apply((ObjectCreationExpr) chainPlan.root());
             case EXPRESSION_RENDERER -> expressionRenderedChainRoot(chainPlan.root(), firstLineWidth);
         };
@@ -1277,7 +1277,7 @@ final class MethodCallChainPrinter {
         ) {
             return calls.brokenMethodCall(methodCall);
         }
-        return expressionRenderer.apply(root);
+        return expressionRenderer.format(root, LayoutContext.root());
     }
 
     private boolean sourceMultilineTypeLikeRoot(MethodCallExpr methodCall) {
@@ -1300,11 +1300,10 @@ final class MethodCallChainPrinter {
             layoutWidth.line(LayoutWidth.LineBudget.CURRENT, compactSourceWidthText(methodRoot)) > options.lineWidth()
             || methodCallRootScopeOverflows(methodRoot)
         ) {
-            return methodCallChain(methodRoot, MethodCallBreakMode.FORCED).orElseGet(() -> expressionRenderer.apply(
-                    methodRoot
-            ));
+            return methodCallChain(methodRoot, MethodCallBreakMode.FORCED)
+                    .orElseGet(() -> expressionRenderer.format(methodRoot, LayoutContext.root()));
         }
-        return expressionRenderer.apply(methodRoot);
+        return expressionRenderer.format(methodRoot, LayoutContext.root());
     }
 
     private Optional<Doc> brokenTypeLikeScopedMethodRoot(MethodCallExpr methodRoot) {
@@ -1360,20 +1359,20 @@ final class MethodCallChainPrinter {
         if (methodCallSegmentHasBlockLambdaArgument(expression)) {
             return blockLambdaSegmentFirstLine(compactSource.compact(expression.getScope().orElseThrow()), expression)
                     .filter(firstLine -> layoutWidth.line(LayoutWidth.LineBudget.BLOCK, firstLine) <= options.lineWidth())
-                    .map(ignored -> expressionRenderer.apply(expression))
+                    .map(ignored -> expressionRenderer.format(expression, LayoutContext.root()))
                     .orElseGet(() -> Doc.concat(
-                            expressionRenderer.apply(expression.getScope().orElseThrow()),
+                            expressionRenderer.format(expression.getScope().orElseThrow(), LayoutContext.root()),
                             chainContinuation(methodCallChainSegment(expression))
                     ));
         }
         return expression.getScope()
                 .map(scope -> Doc.group(
                         Doc.concat(
-                            expressionRenderer.apply(scope),
+                            expressionRenderer.format(scope, LayoutContext.root()),
                             softChainContinuation(methodCallChainSegment(expression))
                         )
                 ))
-                .orElseGet(() -> expressionRenderer.apply(expression));
+                .orElseGet(() -> expressionRenderer.format(expression, LayoutContext.root()));
     }
 
     private Optional<Doc> groupedPromotedExpressionLambda(MethodCallExpr expression) {
@@ -1649,7 +1648,7 @@ final class MethodCallChainPrinter {
         }
         return Optional.of(
             Doc.concat(
-                expressionRenderer.apply(root.orElseThrow()),
+                expressionRenderer.format(root.orElseThrow(), LayoutContext.root()),
                 chainContinuation(Doc.join(Doc.HARD_LINE, segments))
             )
         );
@@ -1976,7 +1975,7 @@ final class MethodCallChainPrinter {
         return Optional.of(
             Doc.concat(
                 Doc.text(prefix + "("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, expressionRenderer.apply(methodRoot.getArgument(0)))),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, expressionRenderer.format(methodRoot.getArgument(0), LayoutContext.root()))),
                 Doc.HARD_LINE,
                 Doc.text(")"),
                 methodCallChainSegmentAttachedToRootClose(call, finalSegmentSuffix, lineBudget)
@@ -2108,7 +2107,9 @@ final class MethodCallChainPrinter {
     }
 
     private Doc inlineMethodCall(MethodCallExpr expression) {
-        Doc scope = expression.getScope().map(expressionRenderer).orElse(Doc.EMPTY);
+        Doc scope = expression.getScope()
+                .map(node -> expressionRenderer.format(node, LayoutContext.root()))
+                .orElse(Doc.EMPTY);
         String typeArguments = expression.getTypeArguments()
                 .map(arguments -> "<" + types.compactJoinTypeLike(arguments) + ">")
                 .orElse("");
@@ -2135,7 +2136,7 @@ final class MethodCallChainPrinter {
                     .map(scope -> promotedFieldAccessRootMethodCall(scope, expression))
                     .or(() -> expression.getScope().map(
                             scope -> Doc.concat(
-                                expressionRenderer.apply(scope),
+                                expressionRenderer.format(scope, LayoutContext.root()),
                                 chainContinuation(methodCallChainSegment(expression))
                             )
                     ))
@@ -2645,7 +2646,7 @@ final class MethodCallChainPrinter {
                 return Optional.of(Doc.concat(Doc.text(" "), flatHeaded.orElseThrow()));
             }
         }
-        return Optional.of(Doc.concat(Doc.text(" "), expressionRenderer.apply(body)));
+        return Optional.of(Doc.concat(Doc.text(" "), expressionRenderer.format(body, LayoutContext.root())));
     }
 
     /**

@@ -453,7 +453,12 @@ keep `call(() -> inner(` on one opener when the author broke a lambda body) appl
 `openerOverflows`: they measure the opener at the lambda's rendered indentation (`LayoutWidth.nodeIndentWidth`, which
 counts every enclosing type and block) and take the wider of that and the historical shallow baseline, so a hug nested
 inside `if`/`for` bodies that overflows at its true depth breaks instead of being frozen over width while shallow fitting
-hugs stay unchanged. A `!(<binary>)` logical-complement initializer value whose inline assignment line overflows keeps
+hugs stay unchanged. The first-line hug gate that decides whether that plan is built at all
+(`ExpressionLambdaArgumentLayout.expressionLineWidth`, which measures the call prefix, leading arguments, and lambda
+header up to `->`) uses the same rendered-column rule: it previously reconstructed the prefix's start column from the
+lambda's `range.begin.column` and so, once the source column understated the rendered column (a reindented or shallowly
+indented call), let an over-width header hug and flip-flop on the next pass (#217); it now takes the wider of the shallow
+baseline and `LayoutWidth.nodeIndentWidth`. A `!(<binary>)` logical-complement initializer value whose inline assignment line overflows keeps
 `name = !(` on the assignment line and breaks the parenthesized binary one operator per line inside the parentheses
 (`VariableInitializerLayout` reuses `EnclosedExpressionPrinter.parenthesizedBreak`, the same shape the `if (...)` condition
 and complement-`return` paths produce) instead of breaking after `=` and stranding `!(...)` flat on the continuation line;

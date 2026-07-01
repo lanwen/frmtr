@@ -852,14 +852,31 @@ final class ExpressionLambdaArgumentLayout {
         return Math.max(expressionFirstLineWidth(openerLine), renderedWidth) > options.lineWidth();
     }
 
+    /**
+     * Measures the call's first line (its prefix, any leading arguments, and the lambda header up to {@code ->}) at the
+     * column where the call actually renders.
+     *
+     * <p>The first-line hug gate at {@link #plan} historically reconstructed that column from the lambda's
+     * {@code range.begin.column}: it subtracted the lambda's offset within the assembled first line to recover the
+     * prefix's <em>source</em> start column, then added the line length. That reconstruction is only correct while the
+     * lambda's source column equals its rendered column. A call nested a few blocks deep — or a source that indented the
+     * call more shallowly than the formatter will — makes the source column understate the real one, so an opener that
+     * overflowed at its true depth measured as fitting and was hugged over-width; on the next pass the now-deeper source
+     * column reported the overflow and the header broke onto its own line, so {@code format(format(x)) != format(x)}
+     * (#217). Measuring at the lambda's rendered indentation ({@link LayoutWidth#nodeIndentWidth}, which counts every
+     * enclosing type and block) makes the hug-vs-break decision width-deterministic, mirroring the sibling opener probe
+     * {@link #openerOverflows} (#165) and the depth-aware method-chain and single-argument gates (#162, #164).
+     *
+     * <p>The probe takes the wider of the historical fixed baseline and the real rendered column, so it can only ever
+     * break a hug that genuinely overflows at its true depth; it never relaxes the gate for shallow calls, keeping
+     * fitting hugs unchanged.
+     */
     private int expressionLineWidth(String line, LambdaExpr lambdaExpr, String lambdaText) {
         int lambdaOffset = line.indexOf(lambdaText);
         if (lambdaOffset < 0) {
             return expressionFirstLineWidth(line);
         }
-        return lambdaExpr.getRange()
-                .map(range -> Math.max(0, range.begin.column + 1 - lambdaOffset) + line.length())
-                .orElseGet(() -> expressionFirstLineWidth(line));
+        return Math.max(expressionFirstLineWidth(line), layoutWidth.nodeIndentWidth(lambdaExpr) + line.length());
     }
 
     private boolean bodyFirstSourceLineFits(String firstLine, Expression bodyExpression) {

@@ -63,6 +63,11 @@ final class BreakableArgumentExpressionPrinter {
      *
      * <p>The suffix is only part of the width probe; callers still own rendering commas, semicolons, or call tails.
      */
+    // C10 (#218): the trailing comma/tail still arrives as an ad-hoc `suffix` string measured against a fixed
+    // LayoutWidth.LineBudget rather than the caller's LayoutContext.trailingContent() at the real rendered column.
+    // Threading a LayoutContext through the argument seam and moving to a rendered-column measurement is a rebaselining
+    // C10 slice, deferred from this byte-identical enabler; #218 migrated only the ThrowsClausePrinter gate to the new
+    // trailing-content field.
     Doc argument(Expression argument, String suffix) {
         Doc flat = expressionRenderer.apply(argument);
         Optional<Doc> broken = brokenArgument(argument);

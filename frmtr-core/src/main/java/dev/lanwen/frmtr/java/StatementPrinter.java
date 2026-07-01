@@ -368,7 +368,7 @@ final class StatementPrinter {
         // read it back from the context instead of the loose parameter that used to be threaded here (LDM-2 / #198). This
         // is the first LayoutContext read in the codebase; the value it carries reproduces the prior lineBudget exactly,
         // so the returned Doc is byte-identical.
-        LayoutContext layout = new LayoutContext(EnclosingConstruct.RETURN_VALUE, "", lineBudget);
+        LayoutContext layout = new LayoutContext(EnclosingConstruct.RETURN_VALUE, "", lineBudget, "");
         return statement.getExpression()
                 .map(expression -> returnStatementRenderer.apply(expression, layout))
                 .orElse(Doc.text("return;" + trailingStatementBlockComment(statement)));

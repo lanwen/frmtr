@@ -341,6 +341,160 @@ final class DocRendererTest {
             .hasMessageContaining("at least one alternative");
     }
 
+    /**
+     * The three alternatives, flattest-first: (0) a breakable argument group that stays one line when it fits but fans
+     * out to five lines when it does not; (1) a two-line layout with a single hard break; (2) a three-line fan-out with
+     * two hard breaks. This is the canonical B8 case — the renderer must rank broken shapes against each other, which a
+     * conditional group cannot.
+     */
+    private static Doc rankedChainAlternatives() {
+        Doc flat = Doc.group(
+            Doc.concat(
+                Doc.text("call("),
+                Doc.indent(Doc.concat(
+                    Doc.SOFT_LINE,
+                    Doc.text("alpha"),
+                    Doc.text(","),
+                    Doc.LINE,
+                    Doc.text("beta"),
+                    Doc.text(","),
+                    Doc.LINE,
+                    Doc.text("gamma")
+                )),
+                Doc.SOFT_LINE,
+                Doc.text(")")
+            )
+        );
+        Doc twoLineBroken = Doc.concat(Doc.text("header()"), Doc.HARD_LINE, Doc.text(".tail()"));
+        Doc threeLineFanout = Doc.concat(
+            Doc.text("head()"),
+            Doc.HARD_LINE,
+            Doc.text(".mid()"),
+            Doc.HARD_LINE,
+            Doc.text(".end()")
+        );
+        return Doc.bestFitting(java.util.List.of(flat, twoLineBroken, threeLineFanout));
+    }
+
+    @Test
+    void bestFittingPicksTheFewerLinesBrokenShapeWhenTheFlatAlternativeWouldOverflow() {
+        // At 20 columns the flat argument group (flat width 24) overflows and fans out to five lines, so it is not the
+        // fewest-lines layout. Between the remaining broken shapes the two-line one beats the three-line fan-out, so the
+        // renderer keeps the two-line layout — proving it ranked broken shapes by line count, not by first-flat-fit.
+        assertThat(renderer(20).render(rankedChainAlternatives())).isEqualTo(
+            """
+                header()
+                .tail()"""
+        );
+    }
+
+    @Test
+    void bestFittingPicksTheFlatAlternativeWhenItFitsOnTheLine() {
+        // At 80 columns the flat argument group fits on one line (zero newlines), the fewest possible, so it wins over
+        // both broken alternatives.
+        assertThat(renderer(80).render(rankedChainAlternatives())).isEqualTo("call(alpha, beta, gamma)");
+    }
+
+    @Test
+    void bestFittingTieBreakKeepsTheEarliestAlternativeAndReformatIsAFixpoint() {
+        // Two alternatives render to the identical line count (2 lines) and overflow (none) at 80 columns; the strict
+        // "fewer lines, then less overflow" comparison makes neither strictly better, so the earlier (index 0) wins.
+        Doc first = Doc.concat(Doc.text("first.head"), Doc.HARD_LINE, Doc.text("first.tail"));
+        Doc second = Doc.concat(Doc.text("second.head"), Doc.HARD_LINE, Doc.text("second.tail"));
+        Doc doc = Doc.bestFitting(java.util.List.of(first, second));
+
+        String once = renderer(80).render(doc);
+        assertThat(once).isEqualTo(
+            """
+                first.head
+                first.tail"""
+        );
+        // Idempotence follows from determinism: re-ranking the same alternatives at the same column picks the same
+        // winner, so wrapping the already-chosen output back through the node is a fixpoint.
+        assertThat(renderer(80).render(doc)).isEqualTo(once);
+    }
+
+    @Test
+    void bestFittingMeasuresOnlyTheFirstEightAlternativesSoAWinnerBeyondTheBoundIsNeverChosen() {
+        // Index 0 is a two-line layout (one newline). Indices 1..7 are three-line layouts, strictly worse, so among the
+        // eight measured alternatives index 0 wins. Index 8 — the ninth, the first beyond MAX_BEST_FITTING_ALTERNATIVES
+        // — is a one-line layout that would strictly beat index 0 on line count if it were ever measured. Because the
+        // ranking stops after eight, it is not, so index 0's two-line layout is what renders. That the strictly-better
+        // ninth alternative loses is the observable proof that only the first eight were measured.
+        java.util.List<Doc> alternatives = new java.util.ArrayList<>();
+        alternatives.add(Doc.concat(Doc.text("chosen.head"), Doc.HARD_LINE, Doc.text("chosen.tail")));
+        for (int i = 1; i < 8; i++) {
+            alternatives.add(Doc.concat(
+                Doc.text("f" + i + "a"),
+                Doc.HARD_LINE,
+                Doc.text("f" + i + "b"),
+                Doc.HARD_LINE,
+                Doc.text("f" + i + "c")
+            ));
+        }
+        alternatives.add(Doc.text("would-win-on-one-line-if-measured"));
+
+        assertThat(renderer(80).render(Doc.bestFitting(alternatives))).isEqualTo(
+            """
+                chosen.head
+                chosen.tail"""
+        );
+    }
+
+    /**
+     * Wraps a two-alternative best-fitting node in {@code wrappers} singleton best-fitting nodes. Each singleton still
+     * advances the best-fitting depth by one when its (only) winner is rendered, so the inner node is evaluated at depth
+     * equal to {@code wrappers} — a precise, deterministic way to place it just inside or just past the depth bound.
+     */
+    private static Doc bestFittingAtDepth(int wrappers, Doc innerFlatAlt, Doc innerBrokenAlt) {
+        Doc node = Doc.bestFitting(java.util.List.of(innerFlatAlt, innerBrokenAlt));
+        for (int i = 0; i < wrappers; i++) {
+            node = Doc.bestFitting(java.util.List.of(node));
+        }
+        return node;
+    }
+
+    @Test
+    void bestFittingWithinDepthBoundRanksTheInnerNodeButBeyondItCollapsesToTheFirstAlternative() {
+        // The inner node's flattest alternative is a breakable argument group: it fans out to four lines when it does
+        // not fit the 10-column width. Its broken alternative is a fixed two-line layout. When the inner node is ranked,
+        // the two-line broken shape wins on line count over the four-line fan-out. When the node is past the depth bound
+        // it is not ranked and collapses to its first alternative, which then renders in its (multi-line) fanned-out
+        // form — a visibly different layout containing the "wrap(" header.
+        Doc flatAlt = Doc.group(
+            Doc.concat(
+                Doc.text("wrap("),
+                Doc.indent(Doc.concat(
+                    Doc.SOFT_LINE,
+                    Doc.text("firstArgument"),
+                    Doc.text(","),
+                    Doc.LINE,
+                    Doc.text("secondArgument"),
+                    Doc.text(","),
+                    Doc.LINE,
+                    Doc.text("thirdArgument")
+                )),
+                Doc.SOFT_LINE,
+                Doc.text(")")
+            )
+        );
+        Doc brokenAlt = Doc.concat(Doc.text("chosen"), Doc.HARD_LINE, Doc.text(".tail"));
+
+        // MAX_BEST_FITTING_DEPTH is 4. With 3 singleton wrappers the inner node sits at depth 3 (< 4) and is ranked, so
+        // the two-line broken alternative wins over the multi-line fan-out.
+        assertThat(renderer(20).render(bestFittingAtDepth(3, flatAlt, brokenAlt))).isEqualTo(
+            """
+                chosen
+                .tail"""
+        );
+
+        // With 4 singleton wrappers the inner node sits at depth 4 (>= 4): ranking stops, it collapses to the flat first
+        // alternative, and that group renders fanned out — the "wrap(" header proves the flat alternative was taken.
+        String collapsed = renderer(20).render(bestFittingAtDepth(4, flatAlt, brokenAlt));
+        assertThat(collapsed).startsWith("wrap(");
+        assertThat(collapsed).doesNotContain("chosen");
+    }
+
     @Test
     void conditionalGroupAcceptsASingletonAsAnUnconditionalFallback() {
         // A single alternative is the degenerate, valid case: there is nothing to choose, so it renders flat when it fits

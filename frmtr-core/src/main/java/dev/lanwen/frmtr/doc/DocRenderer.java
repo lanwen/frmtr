@@ -29,6 +29,15 @@ public final class DocRenderer {
 
     private int column;
 
+    /**
+     * Current {@link Doc.BestFitting} nesting depth, so the linear-time depth bound (rule D16) is applied identically
+     * here and in the line-count simulation. Reset per render; incremented while rendering a chosen alternative so a
+     * nested best-fitting node inside it is ranked at the next depth (matching the depth at which the ranking probe
+     * measured that winner), and beyond {@link DocWidths#MAX_BEST_FITTING_DEPTH} the inner node collapses to its first
+     * alternative instead of being ranked.
+     */
+    private int bestFittingDepth;
+
     public DocRenderer(FormatterOptions options) {
         this.options = options;
     }
@@ -36,9 +45,11 @@ public final class DocRenderer {
     public String render(Doc doc) {
         out.setLength(0);
         column = 0;
+        bestFittingDepth = 0;
         lineSuffixes.clear();
         groupModes.clear();
         DocWidths.Measurement widths = DocWidths.measurement();
+        widths.indentWidth(options.indentUnit().length());
         render(doc, 0, Mode.BREAK, widths);
         flushLineSuffixes(widths);
         String rendered = out.toString();
@@ -149,15 +160,23 @@ public final class DocRenderer {
     }
 
     /**
-     * Renders a {@link Doc.BestFitting} by ranking its alternatives by rendered line count. Placeholder for #204: it
-     * renders the first (flattest) alternative like a {@link Doc.Group} (flat when it fits, broken otherwise). #205
-     * replaces this with the real line-count ranking; until then no printer emits a {@code BestFitting}, so the
-     * fixture corpus stays byte-identical regardless of this body.
+     * Renders a {@link Doc.BestFitting} by keeping the alternative that minimizes rendered line count at the live output
+     * column (rule B8 + D16). Selection is delegated to {@link DocWidths.Measurement#chooseBestFitting} — the same
+     * decision the line-count simulation uses — so the alternative rendered here is always the one the ranking measured;
+     * they cannot drift because there is one decision function, not two. The ranking probes are side-effect-free
+     * (they never touch {@code out}, {@code column}, {@code groupModes}, or {@code lineSuffixes}), so the winner is then
+     * rendered <em>once</em>, for real, in break mode — the same top-level mode a {@code ConditionalGroup} fallback uses,
+     * letting the chosen alternative's own inner groups decide flat-vs-broken from the column they reach. A nested
+     * best-fitting node inside the winner re-enters this method and is ranked at the next depth, under the shared bound.
      */
     private void renderBestFitting(List<Doc> alternatives, int indent, DocWidths.Measurement widths) {
-        Doc flattest = alternatives.getFirst();
-        Mode mode = widths.fits(flattest, options.lineWidth() - column) ? Mode.FLAT : Mode.BREAK;
-        render(flattest, indent, mode, widths);
+        int depth = bestFittingDepth;
+        int chosen = widths.chooseBestFitting(alternatives, indent, column, options.lineWidth(), depth);
+        // Render the winner at the next depth: chooseBestFitting scored it in a probe one level deeper, so a nested
+        // best-fitting node inside it must be ranked at that same deeper level for the emitted layout to match the probe.
+        bestFittingDepth = depth + 1;
+        render(alternatives.get(chosen), indent, Mode.BREAK, widths);
+        bestFittingDepth = depth;
     }
 
     private void append(String value) {

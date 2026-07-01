@@ -881,7 +881,7 @@ final class StatementPrinter {
             && openerComments.isEmpty()
             && !tryResourcesHaveLeadingComments(statement)
             && trailingResourceComments.isEmpty()
-            && currentIndentedWidth.applyAsInt(flat + " {}") <= options.lineWidth()
+            && tryOpenerLineWidth(statement, flat + " {}") <= options.lineWidth()
         ) {
             return Doc.text(" (" + flatResources + ")");
         }
@@ -908,6 +908,28 @@ final class StatementPrinter {
             ),
             Doc.HARD_LINE,
             Doc.text(")")
+        );
+    }
+
+    /**
+     * Measures a try-with-resources opener line at the column where it actually renders.
+     *
+     * <p>The resource-section fit gates ask whether the flat opener (either {@code try (…) {}} for the whole-section
+     * collapse or {@code try (Type name = scope.call(} for the single attached method-call resource) fits on one line.
+     * That opener renders at the {@code try} statement's own indentation, which is the enclosing block/type nesting
+     * depth: {@code BLOCK} (two units) for a {@code try} directly inside a method body and one unit deeper for every
+     * further block ({@code if}, loop, nested {@code try}, …) around it. Measuring against the fixed
+     * {@link LayoutWidth.LineBudget#CURRENT} baseline (one unit) under-counted that indentation for every non-top-level
+     * {@code try}, so a resource list that overflowed its real column was collapsed flat anyway and rendered past the
+     * width limit (#219). Counting the node's rendered nesting through {@link LayoutWidth#nodeLine} reproduces the true
+     * column regardless of source layout, mirroring the return/ternary/unary rendered-column corrections in LDM-2 and the
+     * {@code } catch (…)} multi-catch gate in this printer. The {@code currentIndentedWidth} term is kept as a floor so a
+     * {@code try} nested directly under a member (no enclosing block) is still measured against at least one unit.
+     */
+    private int tryOpenerLineWidth(TryStmt statement, String openerLine) {
+        return Math.max(
+            layoutWidth.nodeLine(statement, openerLine),
+            currentIndentedWidth.applyAsInt(openerLine)
         );
     }
 
@@ -991,7 +1013,7 @@ final class StatementPrinter {
             + " = "
             + tryResourceMethodCallPrefix(methodCall)
             + "(";
-        if (currentIndentedWidth.applyAsInt("try (" + resourcePrefix) > options.lineWidth()) {
+        if (tryOpenerLineWidth(statement, "try (" + resourcePrefix) > options.lineWidth()) {
             return Optional.empty();
         }
         return Optional.of(

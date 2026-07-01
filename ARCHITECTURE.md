@@ -479,7 +479,12 @@ imperative cascade (`variableInitializerCommentAndSourceShapeTier`, the initiali
 `ReturnExpressionPrinter.preemptedReturnValue`), which renders the initializer exactly once and is byte-identical to
 before. The fan-out-versus-argument-break single-call convergence (`singleCallConvergesOnArgumentBreak`) stays imperative
 by design: its idempotence-critical work is the opener-fit gate, which `Doc.bestFitting`'s line-count-first metric cannot
-express (it would keep an argument-break whose opener overflows). A per-run
+express (it would keep an argument-break whose opener overflows). The try-with-resources opener
+gates (`StatementPrinter.tryOpenerLineWidth`, feeding both the whole-section flat collapse and the single attached
+method-call resource) measure the same way: the `try (…) {` opener renders at the statement's rendered block/type depth,
+so counting that nesting through `LayoutWidth.nodeLine` (floored by the `CURRENT` baseline) replaces the fixed one-unit
+budget that under-counted every non-top-level `try` and collapsed a resource list flat over width when nested inside a
+method body or deeper (#219). A per-run
 `SourceShapePolicy` on `JavaFormatContext` is the consolidating home for
 "should the formatter respect the author's source shape here?" decisions, so printers ask one named question instead of
 re-deriving those reads from raw token text or `getRange()` arithmetic. It owns one canonical definition of each

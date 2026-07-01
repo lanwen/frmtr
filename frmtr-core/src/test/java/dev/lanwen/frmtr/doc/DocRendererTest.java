@@ -333,6 +333,15 @@ final class DocRendererTest {
     }
 
     @Test
+    void bestFittingRejectsAnEmptyAlternativeList() {
+        // Like a conditional group, "render nothing" is never a valid layout-choice intent, so the factory fails fast
+        // instead of building a best-fitting node with nothing to rank or fall back on.
+        assertThatThrownBy(() -> Doc.bestFitting(java.util.List.of()))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("at least one alternative");
+    }
+
+    @Test
     void conditionalGroupAcceptsASingletonAsAnUnconditionalFallback() {
         // A single alternative is the degenerate, valid case: there is nothing to choose, so it renders flat when it fits
         // and broken otherwise, exactly like wrapping that one layout in a group. Here the lone layout fits at 20 columns.

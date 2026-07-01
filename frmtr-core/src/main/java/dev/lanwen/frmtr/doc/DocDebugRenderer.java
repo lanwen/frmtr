@@ -49,6 +49,14 @@ public final class DocDebugRenderer {
                     render(alternatives.get(index), out, depth + 2);
                 }
             }
+            case Doc.BestFitting bestFitting -> {
+                appendLine(out, depth, "BestFitting");
+                List<Doc> alternatives = bestFitting.alternatives();
+                for (int index = 0; index < alternatives.size(); index++) {
+                    appendLine(out, depth + 1, "alt " + index + ":");
+                    render(alternatives.get(index), out, depth + 2);
+                }
+            }
             case Doc.Line ignored -> appendLine(out, depth, "Line");
             case Doc.SoftLine ignored -> appendLine(out, depth, "SoftLine");
             case Doc.HardLine ignored -> appendLine(out, depth, "HardLine");

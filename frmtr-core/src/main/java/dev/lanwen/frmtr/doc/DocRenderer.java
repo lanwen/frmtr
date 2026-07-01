@@ -79,6 +79,7 @@ public final class DocRenderer {
             }
             case Doc.Fill fill -> renderFill(fill.parts(), indent, widths);
             case Doc.ConditionalGroup conditionalGroup -> renderConditionalGroup(conditionalGroup.alternatives(), indent, widths);
+            case Doc.BestFitting bestFitting -> renderBestFitting(bestFitting.alternatives(), indent, widths);
             case Doc.IfBreak conditional -> {
                 // An identified IfBreak follows the recorded mode of its target group (which must have rendered first);
                 // an anonymous IfBreak follows the ambient mode. A target that has not rendered yet is treated as flat.
@@ -147,6 +148,18 @@ public final class DocRenderer {
         render(alternatives.getLast(), indent, Mode.BREAK, widths);
     }
 
+    /**
+     * Renders a {@link Doc.BestFitting} by ranking its alternatives by rendered line count. Placeholder for #204: it
+     * renders the first (flattest) alternative like a {@link Doc.Group} (flat when it fits, broken otherwise). #205
+     * replaces this with the real line-count ranking; until then no printer emits a {@code BestFitting}, so the
+     * fixture corpus stays byte-identical regardless of this body.
+     */
+    private void renderBestFitting(List<Doc> alternatives, int indent, DocWidths.Measurement widths) {
+        Doc flattest = alternatives.getFirst();
+        Mode mode = widths.fits(flattest, options.lineWidth() - column) ? Mode.FLAT : Mode.BREAK;
+        render(flattest, indent, mode, widths);
+    }
+
     private void append(String value) {
         out.append(value);
         int lastLineBreak = value.lastIndexOf('\n');
@@ -198,6 +211,8 @@ public final class DocRenderer {
             case Doc.Fill fill -> fill.parts().stream().anyMatch(DocRenderer::containsHardLine);
             case Doc.ConditionalGroup conditionalGroup ->
                 conditionalGroup.alternatives().stream().anyMatch(DocRenderer::containsHardLine);
+            case Doc.BestFitting bestFitting ->
+                bestFitting.alternatives().stream().anyMatch(DocRenderer::containsHardLine);
             case Doc.Indent indented -> containsHardLine(indented.doc());
             case Doc.Group group -> containsHardLine(group.doc());
             case Doc.Label label -> containsHardLine(label.doc());

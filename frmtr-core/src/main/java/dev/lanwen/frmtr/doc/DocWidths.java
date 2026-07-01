@@ -93,6 +93,11 @@ final class DocWidths {
                 // renderer prefers when it fits.
                 case Doc.ConditionalGroup conditionalGroup ->
                     measure(conditionalGroup.alternatives().getFirst(), remaining);
+                // A best-fitting node is sized by its first (flattest) alternative — the representative flat width, the
+                // same convention as a conditional group. The renderer ranks the alternatives by rendered line count, but
+                // an enclosing group deciding its own flat/break mode only needs the flattest candidate's width.
+                case Doc.BestFitting bestFitting ->
+                    measure(bestFitting.alternatives().getFirst(), remaining);
                 case Doc.Line ignored -> 1;
                 case Doc.SoftLine ignored -> 0;
                 case Doc.HardLine ignored -> NO_FIT;

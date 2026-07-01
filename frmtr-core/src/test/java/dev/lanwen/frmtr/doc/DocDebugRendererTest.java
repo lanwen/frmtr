@@ -144,6 +144,34 @@ final class DocDebugRendererTest {
     }
 
     @Test
+    void rendersBestFittingAlternativesUnderNumberedHeaders() {
+        // A best-fitting node prints like a conditional group in the debug tree — its alternatives under numbered
+        // headers — but a non-first alternative is allowed to contain a forced break, which the debug view shows verbatim.
+        Doc doc = Doc.bestFitting(
+            java.util.List.of(
+                Doc.text("root().a().b()"),
+                Doc.concat(Doc.text("root()"), Doc.HARD_LINE, Doc.text(".a()"), Doc.HARD_LINE, Doc.text(".b()"))
+            )
+        );
+
+        String rendered = DocDebugRenderer.render(doc);
+
+        assertThat(rendered).isEqualTo(
+            """
+                BestFitting
+                  alt 0:
+                    Text("root().a().b()")
+                  alt 1:
+                    Concat
+                      Text("root()")
+                      HardLine
+                      Text(".a()")
+                      HardLine
+                      Text(".b()")"""
+        );
+    }
+
+    @Test
     void rendersBreakParentMarker() {
         Doc doc = Doc.concat(Doc.text("value"), Doc.BREAK_PARENT);
 

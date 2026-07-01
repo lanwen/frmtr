@@ -1718,6 +1718,16 @@ final class MethodCallChainPrinter {
                 }
                 yield new PaddedDoc(Doc.conditionalGroup(alternatives), false);
             }
+            // A best-fitting node's alternatives are mutually exclusive layouts too; only the rank-winner renders, so
+            // each is padded from the same incoming line-start rather than threaded in sequence, and the token that
+            // follows conservatively reports lineStart=false because which alternative rendered is a renderer decision.
+            case Doc.BestFitting bestFitting -> {
+                List<Doc> alternatives = new ArrayList<>();
+                for (Doc alternative : bestFitting.alternatives()) {
+                    alternatives.add(linePadded(alternative, padding, lineStart).doc());
+                }
+                yield new PaddedDoc(Doc.bestFitting(alternatives), false);
+            }
             case Doc.Line ignored -> new PaddedDoc(
                 Doc.concat(Doc.LINE, Doc.ifBreak(Doc.text(padding), Doc.EMPTY)),
                 false

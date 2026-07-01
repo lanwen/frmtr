@@ -181,6 +181,18 @@ public final class DocExplainRenderer {
                     }
                     return structural;
                 }
+                case Doc.BestFitting bestFitting -> {
+                    // Placeholder for #204: mirror DocRenderer.renderBestFitting's #204 stub so the replayed column
+                    // cursor advances identically — probe the first (flattest) alternative with the shared fit authority
+                    // and walk only it, flat when it fits or broken otherwise. #206 records the real BestFittingDecision
+                    // here once #205 makes the renderer rank by line count; until then no decision is emitted.
+                    Builder structural = Builder.structural();
+                    List<Doc> alternatives = bestFitting.alternatives();
+                    Doc flattest = alternatives.getFirst();
+                    Mode chosenMode = widths.fits(flattest, lineWidth - column) ? Mode.FLAT : Mode.BREAK;
+                    structural.add(render(flattest, indent, chosenMode, enclosingLabel));
+                    return structural;
+                }
                 case Doc.Line ignored -> {
                     if (mode == Mode.FLAT) {
                         advance(" ");

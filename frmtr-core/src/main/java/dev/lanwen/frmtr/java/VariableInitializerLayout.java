@@ -77,7 +77,7 @@ final class VariableInitializerLayout {
 
     private final Function<BinaryExpr, Doc> binaryExpressionLinesWithComments;
 
-    private final BiFunction<Expression, Boolean, Optional<Doc>> suffixedEnclosedExpression;
+    private final BiFunction<Expression, LayoutContext, Optional<Doc>> suffixedEnclosedExpression;
 
     private final Function<ArrayAccessExpr, Doc> arrayAccessWithBrokenEnclosedName;
 
@@ -156,7 +156,7 @@ final class VariableInitializerLayout {
             Function<Expression, Doc> expressionWithoutOwnComment,
             Predicate<BinaryExpr> binaryExpressionHasLineComments,
             Function<BinaryExpr, Doc> binaryExpressionLinesWithComments,
-            BiFunction<Expression, Boolean, Optional<Doc>> suffixedEnclosedExpression,
+            BiFunction<Expression, LayoutContext, Optional<Doc>> suffixedEnclosedExpression,
             Function<ArrayAccessExpr, Doc> arrayAccessWithBrokenEnclosedName,
             Predicate<BinaryExpr> shouldKeepCastDivisionContinuationFlat,
             BiFunction<Expression, Boolean, Doc> binaryExpressionLines,
@@ -647,7 +647,10 @@ final class VariableInitializerLayout {
             }
         }
         if (layoutWidth.blockStatement(flat) > options.lineWidth()) {
-            Optional<Doc> suffixedEnclosedInitializer = suffixedEnclosedExpression.apply(initializer, true);
+            // The initializer line is already over width, so the enclosed suffix receiver must lead with a break; that
+            // positional fact rides on the LayoutContext (#189) rather than a loose boolean argument.
+            Optional<Doc> suffixedEnclosedInitializer =
+                suffixedEnclosedExpression.apply(initializer, LayoutContext.root().withLeadingBreak(true));
             if (suffixedEnclosedInitializer.isPresent()) {
                 return Optional.of(Doc.concat(Doc.text(name + " = "), suffixedEnclosedInitializer.orElseThrow()));
             }

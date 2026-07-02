@@ -31,8 +31,15 @@ final class EnclosedSuffixDispatcher {
      *
      * <p>Method calls preserve a dotted call suffix, method references preserve a {@code ::} suffix, and every other
      * expression reports no bridge so the caller can keep its existing expression handling.
+     *
+     * <p>Whether the receiver is already committed to a leading break is a positional fact, so it is read from the
+     * {@link LayoutContext} the caller threads in ({@link LayoutContext#leadingBreak()}, #189) rather than carried as a
+     * separate dispatch argument. The concrete suffix printers still take the resolved boolean because they have
+     * non-positional callers (an ordinary {@code methodCall}/{@code methodReference} that has no context to break)
+     * that pass it directly.
      */
-    Optional<Doc> suffixedEnclosedExpression(Expression expression, boolean leadingBreak) {
+    Optional<Doc> suffixedEnclosedExpression(Expression expression, LayoutContext layout) {
+        boolean leadingBreak = layout.leadingBreak();
         if (expression instanceof MethodCallExpr methodCallExpr) {
             return methodCalls.suffixedEnclosedMethodCall(methodCallExpr, leadingBreak);
         }

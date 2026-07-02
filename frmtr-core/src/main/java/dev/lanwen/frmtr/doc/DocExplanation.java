@@ -219,8 +219,8 @@ public record DocExplanation(
          *
          * <p>{@code index} is its position in the alternative list, {@code lines} the number of newlines it would render
          * into at the node's start column, and {@code overflow} the total columns past the line width it would incur.
-         * The ranking keeps the alternative with the fewest lines, then the least overflow, then the earliest index.
-         * {@code chosen} marks the winner.
+         * The ranking keeps a fitting alternative (zero overflow) over any overflowing one first, then among equal fit
+         * status the fewest lines, then the least overflow, then the earliest index. {@code chosen} marks the winner.
          */
         public record Alternative(int index, int lines, int overflow, boolean chosen) {}
     }

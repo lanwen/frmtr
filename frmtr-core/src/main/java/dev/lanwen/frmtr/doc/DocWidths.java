@@ -115,9 +115,11 @@ final class DocWidths {
          * <p>Only the first {@code min(size, MAX_BEST_FITTING_ALTERNATIVES)} alternatives are measured (linear-time
          * bound). Beyond {@link #MAX_BEST_FITTING_DEPTH} nested best-fitting levels the node is not ranked at all and
          * collapses to its first (flattest) alternative, so total exploration stays bounded. The tie-break (D16) is
-         * strict: an alternative wins only if it has <em>strictly fewer</em> lines, or equal lines and
-         * <em>strictly less</em> overflow; equal-lines-equal-overflow keeps the earlier (flatter) alternative, which
-         * makes the choice deterministic and therefore the reformat a fixpoint.
+         * strict and gated on fit first: a layout that fits (no line exceeds the width) beats any that
+         * overflows, no matter its line count; within one fit class an alternative wins only if it has <em>strictly
+         * fewer</em> lines, or equal lines and <em>strictly less</em> overflow. Equal-fit-equal-lines-equal-overflow
+         * keeps the earlier (flatter) alternative, which makes the choice deterministic and therefore the reformat a
+         * fixpoint. See {@link LineCount#betterThan}.
          *
          * @param depth the best-fitting nesting depth of this node (0 for a top-level node), used to apply the bound
          */
@@ -406,18 +408,42 @@ final class DocWidths {
 
     /**
      * The result of a {@link Measurement#measureLineCount} probe: how many newlines a document renders into and the
-     * total overflow past the line width. Used to rank {@link Doc.BestFitting} alternatives (rule D16): the winner is
-     * the one with strictly fewer lines, then strictly less overflow, then the earliest (flattest) on a tie.
+     * total overflow past the line width. Used to rank {@link Doc.BestFitting} alternatives (rule D16): a layout that
+     * fits (zero overflow) always beats one that overflows; among layouts of equal fit status the winner is the one with
+     * strictly fewer lines, then strictly less overflow, then the earliest (flattest) on a tie.
      */
     record LineCount(int lines, int overflow) {
 
         /**
-         * Whether this count is strictly preferable to {@code other} under the D16 tie-break: fewer lines wins; on equal
-         * lines, less overflow wins. Equal lines and equal overflow is <em>not</em> strictly better, so an earlier
-         * alternative already chosen keeps its place — that strictness is what makes the ranking deterministic and the
-         * reformat a fixpoint.
+         * Whether the document fits — no rendered line exceeded the width, i.e. the summed per-line overflow is zero.
+         * This is the primary ranking key (rule D16): fitting must dominate line count, because a layout whose opener or
+         * any later line spills past the width is a defect the reader sees, whereas one extra line is not.
+         */
+        boolean fits() {
+            return overflow == 0;
+        }
+
+        /**
+         * Whether this count is strictly preferable to {@code other} under the D16 tie-break.
+         *
+         * <p>The <em>overflow gate</em> is the primary key (rule D16): a fitting layout (zero total overflow) is strictly
+         * better than any overflowing one, no matter how many fewer lines the overflowing one uses. Without this gate the
+         * line-count-first metric could keep an alternative whose first line already overruns the width simply because it
+         * renders in fewer lines, outranking an alternative that fully fits but wraps onto more lines — exactly the
+         * fan-out-versus-argument-break decision a printer needs to route through {@code bestFitting}.
+         *
+         * <p>Within one fit class the existing least-bad metric decides: fewer lines wins; on equal lines, less overflow
+         * wins. When both fit, overflow is zero for each, so the choice reduces to fewer lines. When neither fits the gate
+         * is a no-op and the fewest-lines / least-overflow order is unchanged. Equal lines and equal overflow is
+         * <em>not</em> strictly better, so an earlier alternative already chosen keeps its place — that strictness is what
+         * makes the ranking deterministic and the reformat a fixpoint.
          */
         boolean betterThan(LineCount other) {
+            // Overflow gate first: fitting dominates line count, so a layout that fits can never be outranked by one that
+            // overflows regardless of its line count, and an overflowing one can never outrank a fitting one.
+            if (fits() != other.fits()) {
+                return fits();
+            }
             if (lines != other.lines) {
                 return lines < other.lines;
             }

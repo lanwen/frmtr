@@ -156,16 +156,19 @@ instead of building strings directly:
   **not** encode predicate-gated selection or ranking among multiple broken layouts, so it does not subsume the
   source/structural-predicate-gated `Optional<Doc>` layout dispatch in `MethodCallChainPrinter`. It is an additive
   primitive; `MethodCallChainPrinter` adopts `BestFitting` (below), not `ConditionalGroup`.
-- `BestFitting` holds an ordered, flattest-first list of layout alternatives and renders the one that **minimizes
-  rendered line count** at the live output column, with a deterministic tie-break. It is the capability `ConditionalGroup`
+- `BestFitting` holds an ordered, flattest-first list of layout alternatives and renders the one that **fits, then
+  minimizes rendered line count** at the live output column, with a deterministic tie-break. It is the capability `ConditionalGroup`
   structurally lacks (layout-decision-model rule B8): a conditional group offers N flat candidates plus exactly one
   broken fallback and chooses purely by flat fit, so it cannot rank two *broken* shapes against each other; a
   best-fitting node can, which is why — unlike a conditional group — **a non-first alternative MAY contain a forced
   break**. The last alternative must be renderable at any width, and the first (flattest) is the representative width an
   enclosing group sizes the node by. The factory rejects an empty list; the "may contain a forced break" freedom is
   intentionally not asserted (mirroring `ConditionalGroup`'s inverse note, to avoid inverting the `Doc` → renderer
-  layering). The tie-break (rule D16) is strict — fewer lines, then less overflow, then the earliest (flattest) index —
-  so it is deterministic and therefore idempotent. Ranking is bounded for linear time and native-image safety: only the
+  layering). The tie-break (rule D16) is strict and gated on fit first — a layout that fits (no line exceeds the width)
+  beats any that overflows regardless of line count, then within one fit class fewer lines, then less overflow, then the
+  earliest (flattest) index — so it is deterministic and therefore idempotent. The overflow gate is what lets a printer
+  route a fan-out-versus-argument-break choice through `bestFitting`: a fitting fan-out can never be outranked by an
+  argument-break whose opener overruns the width. Ranking is bounded for linear time and native-image safety: only the
   first `DocWidths.MAX_BEST_FITTING_ALTERNATIVES` (8) alternatives are measured, and a best-fitting node nested past
   `DocWidths.MAX_BEST_FITTING_DEPTH` (4) collapses to its first alternative instead of being ranked. `MethodCallChainPrinter`
   is the first Java printer to emit it (layout-decision-model milestone LDM-3): a comment-free, width-driven single-segment
@@ -483,8 +486,9 @@ ones (arrays/switch/anonymous-class own their break), source-multiline-preserved
 imperative cascade (`variableInitializerCommentAndSourceShapeTier`, the initializer analogue of
 `ReturnExpressionPrinter.preemptedReturnValue`), which renders the initializer exactly once and is byte-identical to
 before. The fan-out-versus-argument-break single-call convergence (`singleCallConvergesOnArgumentBreak`) stays imperative
-by design: its idempotence-critical work is the opener-fit gate, which `Doc.bestFitting`'s line-count-first metric cannot
-express (it would keep an argument-break whose opener overflows). The try-with-resources opener
+for now: its idempotence-critical work is the opener-fit gate, and `Doc.bestFitting`'s ranking now carries the overflow
+gate that expresses it — a fitting fan-out can never be outranked by an argument-break whose opener overflows (#223) —
+but no consumer has been migrated onto that path yet, so the imperative gate is still what runs. The try-with-resources opener
 gates (`StatementPrinter.tryOpenerLineWidth`, feeding both the whole-section flat collapse and the single attached
 method-call resource) measure the same way: the `try (…) {` opener renders at the statement's rendered block/type depth,
 so counting that nesting through `LayoutWidth.nodeLine` (floored by the `CURRENT` baseline) replaces the fixed one-unit

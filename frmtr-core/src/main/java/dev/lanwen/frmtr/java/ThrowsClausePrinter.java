@@ -19,8 +19,11 @@ import java.util.function.ToIntFunction;
  * concern.
  *
  * <p>Callers still decide declaration header assembly, parameter-list rendering, body or semicolon suffix selection,
- * compact source text policy, and the active width calculation. This helper only asks for the already assembled flat
- * pieces needed to choose where the throws clause lands.
+ * and compact source text policy. This helper owns the width calculation and measures the candidate same-line throws
+ * clause at the declaration's real rendered column (its block/type nesting depth) rather than a fixed baseline, so a
+ * {@code throws …} on a member of an inner class or nested type is judged against the column where it actually renders.
+ * It asks the caller only for the declaration node (for that depth) plus the already assembled flat pieces needed to
+ * choose where the throws clause lands.
  */
 final class ThrowsClausePrinter {
 
@@ -32,19 +35,24 @@ final class ThrowsClausePrinter {
 
     private final ToIntFunction<String> currentIndentedWidth;
 
+    private final LayoutWidth layoutWidth;
+
     ThrowsClausePrinter(
             FormatterOptions options,
             Function<Node, String> compact,
             Function<List<? extends Node>, String> compactJoin,
-            ToIntFunction<String> currentIndentedWidth
+            ToIntFunction<String> currentIndentedWidth,
+            LayoutWidth layoutWidth
     ) {
         this.options = options;
         this.compact = compact;
         this.compactJoin = compactJoin;
         this.currentIndentedWidth = currentIndentedWidth;
+        this.layoutWidth = layoutWidth;
     }
 
     Doc throwsClause(
+            Node declaration,
             String prefix,
             NodeList<Parameter> parameters,
             NodeList<? extends Node> thrownExceptions,
@@ -63,15 +71,21 @@ final class ThrowsClausePrinter {
             + parameters.stream().map(compact).reduce((left, right) -> left + ", " + right).orElse("")
             + ")";
         String flatSignature = prefix + flatParameters;
-        // C10 (#218): this still measures the same-line width at the fixed one-indent-level `currentIndented` baseline
-        // rather than the real rendered column. Sourcing the trailer from the context (above) is byte-identical — it
-        // reproduces the old `suffix` string exactly. Moving the measurement itself onto a rendered-column
-        // Doc.group/conditionalGroup (so nested-class members are measured at their true column) is a separate,
-        // rebaselining C10 slice mirroring the LDM-2 unary/ternary/return gates, deferred out of this byte-identical
-        // enabler.
-        int sameLineWidth = parametersBreak
-            ? currentIndentedWidth.applyAsInt(") " + throwsText + suffix)
-            : currentIndentedWidth.applyAsInt(flatSignature + " " + throwsText + suffix);
+        // C10 (#220): the same-line throws width is measured at the declaration's real rendered column, not the fixed
+        // one-indent-level `currentIndented` baseline. A `throws …` on a member of an inner class / nested type renders
+        // one block/type level deeper per enclosing scope, and the old baseline under-counted that indentation, so an
+        // over-width nested clause was kept inline against reality. `LayoutWidth.nodeLine` counts every enclosing
+        // TypeDeclaration/BlockStmt around the declaration and floors at one level, and the `currentIndentedWidth` term
+        // is kept as a floor so a top-level member is still measured against at least one unit — leaving top-level
+        // declarations byte-identical while correcting the deeper-nested ones (mirrors the LDM-2 unary/ternary/return
+        // gates and the try-with-resources opener gate #219). The trailer still arrives from LayoutContext (above).
+        String sameLine = parametersBreak
+            ? ") " + throwsText + suffix
+            : flatSignature + " " + throwsText + suffix;
+        int sameLineWidth = Math.max(
+            layoutWidth.nodeLine(declaration, sameLine),
+            currentIndentedWidth.applyAsInt(sameLine)
+        );
         if (forceBreak && (!parametersBreak || sameLineWidth > options.lineWidth())) {
             return brokenThrowsClause(thrownExceptions);
         }

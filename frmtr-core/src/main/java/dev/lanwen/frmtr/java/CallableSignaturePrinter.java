@@ -42,6 +42,8 @@ final class CallableSignaturePrinter {
 
     private final FormatterOptions options;
 
+    private final LayoutWidth layoutWidth;
+
     private final Function<Node, String> compact;
 
     private final Function<Node, String> compactTypeLike;
@@ -64,6 +66,7 @@ final class CallableSignaturePrinter {
             CommentTracker comments,
             RawSource rawSource,
             FormatterOptions options,
+            LayoutWidth layoutWidth,
             Function<Node, String> compact,
             Function<Node, String> compactTypeLike,
             Function<Type, Doc> typeBody,
@@ -77,6 +80,7 @@ final class CallableSignaturePrinter {
         this.comments = comments;
         this.rawSource = rawSource;
         this.options = options;
+        this.layoutWidth = layoutWidth;
         this.compact = compact;
         this.compactTypeLike = compactTypeLike;
         this.typeBody = typeBody;
@@ -194,17 +198,25 @@ final class CallableSignaturePrinter {
 
     /**
      * Decides whether the callable parameter list must break before later signature clauses are appended.
+     *
+     * <p>C10 (#220): the flat signature is measured at the declaration's real rendered column, not the fixed
+     * one-indent-level baseline. A declaration inside an inner class or nested type renders one block/type level deeper
+     * per enclosing scope, so a signature that fits at one unit can overflow at its true column; the old fixed baseline
+     * under-counted that and left the parameters unbroken against reality. {@link LayoutWidth#nodeLine} counts every
+     * enclosing {@code TypeDeclaration}/{@code BlockStmt} and floors at one level, and the {@code currentIndentedWidth}
+     * term is kept as a floor so a top-level declaration is still measured against at least one unit — leaving top-level
+     * signatures byte-identical while correcting deeper-nested ones. The caller's {@code prefix} and {@code suffix} (the
+     * {@code "throws … {"}/{@code ";"} the header appends on this line) are folded into the measured text exactly as
+     * before, mirroring the throws-clause and try-with-resources rendered-column gates.
      */
-    // C10 (#218): this gate still takes the caller's same-line prefix and suffix ("throws … {"/";") as ad-hoc string
-    // parameters and measures them at the fixed one-indent-level `currentIndentedWidth` baseline. Migrating it to source
-    // the trailer from LayoutContext.trailingContent() and measure at the real rendered column (a Doc.group/
-    // conditionalGroup, mirroring the LDM-2 gates) is deferred: threading a LayoutContext through parametersBreak and
-    // its callers is more invasive than the ThrowsClausePrinter seam, and the rendered-column measurement is a
-    // rebaselining C10 slice rather than part of this byte-identical enabler. Only the ThrowsClausePrinter gate was
-    // migrated to the new trailing-content field in #218.
     boolean parametersBreak(String prefix, CallableDeclaration<?> declaration, String suffix) {
         String parameters = callableParameterText(declaration);
-        return currentIndentedWidth(prefix + "(" + parameters + ")" + suffix) > options.lineWidth();
+        String signatureLine = prefix + "(" + parameters + ")" + suffix;
+        int width = Math.max(
+            layoutWidth.nodeLine(declaration, signatureLine),
+            currentIndentedWidth(signatureLine)
+        );
+        return width > options.lineWidth();
     }
 
     /**

@@ -520,7 +520,21 @@ commented-lambda opener tests plus the object-creation-chain-root gate (which pr
 body local but under-counted a field in a nested type or a local nested inside further blocks, keeping an opener that
 renders past the line width there (the #137/#155 measure-at-the-wrong-column family). Because `openerLineWidth` is never
 narrower than the true rendered column, a genuinely over-width opener always trips a gate, and flooring by
-`currentIndented` keeps every already-correct shallow position byte-identical (#216).
+`currentIndented` keeps every already-correct shallow position byte-identical (#216). The declaration-header throws
+clause (`ThrowsClausePrinter`), the callable parameter-list break (`CallableSignaturePrinter.parametersBreak`), and the
+breakable-argument continuation gate (`BreakableArgumentExpressionPrinter`) close the same family (#220): each measured
+its same-line width at a fixed baseline (the one-indent `currentIndented` for the throws clause and parameter list, the
+three-unit `CONTINUATION` budget for a breakable argument), so a `throws …`, a signature, or an argument on a member of
+an inner class or nested type — which renders one block/type level deeper per enclosing scope — was judged against a
+shallower column than it occupies and kept inline/flat over width. They now take the wider of that historical baseline
+and `LayoutWidth.nodeLine` at the node's real block/type depth: the floor leaves top-level declarations byte-identical
+(the whole fixture corpus was unchanged) while a deeper-nested `throws` list, parameter list, or binary/conditional
+argument breaks at its true column. The deeper-nesting rebaselining is guarded by
+`format/throws-clause-nested-depth` (the same method and constructor at class depth stay inline but break one level
+down) and `format/breakable-argument-nested-depth` (a binary-sum argument that fits flat at method depth breaks
+one-operand-per-line inside three nested classes). A method-call argument stays on the earlier chain-argument path
+(`MethodCallPrinter`'s `CONTINUATION`-budget chain probe), which is a separate seam left on its fixed budget, so the
+breakable-argument gate change is observable for non-method-call arguments (binary, conditional).
 
 The per-node *positional* facts a width gate needs — distinct from the run-scoped `JavaFormatContext` services and
 from per-type dispatch — travel in an immutable `LayoutContext` record threaded down the descent
@@ -541,10 +555,12 @@ unconditionally — rather than the dispatcher carrying that decision as a separ
 concrete `MethodCallPrinter`/`MethodReferencePrinter` suffix printers keep the resolved boolean because they also
 serve non-positional callers (a plain `methodCall`/`methodReference` with no broken line to inherit). The record
 stays a plain record with a `root()` default of no trailer and no leading break, plus `withTrailingContent` and
-`withLeadingBreak` derivations, so it is native-image safe and every non-header, non-broken call site is unaffected. Moving the throws gate's *measurement* off the fixed one-indent-level `currentIndented` baseline
-onto a rendered-column `Doc.group`/`conditionalGroup` (the C10 parity the LDM-2 unary/ternary/return gates already
-have) is a separate rebaselining slice; the `parametersBreak` and breakable-argument width gates still take their
-same-line prefix/suffix as ad-hoc strings and carry `// C10:` notes pointing at #218. A per-run
+`withLeadingBreak` derivations, so it is native-image safe and every non-header, non-broken call site is unaffected.
+The throws gate's *measurement* now runs at the declaration's real rendered column (`LayoutWidth.nodeLine` floored by
+`currentIndented`), the C10 rebaselining parity the LDM-2 unary/ternary/return gates already had, and the
+`parametersBreak` and breakable-argument width gates were migrated the same way in the same slice (#220, described with
+the rendered-column family above); the `trailingContent` prefix/suffix these gates measure is still the ad-hoc string
+the caller assembles, only its measurement column moved. A per-run
 `SourceShapePolicy` on `JavaFormatContext` is the consolidating home for
 "should the formatter respect the author's source shape here?" decisions, so printers ask one named question instead of
 re-deriving those reads from raw token text or `getRange()` arithmetic. It owns one canonical definition of each

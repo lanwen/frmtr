@@ -156,6 +156,7 @@ final class MethodDeclarationPrinter {
         if (!declaration.getThrownExceptions().isEmpty()) {
             docs.add(
                 throwsClause.render(
+                    declaration,
                     prefix,
                     declaration.getParameters(),
                     declaration.getThrownExceptions(),
@@ -413,6 +414,7 @@ final class MethodDeclarationPrinter {
     @FunctionalInterface
     interface ThrowsClauseRenderer {
         Doc render(
+                Node declaration,
                 String prefix,
                 NodeList<Parameter> parameters,
                 NodeList<? extends Node> thrownExceptions,

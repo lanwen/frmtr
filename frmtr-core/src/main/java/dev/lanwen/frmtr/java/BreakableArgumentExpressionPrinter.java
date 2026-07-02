@@ -63,11 +63,11 @@ final class BreakableArgumentExpressionPrinter {
      *
      * <p>The suffix is only part of the width probe; callers still own rendering commas, semicolons, or call tails.
      */
-    // C10 (#218): the trailing comma/tail still arrives as an ad-hoc `suffix` string measured against a fixed
-    // LayoutWidth.LineBudget rather than the caller's LayoutContext.trailingContent() at the real rendered column.
-    // Threading a LayoutContext through the argument seam and moving to a rendered-column measurement is a rebaselining
-    // C10 slice, deferred from this byte-identical enabler; #218 migrated only the ThrowsClausePrinter gate to the new
-    // trailing-content field.
+    // C10 (#220): the continuation-line width is measured at the argument's real rendered depth, floored by the fixed
+    // CONTINUATION budget, rather than at the fixed budget alone (see continuationWidth). The trailing comma/tail still
+    // arrives as an ad-hoc `suffix` string; threading a LayoutContext through the argument seam to source it from
+    // LayoutContext.trailingContent() is a separate concern and stays deferred (the seam is shared by method-call and
+    // object-creation argument lists that do not thread a context yet).
     Doc argument(Expression argument, String suffix) {
         Doc flat = expressionRenderer.apply(argument);
         Optional<Doc> broken = brokenArgument(argument);
@@ -75,8 +75,7 @@ final class BreakableArgumentExpressionPrinter {
             broken.isPresent()
             && (sourceShapePolicy.wasMultiline(argument)
                 || conditionalArgumentLineOverflows(argument, suffix)
-                || layoutWidth.line(LayoutWidth.LineBudget.CONTINUATION, compact.apply(argument) + suffix)
-                    > options.lineWidth())
+                || continuationWidth(argument, compact.apply(argument) + suffix) > options.lineWidth())
         ) {
             return Doc.ifBreak(broken.orElseThrow(), flat);
         }
@@ -98,8 +97,7 @@ final class BreakableArgumentExpressionPrinter {
             && (sourceShapePolicy.wasMultiline(argument)
                 || sourceMultilineMethodCallArguments(argument)
                 || conditionalArgumentLineOverflows(argument, suffix)
-                || layoutWidth.line(LayoutWidth.LineBudget.CONTINUATION, compact.apply(argument) + suffix)
-                    > options.lineWidth())
+                || continuationWidth(argument, compact.apply(argument) + suffix) > options.lineWidth())
         ) {
             return broken.orElseThrow();
         }
@@ -118,7 +116,29 @@ final class BreakableArgumentExpressionPrinter {
             return false;
         }
         String line = conditionalProjection.line(conditionalExpr) + suffix;
-        return layoutWidth.line(LayoutWidth.LineBudget.CONTINUATION, line) > options.lineWidth();
+        return continuationWidth(argument, line) > options.lineWidth();
+    }
+
+    /**
+     * Measures an argument's own continuation line at the column where it actually renders, floored by the fixed
+     * {@link LayoutWidth.LineBudget#CONTINUATION} budget.
+     *
+     * <p>C10 (#220): once the enclosing argument list breaks, a breakable argument renders on its own line at the
+     * argument's rendered nesting depth. The historical fixed CONTINUATION budget (three units) is the shallow common
+     * case but under-counts an argument list that sits inside an inner class or nested type, so an argument that
+     * overflowed its true column was frozen flat over width. {@link LayoutWidth#nodeLine} counts every enclosing
+     * {@code TypeDeclaration}/{@code BlockStmt} around the argument, and the CONTINUATION term is kept as a floor so a
+     * shallow argument (at or below three units, the corpus's common case) is measured exactly as before while a deeply
+     * nested one breaks at its real column. This mirrors the throws-clause, parameter-list, and try-with-resources
+     * rendered-column gates. The argument-list {@code Doc.indent} itself is not counted here (it is applied by the
+     * caller, not visible from the argument node), so this stays a floor on the shallow estimate rather than a full
+     * reconstruction of the running column.
+     */
+    private int continuationWidth(Expression argument, String line) {
+        return Math.max(
+            layoutWidth.nodeLine(argument, line),
+            layoutWidth.line(LayoutWidth.LineBudget.CONTINUATION, line)
+        );
     }
 
     private boolean sourceMultilineMethodCallArguments(Expression argument) {

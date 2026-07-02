@@ -88,7 +88,7 @@ final class FieldDeclarationPrinter {
             Function<MethodCallExpr, Doc> methodCall,
             Function<MethodCallExpr, Doc> brokenMethodCall,
             Function<MethodCallExpr, Optional<Doc>> mixedFieldMethodCallChain,
-            BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> forcedMethodCallChain,
+            VariableInitializerLayout.ForcedChainWithLayout forcedMethodCallChain,
             BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> packedMethodCallChain,
             Function<MethodCallExpr, Optional<String>> compactMethodCallChainRoot,
             Function<MethodCallExpr, Doc> methodCallWithSemicolon,

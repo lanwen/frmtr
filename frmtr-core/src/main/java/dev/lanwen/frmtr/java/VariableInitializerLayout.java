@@ -47,6 +47,24 @@ import java.util.function.ToIntFunction;
  */
 final class VariableInitializerLayout {
 
+    /**
+     * A forced-chain callback that carries the initializer's {@link LayoutContext} alongside its first-line-width probe.
+     *
+     * <p>LDM-2f (#190). The initializer keyword shares the chain's first line with the assignment prefix
+     * ({@code NAME = }), so the caller threads that fixed prefix through {@link LayoutContext#leftEdgePrefix()}. The chain
+     * width gate that reads it ({@code MethodCallChainPrinter.compactRootLineWidth}) then attributes the prefix at the
+     * rendered column instead of inferring it from the initializer value's stale source column, and the object-creation
+     * dot-split tail ({@code MethodCallChainPrinter.refuseOpeningSingleSimpleReturnChainTail}) becomes reachable. This is
+     * the initializer analogue of {@link ReturnExpressionPrinter.ChainWithLayout}; there is no three-argument
+     * {@link BiFunction}, so it is its own interface. The {@code firstLineWidth} probe is retained because the greedy
+     * packer and stay-flat gates still measure through it; the {@link LayoutContext} only adds the same-line-prefix fact
+     * the fixed-column gate needs.
+     */
+    @FunctionalInterface
+    interface ForcedChainWithLayout {
+        Optional<Doc> apply(MethodCallExpr expression, ToIntFunction<String> firstLineWidth, LayoutContext layout);
+    }
+
     private final CommentTracker comments;
 
     private final JavaCommentPlacementPolicy commentPlacement;
@@ -93,7 +111,7 @@ final class VariableInitializerLayout {
 
     private final Function<MethodCallExpr, Optional<Doc>> mixedFieldMethodCallChain;
 
-    private final BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> forcedMethodCallChain;
+    private final ForcedChainWithLayout forcedMethodCallChain;
 
     private final BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> packedMethodCallChain;
 
@@ -164,7 +182,7 @@ final class VariableInitializerLayout {
             Function<MethodCallExpr, Doc> methodCall,
             Function<MethodCallExpr, Doc> brokenMethodCall,
             Function<MethodCallExpr, Optional<Doc>> mixedFieldMethodCallChain,
-            BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> forcedMethodCallChain,
+            ForcedChainWithLayout forcedMethodCallChain,
             BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> packedMethodCallChain,
             Function<MethodCallExpr, Optional<String>> compactMethodCallChainRoot,
             Function<MethodCallExpr, Doc> methodCallWithSemicolon,
@@ -2000,8 +2018,17 @@ final class VariableInitializerLayout {
         }
         String bodyFirstLine = methodCallChainFirstLine.apply(methodCall);
         String lambdaPrefix = parameters + " ->";
+        // The chain here is an expression-lambda body (NAME = params -> chain), a distinct position from the direct
+        // initializer chain: its same-line prefix is NAME = params -> , not NAME = . Threading a non-empty leftEdgePrefix
+        // here would newly activate the object-creation dot-split for lambda-body chains too, which is out of the
+        // initializer-chain slice's scope (LDM-2f #190, mirroring #236 keeping return scoped to the direct return chain).
+        // Pass root(); the firstLineWidth probe still folds the lambda prefix in, so this stays byte-identical.
         Doc body = forcedMethodCallChain
-                .apply(methodCall, firstLineWidth(variable, flatName + " = " + lambdaPrefix + " "))
+                .apply(
+                    methodCall,
+                    firstLineWidth(variable, flatName + " = " + lambdaPrefix + " "),
+                    LayoutContext.root()
+                )
                 .orElseGet(() -> expression.apply(methodCall));
         if (
             layoutWidth.currentIndented(flatName + " = " + lambdaPrefix + " " + bodyFirstLine)
@@ -2025,7 +2052,26 @@ final class VariableInitializerLayout {
             MethodCallExpr methodCall,
             String flatName
     ) {
-        return forcedMethodCallChain.apply(methodCall, firstLineWidth(variable, flatName + " = "));
+        // LDM-2f (#190): the initializer's assignment prefix (NAME = ) shares the chain's first line, so hand the chain
+        // gates that fixed prefix through the LayoutContext, mirroring how ReturnExpressionPrinter threads "return ".
+        // compactRootLineWidth then measures the compact chain root at nodeIndentWidth(root) + "NAME = ".length() + text
+        // and drops its stale source-column floor, so the fit decision no longer depends on where the value sat in source
+        // (a determinism hardening — measurement parity with the old floor holds for already-formatted input, so nothing
+        // moves on the corpus, but a reindented value is now measured at its true rendered column). It also makes the
+        // object-creation dot-split (MethodCallChainPrinter.refuseOpeningSingleSimpleReturnChainTail) reachable for the
+        // object-creation-rooted chain shapes this forced path renders. The firstLineWidth probe is unchanged; it already
+        // folded the same NAME = prefix in, so the greedy packer and stay-flat gates stay byte-identical.
+        //
+        // NOTE (scope): the single-call object-root case whose opener fits (NAME = new X(a).sel(simpleArg) kept on the
+        // assignment line) does NOT reach here — variableInitializerBrokenOrFlat pre-empts it with the argument-break
+        // shape under singleCallConvergesOnArgumentBreak, a deliberate idempotence-preserving convergence choice. Rerouting
+        // it to the dot-split fan-out is non-idempotent for initializers (unlike return, the initializer layout space has a
+        // break-after-= collapse the fan-out oscillates with), so it is left as-is and deferred.
+        return forcedMethodCallChain.apply(
+            methodCall,
+            firstLineWidth(variable, flatName + " = "),
+            LayoutContext.root().withLeftEdgePrefix(flatName + " = ")
+        );
     }
 
     private ToIntFunction<String> firstLineWidth(VariableDeclarator variable, String prefix) {
@@ -2178,8 +2224,11 @@ final class VariableInitializerLayout {
      */
     private Doc brokenInitializer(VariableDeclarator variable, Expression initializer) {
         if (initializer instanceof MethodCallExpr methodCall) {
+            // This fallback renders the chain on its own continuation line under a broken NAME = (the caller wraps it in
+            // NAME =\n<indented>), so the chain owns its first column with no same-line prefix. Pass root() (empty prefix):
+            // there is no NAME = to attribute at the rendered column here, so the leftEdgePrefix arm must stay off.
             return forcedMethodCallChain
-                    .apply(methodCall, text -> layoutWidth.variableInitializer(variable, text))
+                    .apply(methodCall, text -> layoutWidth.variableInitializer(variable, text), LayoutContext.root())
                     .orElseGet(() -> expression.apply(initializer));
         }
         return expression.apply(initializer);

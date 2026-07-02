@@ -858,24 +858,35 @@ final class VariableInitializerLayout {
             }
             MethodCallChainSourcePlanner.InitializerChainShape initializerChainShape =
                 methodCallChainInitializerShape.apply(methodCall);
-            // C10 (B) — left imperative deliberately. The intent was to replace this fan-out-versus-argument-break choice
-            // with Doc.bestFitting([argumentBreak, fanOut]) and let the renderer rank them. Analysis of the shipped
-            // bestFitting metric shows that is not a safe swap here:
-            //  * argument-break keeps `NAME = ROOT.call(` on the assignment line, so for a single-selector call it always
-            //    wraps into strictly fewer lines than the one-per-line fan-out. bestFitting ranks flattest-first by line
-            //    count, so it would ALWAYS pick argument-break — the ranking never selects fan-out, so it adds no
-            //    behavior over "prefer argument-break when it is offered".
-            //  * The real, idempotence-critical work is deciding *whether argument-break is offered at all*:
-            //    singleCallConvergesOnArgumentBreak gates on the opener fitting (argumentBreakOpenerFits) and an
-            //    attachable root. DocWidths.LineCount#betterThan prioritizes line count over overflow, so a bestFitting
-            //    node would keep an argument-break whose opener overflows (fewer lines) instead of the fan-out — exactly
-            //    the regression field-init-typelike-root-idempotence's `qualifiedRootProviders` locks against. bestFitting
-            //    cannot express the opener-fit gate, so it cannot replace this predicate without reintroducing it.
-            //  * Both arms render the call, so a bestFitting would double-claim comments for this method's comment-bearing
-            //    caller (variableInitializerBrokenOrFlat is also reached from the imperative comment path).
-            // The predicate already keys purely on AST shape + measured width (never source line breaks), so it is
-            // idempotent by construction; leaving it imperative keeps that guarantee. (LDM-3/B8 territory once the ranking
-            // metric grows an overflow-first tie-break that can decline an overflowing opener.)
+            // C10 (B) — left imperative deliberately. The intent (LDM-3, #191) was to replace this
+            // fan-out-versus-argument-break choice with Doc.bestFitting([argumentBreak, fanOut]) and let the renderer
+            // rank them. The overflow-gated tie-break the original note said this was waiting on has since landed (#223:
+            // DocWidths.LineCount#betterThan now ranks a fitting layout above any that overflows), but a #191 (LDM-3)
+            // investigation found the overflow gate is necessary yet not sufficient — two structural blockers remain, so
+            // the swap still regresses and this stays imperative:
+            //  * The fan-out arm is itself source-shape-dependent. variableWithForcedMethodCallChain delegates to
+            //    MethodCallChainPrinter.forcedMethodCallChain, which returns empty for a flat single-selector call whose
+            //    opener fits (a single call has no `.selector` chain segment to break) and non-empty only when the opener
+            //    overflows or the source chain was multiline. A bestFitting built from it therefore fires only for those
+            //    inputs; for the source-multiline case it picks the collapse (NAME =\n WHOLE_CALL, fewer lines) while the
+            //    re-format — now flat source — reaches the deterministic argument-break path, so the layout oscillates
+            //    (the field-init-typelike-root-idempotence `seenProviders` entry). The overflow gate cannot fix this: the
+            //    two competing shapes both fit, so the gate is a no-op and line count decides.
+            //  * Even with a hypothetical source-neutral collapse arm, the imperative policy here is opener-attachment
+            //    ("keep ROOT.method( on the assignment line whenever its opener fits, breaking only the argument list"),
+            //    which is not line-count minimization. For any call whose whole form fits on one continuation line the
+            //    collapse fan-out has strictly FEWER lines than the argument-break, so a line-count-ranked bestFitting
+            //    picks the collapse and moves the field-init-typelike-root-idempotence golden (seenProviders /
+            //    collapsedProviders both render argument-break today). bestFitting ranks by fit-then-line-count and cannot
+            //    express "prefer the opener-attached shape even when it uses more lines". (Contrast LDM-3's
+            //    MethodCallChainPrinter.rankedSingleSegmentChain, which works precisely because its preferred alternative
+            //    — compact-with-broken-final-segment — has no more lines than its fan-out.)
+            //  * Both arms render the call, so a bestFitting would additionally double-claim comments for this method's
+            //    comment-bearing caller (variableInitializerBrokenOrFlat is also reached from the imperative comment path).
+            // The predicate keys purely on AST shape + measured width (never source line breaks), so it is idempotent by
+            // construction; leaving it imperative keeps that guarantee. Migrating this arm needs a source-neutral fan-out
+            // builder AND a way to express opener-attachment preference (or a deliberate decision to move the golden to
+            // the collapse and route every entry path through the one bestFitting) — beyond an equivalence-preserving swap.
             if (
                 initializerChainShape.shouldForceWideInitializerChain()
                 && !singleCallConvergesOnArgumentBreak(

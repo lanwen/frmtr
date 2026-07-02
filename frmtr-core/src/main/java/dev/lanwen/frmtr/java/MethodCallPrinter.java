@@ -634,11 +634,30 @@ final class MethodCallPrinter {
         return methodChains.forcedMethodCallChain(expression, lineBudget);
     }
 
+    // LDM-2f (#190): the layout-carrying delegators the return chain uses to thread its {@code "return "} left-edge
+    // prefix down to the chain width gates. Callers without a prefix keep the overloads above (which pass {@code root()}),
+    // so they stay byte-identical until their own activation slice.
+    Optional<Doc> forcedMethodCallChain(
+            MethodCallExpr expression,
+            LayoutWidth.LineBudget lineBudget,
+            LayoutContext layout
+    ) {
+        return methodChains.forcedMethodCallChain(expression, lineBudget, layout);
+    }
+
     Optional<Doc> forcedMethodCallChain(
             MethodCallExpr expression,
             ToIntFunction<String> firstLineWidth
     ) {
         return methodChains.forcedMethodCallChain(expression, firstLineWidth);
+    }
+
+    Optional<Doc> forcedMethodCallChain(
+            MethodCallExpr expression,
+            ToIntFunction<String> firstLineWidth,
+            LayoutContext layout
+    ) {
+        return methodChains.forcedMethodCallChain(expression, firstLineWidth, layout);
     }
 
     Optional<Doc> packedMethodCallChain(
@@ -657,6 +676,16 @@ final class MethodCallPrinter {
             LayoutWidth.LineBudget lineBudget
     ) {
         return methodChains.compactRootWithBrokenFinalChainSegment(expression, lineBudget);
+    }
+
+    // LDM-2f (#190): the layout-carrying delegator the return chain uses to thread its {@code "return "} left-edge prefix
+    // down to {@code compactRootLineWidth}. The no-{@code layout} overload above passes {@code root()}.
+    Optional<Doc> compactRootWithBrokenFinalChainSegment(
+            MethodCallExpr expression,
+            LayoutWidth.LineBudget lineBudget,
+            LayoutContext layout
+    ) {
+        return methodChains.compactRootWithBrokenFinalChainSegment(expression, lineBudget, layout);
     }
 
     Optional<Doc> sourceMultilineMethodCallStatement(

@@ -32,6 +32,17 @@ import java.util.function.ToIntFunction;
  */
 final class ReturnExpressionPrinter {
 
+    /**
+     * A forced-chain callback that also carries the return value's {@link LayoutContext}. The second parameter is the
+     * width shape the chain callee already took before LDM-2f ({@link LayoutWidth.LineBudget} or a first-line
+     * {@link ToIntFunction}); the third threads the {@code "return "} left-edge prefix so the chain width gates can
+     * attribute it at the rendered column. There is no three-argument {@code BiFunction}, so this is its own interface.
+     */
+    @FunctionalInterface
+    interface ChainWithLayout<W> {
+        Optional<Doc> apply(MethodCallExpr expression, W widthShape, LayoutContext layout);
+    }
+
     private final FormatterOptions options;
 
     private final LayoutWidth layoutWidth;
@@ -56,15 +67,14 @@ final class ReturnExpressionPrinter {
 
     private final Function<MethodCallExpr, Optional<Doc>> sourceMultilineMethodCall;
 
-    private final BiFunction<
-        MethodCallExpr,
-        LayoutWidth.LineBudget,
-        Optional<Doc>
-    > compactRootWithBrokenFinalChainSegment;
+    // LDM-2f (#190): these three chain callbacks reach {@code MethodCallChainPrinter.compactRootLineWidth}, so each takes
+    // a {@link LayoutContext} the return caller fills with {@code withLeftEdgePrefix("return ")}. That lets the gate
+    // attribute the {@code return } prefix at the rendered column instead of inferring it from the value's source column.
+    private final ChainWithLayout<LayoutWidth.LineBudget> compactRootWithBrokenFinalChainSegment;
 
-    private final BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Optional<Doc>> forcedMethodCallChain;
+    private final ChainWithLayout<LayoutWidth.LineBudget> forcedMethodCallChain;
 
-    private final BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> forcedMethodCallChainWithFirstLine;
+    private final ChainWithLayout<ToIntFunction<String>> forcedMethodCallChainWithFirstLine;
 
     private final Function<MethodCallExpr, Doc> brokenMethodCall;
 
@@ -117,9 +127,9 @@ final class ReturnExpressionPrinter {
             ToIntFunction<String> continuationStatementWidth,
             Function<MethodCallExpr, Optional<Doc>> sourceMultilineExpressionLambda,
             Function<MethodCallExpr, Optional<Doc>> sourceMultilineMethodCall,
-            BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Optional<Doc>> compactRootWithBrokenFinalChainSegment,
-            BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Optional<Doc>> forcedMethodCallChain,
-            BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> forcedMethodCallChainWithFirstLine,
+            ChainWithLayout<LayoutWidth.LineBudget> compactRootWithBrokenFinalChainSegment,
+            ChainWithLayout<LayoutWidth.LineBudget> forcedMethodCallChain,
+            ChainWithLayout<ToIntFunction<String>> forcedMethodCallChainWithFirstLine,
             Function<MethodCallExpr, Doc> brokenMethodCall,
             BiFunction<MethodCallExpr, String, Doc> brokenMethodCallWithClosingLine,
             Function<MethodCallExpr, String> methodCallPrefix,
@@ -523,6 +533,11 @@ final class ReturnExpressionPrinter {
         // The chain callees keep their LineBudget signatures (LDM-3 pilot, #190), so read the budget back from the
         // return value's context to feed them.
         LayoutWidth.LineBudget lineBudget = layout.widthBudget();
+        // LDM-2f (#190): the return keyword shares the value's first line, so hand the chain gates that fixed prefix. The
+        // gate that reads it (MethodCallChainPrinter.compactRootLineWidth) drops its source-column floor and measures the
+        // compact chain root at nodeIndentWidth + "return " + text; every branch that can reach that gate threads the same
+        // prefix so the fit decision is identical on every pass (idempotent).
+        LayoutContext chainLayout = layout.withLeftEdgePrefix("return ");
         Optional<Doc> expressionLambda = sourceMultilineExpressionLambda.apply(methodCall);
         if (expressionLambda.isPresent()) {
             return expressionLambda;
@@ -535,8 +550,8 @@ final class ReturnExpressionPrinter {
         }
         if (methodCallChainIsSourceMultiline.test(methodCall)) {
             return forcedMethodCallChainWithFirstLine
-                    .apply(methodCall, text -> returnLineWidth(methodCall, "return " + text, layout))
-                    .or(() -> forcedMethodCallChain.apply(methodCall, lineBudget));
+                    .apply(methodCall, text -> returnLineWidth(methodCall, "return " + text, layout), chainLayout)
+                    .or(() -> forcedMethodCallChain.apply(methodCall, lineBudget, chainLayout));
         }
         if (methodCall.getScope().filter(ObjectCreationExpr.class::isInstance).isPresent()) {
             // LDM-3g (#210): a source-compact object-creation-rooted single-segment chain routes through the chain
@@ -545,15 +560,16 @@ final class ReturnExpressionPrinter {
             // at the real column instead of the first-line probe committing to a shape. The probe is still threaded so the
             // deeper/source-multiline object-root shapes the ranker defers on keep their imperative selection.
             return forcedMethodCallChainWithFirstLine
-                    .apply(methodCall, text -> returnLineWidth(methodCall, "return " + text, layout))
-                    .or(() -> forcedMethodCallChain.apply(methodCall, lineBudget));
+                    .apply(methodCall, text -> returnLineWidth(methodCall, "return " + text, layout), chainLayout)
+                    .or(() -> forcedMethodCallChain.apply(methodCall, lineBudget, chainLayout));
         }
-        return compactRootWithBrokenFinalChainSegment.apply(methodCall, lineBudget)
+        return compactRootWithBrokenFinalChainSegment.apply(methodCall, lineBudget, chainLayout)
                 .or(() -> forcedMethodCallChainWithFirstLine.apply(
                         methodCall,
-                        text -> returnLineWidth(methodCall, "return " + text, layout)
+                        text -> returnLineWidth(methodCall, "return " + text, layout),
+                        chainLayout
                 ))
-                .or(() -> forcedMethodCallChain.apply(methodCall, lineBudget))
+                .or(() -> forcedMethodCallChain.apply(methodCall, lineBudget, chainLayout))
                 .or(() -> Optional.of(brokenMethodCall.apply(methodCall)));
     }
 

@@ -443,7 +443,18 @@ selected by the gates above and is never a width-ranked alternative, so ranking 
 is gated on the chain being **comment-free** (`!MethodCallChainAnalysis.hasComments()`): a comment-bearing chain stays on
 the imperative `speculatively` ladder whose first-builder-wins rollback owns the comment claim, because building both
 `bestFitting` alternatives eagerly would double-claim comments and trip the strict-claims guardrail. Because the ranking
-agrees with the retained probe at the real column, the fixture corpus is byte-identical. The single-attachable-argument
+agrees with the retained probe at the real column, the fixture corpus is byte-identical. Milestone LDM-3g (#210) adds the
+object-creation-rooted sibling `MethodCallChainPrinter.rankedObjectRootSingleSegmentChain`, which ranks the same two
+broken shapes for a source-compact constructor root (`new Type(args).selector(...)`) under the identical
+source-shape + `!hasComments` gates and reuses the same `compactRootWithBrokenFinalSegment` for the compact alternative
+(it already builds that shape for object-creation roots). It is reached in the forced-chain single-segment branch, so
+`ReturnExpressionPrinter` drops the object-creation-rooted-chain pre-empt from `preemptedReturnValue`: an
+object-creation-rooted return chain now falls through to the return's flat-versus-broken `conditionalGroup`, whose broken
+arm is this ranked `bestFitting` (the return `conditionalGroup` measures flat-versus-broken at the real column, then the
+nested `bestFitting` ranks the two broken shapes). This is again byte-identical on the corpus because the ranking agrees
+with the retired first-line probe. The two source-multiline return branches that still pre-empt — the enclosed binary and
+the source-multiline object creation — stay imperative pending LDM-4 (the binary/object-creation printers exposing their
+own ranked candidates); the ranker cannot override those source-preserved shapes today. The single-attachable-argument
 hug gates (`MethodCallPrinter.singleMethodCallArgument` /
 `singleObjectCreationArgument`, which keep `outer(inner(` on one opener when the author broke a lone inner call or
 constructor argument) apply the same prefix-aware width rule through `attachedOpenerOverflows`: rather than measuring the

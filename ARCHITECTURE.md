@@ -461,7 +461,23 @@ hugs stay unchanged. The first-line hug gate that decides whether that plan is b
 header up to `->`) uses the same rendered-column rule: it previously reconstructed the prefix's start column from the
 lambda's `range.begin.column` and so, once the source column understated the rendered column (a reindented or shallowly
 indented call), let an over-width header hug and flip-flop on the next pass (#217); it now takes the wider of the shallow
-baseline and `LayoutWidth.nodeIndentWidth`. A `!(<binary>)` logical-complement initializer value whose inline assignment line overflows keeps
+baseline and `LayoutWidth.nodeIndentWidth`. The method-call and chain printers' own root-width probes join the same rule:
+`MethodCallPrinter.methodCallRootLineWidth` (the source-multiline expression-lambda hug gate) and
+`MethodCallChainPrinter.compactRootLineWidth` / `rootLineWidth` / `selectorLineWidth` (the compact-root, promoted-root,
+and broken-selector chain gates) each reconstructed the root/selector column from `range.begin.column` and now take the
+wider of that reconstruction and `LayoutWidth.nodeIndentWidth`, so a chain reindented shallower than its true block/type
+depth is no longer measured as fitting at its stale column. Unlike `expressionLineWidth`, these keep the source column as
+the *floor* rather than replacing it: a chain root usually renders after a same-line leading prefix — a `NAME … = `, a
+`return `, or an enclosing argument list's continuation indent — that `nodeIndentWidth` (nesting depth only) does not
+carry but the source column does, so a bare `nodeIndentWidth` swap under-measured such prefixed roots and regressed the
+initializer/return chain fixtures into over-width flip-flops. Flooring by the source column keeps the probe monotone
+(it can only ever measure wider), so the migration is regression-free and byte-identical on the corpus; fully attributing
+that leading prefix at the rendered column — rather than leaning on the source column to supply it — is the
+`LayoutContext.leftEdgePrefix` follow-up to C10-6's trailing-content (#190). `MethodCallChainPrinter.methodCallSegmentWidth`
+is deliberately *not* migrated: it measures a segment kept beside a preceding token on the same line, a position deeper
+than the block indent that `nodeIndentWidth` cannot express (the one-per-line case is already routed around it via
+`segmentOnOwnLine`), so its source column stays. A `!(<binary>)` logical-complement initializer value whose inline
+assignment line overflows keeps
 `name = !(` on the assignment line and breaks the parenthesized binary one operator per line inside the parentheses
 (`VariableInitializerLayout` reuses `EnclosedExpressionPrinter.parenthesizedBreak`, the same shape the `if (...)` condition
 and complement-`return` paths produce) instead of breaking after `=` and stranding `!(...)` flat on the continuation line;

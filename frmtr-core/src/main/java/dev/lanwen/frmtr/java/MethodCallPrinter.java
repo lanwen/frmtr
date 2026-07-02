@@ -1032,9 +1032,30 @@ final class MethodCallPrinter {
             && argument.bodyOpenerOverflows(line -> methodCallRootLineWidth(expression, line), options.lineWidth());
     }
 
+    /**
+     * Measures the call's first line ({@code prefix(args lambda ->}) at the column where the call renders, gating whether
+     * a source-multiline expression-lambda argument can be hugged.
+     *
+     * <p>C10 (#217): this gate reconstructs the call column from {@code range.begin.column}, a source-column read that
+     * understates the rendered column once the call is reindented shallower than its true block/type depth. It now also
+     * considers the call's rendered indentation ({@link LayoutWidth#nodeIndentWidth}, which counts every enclosing type
+     * and block) and takes the <em>wider</em> of the two, mirroring the chain-printer root gates
+     * ({@code MethodCallChainPrinter.compactRootLineWidth}/{@code rootLineWidth}), the sibling
+     * {@link ExpressionLambdaArgumentLayout} first-line gate (#226), and the single-argument hug gate
+     * {@link #attachedOpenerOverflows}.
+     *
+     * <p>The source column is kept as the <em>floor</em> rather than replaced: this call can be an initializer/return
+     * value whose {@code = }/{@code return } leading prefix shares the measured line, and {@code nodeIndentWidth}
+     * (nesting depth only) does not carry that prefix while the source column does. Flooring by the source column keeps
+     * it accounted for, so the probe can only ever measure wider and never under-measures a prefixed call. The change is
+     * byte-identical on the fixture corpus and on every reindented/nested probe; fully attributing the leading prefix at
+     * the rendered column awaits the {@code LayoutContext.leftEdgePrefix} follow-up (#190).
+     */
     private int methodCallRootLineWidth(MethodCallExpr expression, String firstLine) {
         return expression.getRange()
-                .map(range -> Math.max(0, range.begin.column + 1) + firstLine.length())
+                .map(range -> Math.max(
+                    Math.max(0, range.begin.column + 1) + firstLine.length(),
+                    layoutWidth.nodeIndentWidth(expression) + firstLine.length()))
                 .orElseGet(() -> layoutWidth.line(LayoutWidth.LineBudget.CURRENT, firstLine));
     }
 

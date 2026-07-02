@@ -1682,9 +1682,31 @@ final class MethodCallChainPrinter {
                 .orElse(true);
     }
 
+    /**
+     * Measures a compact chain root's first line ({@code root.selector(args…}) at the column where the root renders.
+     *
+     * <p>C10 (#217): this gate reconstructs the root's start column from {@code range.begin.column}, a source-column
+     * read that understates the rendered column once the root is reindented shallower than its true block/type depth. It
+     * now also considers the root's rendered indentation ({@link LayoutWidth#nodeIndentWidth}, which counts every
+     * enclosing type and block) and takes the <em>wider</em> of the two, so a root reindented flush-left inside deep
+     * nesting is no longer measured as fitting at its stale shallow column and hugged over width. This mirrors the
+     * sibling {@link ExpressionLambdaArgumentLayout} first-line gate (#226) and the depth-aware chain probes (#162).
+     *
+     * <p>Unlike those siblings, the source column is kept as the <em>floor</em> rather than replaced outright: a chain
+     * root frequently renders after a same-line leading prefix — a field/local {@code NAME … = }, a {@code return }, or
+     * an enclosing argument list's continuation indent — that {@code nodeIndentWidth} (nesting depth only) does not carry
+     * but the source column does. Flooring by the source column keeps that prefix accounted for, so the probe can only
+     * ever measure <em>wider</em> than before and never under-measures a prefixed root (a bare {@code nodeIndentWidth}
+     * swap did regress {@code return-chain-final-argument} and {@code source-multiline-method-root-chain-initializer}
+     * into over-width flip-flops). Fully attributing that leading prefix at the rendered column — rather than leaning on
+     * the source column to supply it — awaits the {@code LayoutContext.leftEdgePrefix} follow-up (#190); until then the
+     * wider-of rule is a strict, regression-free improvement, byte-identical on the corpus.
+     */
     private int compactRootLineWidth(Expression root, String firstLine, LayoutWidth.LineBudget lineBudget) {
         return root.getRange()
-                .map(range -> Math.max(0, range.begin.column + 1) + firstLine.length())
+                .map(range -> Math.max(
+                    Math.max(0, range.begin.column + 1) + firstLine.length(),
+                    layoutWidth.nodeIndentWidth(root) + firstLine.length()))
                 .orElseGet(() -> layoutWidth.line(lineBudget, firstLine));
     }
 
@@ -2180,9 +2202,22 @@ final class MethodCallChainPrinter {
                 );
     }
 
+    /**
+     * Measures a chain root's compact form at the column where the root renders, feeding the compact-root break
+     * decisions ({@link #canBreakAfterCompactExpressionLambdaRoot}, {@link #promotedRootArgumentsShouldBreak}).
+     *
+     * <p>C10 (#217): like {@link #compactRootLineWidth} it takes the wider of the source-column reconstruction and the
+     * root's rendered indentation ({@link LayoutWidth#nodeIndentWidth}), so a root reindented shallower than its true
+     * depth is no longer under-measured, while the source-column floor keeps the {@code = }/{@code return }/continuation
+     * leading prefix accounted for (a bare {@code nodeIndentWidth} swap regressed the initializer/return fixtures). The
+     * wider-of rule can only measure wider than before, so it is regression-free and byte-identical on the corpus; fully
+     * rendering the leading prefix at the rendered column awaits {@code leftEdgePrefix} (#190).
+     */
     private int rootLineWidth(Expression root, String text) {
         return root.getRange()
-                .map(range -> Math.max(0, range.begin.column - 1) + text.length())
+                .map(range -> Math.max(
+                    Math.max(0, range.begin.column - 1) + text.length(),
+                    layoutWidth.nodeIndentWidth(root) + text.length()))
                 .orElseGet(() -> layoutWidth.line(LayoutWidth.LineBudget.CURRENT, text));
     }
 
@@ -2266,10 +2301,25 @@ final class MethodCallChainPrinter {
         return text -> layoutWidth.line(lineBudget, text);
     }
 
+    /**
+     * Measures the selector's line width when the selector was broken onto its own continuation line after the scope.
+     *
+     * <p>C10 (#217): the sole caller ({@link #promotedRootArgumentsShouldBreak}) reaches it only when
+     * {@code methodCallStartsAfterScopeLine} holds — the author already broke {@code .selector} onto a continuation line
+     * under the scope — so the selector renders at that continuation indent, which is <em>deeper</em> than the
+     * block/type nesting depth {@link LayoutWidth#nodeIndentWidth} counts. The name-token source column, not
+     * {@code nodeIndentWidth}, is what actually describes where the preserved continuation sits, so the source column is
+     * kept as the floor; taking the wider of it and {@code nodeIndentWidth} matches the root gates' shape and can only
+     * ever measure wider (so it cannot regress), but the {@code nodeIndentWidth} arm rarely wins here because the
+     * continuation indent already exceeds it. Fully modelling the continuation column awaits {@code leftEdgePrefix}
+     * (#190).
+     */
     private int selectorLineWidth(MethodCallExpr expression, String text) {
         return expression.getName()
                 .getRange()
-                .map(range -> Math.max(0, range.begin.column - 1) + text.length())
+                .map(range -> Math.max(
+                    Math.max(0, range.begin.column - 1) + text.length(),
+                    layoutWidth.nodeIndentWidth(expression) + text.length()))
                 .orElseGet(() -> layoutWidth.line(LayoutWidth.LineBudget.CURRENT, text));
     }
 
@@ -3012,6 +3062,17 @@ final class MethodCallChainPrinter {
                 .orElse("");
     }
 
+    /**
+     * Estimates a chain segment's width when it is kept beside a preceding token on the same line.
+     *
+     * <p>C10 (#217): deliberately left source-relative. The reconstruction — the name token's source column minus its
+     * offset within the segment — recovers where the whole segment starts <em>beside its preceding token</em> (see
+     * {@link #finalSegmentRenderedWidth}), a source-shaped position that depends on what shares the line, not on the
+     * segment's own block/type nesting depth. {@link LayoutWidth#nodeIndentWidth} measures only that nesting depth and
+     * so cannot express the beside-a-token column, which is why the one-per-line caller already routes around this via
+     * {@code segmentOnOwnLine}. The source column remains the faithful estimate for the beside-a-token case; a correct
+     * rendered-column migration would need the same leading-offset machinery the root gates await (#190).
+     */
     private int methodCallSegmentWidth(
             MethodCallExpr expression,
             String segment,

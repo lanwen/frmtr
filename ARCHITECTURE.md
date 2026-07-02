@@ -501,10 +501,24 @@ flat rendering is a single line: comment-bearing initializers (both arms would c
 ones (arrays/switch/anonymous-class own their break), source-multiline-preserved shapes, and casts stay on the historical
 imperative cascade (`variableInitializerCommentAndSourceShapeTier`, the initializer analogue of
 `ReturnExpressionPrinter.preemptedReturnValue`), which renders the initializer exactly once and is byte-identical to
-before. The fan-out-versus-argument-break single-call convergence (`singleCallConvergesOnArgumentBreak`) stays imperative
-for now: its idempotence-critical work is the opener-fit gate, and `Doc.bestFitting`'s ranking now carries the overflow
-gate that expresses it — a fitting fan-out can never be outranked by an argument-break whose opener overflows (#223) —
-but no consumer has been migrated onto that path yet, so the imperative gate is still what runs. The try-with-resources opener
+before. The fan-out-versus-argument-break single-call convergence (`singleCallConvergesOnArgumentBreak`) stays imperative.
+The overflow-gated tie-break it was originally waiting on has landed (#223: a fitting fan-out can never be outranked by an
+argument-break whose opener overflows), but a #191 (LDM-3) investigation found the gate is necessary yet not sufficient to route
+this arm through `Doc.bestFitting([argument-break, fan-out])`, so it was deliberately left imperative (see the extended
+`VariableInitializerLayout` note). Two structural blockers remain beyond the overflow gate. First, the fan-out arm is
+itself source-shape-dependent: `variableWithForcedMethodCallChain` → `MethodCallChainPrinter.forcedMethodCallChain`
+returns empty for a flat single-selector call whose opener fits (there is no `.selector` chain segment to break) and
+non-empty only when the opener overflows or the source chain was multiline, so a `bestFitting` built from it fires only
+for those inputs and, in the source-multiline case, picks the fewer-line collapse while the flat-source re-format falls to
+the deterministic argument-break path — a non-idempotent oscillation the overflow gate cannot fix, because both shapes fit
+and the gate is a no-op. Second, the imperative policy is opener-attachment ("keep `ROOT.method(` on the assignment line
+whenever its opener fits, breaking only the argument list"), which is not line-count minimization: whenever the whole call
+fits on one continuation line the collapse fan-out has strictly fewer lines than the argument-break, so a line-count-ranked
+`bestFitting` would move the `field-init-typelike-root-idempotence` golden (`seenProviders`/`collapsedProviders` render
+argument-break today). LDM-3's `MethodCallChainPrinter.rankedSingleSegmentChain` works precisely because its preferred
+alternative has no more lines than its fan-out; this arm's does not, so migrating it needs a source-neutral fan-out builder
+and a way to express opener-attachment preference (or a deliberate golden move to the collapse with every entry path routed
+through one `bestFitting`) — beyond an equivalence-preserving swap. The try-with-resources opener
 gates (`StatementPrinter.tryOpenerLineWidth`, feeding both the whole-section flat collapse and the single attached
 method-call resource) measure the same way: the `try (…) {` opener renders at the statement's rendered block/type depth,
 so counting that nesting through `LayoutWidth.nodeLine` (floored by the `CURRENT` baseline) replaces the fixed one-unit

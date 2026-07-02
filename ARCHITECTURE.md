@@ -484,7 +484,14 @@ carry but the source column does, so a bare `nodeIndentWidth` swap under-measure
 initializer/return chain fixtures into over-width flip-flops. Flooring by the source column keeps the probe monotone
 (it can only ever measure wider), so the migration is regression-free and byte-identical on the corpus; fully attributing
 that leading prefix at the rendered column — rather than leaning on the source column to supply it — is the
-`LayoutContext.leftEdgePrefix` follow-up to C10-6's trailing-content (#190). `MethodCallChainPrinter.methodCallSegmentWidth`
+`LayoutContext.leftEdgePrefix` follow-up to C10-6's trailing-content (#190). As the byte-identical structural
+prerequisite for that follow-up (LDM-2f), the method-call printers now receive a `LayoutContext`:
+`MethodCallPrinter.methodCall(MethodCallExpr, LayoutContext)` is the context-carrying entry (the no-context overload
+defaults to `LayoutContext.root()`), and the context is threaded through the chain entries and their helpers down to all
+four gates above. The gates take the parameter but do **not** read `leftEdgePrefix` yet, so no width decision changes;
+the follow-up populates `leftEdgePrefix` at the seam and reads it in the gates, then drops the source-column floor. The
+main expression-dispatch seam (`ExpressionPrinters`) forwards the real outer `layout`; the with-tail and other
+call/chain seams still pass `root()` until the activation slice extends them. `MethodCallChainPrinter.methodCallSegmentWidth`
 is deliberately *not* migrated: it measures a segment kept beside a preceding token on the same line, a position deeper
 than the block indent that `nodeIndentWidth` cannot express (the one-per-line case is already routed around it via
 `segmentOnOwnLine`), so its source column stays. A `!(<binary>)` logical-complement initializer value whose inline

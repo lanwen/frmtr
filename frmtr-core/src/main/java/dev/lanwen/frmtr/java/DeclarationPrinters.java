@@ -188,6 +188,7 @@ final class DeclarationPrinters {
             comments,
             rawSource,
             options,
+            context.layoutWidth,
             compactSource::compact,
             compactSource::compactTypeLike,
             types::typeBody,
@@ -202,7 +203,8 @@ final class DeclarationPrinters {
             options,
             compactSource::compact,
             compactSource::compactJoin,
-            this::currentIndentedWidth
+            this::currentIndentedWidth,
+            context.layoutWidth
         );
         this.classOrInterfaces = new ClassOrInterfaceDeclarationPrinter(
             comments,

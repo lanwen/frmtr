@@ -85,6 +85,7 @@ final class ConstructorDeclarationPrinter {
         if (!declaration.getThrownExceptions().isEmpty()) {
             docs.add(
                 throwsClause.render(
+                    declaration,
                     prefix,
                     declaration.getParameters(),
                     declaration.getThrownExceptions(),
@@ -118,6 +119,7 @@ final class ConstructorDeclarationPrinter {
         if (!declaration.getThrownExceptions().isEmpty()) {
             docs.add(
                 throwsClause.render(
+                    declaration,
                     prefix,
                     NodeList.nodeList(),
                     declaration.getThrownExceptions(),
@@ -160,6 +162,7 @@ final class ConstructorDeclarationPrinter {
     @FunctionalInterface
     interface ThrowsClauseRenderer {
         Doc render(
+                Node declaration,
                 String prefix,
                 NodeList<Parameter> parameters,
                 NodeList<? extends Node> thrownExceptions,

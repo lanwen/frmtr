@@ -107,8 +107,8 @@ final class ExpressionPrinters {
             context.sourceShapePolicy,
             compactSource::compact,
             compactSource::compactWithoutOwnComment,
-            this::continuationStatementWidth,
-            this::blockStatementWidth
+            context.layoutWidth::continuationStatement,
+            context.layoutWidth::blockStatement
         );
         this.annotationExpressions = new AnnotationExpressionPrinter(
             comments,
@@ -117,15 +117,15 @@ final class ExpressionPrinters {
             (expression, layout) -> expression(expression),
             binaries::nestedLines,
             compactSource::compact,
-            this::currentIndentedWidth
+            context.layoutWidth::currentIndented
         );
         compactSource.useAnnotationFlatText(annotationExpressions::annotationFlatText);
         this.conditionals = new ConditionalExpressionPrinter(
             context,
             this::expression,
             this::expressionWithoutOwnComment,
-            this::blockStatementWidth,
-            this::continuationStatementWidth,
+            context.layoutWidth::blockStatement,
+            context.layoutWidth::continuationStatement,
             binaries::lines,
             binaries::nestedLines,
             binaries::expressionHasParenthesizedNestedBinary
@@ -151,8 +151,8 @@ final class ExpressionPrinters {
             compactSource::compact,
             compactSource::compactWithoutOwnComment,
             compactSource::compactJoin,
-            this::currentIndentedWidth,
-            this::blockStatementWidth,
+            context.layoutWidth::currentIndented,
+            context.layoutWidth::blockStatement,
             CommentIndex::startsBefore,
             CommentIndex::startsOnSameLine
         );
@@ -162,8 +162,8 @@ final class ExpressionPrinters {
             compactSource::compactTypeLike,
             compactSource::compact,
             types::typeBody,
-            this::currentIndentedWidth,
-            this::continuationStatementWidth
+            context.layoutWidth::currentIndented,
+            context.layoutWidth::continuationStatement
         );
         this.classExpressions = new ClassExpressionPrinter(compactSource::compactTypeLike);
         this.enclosedExpressions = new EnclosedExpressionPrinter(
@@ -173,8 +173,8 @@ final class ExpressionPrinters {
             binaries::hasLineComments,
             binaries::linesWithComments,
             compactSource::compact,
-            this::currentIndentedWidth,
-            this::continuationStatementWidth,
+            context.layoutWidth::currentIndented,
+            context.layoutWidth::continuationStatement,
             casts::nestedCastDepth,
             lambdas::parenthesizedLambdaBreak,
             conditionals::conditionalExpression
@@ -202,7 +202,7 @@ final class ExpressionPrinters {
             (expression, layout) -> expression(expression),
             compactSource::compact,
             compactSource::compactTypeLike,
-            this::currentIndentedWidth
+            context.layoutWidth::currentIndented
         );
         this.fieldAccesses = new FieldAccessPrinter(comments, (expression, layout) -> expression(expression));
         this.methodReferences = new MethodReferencePrinter(
@@ -210,7 +210,7 @@ final class ExpressionPrinters {
             compactSource::compact,
             types::compactJoinTypeLike,
             enclosedExpressions::brokenEnclosedForSuffix,
-            this::blockStatementWidth
+            context.layoutWidth::blockStatement
         );
         this.methodCalls = new MethodCallPrinter(
             context,
@@ -241,7 +241,7 @@ final class ExpressionPrinters {
             objectCreations::objectCreationWithSuffix,
             compactSource::compactTypeLike,
             compactSource::compact,
-            this::currentIndentedWidth
+            context.layoutWidth::currentIndented
         );
         this.enclosedSuffixes = new EnclosedSuffixDispatcher(methodCalls, methodReferences);
         this.assignments = new AssignmentExpressionPrinter(
@@ -252,7 +252,7 @@ final class ExpressionPrinters {
             this::expressionWithoutOwnComment,
             this::expressionWithTail,
             compactSource::compact,
-            this::blockStatementWidth,
+            context.layoutWidth::blockStatement,
             enclosedSuffixes::suffixedEnclosedExpression,
             binaries::shouldKeepCastDivisionContinuationFlat,
             binaries::hasLineComments,
@@ -295,8 +295,8 @@ final class ExpressionPrinters {
             this::expressionWithTail,
             lambdas::brokenExpressionLambda,
             compactSource::compact,
-            this::currentIndentedWidth,
-            this::continuationStatementWidth,
+            context.layoutWidth::currentIndented,
+            context.layoutWidth::continuationStatement,
             methodCalls::sourceMultilineExpressionLambda,
             methodCalls::sourceMultilineArguments,
             methodCalls::compactRootWithBrokenFinalChainSegment,
@@ -611,18 +611,6 @@ final class ExpressionPrinters {
 
     Doc lambdaExpression(LambdaExpr expression) {
         return lambdas.lambdaExpression(expression);
-    }
-
-    private int currentIndentedWidth(String text) {
-        return context.layoutWidth.currentIndented(text);
-    }
-
-    private int blockStatementWidth(String text) {
-        return context.layoutWidth.blockStatement(text);
-    }
-
-    private int continuationStatementWidth(String text) {
-        return context.layoutWidth.continuationStatement(text);
     }
 
     /**

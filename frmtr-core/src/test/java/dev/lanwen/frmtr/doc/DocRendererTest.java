@@ -396,6 +396,51 @@ final class DocRendererTest {
     }
 
     @Test
+    void bestFittingKeepsAFittingAlternativeOverAFewerLinesOneThatOverflows() {
+        // The overflow gate: index 0 is a single line that overruns the 20-column width (39 wide, 0 newlines); index 1
+        // fits on two lines (each within 20). On pure line count the one-liner would win — it has the fewest newlines —
+        // but a layout whose first line spills past the width is a defect the reader sees, so the fitting two-line layout
+        // must win despite using more lines. That the wider one-liner loses is the observable proof the gate ranks fit
+        // above line count.
+        Doc overflowingOneLiner = Doc.text("config.resolveConnectionTimeoutMillis()");
+        Doc fittingTwoLine = Doc.concat(Doc.text("config.head()"), Doc.HARD_LINE, Doc.text(".timeout()"));
+
+        assertThat(renderer(20).render(Doc.bestFitting(java.util.List.of(overflowingOneLiner, fittingTwoLine))))
+            .isEqualTo(
+                """
+                    config.head()
+                    .timeout()"""
+            );
+    }
+
+    @Test
+    void bestFittingKeepsTheFewerLinesLeastBadAlternativeWhenNoAlternativeFits() {
+        // When nothing fits the gate is a no-op and the existing least-bad metric decides unchanged: fewer lines wins
+        // even at the cost of more total overflow. Index 0 overflows on both of its two lines (total overflow 17); index
+        // 1 overflows less in total (15) but across three lines. The two-line layout keeps the win on fewer lines, so the
+        // secondary fewest-lines-then-least-overflow order still holds among all-overflowing alternatives.
+        Doc twoLineOverflow = Doc.concat(
+            Doc.text("persistenceContextEntityManager"),
+            Doc.HARD_LINE,
+            Doc.text(".flushAndClearAllPending()")
+        );
+        Doc threeLineOverflow = Doc.concat(
+            Doc.text("persistenceContextEntityManager"),
+            Doc.HARD_LINE,
+            Doc.text(".flush()"),
+            Doc.HARD_LINE,
+            Doc.text(".clearAllPendingWrites()")
+        );
+
+        assertThat(renderer(20).render(Doc.bestFitting(java.util.List.of(twoLineOverflow, threeLineOverflow))))
+            .isEqualTo(
+                """
+                    persistenceContextEntityManager
+                    .flushAndClearAllPending()"""
+            );
+    }
+
+    @Test
     void bestFittingTieBreakKeepsTheEarliestAlternativeAndReformatIsAFixpoint() {
         // Two alternatives render to the identical line count (2 lines) and overflow (none) at 80 columns; the strict
         // "fewer lines, then less overflow" comparison makes neither strictly better, so the earlier (index 0) wins.

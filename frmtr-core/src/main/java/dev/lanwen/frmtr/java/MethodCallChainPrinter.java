@@ -149,14 +149,34 @@ final class MethodCallChainPrinter {
     }
 
     Optional<Doc> forcedMethodCallChain(MethodCallExpr expression, LayoutWidth.LineBudget lineBudget) {
-        return forcedMethodCallChain(expression, lineBudget, lineWidth(lineBudget), LayoutContext.root());
+        return forcedMethodCallChain(expression, lineBudget, LayoutContext.root());
+    }
+
+    // LDM-2f (#190): the layout-carrying entry seam. A caller that shares its first line with a fixed prefix (the return
+    // chain threads {@code layout.withLeftEdgePrefix("return ")}) hands that context through here so the chain width gates
+    // can attribute the prefix at the rendered column. The no-{@code layout} overload above passes {@code root()} (empty
+    // prefix), keeping every other forced-chain caller byte-identical until its own activation slice.
+    Optional<Doc> forcedMethodCallChain(
+            MethodCallExpr expression,
+            LayoutWidth.LineBudget lineBudget,
+            LayoutContext layout
+    ) {
+        return forcedMethodCallChain(expression, lineBudget, lineWidth(lineBudget), layout);
     }
 
     Optional<Doc> forcedMethodCallChain(
             MethodCallExpr expression,
             ToIntFunction<String> firstLineWidth
     ) {
-        return forcedMethodCallChain(expression, LayoutWidth.LineBudget.CURRENT, firstLineWidth, LayoutContext.root());
+        return forcedMethodCallChain(expression, firstLineWidth, LayoutContext.root());
+    }
+
+    Optional<Doc> forcedMethodCallChain(
+            MethodCallExpr expression,
+            ToIntFunction<String> firstLineWidth,
+            LayoutContext layout
+    ) {
+        return forcedMethodCallChain(expression, LayoutWidth.LineBudget.CURRENT, firstLineWidth, layout);
     }
 
     Optional<Doc> packedMethodCallChain(
@@ -283,6 +303,9 @@ final class MethodCallChainPrinter {
                 return Optional.empty();
             }
             Doc rootDoc = brokenObjectCreationRenderer.apply(objectCreation);
+            // This packed entry has no same-line leading prefix threaded, so pass root(): the leftEdgePrefix-gated
+            // compact-tail fan-out in objectRootSingleSegmentChain is a return-chain-only refinement, and this
+            // broken-object-creation path stays byte-identical.
             return Optional.of(objectRootSingleSegmentChain(
                 objectCreation,
                 rootDoc,
@@ -291,7 +314,8 @@ final class MethodCallChainPrinter {
                 MethodCallChainSourcePlanner.ChainRootRendering.BROKEN_OBJECT_CREATION,
                 analysis.sourceMultilineChain(),
                 LayoutWidth.LineBudget.CURRENT,
-                firstLineWidth
+                firstLineWidth,
+                LayoutContext.root()
             ));
         }
         // Multi-segment constructor chains break one segment per line through the shared chain machinery, which decides
@@ -356,6 +380,18 @@ final class MethodCallChainPrinter {
             MethodCallExpr expression,
             LayoutWidth.LineBudget lineBudget
     ) {
+        return compactRootWithBrokenFinalChainSegment(expression, lineBudget, LayoutContext.root());
+    }
+
+    // LDM-2f (#190): the layout-carrying entry seam for the compact-root-with-broken-final-segment shape. The return chain
+    // threads {@code layout.withLeftEdgePrefix("return ")} through here so {@code compactRootLineWidth} can attribute the
+    // {@code return } prefix at the rendered column. The no-{@code layout} overload above passes {@code root()} (empty
+    // prefix), keeping every other caller byte-identical until its own activation slice.
+    Optional<Doc> compactRootWithBrokenFinalChainSegment(
+            MethodCallExpr expression,
+            LayoutWidth.LineBudget lineBudget,
+            LayoutContext layout
+    ) {
         List<MethodCallExpr> calls = new ArrayList<>();
         Expression root = methodChainPlanner.methodCallChainRoot(expression, calls);
         SourceMultilineLambdaChainPlan sourceMultilineLambdaPlan = sourceMultilineLambdaChainPlan(root, calls);
@@ -392,10 +428,10 @@ final class MethodCallChainPrinter {
             return Optional.empty();
         }
         if (root instanceof MethodCallExpr methodRoot && calls.size() == 1) {
-            return compactRootWithBrokenFinalSegment(methodRoot, calls.getFirst(), lineBudget, LayoutContext.root());
+            return compactRootWithBrokenFinalSegment(methodRoot, calls.getFirst(), lineBudget, layout);
         }
         if (methodChainPlanner.promotesFirstCall(root) && calls.size() == 2) {
-            return compactRootWithBrokenFinalSegment(calls.getFirst(), calls.get(1), lineBudget, LayoutContext.root());
+            return compactRootWithBrokenFinalSegment(calls.getFirst(), calls.get(1), lineBudget, layout);
         }
         return Optional.empty();
     }
@@ -829,7 +865,8 @@ final class MethodCallChainPrinter {
                 chainPlan.rootRendering(),
                 analysis.sourceMultilineChain(),
                 lineBudget,
-                firstLineWidth
+                firstLineWidth,
+                layout
             ));
         }
         if (
@@ -1628,6 +1665,42 @@ final class MethodCallChainPrinter {
         return huggableBlockLambdaFirstLine.apply(prefix, expression.getArguments());
     }
 
+    /**
+     * Refuses the compact-root-with-broken-final-segment shape for an object-creation-rooted return chain whose final
+     * segment is a call with exactly one <em>simple</em> argument, so the chain fans the selector onto its own dotted
+     * continuation line with that argument kept inline ({@code new X(...)}\n{@code .selector(arg)}) rather than opening the
+     * single argument ({@code new X(...).selector(}\n{@code arg}\n{@code )}).
+     *
+     * <p>LDM-2f (#190), revising #236. #236 activated {@code leftEdgePrefix} for the return-chain gate so an over-width
+     * {@code return new X(...).selector(arg)} stops hugging and breaks. The broken shape it then produced opened the
+     * selector's single argument, which is gratuitous: on its own continuation line the whole {@code .selector(arg)}
+     * routinely fits well within budget, and opening a one-simple-argument call adds two lines that carry no information.
+     * By declining the arg-opening shape here, both broken-chain entry points converge on the fan-out: the direct
+     * {@code compactRootWithBrokenFinalSegment} call in the forced single-segment branch and the compact alternative of
+     * {@link #rankedObjectRootSingleSegmentChain} both see {@link Optional#empty()} and fall through to
+     * {@link #objectRootSingleSegmentChain}, whose fan-out branch renders the single-simple-argument tail compact on its
+     * dotted line (see the {@code singleSimpleMethodCallSegmentArgument} case there).
+     *
+     * <p><strong>Narrowly scoped.</strong> Gated on a non-empty {@link LayoutContext#leftEdgePrefix()} — only the return
+     * chain threads one ({@code "return "}), so statement/if/assignment/field chains, which pass {@code root()}, are
+     * untouched. Restricted to {@link ObjectCreationExpr} roots (the {@code new X(...).selector(arg)} slice #236 activated),
+     * so method-rooted return chains keep their existing shape. "Simple" mirrors
+     * {@link ControlConditionMethodCallLayout#hasComplexArgument}'s inverse via {@link #singleSimpleMethodCallSegmentArgument}
+     * ({@code NameExpr | FieldAccessExpr | ThisExpr | SuperExpr | LiteralExpr}); a lambda, method-call, multi-argument, or
+     * already-multiline tail is not simple and still opens exactly as before. A final-segment suffix (the statement
+     * terminator carried through the chain) also excludes the tail, matching the ranker's own {@code !finalSegmentSuffix.isEmpty()}
+     * gate, since the return keyword's {@code ;} is appended by the caller rather than threaded here.
+     */
+    private boolean refuseOpeningSingleSimpleReturnChainTail(
+            Expression root,
+            MethodCallExpr call,
+            LayoutContext layout
+    ) {
+        return !layout.leftEdgePrefix().isEmpty()
+            && root instanceof ObjectCreationExpr
+            && singleSimpleMethodCallSegmentArgument(call);
+    }
+
     private Optional<Doc> compactRootWithBrokenFinalSegment(Expression root, MethodCallExpr call) {
         return compactRootWithBrokenFinalSegment(
             root,
@@ -1670,6 +1743,9 @@ final class MethodCallChainPrinter {
             LayoutContext layout
     ) {
         if (call.getArguments().isEmpty()) {
+            return Optional.empty();
+        }
+        if (refuseOpeningSingleSimpleReturnChainTail(root, call, layout)) {
             return Optional.empty();
         }
         if (
@@ -1804,15 +1880,29 @@ final class MethodCallChainPrinter {
      * nesting is no longer measured as fitting at its stale shallow column and hugged over width. This mirrors the
      * sibling {@link ExpressionLambdaArgumentLayout} first-line gate (#226) and the depth-aware chain probes (#162).
      *
-     * <p>Unlike those siblings, the source column is kept as the <em>floor</em> rather than replaced outright: a chain
-     * root frequently renders after a same-line leading prefix — a field/local {@code NAME … = }, a {@code return }, or
-     * an enclosing argument list's continuation indent — that {@code nodeIndentWidth} (nesting depth only) does not carry
-     * but the source column does. Flooring by the source column keeps that prefix accounted for, so the probe can only
-     * ever measure <em>wider</em> than before and never under-measures a prefixed root (a bare {@code nodeIndentWidth}
-     * swap did regress {@code return-chain-final-argument} and {@code source-multiline-method-root-chain-initializer}
-     * into over-width flip-flops). Fully attributing that leading prefix at the rendered column — rather than leaning on
-     * the source column to supply it — awaits the {@code LayoutContext.leftEdgePrefix} follow-up (#190); until then the
-     * wider-of rule is a strict, regression-free improvement, byte-identical on the corpus.
+     * <p>Two measurement modes, keyed on whether a caller has threaded the same-line leading prefix through
+     * {@link LayoutContext#leftEdgePrefix()}:
+     *
+     * <ul>
+     *   <li><strong>Prefix threaded (LDM-2f, #190).</strong> When a caller supplies its fixed leading prefix — the
+     *   {@code return } chain threads {@code "return "} — the rendered column is known exactly:
+     *   {@code nodeIndentWidth(root) + leftEdgePrefix.length() + firstLine.length()}. The source-column floor is
+     *   <em>dropped</em>, because it was only ever a stand-in for the prefix this arm now measures directly, and it could
+     *   over- or under-count when the root was reindented away from its source column. A reindented-flat return chain whose
+     *   compact first line is under budget by the stale source column but over budget once {@code return } is added
+     *   (the {@code return } was worth exactly the missing width) is now correctly measured over width and fanned out.</li>
+     *   <li><strong>No prefix threaded.</strong> Every other caller still passes {@code root()} (empty prefix), so the
+     *   historical wider-of rule stands: {@code max(source-column, nodeIndentWidth) + firstLine.length()}. C10 (#217)
+     *   added the {@code nodeIndentWidth} arm so a root reindented flush-left inside deep nesting is no longer measured as
+     *   fitting at its stale shallow column and hugged over width; the source column is kept as the <em>floor</em> because
+     *   it is where these callers' unmodelled leading prefix (a {@code NAME … = }, a continuation indent) still lives. This
+     *   arm is byte-identical to before and stays until each caller's own {@code leftEdgePrefix} activation slice drops it
+     *   too. A bare {@code nodeIndentWidth} swap without a threaded prefix did regress
+     *   {@code source-multiline-method-root-chain-initializer}, which is why the floor stays for the unactivated callers.</li>
+     * </ul>
+     *
+     * <p>This mirrors the sibling {@link ExpressionLambdaArgumentLayout} first-line gate (#226) and the depth-aware chain
+     * probes (#162).
      */
     private int compactRootLineWidth(
             Expression root,
@@ -1820,9 +1910,11 @@ final class MethodCallChainPrinter {
             LayoutWidth.LineBudget lineBudget,
             LayoutContext layout
     ) {
-        // LDM-2f (#190): {@code layout} is threaded here so a follow-up can attribute the same-line
-        // {@code layout.leftEdgePrefix()} at the rendered column. This slice is pure plumbing: the prefix is not read
-        // yet, so the {@code max(source-column, nodeIndentWidth)} floor is unchanged and the width stays byte-identical.
+        // LDM-2f (#190): with the same-line prefix threaded, measure at the exact rendered column and drop the
+        // source-column floor, which was only ever a stand-in for this prefix.
+        if (!layout.leftEdgePrefix().isEmpty()) {
+            return layoutWidth.nodeIndentWidth(root) + layout.leftEdgePrefix().length() + firstLine.length();
+        }
         return root.getRange()
                 .map(range -> Math.max(
                     Math.max(0, range.begin.column + 1) + firstLine.length(),
@@ -2574,7 +2666,8 @@ final class MethodCallChainPrinter {
             MethodCallChainSourcePlanner.ChainRootRendering rootRendering,
             boolean sourceMultilineChain,
             LayoutWidth.LineBudget lineBudget,
-            ToIntFunction<String> firstLineWidth
+            ToIntFunction<String> firstLineWidth,
+            LayoutContext layout
     ) {
         if (sourceMultilineChain && methodCallSegmentHasLeadingLineComment(call)) {
             return Doc.concat(
@@ -2598,6 +2691,23 @@ final class MethodCallChainPrinter {
             compactSegmentWidth.applyAsInt(compactMethodCallChainSegment(call) + finalSegmentSuffix.text())
                 > options.lineWidth()
         ) {
+            // The compact chain (constructor plus the attached selector on one line) overflows, so the selector fans onto
+            // its own continuation line. On the return chain (the only caller that threads a leftEdgePrefix, LDM-2f #190,
+            // revising #236), when that selector is a call whose argument list is exactly one simple argument (a name,
+            // field access, this/super, or literal — no lambda, no nested call, no multiple arguments), opening that single
+            // argument (constructor \n .selector( \n arg \n )) is gratuitous: on its own continuation line the whole
+            // {@code .selector(arg)} routinely fits well within budget. Render such a tail compact on its dotted line
+            // through the ordinary segment renderer, whose group keeps {@code .selector(arg)} flat when it fits at the
+            // continuation column and still breaks the argument only if it genuinely overruns. Multi-argument, lambda, and
+            // already-broken selectors are excluded by singleSimpleMethodCallSegmentArgument, so they keep the existing
+            // argument-opening fan-out. The leftEdgePrefix gate scopes this to the return chain: field/statement/initializer
+            // callers pass root() (empty prefix), so their fan-out stays byte-identical.
+            if (!layout.leftEdgePrefix().isEmpty() && singleSimpleMethodCallSegmentArgument(call)) {
+                return Doc.concat(
+                    rootDoc,
+                    objectRootContinuation(methodCallChainSegment(call, Optional.empty(), finalSegmentSuffix))
+                );
+            }
             return Doc.concat(
                 rootDoc,
                 objectRootContinuation(brokenMethodCallChainSegment(call, finalSegmentSuffix))

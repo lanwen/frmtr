@@ -484,14 +484,45 @@ carry but the source column does, so a bare `nodeIndentWidth` swap under-measure
 initializer/return chain fixtures into over-width flip-flops. Flooring by the source column keeps the probe monotone
 (it can only ever measure wider), so the migration is regression-free and byte-identical on the corpus; fully attributing
 that leading prefix at the rendered column — rather than leaning on the source column to supply it — is the
-`LayoutContext.leftEdgePrefix` follow-up to C10-6's trailing-content (#190). As the byte-identical structural
-prerequisite for that follow-up (LDM-2f), the method-call printers now receive a `LayoutContext`:
+`LayoutContext.leftEdgePrefix` follow-up to C10-6's trailing-content (#190). The byte-identical structural prerequisite
+for that follow-up (LDM-2f) gave the method-call printers a `LayoutContext`:
 `MethodCallPrinter.methodCall(MethodCallExpr, LayoutContext)` is the context-carrying entry (the no-context overload
 defaults to `LayoutContext.root()`), and the context is threaded through the chain entries and their helpers down to all
-four gates above. The gates take the parameter but do **not** read `leftEdgePrefix` yet, so no width decision changes;
-the follow-up populates `leftEdgePrefix` at the seam and reads it in the gates, then drops the source-column floor. The
-main expression-dispatch seam (`ExpressionPrinters`) forwards the real outer `layout`; the with-tail and other
-call/chain seams still pass `root()` until the activation slice extends them. `MethodCallChainPrinter.methodCallSegmentWidth`
+four gates above.
+
+The first activation slice (LDM-2f, #190) then populated `leftEdgePrefix` for **one** caller/gate pair: the `return`
+chain and `MethodCallChainPrinter.compactRootLineWidth`. `ReturnExpressionPrinter.returnWithForcedMethodCallChain` threads
+`layout.withLeftEdgePrefix("return ")` through every forced-chain callback that can reach that gate
+(`compactRootWithBrokenFinalChainSegment` and the two `forcedMethodCallChain` overloads, each given a
+`LayoutContext`-carrying variant on `MethodCallPrinter`/`MethodCallChainPrinter`). When `compactRootLineWidth` sees a
+non-empty prefix it measures the compact chain root's first line at the exact rendered column
+`nodeIndentWidth(root) + leftEdgePrefix.length() + firstLine.length()` and **drops the source-column floor** — the floor
+was only ever a stand-in for that prefix. This fixes a reindented-flat returned object-root chain whose compact first line
+fit by the stale source column but overran the width once `return ` was added (a genuine over-width line, covered by the
+`return-chain-root-prefix-width` fixture).
+
+The same slice also refines the **broken shape** an over-width object-creation-rooted return chain takes. When such a
+chain breaks and its final segment is a call whose argument list is exactly one *simple* argument
+(`NameExpr | FieldAccessExpr | ThisExpr | SuperExpr | LiteralExpr`, mirroring
+`ControlConditionMethodCallLayout.hasComplexArgument`'s inverse), the tail renders **compact on its own dotted continuation
+line** (`return new X(...)` ⏎ `.selector(arg);`) rather than opening the single argument (`return new X(...).selector(` ⏎
+`arg` ⏎ `);`). Both broken-chain entry points converge on this: `compactRootWithBrokenFinalSegment` refuses the arg-opening
+shape (`refuseOpeningSingleSimpleReturnChainTail`, gated on a non-empty `leftEdgePrefix` and an `ObjectCreationExpr` root),
+so the direct forced-single-segment call and the compact alternative of `rankedObjectRootSingleSegmentChain` both fall
+through to `objectRootSingleSegmentChain`, whose fan-out branch renders the single-simple-argument selector through the
+ordinary segment renderer (a `Doc.group` that stays flat when it fits at the continuation column and still opens the
+argument only if it genuinely overruns). The refinement is scoped to the `return` chain by the same `leftEdgePrefix` gate —
+`objectRootSingleSegmentChain` takes a `LayoutContext`, the `methodCallChain` object-root caller threads the real `layout`
+while the packed broken-object-creation caller passes `root()`, so field/statement/initializer chains and multi-argument /
+lambda / already-broken return tails all keep their existing argument-opening fan-out. Covered by the two-plus-two
+`return-chain-root-prefix-width` fixture (two single-simple-arg tails that compact, one multi-argument and one lambda tail
+that still open) and the `return-chain-final-argument` nested-return cases. The other three gates (`rootLineWidth`,
+`selectorLineWidth`,
+`MethodCallPrinter.methodCallRootLineWidth`) and every non-`return` caller still pass `root()` (empty prefix) and keep the
+wider-of source-column floor, so they remain byte-identical pending their own slices. `withLeftEdgePrefix` mirrors
+`withTrailingContent`/`withLeadingBreak` (fresh value, all other components preserved). The main expression-dispatch seam
+(`ExpressionPrinters`) forwards the real outer `layout`; the with-tail and other call/chain seams still pass `root()`
+until later activation slices extend them. `MethodCallChainPrinter.methodCallSegmentWidth`
 is deliberately *not* migrated: it measures a segment kept beside a preceding token on the same line, a position deeper
 than the block indent that `nodeIndentWidth` cannot express (the one-per-line case is already routed around it via
 `segmentOnOwnLine`), so its source column stays. A `!(<binary>)` logical-complement initializer value whose inline
@@ -585,9 +616,12 @@ thread `LayoutContext.root().withLeadingBreak(true)` and `EnclosedSuffixDispatch
 (`layout.leadingBreak()`) — so a `(…).method(…)`/`(…)::member` receiver breaks its parenthesized scope
 unconditionally — rather than the dispatcher carrying that decision as a separate boolean argument (#189); the
 concrete `MethodCallPrinter`/`MethodReferencePrinter` suffix printers keep the resolved boolean because they also
-serve non-positional callers (a plain `methodCall`/`methodReference` with no broken line to inherit). The record
-stays a plain record with a `root()` default of no trailer and no leading break, plus `withTrailingContent` and
-`withLeadingBreak` derivations, so it is native-image safe and every non-header, non-broken call site is unaffected.
+serve non-positional callers (a plain `methodCall`/`methodReference` with no broken line to inherit). `leftEdgePrefix`
+carries the same-line text ahead of the node; its first reader is `MethodCallChainPrinter.compactRootLineWidth`, which
+the `return` chain feeds `withLeftEdgePrefix("return ")` (LDM-2f, #190, above) so the gate measures at the exact rendered
+column and drops its source-column floor. The record stays a plain record with a `root()` default of no prefix, no
+trailer, and no leading break, plus `withTrailingContent`, `withLeadingBreak`, and `withLeftEdgePrefix` derivations, so it
+is native-image safe and every non-header, non-broken, non-prefixed call site is unaffected.
 The throws gate's *measurement* now runs at the declaration's real rendered column (`LayoutWidth.nodeLine` floored by
 `currentIndented`), the C10 rebaselining parity the LDM-2 unary/ternary/return gates already had, and the
 `parametersBreak` and breakable-argument width gates were migrated the same way in the same slice (#220, described with

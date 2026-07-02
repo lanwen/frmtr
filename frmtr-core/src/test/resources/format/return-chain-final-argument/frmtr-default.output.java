@@ -15,9 +15,7 @@ class ReturnChainFinalArgumentSample {
             serviceName,
             ignored -> {
                 return new AggregateWaitAllStrategy(AggregateWaitAllStrategy.Mode.WITH_MAXIMUM_OUTER_TIMEOUT)
-                    .withStartupTimeout(
-                        startupTimeout
-                    );
+                    .withStartupTimeout(startupTimeout);
             }
         );
         sink(waitStrategy);
@@ -32,9 +30,7 @@ class ReturnChainFinalArgumentSample {
             serviceName,
             ignored -> {
                 return new AggregateWaitAllStrategy(AggregateWaitAllStrategy.Mode.WITH_MAXIMUM_OUTER_TIMEOUT)
-                    .withStartupTimeout(
-                        startupTimeout
-                    );
+                    .withStartupTimeout(startupTimeout);
             }
         );
         sink(waitStrategy);

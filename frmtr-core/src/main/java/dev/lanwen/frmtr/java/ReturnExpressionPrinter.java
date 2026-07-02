@@ -219,9 +219,11 @@ final class ReturnExpressionPrinter {
                 Doc.concat(Doc.HARD_LINE, Doc.text(";"))
             );
         }
-        // Source-shape entries and branches whose broken shape is itself chosen by width (object creation, enclosed or
-        // direct binary continuations, object-creation-rooted chains) keep the imperative oracle for that broken-shape
-        // ranking (LDM-3); they pre-empt the renderer-measured gate below.
+        // Source-multiline entries whose broken shape is a source-preserved layout (a source-multiline object creation,
+        // or an enclosed binary the direct-binary/parenthesized layout owns) keep the imperative oracle for that
+        // broken-shape selection; they pre-empt the renderer-measured gate below. The object-creation-rooted method-call
+        // chain used to pre-empt here too (LDM-3), but now routes through the renderer: it falls through to the
+        // flat-versus-broken conditional group, whose broken arm is the chain's ranked Doc.bestFitting (LDM-3g, #210).
         Optional<Doc> preempted = preemptedReturnValue(expression, layout);
         if (preempted.isPresent()) {
             return Doc.concat(Doc.text("return "), preempted.orElseThrow(), Doc.text(";"));
@@ -363,21 +365,25 @@ final class ReturnExpressionPrinter {
     }
 
     /**
-     * Renders the return value for the branches whose choice of broken shape is itself decided by width (LDM-3), so they
-     * cannot be expressed as a two-arm flat-versus-broken group and keep their imperative oracle.
+     * Renders the return value for the source-multiline branches whose broken shape is a source-preserved layout the
+     * binary/object-creation printers own, so they cannot be expressed as a two-arm flat-versus-broken group and keep
+     * their imperative oracle.
      *
-     * <p>These are the source-multiline enclosed binary (broken through the width-ranked direct-binary layout), the
-     * source-multiline object creation, and an object-creation-rooted method-call chain whose first line is measured to
-     * pick the broken chain shape. Each internally decides flat-versus-broken and, when broken, which broken shape to use;
-     * the renderer-measured gate cannot express that ranking, so these pre-empt it. Everything else falls through to the
-     * flat-versus-broken conditional group in {@link #returnStatement}.
+     * <p>These are the source-multiline enclosed binary (broken through the direct-binary/parenthesized layout) and the
+     * source-multiline object creation. Each internally decides flat-versus-broken and, when broken, which broken shape to
+     * use; the renderer-measured gate cannot express that until those printers expose their own ranked candidates
+     * (layout-decision-model milestone LDM-4, context-as-data → enum), so they pre-empt it. The object-creation-rooted
+     * method-call chain that also used to pre-empt here has moved off this path (LDM-3g, #210): it now falls through to the
+     * flat-versus-broken conditional group in {@link #returnStatement}, whose broken arm is the chain's ranked
+     * {@link Doc#bestFitting(java.util.List)}. Everything else falls through to that conditional group too.
      */
     private Optional<Doc> preemptedReturnValue(Expression expression, LayoutContext layout) {
         Optional<BinaryExpr> sourceMultilineEnclosedBinary = sourceMultilineEnclosedBinary(expression);
         if (sourceMultilineEnclosedBinary.isPresent()) {
             BinaryExpr binaryExpr = sourceMultilineEnclosedBinary.orElseThrow();
-            // LDM-3: the enclosed-binary broken shape is ranked by width (direct-binary continuation versus parenthesized
-            // break), so this stays on the imperative oracle rather than the renderer-measured flat-versus-broken group.
+            // LDM-4 (deferred): the enclosed-binary broken shape is chosen among source-preserved layouts (direct-binary
+            // continuation versus parenthesized break) that the binary printer does not yet expose as ranked candidates,
+            // so this stays on the imperative oracle rather than the renderer-measured flat-versus-broken group.
             return Optional.of(
                 binaryReturns.directBinaryReturn(binaryExpr, expression, layout).orElseGet(
                     () -> parenthesizedBreak.apply(binaryExpr, true)
@@ -385,18 +391,9 @@ final class ReturnExpressionPrinter {
             );
         }
         if (sourceMultilineObjectCreation(expression)) {
+            // LDM-4 (deferred): the source-multiline object creation is a source-preserved shape the object-creation
+            // printer does not yet expose as a ranked candidate, so it stays on the imperative oracle here.
             return Optional.of(brokenObjectCreation.apply((ObjectCreationExpr) expression));
-        }
-        if (
-            expression instanceof MethodCallExpr methodCall
-            && objectCreationRootMethodCallReturnLineOverflows(methodCall, layout)
-        ) {
-            // LDM-3: an object-creation-rooted chain measures its own first line to choose the broken chain shape, a
-            // ranking a two-arm group cannot express, so this width gate stays imperative.
-            Optional<Doc> forcedChain = returnWithForcedMethodCallChain(methodCall, layout);
-            if (forcedChain.isPresent()) {
-                return forcedChain;
-            }
         }
         return Optional.empty();
     }
@@ -432,18 +429,6 @@ final class ReturnExpressionPrinter {
             return this.expression.apply(binaryExpr);
         }
         return brokenReturnExpression(expression, layout).orElseGet(() -> this.expression.apply(expression));
-    }
-
-    private boolean objectCreationRootMethodCallReturnLineOverflows(
-            MethodCallExpr expression,
-            LayoutContext layout
-    ) {
-        Optional<Expression> scope = expression.getScope();
-        if (scope.filter(ObjectCreationExpr.class::isInstance).isEmpty()) {
-            return false;
-        }
-        String line = "return " + methodCallPrefix.apply(expression) + "(";
-        return returnLineWidth(expression, line, layout) > options.lineWidth();
     }
 
     private Optional<BinaryExpr> sourceMultilineEnclosedBinary(Expression expression) {
@@ -554,6 +539,11 @@ final class ReturnExpressionPrinter {
                     .or(() -> forcedMethodCallChain.apply(methodCall, lineBudget));
         }
         if (methodCall.getScope().filter(ObjectCreationExpr.class::isInstance).isPresent()) {
+            // LDM-3g (#210): a source-compact object-creation-rooted single-segment chain routes through the chain
+            // printer's ranked Doc.bestFitting (MethodCallChainPrinter.rankedObjectRootSingleSegmentChain), reached via the
+            // forced-chain callee below; it lets the renderer rank compact-with-broken-segment versus one-per-line fan-out
+            // at the real column instead of the first-line probe committing to a shape. The probe is still threaded so the
+            // deeper/source-multiline object-root shapes the ranker defers on keep their imperative selection.
             return forcedMethodCallChainWithFirstLine
                     .apply(methodCall, text -> returnLineWidth(methodCall, "return " + text, layout))
                     .or(() -> forcedMethodCallChain.apply(methodCall, lineBudget));

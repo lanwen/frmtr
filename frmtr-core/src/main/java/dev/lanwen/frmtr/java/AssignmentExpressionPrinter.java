@@ -53,7 +53,7 @@ final class AssignmentExpressionPrinter {
 
     private final ToIntFunction<String> blockStatementWidth;
 
-    private final BiFunction<Expression, Boolean, Optional<Doc>> suffixedEnclosedExpression;
+    private final BiFunction<Expression, LayoutContext, Optional<Doc>> suffixedEnclosedExpression;
 
     private final Predicate<BinaryExpr> shouldKeepCastDivisionContinuationFlat;
 
@@ -80,7 +80,7 @@ final class AssignmentExpressionPrinter {
             ExpressionTailRenderer expressionWithTail,
             Function<Node, String> compact,
             ToIntFunction<String> blockStatementWidth,
-            BiFunction<Expression, Boolean, Optional<Doc>> suffixedEnclosedExpression,
+            BiFunction<Expression, LayoutContext, Optional<Doc>> suffixedEnclosedExpression,
             Predicate<BinaryExpr> shouldKeepCastDivisionContinuationFlat,
             Predicate<BinaryExpr> binaryExpressionHasLineComments,
             Function<BinaryExpr, Doc> binaryExpressionLinesWithComments,
@@ -349,7 +349,10 @@ final class AssignmentExpressionPrinter {
      * {@code target op} prefix and leaves that suffix-sensitive shape intact.
      */
     private Optional<Doc> assignmentWithSuffixedEnclosedValue(AssignExpr expression) {
-        Optional<Doc> suffixedEnclosedValue = suffixedEnclosedExpression.apply(expression.getValue(), true);
+        // The assignment has already decided this value breaks, so the enclosed suffix receiver must lead with a break;
+        // that positional fact rides on the LayoutContext (#189) rather than a loose boolean argument.
+        Optional<Doc> suffixedEnclosedValue =
+            suffixedEnclosedExpression.apply(expression.getValue(), LayoutContext.root().withLeadingBreak(true));
         return suffixedEnclosedValue.map(value -> Doc.concat(
                 this.expression.apply(expression.getTarget()),
                 Doc.text(" " + expression.getOperator().asString() + " "),

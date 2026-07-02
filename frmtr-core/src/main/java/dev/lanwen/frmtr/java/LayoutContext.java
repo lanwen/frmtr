@@ -31,21 +31,31 @@ package dev.lanwen.frmtr.java;
  *     same-line content follows (the common case, e.g. a statement or a return value that ends its own line). It is a
  *     positional fact — <em>where</em> this node sits relative to what the caller emits after it — and so lives on the
  *     context, distinct from the node's own rendered text
+ * @param leadingBreak whether the caller has already committed this node to lead with a break, so an enclosed
+ *     call/reference receiver ({@code (…).method(…)}, {@code (…)::member}) must break its parenthesized scope
+ *     unconditionally instead of first gating on its own width. The canonical case is an assignment or variable
+ *     initializer right-hand side whose surrounding line has already been decided too wide to keep flat: the
+ *     suffix-preserving dispatcher is told "you are already past the break decision" here rather than re-deriving it.
+ *     {@code false} when no such decision has been made and the receiver is free to stay compact if it fits (the
+ *     common case). It is a positional fact — <em>whether this node's position is already inside a broken line</em> —
+ *     and so lives on the context, distinct from the node's own rendered text, which is why {@link
+ *     EnclosedSuffixDispatcher} reads it from here (#189) rather than carrying it as a separate dispatch argument
  */
 record LayoutContext(
     EnclosingConstruct enclosing,
     String leftEdgePrefix,
     LayoutWidth.LineBudget widthBudget,
-    String trailingContent
+    String trailingContent,
+    boolean leadingBreak
 ) {
 
     /**
      * The compilation-unit-level starting context: at the root, with no left-edge prefix, no caller-emitted trailing
-     * content, and the current-line width budget. This reproduces the defaults every call site assumed before
-     * {@code LayoutContext} existed, so threading it through changes no formatting decision.
+     * content, no committed leading break, and the current-line width budget. This reproduces the defaults every call
+     * site assumed before {@code LayoutContext} existed, so threading it through changes no formatting decision.
      */
     static LayoutContext root() {
-        return new LayoutContext(EnclosingConstruct.ROOT, "", LayoutWidth.LineBudget.CURRENT, "");
+        return new LayoutContext(EnclosingConstruct.ROOT, "", LayoutWidth.LineBudget.CURRENT, "", false);
     }
 
     /**
@@ -55,6 +65,17 @@ record LayoutContext(
      * produces a fresh value rather than mutating; the original is unchanged.
      */
     LayoutContext withTrailingContent(String trailingContent) {
-        return new LayoutContext(enclosing, leftEdgePrefix, widthBudget, trailingContent);
+        return new LayoutContext(enclosing, leftEdgePrefix, widthBudget, trailingContent, leadingBreak);
+    }
+
+    /**
+     * Derives a copy of this context that records whether the node is already committed to lead with a break — for
+     * example an assignment or initializer right-hand side whose surrounding line the caller has already decided must
+     * break, so an enclosed suffix receiver breaks its parenthesized scope unconditionally instead of re-gating on its
+     * own width. Every other positional fact is preserved. Following the {@code LayoutContext} discipline this produces
+     * a fresh value rather than mutating; the original is unchanged.
+     */
+    LayoutContext withLeadingBreak(boolean leadingBreak) {
+        return new LayoutContext(enclosing, leftEdgePrefix, widthBudget, trailingContent, leadingBreak);
     }
 }

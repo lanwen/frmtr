@@ -549,8 +549,8 @@ final class ExpressionPrinters {
         return binaries.shouldKeepCastDivisionContinuationFlat(expression);
     }
 
-    Optional<Doc> suffixedEnclosedExpression(Expression expression, Boolean leadingBreak) {
-        return enclosedSuffixes.suffixedEnclosedExpression(expression, leadingBreak);
+    Optional<Doc> suffixedEnclosedExpression(Expression expression, LayoutContext layout) {
+        return enclosedSuffixes.suffixedEnclosedExpression(expression, layout);
     }
 
     Doc arrayAccessWithBrokenEnclosedName(ArrayAccessExpr expression) {

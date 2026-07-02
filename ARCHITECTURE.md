@@ -524,16 +524,24 @@ narrower than the true rendered column, a genuinely over-width opener always tri
 
 The per-node *positional* facts a width gate needs — distinct from the run-scoped `JavaFormatContext` services and
 from per-type dispatch — travel in an immutable `LayoutContext` record threaded down the descent
-(`EnclosingConstruct` position, `leftEdgePrefix`, a transitional `LayoutWidth.LineBudget` selector, and the
-`trailingContent` the caller will emit on the same line after the node). `trailingContent` carries the one fact
+(`EnclosingConstruct` position, `leftEdgePrefix`, a transitional `LayoutWidth.LineBudget` selector, the
+`trailingContent` the caller will emit on the same line after the node, and a `leadingBreak` flag recording whether
+the caller has already committed the node to lead with a break). `trailingContent` carries the one fact
 node-local IR cannot see: the same-line opener a header appends after a clause. The canonical case is the throws
 clause — a declaration header's `throws …` width has to include the `" {"` (body) or `";"` (abstract) the caller
 glues on that line — so `MethodDeclarationPrinter`/`ConstructorDeclarationPrinter` thread that opener as
 `LayoutContext.root().withTrailingContent(" {"/";")` and `ThrowsClausePrinter` reads it from the context
 (`layout.trailingContent()`) rather than receiving an ad-hoc `suffix` string, keeping the trailer a positional fact
-about where the clause sits instead of a loose parameter (#218). The record stays a plain record with a `root()`
-default of no trailer and a `withTrailingContent` derivation, so it is native-image safe and every non-header call
-site is unaffected. Moving the throws gate's *measurement* off the fixed one-indent-level `currentIndented` baseline
+about where the clause sits instead of a loose parameter (#218). `leadingBreak` carries the mirror fact for the
+enclosed-suffix path: whether the node's line is *already* broken. When an assignment or variable-initializer
+right-hand side has been decided too wide to stay flat, `AssignmentExpressionPrinter`/`VariableInitializerLayout`
+thread `LayoutContext.root().withLeadingBreak(true)` and `EnclosedSuffixDispatcher` reads it from the context
+(`layout.leadingBreak()`) — so a `(…).method(…)`/`(…)::member` receiver breaks its parenthesized scope
+unconditionally — rather than the dispatcher carrying that decision as a separate boolean argument (#189); the
+concrete `MethodCallPrinter`/`MethodReferencePrinter` suffix printers keep the resolved boolean because they also
+serve non-positional callers (a plain `methodCall`/`methodReference` with no broken line to inherit). The record
+stays a plain record with a `root()` default of no trailer and no leading break, plus `withTrailingContent` and
+`withLeadingBreak` derivations, so it is native-image safe and every non-header, non-broken call site is unaffected. Moving the throws gate's *measurement* off the fixed one-indent-level `currentIndented` baseline
 onto a rendered-column `Doc.group`/`conditionalGroup` (the C10 parity the LDM-2 unary/ternary/return gates already
 have) is a separate rebaselining slice; the `parametersBreak` and breakable-argument width gates still take their
 same-line prefix/suffix as ad-hoc strings and carry `// C10:` notes pointing at #218. A per-run

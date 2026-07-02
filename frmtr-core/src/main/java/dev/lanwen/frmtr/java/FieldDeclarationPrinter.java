@@ -80,7 +80,7 @@ final class FieldDeclarationPrinter {
             Function<Expression, Doc> expressionWithoutOwnComment,
             Predicate<BinaryExpr> binaryExpressionHasLineComments,
             Function<BinaryExpr, Doc> binaryExpressionLinesWithComments,
-            BiFunction<Expression, Boolean, Optional<Doc>> suffixedEnclosedExpression,
+            BiFunction<Expression, LayoutContext, Optional<Doc>> suffixedEnclosedExpression,
             Function<ArrayAccessExpr, Doc> arrayAccessWithBrokenEnclosedName,
             Predicate<BinaryExpr> shouldKeepCastDivisionContinuationFlat,
             BiFunction<Expression, Boolean, Doc> binaryExpressionLines,

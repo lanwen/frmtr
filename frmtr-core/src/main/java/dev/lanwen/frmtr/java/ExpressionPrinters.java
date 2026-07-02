@@ -277,7 +277,7 @@ final class ExpressionPrinters {
             (expression, layout) -> fieldAccesses.fieldAccess(expression),
             (expression, layout) -> instanceOfExpressions.instanceOfExpression(expression),
             (expression, layout) -> lambdas.lambdaExpression(expression),
-            (expression, layout) -> methodCalls.methodCall(expression),
+            (expression, layout) -> methodCalls.methodCall(expression, layout),
             (expression, layout) -> methodReferences.methodReference(expression),
             (expression, layout) -> objectCreations.objectCreation(expression),
             switchExpressionRenderer,
@@ -418,7 +418,11 @@ final class ExpressionPrinters {
     }
 
     Doc methodCall(MethodCallExpr expression) {
-        return methodCalls.methodCall(expression);
+        return methodCalls.methodCall(expression, LayoutContext.root());
+    }
+
+    Doc methodCall(MethodCallExpr expression, LayoutContext layout) {
+        return methodCalls.methodCall(expression, layout);
     }
 
     Doc methodCallArgumentList(NodeList<Expression> arguments, Doc line) {

@@ -169,11 +169,23 @@ final class MethodCallPrinter {
     }
 
     Doc methodCall(MethodCallExpr expression) {
-        return methodCall(expression, MethodCallBreakMode.AUTO);
+        return methodCall(expression, LayoutContext.root());
+    }
+
+    /**
+     * The public method-call entry that receives the caller's {@link LayoutContext}.
+     *
+     * <p>LDM-2f (#190): the context is threaded from here down to the chain width gates so a follow-up can attribute
+     * the same-line {@code leftEdgePrefix} at the rendered column. This slice is pure plumbing — the prefix is not read
+     * yet and no width decision changes — so {@link #methodCall(MethodCallExpr)} keeps its {@link LayoutContext#root()}
+     * default and output stays byte-identical.
+     */
+    Doc methodCall(MethodCallExpr expression, LayoutContext layout) {
+        return methodCall(expression, MethodCallBreakMode.AUTO, layout);
     }
 
     Doc brokenMethodCall(MethodCallExpr expression) {
-        return methodCall(expression, MethodCallBreakMode.FORCED);
+        return methodCall(expression, MethodCallBreakMode.FORCED, LayoutContext.root());
     }
 
     Doc methodCallWithTail(MethodCallExpr expression, ExpressionTail tail) {
@@ -224,7 +236,7 @@ final class MethodCallPrinter {
      * <p>The unforced path tries a chain shape only when the call itself asks for it; the forced path is used by
      * surrounding expression printers that already decided the call arguments must break.
      */
-    private Doc methodCall(MethodCallExpr expression, MethodCallBreakMode breakMode) {
+    private Doc methodCall(MethodCallExpr expression, MethodCallBreakMode breakMode, LayoutContext layout) {
         if (
             expression.getScope().isEmpty()
             && expression.getNameAsString().equals("yield")
@@ -253,18 +265,18 @@ final class MethodCallPrinter {
             );
         }
         Optional<Doc> sourceMultilineExpressionLambda = comments.speculatively(
-            () -> sourceMultilineExpressionLambda(expression)
+            () -> sourceMultilineExpressionLambda(expression, layout)
         );
         if (sourceMultilineExpressionLambda.isPresent()) {
             return sourceMultilineExpressionLambda.orElseThrow();
         }
         if (!breakMode.isForced()) {
-            Optional<Doc> chain = comments.speculatively(() -> methodCallChain(expression));
+            Optional<Doc> chain = comments.speculatively(() -> methodCallChain(expression, layout));
             if (chain.isPresent()) {
                 return chain.orElseThrow();
             }
         } else if (methodCallChainIsSourceMultiline(expression)) {
-            Optional<Doc> chain = comments.speculatively(() -> methodCallChain(expression, breakMode, ""));
+            Optional<Doc> chain = comments.speculatively(() -> methodCallChain(expression, breakMode, "", layout));
             if (chain.isPresent()) {
                 return chain.orElseThrow();
             }
@@ -304,7 +316,7 @@ final class MethodCallPrinter {
             return huggableExpressionLambda.orElseThrow();
         }
         Optional<Doc> brokenExpressionLambdaArguments = comments.speculatively(
-            () -> brokenExpressionLambdaArgumentsForOverflow(prefix, expression)
+            () -> brokenExpressionLambdaArgumentsForOverflow(prefix, expression, layout)
         );
         if (brokenExpressionLambdaArguments.isPresent()) {
             return brokenExpressionLambdaArguments.orElseThrow();
@@ -357,6 +369,10 @@ final class MethodCallPrinter {
         return Doc.group(call);
     }
 
+    // LDM-2f (#190): the with-tail seam (reached from ExpressionPrinters#expressionWithTail and StatementPrinters, which
+    // do not yet carry a LayoutContext) keeps passing LayoutContext.root() to the call/chain gates. Threading a real
+    // outer layout to this seam lands with the leftEdgePrefix activation slice; today root() reproduces existing behavior
+    // and keeps output byte-identical.
     private Doc methodCallWithTail(
             MethodCallExpr expression,
             ExpressionTail tail,
@@ -364,7 +380,7 @@ final class MethodCallPrinter {
             LayoutWidth.LineBudget lineBudget
     ) {
         if (tail.isEmpty()) {
-            return methodCall(expression, breakMode);
+            return methodCall(expression, breakMode, LayoutContext.root());
         }
         Optional<Doc> chain = comments.speculatively(
             () -> methodCallChain(expression, breakMode, tail.text(), lineBudget)
@@ -380,7 +396,11 @@ final class MethodCallPrinter {
                 return tail.appendTo(unsuffixedChain.orElseThrow());
             }
         }
-        return appendTailBeforeFinalTrailingLineComment(methodCall(expression, breakMode), expression, tail);
+        return appendTailBeforeFinalTrailingLineComment(
+            methodCall(expression, breakMode, LayoutContext.root()),
+            expression,
+            tail
+        );
     }
 
     private boolean methodCallWithTailOverflows(
@@ -453,12 +473,16 @@ final class MethodCallPrinter {
         );
     }
 
-    private Optional<Doc> brokenExpressionLambdaArgumentsForOverflow(String prefix, MethodCallExpr expression) {
+    private Optional<Doc> brokenExpressionLambdaArgumentsForOverflow(
+            String prefix,
+            MethodCallExpr expression,
+            LayoutContext layout
+    ) {
         Optional<ExpressionLambdaArgumentLayout.Plan> plan = expressionLambdaArgumentPlan.apply(
             prefix,
             expression.getArguments()
         );
-        if (plan.filter(argument -> expressionLambdaBodyOpenerOverflows(expression, argument)).isEmpty()) {
+        if (plan.filter(argument -> expressionLambdaBodyOpenerOverflows(expression, argument, layout)).isEmpty()) {
             return Optional.empty();
         }
         return Optional.of(
@@ -595,6 +619,10 @@ final class MethodCallPrinter {
         return methodChains.methodCallChain(expression);
     }
 
+    Optional<Doc> methodCallChain(MethodCallExpr expression, LayoutContext layout) {
+        return methodChains.methodCallChain(expression, layout);
+    }
+
     Optional<Doc> forcedMethodCallChain(MethodCallExpr expression) {
         return methodChains.forcedMethodCallChain(expression);
     }
@@ -647,7 +675,16 @@ final class MethodCallPrinter {
             MethodCallBreakMode breakMode,
             String finalSegmentSuffix
     ) {
-        return methodChains.methodCallChain(expression, breakMode, finalSegmentSuffix);
+        return methodChains.methodCallChain(expression, breakMode, finalSegmentSuffix, LayoutContext.root());
+    }
+
+    Optional<Doc> methodCallChain(
+            MethodCallExpr expression,
+            MethodCallBreakMode breakMode,
+            String finalSegmentSuffix,
+            LayoutContext layout
+    ) {
+        return methodChains.methodCallChain(expression, breakMode, finalSegmentSuffix, layout);
     }
 
     Optional<Doc> methodCallChain(
@@ -656,7 +693,7 @@ final class MethodCallPrinter {
             String finalSegmentSuffix,
             LayoutWidth.LineBudget lineBudget
     ) {
-        return methodChains.methodCallChain(expression, breakMode, finalSegmentSuffix, lineBudget);
+        return methodChains.methodCallChain(expression, breakMode, finalSegmentSuffix, lineBudget, LayoutContext.root());
     }
 
     Optional<Doc> methodCallChain(
@@ -671,7 +708,8 @@ final class MethodCallPrinter {
             breakMode,
             finalSegmentSuffix,
             lineBudget,
-            firstLineWidth
+            firstLineWidth,
+            LayoutContext.root()
         );
     }
 
@@ -978,6 +1016,10 @@ final class MethodCallPrinter {
     }
 
     Optional<Doc> sourceMultilineExpressionLambda(MethodCallExpr expression) {
+        return sourceMultilineExpressionLambda(expression, LayoutContext.root());
+    }
+
+    Optional<Doc> sourceMultilineExpressionLambda(MethodCallExpr expression, LayoutContext layout) {
         if (
             expression.getArguments().isEmpty()
             || !expression.getAllContainedComments().isEmpty()
@@ -995,10 +1037,10 @@ final class MethodCallPrinter {
         );
         if (
             plan.filter(argument -> argument.firstLineFits(
-                    line -> methodCallRootLineWidth(expression, line),
+                    line -> methodCallRootLineWidth(expression, line, layout),
                     options.lineWidth()
             )).isEmpty()
-            || plan.filter(argument -> expressionLambdaBodyOpenerOverflows(expression, argument)).isPresent()
+            || plan.filter(argument -> expressionLambdaBodyOpenerOverflows(expression, argument, layout)).isPresent()
         ) {
             return Optional.empty();
         }
@@ -1025,11 +1067,12 @@ final class MethodCallPrinter {
 
     private boolean expressionLambdaBodyOpenerOverflows(
             MethodCallExpr expression,
-            ExpressionLambdaArgumentLayout.Plan argument
+            ExpressionLambdaArgumentLayout.Plan argument,
+            LayoutContext layout
     ) {
         return !argument.bodyFirstSourceLineFits()
             && argument.bodyOpenerFitsOnContinuation(lineWidth(LayoutWidth.LineBudget.CONTINUATION), options.lineWidth())
-            && argument.bodyOpenerOverflows(line -> methodCallRootLineWidth(expression, line), options.lineWidth());
+            && argument.bodyOpenerOverflows(line -> methodCallRootLineWidth(expression, line, layout), options.lineWidth());
     }
 
     /**
@@ -1051,7 +1094,10 @@ final class MethodCallPrinter {
      * byte-identical on the fixture corpus and on every reindented/nested probe; fully attributing the leading prefix at
      * the rendered column awaits the {@code LayoutContext.leftEdgePrefix} follow-up (#190).
      */
-    private int methodCallRootLineWidth(MethodCallExpr expression, String firstLine) {
+    private int methodCallRootLineWidth(MethodCallExpr expression, String firstLine, LayoutContext layout) {
+        // LDM-2f (#190): {@code layout} is threaded here so a follow-up can attribute the same-line
+        // {@code layout.leftEdgePrefix()} at the rendered column. This slice is pure plumbing: the prefix is not read
+        // yet, so the {@code max(source-column, nodeIndentWidth)} floor is unchanged and the width stays byte-identical.
         return expression.getRange()
                 .map(range -> Math.max(
                     Math.max(0, range.begin.column + 1) + firstLine.length(),

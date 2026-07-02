@@ -253,6 +253,7 @@ final class VariableInitializerLayout {
                     .map(comments::comment)
                     .orElse(Doc.EMPTY);
             Doc declaration = variableWithMethodCallChain(
+                variable,
                 variableName(variable),
                 declarationPrefix + variable.getNameAsString(),
                 methodCall,
@@ -267,6 +268,7 @@ final class VariableInitializerLayout {
             && !methodCallFinalTrailingLineComments(methodCall).isEmpty()
         ) {
             return variableWithMethodCallChain(
+                variable,
                 variableName(variable),
                 declarationPrefix + variable.getNameAsString(),
                 methodCall,
@@ -638,6 +640,7 @@ final class VariableInitializerLayout {
                 || methodCallHasContainedCommentObjectCreationBlockLambdaArgument(methodCall))
         ) {
             Optional<Doc> brokenCall = variableWithLeadingCommentedBlockLambdaMethodCall(
+                variable,
                 name,
                 declarationPrefix + variable.getNameAsString(),
                 methodCall
@@ -676,6 +679,7 @@ final class VariableInitializerLayout {
             }
             if (initializer instanceof ObjectCreationExpr objectCreationExpr) {
                 Optional<Doc> objectCreation = variableWithBrokenObjectCreation(
+                    variable,
                     name,
                     declarationPrefix + variable.getNameAsString(),
                     objectCreationExpr
@@ -689,7 +693,7 @@ final class VariableInitializerLayout {
                 && methodCallChainInitializerShape.apply(methodCall).shouldForceSourceMultilineInitializerChain()
                 && !singleCallConvergesOnArgumentBreak(
                     methodCall,
-                    argumentBreakOpenerFits(methodCall, declarationPrefix + variable.getNameAsString())
+                    argumentBreakOpenerFits(variable, methodCall, declarationPrefix + variable.getNameAsString())
                 )
             ) {
                 Optional<Doc> forcedChain = variableWithForcedMethodCallChain(
@@ -873,7 +877,7 @@ final class VariableInitializerLayout {
                 initializerChainShape.shouldForceWideInitializerChain()
                 && !singleCallConvergesOnArgumentBreak(
                     methodCall,
-                    argumentBreakOpenerFits(methodCall, declarationPrefix + variable.getNameAsString())
+                    argumentBreakOpenerFits(variable, methodCall, declarationPrefix + variable.getNameAsString())
                 )
             ) {
                 Optional<Doc> forcedChain = variableWithForcedMethodCallChain(
@@ -928,6 +932,7 @@ final class VariableInitializerLayout {
             Optional<Doc> mixedChain = mixedFieldMethodCallChain.apply(methodCall);
             if (mixedChain.isPresent()) {
                 return variableWithMethodCallChain(
+                    variable,
                     name,
                     declarationPrefix + variable.getNameAsString(),
                     methodCall,
@@ -1290,6 +1295,7 @@ final class VariableInitializerLayout {
      * and commented creations to the shared object-creation formatter.
      */
     private Optional<Doc> variableWithBrokenObjectCreation(
+            VariableDeclarator variable,
             String name,
             String flatName,
             ObjectCreationExpr objectCreation
@@ -1298,13 +1304,18 @@ final class VariableInitializerLayout {
             return Optional.empty();
         }
         if (!objectCreation.getAllContainedComments().isEmpty()) {
-            return variableWithCommentedObjectCreation(name, flatName, objectCreation);
+            return variableWithCommentedObjectCreation(variable, name, flatName, objectCreation);
         }
-        Optional<Doc> typeArguments = variableWithBrokenObjectCreationTypeArguments(name, flatName, objectCreation);
+        Optional<Doc> typeArguments = variableWithBrokenObjectCreationTypeArguments(
+            variable,
+            name,
+            flatName,
+            objectCreation
+        );
         if (typeArguments.isPresent()) {
             return typeArguments;
         }
-        return variableWithBrokenObjectCreationArguments(name, flatName, objectCreation);
+        return variableWithBrokenObjectCreationArguments(variable, name, flatName, objectCreation);
     }
 
     /**
@@ -1312,6 +1323,7 @@ final class VariableInitializerLayout {
      * leaving the nested comment placement to the normal object-creation renderer.
      */
     private Optional<Doc> variableWithCommentedObjectCreation(
+            VariableDeclarator variable,
             String name,
             String flatName,
             ObjectCreationExpr objectCreation
@@ -1324,7 +1336,7 @@ final class VariableInitializerLayout {
             return Optional.empty();
         }
         String prefix = objectCreationPrefix.apply(objectCreation);
-        if (layoutWidth.currentIndented(flatName + " = " + prefix + "(") > options.lineWidth()) {
+        if (openerLineWidth(variable, flatName + " = " + prefix + "(") > options.lineWidth()) {
             return Optional.empty();
         }
         return Optional.of(Doc.concat(Doc.text(name + " = "), expression.apply(objectCreation)));
@@ -1335,6 +1347,7 @@ final class VariableInitializerLayout {
      * to hard lines.
      */
     private Optional<Doc> variableWithBrokenObjectCreationArguments(
+            VariableDeclarator variable,
             String name,
             String flatName,
             ObjectCreationExpr objectCreation
@@ -1343,10 +1356,10 @@ final class VariableInitializerLayout {
             return Optional.empty();
         }
         String prefix = objectCreationPrefix.apply(objectCreation);
-        if (layoutWidth.currentIndented(flatName + " = " + prefix + "(") > options.lineWidth()) {
+        if (openerLineWidth(variable, flatName + " = " + prefix + "(") > options.lineWidth()) {
             return Optional.empty();
         }
-        if (smallConstructorCanStayFlat(flatName, objectCreation)) {
+        if (smallConstructorCanStayFlat(variable, flatName, objectCreation)) {
             return Optional.of(Doc.concat(Doc.text(name + " = "), expression.apply(objectCreation)));
         }
         return Optional.of(
@@ -1384,11 +1397,14 @@ final class VariableInitializerLayout {
         return expression.apply(argument);
     }
 
-    private boolean smallConstructorCanStayFlat(String flatName, ObjectCreationExpr objectCreation) {
+    private boolean smallConstructorCanStayFlat(
+            VariableDeclarator variable,
+            String flatName,
+            ObjectCreationExpr objectCreation
+    ) {
         return objectCreation.getArguments().size() <= 3
-            && layoutWidth.currentIndented(
-                flatName + " = " + compact.apply(objectCreation) + ";"
-            ) <= options.lineWidth();
+            && openerLineWidth(variable, flatName + " = " + compact.apply(objectCreation) + ";")
+                <= options.lineWidth();
     }
 
     /**
@@ -1396,6 +1412,7 @@ final class VariableInitializerLayout {
      * arguments or scopes that need a different object-creation layout.
      */
     private Optional<Doc> variableWithBrokenObjectCreationTypeArguments(
+            VariableDeclarator variable,
             String name,
             String flatName,
             ObjectCreationExpr objectCreation
@@ -1411,7 +1428,8 @@ final class VariableInitializerLayout {
         ClassOrInterfaceType type = objectCreation.getType().asClassOrInterfaceType();
         if (
             !hasNonEmptyTypeArguments(type)
-            || layoutWidth.currentIndented(
+            || openerLineWidth(
+                variable,
                 flatName + " = new " + typeNameWithoutArguments.apply(type) + "<"
             ) > options.lineWidth()
         ) {
@@ -1464,7 +1482,7 @@ final class VariableInitializerLayout {
             }
         }
         String firstLine = flatName + " = " + callPrefix + "(";
-        boolean openerFits = layoutWidth.currentIndented(firstLine) <= options.lineWidth();
+        boolean openerFits = openerLineWidth(variable, firstLine) <= options.lineWidth();
         if (
             methodCallChainIsSourceMultiline.test(methodCall)
             && blockLambdaCall.isEmpty()
@@ -1526,10 +1544,30 @@ final class VariableInitializerLayout {
      * {@code NAME = ROOT.method(} still fits on the assignment line, so the argument-break shape is reachable. Computed
      * here so the force-chain gates can ask the convergence predicate without first descending into that method.
      */
-    private boolean argumentBreakOpenerFits(MethodCallExpr methodCall, String flatName) {
-        return layoutWidth.currentIndented(
-            flatName + " = " + methodCallPrefix.apply(methodCall) + "("
-        ) <= options.lineWidth();
+    private boolean argumentBreakOpenerFits(VariableDeclarator variable, MethodCallExpr methodCall, String flatName) {
+        return openerLineWidth(variable, flatName + " = " + methodCallPrefix.apply(methodCall) + "(")
+            <= options.lineWidth();
+    }
+
+    /**
+     * Measures the {@code NAME = ROOT.method(} argument-break opener at the declaration's real rendered column (the
+     * C10 "measure at the rendered column" pattern), floored by the historical {@link LayoutWidth#currentIndented}
+     * baseline so it never measures narrower than before.
+     *
+     * <p>The opener stays on the assignment line only when it fits; the fixed {@code currentIndented} budget counted one
+     * indentation unit (plus, for a local, the extra unit folded into {@code flatName}), which matches a top-level field
+     * or a method-body local but under-counts a field in a nested type or a local nested inside further blocks. At those
+     * deeper positions the fixed baseline kept an opener that renders past the line-width limit, then a re-format from the
+     * now-deeper rendered column would break it (the #137/#155 width-at-wrong-column family). {@link
+     * LayoutWidth#variableInitializer} counts the declarator's real block/type nesting depth, so the keep-opener decision
+     * matches the column the opener is actually written at; flooring by {@code currentIndented} keeps every already-correct
+     * shallow position byte-identical.
+     */
+    private int openerLineWidth(VariableDeclarator variable, String openerLine) {
+        return Math.max(
+            layoutWidth.variableInitializer(variable, openerLine),
+            layoutWidth.currentIndented(openerLine)
+        );
     }
 
     /**
@@ -1561,6 +1599,7 @@ final class VariableInitializerLayout {
      * preserves the contained comment.
      */
     private Optional<Doc> variableWithLeadingCommentedBlockLambdaMethodCall(
+            VariableDeclarator variable,
             String name,
             String flatName,
             MethodCallExpr methodCall
@@ -1576,7 +1615,7 @@ final class VariableInitializerLayout {
         }
         String callPrefix = methodCallPrefix.apply(methodCall);
         String firstLine = flatName + " = " + callPrefix + "(";
-        if (layoutWidth.currentIndented(firstLine) > options.lineWidth()) {
+        if (openerLineWidth(variable, firstLine) > options.lineWidth()) {
             return Optional.empty();
         }
         return Optional.of(brokenMethodCallArgumentList(name, methodCall, callPrefix));
@@ -1638,6 +1677,7 @@ final class VariableInitializerLayout {
             MethodCallExpr methodCall
     ) {
         return forcedMethodCallChain(variable, methodCall, flatName).map(chain -> variableWithMethodCallChain(
+                variable,
                 name,
                 flatName,
                 methodCall,
@@ -1857,6 +1897,7 @@ final class VariableInitializerLayout {
      * Decides whether a method-call chain can start after {@code =} or must move entirely to an indented continuation.
      */
     private Doc variableWithMethodCallChain(
+            VariableDeclarator variable,
             String name,
             String flatName,
             MethodCallExpr methodCall,
@@ -1865,11 +1906,11 @@ final class VariableInitializerLayout {
     ) {
         if (
             methodCallChainRootIsObjectCreation.test(methodCall)
-            && layoutWidth.blockStatement(flatName + " = " + firstLine + ";") > options.lineWidth()
+            && openerLineWidth(variable, flatName + " = " + firstLine + ";") > options.lineWidth()
         ) {
             return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
         }
-        if (layoutWidth.currentIndented(flatName + " = " + firstLine) > options.lineWidth()) {
+        if (openerLineWidth(variable, flatName + " = " + firstLine) > options.lineWidth()) {
             return Doc.concat(Doc.text(name + " ="), Doc.indent(Doc.concat(Doc.HARD_LINE, chain)));
         }
         return Doc.concat(Doc.text(name + " = "), chain);

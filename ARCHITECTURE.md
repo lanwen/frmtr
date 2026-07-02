@@ -509,7 +509,18 @@ gates (`StatementPrinter.tryOpenerLineWidth`, feeding both the whole-section fla
 method-call resource) measure the same way: the `try (…) {` opener renders at the statement's rendered block/type depth,
 so counting that nesting through `LayoutWidth.nodeLine` (floored by the `CURRENT` baseline) replaces the fixed one-unit
 budget that under-counted every non-top-level `try` and collapsed a resource list flat over width when nested inside a
-method body or deeper (#219).
+method body or deeper (#219). The initializer *opener* gates that stay imperative below the master collapse — the ones
+that decide whether `NAME = ROOT.method(` (or `NAME = new Type(` / `NAME = new Type<`) keeps its opener on the assignment
+line or moves the whole method-call chain or object creation onto an indented continuation — measure the same way through
+`VariableInitializerLayout.openerLineWidth`, which takes the wider of `LayoutWidth.variableInitializer(variable, opener)`
+(the declarator's real block/type nesting depth) and the historical `LayoutWidth.currentIndented` baseline. That floor
+feeds the ~10 argument-break/type-argument/broken-object-creation/commented-object-creation/small-constructor/leading-
+commented-lambda opener tests plus the object-creation-chain-root gate (which previously used the fixed two-level
+`LayoutWidth.blockStatement` budget); the fixed one-unit `currentIndented` budget matched a top-level field or a method-
+body local but under-counted a field in a nested type or a local nested inside further blocks, keeping an opener that
+renders past the line width there (the #137/#155 measure-at-the-wrong-column family). Because `openerLineWidth` is never
+narrower than the true rendered column, a genuinely over-width opener always trips a gate, and flooring by
+`currentIndented` keeps every already-correct shallow position byte-identical (#216).
 
 The per-node *positional* facts a width gate needs — distinct from the run-scoped `JavaFormatContext` services and
 from per-type dispatch — travel in an immutable `LayoutContext` record threaded down the descent

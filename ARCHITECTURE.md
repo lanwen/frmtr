@@ -557,17 +557,47 @@ corpus — so the slice is a determinism hardening (a reindented initializer val
 column rather than its stale source column) rather than a golden-moving change. The dot-split tail
 (`refuseOpeningSingleSimpleReturnChainTail`, still gated on an `ObjectCreationExpr` root) is thereby **reachable** from the
 object-creation-rooted chain shapes this forced path renders, and stays consistent with the `return` chain. It is
-deliberately **not generalized** to non-object-creation roots. One initializer shape's *dot-split tail* is deferred: a
-single-call object-creation root whose selector opener fits and is kept on the assignment line
-(`NAME = new X(a).sel(simpleArg)`) is still argument-broken by `variableInitializerBrokenOrFlat` under
-`singleCallConvergesOnArgumentBreak` — a deliberate idempotence-preserving convergence choice. Rerouting *that* tail to the
-dot-split fan-out is the #221 Case B / slice-4 change, deferred here. (The *simple-attachable-root* single-call convergence
-this predicate also governed — `NAME = Collections.newSetFromMap(...)`, #191 — is now routed through
-`Doc.bestFitting([argument-break@1, collapse@0])`; see the ranked-engine convergence paragraph below.) The initializer's lambda-body and break-after-`=` chain seams pass `root()` (the chain there does not share the
+deliberately **not generalized** to non-object-creation roots.
+
+Slice 4 (#221, **Case B**) closes the last initializer *dot-split tail* this seam left deferred. A single-call
+object-creation root whose selector opener fits and is kept on the assignment line (`NAME = new X(a).sel(simpleArg)`, the
+maintainer's "Case 1") was previously argument-broken (`new X(a).sel(`⏎`simpleArg`⏎`)`) by the object-creation branch of
+`variableInitializerBrokenOrFlat` via `variableWithBrokenMethodCallArguments`→`brokenMethodCallArgumentList` — opening one
+simple argument across three lines when `.sel(simpleArg)` routinely fits on its own dotted continuation line.
+`VariableInitializerLayout.initializerSingleSimpleArgTailDotSplits` now intercepts that shape — an object-creation root, one
+selector segment, a single *simple* argument (`tailHasSingleSimpleArgument`, the initializer's mirror of
+`MethodCallChainPrinter.singleSimpleMethodCallSegmentArgument`: `NameExpr | FieldAccessExpr | ThisExpr | SuperExpr | LiteralExpr`),
+and an opener that fits (`argumentBreakOpenerFits`) — and routes it through the initializer's existing
+**chain-continuation (+8) fan-out**, `variableWithPackedMethodCallChain`→`packedMethodCallChain`. That is the *same* path a
+long-constructor single-selector tail already takes when its opener overflows (the `buildLongConstructorStrategy` /
+`buildShortConstructorStrategy` goldens): `packedMethodCallChain` keeps the constructor root on the assignment line and fans
+the lone selector compact onto its own continuation line at the chain-continuation indent (constructor root ⏎ `.sel(simpleArg)`),
+so Case 1 is byte-for-byte consistent with its opener-overflow siblings rather than taking the argument-open shape or the
+shallower `MethodCallChainPrinter.objectRootSingleSegmentChain` indent the `return` chain's #236 dot-split uses. Reaching that
+path required relaxing `variableWithPackedMethodCallChain`'s own gate for this one shape: a single-line-source single call is
+not a compact-object-creation shape and its opener fits, so the gate would otherwise reject it as an argument-break candidate —
+`tailHasSingleSimpleArgument` now admits it (and suppresses the opener-fits argument-break rejection) so the packed fan-out is
+selected; multi-argument and lambda tails do not match and keep their prior behavior. The flip is **emitted ahead of** the
+source-shape-sensitive collapse branch (`variableWithCompactObjectCreationChain`), and its gate keys only on AST shape and the
+opener's fit at the rendered column, so it wins on every pass and is a **fixpoint by construction**: `packedMethodCallChain` is
+a pure width function of the AST, so re-formatting the already-split source re-derives the same packed fan-out rather than
+collapsing the (now-fitting) whole chain onto the continuation line. It is scoped by `argumentBreakOpenerFits` to exactly the
+tails that *currently* arg-open (fit opener); a long-constructor single-simple-arg tail whose `new X(...).sel(` opener
+overflows already reaches the identical `packedMethodCallChain` fan-out through the unchanged overflow path, so declining here
+leaves it byte-identical. Multi-argument and lambda tails (and non-object-creation roots) are untouched: they never satisfy
+`tailHasSingleSimpleArgument` (or the object-creation-root gate) and keep opening. (The *simple-attachable-root* single-call convergence
+`singleCallConvergesOnArgumentBreak` also governed — `NAME = Collections.newSetFromMap(...)`, #191 — is routed through
+`Doc.bestFitting([argument-break@1, collapse@0])`; see the ranked-engine convergence paragraph below. Its single argument is
+a `new WeakHashMap<>(4)` object creation, *not* simple, so it is out of Case B's scope and stays argument-broken/collapsed.)
+The initializer's lambda-body and break-after-`=` chain seams pass `root()` (the chain there does not share the
 `NAME = ` line), and its packed-object-root seam keeps `root()` because that path measures through its already-prefix-aware
-`firstLineWidth` closure, not `compactRootLineWidth`. Covered by the `initializer-chain-root-prefix-width` fixture (two
-compact-dotted single-simple-arg tails, the deferred opener-fits argument-break case, and multi-argument / lambda
-scope-proving tails). `MethodCallChainPrinter.methodCallSegmentWidth`
+`firstLineWidth` closure, not `compactRootLineWidth`. Covered by the `initializer-chain-root-prefix-width` fixture
+(`buildAttachedOpenerStrategy` now fans its single-simple-arg tail at the chain-continuation indent, the *same* column as
+`buildLongConstructorStrategy` / `buildShortConstructorStrategy`, whose openers overflow; the multi-argument
+`buildMultiTimeoutStrategy` and lambda `buildConditionalStrategy` tails stay opened as scope proofs) and by
+`object-creation-root-chain-break` (`singleCallObjectRootDotSplitsSimpleArgTail`). Corpus-wide the flip moves only
+object-creation single-simple-arg initializer tails whose opener fits, with no new non-idempotence. (Case A — the
+lambda-body chain — remains for slice 5.) `MethodCallChainPrinter.methodCallSegmentWidth`
 is deliberately *not* migrated: it measures a segment kept beside a preceding token on the same line, a position deeper
 than the block indent that `nodeIndentWidth` cannot express (the one-per-line case is already routed around it via
 `segmentOnOwnLine`), so its source column stays. A `!(<binary>)` logical-complement initializer value whose inline
@@ -614,8 +644,9 @@ input), so both passes rank the same two candidates and the previously-oscillati
 construction rather than by an imperative source-shape predicate. The collapse is built directly rather than through
 `MethodCallChainPrinter.chainFanOut`: for a single selector `chainFanOut` fans the selector onto its own dotted
 continuation line (`ROOT`⏎`.method(...)`), a *dot-split* shape distinct from this initializer's whole-call collapse, and
-routing through it would move the `qualifiedRootProviders` golden (the single-simple-arg tail dot-split is #221 Case B /
-slice 4, out of scope here). The emission is gated comment-free (both arms render the call, and the node is a single
+routing through it would move the `qualifiedRootProviders` golden. That `qualifiedRootProviders` argument is a
+`new WeakHashMap<>(4)` object creation, not a *simple* argument, so it is out of the #221 Case B single-simple-arg tail
+dot-split (`initializerSingleSimpleArgTailDotSplits`, above) and stays on this ranked whole-call collapse. The emission is gated comment-free (both arms render the call, and the node is a single
 `Doc`, so no comment is double-claimed); comment-bearing single calls stay on the imperative cascade. Object-creation-rooted
 single calls (the #48 case) keep their existing imperative branches — their collapse is a broken-constructor/dot-split
 shape, not this whole-call collapse — and `singleCallConvergesOnArgumentBreak` survives as the AST+width eligibility signal

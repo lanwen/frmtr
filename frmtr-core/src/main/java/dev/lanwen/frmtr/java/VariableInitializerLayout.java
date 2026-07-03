@@ -861,13 +861,50 @@ final class VariableInitializerLayout {
                 return rankedConvergence.orElseThrow();
             }
             if (
+                initializerSingleSimpleArgTailDotSplits(
+                    variable,
+                    methodCall,
+                    declarationPrefix + variable.getNameAsString()
+                )
+            ) {
+                // #221 Case B / slice 4. An over-width object-creation-rooted single call whose selector's argument list is
+                // exactly one simple argument (a name, field access, this/super, or literal) and whose opener still fits on
+                // the assignment line ({@code NAME = new X(...).selector(} within budget) previously kept the whole opener on
+                // the assignment line and broke that single argument onto its own line ({@code new X(...).selector(}⏎{@code arg}
+                // ⏎{@code )}) via the object-creation argument-break branch below. That opened one simple argument across three
+                // lines when {@code .selector(arg)} routinely fits on its own dotted continuation line. Route it through the
+                // initializer's existing chain-continuation (+8) fan-out ({@link #variableWithPackedMethodCallChain}) instead —
+                // the same path a long-constructor single-selector tail already takes when its opener overflows (the
+                // {@code buildLongConstructorStrategy}/{@code buildShortConstructorStrategy} goldens). That path keeps the
+                // constructor root on the assignment line and fans the lone selector compact onto its own continuation line at
+                // the chain-continuation indent, so Case 1 is byte-for-byte consistent with its opener-overflow siblings rather
+                // than taking the argument-open shape or the shallower {@code objectRootSingleSegmentChain} indent. Emitting it
+                // here — before the source-shape-sensitive {@code variableWithCompactObjectCreationChain} collapse below — keys
+                // the shape on AST + the opener's fit at the rendered column only, so it wins on every pass and is idempotent:
+                // {@code packedMethodCallChain} is a pure width function of the AST, so a re-format of the already-split source
+                // re-derives the same packed fan-out rather than collapsing the (now-fitting) whole chain onto the
+                // continuation line.
+                Optional<Doc> dotSplitTail = variableWithPackedMethodCallChain(
+                    variable,
+                    name,
+                    declarationPrefix + variable.getNameAsString(),
+                    methodCall
+                );
+                if (dotSplitTail.isPresent()) {
+                    return dotSplitTail.orElseThrow();
+                }
+            }
+            if (
                 methodCallChainRootIsObjectCreation.test(methodCall)
                 && methodCallChainInitializerShape.apply(methodCall).singleCall()
             ) {
                 // Only single-segment object-creation roots (new X(args).onlyCall(...)) keep the call on the
                 // assignment line and break its argument list. Multi-segment constructor chains fall through to the
                 // one-per-line chain below so the root sits alone and every .call() gets its own line, instead of
-                // greedy-packing the root plus the leading calls onto the assignment line.
+                // greedy-packing the root plus the leading calls onto the assignment line. The single-simple-argument
+                // tail is handled above by the dot-split (#221 Case B), so only multi-argument and lambda tails (and
+                // single-simple-arg tails whose opener overflows, which the dot-split gate declines) reach this
+                // argument-break branch.
                 Optional<Doc> directObjectCreationCall = variableWithBrokenMethodCallArguments(
                     variable,
                     name,
@@ -1172,8 +1209,20 @@ final class VariableInitializerLayout {
                     sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall)
                 )
                 || sourceFirstLineKeepsChainAfterRoot(methodCall)
+                // #221 Case B / slice 4. A single-selector object-creation root with a single simple-argument tail whose
+                // opener fits on the assignment line is admitted to this +8 fan-out too, so it fans the constructor root on
+                // the assignment line and {@code .selector(simpleArg)} compact on its own continuation line — the same shape a
+                // long-constructor tail produces when its opener overflows. Without this the shape gate below rejects it
+                // (a single-line-source single call is not a compact-object-creation shape), which is what forced the old
+                // argument-open. The width gate that follows also stops rejecting a single-simple-arg tail as an
+                // argument-break candidate. The {@code initializerSingleSimpleArgTailDotSplits} branch of
+                // {@code variableInitializerBrokenOrFlat} routes exactly this shape here ahead of the argument-break branch;
+                // multi-argument and lambda tails never match {@link #tailHasSingleSimpleArgument} and keep their existing
+                // argument-break / opener-fits behavior.
+                || tailHasSingleSimpleArgument(methodCall)
             )
             || (!methodCall.getArguments().isEmpty()
+                && !tailHasSingleSimpleArgument(methodCall)
                 && layoutWidth.variableInitializer(
                     variable,
                     flatName + " = " + methodCallPrefix.apply(methodCall) + "("
@@ -1689,6 +1738,62 @@ final class VariableInitializerLayout {
                         || scope.isFieldAccessExpr())
                 .filter(scope -> !shouldPrintScopeAsDoc.test(scope))
                 .isPresent();
+    }
+
+    /**
+     * Decides whether an over-width object-creation-rooted single-call initializer should fan its tail compact onto its own
+     * dotted continuation line instead of opening the tail's single argument (#221 Case B / slice 4). It holds only for the
+     * exact shape that previously arg-opened:
+     * <ul>
+     *   <li>an object-creation root ({@code new X(...)}) with exactly one selector segment — the same
+     *       {@code rootIsObjectCreation && singleCall} shape the object-creation argument-break branch owns;</li>
+     *   <li>a tail whose argument list is a single <em>simple</em> argument ({@link #tailHasSingleSimpleArgument}); a
+     *       multi-argument or lambda tail is out of #221's scope and keeps opening; and</li>
+     *   <li>an opener that still fits on the assignment line ({@link #argumentBreakOpenerFits}, {@code NAME = new X(...).selector(}
+     *       within budget). This is the precise boundary that scopes the flip to the cases that <em>currently</em> arg-open.
+     *       When the opener-with-selector overflows (a long constructor whose {@code new X(...).selector(} does not fit) the
+     *       call already fans onto its own continuation line through {@link #variableWithPackedMethodCallChain} — declining
+     *       here leaves that (identical-looking) shape to the unchanged overflow path.</li>
+     * </ul>
+     *
+     * <p>The chosen shape is the same chain-continuation (+8) fan-out {@link #variableWithPackedMethodCallChain} already
+     * produces for an opener-overflow single-selector tail (the {@code buildLongConstructorStrategy}/
+     * {@code buildShortConstructorStrategy} goldens), so Case 1 fans at the same indent as its opener-overflow siblings
+     * rather than at the shallower {@code MethodCallChainPrinter.objectRootSingleSegmentChain} indent the {@code return}
+     * chain's #236 dot-split uses. Every input is an AST-shape or rendered-column-width fact, never a source line break, so
+     * the decision is a fixpoint: re-formatting the produced fan-out re-derives the same facts and re-emits it (see the call
+     * site for why emitting here — ahead of the source-shape-sensitive collapse branches — is what makes it idempotent).
+     */
+    private boolean initializerSingleSimpleArgTailDotSplits(
+            VariableDeclarator variable,
+            MethodCallExpr methodCall,
+            String flatName
+    ) {
+        return methodCallChainRootIsObjectCreation.test(methodCall)
+            && methodCallChainInitializerShape.apply(methodCall).singleCall()
+            && tailHasSingleSimpleArgument(methodCall)
+            && argumentBreakOpenerFits(variable, methodCall, flatName);
+    }
+
+    /**
+     * Identifies a call whose argument list is exactly one <em>simple</em> argument — a bare name, field access,
+     * {@code this}/{@code super}, or literal. This mirrors {@code MethodCallChainPrinter.singleSimpleMethodCallSegmentArgument}
+     * (the classification the return chain's #236 dot-split and {@code objectRootSingleSegmentChain}'s compact-tail branch
+     * use) so the initializer's single-simple-arg tail gate keeps the same notion of "simple" as the chain segment renderer
+     * it ultimately routes through; a lambda, nested call, or multi-argument tail is not simple and keeps opening its
+     * argument list. It is the inverse of {@code ControlConditionMethodCallLayout.hasComplexArgument} for the single-argument
+     * case.
+     */
+    private boolean tailHasSingleSimpleArgument(MethodCallExpr methodCall) {
+        if (methodCall.getArguments().size() != 1) {
+            return false;
+        }
+        Expression argument = methodCall.getArgument(0);
+        return argument.isNameExpr()
+            || argument.isFieldAccessExpr()
+            || argument.isThisExpr()
+            || argument.isSuperExpr()
+            || argument.isLiteralExpr();
     }
 
     /**

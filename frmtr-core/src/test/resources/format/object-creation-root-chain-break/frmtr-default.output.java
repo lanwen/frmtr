@@ -28,9 +28,8 @@ class ObjectCreationRootChainBreak {
                 .andRegisterShutdownHookThatOverflows(closer);
     }
 
-    void singleCallObjectRootKeepsArgumentBreak() {
-        var probe = new SignalContainer(imageReferenceForSignalRouter).withSignalEndpoint(
-            controlPlaneEndpointThatOverflows
-        );
+    void singleCallObjectRootDotSplitsSimpleArgTail() {
+        var probe = new SignalContainer(imageReferenceForSignalRouter)
+                .withSignalEndpoint(controlPlaneEndpointThatOverflows);
     }
 }

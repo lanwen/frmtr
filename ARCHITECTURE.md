@@ -173,8 +173,10 @@ instead of building strings directly:
   argument-break) over a fewer-lines collapse when both fit. It is carried as a parallel `int[] priorities` on the node
   (`Doc.bestFitting(alternatives, priorities)`); the existing `Doc.bestFitting(alternatives)` factory defaults it to
   all-zero, which makes the key a no-op (every candidate ties on priority) and reduces the ranking to the fewest-lines
-  metric — so the key is **dormant until a consumer sets a non-zero priority**, and no consumer does yet (slice 1 is
-  plumbing only). The overflow gate is what lets a printer route a fan-out-versus-argument-break choice through
+  metric — so the key stays dormant for every caller that sets no priority. Its first consumer is the initializer
+  single-call convergence (`VariableInitializerLayout.rankedSimpleRootSingleCallConvergence`, #191), which emits
+  `bestFitting([argument-break@1, collapse@0])` so the opener-attached argument-break is preferred over the fewer-lines
+  collapse whenever it fits. The overflow gate is what lets a printer route a fan-out-versus-argument-break choice through
   `bestFitting`: a fitting fan-out can never be outranked by an argument-break whose opener overruns the width. Ranking is
   bounded for linear time and native-image safety: only the first `DocWidths.MAX_BEST_FITTING_ALTERNATIVES` (8)
   alternatives are measured, and a best-fitting node nested past `DocWidths.MAX_BEST_FITTING_DEPTH` (4) collapses to its
@@ -555,12 +557,13 @@ corpus — so the slice is a determinism hardening (a reindented initializer val
 column rather than its stale source column) rather than a golden-moving change. The dot-split tail
 (`refuseOpeningSingleSimpleReturnChainTail`, still gated on an `ObjectCreationExpr` root) is thereby **reachable** from the
 object-creation-rooted chain shapes this forced path renders, and stays consistent with the `return` chain. It is
-deliberately **not generalized** to non-object-creation roots. One initializer shape is deferred: a single-call
-object-creation root whose selector opener fits and is kept on the assignment line (`NAME = new X(a).sel(simpleArg)`) is
-still argument-broken by `variableInitializerBrokenOrFlat` under `singleCallConvergesOnArgumentBreak` — a deliberate
-idempotence-preserving convergence choice. Rerouting it to the dot-split fan-out is non-idempotent for initializers
-(unlike `return`, the initializer layout space has a break-after-`=` collapse the fan-out oscillates with), so it is left
-as-is. The initializer's lambda-body and break-after-`=` chain seams pass `root()` (the chain there does not share the
+deliberately **not generalized** to non-object-creation roots. One initializer shape's *dot-split tail* is deferred: a
+single-call object-creation root whose selector opener fits and is kept on the assignment line
+(`NAME = new X(a).sel(simpleArg)`) is still argument-broken by `variableInitializerBrokenOrFlat` under
+`singleCallConvergesOnArgumentBreak` — a deliberate idempotence-preserving convergence choice. Rerouting *that* tail to the
+dot-split fan-out is the #221 Case B / slice-4 change, deferred here. (The *simple-attachable-root* single-call convergence
+this predicate also governed — `NAME = Collections.newSetFromMap(...)`, #191 — is now routed through
+`Doc.bestFitting([argument-break@1, collapse@0])`; see the ranked-engine convergence paragraph below.) The initializer's lambda-body and break-after-`=` chain seams pass `root()` (the chain there does not share the
 `NAME = ` line), and its packed-object-root seam keeps `root()` because that path measures through its already-prefix-aware
 `firstLineWidth` closure, not `compactRootLineWidth`. Covered by the `initializer-chain-root-prefix-width` fixture (two
 compact-dotted single-simple-arg tails, the deferred opener-fits argument-break case, and multi-argument / lambda
@@ -592,24 +595,33 @@ flat rendering is a single line: comment-bearing initializers (both arms would c
 ones (arrays/switch/anonymous-class own their break), source-multiline-preserved shapes, and casts stay on the historical
 imperative cascade (`variableInitializerCommentAndSourceShapeTier`, the initializer analogue of
 `ReturnExpressionPrinter.preemptedReturnValue`), which renders the initializer exactly once and is byte-identical to
-before. The fan-out-versus-argument-break single-call convergence (`singleCallConvergesOnArgumentBreak`) stays imperative.
-The overflow-gated tie-break it was originally waiting on has landed (#223: a fitting fan-out can never be outranked by an
-argument-break whose opener overflows), but a #191 (LDM-3) investigation found the gate is necessary yet not sufficient to route
-this arm through `Doc.bestFitting([argument-break, fan-out])`, so it was deliberately left imperative (see the extended
-`VariableInitializerLayout` note). Two structural blockers remain beyond the overflow gate. First, the fan-out arm is
-itself source-shape-dependent: `variableWithForcedMethodCallChain` → `MethodCallChainPrinter.forcedMethodCallChain`
-returns empty for a flat single-selector call whose opener fits (there is no `.selector` chain segment to break) and
-non-empty only when the opener overflows or the source chain was multiline, so a `bestFitting` built from it fires only
-for those inputs and, in the source-multiline case, picks the fewer-line collapse while the flat-source re-format falls to
-the deterministic argument-break path — a non-idempotent oscillation the overflow gate cannot fix, because both shapes fit
-and the gate is a no-op. Second, the imperative policy is opener-attachment ("keep `ROOT.method(` on the assignment line
-whenever its opener fits, breaking only the argument list"), which is not line-count minimization: whenever the whole call
-fits on one continuation line the collapse fan-out has strictly fewer lines than the argument-break, so a line-count-ranked
-`bestFitting` would move the `field-init-typelike-root-idempotence` golden (`seenProviders`/`collapsedProviders` render
-argument-break today). LDM-3's `MethodCallChainPrinter.rankedSingleSegmentChain` works precisely because its preferred
-alternative has no more lines than its fan-out; this arm's does not, so migrating it needs a source-neutral fan-out builder
-and a way to express opener-attachment preference (or a deliberate golden move to the collapse with every entry path routed
-through one `bestFitting`) — beyond an equivalence-preserving swap. The try-with-resources opener
+before. The single-selector, simple-attachable-root fan-out-versus-argument-break convergence (#191, LDM-3) now **runs through
+the ranked engine** (`VariableInitializerLayout.rankedSimpleRootSingleCallConvergence`). For an over-width single call
+with a name/type-like/field-access root (`NAME = Collections.newSetFromMap(new WeakHashMap<>(4))`),
+`variableInitializerBrokenOrFlat` emits `Doc.bestFitting([argument-break@1, collapse@0])` instead of the old imperative
+`singleCallConvergesOnArgumentBreak` steering: the **argument-break** (opener attached, `NAME = ROOT.method(`⏎`args`⏎`)`)
+carries the higher priority so it wins whenever it fits, and the **collapse** (`NAME =`⏎`ROOT.method(whole)`, the whole
+call flat on the continuation line) carries priority 0 so it wins only when the argument-break opener overflows the fit
+gate. This reproduces the `field-init-typelike-root-idempotence` golden **by mechanism** — `seenProviders`/
+`collapsedProviders`/`attachedProviders` (opener fits) render argument-break, `qualifiedRootProviders`/`qualifiedRootBroken`
+(opener overflows) render the collapse — and preserves the maintainer's decided opener-attached house style. The two
+blockers the earlier note recorded are both removed by the convergence-redesign foundation: the priority key (Mechanism 2,
+slice 1, `Doc.bestFitting(List, int[])`) placed after the fit gate and before line count expresses opener-attachment even
+though the collapse uses fewer lines (so the overflow gate stays primary — a fitting-but-lower-priority collapse still
+loses to a fitting argument-break, and an overflowing argument-break still loses to a fitting collapse); and the collapse
+arm is built **source-neutrally** (the whole call flat on the continuation line — a pure AST function present on every
+input), so both passes rank the same two candidates and the previously-oscillating `seenProviders` entry is a fixpoint by
+construction rather than by an imperative source-shape predicate. The collapse is built directly rather than through
+`MethodCallChainPrinter.chainFanOut`: for a single selector `chainFanOut` fans the selector onto its own dotted
+continuation line (`ROOT`⏎`.method(...)`), a *dot-split* shape distinct from this initializer's whole-call collapse, and
+routing through it would move the `qualifiedRootProviders` golden (the single-simple-arg tail dot-split is #221 Case B /
+slice 4, out of scope here). The emission is gated comment-free (both arms render the call, and the node is a single
+`Doc`, so no comment is double-claimed); comment-bearing single calls stay on the imperative cascade. Object-creation-rooted
+single calls (the #48 case) keep their existing imperative branches — their collapse is a broken-constructor/dot-split
+shape, not this whole-call collapse — and `singleCallConvergesOnArgumentBreak` survives as the AST+width eligibility signal
+for that object-creation case and for the source-multiline gates (`variableInitializerCommentAndSourceShapeTier`,
+`variableWithBrokenMethodCallArguments`) that defer converging single calls to this ranked arm; the force-wide gate below
+it now reaches only multi-segment type-like chains. The try-with-resources opener
 gates (`StatementPrinter.tryOpenerLineWidth`, feeding both the whole-section flat collapse and the single attached
 method-call resource) measure the same way: the `try (…) {` opener renders at the statement's rendered block/type depth,
 so counting that nesting through `LayoutWidth.nodeLine` (floored by the `CURRENT` baseline) replaces the fixed one-unit

@@ -147,6 +147,7 @@ final class ExpressionPrinters {
             binaries::nestedLines,
             this::brokenMethodCall,
             this::packedExpressionLambdaMethodCallChainBody,
+            this::huggedLambdaBodyChain,
             this::methodCallArgumentList,
             compactSource::compact,
             compactSource::compactWithoutOwnComment,
@@ -415,6 +416,30 @@ final class ExpressionPrinters {
 
     Optional<Doc> packedExpressionLambdaMethodCallChainBody(String firstLine, MethodCallExpr expression) {
         return methodCalls.packedExpressionLambdaMethodCallChainBody(firstLine, expression);
+    }
+
+    /**
+     * Fans an over-width method-call chain that sits in an expression-lambda body onto dotted continuation lines while it
+     * hugs the lambda header on the first line ({@code someCall(x -> assertThat(x)}\n{@code .extracting(...)}\n
+     * {@code .containsOnly(...))}).
+     *
+     * <p>The chain is forced to break — {@link ExpressionLambdaArgumentLayout} already decided the flat chain overflows at
+     * its real rendered column — so the chain printer lays the bare-call root on the header line and every
+     * {@code .call(...)} on its own continuation line, keeping a single-simple-argument tail compact. The caller owns the
+     * trailing call close, so the chain renders without a final terminator.
+     *
+     * <p>The chain shares its line with {@code firstLine} — the enclosing call opener plus the lambda header up to
+     * {@code ->} — so it renders past that prefix, not at the statement's own column. That prefix is threaded as the
+     * chain's {@link LayoutContext#leftEdgePrefix()} so every width gate the forced chain consults measures at the real
+     * rendered column rather than column zero, matching how the return chain threads its {@code "return "} prefix
+     * (LDM-2f #190/#236).
+     */
+    Optional<Doc> huggedLambdaBodyChain(String firstLine, MethodCallExpr expression) {
+        return methodCalls.forcedMethodCallChain(
+            expression,
+            LayoutWidth.LineBudget.CURRENT,
+            LayoutContext.root().withLeftEdgePrefix(firstLine + " ")
+        );
     }
 
     Doc methodCall(MethodCallExpr expression) {

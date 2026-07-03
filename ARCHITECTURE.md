@@ -462,7 +462,16 @@ source-shape + `!hasComments` gates and reuses the same `compactRootWithBrokenFi
 object-creation-rooted return chain now falls through to the return's flat-versus-broken `conditionalGroup`, whose broken
 arm is this ranked `bestFitting` (the return `conditionalGroup` measures flat-versus-broken at the real column, then the
 nested `bestFitting` ranks the two broken shapes). This is again byte-identical on the corpus because the ranking agrees
-with the retired first-line probe. The two source-multiline return branches that still pre-empt — the enclosed binary and
+with the retired first-line probe. The `one-per-line fan-out` alternative both rankers rank against the compact shape is
+built by the shared `MethodCallChainPrinter.chainFanOut(root, calls, tail, layout)` helper (convergence-redesign
+Mechanism 1, slice 2): it constructs the fan-out — `root` then each selector on its own dotted continuation line via
+`chainContinuation`, each segment rendered through the ordinary `methodCallChainSegment` group so a single-simple-argument
+tail stays compact — **from the AST alone, never gating on `openerFits` or `sourceMultilineChain`**. That source-neutrality
+is invisible to these two callers (they only reach the builder for width-driven, source-neutral single-segment chains, and
+it reproduces the exact `Doc` they built inline before the extraction, so the corpus stays byte-identical), but it is the
+point of the extraction: it is the builder the initializer's collapse arm will route through in convergence-redesign
+slice 3, where the fan-out must exist on every input regardless of source shape (the `field-init-typelike-root-idempotence`
+Blocker 1). No new consumer routes fresh input through `chainFanOut` yet. The two source-multiline return branches that still pre-empt — the enclosed binary and
 the source-multiline object creation — stay imperative pending LDM-4 (the binary/object-creation printers exposing their
 own ranked candidates); the ranker cannot override those source-preserved shapes today. The single-attachable-argument
 hug gates (`MethodCallPrinter.singleMethodCallArgument` /

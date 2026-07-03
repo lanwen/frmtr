@@ -838,6 +838,28 @@ final class VariableInitializerLayout {
             && initializer instanceof MethodCallExpr methodCall
             && !initializerHasOwnBreak(initializer)
         ) {
+            // C10 (B) — #191 resolved via the ranked engine. The single-selector, simple-attachable-root fan-out-versus-
+            // argument-break convergence (NAME = Collections.newSetFromMap(...)) that was left imperative here — deferred as
+            // "non-idempotent to route" — now runs through Doc.bestFitting([argumentBreak@1, collapse@0]). The two blockers
+            // the old note recorded are both removed: (1) the collapse arm is now built source-neutrally (whole call flat on
+            // the continuation line, a pure AST function present on every input, so both passes rank the same two
+            // candidates — no source-multiline-versus-flat oscillation); and (2) opener-attachment is expressed by the
+            // per-alternative priority (convergence-redesign Mechanism 2, slice 1), placed after the fit gate and before
+            // line count, so the opener-attached argument-break is preferred whenever it fits even though the collapse uses
+            // fewer lines, and the collapse wins only when the opener overflows the fit gate. Comment-bearing single calls
+            // stay on the imperative cascade below (the ranked node is emitted only when the call is comment-free), so no
+            // comment is double-claimed. Object-creation-rooted single calls (the #48 case) keep their existing imperative
+            // branches below — their collapse is a broken-constructor/dot-split shape, not this whole-call collapse, so they
+            // are out of this arm's scope (as is the single-simple-arg tail dot-split, #221 Case B / slice 4).
+            Optional<Doc> rankedConvergence = rankedSimpleRootSingleCallConvergence(
+                variable,
+                name,
+                declarationPrefix + variable.getNameAsString(),
+                methodCall
+            );
+            if (rankedConvergence.isPresent()) {
+                return rankedConvergence.orElseThrow();
+            }
             if (
                 methodCallChainRootIsObjectCreation.test(methodCall)
                 && methodCallChainInitializerShape.apply(methodCall).singleCall()
@@ -876,35 +898,13 @@ final class VariableInitializerLayout {
             }
             MethodCallChainSourcePlanner.InitializerChainShape initializerChainShape =
                 methodCallChainInitializerShape.apply(methodCall);
-            // C10 (B) — left imperative deliberately. The intent (LDM-3, #191) was to replace this
-            // fan-out-versus-argument-break choice with Doc.bestFitting([argumentBreak, fanOut]) and let the renderer
-            // rank them. The overflow-gated tie-break the original note said this was waiting on has since landed (#223:
-            // DocWidths.LineCount#betterThan now ranks a fitting layout above any that overflows), but a #191 (LDM-3)
-            // investigation found the overflow gate is necessary yet not sufficient — two structural blockers remain, so
-            // the swap still regresses and this stays imperative:
-            //  * The fan-out arm is itself source-shape-dependent. variableWithForcedMethodCallChain delegates to
-            //    MethodCallChainPrinter.forcedMethodCallChain, which returns empty for a flat single-selector call whose
-            //    opener fits (a single call has no `.selector` chain segment to break) and non-empty only when the opener
-            //    overflows or the source chain was multiline. A bestFitting built from it therefore fires only for those
-            //    inputs; for the source-multiline case it picks the collapse (NAME =\n WHOLE_CALL, fewer lines) while the
-            //    re-format — now flat source — reaches the deterministic argument-break path, so the layout oscillates
-            //    (the field-init-typelike-root-idempotence `seenProviders` entry). The overflow gate cannot fix this: the
-            //    two competing shapes both fit, so the gate is a no-op and line count decides.
-            //  * Even with a hypothetical source-neutral collapse arm, the imperative policy here is opener-attachment
-            //    ("keep ROOT.method( on the assignment line whenever its opener fits, breaking only the argument list"),
-            //    which is not line-count minimization. For any call whose whole form fits on one continuation line the
-            //    collapse fan-out has strictly FEWER lines than the argument-break, so a line-count-ranked bestFitting
-            //    picks the collapse and moves the field-init-typelike-root-idempotence golden (seenProviders /
-            //    collapsedProviders both render argument-break today). bestFitting ranks by fit-then-line-count and cannot
-            //    express "prefer the opener-attached shape even when it uses more lines". (Contrast LDM-3's
-            //    MethodCallChainPrinter.rankedSingleSegmentChain, which works precisely because its preferred alternative
-            //    — compact-with-broken-final-segment — has no more lines than its fan-out.)
-            //  * Both arms render the call, so a bestFitting would additionally double-claim comments for this method's
-            //    comment-bearing caller (variableInitializerBrokenOrFlat is also reached from the imperative comment path).
-            // The predicate keys purely on AST shape + measured width (never source line breaks), so it is idempotent by
-            // construction; leaving it imperative keeps that guarantee. Migrating this arm needs a source-neutral fan-out
-            // builder AND a way to express opener-attachment preference (or a deliberate decision to move the golden to
-            // the collapse and route every entry path through the one bestFitting) — beyond an equivalence-preserving swap.
+            // The single-selector simple-attachable-root fan-out-versus-argument-break convergence (#191) is resolved
+            // above by rankedSimpleRootSingleCallConvergence, so this force-wide gate now only reaches MULTI-SEGMENT
+            // type-like chains (NAME = a.b.C.first(...).second(...)), whose one-per-line forced chain the ranked
+            // single-call arm does not build. singleCallConvergesOnArgumentBreak still guards the object-creation single
+            // call (the #48 case, whose collapse is a broken-constructor shape rendered by its own branches, not this
+            // whole-call collapse); for that shape the predicate keeps the deterministic argument-break decision. It keys
+            // purely on AST shape + measured width, never source line breaks, so this remaining path stays idempotent.
             if (
                 initializerChainShape.shouldForceWideInitializerChain()
                 && !singleCallConvergesOnArgumentBreak(
@@ -1540,6 +1540,71 @@ final class VariableInitializerLayout {
     }
 
     /**
+     * Routes the over-width, single-selector, simple-attachable-root initializer through the ranked
+     * {@link Doc#bestFitting(java.util.List, int[]) bestFitting} engine, replacing the imperative fan-out-versus-argument-
+     * break convergence that #191 (LDM-3) deferred as "non-idempotent to route" (see the {@code // C10 (B)} note in
+     * {@link #variableInitializerBrokenOrFlat}). Present only for the exact shape the imperative
+     * {@link #singleCallConvergesOnArgumentBreak} predicate governed for a name/type-like/field-access root
+     * ({@code NAME = Collections.newSetFromMap(new WeakHashMap<>(4))}): a single selector segment, a simple attachable
+     * root, breakable non-empty non-lambda arguments, no own or contained comment, and a scope the chain renders inline.
+     *
+     * <p><strong>The two ranked alternatives.</strong>
+     * <ul>
+     *   <li><b>argument-break, priority 1 (opener-attached).</b> {@code NAME = ROOT.method(}⏎{@code args}⏎{@code )} —
+     *       the {@link #brokenMethodCallArgumentList} shape. Built unconditionally (the historical {@code openerFits}
+     *       gate is now the renderer's fit gate, upstream of priority): its first line is the opener {@code NAME = ROOT.method(},
+     *       so it fits iff the opener fits at the real rendered column.</li>
+     *   <li><b>collapse, priority 0 (fewer lines).</b> {@code NAME =}⏎{@code ROOT.method(whole)} — the whole call flat on
+     *       the continuation line, the same shape the imperative fall-through built via {@code brokenInitializer} for a
+     *       single simple call (whose {@code forcedMethodCallChain} is empty, so it renders the call flat). This is the
+     *       "single-selector fan-out / root on the continuation line, no dot-split" the convergence-redesign names; it is
+     *       built directly here rather than through {@code MethodCallChainPrinter.chainFanOut}, because {@code chainFanOut}
+     *       fans a single selector onto its own dotted continuation line ({@code ROOT}⏎{@code .method(...)}), which is a
+     *       different (dot-split) shape than this initializer's whole-call collapse and would move the
+     *       {@code field-init-typelike-root-idempotence} {@code qualifiedRootProviders} golden. (The single-simple-arg tail
+     *       dot-split is deliberately out of scope here — that is #221 Case B / slice 4.)</li>
+     * </ul>
+     *
+     * <p><strong>Why this reproduces the golden by mechanism.</strong> When the opener fits, both arms fit and priority
+     * keeps the opener-attached argument-break (the maintainer's decided house style — {@code seenProviders},
+     * {@code collapsedProviders}, {@code attachedProviders}). When the opener overflows, the argument-break's first line
+     * overflows so the fit gate drops it and the collapse wins ({@code qualifiedRootProviders}, {@code qualifiedRootBroken}).
+     * The decision keys only on AST shape and the opener's fit at the rendered column — never on source line breaks — so it
+     * is a fixpoint: pass 2 re-measures the same two candidates the renderer builds fresh from the AST and picks the same
+     * arm, which is what makes the previously-oscillating {@code seenProviders} entry idempotent by construction.
+     *
+     * <p><strong>Comment safety.</strong> Emitted only when the call is comment-free (no own comment, no contained
+     * comments). Both arms render the call once, and this returns a single {@link Doc}, so it never double-claims a comment;
+     * comment-bearing single calls stay on the imperative cascade below, exactly as the landed rankers require.
+     */
+    private Optional<Doc> rankedSimpleRootSingleCallConvergence(
+            VariableDeclarator variable,
+            String name,
+            String flatName,
+            MethodCallExpr methodCall
+    ) {
+        if (
+            !methodCallChainInitializerShape.apply(methodCall).singleCall()
+            || !singleCallHasSimpleAttachableRoot(methodCall)
+            || methodCall.getArguments().isEmpty()
+            || methodCall.getArguments().stream().anyMatch(LambdaExpr.class::isInstance)
+            || methodCallHasBlockLambdaArgument(methodCall)
+            || methodCallHasOwnComment(methodCall)
+            || !methodCall.getAllContainedComments().isEmpty()
+            || methodCall.getScope().filter(shouldPrintScopeAsDoc).isPresent()
+        ) {
+            return Optional.empty();
+        }
+        String callPrefix = methodCallPrefix.apply(methodCall);
+        Doc argumentBreak = brokenMethodCallArgumentList(name, methodCall, callPrefix);
+        Doc collapse = Doc.concat(
+            Doc.text(name + " ="),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, expression.apply(methodCall)))
+        );
+        return Optional.of(Doc.bestFitting(List.of(argumentBreak, collapse), new int[] {1, 0}));
+    }
+
+    /**
      * Decides whether a single-selector method-call initializer should converge on the argument-break layout instead of
      * deferring to the source-shape gates.
      *
@@ -1553,15 +1618,23 @@ final class VariableInitializerLayout {
      * <p>This predicate keys the decision on AST shape (single selector segment, an attachable root) and width (the
      * argument-break opener fits) only, never on the source line breaks. Two root kinds converge here:
      * <ul>
-     *   <li>An object-creation root ({@code new X(ctorArgs).method(...)}) — the original #48 case.</li>
+     *   <li>An object-creation root ({@code new X(ctorArgs).method(...)}) — the original #48 case. This root kind is still
+     *       argument-broken imperatively (its collapse is a broken-constructor / dot-split shape, not a whole-call
+     *       collapse), so this predicate remains its convergence signal.</li>
      *   <li>A simple attachable name/type-like or field-access root ({@code Collections.newSetFromMap(...)},
-     *       {@code this.foo(...)}) — the deferred case where {@code shouldForceSourceMultilineInitializerChain}/
-     *       {@code shouldForceWideInitializerChain} would otherwise collapse a selector-broken source into the
-     *       break-after-{@code =} shape that the re-format then re-attaches.</li>
+     *       {@code this.foo(...)}) — the #191 case, whose argument-break-versus-collapse choice now runs through the ranked
+     *       engine ({@link #rankedSimpleRootSingleCallConvergence}, {@code Doc.bestFitting([argument-break@1, collapse@0])}).
+     *       That ranked arm pre-empts this shape in {@link #variableInitializerBrokenOrFlat}, so here the predicate no longer
+     *       <em>chooses</em> the layout for it; it survives as the AST+width eligibility signal the source-shape gates
+     *       ({@code shouldForceSourceMultilineInitializerChain} at the comment/source-shape tier,
+     *       {@code shouldForceWideInitializerChain} below the ranked arm, and the source-multiline guard inside
+     *       {@link #variableWithBrokenMethodCallArguments}) read to <em>defer</em> a converging single call to that ranked
+     *       arm rather than force a dot-split chain the re-format would then re-attach.</li>
      * </ul>
-     * When it holds, the argument-break shape is chosen on every pass, so the layout is idempotent. Multi-segment chains,
-     * method-call roots (which carry their own attach logic), and openers that do not fit are intentionally left to the
-     * source-shape gates and the forced-chain fallbacks.
+     * When it holds, the argument-break shape is chosen on every pass (imperatively for the object-creation root, via the
+     * ranked engine for the simple root), so the layout is idempotent. Multi-segment chains, method-call roots (which carry
+     * their own attach logic), and openers that do not fit are intentionally left to the source-shape gates and the
+     * forced-chain fallbacks.
      */
     private boolean singleCallConvergesOnArgumentBreak(MethodCallExpr methodCall, boolean openerFits) {
         if (!openerFits || !methodCallChainInitializerShape.apply(methodCall).singleCall()) {

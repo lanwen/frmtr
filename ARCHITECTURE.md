@@ -488,7 +488,31 @@ keep `call(() -> inner(` on one opener when the author broke a lambda body) appl
 `openerOverflows`: they measure the opener at the lambda's rendered indentation (`LayoutWidth.nodeIndentWidth`, which
 counts every enclosing type and block) and take the wider of that and the historical shallow baseline, so a hug nested
 inside `if`/`for` bodies that overflows at its true depth breaks instead of being frozen over width while shallow fitting
-hugs stay unchanged. The first-line hug gate that decides whether that plan is built at all
+hugs stay unchanged. When the lambda body is instead a **bare-call-rooted method-call chain** that overflows
+(`someCall(x -> assertThat(x).extracting(...).containsOnly("v"))`, #221 Case A), `ExpressionLambdaArgumentLayout` fans it
+by dots — the compact root on the lambda-header line, each `.selector(...)` on its own dotted continuation line, a
+single-simple-argument tail kept compact, and the **enclosing call's `)` dedented to its own line at the opener's column**
+(`someCall(x -> assertThat(x)`⏎`.extracting(...)`⏎`.containsOnly("v")`⏎`)`) — rather than packing the flat chain and
+opening only the tail argument (`…containsOnly(`⏎`"v"`⏎`)`). The dedented close is the same shape a broken argument list
+renders (`foo(`⏎`arg`⏎`)`, close back at the statement-start column) and the packed lambda-body shapes'
+`PackedLambdaBody.CLOSING_ON_OWN_LINE` produce: the fanned chain carries its own continuation indent while the trailing
+`HARD_LINE` + `)` stay outside any extra indent, so they land at the enclosing statement's column; a header opening several
+calls before the break stacks their closes on that one dedented line. The branch runs after the compact-flat shape
+(`compactBodyWithClosingLine`) and before the packed-opener shapes (`packedLambdaBody`), and its gate
+(`overflowingHuggedBareRootChainBody`) is deliberately narrow so it moves only genuine Case-A chains and nothing else: the
+chain root is an **unscoped call** (`assertThat(x)`, which the scoped-root packer `packedExpressionLambdaBodyChain` cannot
+fan — chains rooted at a name/type/field keep that packer's greedy shape); **every call stays flat** (no
+lambda/comment/source-multiline argument, mirroring the chain printer's `compactMethodCallChainSegmentCanStayFlat`, so a
+lambda-tail or text-block-argument chain keeps the opener-packing shape); the compact chain **overflows at its real
+rendered column** (`nodeIndentWidth` + the `someCall(x -> ` header prefix + compact chain, not the shallow baseline the
+sibling body probes use); and the fan is a **width-safe improvement** (`huggedFanFits`: at least two dotted selectors so it
+is a fan and not a one-dot break, the root fits after the header, and every selector fits at the double continuation
+indent). All four conditions read AST text and block/type nesting only, so the decision is identical whether the input
+arrived flat or already fanned — a fixpoint. It renders through
+`huggedLambdaBodyChain` → `forcedMethodCallChain(expr, layout.withLeftEdgePrefix(firstLine + " "))`, the forced-chain
+entry that (unlike `brokenMethodCall`, which for a source-single-line chain opens the tail argument) reaches the chain
+printer's segment fan-out directly; the `leftEdgePrefix` conveys the header column to the forced chain's own width gates.
+The first-line hug gate that decides whether that plan is built at all
 (`ExpressionLambdaArgumentLayout.expressionLineWidth`, which measures the call prefix, leading arguments, and lambda
 header up to `->`) uses the same rendered-column rule: it previously reconstructed the prefix's start column from the
 lambda's `range.begin.column` and so, once the source column understated the rendered column (a reindented or shallowly
@@ -705,7 +729,13 @@ serve non-positional callers (a plain `methodCall`/`methodReference` with no bro
 carries the same-line text ahead of the node; its reader is `MethodCallChainPrinter.compactRootLineWidth`, which the
 `return` chain feeds `withLeftEdgePrefix("return ")` and the variable-initializer chain feeds
 `withLeftEdgePrefix(flatName + " = ")` (LDM-2f, #190, above) so the gate measures at the exact rendered column and drops
-its source-column floor. The record stays a plain record with a `root()` default of no prefix, no
+its source-column floor. The expression-lambda body chain is the third feeder (#221 Case A): when a lambda body is a
+bare-call-rooted method-call chain (`someCall(x -> assertThat(x).extracting(...).containsOnly("v"))`) that overflows at
+its real rendered column, `ExpressionLambdaArgumentLayout` fans it onto dotted continuation lines while it hugs the lambda
+header, routing through `ExpressionPrinters.huggedLambdaBodyChain` →
+`MethodCallPrinter.forcedMethodCallChain(expr, CURRENT, layout.withLeftEdgePrefix(firstLine + " "))` so every width gate
+the forced chain consults measures past the `someCall(x -> ` prefix (detailed with the expression-lambda layout helpers
+above). The record stays a plain record with a `root()` default of no prefix, no
 trailer, and no leading break, plus `withTrailingContent`, `withLeadingBreak`, and `withLeftEdgePrefix` derivations, so it
 is native-image safe and every non-header, non-broken, non-prefixed call site is unaffected.
 The throws gate's *measurement* now runs at the declaration's real rendered column (`LayoutWidth.nodeLine` floored by

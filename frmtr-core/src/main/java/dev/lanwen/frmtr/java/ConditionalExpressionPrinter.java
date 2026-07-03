@@ -26,7 +26,6 @@ import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.ToIntFunction;
 
 /**
  * Renders Java conditional expressions and their assignment or initializer-specific break decisions.
@@ -68,10 +67,6 @@ final class ConditionalExpressionPrinter {
     private final Function<Expression, Doc> expressionRenderer;
 
     private final Function<Expression, Doc> expressionWithoutOwnCommentRenderer;
-
-    private final ToIntFunction<String> blockStatementWidth;
-
-    private final ToIntFunction<String> continuationStatementWidth;
 
     private final BiFunction<Expression, Boolean, Doc> binaryExpressionLinesRenderer;
 
@@ -122,8 +117,6 @@ final class ConditionalExpressionPrinter {
             JavaFormatContext context,
             Function<Expression, Doc> expressionRenderer,
             Function<Expression, Doc> expressionWithoutOwnCommentRenderer,
-            ToIntFunction<String> blockStatementWidth,
-            ToIntFunction<String> continuationStatementWidth,
             BiFunction<Expression, Boolean, Doc> binaryExpressionLinesRenderer,
             BiFunction<Expression, Boolean, Doc> nestedBinaryExpressionLinesRenderer,
             Predicate<Expression> expressionHasParenthesizedNestedBinary
@@ -137,8 +130,6 @@ final class ConditionalExpressionPrinter {
         this.layoutDecisions = context.layoutDecisions;
         this.expressionRenderer = expressionRenderer;
         this.expressionWithoutOwnCommentRenderer = expressionWithoutOwnCommentRenderer;
-        this.blockStatementWidth = blockStatementWidth;
-        this.continuationStatementWidth = continuationStatementWidth;
         this.binaryExpressionLinesRenderer = binaryExpressionLinesRenderer;
         this.nestedBinaryExpressionLinesRenderer = nestedBinaryExpressionLinesRenderer;
         this.expressionHasParenthesizedNestedBinary = expressionHasParenthesizedNestedBinary;
@@ -188,7 +179,7 @@ final class ConditionalExpressionPrinter {
             + " "
             + compactSource.compact(conditionalExpr.getCondition())
             + ";";
-        if (blockStatementWidth.applyAsInt(conditionLine) <= options.lineWidth()) {
+        if (layoutWidth.blockStatement(conditionLine) <= options.lineWidth()) {
             return Optional.of(
                 Doc.concat(
                     expressionRenderer.apply(assignExpr.getTarget()),
@@ -718,7 +709,7 @@ final class ConditionalExpressionPrinter {
     ) {
         if (
             binaryCondition(condition).isEmpty()
-            || sourceShapePolicy.fitsOnOneLine(condition, continuationStatementWidth)
+            || sourceShapePolicy.fitsOnOneLine(condition, layoutWidth::continuationStatement)
         ) {
             return ConditionalConditionLayout.EXPRESSION;
         }

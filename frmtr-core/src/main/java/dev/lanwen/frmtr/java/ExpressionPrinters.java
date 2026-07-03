@@ -124,8 +124,6 @@ final class ExpressionPrinters {
             context,
             this::expression,
             this::expressionWithoutOwnComment,
-            context.layoutWidth::blockStatement,
-            context.layoutWidth::continuationStatement,
             binaries::lines,
             binaries::nestedLines,
             binaries::expressionHasParenthesizedNestedBinary
@@ -296,8 +294,6 @@ final class ExpressionPrinters {
             this::expressionWithTail,
             lambdas::brokenExpressionLambda,
             compactSource::compact,
-            context.layoutWidth::currentIndented,
-            context.layoutWidth::continuationStatement,
             methodCalls::sourceMultilineExpressionLambda,
             methodCalls::sourceMultilineArguments,
             methodCalls::compactRootWithBrokenFinalChainSegment,

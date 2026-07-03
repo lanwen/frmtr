@@ -554,7 +554,41 @@ final class ReturnExpressionPrinter {
                     .apply(methodCall, text -> returnLineWidth(methodCall, "return " + text, layout), chainLayout)
                     .or(() -> forcedMethodCallChain.apply(methodCall, lineBudget, chainLayout));
         }
-        return compactRootWithBrokenFinalChainSegment.apply(methodCall, lineBudget, chainLayout)
+        // chain-unify U2 (#190): route the general width-driven return chain's compact-versus-fan verdict through the
+        // ranked engine. The chain has two legal broken shapes here — the compact-root-with-broken-final-segment (CRBFS,
+        // the compact root plus selector on one line with only the final argument list broken) and the one-per-line
+        // fan-out (each selector on its own dotted continuation line, the named arm U1 consolidated). Rather than the
+        // imperative "CRBFS first if it fits, else fan" the return caller used before, emit a single Doc.bestFitting so the
+        // renderer owns the verdict at the real column (post-"return "), the same way the single-segment/object-root
+        // rankers already do inside MethodCallChainPrinter.
+        //
+        // The CRBFS arm carries priority 1 and the fan arm priority 0 (Mechanism 2, Doc.bestFitting(List, int[])): among
+        // the arms that FIT, the higher-priority CRBFS is kept regardless of line count. That reproduces the imperative
+        // pre-empt byte-identically — the pre-empt returned CRBFS whenever compactRootWithBrokenFinalChainSegment could
+        // build it (its opener fits), i.e. exactly the cases where the CRBFS arm now fits and its priority keeps it. The
+        // only place the two differ is when the compact shape overflows at the rendered column (e.g. a chain co-located
+        // after an unbroken `if (...) ... else return `, whose deep first line no shape can rescue): the old pre-empt still
+        // committed to the over-width CRBFS, whereas priority never rescues an overflowing arm, so bestFitting falls to the
+        // fan-out, which uses fewer lines for the same unavoidable overflow — a strict improvement, and idempotent (the
+        // renderer re-ranks the same two AST-built candidates every pass). Only comment-free chains build both arms eagerly
+        // (the arms render the chain twice and would otherwise double-claim a comment, tripping the strict-claims guardrail
+        // — the same gate the landed rankers apply); a comment-bearing chain keeps the imperative cascade, which renders
+        // the chosen shape once. chainLayout carries the "return " left-edge prefix into both arms so each candidate is
+        // measured at the true rendered column.
+        Optional<Doc> compactBrokenSegment =
+            compactRootWithBrokenFinalChainSegment.apply(methodCall, lineBudget, chainLayout);
+        if (methodCall.getAllContainedComments().isEmpty() && compactBrokenSegment.isPresent()) {
+            Optional<Doc> fanOut = forcedMethodCallChainWithFirstLine
+                    .apply(methodCall, text -> returnLineWidth(methodCall, "return " + text, layout), chainLayout)
+                    .or(() -> forcedMethodCallChain.apply(methodCall, lineBudget, chainLayout));
+            if (fanOut.isPresent()) {
+                return Optional.of(Doc.bestFitting(
+                    List.of(compactBrokenSegment.orElseThrow(), fanOut.orElseThrow()),
+                    new int[] {1, 0}
+                ));
+            }
+        }
+        return compactBrokenSegment
                 .or(() -> forcedMethodCallChainWithFirstLine.apply(
                         methodCall,
                         text -> returnLineWidth(methodCall, "return " + text, layout),

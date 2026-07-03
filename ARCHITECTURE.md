@@ -485,7 +485,24 @@ produces a different `rootDoc` and keeps the inline construction. The comment-fr
 re-renders the root a second time inside `chainFanOut`, discarding the `rootDoc` it built earlier, and re-rendering a
 comment-bearing root would re-claim its already-printed comments); it is the same comment-free guard the single-segment
 rankers apply to their `chainFanOut` arm. Because the delegated shape is byte-identical to the discarded inline shape, the
-corpus stays byte-identical (U1 is a pure consolidation, not a decision change). The two source-multiline return branches that still pre-empt — the enclosed binary and
+corpus stays byte-identical (U1 is a pure consolidation, not a decision change). Chain-path-unification slice U2 (#190)
+then routes the **return chain's general width-driven broken arm** through the same engine:
+`ReturnExpressionPrinter.returnWithForcedMethodCallChain` used to hand-pick the compact-root-with-broken-final-segment
+(CRBFS) shape first (its `compactRootWithBrokenFinalChainSegment` pre-empt) before falling to the forced one-per-line
+fan-out, so the CRBFS-versus-fan verdict for a name-rooted return chain — single-segment method root or promoted
+type-root (`Optional.ofNullable(x).orElse(y)`, `PipelineFactory.wrap(p).withFailureRecovery(...)`) — was chosen
+imperatively rather than at the rendered column. It now emits, for a comment-free chain whose compact shape exists, a
+single `Doc.bestFitting([CRBFS, forced-fan-out], new int[] {1, 0})`: the CRBFS arm carries priority 1 so that **among the
+arms that fit** it is kept regardless of line count, reproducing the imperative pre-empt byte-identically (the pre-empt
+returned CRBFS exactly when its opener fit, i.e. exactly when the priority-1 arm now fits). The genuine multi-segment
+name-root chain (three or more selectors) has no compact competitor — `compactRootWithBrokenFinalChainSegment` returns
+empty — so it keeps falling to the fan-out, now the `chainFanOut` arm U1 named. The only place the ranked node departs
+from the old pre-empt is when the compact shape overflows at the rendered column (a chain co-located after an unbroken
+`if (...) ... else return `, whose deep first line no shape can rescue): priority never rescues an overflowing arm, so
+`bestFitting` falls to the fan-out, which uses fewer lines for the same unavoidable overflow — a strict improvement, and
+idempotent because the renderer re-ranks the same two AST-built candidates every pass. Only comment-free chains build both
+arms eagerly (the same double-claim guard the landed rankers use); a comment-bearing return chain keeps the imperative
+cascade. The two source-multiline return branches that still pre-empt — the enclosed binary and
 the source-multiline object creation — stay imperative pending LDM-4 (the binary/object-creation printers exposing their
 own ranked candidates); the ranker cannot override those source-preserved shapes today. The single-attachable-argument
 hug gates (`MethodCallPrinter.singleMethodCallArgument` /

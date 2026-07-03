@@ -2507,13 +2507,17 @@ final class MethodCallChainPrinter {
      * root's rendered indentation ({@link LayoutWidth#nodeIndentWidth}), so a root reindented shallower than its true
      * depth is no longer under-measured, while the source-column floor keeps the {@code = }/{@code return }/continuation
      * leading prefix accounted for (a bare {@code nodeIndentWidth} swap regressed the initializer/return fixtures). The
-     * wider-of rule can only measure wider than before, so it is regression-free and byte-identical on the corpus; fully
-     * rendering the leading prefix at the rendered column awaits {@code leftEdgePrefix} (#190).
+     * wider-of rule can only measure wider than before, so it is regression-free and byte-identical on the corpus.
+     *
+     * <p>LDM-2f / chain-unify U3 (#190): {@code layout} is threaded here so a follow-up can attribute the same-line
+     * {@code layout.leftEdgePrefix()} at the rendered column. Unlike {@link #compactRootLineWidth}, this gate is NOT yet
+     * activated to read the prefix: its sole consumer {@link #promotedRootArgumentsShouldBreak} is already reached by the
+     * <em>initializer</em> chain carrying a real {@code "NAME = "} prefix (LDM-2f initializer slice), so dropping the
+     * source-column floor here would change the initializer's promoted-root arg-break verdict — a corpus regression, not
+     * a no-op. Activating it therefore waits until that promoted-root path is reviewed; for now the wider-of floor is
+     * unchanged and every caller stays byte-identical.
      */
     private int rootLineWidth(Expression root, String text, LayoutContext layout) {
-        // LDM-2f (#190): {@code layout} is threaded here so a follow-up can attribute the same-line
-        // {@code layout.leftEdgePrefix()} at the rendered column. This slice is pure plumbing: the prefix is not read
-        // yet, so the {@code max(source-column, nodeIndentWidth)} floor is unchanged and the width stays byte-identical.
         return root.getRange()
                 .map(range -> Math.max(
                     Math.max(0, range.begin.column - 1) + text.length(),
@@ -2613,13 +2617,15 @@ final class MethodCallChainPrinter {
      * {@code nodeIndentWidth}, is what actually describes where the preserved continuation sits, so the source column is
      * kept as the floor; taking the wider of it and {@code nodeIndentWidth} matches the root gates' shape and can only
      * ever measure wider (so it cannot regress), but the {@code nodeIndentWidth} arm rarely wins here because the
-     * continuation indent already exceeds it. Fully modelling the continuation column awaits {@code leftEdgePrefix}
-     * (#190).
+     * continuation indent already exceeds it.
+     *
+     * <p>LDM-2f / chain-unify U3 (#190): {@code layout} is threaded here so a follow-up can attribute the same-line
+     * {@code layout.leftEdgePrefix()} at the rendered column. Like the sibling {@link #rootLineWidth} it is NOT yet
+     * activated to read the prefix, and for the same reason: its sole caller {@link #promotedRootArgumentsShouldBreak} is
+     * reached by the initializer chain carrying a real {@code "NAME = "} prefix, so dropping the floor here would move the
+     * initializer's promoted-root arg-break verdict. The wider-of floor stays until that path is reviewed.
      */
     private int selectorLineWidth(MethodCallExpr expression, String text, LayoutContext layout) {
-        // LDM-2f (#190): {@code layout} is threaded here so a follow-up can attribute the same-line
-        // {@code layout.leftEdgePrefix()} at the rendered column. This slice is pure plumbing: the prefix is not read
-        // yet, so the {@code max(source-column, nodeIndentWidth)} floor is unchanged and the width stays byte-identical.
         return expression.getName()
                 .getRange()
                 .map(range -> Math.max(

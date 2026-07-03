@@ -203,12 +203,40 @@ final class MethodCallPrinter {
         return methodCallWithTail(expression, tail, breakMode, lineBudget);
     }
 
+    // LDM-2f / chain-unify U3 (#190): the statement expression renderer's forced-chain entry (reached only from
+    // StatementPrinters). It threads a real LayoutContext (STATEMENT position) instead of the implicit root(), so the
+    // statement caller is ready to list a chainFanOut arm through bestFitting in U4. A statement chain owns its own first
+    // column, so the leftEdgePrefix is empty (the gate reads stay a no-op) but the chain's first-line width becomes the
+    // statement's real rendered column ({@code nodeLine(expression, ...)}, which counts every enclosing block/type) rather
+    // than the fixed {@code LineBudget.BLOCK} baseline the seam threaded before. Because a statement always renders at its
+    // own block depth (no stacked continuation indent an argument can accumulate), {@code nodeLine} is exactly that
+    // column, so already-formatted input is byte-identical while a statement chain nested deeper than the two-level budget
+    // is now measured at its true depth. The outer break-or-flat gate (methodCallStatementWidth) still keys on the
+    // threaded LineBudget and is left unchanged.
     Doc forcedMethodCallWithTail(
             MethodCallExpr expression,
             ExpressionTail tail,
             LayoutWidth.LineBudget lineBudget
     ) {
-        return methodCallWithTail(expression, tail, MethodCallBreakMode.FORCED, lineBudget);
+        LayoutContext statementLayout = new LayoutContext(
+            EnclosingConstruct.STATEMENT,
+            "",
+            lineBudget,
+            "",
+            false
+        );
+        // Compute the statement's rendered indentation once — nodeIndentWidth walks the ancestor chain, so folding it into
+        // the width closure (which the chain probes call repeatedly) would make it O(depth) per probe. The statement's
+        // first line carries no leading whitespace, so nodeIndentWidth(expr) + text.length() equals nodeLine(expr, text).
+        int statementIndentWidth = layoutWidth.nodeIndentWidth(expression);
+        return methodCallWithTail(
+            expression,
+            tail,
+            MethodCallBreakMode.FORCED,
+            lineBudget,
+            firstLine -> statementIndentWidth + firstLine.length(),
+            statementLayout
+        );
     }
 
     Doc brokenMethodCallWithClosingLine(MethodCallExpr expression, String closingLine) {
@@ -369,35 +397,49 @@ final class MethodCallPrinter {
         return Doc.group(call);
     }
 
-    // LDM-2f (#190): the with-tail seam (reached from ExpressionPrinters#expressionWithTail and StatementPrinters, which
-    // do not yet carry a LayoutContext) keeps passing LayoutContext.root() to the call/chain gates. Threading a real
-    // outer layout to this seam lands with the leftEdgePrefix activation slice; today root() reproduces existing behavior
-    // and keeps output byte-identical.
     private Doc methodCallWithTail(
             MethodCallExpr expression,
             ExpressionTail tail,
             MethodCallBreakMode breakMode,
             LayoutWidth.LineBudget lineBudget
     ) {
+        return methodCallWithTail(expression, tail, breakMode, lineBudget, lineWidth(lineBudget), LayoutContext.root());
+    }
+
+    // LDM-2f / chain-unify U3 (#190): the with-tail seam threads a caller-chosen first-line width and LayoutContext to
+    // the chain gates. The default overload above still passes {@code lineWidth(lineBudget)} + {@code root()} (so every
+    // existing caller — array elements, expression-with-tail — stays byte-identical). The statement caller
+    // (StatementPrinters#forcedMethodCallWithTail) threads a {@code nodeLine}-based first-line width so the chain measures
+    // at the statement's real rendered column instead of the fixed {@code LineBudget.BLOCK} baseline, and a
+    // {@code LayoutContext} (empty {@code leftEdgePrefix} — a statement chain owns its own first column) so a later slice
+    // can route the statement fan-out through {@code bestFitting}.
+    private Doc methodCallWithTail(
+            MethodCallExpr expression,
+            ExpressionTail tail,
+            MethodCallBreakMode breakMode,
+            LayoutWidth.LineBudget lineBudget,
+            ToIntFunction<String> firstLineWidth,
+            LayoutContext layout
+    ) {
         if (tail.isEmpty()) {
-            return methodCall(expression, breakMode, LayoutContext.root());
+            return methodCall(expression, breakMode, layout);
         }
         Optional<Doc> chain = comments.speculatively(
-            () -> methodCallChain(expression, breakMode, tail.text(), lineBudget)
+            () -> methodCallChain(expression, breakMode, tail.text(), lineBudget, firstLineWidth, layout)
         );
         if (chain.isPresent()) {
             return chain.orElseThrow();
         }
         if (finalTrailingLineComments(expression).isEmpty()) {
             Optional<Doc> unsuffixedChain = comments.speculatively(
-                () -> methodCallChain(expression, breakMode, "", lineBudget)
+                () -> methodCallChain(expression, breakMode, "", lineBudget, firstLineWidth, layout)
             );
             if (unsuffixedChain.isPresent()) {
                 return tail.appendTo(unsuffixedChain.orElseThrow());
             }
         }
         return appendTailBeforeFinalTrailingLineComment(
-            methodCall(expression, breakMode, LayoutContext.root()),
+            methodCall(expression, breakMode, layout),
             expression,
             tail
         );
@@ -739,6 +781,27 @@ final class MethodCallPrinter {
             lineBudget,
             firstLineWidth,
             LayoutContext.root()
+        );
+    }
+
+    // LDM-2f / chain-unify U3 (#190): the layout-carrying overload used by the statement with-tail seam to thread its
+    // rendered-column first-line width alongside a real LayoutContext (empty prefix). The overload above keeps passing
+    // {@code root()} for callers that have no context yet.
+    Optional<Doc> methodCallChain(
+            MethodCallExpr expression,
+            MethodCallBreakMode breakMode,
+            String finalSegmentSuffix,
+            LayoutWidth.LineBudget lineBudget,
+            ToIntFunction<String> firstLineWidth,
+            LayoutContext layout
+    ) {
+        return methodChains.methodCallChain(
+            expression,
+            breakMode,
+            finalSegmentSuffix,
+            lineBudget,
+            firstLineWidth,
+            layout
         );
     }
 
@@ -1120,13 +1183,24 @@ final class MethodCallPrinter {
      * value whose {@code = }/{@code return } leading prefix shares the measured line, and {@code nodeIndentWidth}
      * (nesting depth only) does not carry that prefix while the source column does. Flooring by the source column keeps
      * it accounted for, so the probe can only ever measure wider and never under-measures a prefixed call. The change is
-     * byte-identical on the fixture corpus and on every reindented/nested probe; fully attributing the leading prefix at
-     * the rendered column awaits the {@code LayoutContext.leftEdgePrefix} follow-up (#190).
+     * byte-identical on the fixture corpus and on every reindented/nested probe.
+     *
+     * <p>LDM-2f / chain-unify U3 (#190): activated to read {@code layout.leftEdgePrefix()} the same way its sibling
+     * {@code MethodCallChainPrinter.compactRootLineWidth} does — when the prefix is non-empty it measures the call's first
+     * line at the exact rendered column {@code nodeIndentWidth(expression) + leftEdgePrefix.length() + firstLine.length()}
+     * and drops the source-column floor. Reading an empty prefix is a strict no-op, so every caller keeps the wider-of
+     * floor. No current caller of this source-multiline expression-lambda hug gate threads a non-empty prefix into it
+     * (the statement and argument chain callers thread an empty prefix), so the activation is byte-identical readiness for
+     * a future prefixed lambda-hug caller — unlike the chain-printer's {@code rootLineWidth}/{@code selectorLineWidth},
+     * which the initializer chain already reaches with a real prefix and so cannot be activated here without moving a
+     * golden.
      */
     private int methodCallRootLineWidth(MethodCallExpr expression, String firstLine, LayoutContext layout) {
-        // LDM-2f (#190): {@code layout} is threaded here so a follow-up can attribute the same-line
-        // {@code layout.leftEdgePrefix()} at the rendered column. This slice is pure plumbing: the prefix is not read
-        // yet, so the {@code max(source-column, nodeIndentWidth)} floor is unchanged and the width stays byte-identical.
+        // LDM-2f (#190): with the same-line prefix threaded, measure at the exact rendered column and drop the
+        // source-column floor, which was only ever a stand-in for this prefix.
+        if (!layout.leftEdgePrefix().isEmpty()) {
+            return layoutWidth.nodeIndentWidth(expression) + layout.leftEdgePrefix().length() + firstLine.length();
+        }
         return expression.getRange()
                 .map(range -> Math.max(
                     Math.max(0, range.begin.column + 1) + firstLine.length(),
@@ -1288,9 +1362,35 @@ final class MethodCallPrinter {
         // real (deeper) column; threading the CONTINUATION budget lets the chain printer's nesting-aware probe (#160/#161)
         // break the chain at its actual position. A chain that still fits at this depth returns empty and falls through
         // to the unchanged flat rendering, so non-overflowing arguments stay byte-identical.
+        //
+        // LDM-2f / chain-unify U3 (#190): thread a real LayoutContext (ARGUMENT position, CONTINUATION budget) for the
+        // argument chain instead of the implicit root(), so the argument caller is ready to list a chainFanOut arm through
+        // bestFitting in U4. The leftEdgePrefix is left EMPTY on purpose: unlike a return/initializer value — whose whole
+        // same-line prefix is textual (`return `, `NAME = `) and whose column nodeIndentWidth already captures — an
+        // argument's extra offset is pure continuation INDENTATION applied by the enclosing list's nested Doc.indent at
+        // render time, and an argument can sit under several stacked continuations that nodeIndentWidth (block/type depth
+        // only) does not count. The chain width gates therefore keep their wider-of source-column floor
+        // (max(source-column, nodeIndentWidth)), which is exactly where that unmodelled continuation indent still lives,
+        // and the stay-flat gate keeps measuring at the fixed CONTINUATION budget — byte-identical. Dropping that floor
+        // here via a nodeIndentWidth-based prefix under-measures a deeply nested argument and regresses it to an
+        // over-width flat line, so the rendered-column attribution of the continuation indent is left to a later slice.
         if (argument instanceof MethodCallExpr methodCall) {
+            LayoutContext argumentLayout = new LayoutContext(
+                EnclosingConstruct.ARGUMENT,
+                "",
+                LayoutWidth.LineBudget.CONTINUATION,
+                "",
+                false
+            );
             Optional<Doc> chain = comments.speculatively(
-                () -> methodCallChain(methodCall, MethodCallBreakMode.AUTO, suffix, LayoutWidth.LineBudget.CONTINUATION)
+                () -> methodCallChain(
+                    methodCall,
+                    MethodCallBreakMode.AUTO,
+                    suffix,
+                    LayoutWidth.LineBudget.CONTINUATION,
+                    lineWidth(LayoutWidth.LineBudget.CONTINUATION),
+                    argumentLayout
+                )
             );
             if (chain.isPresent()) {
                 return chain.orElseThrow();

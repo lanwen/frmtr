@@ -332,9 +332,11 @@ final class ExplainView {
 
     /**
      * Renders a {@link BestFittingDecision} whose chosen alternative wraps across lines. A best-fitting node ranks its
-     * alternatives by rendered line count rather than flat fit, so the report shows each measured alternative's line
-     * count (and overflow past the line width) and marks the winner, letting the developer see why the flatter
-     * alternatives lost.
+     * alternatives by fit, then a per-alternative priority, then rendered line count, so the report shows each measured
+     * alternative's line count (and overflow past the line width) and marks the winner, letting the developer see why the
+     * flatter alternatives lost. A non-zero priority is shown alongside the line count so a win that contradicts pure line
+     * count (a higher-priority arm beating a fewer-lines one) is explained rather than looking arbitrary; the common
+     * no-preference case (all-zero priority) prints nothing extra.
      */
     private void appendBestFittingBreak(StringBuilder out, BestFittingDecision bestFitting) {
         out.append("  ")
@@ -355,6 +357,9 @@ final class ExplainView {
                     .append(alternative.lines() == 1 ? " line" : " lines");
             if (alternative.overflow() > 0) {
                 out.append(styler.style(Role.FADE, " (" + alternative.overflow() + " over)"));
+            }
+            if (alternative.priority() != 0) {
+                out.append(styler.style(Role.FADE, " [priority " + alternative.priority() + "]"));
             }
             if (alternative.chosen()) {
                 out.append(styler.style(Role.FADE, " <- chosen"));

@@ -218,11 +218,15 @@ public record DocExplanation(
          * One measured alternative in a {@link Doc.BestFitting}.
          *
          * <p>{@code index} is its position in the alternative list, {@code lines} the number of newlines it would render
-         * into at the node's start column, and {@code overflow} the total columns past the line width it would incur.
-         * The ranking keeps a fitting alternative (zero overflow) over any overflowing one first, then among equal fit
-         * status the fewest lines, then the least overflow, then the earliest index. {@code chosen} marks the winner.
+         * into at the node's start column, {@code overflow} the total columns past the line width it would incur, and
+         * {@code priority} the per-alternative preference weight (higher wins among fitting candidates). The ranking keeps
+         * a fitting alternative (zero overflow) over any overflowing one first; then, among fitting candidates, a strictly
+         * higher {@code priority}; then within equal fit-and-priority the fewest lines, then the least overflow, then the
+         * earliest index. Recording {@code priority} lets {@code --explain} show why a higher-line alternative won when a
+         * caller set a preference (without it the report would show a line count that disagrees with the choice).
+         * {@code chosen} marks the winner.
          */
-        public record Alternative(int index, int lines, int overflow, boolean chosen) {}
+        public record Alternative(int index, int lines, int overflow, int priority, boolean chosen) {}
     }
 
     /**

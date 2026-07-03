@@ -90,7 +90,7 @@ public final class DocRenderer {
             }
             case Doc.Fill fill -> renderFill(fill.parts(), indent, widths);
             case Doc.ConditionalGroup conditionalGroup -> renderConditionalGroup(conditionalGroup.alternatives(), indent, widths);
-            case Doc.BestFitting bestFitting -> renderBestFitting(bestFitting.alternatives(), indent, widths);
+            case Doc.BestFitting bestFitting -> renderBestFitting(bestFitting, indent, widths);
             case Doc.IfBreak conditional -> {
                 // An identified IfBreak follows the recorded mode of its target group (which must have rendered first);
                 // an anonymous IfBreak follows the ambient mode. A target that has not rendered yet is treated as flat.
@@ -169,9 +169,11 @@ public final class DocRenderer {
      * letting the chosen alternative's own inner groups decide flat-vs-broken from the column they reach. A nested
      * best-fitting node inside the winner re-enters this method and is ranked at the next depth, under the shared bound.
      */
-    private void renderBestFitting(List<Doc> alternatives, int indent, DocWidths.Measurement widths) {
+    private void renderBestFitting(Doc.BestFitting bestFitting, int indent, DocWidths.Measurement widths) {
+        List<Doc> alternatives = bestFitting.alternatives();
         int depth = bestFittingDepth;
-        int chosen = widths.chooseBestFitting(alternatives, indent, column, options.lineWidth(), depth);
+        int chosen =
+            widths.chooseBestFitting(alternatives, bestFitting.priorities(), indent, column, options.lineWidth(), depth);
         // Render the winner at the next depth: chooseBestFitting scored it in a probe one level deeper, so a nested
         // best-fitting node inside it must be ranked at that same deeper level for the emitted layout to match the probe.
         bestFittingDepth = depth + 1;

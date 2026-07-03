@@ -164,13 +164,21 @@ instead of building strings directly:
   break**. The last alternative must be renderable at any width, and the first (flattest) is the representative width an
   enclosing group sizes the node by. The factory rejects an empty list; the "may contain a forced break" freedom is
   intentionally not asserted (mirroring `ConditionalGroup`'s inverse note, to avoid inverting the `Doc` → renderer
-  layering). The tie-break (rule D16) is strict and gated on fit first — a layout that fits (no line exceeds the width)
-  beats any that overflows regardless of line count, then within one fit class fewer lines, then less overflow, then the
-  earliest (flattest) index — so it is deterministic and therefore idempotent. The overflow gate is what lets a printer
-  route a fan-out-versus-argument-break choice through `bestFitting`: a fitting fan-out can never be outranked by an
-  argument-break whose opener overruns the width. Ranking is bounded for linear time and native-image safety: only the
-  first `DocWidths.MAX_BEST_FITTING_ALTERNATIVES` (8) alternatives are measured, and a best-fitting node nested past
-  `DocWidths.MAX_BEST_FITTING_DEPTH` (4) collapses to its first alternative instead of being ranked. `MethodCallChainPrinter`
+  layering). The tie-break (rule D16) is strict and layered — a layout that fits (no line exceeds the width) beats any
+  that overflows regardless of line count; then, **among the fitting candidates, a strictly higher per-alternative
+  `priority` wins** (convergence-redesign Mechanism 2); then within one fit-and-priority class fewer lines, then less
+  overflow, then the earliest (flattest) index — so it is deterministic and therefore idempotent. The `priority` key sits
+  deliberately between the fit gate and line count: after fit so it can never rescue an overflowing alternative (the
+  overflow gate stays primary), before line count so a caller can prefer a more-broken shape (e.g. an opener-attached
+  argument-break) over a fewer-lines collapse when both fit. It is carried as a parallel `int[] priorities` on the node
+  (`Doc.bestFitting(alternatives, priorities)`); the existing `Doc.bestFitting(alternatives)` factory defaults it to
+  all-zero, which makes the key a no-op (every candidate ties on priority) and reduces the ranking to the fewest-lines
+  metric — so the key is **dormant until a consumer sets a non-zero priority**, and no consumer does yet (slice 1 is
+  plumbing only). The overflow gate is what lets a printer route a fan-out-versus-argument-break choice through
+  `bestFitting`: a fitting fan-out can never be outranked by an argument-break whose opener overruns the width. Ranking is
+  bounded for linear time and native-image safety: only the first `DocWidths.MAX_BEST_FITTING_ALTERNATIVES` (8)
+  alternatives are measured, and a best-fitting node nested past `DocWidths.MAX_BEST_FITTING_DEPTH` (4) collapses to its
+  first alternative instead of being ranked. `MethodCallChainPrinter`
   is the first Java printer to emit it (layout-decision-model milestone LDM-3): a comment-free, width-driven single-segment
   chain whose final segment carries breakable arguments emits `bestFitting([compact-with-broken-segment, one-per-line
   fan-out])` and lets the renderer rank the two broken shapes at the real output column instead of committing to one via a
@@ -234,8 +242,10 @@ choices as a `FillDecision` (one entry per separator, each carrying the flat wid
 columns left, and the column the separator started at), and a `ConditionalGroup`'s alternative selection as a
 `ConditionalGroupDecision` (the chosen index, whether it was the break-mode fallback, and each probed alternative's flat
 width and fit so the report can show why earlier alternatives were skipped), and a `BestFitting`'s ranked-alternative
-selection as a `BestFittingDecision` (the chosen index and each measured alternative's rendered line count and overflow,
-marking the winner, so the report can show why the flatter alternatives lost on line count). The CLI surfaces broken
+selection as a `BestFittingDecision` (the chosen index and each measured alternative's rendered line count, overflow, and
+per-alternative priority, marking the winner, so the report can show why the flatter alternatives lost — and, when a
+consumer set a preference, why a higher-line alternative won on priority). The CLI prints a non-zero priority alongside
+the line count and omits it for the common all-zero default. The CLI surfaces broken
 fills, break-mode conditional groups, and wrapping best-fitting layouts in the same "why it wrapped" section as group
 breaks.
 

@@ -112,8 +112,8 @@ final class ExplainViewTest {
             20,
             0,
             List.of(
-                new BestFittingDecision.Alternative(0, 4, 3, false),
-                new BestFittingDecision.Alternative(1, 2, 0, true)
+                new BestFittingDecision.Alternative(0, 4, 3, 0, false),
+                new BestFittingDecision.Alternative(1, 2, 0, 0, true)
             )
         );
 
@@ -122,7 +122,32 @@ final class ExplainViewTest {
         assertThat(why)
                 .contains("method chain wrapped (ranked by line count, chose alternative 1):")
                 .contains("alternative 0: 4 lines (3 over)")
-                .contains("alternative 1: 2 lines <- chosen");
+                .contains("alternative 1: 2 lines <- chosen")
+                // All-zero priority is the no-preference default and must add no noise to the report.
+                .doesNotContain("priority");
+    }
+
+    @Test
+    void rendersThePriorityWhenAHigherPriorityAlternativeWonOverAFewerLinesOne() {
+        // A caller set a preference: alternative 1 uses one more line than alternative 0 yet was chosen because its
+        // priority is higher. The report prints the priority so the win does not look like it contradicts line count.
+        BestFittingDecision bestFitting = new BestFittingDecision(
+            Optional.of("java.expression:MethodCallExpr"),
+            1,
+            80,
+            0,
+            List.of(
+                new BestFittingDecision.Alternative(0, 2, 0, 0, false),
+                new BestFittingDecision.Alternative(1, 3, 0, 1, true)
+            )
+        );
+
+        String why = renderWhy(explanationWith(List.of(), List.of(), List.of(bestFitting)));
+
+        assertThat(why)
+                .contains("alternative 1: 3 lines [priority 1] <- chosen")
+                // The zero-priority loser prints no priority tag.
+                .contains("alternative 0: 2 lines\n");
     }
 
     @Test
@@ -135,8 +160,8 @@ final class ExplainViewTest {
             80,
             0,
             List.of(
-                new BestFittingDecision.Alternative(0, 0, 0, true),
-                new BestFittingDecision.Alternative(1, 2, 0, false)
+                new BestFittingDecision.Alternative(0, 0, 0, 0, true),
+                new BestFittingDecision.Alternative(1, 2, 0, 0, false)
             )
         );
 

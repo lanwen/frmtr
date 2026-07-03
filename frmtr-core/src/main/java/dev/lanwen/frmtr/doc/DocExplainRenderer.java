@@ -210,10 +210,11 @@ public final class DocExplainRenderer {
                     // weighed — so --explain can show why the flatter alternatives lost.
                     Builder structural = Builder.structural();
                     List<Doc> alternatives = bestFitting.alternatives();
+                    int[] priorities = bestFitting.priorities();
                     int available = lineWidth - column;
                     int startColumn = column;
                     int depth = bestFittingDepth;
-                    int chosen = widths.chooseBestFitting(alternatives, indent, startColumn, lineWidth, depth);
+                    int chosen = widths.chooseBestFitting(alternatives, priorities, indent, startColumn, lineWidth, depth);
                     // Only the alternatives the ranking measured (the first MAX_BEST_FITTING_ALTERNATIVES, and none at
                     // all past the depth bound where the node collapses to its first) are recorded, matching the winner
                     // selection exactly.
@@ -224,7 +225,15 @@ public final class DocExplainRenderer {
                     for (int i = 0; i < measured; i++) {
                         DocWidths.LineCount count =
                             widths.measureLineCount(alternatives.get(i), indent, startColumn, lineWidth, depth + 1);
-                        ranked.add(new BestFittingDecision.Alternative(i, count.lines(), count.overflow(), i == chosen));
+                        // Record the priority alongside the measured line count so --explain can show why a higher-line
+                        // alternative won: a fitting higher-priority arm outranks a fitting fewer-lines one.
+                        ranked.add(new BestFittingDecision.Alternative(
+                            i,
+                            count.lines(),
+                            count.overflow(),
+                            priorities[i],
+                            i == chosen
+                        ));
                     }
                     bestFittingDecisions.add(new BestFittingDecision(
                         enclosingLabel == null ? Optional.empty() : enclosingLabel.label,

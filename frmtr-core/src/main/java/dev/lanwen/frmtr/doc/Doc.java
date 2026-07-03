@@ -236,7 +236,33 @@ public sealed interface Doc
      * @throws IllegalArgumentException if {@code alternatives} is empty
      */
     static Doc bestFitting(List<Doc> alternatives) {
-        return new BestFitting(alternatives);
+        return new BestFitting(alternatives, new int[0]);
+    }
+
+    /**
+     * Builds a ranked-broken-layout node whose alternatives carry per-alternative <em>priorities</em>, giving a caller a
+     * way to say "prefer this shape over that one even though it uses more lines" (convergence-redesign Mechanism 2). The
+     * priority is a secondary ranking key placed <strong>after the fit gate and before line count</strong>: among the
+     * alternatives that fit, the highest-priority one wins regardless of how many lines it uses; a fitting alternative
+     * still beats any overflowing one whatever its priority (priority never rescues an overflowing arm), and equal
+     * priority reduces to the ordinary fewest-lines-then-least-overflow order of {@link #bestFitting(List)}. This is what
+     * lets an opener-attached layout be preferred over a fewer-lines collapse when both fit, without letting a
+     * high-priority arm produce over-width output.
+     *
+     * <p>{@code priorities} is a parallel vector, one entry per alternative in the same order; a higher integer is
+     * preferred. An <em>empty</em> array is the "no preference" default and is treated as all-zero, which makes this
+     * factory identical to {@link #bestFitting(List)} (equal priority ⇒ today's metric). A non-empty array must have
+     * exactly one entry per alternative.
+     *
+     * <p>All other {@code bestFitting} semantics are unchanged: alternatives are ordered flattest-first, a non-first
+     * alternative may contain a forced break, the last must be renderable at any width, and an enclosing group sizes the
+     * node by its first alternative. See {@link #bestFitting(List)} for the full contract.
+     *
+     * @throws IllegalArgumentException if {@code alternatives} is empty, or if {@code priorities} is non-empty and its
+     *     length does not equal the number of alternatives
+     */
+    static Doc bestFitting(List<Doc> alternatives, int[] priorities) {
+        return new BestFitting(alternatives, priorities);
     }
 
     /**
@@ -289,14 +315,25 @@ public sealed interface Doc
         }
     }
 
-    /** Ranked broken-layout alternatives; the renderer keeps the one minimizing line count. See {@link #bestFitting}. */
-    record BestFitting(List<Doc> alternatives) implements Doc {
+    /**
+     * Ranked broken-layout alternatives; the renderer keeps the one that fits, then (among fitting candidates) has the
+     * highest {@code priority}, then minimizes line count. See {@link #bestFitting(List)} / {@link #bestFitting(List, int[])}.
+     *
+     * <p>{@code priorities} is a parallel vector — one entry per alternative, same order, higher preferred — read as a
+     * secondary ranking key between the fit gate and line count. It is a static per-alternative fact on the node, not a
+     * measured width, so the ranking stays a pure function of the AST plus the rendered column.
+     */
+    record BestFitting(List<Doc> alternatives, int[] priorities) implements Doc {
         /**
-         * Rejects an empty alternative list and defensively copies the rest, so the "at least one alternative" invariant
-         * holds for every {@code BestFitting} no matter how it is constructed — including a direct in-package
-         * {@code new BestFitting(...)} that bypasses the {@link #bestFitting(List)} factory. "Render nothing" is never a
-         * valid layout-choice intent; use {@link #EMPTY} to render nothing deliberately. The "a non-first alternative
-         * may contain a forced break" freedom is intentionally not enforced here (see {@link #bestFitting(List)}).
+         * Rejects an empty alternative list, defensively copies the alternatives, and normalizes {@code priorities} so
+         * the "at least one alternative" and "one priority per alternative" invariants hold for every {@code BestFitting}
+         * no matter how it is constructed — including a direct in-package {@code new BestFitting(...)} that bypasses the
+         * factories. An empty {@code priorities} array is the "no preference" default and is expanded to all-zero, which
+         * makes the priority key a no-op (every candidate ties on priority) and reduces the ranking to today's
+         * fewest-lines metric — the byte-identity guarantee for existing call sites. A non-empty array is cloned and must
+         * have exactly one entry per alternative. "Render nothing" is never a valid layout-choice intent; use
+         * {@link #EMPTY} to render nothing deliberately. The "a non-first alternative may contain a forced break" freedom
+         * is intentionally not enforced here (see {@link #bestFitting(List)}).
          */
         public BestFitting {
             if (alternatives.isEmpty()) {
@@ -305,6 +342,13 @@ public sealed interface Doc
                 );
             }
             alternatives = List.copyOf(alternatives);
+            priorities = priorities.length == 0 ? new int[alternatives.size()] : priorities.clone();
+            if (priorities.length != alternatives.size()) {
+                throw new IllegalArgumentException(
+                    "bestFitting priorities length (" + priorities.length + ") must equal the number of alternatives ("
+                        + alternatives.size() + ")"
+                );
+            }
         }
     }
 

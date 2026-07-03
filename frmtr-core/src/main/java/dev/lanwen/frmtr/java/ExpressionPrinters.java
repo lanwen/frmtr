@@ -470,6 +470,18 @@ final class ExpressionPrinters {
         return methodCalls.forcedMethodCallChain(expression, firstLineWidth);
     }
 
+    // LDM-2f (#190): the layout-carrying overload the initializer chain threads. The initializer supplies its assignment
+    // prefix through {@code layout.withLeftEdgePrefix("NAME = ")} so the chain width gate can attribute it at the rendered
+    // column and reach the object-creation dot-split tail. Other callers of the two-arg overload above pass no prefix and
+    // stay byte-identical.
+    Optional<Doc> forcedMethodCallChain(
+            MethodCallExpr expression,
+            ToIntFunction<String> firstLineWidth,
+            LayoutContext layout
+    ) {
+        return methodCalls.forcedMethodCallChain(expression, firstLineWidth, layout);
+    }
+
     Optional<Doc> packedMethodCallChain(
             MethodCallExpr expression,
             ToIntFunction<String> firstLineWidth

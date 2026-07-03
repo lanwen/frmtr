@@ -522,7 +522,30 @@ that still open) and the `return-chain-final-argument` nested-return cases. The 
 wider-of source-column floor, so they remain byte-identical pending their own slices. `withLeftEdgePrefix` mirrors
 `withTrailingContent`/`withLeadingBreak` (fresh value, all other components preserved). The main expression-dispatch seam
 (`ExpressionPrinters`) forwards the real outer `layout`; the with-tail and other call/chain seams still pass `root()`
-until later activation slices extend them. `MethodCallChainPrinter.methodCallSegmentWidth`
+until later activation slices extend them.
+
+The second activation slice (LDM-2f, #190) then populated `leftEdgePrefix` for the **variable-initializer** chain.
+`VariableInitializerLayout.forcedMethodCallChain(variable, methodCall, flatName)` — the seam
+`variableWithForcedMethodCallChain` uses — threads `LayoutContext.root().withLeftEdgePrefix(flatName + " = ")` through a
+new `ForcedChainWithLayout` callback (the initializer analogue of `ReturnExpressionPrinter.ChainWithLayout`; wired
+`ExpressionPrinters`/`MethodCallPrinter`→`MethodCallChainPrinter.forcedMethodCallChain(expr, firstLineWidth, layout)`),
+so `compactRootLineWidth` measures the initializer chain root at `nodeIndentWidth(root) + "NAME = ".length() + firstLine`
+and drops the source-column floor. Because the initializer's own opener gates (`variableInitializer`, #216/#222) already
+measured the `NAME = ` prefix at the rendered column, this arm reaches **measurement parity** — byte-identical on the
+corpus — so the slice is a determinism hardening (a reindented initializer value is now measured at its true rendered
+column rather than its stale source column) rather than a golden-moving change. The dot-split tail
+(`refuseOpeningSingleSimpleReturnChainTail`, still gated on an `ObjectCreationExpr` root) is thereby **reachable** from the
+object-creation-rooted chain shapes this forced path renders, and stays consistent with the `return` chain. It is
+deliberately **not generalized** to non-object-creation roots. One initializer shape is deferred: a single-call
+object-creation root whose selector opener fits and is kept on the assignment line (`NAME = new X(a).sel(simpleArg)`) is
+still argument-broken by `variableInitializerBrokenOrFlat` under `singleCallConvergesOnArgumentBreak` — a deliberate
+idempotence-preserving convergence choice. Rerouting it to the dot-split fan-out is non-idempotent for initializers
+(unlike `return`, the initializer layout space has a break-after-`=` collapse the fan-out oscillates with), so it is left
+as-is. The initializer's lambda-body and break-after-`=` chain seams pass `root()` (the chain there does not share the
+`NAME = ` line), and its packed-object-root seam keeps `root()` because that path measures through its already-prefix-aware
+`firstLineWidth` closure, not `compactRootLineWidth`. Covered by the `initializer-chain-root-prefix-width` fixture (two
+compact-dotted single-simple-arg tails, the deferred opener-fits argument-break case, and multi-argument / lambda
+scope-proving tails). `MethodCallChainPrinter.methodCallSegmentWidth`
 is deliberately *not* migrated: it measures a segment kept beside a preceding token on the same line, a position deeper
 than the block indent that `nodeIndentWidth` cannot express (the one-per-line case is already routed around it via
 `segmentOnOwnLine`), so its source column stays. A `!(<binary>)` logical-complement initializer value whose inline
@@ -617,9 +640,10 @@ thread `LayoutContext.root().withLeadingBreak(true)` and `EnclosedSuffixDispatch
 unconditionally — rather than the dispatcher carrying that decision as a separate boolean argument (#189); the
 concrete `MethodCallPrinter`/`MethodReferencePrinter` suffix printers keep the resolved boolean because they also
 serve non-positional callers (a plain `methodCall`/`methodReference` with no broken line to inherit). `leftEdgePrefix`
-carries the same-line text ahead of the node; its first reader is `MethodCallChainPrinter.compactRootLineWidth`, which
-the `return` chain feeds `withLeftEdgePrefix("return ")` (LDM-2f, #190, above) so the gate measures at the exact rendered
-column and drops its source-column floor. The record stays a plain record with a `root()` default of no prefix, no
+carries the same-line text ahead of the node; its reader is `MethodCallChainPrinter.compactRootLineWidth`, which the
+`return` chain feeds `withLeftEdgePrefix("return ")` and the variable-initializer chain feeds
+`withLeftEdgePrefix(flatName + " = ")` (LDM-2f, #190, above) so the gate measures at the exact rendered column and drops
+its source-column floor. The record stays a plain record with a `root()` default of no prefix, no
 trailer, and no leading break, plus `withTrailingContent`, `withLeadingBreak`, and `withLeftEdgePrefix` derivations, so it
 is native-image safe and every non-header, non-broken, non-prefixed call site is unaffected.
 The throws gate's *measurement* now runs at the declaration's real rendered column (`LayoutWidth.nodeLine` floored by

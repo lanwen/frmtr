@@ -591,9 +591,8 @@ while the packed broken-object-creation caller passes `root()`, so field/stateme
 lambda / already-broken return tails all keep their existing argument-opening fan-out. Covered by the two-plus-two
 `return-chain-root-prefix-width` fixture (two single-simple-arg tails that compact, one multi-argument and one lambda tail
 that still open) and the `return-chain-final-argument` nested-return cases. The other three gates (`rootLineWidth`,
-`selectorLineWidth`,
-`MethodCallPrinter.methodCallRootLineWidth`) and every non-`return` caller still pass `root()` (empty prefix) and keep the
-wider-of source-column floor, so they remain byte-identical pending their own slices. `withLeftEdgePrefix` mirrors
+`selectorLineWidth`, `MethodCallPrinter.methodCallRootLineWidth`) and every non-`return` caller still pass `root()` (empty
+prefix) and keep the wider-of source-column floor at this point. `withLeftEdgePrefix` mirrors
 `withTrailingContent`/`withLeadingBreak` (fresh value, all other components preserved). The main expression-dispatch seam
 (`ExpressionPrinters`) forwards the real outer `layout`; the with-tail and other call/chain seams still pass `root()`
 until later activation slices extend them.
@@ -736,6 +735,35 @@ down) and `format/breakable-argument-nested-depth` (a binary-sum argument that f
 one-operand-per-line inside three nested classes). A method-call argument stays on the earlier chain-argument path
 (`MethodCallPrinter`'s `CONTINUATION`-budget chain probe), which is a separate seam left on its fixed budget, so the
 breakable-argument gate change is observable for non-method-call arguments (binary, conditional).
+
+Chain-unify U3 (LDM-2f, #190) then wired the **statement** and **argument** chain callers — the last two that reached the
+chain gates through an implicit `LayoutContext.root()` — with a real `LayoutContext`, and activated the prefix read on
+`MethodCallPrinter.methodCallRootLineWidth`. `MethodCallPrinter.forcedMethodCallWithTail` (the statement expression
+renderer's forced-chain entry, reached only from `StatementPrinters`) now builds a `LayoutContext`
+(`EnclosingConstruct.STATEMENT`, empty `leftEdgePrefix`) and threads a `LayoutWidth.nodeIndentWidth`-based first-line width
+(computed once, then folded into the width closure so it stays O(1) per probe) to the chain instead of the fixed
+`LineBudget.BLOCK` baseline, so the chain measures at the statement's real rendered column. A statement always renders at
+its own block depth (no stacked continuation indent an argument can accumulate), so that width is exactly the statement's
+rendered column and the change is byte-identical on already-formatted input while a statement chain nested deeper than the
+two-level budget is now measured at its true depth. The statement's own outer break-or-flat gate
+(`StatementPrinter.methodCallStatementWidth`) is intentionally left on the fixed `LineBudget`: it also gates non-chain
+statement calls, so swapping it to the rendered column breaks pre-existing over-width statements whose forced-break path
+has a latent trailing-line-comment placement non-idempotence, which is out of this byte-identical slice's scope.
+`MethodCallPrinter.methodCallArgumentDoc` likewise builds a `LayoutContext` (`EnclosingConstruct.ARGUMENT`,
+`LineBudget.CONTINUATION`) but with an **empty** `leftEdgePrefix`, because an argument's extra offset is pure continuation
+*indentation* applied by the enclosing list's nested `Doc.indent` at render time — an argument can sit under several
+stacked continuations that `nodeIndentWidth` (block/type depth only) does not count — so the chain gates keep their
+wider-of source-column floor, which is where that unmodelled continuation indent still lives; a `nodeIndentWidth`-based
+prefix here under-measures a deeply nested argument and regresses it to an over-width flat line, so the rendered-column
+attribution of an argument's continuation indent is deferred. `methodCallRootLineWidth` (the source-multiline
+expression-lambda hug gate) now reads a non-empty `leftEdgePrefix` the same way `compactRootLineWidth` does
+(`nodeIndentWidth(expression) + leftEdgePrefix.length() + firstLine.length()`, floor dropped); reading an empty prefix
+stays a strict no-op, so it is byte-identical readiness (no current caller threads a non-empty prefix into it). The other
+two sibling gates (`rootLineWidth`, `selectorLineWidth`) stay plumbed-but-no-op: their sole consumer
+`promotedRootArgumentsShouldBreak` is already reached by the **initializer** chain carrying a real `"NAME = "` prefix, so
+activating them would change the initializer's promoted-root argument-break verdict — a corpus regression, not a no-op — so
+their activation waits until that promoted-root path is reviewed. The whole slice is byte-identical across the frmtr,
+kafka, and camel corpora (0 files move) with zero new non-idempotence.
 
 The per-node *positional* facts a width gate needs — distinct from the run-scoped `JavaFormatContext` services and
 from per-type dispatch — travel in an immutable `LayoutContext` record threaded down the descent

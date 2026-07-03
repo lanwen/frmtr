@@ -45,6 +45,17 @@ public final class FrmtrSession {
     }
 
     /**
+     * Formats one Java source and reports each output line's structural indentation using this session's setup.
+     *
+     * <p>The returned {@link IndentedSource#text()} is byte-for-byte identical to {@link #format(String)} for the same
+     * input; the per-line signal is captured alongside it and lets a visualization distinguish a block indent from a
+     * continuation indent, which the finished text alone cannot express.
+     */
+    public IndentedSource formatIndented(String source) {
+        return formatterCall(() -> formatter.formatIndented(source));
+    }
+
+    /**
      * Returns the structural document tree produced by this session's formatter setup.
      */
     public String debugDoc(String source) {

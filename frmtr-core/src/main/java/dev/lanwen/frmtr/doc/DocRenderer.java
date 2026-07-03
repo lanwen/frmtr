@@ -27,6 +27,21 @@ public final class DocRenderer {
      */
     private final Map<String, Mode> groupModes = new HashMap<>();
 
+    /**
+     * Structural indentation fact for each output line, in line order, recorded only when a caller renders through
+     * {@link #renderIndented(Doc)}; empty (never populated) on the byte-identical {@link #render(Doc)} path. Each entry
+     * says whether the line's leading whitespace was emitted by {@link #newline(int, DocWidths.Measurement)} (a
+     * structural indent the formatter chose) and, if so, at which indent <em>level</em> (not columns). Lines whose
+     * leading whitespace is literal — text-block interiors, whose embedded newlines flow through {@link #append(String)}
+     * rather than {@code newline} — are recorded as non-structural, so a presentation layer can leave their indentation
+     * exactly as the formatter emitted it. Levels are the authoritative, tab-width-independent signal that column
+     * counting cannot recover from the finished text.
+     */
+    private final List<LineIndent> lineIndents = new ArrayList<>();
+
+    /** Whether the current render is accumulating {@link #lineIndents}; keeps {@link #render(Doc)} allocation-free. */
+    private boolean trackLineIndents;
+
     private int column;
 
     /**
@@ -43,11 +58,36 @@ public final class DocRenderer {
     }
 
     public String render(Doc doc) {
+        return renderInternal(doc, false).text();
+    }
+
+    /**
+     * Renders {@code doc} exactly as {@link #render(Doc)} does and additionally reports, for each output line, whether
+     * its leading indentation is structural (formatter-emitted) and at which indent level.
+     *
+     * <p>The rendered text is byte-for-byte identical to {@link #render(Doc)}; the only difference is that this overload
+     * also accumulates the per-line {@link LineIndent} facts. The facts carry the block-vs-continuation signal that the
+     * finished text cannot: a block level and a continuation offset both look like leading spaces, and tabs make column
+     * counting ambiguous, but the renderer knows the true indent <em>level</em> at each newline. Non-structural lines
+     * (text-block interiors) are marked so callers can leave their literal indentation untouched. Classifying a
+     * structural indent as block or continuation is deliberately left to the caller — that policy is a
+     * presentation concern, and this renderer owns only the raw structural facts.
+     */
+    public RenderedSource renderIndented(Doc doc) {
+        return renderInternal(doc, true);
+    }
+
+    private RenderedSource renderInternal(Doc doc, boolean tracking) {
         out.setLength(0);
         column = 0;
         bestFittingDepth = 0;
         lineSuffixes.clear();
         groupModes.clear();
+        lineIndents.clear();
+        trackLineIndents = tracking;
+        // The first output line starts before any newline fires; its indentation (the document's root column) is
+        // structural at level 0, matching how render() begins at indent 0 / column 0.
+        recordLineStart(true, 0);
         DocWidths.Measurement widths = DocWidths.measurement();
         widths.indentWidth(options.indentUnit().length());
         render(doc, 0, Mode.BREAK, widths);
@@ -56,7 +96,7 @@ public final class DocRenderer {
         if (options.trailingNewline() && !rendered.endsWith(options.lineEnding().value())) {
             rendered += options.lineEnding().value();
         }
-        return rendered;
+        return new RenderedSource(rendered, tracking ? List.copyOf(lineIndents) : List.of());
     }
 
     private void render(Doc doc, int indent, Mode mode, DocWidths.Measurement widths) {
@@ -189,6 +229,14 @@ public final class DocRenderer {
         } else {
             column += value.length();
         }
+        // A newline that arrives inside appended text (only text-block literals carry embedded newlines) starts a line
+        // whose leading whitespace is literal source data, not a structural indent the formatter chose — mark it
+        // non-structural so the presentation layer leaves it exactly as emitted.
+        if (trackLineIndents && lastLineBreak >= 0) {
+            for (int at = value.indexOf('\n'); at >= 0; at = value.indexOf('\n', at + 1)) {
+                recordLineStart(false, 0);
+            }
+        }
     }
 
     private void newline(int indent, DocWidths.Measurement widths) {
@@ -197,6 +245,15 @@ public final class DocRenderer {
         out.append(options.lineEnding().value())
                 .repeat(options.indentUnit(), indent);
         column = options.indentUnit().length() * indent;
+        // The line just opened begins with a structural indent of exactly this many levels — the tab-width-independent
+        // fact the finished text cannot recover.
+        recordLineStart(true, indent);
+    }
+
+    private void recordLineStart(boolean structural, int level) {
+        if (trackLineIndents) {
+            lineIndents.add(new LineIndent(structural, level));
+        }
     }
 
     /**
@@ -264,4 +321,27 @@ public final class DocRenderer {
     }
 
     private record BufferedSuffix(Doc content, int indent, Mode mode) {}
+
+    /**
+     * The rendered source paired with a per-line structural indentation signal, produced by {@link #renderIndented(Doc)}.
+     * {@link #text()} is byte-for-byte what {@link #render(Doc)} returns; {@link #lines()} holds one {@link LineIndent}
+     * per output line (splitting {@code text} on line feeds), in order. On the plain {@link #render(Doc)} path
+     * {@code lines()} is empty because the facts are not accumulated.
+     *
+     * @param text the formatted source, identical to {@link #render(Doc)} for the same document
+     * @param lines the structural indentation fact for each output line, in order (empty when not rendered with indents)
+     */
+    public record RenderedSource(String text, List<LineIndent> lines) {}
+
+    /**
+     * Structural indentation fact for one output line. {@link #structural()} is true when the line's leading whitespace
+     * was emitted by the renderer as a chosen indent (so {@link #level()} is meaningful) and false for text-block
+     * interior lines, whose leading whitespace is literal source data and whose {@code level} is not meaningful. The
+     * level is an indent-unit count, independent of tab width — the signal a presentation layer needs to tell a block
+     * indent from a continuation indent, which the finished text alone cannot provide.
+     *
+     * @param structural whether this line's leading whitespace is a formatter-chosen indent (vs literal text-block content)
+     * @param level the indent-unit level of that structural indent; not meaningful when {@code structural} is false
+     */
+    public record LineIndent(boolean structural, int level) {}
 }

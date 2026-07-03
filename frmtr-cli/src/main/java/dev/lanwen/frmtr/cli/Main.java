@@ -392,7 +392,7 @@ public final class Main implements Callable<Integer> {
 
     private int formatStdin(FormatterOptions options) {
         try {
-            out.print(renderSource(Frmtr.format(readStdin(), options)));
+            out.print(renderSource(readStdin(), options));
             out.flush();
             return 0;
         } catch (FormatterException | IOException exception) {
@@ -402,13 +402,19 @@ public final class Main implements Callable<Integer> {
     }
 
     /**
-     * Applies the optional printed-source display transforms before emission. Currently only
-     * {@code --render-indentation}, which visualizes leading indentation as middle-dots. Off by default, so the printed
-     * source is byte-for-byte the formatter output unless the flag is set. Only source-printing paths (default print and
-     * {@code --stdin}) route through here; {@code --write}, {@code --check}, and {@code --diff} deliberately do not.
+     * Formats {@code source} and applies the optional printed-source display transforms before emission. Currently only
+     * {@code --render-indentation}, which visualizes leading indentation as block-delta dots and continuation ellipses.
+     * Off by default, so the printed source is byte-for-byte the formatter output unless the flag is set; when it is set
+     * the formatter still produces identical text and the transform only substitutes glyphs for leading whitespace,
+     * reading the formatter's per-line structural indent signal to tell block indents from continuation indents. Only
+     * source-printing paths (default print and {@code --stdin}) route through here; {@code --write}, {@code --check},
+     * and {@code --diff} deliberately do not.
      */
-    private String renderSource(String formatted) {
-        return renderIndentation ? IndentationRenderer.render(formatted) : formatted;
+    private String renderSource(String source, FormatterOptions options) {
+        if (!renderIndentation) {
+            return Frmtr.format(source, options);
+        }
+        return IndentationRenderer.render(Frmtr.formatIndented(source, options));
     }
 
     private int checkStdin(FormatterOptions options) {
@@ -606,8 +612,8 @@ public final class Main implements Callable<Integer> {
         for (int i = 0; i < files.size(); i++) {
             Path file = files.get(i);
             try {
-                String formatted = Frmtr.format(Files.readString(file, StandardCharsets.UTF_8), options);
-                printFormatted(files, i, file, formatted);
+                String display = renderSource(Files.readString(file, StandardCharsets.UTF_8), options);
+                printFormatted(files, i, file, display);
                 printed++;
             } catch (FormatterException | IOException exception) {
                 failures.add(
@@ -634,14 +640,14 @@ public final class Main implements Callable<Integer> {
         return new String(System.in.readAllBytes(), StandardCharsets.UTF_8);
     }
 
-    private void printFormatted(List<Path> files, int index, Path file, String formatted) {
+    private void printFormatted(List<Path> files, int index, Path file, String display) {
         if (files.size() > 1) {
             if (index > 0) {
                 out.println();
             }
             out.println("==> " + displayPath(file) + " <==");
         }
-        out.print(renderSource(formatted));
+        out.print(display);
         out.flush();
     }
 

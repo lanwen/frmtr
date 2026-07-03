@@ -27,6 +27,7 @@ import com.github.javaparser.ast.stmt.Statement;
 import dev.lanwen.frmtr.ExplainResult;
 import dev.lanwen.frmtr.FormatterException;
 import dev.lanwen.frmtr.FormatterOptions;
+import dev.lanwen.frmtr.IndentedSource;
 import dev.lanwen.frmtr.doc.Doc;
 import dev.lanwen.frmtr.doc.DocDebugRenderer;
 import dev.lanwen.frmtr.doc.DocExplainRenderer;
@@ -65,6 +66,31 @@ public final class JavaFormatter {
         FormattedSource formatted = formatSource(source);
         formatted.parseResult().ifPresent(parseResult -> verifyAstEquivalent(parseResult, formatted.output()));
         return formatted.output();
+    }
+
+    /**
+     * Formats {@code source} and additionally reports, for each output line, whether its leading indentation is a
+     * structural indent the formatter chose and at which indent level.
+     *
+     * <p>{@link IndentedSource#text()} is byte-for-byte what {@link #format(String)} returns for the same input — the
+     * document is built and rendered by the identical path, only through {@link DocRenderer#renderIndented(Doc)} so the
+     * per-line signal is captured alongside the text. The signal carries the block-vs-continuation information that the
+     * finished text cannot (a block level and a continuation offset both look like leading whitespace). AST-equivalence
+     * verification runs identically to {@link #format(String)}. A require-pragma input without the pragma is returned
+     * unchanged with an empty per-line signal, mirroring {@link #format(String)} returning it unchanged.
+     */
+    public IndentedSource formatIndented(String source) {
+        if (options.requirePragma() && !hasFormatPragma(source)) {
+            return new IndentedSource(source, List.of());
+        }
+        JavaParseResult parseResult = parse(source);
+        Doc doc = printDoc(source, parseResult);
+        DocRenderer.RenderedSource rendered = new DocRenderer(options).renderIndented(doc);
+        verifyAstEquivalent(parseResult, rendered.text());
+        List<IndentedSource.Line> lines = rendered.lines().stream()
+                .map(line -> new IndentedSource.Line(line.structural(), line.level()))
+                .toList();
+        return new IndentedSource(rendered.text(), lines);
     }
 
     /**

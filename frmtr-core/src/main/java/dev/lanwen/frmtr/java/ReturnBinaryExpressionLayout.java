@@ -9,7 +9,6 @@ import dev.lanwen.frmtr.doc.Doc;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.function.ToIntFunction;
 
 /**
  * Owns direct binary-expression layout in return statements.
@@ -31,8 +30,6 @@ final class ReturnBinaryExpressionLayout {
 
     private final Function<Expression, String> compact;
 
-    private final ToIntFunction<String> continuationStatementWidth;
-
     private final BiFunction<Expression, Boolean, Doc> binaryLines;
 
     private final BiFunction<MethodCallExpr, String, Doc> brokenMethodCallWithClosingLine;
@@ -45,7 +42,6 @@ final class ReturnBinaryExpressionLayout {
             SourceShapePolicy sourceShapePolicy,
             Function<Expression, Doc> expressionRenderer,
             Function<Expression, String> compact,
-            ToIntFunction<String> continuationStatementWidth,
             BiFunction<Expression, Boolean, Doc> binaryLines,
             BiFunction<MethodCallExpr, String, Doc> brokenMethodCallWithClosingLine,
             Function<MethodCallExpr, String> methodCallPrefix
@@ -55,7 +51,6 @@ final class ReturnBinaryExpressionLayout {
         this.sourceShapePolicy = sourceShapePolicy;
         this.expressionRenderer = expressionRenderer;
         this.compact = compact;
-        this.continuationStatementWidth = continuationStatementWidth;
         this.binaryLines = binaryLines;
         this.brokenMethodCallWithClosingLine = brokenMethodCallWithClosingLine;
         this.methodCallPrefix = methodCallPrefix;
@@ -145,7 +140,7 @@ final class ReturnBinaryExpressionLayout {
     }
 
     private boolean directBinaryReturnMethodCallClosingLineFits(BinaryExpr binaryExpr) {
-        return continuationStatementWidth.applyAsInt(
+        return layoutWidth.continuationStatement(
             methodCallBinaryReturnClosingLine(binaryExpr) + ";"
         ) <= options.lineWidth();
     }
@@ -178,7 +173,7 @@ final class ReturnBinaryExpressionLayout {
         String line = directBinaryReturnLastLinePrefix(expression)
             + compact.apply(lastBinaryOperand(expression))
             + ";";
-        return continuationStatementWidth.applyAsInt(line) <= options.lineWidth()
+        return layoutWidth.continuationStatement(line) <= options.lineWidth()
             || directBinaryReturnLastMethodCallOperandFits(expression);
     }
 
@@ -194,7 +189,7 @@ final class ReturnBinaryExpressionLayout {
             return false;
         }
         String firstLine = directBinaryReturnLastLinePrefix(expression) + methodCallPrefix.apply(methodCall) + "(";
-        return continuationStatementWidth.applyAsInt(firstLine) <= options.lineWidth()
+        return layoutWidth.continuationStatement(firstLine) <= options.lineWidth()
             && directBinaryReturnMethodCallClosingLineFits(binaryOperand);
     }
 

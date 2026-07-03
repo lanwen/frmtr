@@ -59,10 +59,6 @@ final class ReturnExpressionPrinter {
 
     private final Function<Expression, String> compact;
 
-    private final ToIntFunction<String> currentIndentedWidth;
-
-    private final ToIntFunction<String> continuationStatementWidth;
-
     private final Function<MethodCallExpr, Optional<Doc>> sourceMultilineExpressionLambda;
 
     private final Function<MethodCallExpr, Optional<Doc>> sourceMultilineMethodCall;
@@ -123,8 +119,6 @@ final class ReturnExpressionPrinter {
             ExpressionTailRenderer expressionWithTail,
             Function<LambdaExpr, Doc> brokenLambdaExpression,
             Function<Expression, String> compact,
-            ToIntFunction<String> currentIndentedWidth,
-            ToIntFunction<String> continuationStatementWidth,
             Function<MethodCallExpr, Optional<Doc>> sourceMultilineExpressionLambda,
             Function<MethodCallExpr, Optional<Doc>> sourceMultilineMethodCall,
             ChainWithLayout<LayoutWidth.LineBudget> compactRootWithBrokenFinalChainSegment,
@@ -157,8 +151,6 @@ final class ReturnExpressionPrinter {
         this.expressionWithTail = expressionWithTail;
         this.brokenLambdaExpression = brokenLambdaExpression;
         this.compact = compact;
-        this.currentIndentedWidth = currentIndentedWidth;
-        this.continuationStatementWidth = continuationStatementWidth;
         this.sourceMultilineExpressionLambda = sourceMultilineExpressionLambda;
         this.sourceMultilineMethodCall = sourceMultilineMethodCall;
         this.compactRootWithBrokenFinalChainSegment = compactRootWithBrokenFinalChainSegment;
@@ -188,7 +180,6 @@ final class ReturnExpressionPrinter {
             sourceShapePolicy,
             expression,
             compact,
-            continuationStatementWidth,
             binaryLines,
             brokenMethodCallWithClosingLine,
             methodCallPrefix
@@ -483,8 +474,8 @@ final class ReturnExpressionPrinter {
      * plus {@code "return "}. Counting the enclosing block/type nesting through {@link LayoutWidth#nodeLine} reproduces
      * that indentation regardless of where the value sat in source, so the fit/break decision is identical on every pass
      * (the same source-column-to-rendered-column correction made for {@code if} conditions in #155 and for hugged call
-     * openers in #161). The {@code currentIndentedWidth} floor is kept so a {@code return} nested directly under a member
-     * (no enclosing block) is still measured against at least one indentation unit.
+     * openers in #161). The {@link LayoutWidth#currentIndented} floor is kept so a {@code return} nested directly under a
+     * member (no enclosing block) is still measured against at least one indentation unit.
      *
      * <p>The fixed-budget term reads its {@link LayoutWidth.LineBudget} from the return value's {@link LayoutContext}
      * rather than a loose parameter threaded from the statement dispatcher (LDM-2 / #198). {@code widthBudget()}
@@ -494,7 +485,7 @@ final class ReturnExpressionPrinter {
         int budgetWidth = layoutWidth.line(layout.widthBudget(), line);
         int renderedColumnWidth = Math.max(
             layoutWidth.nodeLine(expression, line),
-            currentIndentedWidth.applyAsInt(line)
+            layoutWidth.currentIndented(line)
         );
         return Math.max(budgetWidth, renderedColumnWidth);
     }

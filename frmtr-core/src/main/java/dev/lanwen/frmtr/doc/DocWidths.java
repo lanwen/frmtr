@@ -115,15 +115,20 @@ final class DocWidths {
          * <p>Only the first {@code min(size, MAX_BEST_FITTING_ALTERNATIVES)} alternatives are measured (linear-time
          * bound). Beyond {@link #MAX_BEST_FITTING_DEPTH} nested best-fitting levels the node is not ranked at all and
          * collapses to its first (flattest) alternative, so total exploration stays bounded. The tie-break (D16) is
-         * strict and gated on fit first: a layout that fits (no line exceeds the width) beats any that
-         * overflows, no matter its line count; within one fit class an alternative wins only if it has <em>strictly
-         * fewer</em> lines, or equal lines and <em>strictly less</em> overflow. Equal-fit-equal-lines-equal-overflow
-         * keeps the earlier (flatter) alternative, which makes the choice deterministic and therefore the reformat a
-         * fixpoint. See {@link LineCount#betterThan}.
+         * strict and layered: a layout that fits (no line exceeds the width) beats any that overflows, no matter its line
+         * count; among the fitting candidates a strictly higher {@code priority} wins regardless of line count; within one
+         * fit-and-priority class an alternative wins only if it has <em>strictly fewer</em> lines, or equal lines and
+         * <em>strictly less</em> overflow. Equal fit, priority, lines, and overflow keeps the earlier (flatter)
+         * alternative, which makes the choice deterministic and therefore the reformat a fixpoint. The priority is a
+         * per-alternative static fact carried alongside each candidate's measured {@link LineCount}; see
+         * {@link #betterThan(LineCount, int, LineCount, int)}.
          *
+         * @param priorities the per-alternative priorities (same order as {@code alternatives}); higher wins among
+         *     fitting candidates. All-equal (e.g. all-zero) reduces the ranking to the fewest-lines {@link LineCount}
+         *     metric.
          * @param depth the best-fitting nesting depth of this node (0 for a top-level node), used to apply the bound
          */
-        int chooseBestFitting(List<Doc> alternatives, int indent, int startColumn, int lineWidth, int depth) {
+        int chooseBestFitting(List<Doc> alternatives, int[] priorities, int indent, int startColumn, int lineWidth, int depth) {
             if (depth >= MAX_BEST_FITTING_DEPTH || alternatives.size() == 1) {
                 return 0;
             }
@@ -134,12 +139,37 @@ final class DocWidths {
                 // Rank each candidate as it would render at this column, resolving any nested best-fitting nodes at the
                 // next depth so the metric matches what the winner will actually emit.
                 LineCount candidate = measureLineCount(alternatives.get(i), indent, startColumn, lineWidth, depth + 1);
-                if (best == null || candidate.betterThan(best)) {
+                if (best == null || betterThan(candidate, priorities[i], best, priorities[bestIndex])) {
                     best = candidate;
                     bestIndex = i;
                 }
             }
             return bestIndex;
+        }
+
+        /**
+         * Whether candidate {@code (aCount, aPriority)} is strictly preferable to {@code (bCount, bPriority)} under the
+         * D16 tie-break extended with a per-alternative priority key (convergence-redesign Mechanism 2). The order is,
+         * top to bottom: <strong>fit</strong> (a fitting layout always beats an overflowing one — {@link LineCount#fits});
+         * then, <strong>among two fitting candidates only</strong>, a strictly higher {@code priority}; then fewer lines,
+         * then less overflow (the {@link LineCount#betterThan} order).
+         *
+         * <p>Placement is load-bearing: priority sits <em>after</em> the fit gate so it can never rescue an overflowing
+         * alternative (both must fit before priority is even consulted — the overflow gate stays primary), and
+         * <em>before</em> line count so a higher-priority fitting shape can win over a fewer-lines one. When priorities are
+         * equal (the default all-zero case, and the "neither fits" case where priority is not consulted) this reduces
+         * exactly to {@link LineCount#betterThan}, which is the byte-identity guarantee for callers that set no priority.
+         */
+        private boolean betterThan(LineCount aCount, int aPriority, LineCount bCount, int bPriority) {
+            // Fit gate first: fitting dominates both priority and line count, so priority is only a tie-break among
+            // candidates that already fit and can never make an overflowing alternative win.
+            if (aCount.fits() != bCount.fits()) {
+                return aCount.fits();
+            }
+            if (aCount.fits() && aPriority != bPriority) {
+                return aPriority > bPriority;
+            }
+            return aCount.betterThan(bCount);
         }
 
         /**
@@ -314,7 +344,14 @@ final class DocWidths {
                     case Doc.ConditionalGroup conditionalGroup -> walkConditionalGroup(conditionalGroup.alternatives(), indent);
                     case Doc.BestFitting bestFitting -> {
                         List<Doc> alternatives = bestFitting.alternatives();
-                        int chosen = chooseBestFitting(alternatives, indent, column, lineWidth, bestFittingDepth);
+                        int chosen = chooseBestFitting(
+                            alternatives,
+                            bestFitting.priorities(),
+                            indent,
+                            column,
+                            lineWidth,
+                            bestFittingDepth
+                        );
                         walk(alternatives.get(chosen), indent, LineMode.BREAK);
                     }
                     case Doc.IfBreak conditional -> {
@@ -410,7 +447,10 @@ final class DocWidths {
      * The result of a {@link Measurement#measureLineCount} probe: how many newlines a document renders into and the
      * total overflow past the line width. Used to rank {@link Doc.BestFitting} alternatives (rule D16): a layout that
      * fits (zero overflow) always beats one that overflows; among layouts of equal fit status the winner is the one with
-     * strictly fewer lines, then strictly less overflow, then the earliest (flattest) on a tie.
+     * strictly fewer lines, then strictly less overflow, then the earliest (flattest) on a tie. This is the
+     * <em>measured-width</em> half of the ranking only; the per-alternative priority key (convergence-redesign
+     * Mechanism 2) sits between the fit gate and line count and is applied by
+     * {@link Measurement#betterThan(LineCount, int, LineCount, int)}, which keeps {@code LineCount} a pure width fact.
      */
     record LineCount(int lines, int overflow) {
 

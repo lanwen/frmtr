@@ -414,6 +414,81 @@ final class DocRendererTest {
     }
 
     @Test
+    void bestFittingPriorityBeatsFewerLinesAmongFittingAlternatives() {
+        // Convergence-redesign Mechanism 2: the priority key sits after the fit gate and before line count. Both
+        // alternatives fit at 40 columns. Index 0 is the fewer-lines shape (collapse: everything on one continuation
+        // line, 1 newline). Index 1 is the opener-attached shape (argument-break: opener on line one, arg on line two,
+        // closer on line three — 2 newlines). On pure line count index 0 would win; giving index 1 the higher priority
+        // must flip the winner to the opener-attached shape despite its extra line. That the more-lines alternative wins
+        // is the observable proof priority outranks line count among fitting candidates.
+        Doc collapse = Doc.concat(Doc.text("providers ="), Doc.HARD_LINE, Doc.text("newSetFromMap(weakMap);"));
+        Doc argumentBreak = Doc.concat(
+            Doc.text("providers = newSetFromMap("),
+            Doc.HARD_LINE,
+            Doc.text("weakMap"),
+            Doc.HARD_LINE,
+            Doc.text(");")
+        );
+
+        Doc ranked = Doc.bestFitting(java.util.List.of(collapse, argumentBreak), new int[] {0, 1});
+
+        assertThat(renderer(40).render(ranked)).isEqualTo(
+            """
+                providers = newSetFromMap(
+                weakMap
+                );"""
+        );
+    }
+
+    @Test
+    void bestFittingWithEqualPrioritiesStillPicksFewerLinesUnchanged() {
+        // The byte-identity guarantee: with equal (zero) priorities the priority key is a no-op and the ranking reduces
+        // to today's fewest-lines metric. This is the identical construction as the priority test above, only with equal
+        // priorities, and it picks the fewer-lines collapse — exactly what the priority-free bestFitting(List) factory
+        // would. The explicit all-zero array and the default factory must agree.
+        Doc collapse = Doc.concat(Doc.text("providers ="), Doc.HARD_LINE, Doc.text("newSetFromMap(weakMap);"));
+        Doc argumentBreak = Doc.concat(
+            Doc.text("providers = newSetFromMap("),
+            Doc.HARD_LINE,
+            Doc.text("weakMap"),
+            Doc.HARD_LINE,
+            Doc.text(");")
+        );
+        java.util.List<Doc> alternatives = java.util.List.of(collapse, argumentBreak);
+
+        String expected =
+            """
+                providers =
+                newSetFromMap(weakMap);""";
+
+        // Explicit all-zero priorities.
+        assertThat(renderer(40).render(Doc.bestFitting(alternatives, new int[] {0, 0}))).isEqualTo(expected);
+        // The default (no-priority) factory must produce the identical layout — the no-op equivalence.
+        assertThat(renderer(40).render(Doc.bestFitting(alternatives))).isEqualTo(expected);
+    }
+
+    @Test
+    void bestFittingPriorityDoesNotOverrideTheFitGate() {
+        // Priority is secondary to fit: it is consulted only among alternatives that already fit, so a high-priority
+        // alternative that overflows still loses to a fitting low-priority one. At 20 columns index 0 (high priority) is
+        // a single line 39 columns wide — it overflows — while index 1 (zero priority) fits on two lines. The overflow
+        // gate drops the high-priority arm before priority is ever weighed, so the fitting low-priority two-line layout
+        // wins. That the high-priority overflowing arm loses is the observable proof priority never rescues an
+        // overflowing candidate (this is the qualifiedRootProviders collapse-wins case in miniature).
+        Doc overflowingHighPriority = Doc.text("config.resolveConnectionTimeoutMillis()");
+        Doc fittingLowPriority = Doc.concat(Doc.text("config.head()"), Doc.HARD_LINE, Doc.text(".timeout()"));
+
+        Doc ranked =
+            Doc.bestFitting(java.util.List.of(overflowingHighPriority, fittingLowPriority), new int[] {5, 0});
+
+        assertThat(renderer(20).render(ranked)).isEqualTo(
+            """
+                config.head()
+                .timeout()"""
+        );
+    }
+
+    @Test
     void bestFittingKeepsTheFewerLinesLeastBadAlternativeWhenNoAlternativeFits() {
         // When nothing fits the gate is a no-op and the existing least-bad metric decides unchanged: fewer lines wins
         // even at the cost of more total overflow. Index 0 overflows on both of its two lines (total overflow 17); index

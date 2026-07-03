@@ -40,6 +40,29 @@ public final class Frmtr {
         return debugDoc(source, FormatterOptions.defaults());
     }
 
+    /**
+     * Formats the source with formatter defaults and reports each output line's structural indentation.
+     *
+     * <p>Convenience overload of {@link #formatIndented(String, FormatterOptions)} using {@link FormatterOptions#defaults()}.
+     */
+    public static IndentedSource formatIndented(String source) {
+        return formatIndented(source, FormatterOptions.defaults());
+    }
+
+    /**
+     * Formats the source and reports, for each output line, whether its leading indentation is a structural indent the
+     * formatter chose and at which indent level.
+     *
+     * <p>{@link IndentedSource#text()} is byte-for-byte identical to {@link #format(String, FormatterOptions)} for the
+     * same input and options, so requesting the indentation signal never changes formatting. The signal exists so a
+     * visualization (the CLI {@code --render-indentation}) can tell a block indent from a continuation indent — a
+     * distinction the finished text cannot carry, since both are just leading whitespace and tabs make column counting
+     * ambiguous, whereas the renderer knows the true indent level at every newline.
+     */
+    public static IndentedSource formatIndented(String source, FormatterOptions options) {
+        return session(options).formatIndented(source);
+    }
+
     public static ExplainResult explain(String source) {
         return explain(source, FormatterOptions.defaults());
     }

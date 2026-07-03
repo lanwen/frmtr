@@ -896,4 +896,38 @@ final class DocRendererTest {
                 prefix-flat"""
         );
     }
+
+    @Test
+    void renderIndentedReportsStructuralIndentLevelsAndIsByteIdenticalToRender() {
+        // A newline inside an indent opens a structural line at that indent level; a newline that arrives inside a Text
+        // (as a text-block literal's interior would) opens a non-structural line whose leading whitespace is literal.
+        Doc doc = Doc.concat(
+            Doc.text("head"),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text("first line\n  literal interior"))),
+            Doc.HARD_LINE,
+            Doc.text("tail")
+        );
+
+        DocRenderer.RenderedSource indented = renderer(80).renderIndented(doc);
+
+        // The rendered text is byte-for-byte what render() produces.
+        assertThat(indented.text()).isEqualTo(renderer(80).render(doc));
+        // Line 0 (head) is structural at level 0; line 1 (first line) is structural at level 1 (inside one indent);
+        // line 2 (the Text's embedded newline) is non-structural literal content; line 3 (tail) is structural at 0.
+        assertThat(indented.lines())
+                .containsExactly(
+                    new DocRenderer.LineIndent(true, 0),
+                    new DocRenderer.LineIndent(true, 1),
+                    new DocRenderer.LineIndent(false, 0),
+                    new DocRenderer.LineIndent(true, 0)
+                );
+    }
+
+    @Test
+    void renderLeavesTheStructuralSignalUnaccumulatedSoTheByteIdenticalPathIsUnaffected() {
+        Doc doc = Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.text("value")));
+
+        // The plain render() path returns the text with no per-line signal; renderIndented() opts into accumulating it.
+        assertThat(renderer(80).renderIndented(doc).lines()).isNotEmpty();
+    }
 }

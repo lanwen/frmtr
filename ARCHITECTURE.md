@@ -827,16 +827,37 @@ and the fixture audit share one pragma definition (the audit's single-line `frmt
 carrying the marker; this is narrower than `FormatterPragmas`, which raw-passes the following node, but it is the
 over-width-specific policy and the audit allowlists any such kept line separately).
 
-`--render-indentation` is a presentation-only transform that visualizes leading indentation as middle-dots (`·`). It
-owns no formatting policy: `IndentationRenderer.render(...)` runs on the already-formatted source string just before
-`Main` prints it, substituting one dot per leading whitespace character and leaving every other byte (mid-line spaces,
-string-literal whitespace, line endings) intact, so it shifts no columns and cannot change wrapping. It is wired only
-into the source-printing paths (`formatStdin` and `printFormatted`, both via `Main.renderSource(...)`); `--write`,
+`--render-indentation` is a presentation-only transform that visualizes leading indentation, distinguishing a **block**
+indent (opening a new brace-delimited body) from a **continuation** indent (a wrap aligned to a logical parent — a
+broken method-chain selector, an assignment/return continuation). A block indent renders only the columns it adds over
+the previous line as middle-dots (`·`) with the shared prefix blank (a dedent adds nothing, so it is plain spaces); a
+continuation renders a vertical ellipsis (`⋮`, U+22EE) at the enclosing statement's indent followed by dots for the rest
+of its offset, on every continuation line. It owns no formatting policy: `IndentationRenderer.render(...)` runs on the
+already-formatted source just before `Main` prints it, substituting glyphs only for leading whitespace and leaving every
+other byte (mid-line spaces, string-literal whitespace, line endings) intact, so it shifts no columns and cannot change
+wrapping — replacing `·` and `⋮` back to spaces recovers the plain output exactly. It is wired only into the
+source-printing paths (`formatStdin` and `printFiles`, both via `Main.renderSource(source, options)`); `--write`,
 `--check`, `--diff`, `--render-line-width`, and `--explain` deliberately do not route through it, and `Main` rejects the
 flag when combined with any of them (or with the implicit default check mode, which prints nothing) with a usage error.
-Off by default, so printed output is byte-for-byte the formatter result unless the flag is set. The transform does not
-distinguish block indentation from continuation or text-block-interior indentation today; that finer split is a possible
-follow-up but would still live entirely in this presentation layer.
+Off by default, so printed output is byte-for-byte the formatter result unless the flag is set.
+
+Telling a block indent from a continuation indent is not recoverable from the finished text alone (a block level and a
+continuation offset are both leading whitespace, and tabs make column counting ambiguous), so the transform reads a
+per-line structural signal the renderer emits. `Frmtr.formatIndented(...)` returns an `IndentedSource` — the formatted
+text (byte-identical to `format(...)`) plus one `IndentedSource.Line` per output line, each carrying whether the line's
+leading whitespace is a formatter-chosen indent and, if so, its indent _level_. `DocRenderer.renderIndented(...)`
+produces that signal as a minimal by-product of the render: `newline(...)` records a structural line at the level it
+just emitted, while a newline arriving inside a `Text` (a text-block literal's interior) records a non-structural line
+whose leading whitespace is literal program data. The plain `render(...)` path does not accumulate the signal, so it is
+allocation-free and unchanged. On top of that level signal the CLI applies a documented **heuristic** for block vs
+continuation, because the level alone does not name the construct: a line reads as a continuation when its level rises
+two or more levels above the current block baseline (the double-indent shape every continuation construct in the printers
+uses), except a real block opened inside a continuation (a block-lambda body under a broken chain) — caught by a trailing
+`{` on the previous line, the classic brace-based block signal, which resets the baseline. This is approximate in two
+documented ways: a continuation that indents exactly one level (a single-level wrapped argument list) reads as a block,
+and text-block interiors keep the pre-existing uniform-dot rendering. A fully exact classifier would require the layout
+printers to label their continuation indents; the transform intentionally stays in the CLI/renderer presentation layer
+and does not reach into the chain-layout printers.
 
 The CLI maps run outcomes to four process exit codes, highest severity winning (`3 > 2 > 1 > 0`): `0` success (all
 clean / written / verified, or no files matched); `1` would-change in check modes (no failures); `2` parse failure, IO

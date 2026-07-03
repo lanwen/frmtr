@@ -651,7 +651,7 @@ final class MainTest {
     }
 
     @Test
-    void renderIndentationRewritesLeadingWhitespaceOfStdinSourceToMiddleDots() {
+    void renderIndentationRendersBlockNestingAsAddedDeltaDots() {
         Result withoutFlag = run(Path.of("."), "class Order{void place(){if(paid){total=1;}}}", "--stdin");
         Result withFlag = run(
             Path.of("."),
@@ -675,21 +675,54 @@ final class MainTest {
                 }
                 """
         );
-        // With the flag: leading indentation renders as middle-dots, and nothing else changes.
+        // With the flag: each block indent shows only the columns it adds over the line above (dots); the shared indent
+        // stays blank, and dedents (the closing braces) render as plain spaces because they add nothing.
         assertThat(withFlag.out()).isEqualTo(
             """
                 class Order {
 
                 ····void place() {
-                ········if (paid) {
-                ············total = 1;
-                ········}
-                ····}
+                    ····if (paid) {
+                        ····total = 1;
+                        }
+                    }
                 }
                 """
         );
-        // The transform touches only leading whitespace: strip the dots back to spaces and it is the plain output.
-        assertThat(withFlag.out().replace('·', ' ')).isEqualTo(withoutFlag.out());
+        // The transform touches only leading whitespace: strip the glyphs back to spaces and it is the plain output.
+        assertThat(withFlag.out().replace('·', ' ').replace('⋮', ' ')).isEqualTo(withoutFlag.out());
+        assertThat(withFlag.err()).isEmpty();
+    }
+
+    @Test
+    void renderIndentationMarksChainContinuationLinesWithVerticalEllipsis() {
+        String source =
+            "class Verify{void run(RouteVerifier verifier){"
+                + "verifier.assertEachRoute(handler->assertThat(handler)"
+                + ".extracting(HandlerConfig::identifier).containsOnly(\"primaryValue\"));}}";
+        Result withoutFlag = run(Path.of("."), source, "--stdin");
+        Result withFlag = run(Path.of("."), source, "--stdin", "--render-indentation");
+
+        assertThat(withFlag.exitCode()).isZero();
+        // The broken method-chain selectors are continuations aligned with the statement at column 8: each renders as
+        // the statement's 8 blank columns, then the vertical ellipsis, then dots for the rest of the 8-column offset —
+        // on every continuation line, even the consecutive one. The block indents above stay delta dots, and the
+        // closing ");" dedent is plain spaces.
+        assertThat(withFlag.out()).isEqualTo(
+            """
+                class Verify {
+
+                ····void run(RouteVerifier verifier) {
+                    ····verifier.assertEachRoute(handler -> assertThat(handler)
+                        ⋮·······.extracting(HandlerConfig::identifier)
+                        ⋮·······.containsOnly("primaryValue")
+                        );
+                    }
+                }
+                """
+        );
+        // Only leading-whitespace glyphs changed: both markers map back to spaces to recover the plain output exactly.
+        assertThat(withFlag.out().replace('·', ' ').replace('⋮', ' ')).isEqualTo(withoutFlag.out());
         assertThat(withFlag.err()).isEmpty();
     }
 

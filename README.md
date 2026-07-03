@@ -268,7 +268,7 @@ Exclude generated or fixture sources from a broad selector:
 | `--stdin` | Reads Java source from stdin and writes formatted source to stdout. |
 | `--stdin --check` | Compares piped source against formatter output. |
 | `--stdin --diff` | Prints a unified diff between piped source and formatter output. |
-| `--render-indentation` | Renders the leading indentation of printed source as middle-dots (`·`) so you can see how far each line is indented. A display aid for printed source only (default print or `--stdin`); the formatting is unchanged and it cannot combine with `--write`, `--check`, `--diff`, `--render-line-width`, or `--explain`. |
+| `--render-indentation` | Visualizes the leading indentation of printed source so you can see how far and why each line is indented: block indents show the columns they add as middle-dots (`·`), continuation indents (broken chains, assignment/return wraps) show a vertical ellipsis (`⋮`) plus dots. A display aid for printed source only (default print or `--stdin`); the formatting is unchanged and it cannot combine with `--write`, `--check`, `--diff`, `--render-line-width`, or `--explain`. |
 
 For multi-file runs, `--check` and `--write` continue after formatter failures and render outlined diagnostics with
 line-numbered JavaParser source context when available.
@@ -321,13 +321,17 @@ when `--diff` output is present.
 
 - `--diff` renders unified diffs for files marked `✗`, with `origin` and `frmtr` side labels.
 - `--render-line-width` prints terminal-only diff output with a dotted width guide near the configured line width.
-- `--render-indentation` prints formatted source with each line's leading indentation shown as middle-dots (`·`), one
-  dot per whitespace character, to visualize how far and why each line is indented. It applies only when source is
-  printed (default print mode or `--stdin`), never rewrites files, and is off by default so plain output is byte-for-byte
-  the formatter result. It replaces only leading whitespace — mid-line spaces and whitespace inside string literals are
-  untouched — so the substitution shifts no columns. (Interior lines of a multi-line text block are indented too, so
-  their leading whitespace is dotted along with everything else; the display does not distinguish block indentation from
-  continuation indentation today.)
+- `--render-indentation` prints formatted source with each line's leading indentation visualized so you can see how far
+  and _why_ each line is indented, distinguishing the two kinds of indentation plain text renders identically. A
+  **block** indent (opening a new brace-delimited body) shows only the columns it _adds_ over the line above as
+  middle-dots (`·`); the indentation it shares with that line stays blank, and a dedent renders as plain spaces. A
+  **continuation** indent (a wrap aligned to a logical parent — a broken method-chain selector, an assignment or return
+  continuation) shows a vertical ellipsis (`⋮`) at the enclosing statement's indent followed by dots for the rest of its
+  offset, on every continuation line. It applies only when source is printed (default print mode or `--stdin`), never
+  rewrites files, and is off by default so plain output is byte-for-byte the formatter result. It replaces only leading
+  whitespace — mid-line spaces and whitespace inside string literals are untouched — so the substitution shifts no
+  columns. (Interior lines of a multi-line text block carry literal indentation, not layout, so their leading whitespace
+  is shown as uniform dots and left out of the block/continuation scheme.)
 - `--color=auto|always|never` controls ANSI coloring for status markers and diff output; formatted source output stays
   plain.
 

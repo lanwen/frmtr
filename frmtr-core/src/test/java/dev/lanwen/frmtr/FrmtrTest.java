@@ -69,6 +69,47 @@ final class FrmtrTest {
     }
 
     @Test
+    void formatIndentedReturnsTextByteIdenticalToFormatWithOneStructuralSignalPerLine() {
+        String source = "class Order{void place(){if(paid){total=1;}}}";
+
+        IndentedSource indented = Frmtr.formatIndented(source);
+
+        // Requesting the indentation signal never changes the formatted text.
+        assertThat(indented.text()).isEqualTo(Frmtr.format(source));
+        // One signal per rendered line; the final trailing newline appends an empty text line with no signal of its own.
+        String[] textLines = indented.text().split("\n", -1);
+        assertThat(indented.lines()).hasSize(textLines.length - 1);
+        assertThat(textLines[textLines.length - 1]).isEmpty();
+        // A pure nested-block program has an all-structural signal whose levels track the brace nesting: class body at
+        // 0, the blank separator and void at 1, if at 2, the assignment at 3, then the dedenting braces back down to 0.
+        assertThat(indented.lines())
+                .allSatisfy(line -> assertThat(line.structural()).isTrue())
+                .extracting(IndentedSource.Line::level)
+                .containsExactly(0, 1, 1, 2, 3, 2, 1, 0);
+    }
+
+    @Test
+    void formatIndentedMarksTextBlockInteriorLinesAsNonStructural() {
+        // A text block's interior is the literal String value, emitted verbatim rather than as a formatter-chosen
+        // indent, so those lines must be reported non-structural while the code around them stays structural.
+        IndentedSource indented = Frmtr.formatIndented(
+            "class Sql{String q(){return \"\"\"\n    select 1\n    \"\"\";}}"
+        );
+
+        String[] lines = indented.text().split("\n", -1);
+        int interior = -1;
+        for (int i = 0; i < lines.length; i++) {
+            if (lines[i].contains("select 1")) {
+                interior = i;
+            }
+        }
+        assertThat(interior).isNotNegative();
+        assertThat(indented.lines().get(interior).structural()).isFalse();
+        // The statement that opens the text block is a normal structural indent.
+        assertThat(indented.lines().get(interior - 1).structural()).isTrue();
+    }
+
+    @Test
     void reusableSessionFormatsSequentialSourcesWithOneOptionsValue() {
         FrmtrSession session = Frmtr.session(FormatterOptions.defaults().withLineWidth(24));
 

@@ -12,7 +12,7 @@ class ObjectCreationRootChainBreak {
         var harness = new ContainerHarness(baseImageReference).withServices(serviceCatalog).andRegisterShutdownHookThatOverflows(closer);
     }
 
-    void singleCallObjectRootKeepsArgumentBreak() {
+    void singleCallObjectRootDotSplitsSimpleArgTail() {
         var probe = new SignalContainer(imageReferenceForSignalRouter).withSignalEndpoint(controlPlaneEndpointThatOverflows);
     }
 }

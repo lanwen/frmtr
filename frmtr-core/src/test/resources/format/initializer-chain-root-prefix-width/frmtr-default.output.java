@@ -11,9 +11,8 @@ class InitializerChainRootPrefixWidthSample {
     }
 
     void buildAttachedOpenerStrategy(Duration configuredTimeout) {
-        RetryingConnectionStrategy strategy = new RetryingConnectionStrategy(config).withTimeout(
-            configuredDefaultConnectionTimeoutValue
-        );
+        RetryingConnectionStrategy strategy = new RetryingConnectionStrategy(config)
+                .withTimeout(configuredDefaultConnectionTimeoutValue);
     }
 
     void buildMultiTimeoutStrategy(Duration configuredStartupTimeout, Duration configuredShutdownTimeout) {

@@ -83,6 +83,14 @@ public final class Main implements Callable<Integer> {
     @Option(names = "--render-line-width", description = "Print diff output with a dotted width guide.")
     boolean renderLineWidth;
 
+    @Option(
+        names = "--render-indentation",
+        description = "Render leading indentation of printed source as middle-dots (·) to visualize how far each line "
+            + "is indented. Display aid only for printed source (default print or --stdin); the formatting is unchanged. "
+            + "Cannot be combined with --write, --check, --diff, --render-line-width, or --explain."
+    )
+    boolean renderIndentation;
+
     @Option(names = "--write", description = "Rewrite files in place.")
     boolean write;
 
@@ -229,6 +237,13 @@ public final class Main implements Callable<Integer> {
             err.println("--verify requires --write or --check");
             return EXIT_FAILED;
         }
+        if (renderIndentation && (check || write || diff || renderLineWidth || explain)) {
+            err.println(
+                "--render-indentation renders printed source only and cannot be combined with --check, --write, "
+                    + "--diff, --render-line-width, or --explain"
+            );
+            return 2;
+        }
         if (explain) {
             return runExplain();
         }
@@ -249,6 +264,10 @@ public final class Main implements Callable<Integer> {
         }
         boolean usingDefaultSelectors = selectors.isEmpty();
         boolean effectiveCheck = check || (usingDefaultSelectors && !write);
+        if (renderIndentation && effectiveCheck) {
+            err.println("--render-indentation renders printed source only; pass file selectors to print them");
+            return 2;
+        }
         boolean effectiveDiff = diff || renderLineWidth;
         if (effectiveDiff && !effectiveCheck) {
             err.println(renderLineWidth && !diff ? "--render-line-width requires --check" : "--diff requires --check");
@@ -373,13 +392,23 @@ public final class Main implements Callable<Integer> {
 
     private int formatStdin(FormatterOptions options) {
         try {
-            out.print(Frmtr.format(readStdin(), options));
+            out.print(renderSource(Frmtr.format(readStdin(), options)));
             out.flush();
             return 0;
         } catch (FormatterException | IOException exception) {
             printFailure("stdin", exception);
             return 2;
         }
+    }
+
+    /**
+     * Applies the optional printed-source display transforms before emission. Currently only
+     * {@code --render-indentation}, which visualizes leading indentation as middle-dots. Off by default, so the printed
+     * source is byte-for-byte the formatter output unless the flag is set. Only source-printing paths (default print and
+     * {@code --stdin}) route through here; {@code --write}, {@code --check}, and {@code --diff} deliberately do not.
+     */
+    private String renderSource(String formatted) {
+        return renderIndentation ? IndentationRenderer.render(formatted) : formatted;
     }
 
     private int checkStdin(FormatterOptions options) {
@@ -612,7 +641,7 @@ public final class Main implements Callable<Integer> {
             }
             out.println("==> " + displayPath(file) + " <==");
         }
-        out.print(formatted);
+        out.print(renderSource(formatted));
         out.flush();
     }
 

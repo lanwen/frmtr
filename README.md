@@ -268,6 +268,7 @@ Exclude generated or fixture sources from a broad selector:
 | `--stdin` | Reads Java source from stdin and writes formatted source to stdout. |
 | `--stdin --check` | Compares piped source against formatter output. |
 | `--stdin --diff` | Prints a unified diff between piped source and formatter output. |
+| `--render-indentation` | Renders the leading indentation of printed source as middle-dots (`·`) so you can see how far each line is indented. A display aid for printed source only (default print or `--stdin`); the formatting is unchanged and it cannot combine with `--write`, `--check`, `--diff`, `--render-line-width`, or `--explain`. |
 
 For multi-file runs, `--check` and `--write` continue after formatter failures and render outlined diagnostics with
 line-numbered JavaParser source context when available.
@@ -320,6 +321,13 @@ when `--diff` output is present.
 
 - `--diff` renders unified diffs for files marked `✗`, with `origin` and `frmtr` side labels.
 - `--render-line-width` prints terminal-only diff output with a dotted width guide near the configured line width.
+- `--render-indentation` prints formatted source with each line's leading indentation shown as middle-dots (`·`), one
+  dot per whitespace character, to visualize how far and why each line is indented. It applies only when source is
+  printed (default print mode or `--stdin`), never rewrites files, and is off by default so plain output is byte-for-byte
+  the formatter result. It replaces only leading whitespace — mid-line spaces and whitespace inside string literals are
+  untouched — so the substitution shifts no columns. (Interior lines of a multi-line text block are indented too, so
+  their leading whitespace is dotted along with everything else; the display does not distinguish block indentation from
+  continuation indentation today.)
 - `--color=auto|always|never` controls ANSI coloring for status markers and diff output; formatted source output stays
   plain.
 

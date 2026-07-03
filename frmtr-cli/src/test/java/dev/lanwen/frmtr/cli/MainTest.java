@@ -651,6 +651,87 @@ final class MainTest {
     }
 
     @Test
+    void renderIndentationRewritesLeadingWhitespaceOfStdinSourceToMiddleDots() {
+        Result withoutFlag = run(Path.of("."), "class Order{void place(){if(paid){total=1;}}}", "--stdin");
+        Result withFlag = run(
+            Path.of("."),
+            "class Order{void place(){if(paid){total=1;}}}",
+            "--stdin",
+            "--render-indentation"
+        );
+
+        assertThat(withoutFlag.exitCode()).isZero();
+        assertThat(withFlag.exitCode()).isZero();
+        // Off by default: printed source is byte-identical to the formatter output.
+        assertThat(withoutFlag.out()).isEqualTo(
+            """
+                class Order {
+
+                    void place() {
+                        if (paid) {
+                            total = 1;
+                        }
+                    }
+                }
+                """
+        );
+        // With the flag: leading indentation renders as middle-dots, and nothing else changes.
+        assertThat(withFlag.out()).isEqualTo(
+            """
+                class Order {
+
+                ····void place() {
+                ········if (paid) {
+                ············total = 1;
+                ········}
+                ····}
+                }
+                """
+        );
+        // The transform touches only leading whitespace: strip the dots back to spaces and it is the plain output.
+        assertThat(withFlag.out().replace('·', ' ')).isEqualTo(withoutFlag.out());
+        assertThat(withFlag.err()).isEmpty();
+    }
+
+    @Test
+    void renderIndentationAppliesToPrintedFileSelectors(@TempDir Path dir) throws IOException {
+        write(dir.resolve("src/Config.java"), "class Config{int retries=3;}");
+
+        Result result = run(dir, null, "--render-indentation", "src/Config.java");
+
+        assertThat(result.exitCode()).isZero();
+        assertThat(result.out()).isEqualTo(
+            """
+                class Config {
+
+                ····int retries = 3;
+                }
+                """
+        );
+        assertThat(result.err()).isEqualTo("Processed 1 file: 1 printed.\n");
+    }
+
+    @Test
+    void renderIndentationRejectsCombinationWithCheck() {
+        Result result = run(Path.of("."), "class Demo{int value;}", "--stdin", "--check", "--render-indentation");
+
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.out()).isEmpty();
+        assertThat(result.err())
+                .contains("--render-indentation renders printed source only")
+                .contains("--check, --write, --diff, --render-line-width, or --explain");
+    }
+
+    @Test
+    void renderIndentationRejectsDefaultCheckModeWhenNoSelectorsGiven(@TempDir Path dir) {
+        Result result = run(dir, null, "--render-indentation");
+
+        assertThat(result.exitCode()).isEqualTo(2);
+        assertThat(result.err())
+                .contains("--render-indentation renders printed source only; pass file selectors to print them");
+    }
+
+    @Test
     void printModeReportsFailedFilesWithGroupedFailureRenderer(@TempDir Path dir) throws IOException {
         write(dir.resolve("src/Broken.java"), "class {");
 

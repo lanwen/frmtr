@@ -827,6 +827,17 @@ and the fixture audit share one pragma definition (the audit's single-line `frmt
 carrying the marker; this is narrower than `FormatterPragmas`, which raw-passes the following node, but it is the
 over-width-specific policy and the audit allowlists any such kept line separately).
 
+`--render-indentation` is a presentation-only transform that visualizes leading indentation as middle-dots (`·`). It
+owns no formatting policy: `IndentationRenderer.render(...)` runs on the already-formatted source string just before
+`Main` prints it, substituting one dot per leading whitespace character and leaving every other byte (mid-line spaces,
+string-literal whitespace, line endings) intact, so it shifts no columns and cannot change wrapping. It is wired only
+into the source-printing paths (`formatStdin` and `printFormatted`, both via `Main.renderSource(...)`); `--write`,
+`--check`, `--diff`, `--render-line-width`, and `--explain` deliberately do not route through it, and `Main` rejects the
+flag when combined with any of them (or with the implicit default check mode, which prints nothing) with a usage error.
+Off by default, so printed output is byte-for-byte the formatter result unless the flag is set. The transform does not
+distinguish block indentation from continuation or text-block-interior indentation today; that finer split is a possible
+follow-up but would still live entirely in this presentation layer.
+
 The CLI maps run outcomes to four process exit codes, highest severity winning (`3 > 2 > 1 > 0`): `0` success (all
 clean / written / verified, or no files matched); `1` would-change in check modes (no failures); `2` parse failure, IO
 error, or usage/config error; and `3` a verify violation — a cleanly-parsed file whose formatted output was not

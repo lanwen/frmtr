@@ -1151,10 +1151,7 @@ final class MethodCallChainPrinter {
         // Alternative 2 (fallback, always legal): the one-segment-per-line fan-out — the root alone, then the selector on
         // its own continuation line. This is the shape Branch P produces for a broken chain; here it competes on line
         // count with the compact shape rather than being reached only after a width probe.
-        Doc fanOut = Doc.concat(
-            expressionRenderer.format(methodRoot, LayoutContext.root()),
-            chainContinuation(methodCallChainSegment(call, finalSegmentSuffix))
-        );
+        Doc fanOut = chainFanOut(methodRoot, List.of(call), finalSegmentSuffix, layout);
         return Optional.of(Doc.bestFitting(List.of(compactBrokenSegment.orElseThrow(), fanOut)));
     }
 
@@ -1218,8 +1215,47 @@ final class MethodCallChainPrinter {
         // Alternative 2 (fallback, always legal): the one-segment-per-line fan-out — the constructor alone, then the
         // selector on its own continuation line. This is the shape objectRootSingleSegmentChain's overflow branch produces;
         // here it competes on line count with the compact shape rather than being reached only after a first-line probe.
-        Doc fanOut = Doc.concat(rootDoc, chainContinuation(methodCallChainSegment(call, finalSegmentSuffix)));
+        Doc fanOut = chainFanOut(objectCreation, List.of(call), finalSegmentSuffix, layout);
         return Optional.of(Doc.bestFitting(List.of(compactBrokenSegment.orElseThrow(), fanOut)));
+    }
+
+    /**
+     * Builds the one-segment-per-line fan-out for a chain from the AST alone, so a ranked alternative always exists
+     * regardless of source shape or opener fit (convergence-redesign Mechanism 1). The fan-out is the root followed by
+     * each selector on its own dotted continuation line ({@code root}⏎{@code .selector(args)}); a single-selector chain
+     * fans that lone selector onto its continuation line, a multi-segment chain fans one selector per line.
+     *
+     * <p>Unlike {@link #forcedMethodCallChain}, this builder never gates on {@code openerFits} or
+     * {@code sourceMultilineChain} and never returns empty for a flat single-selector call whose opener fits — the whole
+     * point is that the fan-out is a pure function of the AST, present on every input, so the ranked engine sees the same
+     * alternative on every pass (this source-neutrality is what dissolves the initializer/return convergence Blocker 1
+     * that #191 tracks; slice 3 routes the initializer's collapse arm through this builder).
+     *
+     * <p>It owns the dot-split skeleton only. Each segment renders through the ordinary {@link #methodCallChainSegment}
+     * group, so a segment stays flat when {@code .selector(args)} fits at its continuation column and opens its own
+     * argument list only on genuine overflow — the per-segment argument decision stays with the renderer, and the
+     * single-simple-argument compact-tail refinement ({@link #refuseOpeningSingleSimpleReturnChainTail}) composes through
+     * that same segment renderer rather than being re-implemented here. It builds one {@link Doc} and renders each call
+     * exactly once, so it is comment-neutral and never double-claims a comment; callers that emit it as one arm of a
+     * two-arm {@link Doc#bestFitting(java.util.List) bestFitting} still gate that emission on the chain being comment-free.
+     */
+    Doc chainFanOut(
+            Expression root,
+            List<MethodCallExpr> calls,
+            MethodCallChainTail tail,
+            LayoutContext layout
+    ) {
+        Doc rootDoc = expressionRenderer.format(root, LayoutContext.root());
+        if (calls.size() == 1) {
+            // Single selector: the lone segment fans onto its own dotted continuation line. This reproduces the exact
+            // shape rankedSingleSegmentChain / rankedObjectRootSingleSegmentChain built inline before this extraction —
+            // the segment renders through the ordinary (not on-own-line) segment group so a single-simple-arg tail stays
+            // compact — so those callers stay byte-identical.
+            return Doc.concat(rootDoc, chainContinuation(methodCallChainSegment(calls.getFirst(), tail)));
+        }
+        // Multi-segment: one selector per line under the continuation indent, the same one-per-line layout the imperative
+        // broken-chain tail produces (each segment measured at the continuation column, the final one carrying the tail).
+        return Doc.concat(rootDoc, chainContinuation(root, methodCallChainSegments(calls, tail)));
     }
 
     private boolean methodCallSegmentHasNoOwnContainedComments(MethodCallExpr expression) {

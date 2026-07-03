@@ -473,7 +473,19 @@ is invisible to these two callers (they only reach the builder for width-driven,
 it reproduces the exact `Doc` they built inline before the extraction, so the corpus stays byte-identical), but it is the
 point of the extraction: it is the builder the initializer's collapse arm will route through in convergence-redesign
 slice 3, where the fan-out must exist on every input regardless of source shape (the `field-init-typelike-root-idempotence`
-Blocker 1). No new consumer routes fresh input through `chainFanOut` yet. The two source-multiline return branches that still pre-empt — the enclosed binary and
+Blocker 1). Chain-path-unification slice U1 (#190) routes the **multi-segment fall-through** of
+`MethodCallChainPrinter.methodCallChain` — the imperative one-segment-per-line tail that renders `root` then every
+selector on its own dotted continuation line — through this same `chainFanOut` builder rather than reconstructing that
+`Doc.concat(rootDoc, chainContinuation(root, segments))` shape inline, consolidating the fan-out onto the single builder
+so the later slices' rankers can list it as a named arm. The delegation fires only when the fall-through's `rootDoc` is
+still the plain `expressionRenderer.format(root, root())` doc `chainFanOut` rebuilds — a comment-free
+`EXPRESSION_RENDERER` root that did not fall to the broken-multi-argument shape (`expressionRenderedChainRoot`); a
+promoted / grouped / broken-object-creation root, a first-segment-attached root, or a root-trailing-comment-wrapped root
+produces a different `rootDoc` and keeps the inline construction. The comment-free gate is load-bearing (the fall-through
+re-renders the root a second time inside `chainFanOut`, discarding the `rootDoc` it built earlier, and re-rendering a
+comment-bearing root would re-claim its already-printed comments); it is the same comment-free guard the single-segment
+rankers apply to their `chainFanOut` arm. Because the delegated shape is byte-identical to the discarded inline shape, the
+corpus stays byte-identical (U1 is a pure consolidation, not a decision change). The two source-multiline return branches that still pre-empt — the enclosed binary and
 the source-multiline object creation — stay imperative pending LDM-4 (the binary/object-creation printers exposing their
 own ranked candidates); the ranker cannot override those source-preserved shapes today. The single-attachable-argument
 hug gates (`MethodCallPrinter.singleMethodCallArgument` /

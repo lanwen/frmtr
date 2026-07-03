@@ -772,6 +772,21 @@ final class MethodCallChainPrinter {
         calls = chainPlan.calls();
         sourceMultilineLambdaPlan = sourceMultilineLambdaChainPlan(root, calls);
         Doc rootDoc = methodCallChainRootDoc(chainPlan, firstLineWidth, layout);
+        // Track whether {@code rootDoc} is still the plain {@code expressionRenderer.format(root, root())} doc — the exact
+        // root {@link #chainFanOut} rebuilds — so the multi-segment fall-through below can route through the shared fan-out
+        // builder byte-identically only in that case. It holds only for an EXPRESSION_RENDERER root that did not fall to the
+        // broken-method-call shape; a promoted/grouped/broken-object-creation root, a first-segment-attached root, or a
+        // root-trailing-comment-wrapped root produces a different {@code rootDoc} and stays on the inline construction.
+        //
+        // The comment-free gate is load-bearing: the fall-through routing through {@code chainFanOut} re-renders the root a
+        // second time (the {@code rootDoc} built here is discarded in that path), and re-rendering a comment-bearing root
+        // would re-claim its already-{@code printed} comments and trip the strict-claims guardrail — the same reason the
+        // landed single-segment rankers gate their {@code chainFanOut} arm comment-free. A comment-free root re-renders to a
+        // byte-identical {@code Doc}; a comment-bearing chain keeps the unchanged inline construction (rendered once).
+        boolean rootDocIsPlainExpressionRenderRoot =
+            chainPlan.rootRendering() == MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER
+            && !analysis.hasComments()
+            && !expressionRenderedChainRootBreaksMethodCall(chainPlan.root(), firstLineWidth);
         boolean firstSegmentAttachedToRoot = false;
         Expression sourceMultilineProbeRoot = root;
         List<MethodCallExpr> sourceMultilineProbeCalls = calls;
@@ -798,6 +813,9 @@ final class MethodCallChainPrinter {
                 sourceMultilineLambdaPlan.firstCall()
             );
             firstSegmentAttachedToRoot = true;
+            // The first segment is now glued onto the root, so {@code rootDoc} is the attached-root shape, not the plain
+            // expression-renderer root chainFanOut would build; keep this chain on the inline construction.
+            rootDocIsPlainExpressionRenderRoot = false;
         }
         if (calls.isEmpty()) {
             return Optional.of(appendFinalSegmentSuffix(rootDoc, finalSegmentSuffix));
@@ -824,6 +842,10 @@ final class MethodCallChainPrinter {
                 rootDoc = brokenObjectCreationRenderer.apply(objectCreation);
             }
             rootDoc = Doc.concat(rootDoc, Doc.lineSuffix(Doc.concat(Doc.text(" "), rootTrailingComment)));
+            // The root now carries a trailing line comment suffix, so {@code rootDoc} is no longer the plain
+            // expression-renderer root; a multi-segment chain reaching the fall-through below stays on the inline
+            // construction so the comment suffix is preserved.
+            rootDocIsPlainExpressionRenderRoot = false;
             if (calls.size() == 1) {
                 return Optional.of(
                     Doc.concat(
@@ -985,6 +1007,17 @@ final class MethodCallChainPrinter {
         // does not lay the chain out one per line, so recording before them could attribute a "N segments, one per line"
         // layout to a path that never produced it.
         recordChainWidthBreak(expression, analysis, lineBudget);
+        // chain-unify U1 (#190): the multi-segment fall-through builds the exact one-segment-per-line fan-out
+        // {@code chainFanOut} produces — root then each selector on its own dotted continuation line
+        // ({@code Doc.concat(root, chainContinuation(root, methodCallChainSegments(calls, tail)))}) — so route it through
+        // the shared source-neutral builder rather than reconstructing that shape inline, consolidating the fan-out onto a
+        // single named, reusable arm the ranked engine can list in later slices. This is byte-identical only when
+        // {@code rootDoc} is still the plain {@code expressionRenderer.format(root, root())} doc chainFanOut rebuilds; a
+        // promoted/grouped/broken-object-creation root, a first-segment-attached root, or a root-trailing-comment-wrapped
+        // root produces a different {@code rootDoc}, so those keep the inline construction.
+        if (rootDocIsPlainExpressionRenderRoot) {
+            return Optional.of(chainFanOut(root, calls, finalSegmentSuffix, layout));
+        }
         List<Doc> segments = methodCallChainSegments(calls, finalSegmentSuffix);
         return Optional.of(
             Doc.concat(
@@ -1524,16 +1557,30 @@ final class MethodCallChainPrinter {
             Expression root,
             ToIntFunction<String> firstLineWidth
     ) {
-        if (
-            root instanceof MethodCallExpr methodCall
+        if (expressionRenderedChainRootBreaksMethodCall(root, firstLineWidth)) {
+            return calls.brokenMethodCall((MethodCallExpr) root);
+        }
+        return expressionRenderer.format(root, LayoutContext.root());
+    }
+
+    /**
+     * Whether {@link #expressionRenderedChainRoot} renders an {@link MethodCallChainSourcePlanner.ChainRootRendering#EXPRESSION_RENDERER}
+     * root through {@link MethodCallPrinter#brokenMethodCall} — a multi-argument root that overflows its first line (or is
+     * a source-multiline type-like root that does not fit) — rather than through ordinary expression dispatch. The negation
+     * is the "plain expression-renderer root" case: {@code expressionRenderer.format(root, LayoutContext.root())}, which is
+     * exactly the root {@link #chainFanOut} builds, so the multi-segment fall-through can route through the shared fan-out
+     * builder byte-identically only when this returns {@code false}. Side-effect-free (no comment claim), so evaluating it
+     * to steer the fall-through never double-claims a comment.
+     */
+    private boolean expressionRenderedChainRootBreaksMethodCall(
+            Expression root,
+            ToIntFunction<String> firstLineWidth
+    ) {
+        return root instanceof MethodCallExpr methodCall
             && methodCall.getArguments().size() > 1
             && (firstLineWidth.applyAsInt(compactSourceWidthText(methodCall)) > options.lineWidth()
                 || (sourceMultilineTypeLikeRoot(methodCall)
-                    && !sourceShapePolicy.fitsOnOneLine(methodCall, firstLineWidth)))
-        ) {
-            return calls.brokenMethodCall(methodCall);
-        }
-        return expressionRenderer.format(root, LayoutContext.root());
+                    && !sourceShapePolicy.fitsOnOneLine(methodCall, firstLineWidth)));
     }
 
     private boolean sourceMultilineTypeLikeRoot(MethodCallExpr methodCall) {

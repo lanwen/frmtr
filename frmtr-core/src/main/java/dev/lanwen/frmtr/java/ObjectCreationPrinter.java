@@ -6,7 +6,6 @@ import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.expr.Expression;
-import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
@@ -14,6 +13,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Renders object creation after broad expression dispatch has selected constructor syntax.
@@ -67,6 +67,7 @@ final class ObjectCreationPrinter {
             Function<List<? extends Node>, String> compactJoin,
             Function<Node, String> compactTypeLike,
             Function<Node, String> compactTypeLikeWithoutOwnComment,
+            Predicate<Expression> binaryFansChainOperand,
             Function<Doc, String> commentText
     ) {
         this.comments = context.comments;
@@ -80,6 +81,7 @@ final class ObjectCreationPrinter {
             node -> expressionRenderer.format(node, LayoutContext.root()),
             brokenArgumentRenderer,
             compact::apply,
+            binaryFansChainOperand,
             context.layoutWidth
         );
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
@@ -101,6 +103,49 @@ final class ObjectCreationPrinter {
 
     Doc objectCreationWithSuffix(ObjectCreationExpr expression, String suffix) {
         return objectCreation(expression, false, suffix);
+    }
+
+    /**
+     * Renders a non-anonymous, non-empty-argument constructor call as the SOURCE-NEUTRAL width-driven {@link Doc#group},
+     * bypassing the {@link #sourceMultilineArguments} preservation branch. The arguments render through the same
+     * {@code breakableArguments::argument} + {@code Doc.joinComma} group {@link #objectCreation} produces for a
+     * source-single-line constructor ({@code forceBreak == false}, {@code sourceMultilineArguments} empty), so this is
+     * byte-identical to {@code expressionRenderer.format(expression, root())} whenever the author wrote the arguments on
+     * one line — but it also collapses a source-multiline argument list back to flat when it fits, instead of preserving
+     * the author's break.
+     *
+     * <p>This exists for the canonical-fan cutover ({@link MethodCallChainPrinter}): a constructor-rooted fan-threshold
+     * chain must render its root the same way on every pass so it converges. {@code MethodCallChainPrinter.chainFanOut}
+     * routes an object-creation root through this renderer rather than {@code expressionRenderer.format} (source-shape
+     * sensitive: it preserves a four-plus-argument source-multiline list) or {@code brokenObjectCreation} (always
+     * force-breaks), so the constructor arguments break purely by the renderer's width verdict at the root's live column.
+     * The caller restricts this to comment-free, non-anonymous, non-empty-argument constructors; anonymous bodies, empty
+     * argument lists, and comment-carrying constructors keep their existing rendering and never reach here.
+     */
+    Doc widthDrivenObjectCreation(ObjectCreationExpr expression) {
+        if (
+            expression.getAnonymousClassBody().isPresent()
+            || expression.getArguments().isEmpty()
+            || !expression.getAllContainedComments().isEmpty()
+        ) {
+            return objectCreation(expression, true, "");
+        }
+        String prefix = objectCreationPrefix(expression);
+        return Doc.group(
+            Doc.concat(
+                Doc.text(prefix + "("),
+                Doc.indent(
+                    Doc.concat(
+                        Doc.SOFT_LINE,
+                        Doc.joinComma(
+                            expression.getArguments().stream().map(breakableArguments::argument).toList()
+                        )
+                    )
+                ),
+                Doc.SOFT_LINE,
+                Doc.text(")")
+            )
+        );
     }
 
     /**

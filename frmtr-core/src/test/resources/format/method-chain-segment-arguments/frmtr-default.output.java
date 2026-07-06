@@ -31,11 +31,9 @@ class MethodChainSegmentArgumentsSample {
         if (includeStackTrace) {
             job
                   .failedEntries()
-                  .forEach(
-                      entry -> entry.failureCause().ifPresent(
+                  .forEach(entry -> entry.failureCause().ifPresent(
                           cause -> recordFailure(entry.displayPath().toString(), cause)
-                      )
-                  );
+                  ));
             return;
         }
     }
@@ -106,7 +104,8 @@ class MethodChainSegmentArgumentsSample {
         return token.getRange()
                 .map(sourceText::region)
                 .map(region -> region.beginOffset() == expected.beginOffset()
-                    && region.endOffset() == expected.endOffset())
+                        && region.endOffset() == expected.endOffset()
+                )
                 .orElse(false);
     }
 

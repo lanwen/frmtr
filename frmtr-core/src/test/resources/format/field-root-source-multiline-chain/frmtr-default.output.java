@@ -12,8 +12,7 @@ class Demo {
                     historyId(context.id()),
                     List.of(event(element), changed(element), audited(element), retained(element))
                 );
-        credentialBridge.request.builder.remoteEndpoint
-                .scope(scope)
+        credentialBridge.request.builder.remoteEndpoint.scope(scope)
                 .endpoint(CATALOG)
                 .principal(AUTH.getPrincipal())
                 .secret(AUTH.getSecret())

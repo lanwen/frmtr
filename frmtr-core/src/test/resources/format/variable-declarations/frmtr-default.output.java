@@ -140,7 +140,16 @@ public class Variables {
     }
 
     public void breakVariables() {
-        Obj newObject = new Object().something().more().and().that().as().well().but().not().something();
+        Obj newObject = new Object()
+                .something()
+                .more()
+                .and()
+                .that()
+                .as()
+                .well()
+                .but()
+                .not()
+                .something();
 
         Object.test.creation thisObject = classWithName.invocationOne().invocationTwo();
 

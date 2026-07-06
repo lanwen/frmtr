@@ -6,6 +6,10 @@ import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.JavadocComment;
 import com.github.javaparser.ast.comments.LineComment;
+import com.github.javaparser.ast.expr.BinaryExpr;
+import com.github.javaparser.ast.expr.CastExpr;
+import com.github.javaparser.ast.expr.ConditionalExpr;
+import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
@@ -15,6 +19,7 @@ import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import dev.lanwen.frmtr.doc.DocRenderer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -60,6 +65,8 @@ final class MethodCallChainPrinter {
 
     private final Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer;
 
+    private final Function<ObjectCreationExpr, Doc> widthDrivenObjectCreationRenderer;
+
     private final Function<ObjectCreationExpr, String> objectCreationPrefix;
 
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments;
@@ -84,6 +91,10 @@ final class MethodCallChainPrinter {
 
     private final Function<LambdaExpr, Optional<Doc>> huggedGapCommentedLambdaBody;
 
+    private final BiFunction<String, MethodCallExpr, Optional<Doc>> expressionLambdaMethodCallBodyOpener;
+
+    private final BiFunction<String, MethodCallExpr, Optional<Doc>> expressionLambdaLogicalBinaryBodyOpenerHug;
+
     MethodCallChainPrinter(
             JavaFormatContext context,
             MethodCallPrinter calls,
@@ -91,6 +102,7 @@ final class MethodCallChainPrinter {
             CommentedExpressionListPrinter commentedExpressionLists,
             JavaFormatRule<Expression> expressionRenderer,
             Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer,
+            Function<ObjectCreationExpr, Doc> widthDrivenObjectCreationRenderer,
             Function<ObjectCreationExpr, String> objectCreationPrefix,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,
             BiFunction<String, NodeList<Expression>, Optional<String>> huggableBlockLambdaFirstLine,
@@ -102,7 +114,9 @@ final class MethodCallChainPrinter {
                 Optional<ExpressionLambdaArgumentLayout.Plan>
             > expressionLambdaArgumentPlan,
             Function<LambdaExpr, Optional<Doc>> huggedGapCommentedLambdaBody,
-            Function<LambdaExpr, String> lambdaParameters
+            Function<LambdaExpr, String> lambdaParameters,
+            BiFunction<String, MethodCallExpr, Optional<Doc>> expressionLambdaMethodCallBodyOpener,
+            BiFunction<String, MethodCallExpr, Optional<Doc>> expressionLambdaLogicalBinaryBodyOpenerHug
     ) {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
@@ -117,6 +131,7 @@ final class MethodCallChainPrinter {
         this.commentedExpressionLists = commentedExpressionLists;
         this.expressionRenderer = expressionRenderer;
         this.brokenObjectCreationRenderer = brokenObjectCreationRenderer;
+        this.widthDrivenObjectCreationRenderer = widthDrivenObjectCreationRenderer;
         this.objectCreationPrefix = objectCreationPrefix;
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.huggableBlockLambdaFirstLine = huggableBlockLambdaFirstLine;
@@ -126,6 +141,8 @@ final class MethodCallChainPrinter {
         this.layoutDecisions = context.layoutDecisions;
         this.lambdaParameters = lambdaParameters;
         this.huggedGapCommentedLambdaBody = huggedGapCommentedLambdaBody;
+        this.expressionLambdaMethodCallBodyOpener = expressionLambdaMethodCallBodyOpener;
+        this.expressionLambdaLogicalBinaryBodyOpenerHug = expressionLambdaLogicalBinaryBodyOpenerHug;
         this.sourceMultilineLambdaCalls = new SourceMultilineLambdaCallLayout(
             context.sourceShapePolicy,
             node -> expressionRenderer.format(node, LayoutContext.root()),
@@ -142,6 +159,301 @@ final class MethodCallChainPrinter {
 
     Optional<Doc> methodCallChain(MethodCallExpr expression, LayoutContext layout) {
         return methodCallChain(expression, MethodCallBreakMode.AUTO, layout);
+    }
+
+    /**
+     * Canonical-fan cutover seam (End-state A): routes a fan-threshold, comment/lambda-free chain straight to the
+     * source-neutral {@link #chainFanOut} builder, <em>independent of the author's source shape</em>, and returns empty
+     * for every other chain so the caller keeps its existing decision tree.
+     *
+     * <p>This is the shared, multi-caller sibling of the two source-neutral fan routes already inside
+     * {@link #methodCallChain}: the AUTO stay-flat-gate route (which fans a fitting fan-threshold chain) and the early
+     * canonical-fan route (which fans a breaking one). Both of those gate on {@code !sourceMultilineArguments}, so a
+     * caller reaching {@code methodCallChain} in {@code FORCED} mode on a pass whose inner-selector arguments span source
+     * lines ({@code sourceMultilineArguments == true}) skips them and lands on the source-shape-sensitive imperative
+     * ladder below — {@code canAttachFirstSegmentToSimpleRoot} in particular folds the first selector onto a simple
+     * receiver root ({@code parser.accepts(...)}) when the source chain was multiline and root+selector started on the
+     * same source line. Its already-fanned re-format then has single-line arguments, {@code sourceMultilineArguments}
+     * flips to {@code false}, the early route fires, and {@code chainFanOut} splits the first selector onto its own line
+     * ({@code parser}⏎{@code .accepts(...)}). The two passes disagree forever. Emitting the {@code chainFanOut} shape here
+     * — the same shape both {@code sourceMultilineArguments} passes must converge on — before the caller can consult
+     * source shape removes that dependence: {@code chainFanOut} is a pure function of the AST, so both passes rebuild the
+     * identical fan (a fixpoint by construction, the argument the landed single-segment rankers and the initializer /
+     * factory-root cutover seams already rely on).
+     *
+     * <p>Withheld, matching the other fan routes: a chain with any own or contained comment, any block-lambda argument,
+     * or any commented segment re-renders its root once through the fan and would double-claim comments. Additionally
+     * withheld for this seam: any chain whose selectors carry an expression-lambda argument or whose source-multiline
+     * shape can attach an expression-lambda body — that hug↔break shape is the deliberately-deferred lambda-arrow seam,
+     * left on the imperative ladder untouched.
+     */
+    Optional<Doc> canonicalFanChain(MethodCallExpr expression, String finalSegmentSuffix, LayoutContext layout) {
+        if (!chainFansByCanonicalRuleAdmittingTrailingComment(expression)) {
+            return Optional.empty();
+        }
+        MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
+        // Record the width-break for {@code --explain} exactly as the in-{@code methodCallChain} early canonical-fan route
+        // does before it fans (`:748`): a chain fanned here that overflows its rendered line is a width-driven break, and the
+        // explain report must attribute it as "method chain … flat width … > N available … segments, one per line" rather
+        // than dropping to a bare rule-driven break. {@code recordChainWidthBreak} self-gates on {@code flatWidth > lineWidth},
+        // so a chain fanned purely by the link-count/root-kind rule while it still fits records nothing (it is not a width
+        // break). The budget is read from the caller's {@link LayoutContext}, matching the {@code lineBudget} the early route
+        // threads.
+        recordChainWidthBreak(expression, analysis, layout.widthBudget());
+        return Optional.of(chainFanOut(analysis.root(), analysis.calls(), MethodCallChainTail.of(finalSegmentSuffix), layout));
+    }
+
+    /**
+     * Reports whether a chain is one {@link #canonicalFanChain} would fan: the End-state A structural rule fires
+     * ({@code chainBreaksByRule}) and none of the carve-outs apply (own/contained comments, block-lambda arguments,
+     * commented or expression-lambda selectors, or an attachable expression-lambda body). This is the exact gate
+     * {@link #canonicalFanChain} applies before it emits {@code chainFanOut}, factored out so a caller can ask the
+     * question without rendering the fan.
+     *
+     * <p>The binary/ternary-operand seam (U8) uses this: when a broken binary argument's {@code flat} rendering already
+     * fans a chain operand through this rule (via the dispatched {@code chainFanOut}), the argument printer must not also
+     * offer the operand-per-line {@code broken} alternative, because the {@code flat}-vs-{@code broken} choice is gated on
+     * the source-shape {@code wasMultiline} signal and would otherwise flip the operand between the fanned and flat shapes
+     * across passes (the U8 non-idempotence). Reusing this single predicate keeps the carve-outs — comment / block-lambda /
+     * expression-lambda-body chains, the deferred lambda-arrow seam — identical to what {@code canonicalFanChain} withholds.
+     */
+    boolean chainFansByCanonicalRule(MethodCallExpr expression) {
+        if (expression.getScope().isEmpty()) {
+            return false;
+        }
+        MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
+        return chainBreaksByRule(analysis)
+            && !analysis.hasComments()
+            && !analysis.hasBlockLambdaArgument()
+            && analysis.calls().stream().noneMatch(this::methodCallSegmentHasComment);
+        // Canonical-fan cutover seam (End-state A): the expression-lambda-selector withhold
+        // ({@code noneMatch(methodCallSegmentHasExpressionLambdaArgument)}) and its source-multiline
+        // attach sibling ({@code !sourceMultilineLambdaChainPlan(analysis).canAttachAnyExpressionLambdaBody()})
+        // are REMOVED. They were load-bearing only because {@link #methodCallChainSegment} rendered a selector's
+        // expression-lambda body through source-shape-gated paths, so a fanned expr-lambda chain's segment width flipped
+        // across passes and any enclosing {@code bestFitting}/attach flipped with it. Now that
+        // {@code sourceNeutralExpressionLambdaSegment} renders that selector as a pure function of the AST (a
+        // conditional group of flat vs. hug/fan), the fan is idempotent, so these chains ({@code stream.map(x -> x.foo())
+        // .collect(...)}) may fan like every other chain. {@code canAttachAnyExpressionLambdaBody} was additionally a
+        // source-shape signal ({@code sourceMultilineLambdaChainPlan}); keeping it would have re-coupled the fan verdict to
+        // the author's line breaks. Comment / block-lambda chains stay withheld above.
+    }
+
+    /**
+     * The {@link #canonicalFanChain} entry gate: {@link #chainFansByCanonicalRule} PLUS the one comment relaxation the fan
+     * position can absorb — a chain whose only comment is a last-selector trailing line comment
+     * ({@link #chainCommentsAreOnlyTrailingLine}). This is deliberately NOT folded into {@code chainFansByCanonicalRule}
+     * itself: that predicate is also the shared carve-out gate for the binary-operand ({@link #binaryFansChainOperand}),
+     * lambda-body ({@link #lambdaBodyChainFansByCanonicalRule}), and enclosed-root ({@link #rootIsEnclosedFanningChain})
+     * deciders, which must keep withholding every comment-bearing chain (their flat-vs-broken commits do not own the
+     * comment-preserving segment render). Only the direct fan positions ({@code canonicalFanChain} and the with-tail seam)
+     * admit the trailing-comment chain, where the fan renders the whole chain once and preserves the last selector's comment.
+     */
+    boolean chainFansByCanonicalRuleAdmittingTrailingComment(MethodCallExpr expression) {
+        if (chainFansByCanonicalRule(expression)) {
+            return true;
+        }
+        if (expression.getScope().isEmpty()) {
+            return false;
+        }
+        MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
+        return chainBreaksByRule(analysis)
+            && !analysis.hasBlockLambdaArgument()
+            && analysis.calls().stream().noneMatch(this::methodCallSegmentHasComment)
+            && chainCommentsAreOnlyTrailingLine(analysis);
+    }
+
+    /**
+     * Reports whether a chain's ONLY comment is a single trailing line comment on its LAST selector
+     * ({@code .streams()}⏎{@code .get(0)}⏎{@code .streamArn(); // XXX}) — the one comment shape the source-neutral
+     * {@link #chainFanOut} provably preserves without a placement hazard, because {@link #methodCallChainSegments} re-emits
+     * that last selector's {@code finalTrailingLineComment} slot.
+     *
+     * <p>Deliberately narrow. Every other comment family is excluded so the chain keeps the comment-preserving imperative
+     * path, because {@code chainFanOut} would drop or destabilize it:
+     * <ul>
+     *   <li>a root-contained / root-to-first-selector block comment or the root's own trailing comment — the fan re-renders
+     *       the root through plain expression dispatch, which does not carry it;</li>
+     *   <li>a selector's leading / name / argument-gap comment ({@code methodCallSegmentHasComment}) — reserved for the
+     *       comment-carrying selector paths;</li>
+     *   <li>a trailing comment on the FIRST call — for a factory root that call is PROMOTED onto the root line
+     *       ({@code SubjectFactory.create() // primary subject}) and for a trivial-receiver root it is ATTACHED as bare text
+     *       ({@link #attachedFirstSelectorSegment}); neither promotion nor the bare-text attach carries the comment, so it
+     *       would be dropped (the {@code method-chain-trailing-empty-call-comment} fixture);</li>
+     *   <li>a trailing comment in a BETWEEN-selector gap ({@code .a() // note}⏎{@code .b()}) — JavaParser attaches such a
+     *       comment as leading-of-{@code .b()} vs trailing-of-{@code .a()} depending on the surrounding whitespace, so a
+     *       collapse/re-expand can move it and the fan-vs-imperative verdict would follow (the {@code chain-lambda-nested-comment}
+     *       perturbation). Only the after-LAST-selector slot is placement-stable.</li>
+     * </ul>
+     *
+     * <p><strong>Why the fan must claim the last-selector case.</strong> JavaParser parks a chain's final trailing line
+     * comment (the {@code // XXX} after {@code .streamArn();}) on the STATEMENT when the flat chain shares that source line
+     * with the terminator, but on the LAST SELECTOR once the chain is broken across lines. That flips
+     * {@code MethodCallChainAnalysis.hasComments} between passes: a flat-source pass reads the chain comment-free and fans
+     * it through {@code chainFanOut} (attaching the first selector, End-state A Rule 1), while the broken re-format reads
+     * the comment on the selector, withholds the fan, and drops to the source-shape imperative ladder that fans from the
+     * first selector — {@code streamsListResult.streams()} ⇄ {@code streamsListResult}⏎{@code .streams()} forever. Letting
+     * the fan claim this one shape routes BOTH passes through the same source-neutral {@code chainFanOut}, so the placement
+     * flip no longer selects divergent layouts (the camel {@code ShardIteratorHandler} / {@code CsvDataFormat} /
+     * {@code DefaultSupervisingRouteController} / {@code ExportBaseCommand} residuals).
+     */
+    private boolean chainCommentsAreOnlyTrailingLine(MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis) {
+        List<MethodCallExpr> calls = analysis.calls();
+        return analysis.hasTrailingLineComments()
+            && !analysis.rootHasComments()
+            && !rootHasTrailingLineCommentBeforeFirstSegment(analysis.root(), calls)
+            && calls.stream().noneMatch(this::methodCallSegmentHasComment)
+            && chainTrailingLineCommentOnlyOnLastCall(calls);
+    }
+
+    /**
+     * Reports that the chain carries a trailing line comment on its LAST selector and on NO earlier selector, so the only
+     * trailing comment sits in the placement-stable after-last-selector slot {@link #methodCallChainSegments} re-emits (see
+     * {@link #chainCommentsAreOnlyTrailingLine}). A comment in a between-selector gap or on the first (promoted/attached)
+     * call fails this, keeping the chain on the comment-preserving imperative path.
+     */
+    private boolean chainTrailingLineCommentOnlyOnLastCall(List<MethodCallExpr> calls) {
+        if (calls.isEmpty() || finalTrailingLineComments(calls.getLast()).isEmpty()) {
+            return false;
+        }
+        for (int index = 0; index + 1 < calls.size(); index++) {
+            if (!trailingLineCommentsBeforeNextSegment(calls.get(index), calls.get(index + 1)).isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Reports whether {@code expression} is a canonical fan ({@link #chainFansByCanonicalRule}) that carries a trailing
+     * line comment — the exact chains whose {@code hasComments} placement flips between passes (see
+     * {@link #chainCommentsAreOnlyTrailingLine}). A with-tail caller uses this to route such a chain through the
+     * source-neutral {@code canonicalFanChain} on EVERY pass regardless of the caller's statement/return/initializer
+     * position, so the flip no longer selects the imperative fan-from-first shape on the pass that sees the comment. A
+     * comment-free fan is excluded here (it is not the flip case) and keeps its existing position-specific routing
+     * untouched; a chain with any non-trailing comment is already excluded by {@code chainFansByCanonicalRule}.
+     */
+    boolean chainFansByCanonicalRuleWithTrailingLineComment(MethodCallExpr expression) {
+        return methodCallChainHasFinalTrailingLineComment(expression)
+            && chainFansByCanonicalRuleAdmittingTrailingComment(expression);
+    }
+
+    /**
+     * Reports whether {@code expression} is a binary or ternary expression that contains a flattened operand which the
+     * End-state A canonical-fan rule fans ({@link #chainFansByCanonicalRule}). Such an expression's dispatched flat
+     * rendering hard-breaks that operand into a source-neutral {@code chainFanOut}, so any caller that would otherwise
+     * offer a source-shape-gated operand-per-line broken alternative must instead commit the flat (chain-fanned) shape —
+     * it is the AST-pure fixpoint the two passes converge on.
+     *
+     * <p>Canonical-fan cutover seam (End-state A), the binary/logical/string-concat OPERAND carrier (the "G bucket").
+     * This is the shared carve-out gate for every binary-argument / binary-initializer decider whose flat arm already
+     * fans a chain operand: {@link BreakableArgumentExpressionPrinter} (U8) first used the equivalent recursion on the
+     * method-call/object-creation argument-list path; the same question is asked by {@link MethodCallPrinter}'s
+     * single-binary-argument path (the {@code assertTrue(chain.isPresent() && chain2)} / {@code println("..." + chain)}
+     * carrier that renders a forced operand-per-line break on a flat-source pass but fans the operand on a
+     * source-multiline pass) and by {@link VariableInitializerLayout}'s broken object-creation binary argument (the
+     * {@code new StatusData(chain * step + min, …)} carrier). Factoring the predicate here — beside
+     * {@link #chainFansByCanonicalRule}, the rule it delegates to — keeps the carve-outs (comment / block-lambda /
+     * expression-lambda-body chains, the deferred lambda-arrow seam) identical across every caller.
+     *
+     * <p>The recursion descends {@code BinaryExpr} operands, {@code EnclosedExpr}/{@code ConditionalExpr} branches, and a
+     * leading {@code CastExpr} so a chain operand nested under parentheses, a ternary branch, a mixed-operator sub-binary
+     * ({@code chain * step + min}), or a cast ({@code (Double) chain.metricValue() > 0.0}) is still found. It only inspects
+     * the AST and never claims a comment.
+     */
+    boolean binaryFansChainOperand(Expression expression) {
+        if (!(expression instanceof BinaryExpr) && !(expression instanceof ConditionalExpr)) {
+            return false;
+        }
+        return operandFansChainByRule(expression);
+    }
+
+    private boolean operandFansChainByRule(Expression expression) {
+        if (expression instanceof BinaryExpr binaryExpr) {
+            return operandFansChainByRule(binaryExpr.getLeft()) || operandFansChainByRule(binaryExpr.getRight());
+        }
+        if (expression instanceof EnclosedExpr enclosedExpr) {
+            return operandFansChainByRule(enclosedExpr.getInner());
+        }
+        if (expression instanceof ConditionalExpr conditionalExpr) {
+            return operandFansChainByRule(conditionalExpr.getThenExpr())
+                || operandFansChainByRule(conditionalExpr.getElseExpr());
+        }
+        if (expression instanceof CastExpr castExpr) {
+            return operandFansChainByRule(castExpr.getExpression());
+        }
+        return expression instanceof MethodCallExpr methodCall && chainFansByCanonicalRule(methodCall);
+    }
+
+
+    /**
+     * The lambda-body position (U7) of the canonical-fan cutover: reports whether a chain that IS an expression-lambda
+     * body should fan by the End-state A rule ({@link #chainFansByCanonicalRule}), <em>and</em> its root is one the
+     * lambda-body fan renders idempotently.
+     *
+     * <p>The lambda-body fan hugs the chain root on the lambda-header line and fans the selectors below it, rendering
+     * through {@code huggedLambdaBodyChain} → {@code forcedMethodCallChain} with the header threaded as
+     * {@link LayoutContext#leftEdgePrefix()}. That path re-renders the chain root through {@code chainFanOut} at
+     * {@link LayoutContext#root()} (column zero) regardless of the header's real column — fine for a root whose rendering
+     * is column-invariant (a bare {@code NameExpr}/{@code FieldAccessExpr}/{@code this} receiver, or an unscoped bare call
+     * whose flat form is atomic), but NOT for an {@link ObjectCreationExpr} root: {@code new X()} hugs its first selector
+     * on a flat-source pass and breaks onto its own line on a source-multiline pass, so a {@code new X().setA(...).setB(...)}
+     * lambda body fanned here oscillates between {@code new X().setA(} and {@code new X()}⏎{@code .setA(} forever (the
+     * kafka {@code Endpoints}/{@code ProduceResponse} {@code .map(x -> new Record()....)} shapes). Object-creation-rooted
+     * lambda-body chains are therefore withheld from the fan and left on the packed / opener-breaking shapes below, which
+     * are already source-shape-stable for them; they remain the deferred slice of this cutover (the nested-root gap the
+     * chain-path-unification plan calls out for {@code chainFanOut} rendering a non-name root at {@code root()}).
+     *
+     * <p>Also withheld: a body-chain whose lambda is the argument of a <em>chain-selector</em> call
+     * ({@code stream.filter(e -> e.getKey().description().contains(...))}). When the outer chain fans, that
+     * {@code .filter(...)} selector is re-rendered by the chain printer's own segment path rather than reaching the
+     * lambda-hug seam, so the body's fan-vs-pack verdict is owned by two different code paths across passes and flips
+     * (the kafka {@code SelectorTest} shape). Restricting the fan to lambdas hosted by a call with a non-call scope (a
+     * statement-level or receiver-rooted call such as {@code verifier.assertEachRoute(h -> …)}) keeps the hug column and
+     * its owner stable. This is a conservative withhold — it only ever removes a fan, never forces one — so it cannot
+     * introduce a new oscillation.
+     */
+    boolean lambdaBodyChainFansByCanonicalRule(MethodCallExpr expression) {
+        return chainFansByCanonicalRule(expression)
+            && !(methodCallChainAnalysis(expression).root() instanceof ObjectCreationExpr)
+            && !lambdaBodyHostedByChainSelector(expression);
+    }
+
+    /**
+     * Reports whether the expression-lambda whose body is {@code bodyChain} is itself an argument of a method call that is
+     * a selector in a longer chain (its scope is another {@code MethodCallExpr}), e.g. the {@code .filter(...)} in
+     * {@code stream.filter(e -> bodyChain)}. Such a hosting call reindents when the outer chain fans, moving the lambda
+     * body's rendered column and its layout owner between passes, so the lambda-body canonical fan is withheld there.
+     */
+    private boolean lambdaBodyHostedByChainSelector(MethodCallExpr bodyChain) {
+        // Withhold when the lambda whose body is {@code bodyChain} is an argument of a method call that is itself a chain
+        // selector (its scope is another method call): the outer chain reindents that {@code .filter(e -> …)} host when it
+        // fans, moving the body's rendered column and its layout owner between passes. The body chain sits under its lambda
+        // through a statement/parenthesis wrapper ({@code bodyChain → ExpressionStmt → LambdaExpr}), so walk up to the
+        // nearest enclosing {@link LambdaExpr} before inspecting the hosting call.
+        return enclosingLambda(bodyChain)
+                .flatMap(Node::getParentNode)
+                .filter(MethodCallExpr.class::isInstance)
+                .map(MethodCallExpr.class::cast)
+                .flatMap(MethodCallExpr::getScope)
+                .filter(MethodCallExpr.class::isInstance)
+                .isPresent();
+    }
+
+    private Optional<LambdaExpr> enclosingLambda(MethodCallExpr bodyChain) {
+        Optional<Node> current = bodyChain.getParentNode();
+        while (current.isPresent()) {
+            Node node = current.orElseThrow();
+            if (node instanceof LambdaExpr lambdaExpr) {
+                return Optional.of(lambdaExpr);
+            }
+            if (node instanceof MethodCallExpr || node instanceof ObjectCreationExpr) {
+                // Reached an enclosing call before any lambda — this chain is not a lambda body in the current subtree.
+                return Optional.empty();
+            }
+            current = node.getParentNode();
+        }
+        return Optional.empty();
     }
 
     Optional<Doc> forcedMethodCallChain(MethodCallExpr expression) {
@@ -353,6 +665,15 @@ final class MethodCallChainPrinter {
                 }
             }
             return false;
+        }
+
+        /**
+         * Reports whether the root or any selector in this chain has a source-multiline expression-lambda body that could
+         * hug its call opener. The canonical-fan cutover ({@link #canonicalFanChain}) withholds any such chain so the
+         * lambda-hug↔break shape stays with the deferred lambda-arrow seam rather than being flattened into the fan.
+         */
+        boolean canAttachAnyExpressionLambdaBody() {
+            return rootCanAttachExpressionLambdaBody || callCanAttachExpressionLambdaBody.stream().anyMatch(Boolean::booleanValue);
         }
     }
 
@@ -631,6 +952,12 @@ final class MethodCallChainPrinter {
                 && !analysis.hasComments()
                 && !analysis.hasBlockLambdaArgument()
                 && !analysis.sourceMultilineChain()
+                // SPIKE fanA (canonical fan, End-state A): a chain that reaches its link-count/root-kind threshold
+                // MUST fan one selector per line even when the flat form fits, so it does not stay flat here. This is
+                // #163's structural stay-flat-gate edit (`!chainBreaksByRule`) — but unlike #163 the break is then
+                // routed to the source-neutral `chainFanOut` builder (see the early canonical-fan route below), not the
+                // source-shape-sensitive imperative ladder #163 left downstream.
+                && !chainBreaksByRule(analysis)
                 && !sourceMultilineArguments
                 && !rootObjectCreationNeedsBreak
                 // The stay-flat probe must measure the chain at the same line position it will actually occupy. When the
@@ -667,6 +994,27 @@ final class MethodCallChainPrinter {
         }
         if (singleStringLiteralCallWithSourceMultilineArguments(root, calls)) {
             return Optional.empty();
+        }
+        // SPIKE fanA (canonical fan, End-state A). Route a fan-threshold chain straight to the source-neutral
+        // `chainFanOut` builder rather than the source-shape-sensitive imperative ladder below. This is the whole
+        // premise vs #163: #163 flipped the same stay-flat gate (`!chainBreaksByRule`) but kept the imperative tail —
+        // compactRootWithBrokenFinalSegment, the sourceMultilineArguments branches, objectRootSingleSegmentChain, etc. —
+        // all of which read the AUTHOR'S source shape. A chain #163 forced to break then got RE-SHAPED by one of those
+        // branches, and on pass 2 the now-different source shape selected a different branch: the 432->782 oscillation.
+        // chainFanOut is a pure function of the AST (root + each selector on its own dotted line, root rendered through
+        // ordinary expression dispatch), so pass 2 sees the identical AST and rebuilds the identical fan — idempotent by
+        // construction. Gated comment-free / block-lambda-free: chainFanOut re-renders the root once, and a
+        // comment-bearing root re-render would double-claim its comments (the same guard the landed single-segment
+        // rankers use for their chainFanOut arm). Comment/lambda chains fall through to the unchanged imperative ladder.
+        if (
+            chainBreaksByRule(analysis)
+            && !analysis.hasComments()
+            && !analysis.hasBlockLambdaArgument()
+            && !sourceMultilineArguments
+            && calls.stream().noneMatch(this::methodCallSegmentHasComment)
+        ) {
+            recordChainWidthBreak(expression, analysis, lineBudget);
+            return Optional.of(chainFanOut(root, calls, finalSegmentSuffix, layout));
         }
         Optional<Doc> flatHeadHuggedFinalLambda = comments.speculatively(
             () -> flatHeadHuggedCommentLambdaChain(expression, analysis, finalSegmentSuffix)
@@ -1018,6 +1366,29 @@ final class MethodCallChainPrinter {
         if (rootDocIsPlainExpressionRenderRoot) {
             return Optional.of(chainFanOut(root, calls, finalSegmentSuffix, layout));
         }
+        // Object-creation root cutover seam (End-state A): a comment-free, non-anonymous, non-empty-argument
+        // constructor-rooted fan-threshold chain ({@code new EndpointFactory(a, b, c, d).generate(…).blockFirst(…)}) whose
+        // planner rendering is {@code BROKEN_OBJECT_CREATION} routes through the shared {@code chainFanOut} builder, whose
+        // object-creation-root arm renders the constructor arguments through the source-neutral width-driven
+        // {@link #promotedObjectCreationRootDoc}. This converges with the flat-selector pass, which already reaches
+        // {@code chainFanOut} through the early canonical-fan route: both passes now render the root through the same
+        // width-driven group, so a constructor line that fits stays flat on every pass instead of flipping to the
+        // {@code brokenObjectCreationRenderer} force-break shape once a non-final selector's arguments span source lines.
+        // Comment-free / block-lambda-free is required because {@code chainFanOut} re-renders the root and every selector a
+        // second time (discarding {@code rootDoc}); a comment-bearing chain would re-claim its already-printed comments, so
+        // it keeps the inline construction below (rendered once). The selectors render identically either way — the fan's
+        // multi-segment tail is byte-for-byte the {@code chainContinuation(root, methodCallChainSegments(...))} the inline
+        // construction builds — so only the root doc changes.
+        if (
+            objectCreationRootIsWidthDrivenFanEligible(root)
+            && chainPlan.rootRendering() == MethodCallChainSourcePlanner.ChainRootRendering.BROKEN_OBJECT_CREATION
+            && !firstSegmentAttachedToRoot
+            && !analysis.hasComments()
+            && !analysis.hasBlockLambdaArgument()
+            && calls.stream().noneMatch(this::methodCallSegmentHasComment)
+        ) {
+            return Optional.of(chainFanOut(root, calls, finalSegmentSuffix, layout));
+        }
         List<Doc> segments = methodCallChainSegments(calls, finalSegmentSuffix);
         return Optional.of(
             Doc.concat(
@@ -1036,6 +1407,17 @@ final class MethodCallChainPrinter {
             && calls.getFirst().getAllContainedComments().isEmpty()
             && !methodCallSegmentHasComment(calls.getFirst())
             && sourceShapePolicy.methodCallArgumentsSpanMultipleLines(calls.getFirst());
+    }
+
+    /**
+     * The canonical-fan structural rule (End-state A) — see {@link MethodCallChainSourcePlanner#chainBreaksByRule} for
+     * the link-count/root-kind thresholds, which that planner method owns as the single source of truth. This chain
+     * printer and the variable-initializer path (via {@code InitializerChainShape.chainBreaksByRule}) both read the
+     * identical verdict, so a fan-threshold chain routes onto the same source-neutral fan without the rule drifting
+     * between two copies.
+     */
+    private boolean chainBreaksByRule(MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis) {
+        return methodChainPlanner.chainBreaksByRule(analysis);
     }
 
     private boolean methodRootCanKeepSingleSuffixAttached(MethodCallExpr methodRoot) {
@@ -1278,7 +1660,62 @@ final class MethodCallChainPrinter {
             MethodCallChainTail tail,
             LayoutContext layout
     ) {
-        Doc rootDoc = expressionRenderer.format(root, LayoutContext.root());
+        // Factory / type-like root cutover seam: a {@code promotesFirstCall} root (an uppercase {@code NameExpr} or
+        // {@code FieldAccessExpr} type qualifier, e.g. {@code ClusterConfig}) with two or more calls folds its FIRST call —
+        // the factory invocation ({@code .defaultBuilder()}) — onto the root line and fans only the remaining selectors,
+        // {@code Type.factory()}⏎{@code .next()}⏎{@code .build()}. This mirrors {@code MethodCallChainSourcePlanner.plan}'s
+        // first-call promotion for a static/factory root (which counts that factory call as part of the root — the
+        // {@code calls - 1} arm of {@link MethodCallChainSourcePlanner#chainBreaksByRule}), so the RENDERING now agrees with
+        // the RULE'S link counting. It also makes the whole chain source-neutral: the early canonical-fan route reaches
+        // {@code chainFanOut} on a flat-source pass, while a re-format whose inner selector arguments now span source lines
+        // ({@code sourceMultilineArguments}) skips the early route and lands on {@code plan}'s promotion tail below — both
+        // must produce the identical {@code Type.factory()}-on-the-root-line shape or the chain flips split<->attach forever.
+        // The factory call reaching here is always source-compact (a source-multiline factory call would have tripped
+        // {@code sourceMultilineArguments} and skipped the early route), so {@link #promotedFactoryRootDoc} renders it
+        // through the same width-driven promotion doc {@code plan}'s {@code GROUPED_PROMOTED_METHOD_CALL} /
+        // {@code EXPRESSION_RENDERER} rootRendering produces — byte-identical, and idempotent because that doc is a pure
+        // function of the AST plus the render column.
+        //
+        // Review round 2 (comment #4, "class + method should not break until there is a space left"). A factory call
+        // carrying an expression lambda folds onto the root line in two source-neutral cases: (a) its whole compact form
+        // fits flat ({@link #expressionLambdaFactoryCallPromotesFlat} — {@code IntStream.iterate(50, n -> n + 7)}), and
+        // (b) it has TWO OR MORE arguments ({@link #expressionLambdaFactoryCallFoldsAsMultiArgGroup} —
+        // {@code Flux.usingWhen(connectionFactory.create(), connection -> …, Connection::close)}), which
+        // {@link #promotedFactoryRootDoc} renders through its width-driven multi-argument {@link Doc#group} — {@code
+        // Flux.usingWhen(} on the root line, arguments fanned one per line, {@code )} dedented — never through
+        // {@link #groupedPromotedMethodCall}'s source-shape-sensitive lambda-hug branches. Both routes are a pure function
+        // of the AST plus the render column, so the fold stays a fixpoint. A SINGLE expression-lambda-argument factory call
+        // that does not promote flat ({@code Type.of(x -> body)}) is still held back: it would route through
+        // {@code groupedPromotedMethodCall}'s {@code groupedPromotedExpressionLambda} / packed-body branches, which read the
+        // author's source shape, so it stays on the split shape until the deferred lambda-arrow seam lands. A block-lambda
+        // factory call is likewise held back.
+        if (
+            methodChainPlanner.promotesFirstCall(root)
+            && calls.size() >= 2
+            && !methodCallSegmentHasBlockLambdaArgument(calls.getFirst())
+            && (!methodCallSegmentHasExpressionLambdaArgument(calls.getFirst())
+                || expressionLambdaFactoryCallPromotesFlat(calls.getFirst())
+                || expressionLambdaFactoryCallFoldsAsMultiArgGroup(calls.getFirst()))
+        ) {
+            MethodCallExpr factoryCall = calls.getFirst();
+            List<MethodCallExpr> selectors = new ArrayList<>(calls.subList(1, calls.size()));
+            return Doc.concat(
+                promotedFactoryRootDoc(factoryCall),
+                chainContinuation(factoryCall, methodCallChainSegments(selectors, tail))
+            );
+        }
+        // Object-creation root cutover seam (End-state A), the constructor-root analogue of the factory-root promotion
+        // above: a comment-free, non-anonymous, non-empty-argument {@code new Type(args)} root renders SOURCE-NEUTRALLY
+        // through {@link #promotedObjectCreationRootDoc} (a width-driven {@code Doc.group} of the constructor argument
+        // list), so the constructor arguments break by the renderer's width verdict at the true column on every pass
+        // rather than through {@code ObjectCreationPrinter}'s source-multiline preservation or the imperative
+        // fall-through's {@code brokenObjectCreationRenderer} force-break. This is what lets the fall-through route a
+        // constructor-rooted fan-threshold chain through this builder and converge with the flat-selector pass — see
+        // {@link #promotedObjectCreationRootDoc}. Roots outside that scope keep the plain {@code expressionRenderer.format}
+        // doc.
+        Doc rootDoc = objectCreationRootIsWidthDrivenFanEligible(root)
+            ? promotedObjectCreationRootDoc((ObjectCreationExpr) root)
+            : expressionRenderer.format(root, LayoutContext.root());
         if (calls.size() == 1) {
             // Single selector: the lone segment fans onto its own dotted continuation line. This reproduces the exact
             // shape rankedSingleSegmentChain / rankedObjectRootSingleSegmentChain built inline before this extraction —
@@ -1286,9 +1723,406 @@ final class MethodCallChainPrinter {
             // compact — so those callers stay byte-identical.
             return Doc.concat(rootDoc, chainContinuation(methodCallChainSegment(calls.getFirst(), tail)));
         }
+        // Trivial-receiver first-selector attach (gjf/prettier-java). When the chain root is a TRIVIAL RECEIVER — a bare
+        // {@code NameExpr}/{@code FieldAccessExpr}/{@code this}/{@code super} (see {@link #chainRootIsTrivialReceiver}), NOT
+        // a call/factory/constructor root — the FIRST selector stays glued to the root on the opening line and the fan
+        // begins at the SECOND selector ({@code orderEvent.validateOrder()}⏎{@code .deliveryPlan()}…, {@code response
+        // .unsentRequests.get(0)}⏎{@code .requestBuilder()}…). This matches google-java-format / prettier-java, which anchor
+        // the first segment on the receiver and only fan the builder tail below it. It is a DETERMINISTIC STRUCTURAL rule
+        // keyed strictly on the root kind — never on width or the author's source shape — so it stays a fixpoint by
+        // construction: both passes see the same root kind and rebuild the identical attach. A call/factory/constructor
+        // root keeps the fan-from-first shape above/below. The attached first selector renders through the ordinary (not
+        // on-own-line) segment group, so {@code .selector(args)} stays flat when it fits at the root's live column and opens
+        // its own argument list only on genuine overflow, exactly like the single-selector case; the remaining selectors
+        // fan one per line under the same continuation indent, the final one carrying the tail.
+        //
+        // Gated on {@code calls.size() >= 3}: that is exactly {@code chainBreaksByRule}'s plain-receiver threshold — a
+        // trivial receiver is always a plain-receiver root — so the attach fires ONLY for a genuine CANONICAL fan (three or
+        // more selectors) and never for a sub-threshold TWO-selector chain that reached this builder purely because its flat
+        // form was over-width ({@code builder.defaultStatusHandler(a, b).filter(c)}). Attaching the first selector on such a
+        // width-driven fan would put an over-wide {@code root.firstSelector(args)} opener on the first line, whose own
+        // argument-list break then flips across passes — the oscillation Rule 1 must not introduce. A width-driven
+        // two-selector fan keeps the fan-from-first shape below ({@code builder}⏎{@code .defaultStatusHandler(…)}⏎{@code
+        // .filter(…)}), which is already a fixpoint.
+        //
+        // Additionally gated on the first selector being ATTACH-SAFE ({@link #firstSelectorAttachesSafely}): no arguments or
+        // only simple leaf arguments ({@code .getRange()}, {@code .get(0)}, {@code .entrySet()}, {@code .validateOrder()}),
+        // so it renders as one atomic {@code .selector(...)} token that NEVER opens its own broken argument list. A first
+        // selector with a lambda, nested call, or multi-argument list ({@code target.computeIfAbsent(topicId, __ -> new X()
+        // …)}) can break INTERNALLY, and that inner break's indentation is measured relative to the segment's live column —
+        // which shifts once the previous pass glued the selector to the root — so the attached block reindents across passes
+        // (the kafka {@code ConsumerGroupMember} oscillation). Such a chain keeps the fan-from-first shape below ({@code
+        // target}⏎{@code .computeIfAbsent(…)}⏎…), where the selector's argument list breaks at a stable continuation column.
+        //
+        // Additionally gated on the root NOT being SHORTER than the indent unit ({@link #rootAvoidsShortRootPadding}). A
+        // root shorter than one indent ({@code p}, {@code res}) drives {@code chainContinuation}'s short-root PADDING branch,
+        // which dedent-aligns the fanned selectors under the root text rather than at the plain continuation indent. Attaching
+        // the first selector there ({@code p.recordErrors()}⏎padded{@code .stream()}) diverges from the fan-from-first shape
+        // the imperative fall-through renders once a re-format makes the selector arguments span source lines and the early
+        // canonical route is skipped, so the padded-attach and the fan-from-first alternate across passes (the kafka
+        // {@code Sender} / {@code DescribeConsumerGroupTest} indent oscillation). A short-rooted chain keeps the fan-from-first
+        // shape, whose padding branch is already a fixpoint. Long roots (the maintainer's targets — {@code argument},
+        // {@code response.unsentRequests}, {@code counterStream}) never touch the padding branch and attach cleanly.
+        if (
+            calls.size() >= 3
+            && chainRootIsTrivialReceiver(root)
+            && firstSelectorAttachesSafely(calls.getFirst())
+            && rootAvoidsShortRootPadding(root)
+        ) {
+            List<MethodCallExpr> fannedSelectors = new ArrayList<>(calls.subList(1, calls.size()));
+            return Doc.concat(
+                rootDoc,
+                attachedFirstSelectorSegment(calls.getFirst()),
+                chainContinuation(root, methodCallChainSegments(fannedSelectors, tail))
+            );
+        }
         // Multi-segment: one selector per line under the continuation indent, the same one-per-line layout the imperative
         // broken-chain tail produces (each segment measured at the continuation column, the final one carrying the tail).
         return Doc.concat(rootDoc, chainContinuation(root, methodCallChainSegments(calls, tail)));
+    }
+
+    /**
+     * Reports whether {@code root} is a TRIVIAL RECEIVER for the trivial-receiver first-selector attach in
+     * {@link #chainFanOut}: a bare {@code NameExpr}, {@code FieldAccessExpr}, {@code this}, or {@code super}, and NOT a
+     * type-like/factory qualifier ({@link MethodCallChainSourcePlanner#promotesFirstCall} — an uppercase name or type
+     * {@code FieldAccessExpr}, whose first call is a factory invocation folded onto the root line by the factory-root seam
+     * above). Method-call and object-creation roots are excluded by construction (they are not one of these kinds).
+     *
+     * <p>Keyed only on the root's AST kind — no width, no {@code wasMultiline}, no source-shape signal — because the attach
+     * verdict is exactly the oscillation the End-state A cutover eliminated: a width/source-conditioned "first selector
+     * attaches" flips between passes. A pure structural key is a fixpoint.
+     */
+    private boolean chainRootIsTrivialReceiver(Expression root) {
+        if (methodChainPlanner.promotesFirstCall(root)) {
+            return false;
+        }
+        return root.isNameExpr()
+            || root instanceof FieldAccessExpr
+            || root.isThisExpr()
+            || root.isSuperExpr();
+    }
+
+    /**
+     * Reports whether {@code expression}'s chain root is a {@linkplain #chainRootIsTrivialReceiver(Expression) trivial
+     * receiver} — the case in which {@link #chainFanOut} keeps the first selector on the root's opening line. The lambda-body
+     * arrow seam ({@code LambdaExpressionPrinter.lambdaBodyChainArrowBestFitting}) asks this to keep a trivial-receiver body
+     * ANCHORED on the {@code ->} line rather than breaking after the arrow: {@code dispatchJob -> orderEvent.validateOrder()}
+     * ⏎{@code .deliveryPlan()}…, matching the attach the method-call-argument opener path already produces for the same
+     * chain. Keyed only on the root's AST kind, so the arrow verdict stays the same structural fixpoint as the fan itself.
+     */
+    boolean chainRootIsTrivialReceiver(MethodCallExpr expression) {
+        return chainRootIsTrivialReceiver(methodCallChainAnalysis(expression).root());
+    }
+
+    /**
+     * Reports whether the first selector of a trivial-receiver chain is safe to glue to the root's opening line in
+     * {@link #chainFanOut}: it has NO type arguments, NO comment of any kind, and either NO call arguments or ONLY simple
+     * leaf arguments (a name, field access, {@code this}/{@code super}, or literal). Such a selector renders as one flat,
+     * non-breaking {@code .selector(...)} token through {@link #attachedFirstSelectorSegment}, so it is byte-identical
+     * whether it sits on the root line or its own continuation line, and attaching it is a fixpoint.
+     *
+     * <p>A first selector with a lambda, nested-call, or multi-argument list can break INTERNALLY, and the inner break's
+     * indentation is relative to the segment's live column — which shifts when the attach moves the selector onto the root
+     * line — so it must NOT attach (it keeps the fan-from-first shape, where its argument list breaks at a stable
+     * continuation column). This is a purely structural test on the selector's arguments, no width, so the attach verdict
+     * stays deterministic.
+     *
+     * <p>The comment-free requirement is what lets {@link #attachedFirstSelectorSegment} render the selector as bare text:
+     * the fan otherwise threads a selector's leading / name / between-selector trailing comments through the shared segment
+     * renderer, and a bare-text attach would drop them. A first selector carrying a comment therefore stays on the
+     * fan-from-first shape (its comment placed by the shared renderer); the attach only claims a comment-free leaf selector.
+     * The chain's remaining trailing line comments (on the fanned tail, e.g. {@code .streamArn() // note}) are unaffected —
+     * they sit on selectors {@code chainFanOut} still routes through the shared segment renderer.
+     */
+    private boolean firstSelectorAttachesSafely(MethodCallExpr firstSelector) {
+        if (firstSelector.getTypeArguments().isPresent()) {
+            return false;
+        }
+        if (methodCallSegmentHasComment(firstSelector) || !firstSelector.getAllContainedComments().isEmpty()) {
+            return false;
+        }
+        if (!finalTrailingLineComments(firstSelector).isEmpty()) {
+            return false;
+        }
+        return firstSelector.getArguments().stream().allMatch(this::isSimpleLeafArgument);
+    }
+
+    /**
+     * Renders a trivial-receiver chain's attach-safe first selector ({@link #firstSelectorAttachesSafely}) as one flat,
+     * SOURCE-NEUTRAL {@code .selector(arg, …)} token glued to the root's opening line in {@link #chainFanOut}. The selector
+     * has only simple leaf arguments and no comment (both guaranteed by the attach-safe gate), so the compact join is its
+     * complete rendering and it can never open its own broken argument list.
+     *
+     * <p>This deliberately does NOT go through {@link #methodCallChainSegment}: that shared renderer would take its
+     * {@code sourceMultilineMethodCallSegmentArguments} branch and break the selector's argument list whenever the author
+     * wrote the arguments across source lines — a source-shape signal. When attaching the selector pushes the opening line
+     * over width (a long root prefix, e.g. a cast-wrapped initializer {@code (List<Foo>) fluentTemplate.to("…")}), that
+     * source-driven break becomes VISIBLE and flips across passes: the flat re-format then keeps the selector inline while
+     * the original multiline source broke it (the salesforce {@code CompositeApiCollectionsManualIT} oscillation). Emitting
+     * one flat text makes the attached selector's shape a pure function of the AST, so both passes render it identically
+     * even when the opening line is unavoidably over width — matching google-java-format, which attaches regardless of
+     * width and never re-breaks such a leaf selector.
+     */
+    private Doc attachedFirstSelectorSegment(MethodCallExpr firstSelector) {
+        return Doc.text(
+            "." + firstSelector.getNameAsString()
+                + "(" + compactSource.compactJoin(firstSelector.getArguments()) + ")"
+        );
+    }
+
+    private boolean isSimpleLeafArgument(Expression argument) {
+        return argument.isNameExpr()
+            || argument.isFieldAccessExpr()
+            || argument.isThisExpr()
+            || argument.isSuperExpr()
+            || argument.isLiteralExpr();
+    }
+
+    /**
+     * Reports whether the trivial-receiver first-selector attach in {@link #chainFanOut} may use {@code root} without
+     * triggering {@link #chainContinuation}'s short-root PADDING branch — i.e. the root's compact form is at least one
+     * indent unit wide (or is not a stable single-line compact at all). The padding branch dedent-aligns the fan under a
+     * sub-indent root text; attaching the first selector there diverges from the fan-from-first shape the imperative
+     * fall-through renders on a source-multiline-argument re-format, so a short root ({@code p}, {@code res}) must keep the
+     * fan-from-first layout to stay a fixpoint. Mirrors the exact predicate {@link #chainContinuation(Expression, List)}
+     * uses to enter that branch, so the two stay in lockstep.
+     */
+    private boolean rootAvoidsShortRootPadding(Expression root) {
+        return compactSingleLineRoot(root)
+                .filter(rootText -> rootText.length() < options.indentUnit().length())
+                .isEmpty();
+    }
+
+    /**
+     * Renders the promoted factory call ({@code Type.factory(a, b)}) that heads a canonical-fan factory-root chain, matching
+     * the root doc {@code MethodCallChainSourcePlanner.plan} produces when it promotes the first call of a static/factory
+     * root. A zero/one-argument factory call renders through {@link #groupedPromotedMethodCall}
+     * ({@code Doc.group(Type + softChainContinuation(.factory()))}, which keeps {@code Type.factory()} on one line when it
+     * fits and splits to {@code Type}⏎{@code .factory()} only when the column forces it).
+     *
+     * <p>Canonical-fan cutover seam (End-state A), the multi-argument factory-root convergence. A multi-argument factory
+     * call renders SOURCE-NEUTRALLY as a width-driven {@link Doc#group} of its argument list ({@code Type.factory(} then
+     * each argument, the {@code )} glued to the last), so the {@code DocRenderer} keeps the arguments flat when they fit at
+     * the promoted root's live column and breaks them one per line only on genuine overflow. This replaces
+     * {@code expressionRenderer.format(factoryCall, root())}, which is NOT source-neutral for a promoted factory call whose
+     * SCOPE broke onto its own source line ({@code StreamSupport}⏎{@code .stream(a, b)} → {@code wasMultiline(factoryCall)}
+     * true even though the arguments are single-line): that path routes through the source-multiline-chain single-selector
+     * layout and emits the whole {@code .factory(a, b)} as one FLAT non-breakable {@code Text}, so an over-width promoted
+     * root stays flat on the multiline-scope pass and only breaks its arguments once a prior pass collapses the scope onto
+     * the root line ({@code wasMultiline} false) and the breakable group returns — the factory-root arm of the
+     * {@code source-multiline-method-root-chain-initializer} oscillation. Rendering the argument-list group directly makes
+     * the arguments' break the renderer's width verdict at the true column on every pass, a fixpoint by construction.
+     *
+     * <p>The factory call reaching here carries a lambda only when {@link #expressionLambdaFactoryCallPromotesFlat} admitted
+     * it — a compact expression lambda in a call whose whole flat form fits, so the width-driven group keeps it flat exactly
+     * like the imperative promotion; block-lambda factory calls stay withheld by the {@code chainFanOut} gate. Otherwise its
+     * arguments are plain expressions the shared {@code methodCallArgumentList} renders without a hug/opener decision.
+     * Comment-carrying argument lists keep the source-shape rendering ({@code expressionRenderer.format}) — the width-driven
+     * group would not preserve an inter-argument comment — but such a factory call would already have been withheld from the
+     * fan upstream, so this only guards the residual.
+     */
+    private Doc promotedFactoryRootDoc(MethodCallExpr factoryCall) {
+        // Canonical-fan cutover seam (End-state A), the single-argument-chain factory-root convergence. A one-argument
+        // promoted factory call whose sole argument is itself a fan-threshold chain ({@code Optional.of(a.b().c().d())},
+        // {@code Arrays.stream(a.b().c())}) renders SOURCE-NEUTRALLY as a width-driven {@link Doc#group}: {@code Type.factory(}
+        // glued on the root line, the argument fan under one continuation indent, the {@code )} dedented. This replaces
+        // {@link #groupedPromotedMethodCall}, whose {@code softChainContinuation} group instead splits the SCOPE off the
+        // factory name ({@code Optional}⏎{@code .of(...)}) when the whole promoted call overflows, and whose
+        // {@code sourceMultilineArguments} branch keeps the name attached ({@code Optional.of(}⏎{@code ...}) once the source
+        // argument spans lines — the flat-vs-split flip that IS the {@code ExpectLeaderAction} / {@code LogManagerTest} /
+        // {@code DescribeConsumerGroupTest} residual: on the flat-source pass the early canonical-fan route reaches this
+        // through {@code chainFanOut} and {@code groupedPromotedMethodCall} splits the name off; on the re-format the factory
+        // argument now spans lines, {@code chainHasSourceMultilineArguments} is true, the early route is skipped, and the
+        // imperative plan tail keeps the name attached. Rendering the argument fan as a width-driven group here makes the
+        // {@code Type.factory(} opener the renderer's width verdict at the true column on every pass — the name stays glued
+        // and only the argument fan breaks — a fixpoint by construction, matching the multi-argument arm below.
+        //
+        // The fan is built ONCE, prefix-agnostic ({@code canonicalFanChain(argument, "", root())}), so the argument's root
+        // renders at {@link LayoutContext#root()} and cannot re-flip against the opener. Withheld when the argument is not a
+        // fannable chain ({@code canonicalFanChain} empty — a non-fan call, an object-creation or comment/lambda carrier),
+        // when the factory call carries its own comments, or for the zero-argument case, all of which fall through to
+        // {@link #groupedPromotedMethodCall}'s established shapes.
+        if (
+            factoryCall.getArguments().size() == 1
+            && factoryCall.getArgument(0) instanceof MethodCallExpr chainArgument
+            && factoryCall.getAllContainedComments().isEmpty()
+        ) {
+            Optional<Doc> fan = canonicalFanChain(chainArgument, "", LayoutContext.root());
+            if (fan.isPresent()) {
+                String prefix = calls.methodCallPrefix(factoryCall);
+                Doc fanDoc = fan.orElseThrow();
+                return Doc.group(
+                    Doc.concat(
+                        Doc.text(prefix + "("),
+                        Doc.indent(Doc.concat(Doc.SOFT_LINE, fanDoc)),
+                        Doc.SOFT_LINE,
+                        Doc.text(")")
+                    )
+                );
+            }
+        }
+        // Review round 2 (comment #1, "CacheFactory.newBuilder() should stick together, with higher priority than keeping
+        // `= root` on the LHS line"). A ZERO-ARGUMENT promoted factory call ({@code CacheFactory.newBuilder()}) renders as
+        // ATOMIC text ({@code Type.factory()}) rather than through {@link #groupedPromotedMethodCall}, whose
+        // {@code softChainContinuation} group splits the type off the selector ({@code CacheFactory}⏎{@code .newBuilder()})
+        // when the whole factory root does not fit at its live column. That split is exactly what the field-chain
+        // initializer showed: on the attached arm ({@code NAME = CacheFactory.newBuilder()…} at a deep declaration column)
+        // the group could not keep {@code CacheFactory.newBuilder()} together, so it broke the type off the selector, and
+        // that arm won the initializer {@code bestFitting} on line count. Rendering the factory root atomically makes the
+        // arm's FIRST LINE ({@code NAME = CacheFactory.newBuilder()}) overflow when the type + selector do not fit at the
+        // attach column, so the renderer's fit gate — not a soft-line split — drops the attached arm and the
+        // break-after-{@code =} arm wins, keeping {@code CacheFactory.newBuilder()} together on the continuation line. It is
+        // a pure function of the AST, so both passes render the identical atomic text and the verdict is a fixpoint. This is
+        // the google-java-format / prettier-java convention that a type qualifier never splits from its first call. A short
+        // LHS (the {@code Flux.usingWhen(…)} case, comment #4) keeps the factory root ATTACHED because the atomic opener
+        // fits there — the fit gate attaches when there is space and only breaks after {@code =} when there is not.
+        if (factoryCall.getArguments().isEmpty() && factoryCall.getAllContainedComments().isEmpty()) {
+            return Doc.text(calls.methodCallPrefix(factoryCall) + "()");
+        }
+        if (factoryCall.getArguments().size() <= 1) {
+            return groupedPromotedMethodCall(factoryCall);
+        }
+        if (!factoryCall.getAllContainedComments().isEmpty()) {
+            return expressionRenderer.format(factoryCall, LayoutContext.root());
+        }
+        String prefix = calls.methodCallPrefix(factoryCall);
+        return Doc.group(
+            Doc.concat(
+                Doc.text(prefix + "("),
+                Doc.indent(
+                    Doc.concat(
+                        Doc.SOFT_LINE,
+                        calls.methodCallArgumentList(prefix, factoryCall.getArguments(), Doc.LINE)
+                    )
+                ),
+                Doc.SOFT_LINE,
+                Doc.text(")")
+            )
+        );
+    }
+
+    /**
+     * Canonical-fan cutover seam (End-state A), the expression-lambda factory-root convergence. Reports whether a promoted
+     * factory call carrying a compact EXPRESSION lambda ({@code IntStream.iterate(50, n -> n + 7)}) may fold onto the root
+     * line through {@link #chainFanOut}'s factory promotion. Without this the {@code chainFanOut} gate withholds every
+     * lambda-carrying first call, so the flat-source pass fans the chain with {@code IntStream} on its own line
+     * ({@code IntStream}⏎{@code .iterate(...)}⏎{@code .limit(...)}) while the imperative plan tail (which promotes a
+     * static/factory first call regardless of its lambda) keeps {@code IntStream.iterate(...)} folded on the re-format — the
+     * {@code UnifiedLogTest} residual.
+     *
+     * <p>Scoped so the promotion is a fixpoint: the factory call must have NO block lambda (block-lambda hugs stay on the
+     * deferred lambda-arrow seam), its lambda arguments must be single-line expression lambdas with no contained comments,
+     * and the WHOLE compact factory call must fit on one line. Under those conditions {@link #promotedFactoryRootDoc} renders
+     * it as a width-driven group that stays flat (the arguments fit), reproducing the imperative flat promotion byte for byte
+     * — the promotion never introduces a lambda-body break, so both passes converge. A factory call whose flat form overflows
+     * is withheld (returns false) and keeps the pre-seam split shape, so this only claims the compact case that actually
+     * oscillates.
+     */
+    private boolean expressionLambdaFactoryCallPromotesFlat(MethodCallExpr factoryCall) {
+        if (
+            methodCallSegmentHasBlockLambdaArgument(factoryCall)
+            || !factoryCall.getAllContainedComments().isEmpty()
+        ) {
+            return false;
+        }
+        boolean lambdasAreCompactExpressionBodies = factoryCall.getArguments().stream()
+                .filter(LambdaExpr.class::isInstance)
+                .map(LambdaExpr.class::cast)
+                .allMatch(lambda -> lambda.getExpressionBody().isPresent()
+                    && lambda.getAllContainedComments().isEmpty()
+                    && !sourceShapePolicy.wasMultiline(lambda));
+        return lambdasAreCompactExpressionBodies
+            && rootLineWidth(factoryCall, compactSource.compact(factoryCall), LayoutContext.root()) <= options.lineWidth();
+    }
+
+    /**
+     * Canonical-fan cutover seam (End-state A), review round 2 (comment #4). Reports whether a promoted factory call
+     * carrying an expression lambda may fold onto the root line through {@link #chainFanOut}'s factory promotion because it
+     * has TWO OR MORE arguments, so {@link #promotedFactoryRootDoc} renders it through the width-driven MULTI-ARGUMENT
+     * {@link Doc#group} ({@code Flux.usingWhen(} on the root line, each argument fanned one per line, {@code )} dedented)
+     * rather than through {@link #groupedPromotedMethodCall}'s source-shape-sensitive single-argument lambda-hug branches.
+     * This keeps the factory root ({@code Type.factory(}) glued to the root line and only fans its argument list — the
+     * maintainer's "class + method should not break until there is a space left" for a lambda-carrying factory call whose
+     * whole flat form overflows (so {@link #expressionLambdaFactoryCallPromotesFlat} declines it).
+     *
+     * <p>Scoped so the fold is a fixpoint: no block lambda (block-lambda hugs stay on the deferred lambda-arrow seam), no
+     * contained comments (the width-driven group would not preserve an inter-argument comment), TWO OR MORE arguments (a
+     * single expression-lambda argument routes through {@code groupedPromotedMethodCall}'s source-gated hug and is held
+     * back), and every lambda argument an expression-body lambda whose own body is comment-free — so the argument list is a
+     * pure width-driven decision at the render column. A single-line-flat factory call is already claimed by
+     * {@link #expressionLambdaFactoryCallPromotesFlat}; this only adds the over-width multi-argument case that would
+     * otherwise fan the factory root onto its own line ({@code Flux}⏎{@code .usingWhen(…)}).
+     */
+    private boolean expressionLambdaFactoryCallFoldsAsMultiArgGroup(MethodCallExpr factoryCall) {
+        if (
+            factoryCall.getArguments().size() < 2
+            || methodCallSegmentHasBlockLambdaArgument(factoryCall)
+            || !factoryCall.getAllContainedComments().isEmpty()
+        ) {
+            return false;
+        }
+        return factoryCall.getArguments().stream()
+                .filter(LambdaExpr.class::isInstance)
+                .map(LambdaExpr.class::cast)
+                .allMatch(lambda -> lambda.getExpressionBody().isPresent()
+                    && lambda.getAllContainedComments().isEmpty());
+    }
+
+    /**
+     * Renders the object-creation root ({@code new Type(a, b, c, d)}) that heads a canonical-fan constructor-root chain
+     * SOURCE-NEUTRALLY, the object-creation analogue of {@link #promotedFactoryRootDoc}. The constructor arguments render
+     * through a width-driven {@link Doc#group} ({@code new Type(} then each argument, the {@code )} glued to the last), so
+     * the {@code DocRenderer} keeps them flat when they fit at the root's live column and breaks them one per line only on
+     * genuine overflow.
+     *
+     * <p>Canonical-fan cutover seam (End-state A), the constructor-root convergence — the object-creation analogue of the
+     * factory-root {@code source-multiline-method-root-chain-initializer} oscillation. {@code chainFanOut} rebuilds the
+     * root once per pass; for an object-creation root it previously delegated to {@code expressionRenderer.format(root,
+     * root())} and the imperative fall-through delegated to {@code brokenObjectCreationRenderer}. Those two paths disagree
+     * for a multi-segment constructor-rooted chain whose non-final SELECTOR arguments break across source lines between
+     * passes ({@code new EndpointFactory(alpha, beta, gamma, delta).generate(…, Instance.builder()…build()).blockFirst(…)}):
+     * on the flat-selector pass {@code chainHasSourceMultilineArguments} is false, the early canonical-fan route fires, and
+     * {@code chainFanOut} renders the root through {@code expressionRenderer.format} → {@code ObjectCreationPrinter}'s
+     * width-driven {@code Doc.group} (flat when the constructor line fits); on the re-format the {@code .generate(…)}
+     * arguments now span lines, {@code chainHasSourceMultilineArguments} is true, the early route is skipped, and the
+     * imperative fall-through renders the root through {@code brokenObjectCreationRenderer}, whose {@code forceBreak}
+     * argument shape always puts each constructor argument on its own line — so a constructor line that fits flips
+     * flat↔broken forever. Rendering the argument-list group directly here (bypassing {@code ObjectCreationPrinter}'s
+     * {@code sourceMultilineArguments} preservation as well) makes the arguments' break the renderer's width verdict at the
+     * true column on every pass, a fixpoint by construction, and lets the fall-through route the object-creation root
+     * through the same {@code chainFanOut} builder the flat-selector pass reaches.
+     *
+     * <p>The object-creation reaching here is a comment-free, non-anonymous, non-empty-argument constructor (the fan gate
+     * withholds anonymous bodies, block/expression lambdas, and comment-bearing chains), so its arguments are plain
+     * expressions the shared {@code methodCallArgumentList} renders without a hug/opener decision. Empty-argument and
+     * comment-carrying constructors fall back to {@code widthDrivenObjectCreation}'s own guard (which routes them to the
+     * force-broken form); such constructors are withheld from this path by the {@link #chainFanOut} object-creation-root
+     * gate, so this only guards the residual.
+     *
+     * <p>Rendering delegates to {@code ObjectCreationPrinter.widthDrivenObjectCreation}, which builds the exact
+     * {@code breakableArguments::argument} + {@code Doc.joinComma} group {@code ObjectCreationPrinter} produces for a
+     * source-single-line constructor — byte-identical to the {@code expressionRenderer.format(objectCreation, root())} doc
+     * the flat-selector pass already reached, but with the {@code sourceMultilineArguments} preservation bypassed so a
+     * source-multiline argument list that fits collapses to flat on every pass rather than flipping.
+     */
+    private Doc promotedObjectCreationRootDoc(ObjectCreationExpr objectCreation) {
+        return widthDrivenObjectCreationRenderer.apply(objectCreation);
+    }
+
+    /**
+     * Reports whether {@code chainFanOut} may render an object-creation root through the source-neutral width-driven
+     * {@link #promotedObjectCreationRootDoc}. Scoped to the constructor-root-of-a-fan-threshold-chain position: a
+     * non-anonymous, comment-free, non-empty-argument {@link ObjectCreationExpr}. Anonymous bodies own their own layout
+     * after the header and keep {@code expressionRenderer.format}; empty-argument and comment-carrying constructors have no
+     * width-driven argument decision (or would drop an inter-argument comment) and keep the existing rendering. This gate
+     * mirrors the factory-root gate {@code promotesFirstCall && !block/expression-lambda}: the width-driven group only
+     * fires where the arguments are plain expressions whose break is purely the renderer's column verdict.
+     */
+    private boolean objectCreationRootIsWidthDrivenFanEligible(Expression root) {
+        return root instanceof ObjectCreationExpr objectCreation
+            && objectCreation.getAnonymousClassBody().isEmpty()
+            && !objectCreation.getArguments().isEmpty()
+            && objectCreation.getAllContainedComments().isEmpty();
     }
 
     private boolean methodCallSegmentHasNoOwnContainedComments(MethodCallExpr expression) {
@@ -1365,6 +2199,7 @@ final class MethodCallChainPrinter {
             || !analysis.sourceMultilineChain()
             || chainPlan.root() instanceof MethodCallExpr
             || chainPlan.root() instanceof ObjectCreationExpr
+            || rootIsEnclosedFanningChain(chainPlan.root())
             || sourceFirstLineIsOnlyChainRoot(chainPlan.root(), expression)
             || !sourceShapePolicy.startsOnSameLine(chainPlan.root(), calls.getFirst().getName())
         ) {
@@ -1376,6 +2211,29 @@ final class MethodCallChainPrinter {
             && (sourceShapePolicy.fitsOnOneLine(firstCall, lineWidth(LayoutWidth.LineBudget.CURRENT))
                 || layoutWidth.line(LayoutWidth.LineBudget.CURRENT, this.calls.methodCallPrefix(firstCall) + "(") <= options.lineWidth())
         );
+    }
+
+    /**
+     * Reports whether a chain root is a parenthesized (or parenthesized-cast) expression wrapping a fan-threshold method-call
+     * chain — {@code ((OffsetFetchRequestData) res.unsentRequests.get(0).requestBuilder().build().data())}. Such a root
+     * renders across multiple lines (its inner chain fans by the canonical rule), so its closing {@code )} lands on a
+     * continuation line; whether the chain's FIRST selector ({@code .groups()}) attaches to that {@code )} line then depends
+     * purely on the author's source shape ({@code canAttachFirstSegmentToSimpleRoot}'s {@code startsOnSameLine} probe),
+     * flipping {@code .data()).groups()} ⇄ {@code .data())}⏎{@code .groups()} across passes — the
+     * {@code CommitRequestManagerTest} residual. Withholding the attach here fans the first selector onto its own dotted line
+     * on both passes (the collapsed-source fixpoint the fanned re-format already settles on), a source-neutral verdict.
+     * Keyed strictly on an enclosed/cast root whose inner chain fans ({@code chainFansByCanonicalRule}); a parenthesized
+     * non-chain receiver ({@code (a + b).foo()}) renders on one line and keeps its established attach.
+     */
+    private boolean rootIsEnclosedFanningChain(Expression root) {
+        if (!(root instanceof EnclosedExpr enclosed)) {
+            return false;
+        }
+        Expression inner = enclosed.getInner();
+        if (inner instanceof CastExpr cast) {
+            inner = cast.getExpression();
+        }
+        return inner instanceof MethodCallExpr innerChain && chainFansByCanonicalRule(innerChain);
     }
 
     private Doc firstSegmentAttachedToSimpleRootDoc(
@@ -2292,7 +3150,8 @@ final class MethodCallChainPrinter {
             this::methodCallSegmentHasNameComment,
             this::methodCallSegmentHasArgumentGapComment,
             this::methodCallSegmentHasBlockLambdaArgument,
-            this::methodCallChainHasTrailingLineComments
+            this::methodCallChainHasTrailingLineComments,
+            this::rootHasTrailingLineCommentBeforeFirstSegment
         );
     }
 
@@ -2907,30 +3766,24 @@ final class MethodCallChainPrinter {
         if (huggedCommentedExpressionLambda.isPresent()) {
             return Doc.concat(segmentPrefix, huggedCommentedExpressionLambda.orElseThrow());
         }
-        if (
-            sourceShapePolicy.expressionLambdaStartsOnSelectorLine(expression)
-            && expressionLambdaSpansMultipleLines(expression)
-        ) {
-            Optional<Doc> huggableExpressionLambda = comments.speculatively(
-                () -> huggableExpressionLambdaArguments.apply(prefix, expression.getArguments())
-            );
-            if (huggableExpressionLambda.isPresent()) {
-                Optional<Doc> packedBodyChain = comments.speculatively(
-                    () -> packedSegmentExpressionLambdaBodyChain(
-                        expression,
-                        prefix,
-                        compactSegmentWidth,
-                        finalSegmentSuffix
-                    )
-                );
-                if (packedBodyChain.isPresent()) {
-                    return Doc.concat(segmentPrefix, packedBodyChain.orElseThrow());
-                }
-                if (expressionLambdaSegmentBodyOpenerOverflows(expression, prefix, compactSegmentWidth)) {
-                    return brokenMethodCallSegment(expression, prefix, segmentPrefix, finalSegmentSuffix);
-                }
-                return Doc.concat(segmentPrefix, huggableExpressionLambda.orElseThrow(), finalSegmentSuffix.doc());
-            }
+        // Canonical-fan cutover seam (End-state A), the chain-SELECTOR expression-lambda position. A chain selector whose
+        // sole trailing argument is an expression lambda ({@code .map(entry -> body)}) renders SOURCE-NEUTRALLY here,
+        // replacing the {@code expressionLambdaStartsOnSelectorLine(expression) && expressionLambdaSpansMultipleLines(...)}
+        // source-shape entry gate (plus the {@code huggableExpressionLambdaArguments} / packed-body / opener-overflow
+        // sub-branches, all of which read {@code wasMultiline}/{@code bodyFirstSourceLineFits}). That gate re-rendered the
+        // SAME selector two different ways across passes — the generic {@code Doc.group} argument shape on a flat-source
+        // pass, the source-multiline hug on a re-format — so the segment's rendered width flipped and any enclosing
+        // {@code bestFitting}/attach decision flipped with it. This is the withhold {@code chainFansByCanonicalRule}
+        // ({@code methodCallSegmentHasExpressionLambdaArgument}) was load-bearing for; making the segment AST-pure is what
+        // lets that withhold be removed so expr-lambda-selector chains fan. {@link #sourceNeutralExpressionLambdaSegment}
+        // ranks two pure-AST arms (flat selector vs. hugged/fanned body) with {@link Doc#bestFitting}, so the DocRenderer
+        // picks hug-vs-break at the true live column. Block-lambda and comment-carrying lambdas are handled by the earlier
+        // branches (they never reach here), so this only ever sees a clean expression lambda.
+        Optional<Doc> sourceNeutralExpressionLambda = comments.speculatively(
+            () -> sourceNeutralExpressionLambdaSegment(prefix, expression, segmentPrefix, finalSegmentSuffix, segmentOnOwnLine)
+        );
+        if (sourceNeutralExpressionLambda.isPresent()) {
+            return sourceNeutralExpressionLambda.orElseThrow();
         }
         Optional<Doc> commentedArguments = comments.speculatively(
             () -> commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments())
@@ -3280,38 +4133,350 @@ final class MethodCallChainPrinter {
         );
     }
 
-    private Optional<Doc> packedSegmentExpressionLambdaBodyChain(
-            MethodCallExpr expression,
+    /**
+     * Canonical-fan cutover seam (End-state A): renders a chain selector whose sole trailing argument is an expression
+     * lambda ({@code .map(entry -> body)}) as a SOURCE-NEUTRAL {@link Doc#conditionalGroup} of two pure-AST arms, so the
+     * {@code DocRenderer} picks flat-vs-hug at the true live column instead of the {@code wasMultiline}/
+     * {@code bodyFirstSourceLineFits} predicates the old {@link #methodCallChainSegment} branch consulted. Returns empty
+     * (the segment falls through to the generic argument-group path) when the selector is not this clean single-trailing-
+     * expression-lambda shape — a leading-argument, multiple-lambda, block-lambda, or comment-carrying selector, or a
+     * lambda whose parameters must break, all of which either reach here already handled by an earlier branch or want the
+     * unchanged generic layout.
+     *
+     * <p>The arms are ordered flattest-first, matching the {@code conditionalGroup} contract (first flat fit wins, the last
+     * is the unconditional broken fallback):
+     * <ul>
+     *   <li><b>Flat</b> ({@code .name(params -> compactBody)}): the whole selector on one line, the lambda body compacted.
+     *       Chosen whenever it fits at the render column.</li>
+     *   <li><b>Hug/broken</b>: the always-valid fallback (it carries forced breaks and so never "fits flat"). For a
+     *       method-call body it is the shared expression-lambda hug/fan (the U7 canonical fan, the over-width
+     *       {@code overflowingHuggedBareRootChainBody} hug, the {@code methodCallBodyWithOpener} opener hug); for any other
+     *       body it is {@link #brokenMethodCallSegment} — the selector's own argument list breaks — matching the
+     *       single-segment {@link #compactRootWithBrokenFinalSegment} tail so the two paths converge on identical bytes.</li>
+     * </ul>
+     * Both arms are pure functions of the AST, so the selector's rendered width is a fixpoint and any enclosing
+     * {@code bestFitting}/attach decision no longer flips across passes.
+     */
+    private Optional<Doc> sourceNeutralExpressionLambdaSegment(
             String prefix,
-            ToIntFunction<String> compactSegmentWidth,
-            MethodCallChainTail finalSegmentSuffix
+            MethodCallExpr expression,
+            Doc segmentPrefix,
+            MethodCallChainTail finalSegmentSuffix,
+            boolean segmentOnOwnLine
     ) {
-        return expressionLambdaArgumentPlan.apply(prefix, expression.getArguments())
-                .filter(ExpressionLambdaArgumentLayout.Plan::bodyFirstSourceLineFits)
-                .flatMap(plan ->
-                    plan.bodyExpression() instanceof MethodCallExpr methodCall && sourceFirstLineIsOnlyChainRoot(
-                        methodCall
-                    )
-                        ? packedExpressionLambdaBodyChain(
-                                plan.firstLine(),
-                                methodCall,
-                                line -> methodCallSegmentWidth(expression, line, compactSegmentWidth))
-                                .map(body -> packedSegmentExpressionLambda(plan, body, finalSegmentSuffix))
-                        : Optional.empty()
-                );
+        Optional<LambdaExpr> lambda = soleTrailingExpressionLambdaSelectorArgument(expression);
+        if (lambda.isEmpty()) {
+            return Optional.empty();
+        }
+        LambdaExpr lambdaExpr = lambda.orElseThrow();
+        if (
+            !lambdaExpr.getAllContainedComments().isEmpty()
+            || lambdaParametersShouldBreakInSegment(lambdaExpr)
+        ) {
+            return Optional.empty();
+        }
+        Expression body = lambdaExpr.getExpressionBody().orElseThrow();
+        // Build the flat selector text from a SOURCE-NEUTRAL compact of the lambda. {@code compactSource.compactJoin} has no
+        // {@code LambdaExpr} case, so it falls to {@code compactTokenText}, which only collapses whitespace RUNS — leaving a
+        // stray {@code " ."} where the source wrapped a body chain before a selector ({@code assertThat(x) .isPresent()}). That
+        // spelling is source-shaped (present only when the body was multiline) and would flip the flat arm across passes. The
+        // lambda body compacts cleanly through {@code compactSource.compact} (its {@code MethodCallExpr}/etc. cases reconstruct
+        // canonical dot spacing), so the flat selector is reassembled here as {@code prefix(params -> compactBody)}.
+        String flatLambda = lambdaParameters.apply(lambdaExpr) + " -> " + compactSource.compact(body);
+        Doc flatBody = Doc.text(prefix + "(" + flatLambda + ")" + finalSegmentSuffix);
+        // The broken/hug arm.
+        //
+        // A METHOD-CALL lambda body whose chain root is NOT an object creation ({@code entry -> meshCatalog.prepare(…)},
+        // {@code outcome -> journalWriter.atInfo()….log(…)}) is the chain / fluent-builder / opener family this cutover
+        // targets: it renders through the shared expression-lambda hug/fan renderer ({@code huggableExpressionLambdaArguments}
+        // = ExpressionLambdaArgumentLayout#huggableMethodCallArguments) — the SAME machinery the old source-gated branch
+        // called — reproducing every established shape (the U7 canonical fan, the over-width
+        // {@code overflowingHuggedBareRootChainBody} hug, the {@code methodCallBodyWithOpener} opener hug, the packed body).
+        // If that shared renderer withholds this body (returns empty — a nested-lambda body, a body its {@code plan} gate
+        // rejects), THIS SEAM YIELDS ({@link Optional#empty()}) so the selector keeps the unchanged generic layout rather
+        // than being force-rendered through {@link #brokenMethodCallSegment}, whose standalone-lambda rendering path does not
+        // handle every such body (it throws on a nested-lambda body — the {@code entry -> entry.cause().ifPresent(c -> …)}
+        // shape). Yielding is safe: those bodies were never the oscillating family this cutover set out to fix.
+        //
+        // Every OTHER body — a NON-method-call body (object creation, binary, ternary…), or a method-call body whose chain
+        // root is an OBJECT CREATION ({@code x -> new WorkerLoad.Builder(k).with(…).build()}) — uses {@link #brokenMethodCallSegment}
+        // (the selector's own argument list breaks). Two reasons converge on it: (1) it is exactly the shape the single-segment
+        // {@link #compactRootWithBrokenFinalSegment} tail produces for the same selector ({@code .orElseThrow(() -> new X(…))}),
+        // so a selector rendered here and one rendered by that sibling path converge on identical bytes rather than flipping
+        // opener-hug ⇄ broken-segment; and (2) an object-creation-rooted chain body is the deferred nested-root slice of this
+        // cutover — its hug renders {@code new X()} at column zero and oscillates {@code new X().setA(} ⇄ {@code new X()}⏎{@code .setA(}
+        // (the same reason {@link #lambdaBodyChainFansByCanonicalRule} withholds object-creation roots), so it is kept on the
+        // stable broken-segment shape. All these {@code brokenMethodCallSegment} bodies are object-creation / binary / plain
+        // expressions the segment argument-list break renders safely.
+        Doc hugBody;
+        if (body instanceof MethodCallExpr bodyChain && !methodCallChainRootIsObjectCreation(bodyChain)) {
+            Optional<Doc> hug = comments.speculatively(
+                () -> huggableExpressionLambdaArguments.apply(prefix, expression.getArguments())
+            );
+            // The hug is only a valid conditionalGroup FALLBACK when it is a genuinely broken layout. The shared
+            // huggableExpressionLambdaArguments renderer stays source-shape-gated for a short single-call body: its
+            // {@code compactBodyWithClosingLine} branch fires only when the source lambda body started on the selector line
+            // ({@code sourceMultilineBody}) and then hands back a FLAT one-liner measured at a fixed shallow budget (blind to
+            // the selector's real continuation column), while on the collapsed-source re-format the same gate yields empty and
+            // the selector breaks through the generic argument-list path. That flat-vs-broken flip across passes IS the
+            // {@code ReplicaVerificationTool} oscillation: the hug arm is supposed to be the always-broken fallback the
+            // conditionalGroup renders when {@code flatBody} overflows, but a flat hug renders the over-wide selector flat.
+            // When the hug carries no forced break (the degenerate flat case, redundant with {@code flatBody}) AND the lambda
+            // body is a single call the broken segment can safely re-render, delegate to
+            // {@link #singleCallBodyOpenerHugOrBrokenSegment}: review round 2 (comment #3) builds the source-neutral opener
+            // hug ({@code .forEach((tp, partitionData) -> replicaBuffer.addFetchedData(}⏎…⏎{@code ))}) directly for such a
+            // fanned selector, and falls back to {@link #brokenMethodCallSegment} — the same source-neutral broken shape the
+            // collapsed-source pass reaches — when the opener hug is unavailable, so both passes converge and the fallback
+            // always carries a forced break as the conditionalGroup contract requires.
+            //
+            // The substitution is scoped to a SINGLE-CALL body ({@code entry -> replicaBuffer.addFetchedData(a, b, c)}, its
+            // receiver a plain name/field, not another call) — see {@link #bodyIsSingleCallSafeForBrokenSegment}. A CHAIN
+            // body ({@code node -> assertThat(node.decision()).isPresent()}) is withheld: {@code brokenMethodCallSegment}
+            // re-renders the selector's lambda argument through the generic argument list, whose standalone lambda-body layout
+            // ({@code ExpressionLambdaMethodCallBodyLayout.scopedCallBodyWithHeader}) dereferences the body's inner scope-call
+            // scope and throws when that scope-call is an unqualified static call ({@code assertThat(...)}). Such a chain-body
+            // hug does not oscillate at a shallow column — it was already format-twice stable before this seam — so keeping
+            // its original hug is safe. A hug that DOES carry a forced break (the fan / over-width hug / opener hug for a
+            // fan-threshold or overflowing chain body) is a real broken layout and is kept unchanged, preserving those
+            // established shapes. Yielding empty when the renderer withholds the body entirely is preserved.
+            if (hug.isEmpty()) {
+                return Optional.empty();
+            }
+            Doc hugDoc = hug.orElseThrow();
+            hugBody = DocRenderer.containsHardLine(hugDoc) || !bodyIsSingleCallSafeForBrokenSegment(bodyChain)
+                ? Doc.concat(hugDoc, finalSegmentSuffix.doc())
+                : singleCallBodyOpenerHugOrBrokenSegment(prefix, expression, lambdaExpr, bodyChain, finalSegmentSuffix, segmentOnOwnLine);
+        } else {
+            // Single expression-lambda argument hugs its call opener (gjf/prettier-java, comments #2/#3/#5/#6). Any NON-
+            // method-call body — an OBJECT CREATION ({@code (left, right) -> new ImageCounter(…)}), an OBJECT-CREATION-ROOTED
+            // chain ({@code listener -> new VotersEndpoint().setName(…).setHost(…)}), a TERNARY
+            // ({@code ex -> index + 1 < managers.size() ? authenticate(…) : Mono.error(ex)}, review comment #2), or a LOGICAL
+            // BINARY ({@code initializer -> initializer instanceof A || initializer instanceof B || …}) — keeps the lambda
+            // opener glued to the selector rather than breaking the selector's own parenthesis onto a fresh line:
+            // {@code .onErrorResume(ex -> index + 1 < managers.size()}⏎{@code ? authenticate(…)}⏎{@code : Mono.error(ex)}⏎{@code )}.
+            // {@link #expressionBodyOpenerHug} broadens the round-1 object-creation-only hug to every body the shared
+            // {@code huggableExpressionLambdaArguments} renderer hugs with a forced break, restoring the opener hug the
+            // one-per-line fan over-broke.
+            //
+            // Scoped to a FANNED selector ({@code segmentOnOwnLine}): only a selector on its own dotted continuation line has
+            // a STABLE column (the continuation indent), so the opener hug re-derives the identical shape across passes. A
+            // selector rendered beside a preceding token — a single-selector initializer/return tail such as
+            // {@code spanFor(x).orElseThrow(() -> new IllegalArgumentException(…))} — sits at a variable column, and hugging
+            // its opener there flips opener-hug ⇄ broken-parenthesis against the initializer's own layout across passes (the
+            // {@code ledgerSpan} oscillation). Such a tail keeps the {@link #brokenMethodCallSegment} shape, which is exactly
+            // what the single-segment {@link #compactRootWithBrokenFinalSegment} tail produces, so the two paths converge.
+            // The shared renderer's opener/broken-object/broken-ternary shapes are used only when they carry a forced break (a
+            // genuine broken layout the conditionalGroup fallback contract requires); its FLAT degenerate case (redundant with
+            // {@code flatBody}) and any body it withholds fall through to {@link #brokenMethodCallSegment} too.
+            Optional<Doc> openerHug = segmentOnOwnLine
+                ? expressionBodyOpenerHug(prefix, expression, body, finalSegmentSuffix)
+                : Optional.empty();
+            hugBody = openerHug.orElseGet(
+                () -> brokenMethodCallSegment(expression, prefix, Doc.EMPTY, finalSegmentSuffix)
+            );
+        }
+        // A conditional group (NOT bestFitting) chooses flat-vs-hug purely by whether the flat selector fits at the live
+        // column. This is deliberate: the fan-carrying selector nests inside the enclosing chain fan (itself a bestFitting on
+        // the return/initializer seams), and a per-selector {@code bestFitting} would sit past the {@code MAX_BEST_FITTING_DEPTH}
+        // linear-time bound (D16) — beyond which {@code chooseBestFitting} silently keeps the FIRST (flat) arm, flattening an
+        // over-wide chain body onto one line. A conditional group is not depth-bounded: it flat-fit-probes {@code flatBody} and
+        // renders the {@code hugBody} (which carries forced breaks and so never "fits flat") as the unconditional fallback when
+        // {@code flatBody} overflows. The verdict is a pure function of the AST (compact flat width vs. the live column), so the
+        // selector's shape is a fixpoint. {@code segmentPrefix} (any leading comments) is prepended ONCE outside the group so
+        // the two arms do not share a sub-{@code Doc} instance whose bounded flat-fit probe could perturb the other arm.
+        return Optional.of(Doc.concat(segmentPrefix, Doc.conditionalGroup(List.of(flatBody, hugBody))));
     }
 
-    private Doc packedSegmentExpressionLambda(
-            ExpressionLambdaArgumentLayout.Plan plan,
-            Doc body,
+    /**
+     * Single expression-lambda argument hugs its call opener (gjf/prettier-java, comments #2/#5/#6): builds the
+     * opener-hugged broken layout for a FANNED chain selector whose sole argument is an expression lambda whose body is a
+     * SOURCE-NEUTRAL hug shape — an OBJECT CREATION ({@code .reduce((left, right) -> new ImageCounter(}⏎…), an
+     * OBJECT-CREATION-ROOTED chain ({@code .map(listener -> new VotersEndpoint().setName(…).setHost(}⏎…), a TERNARY
+     * ({@code .onErrorResume(ex -> cond}⏎{@code ? then}⏎{@code : else}⏎{@code )}, review comment #2), or a LOGICAL BINARY
+     * ({@code .map(region -> region.beginOffset() == expected.beginOffset()}⏎{@code && region.endOffset() == …}⏎{@code )},
+     * review round 3) — keeping {@code .selector(params -> body…} on the selector line rather than breaking the selector
+     * parenthesis onto its own line.
+     *
+     * <p>Review round 2 broadened this from the round-1 object-creation-only hug to also cover TERNARY bodies, whose shared
+     * hug ({@code packedConditionalBody}) is a pure width function of the AST. Review round 3 adds LOGICAL ({@code &&}/{@code ||})
+     * BINARY bodies through the DIRECT source-neutral {@code expressionLambdaLogicalBinaryBodyOpenerHug} — NOT the shared
+     * {@code huggableExpressionLambdaArguments} renderer, and NOT the {@code binaryMethodCallBodyWithOpener} path (gated on
+     * {@code sourceMultilineBinaryMethodCallBody}) whose source-shape read oscillated {@code .map(x -> x.f(a) == ALLOWED)} in
+     * kafka {@code AuthHelper} and forced round 2 to drop the binary hug. The direct helper renders the operands with a pure
+     * {@code nestedLines} AST function and always dedents the close, so it is a fixpoint; a top-level RELATIONAL body
+     * ({@code x -> f(...) == ALLOWED}) is not a logical binary, so the helper leaves it unclaimed and it keeps the
+     * {@link #brokenMethodCallSegment} shape and stays idempotent. The object-creation/ternary hug is produced by the shared
+     * {@code huggableExpressionLambdaArguments} renderer ({@link ExpressionLambdaArgumentLayout#huggableMethodCallArguments}).
+     * Every hug is returned only when it carries a forced break ({@link DocRenderer#containsHardLine}): as the second arm of
+     * the selector's {@link Doc#conditionalGroup} it must be a genuinely broken fallback, never a flat layout redundant with
+     * the flat arm (which would let an over-wide selector render flat — the {@code ReplicaVerificationTool} class of
+     * oscillation). Returns empty for any body neither the direct binary helper nor the shared renderer claims (or renders
+     * flat), so the caller keeps the {@link #brokenMethodCallSegment} shape for it. The {@code finalSegmentSuffix} is appended
+     * after the hug so a final selector still carries its statement terminator.
+     *
+     * <p>A PLAIN method-call body (root not an object creation) never reaches here — the caller's method-call branch routes
+     * it through the shared renderer directly (with the {@link #singleCallBodyOpenerHugOrBrokenSegment} substitution for the
+     * degenerate flat single-call case). Only the {@code else} branch's bodies reach here. An object-creation-rooted chain
+     * whose OUTERMOST call is EMPTY ({@code new WorkerLoad.Builder(k).with(a, b).build()}) is withheld
+     * ({@link #bodyIsObjectCreationRootedChain} false): its opener hug would force-break the empty {@code .build()} into a
+     * malformed {@code .build(}⏎⏎{@code )} that oscillates, so it keeps the {@link #brokenMethodCallSegment} shape.
+     */
+    private Optional<Doc> expressionBodyOpenerHug(
+            String prefix,
+            MethodCallExpr expression,
+            Expression body,
             MethodCallChainTail finalSegmentSuffix
     ) {
-        return Doc.concat(
-            Doc.text(plan.firstLine() + " "),
-            Doc.indent(body),
-            Doc.HARD_LINE,
-            Doc.text(")" + finalSegmentSuffix)
+        // A LOGICAL BINARY body ({@code region -> region.beginOffset() == expected.beginOffset() && …}, review round 3) hugs
+        // its opener with the first operand on the selector line, each following {@code &&}/{@code ||} operand one per line
+        // below, and the enclosing {@code )} dedented to the selector column. It is built through the DIRECT source-neutral
+        // {@code expressionLambdaLogicalBinaryBodyOpenerHug}, NOT the shared {@code huggableExpressionLambdaArguments}
+        // renderer the object-creation/ternary bodies use: that shared path carries a {@code plan} source-multiline entry
+        // gate and a source-shaped close placement that flip this shape across passes — the reason review round 2 dropped
+        // the binary hug and left binary bodies on the {@link #brokenMethodCallSegment} shape (see the helper's Javadoc).
+        // Relational-with-wide-method-call bodies ({@code x -> x.f(a) == ALLOWED}, kafka {@code AuthHelper}) are not logical
+        // binaries, so the helper leaves them unclaimed and they keep the broken-segment shape and stay idempotent.
+        Optional<Doc> binaryHug = comments.speculatively(
+            () -> expressionLambdaLogicalBinaryBodyOpenerHug.apply(prefix, expression)
         );
+        if (binaryHug.isPresent()) {
+            return binaryHug.filter(DocRenderer::containsHardLine)
+                    .map(hugDoc -> Doc.concat(hugDoc, finalSegmentSuffix.doc()));
+        }
+        boolean sourceNeutralHugBody = body instanceof ObjectCreationExpr
+            || body instanceof ConditionalExpr
+            || bodyIsObjectCreationRootedChain(body);
+        if (!sourceNeutralHugBody) {
+            return Optional.empty();
+        }
+        Optional<Doc> hug = comments.speculatively(
+            () -> huggableExpressionLambdaArguments.apply(prefix, expression.getArguments())
+        );
+        return hug.filter(DocRenderer::containsHardLine)
+                .map(hugDoc -> Doc.concat(hugDoc, finalSegmentSuffix.doc()));
+    }
+
+    /**
+     * Single expression-lambda argument hugs its call opener (gjf/prettier-java, comment #3): builds the opener-hugged broken
+     * layout for a FANNED chain selector whose sole argument is an expression lambda whose body is a SINGLE method call
+     * ({@code .forEach((tp, partitionData) -> replicaBuffer.addFetchedData(}⏎{@code tp,}⏎…⏎{@code ))}), when the shared
+     * renderer handed back the DEGENERATE FLAT one-liner (no forced break) for it because the source lambda body started on
+     * the selector line ({@code compactBodyWithClosingLine} measured it at a shallow budget, blind to the selector's real
+     * continuation column). The flat one-liner is not a valid {@code conditionalGroup} fallback (it renders the over-wide
+     * selector flat — the {@code ReplicaVerificationTool} oscillation the round-1 seam guarded with
+     * {@link #brokenMethodCallSegment}); this instead builds the opener hug DIRECTLY and SOURCE-NEUTRALLY through
+     * {@link ExpressionLambdaArgumentLayout#methodCallBodyWithOpener}, so both passes render the identical hugged shape
+     * regardless of whether the source lambda body was on the selector line.
+     *
+     * <p>Scoped to a FANNED selector ({@code segmentOnOwnLine}, stable continuation column) as the {@code else}-branch hug is.
+     * Falls back to {@link #brokenMethodCallSegment} — the round-1 shape, exactly the single-segment
+     * {@link #compactRootWithBrokenFinalSegment} tail — when it is not a fanned selector or the opener hug is unavailable
+     * ({@code methodCallBodyWithOpener} withholds an empty-argument, source-multiline-scope, or comment-dropping body), so the
+     * two paths still converge for every body this direct hug does not claim.
+     */
+    private Doc singleCallBodyOpenerHugOrBrokenSegment(
+            String prefix,
+            MethodCallExpr expression,
+            LambdaExpr lambdaExpr,
+            MethodCallExpr bodyCall,
+            MethodCallChainTail finalSegmentSuffix,
+            boolean segmentOnOwnLine
+    ) {
+        // Reached only when the shared renderer handed back the DEGENERATE FLAT one-liner (no forced break) for this
+        // single-call body, so re-fetching it would find the same flat shape; build the opener hug directly instead.
+        if (segmentOnOwnLine) {
+            Optional<Doc> directOpener = comments.speculatively(
+                () -> singleCallLambdaBodyOpenerHug(prefix, lambdaExpr, bodyCall, finalSegmentSuffix)
+            );
+            if (directOpener.isPresent()) {
+                return directOpener.orElseThrow();
+            }
+        }
+        return brokenMethodCallSegment(expression, prefix, Doc.EMPTY, finalSegmentSuffix);
+    }
+
+    /**
+     * Builds the opener hug for a fanned selector whose sole argument is a single-method-call-body expression lambda:
+     * {@code .selector(params -> bodyCall(}⏎ each body argument on its own line ⏎{@code ))}. This is
+     * {@link ExpressionLambdaArgumentLayout#methodCallBodyWithOpener} (the lambda header + body-call opener, body arguments
+     * broken, body-call close) wrapped in the selector's {@code .selector(} … {@code )} — a pure function of the AST, so both
+     * passes render it identically. Returns empty when {@code methodCallBodyWithOpener} withholds the body (empty argument
+     * list, source-multiline scope, or an opener line that would drop a prefix comment), letting the caller fall back to the
+     * source-neutral {@link #brokenMethodCallSegment} shape.
+     */
+    private Optional<Doc> singleCallLambdaBodyOpenerHug(
+            String prefix,
+            LambdaExpr lambdaExpr,
+            MethodCallExpr bodyCall,
+            MethodCallChainTail finalSegmentSuffix
+    ) {
+        String parameters = lambdaParameters.apply(lambdaExpr);
+        return expressionLambdaMethodCallBodyOpener.apply(parameters, bodyCall)
+                .map(bodyOpener -> Doc.concat(
+                        Doc.text(prefix + "("),
+                        bodyOpener,
+                        Doc.text(")" + finalSegmentSuffix)
+                ));
+    }
+
+    /**
+     * Reports whether {@code body} is a method-call chain whose root is an object creation whose OUTERMOST call carries
+     * arguments ({@code new VotersEndpoint().setName(…).setHost(args)}) — the object-creation-rooted body the opener-hug in
+     * {@link #expressionBodyOpenerHug} can render.
+     *
+     * <p>The outermost-call-has-arguments guard is load-bearing: the opener hug renders the chain head on the selector line
+     * and breaks the outermost call's argument list below it, so a chain that ends in an EMPTY call
+     * ({@code new WorkerLoad.Builder(k).with(a, b).build()}) has no argument list to break — the shared renderer force-breaks
+     * the empty {@code .build()} into a malformed {@code .build(}⏎⏎{@code )} and the shape oscillates. Such a chain keeps the
+     * {@link #brokenMethodCallSegment} shape instead.
+     */
+    private boolean bodyIsObjectCreationRootedChain(Expression body) {
+        return body instanceof MethodCallExpr bodyChain
+            && methodCallChainRootIsObjectCreation(bodyChain)
+            && !bodyChain.getArguments().isEmpty();
+    }
+
+    /**
+     * Reports whether {@code bodyChain} — the method-call body of a selector's expression lambda — is a SINGLE call whose
+     * receiver is a plain expression (not another method call), so {@link #brokenMethodCallSegment} can safely re-render the
+     * enclosing selector's lambda argument. This is the {@code entry -> replicaBuffer.addFetchedData(a, b, c)} shape.
+     *
+     * <p>A body that is itself a chain (its scope is another {@link MethodCallExpr}, e.g. {@code assertThat(x).isPresent()})
+     * is excluded: routing it through {@code brokenMethodCallSegment} re-renders the lambda through the generic argument
+     * list, whose standalone lambda-body layout ({@code ExpressionLambdaMethodCallBodyLayout.scopedCallBodyWithHeader})
+     * dereferences the inner scope-call's own scope and throws {@link java.util.NoSuchElementException} when that scope-call
+     * is an unqualified static call with no scope. A body carrying any nested lambda is likewise excluded on the same
+     * generic-layout path. Both keep their original hug shape (already format-twice stable) rather than the broken segment.
+     */
+    private boolean bodyIsSingleCallSafeForBrokenSegment(MethodCallExpr bodyChain) {
+        return bodyChain.getScope().filter(MethodCallExpr.class::isInstance).isEmpty()
+            && bodyChain.getArguments().stream().noneMatch(LambdaExpr.class::isInstance);
+    }
+
+    /**
+     * Reports whether {@code expression}'s sole argument is an expression lambda that the source-neutral segment renderer
+     * owns ({@code .map(entry -> …)}, {@code .filter(row -> …)}), returning that lambda. Scoped to the SINGLE-argument shape
+     * — the expr-lambda-selector fan family ({@code stream.map(x -> x.foo()).collect(…)}) — because a selector with a leading
+     * argument ({@code .onErrorResume(SomeException.class, ex -> …)}) shares the multi-argument list layout with paths this
+     * seam does not own, and hugging its lambda opener here would flip opener-hug ⇄ stacked-argument-list against them. A
+     * block-lambda tail keeps the generic layout too (it is not an expression lambda).
+     */
+    private Optional<LambdaExpr> soleTrailingExpressionLambdaSelectorArgument(MethodCallExpr expression) {
+        NodeList<Expression> arguments = expression.getArguments();
+        if (
+            arguments.size() == 1
+            && arguments.get(0) instanceof LambdaExpr lambdaExpr
+            && lambdaExpr.getExpressionBody().isPresent()
+        ) {
+            return Optional.of(lambdaExpr);
+        }
+        return Optional.empty();
+    }
+
+    private boolean lambdaParametersShouldBreakInSegment(LambdaExpr lambdaExpr) {
+        return lambdaExpr.getParameters()
+                .stream()
+                .anyMatch(parameter -> !parameter.getAllContainedComments().isEmpty());
     }
 
     private boolean sourceFirstLineIsOnlyChainRoot(MethodCallExpr expression) {
@@ -3329,21 +4494,6 @@ final class MethodCallChainPrinter {
                 .lines()
                 .findFirst()
                 .filter(line -> line.equals(compactSource.compact(root)))
-                .isPresent();
-    }
-
-    private boolean expressionLambdaSegmentBodyOpenerOverflows(
-            MethodCallExpr expression,
-            String prefix,
-            ToIntFunction<String> compactSegmentWidth
-    ) {
-        return expressionLambdaArgumentPlan.apply(prefix, expression.getArguments())
-                .filter(plan -> !plan.bodyFirstSourceLineFits())
-                .filter(plan -> plan.bodyOpenerFitsOnContinuation(lineWidth(LayoutWidth.LineBudget.CONTINUATION), options.lineWidth()))
-                .filter(plan -> plan.bodyOpenerOverflows(
-                        line -> methodCallSegmentWidth(expression, line, compactSegmentWidth),
-                        options.lineWidth()
-                ))
                 .isPresent();
     }
 
@@ -3700,6 +4850,35 @@ final class MethodCallChainPrinter {
             return Doc.EMPTY;
         }
         return trailingLineCommentBeforeNextSegment(root, Optional.of(calls.getFirst()));
+    }
+
+    /**
+     * Reports whether the chain root carries a trailing / root-to-first-selector-gap line comment that the imperative
+     * chain renderer would re-emit through {@link #rootTrailingLineCommentBeforeFirstSegment}, for example
+     * {@code new Zone(api, auth, "name") // restart note}⏎{@code .withProperty(...)}.
+     *
+     * <p><strong>Why the fan's other comment gates miss it.</strong> JavaParser attaches such a comment as the root
+     * expression's <em>own</em> comment (the {@code ObjectCreationExpr} / root {@code MethodCallExpr} it trails), not as a
+     * child or contained comment. {@link MethodCallChainAnalysis#rootHasComments()} is built from
+     * {@link SourceShapePolicy#hasContainedComments(Node)} — which lists a node's orphans and its children's comments but
+     * <em>not</em> the node's own comment — plus {@code rootToFirstSelectorGapHasBlockComment}, which matches only block
+     * {@code /* *}{@code /} markers. The per-selector comment scans key on the selectors' own trivia, and the
+     * trailing-line-comment scan only inspects the gaps <em>between</em> and <em>after</em> selectors. So a line comment
+     * owned by the root in the gap before the first selector is invisible to every existing comment gate, the chain reads
+     * comment-free, and the source-neutral fan ({@code chainFanOut}) re-renders the root through ordinary expression
+     * dispatch — which does not carry the root's own comment — silently dropping it.
+     *
+     * <p>Detecting it here off the same {@link #trailingLineCommentsBeforeNextSegment} candidate set the renderer consumes
+     * keeps the withhold verdict and the render in lockstep: any comment this predicate sees is one the imperative path
+     * will actually place, so folding it into {@code hasComments} routes the chain off the fan and onto that
+     * comment-preserving path without over- or under-withholding. This reads the candidate set only; it does not claim or
+     * mark any comment printed, so the real render still owns placement.
+     */
+    private boolean rootHasTrailingLineCommentBeforeFirstSegment(Expression root, List<MethodCallExpr> calls) {
+        if (calls.isEmpty()) {
+            return false;
+        }
+        return !trailingLineCommentsBeforeNextSegment(root, calls.getFirst()).isEmpty();
     }
 
     private List<JavaCommentTrivia> trailingLineCommentsBeforeNextSegment(Node previous, MethodCallExpr next) {

@@ -5,13 +5,13 @@ class MethodChainTrailingLambdaComment {
                 .prepare(signal -> {
                     return signal.withState(State.WAITING);
                 })
-                .thenConsumeWhile(
-                    items -> items.stream().allMatch(
+                .thenConsumeWhile(items -> items.stream().allMatch(
                         candidate -> candidate.remoteProviderState() == ExternalProviderState.TRANSITIONING
-                    )
-                ) // keep polling while external state settles
+                )) // keep polling while external state settles
                 .assertNext(items -> {
-                    assertThat(items).extracting(Item::state).containsOnly(State.READY);
+                    assertThat(items)
+                            .extracting(Item::state)
+                            .containsOnly(State.READY);
                 });
     }
 }

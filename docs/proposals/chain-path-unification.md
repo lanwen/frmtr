@@ -289,6 +289,45 @@ reproduce without an explicit gate. If the intent is to keep scoped-root lambda-
 **Gate:** the `lambda-body-chain-dotted-fan` fixture must not move unless intended; idempotence green. This is the
 largest lambda-body surface, so it rides late.
 
+**Realized (cutover seam U7, End-state A).** `ExpressionLambdaArgumentLayout.huggableMethodCallArguments` now consults
+`MethodCallChainPrinter.lambdaBodyChainFansByCanonicalRule` *before* the fitting `compactBodyWithClosingLine` shape, so a
+fan-threshold lambda-body chain fans one selector per line even when it fits, generalizing the gate past the old
+bare-call-root-only `overflowingHuggedBareRootChainBody` (retained as a subsumed fallback). Both triggers share the
+`huggedLambdaBodyChain` → `forcedMethodCallChain(withLeftEdgePrefix(firstLine + " "))` render. The generalization was NOT
+expressed as `bestFitting` — the existing forced-fan render already produces the canonical shape and threads the header
+column, so no ranked-node change was needed. **Deferred slice:** object-creation-rooted lambda-body chains
+(`.map(x -> new Record().setA(...).setB(...))`) are withheld (`!(root instanceof ObjectCreationExpr)`), because
+`chainFanOut` renders that root at `LayoutContext.root()` and `new X()` hugs its first selector on a flat pass but breaks
+onto its own line on a source-multiline pass — the nested-root gap this plan names — so fanning them reintroduced ~16
+kafka oscillations. They stay on the source-shape-stable packed shapes until the root-at-`root()` gap is closed (the
+same leftEdgePrefix-into-the-root work #190 tracks).
+
+**Realized (cutover seam, the lambda-body ARROW position, #190).** U7 above fans the lambda body in the *hug* position
+(`huggableMethodCallArguments`), but left the **break-after-`->` vs attach-root-to-`->`** verdict of a fan-carrying
+lambda body that is an *exploded/standalone argument* (`() -> admin.createTopics(...).all().get()`, rendered by
+`LambdaExpressionPrinter.lambdaExpression`, not the hug path) on a source-shape-gated dual decider:
+`LambdaBodyHeaderLayout.sourceMultilineMethodCallBodyWithHeader` attaches when the body's *raw first source line* fits
+after the arrow (which, once a prior pass fanned the body, is just the bare root), and the broken-after-arrow fallback
+breaks when it overflowed — so a fan-carrying body alternated `() ->`⏎`admin`⏎`.createTopics(…)…` (break) ⇄
+`() -> admin`⏎`.createTopics(…)…` (attach) forever (5 kafka bucket-C files). The fix replicates the initializer
+break-after-`=` seam: `LambdaExpressionPrinter.lambdaBodyChainArrowBestFitting` ranks two AST-derived arms with
+`Doc.bestFitting` at the true column — attached (`params -> ` + fan) vs broken (`params ->`⏎ indent(fan)) — both wrapping
+**one** source-neutral `chainFanOut` fan rendered once at `LayoutContext.root()` (`ExpressionPrinters.lambdaBodyCanonicalFanChain`,
+gated by the U7 `lambdaBodyChainFansByCanonicalRule`). Sharing the one prefix-agnostic fan is load-bearing (the
+initializer lesson): the root renders at `root()` in both arms, so a promoted-factory/method-call opener group cannot
+break differently between arms and re-flip. Placed *after* `methodCallBodyWithOpener` so a body whose outermost call
+carries arguments (`entry -> entry.a().b().compose(x, y)`) keeps its stable opener shape — only argument-less-tail chains
+(`.all().get()`, `.stream()`, `.isPresent()`) fall here. **Measured (kafka, base 179):** cutover 205→202 non-idempotent,
+NEW 35→32, the 3 name/receiver-rooted bucket-C arrow chains converge, 0 newly-broken (NEW is a strict subset),
+`--verify` 0 non-equivalent, full `./gradlew test` failure set byte-identical to the pre-seam tip. **Deferred slice
+(unchanged from U7, both still oscillate but are byte-identical to the pre-seam tip):** a body chain whose lambda is
+hosted by a chain-selector call (`stream.flatMap(broker -> broker.config()...)`), and a body chain carrying an
+expression-lambda selector (`e -> e.name().filter(n -> …).isPresent()`) — both withheld by
+`lambdaBodyChainFansByCanonicalRule`/`chainFansByCanonicalRule` so `lambdaBodyCanonicalFanChain` returns empty and they
+fall through to the unchanged source-shape branches. The residual 32 NEW are dominated by the **first-selector
+attach/break** position (`data.configResources()` ⇄ `data`⏎`.configResources()`, incl. the expression-lambda-selector
+return chains), the next seam.
+
 ### U8 — Binary operand delegate → `bestFitting` (reviewed). Policy-neutral (gate stays width+AST-only).
 
 **Touches:** `BinaryExpressionPrinter.binaryExpressionLineOperand` (`:242`,`:252`). The break *gate*

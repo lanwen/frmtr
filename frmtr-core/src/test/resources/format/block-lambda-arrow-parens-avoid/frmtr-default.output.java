@@ -447,8 +447,10 @@ public class Lambda {
     }
 
     void lambdaInParentheses() {
-        (dispatchJob ->
-            orderEvent.validateOrder().deliveryPlan().eligibility().compute());
+        (dispatchJob -> orderEvent.validateOrder()
+                .deliveryPlan()
+                .eligibility()
+                .compute());
     }
 }
 

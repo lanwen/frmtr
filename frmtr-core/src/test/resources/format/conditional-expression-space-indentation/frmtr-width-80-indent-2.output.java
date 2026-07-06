@@ -106,7 +106,9 @@ class ConditionalExpression {
     select(
       featureEnabled
         ? quotaAvailable
-        : regionAvailable.planReady().fallbackReady().policyReady()
+        : regionAvailable.planReady()
+            .fallbackReady()
+            .policyReady()
     );
   }
 

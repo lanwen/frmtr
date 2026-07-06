@@ -8,10 +8,8 @@ class LambdaBinaryBodyOpenerSample {
     }
 
     boolean nested(RoutePlan plan, InventorySnapshot inventory, PricingMatrix pricing) {
-        return plan
-                .candidateRoutes()
-                .flatMap(
-                    route -> inventory.availableWindows().flatMap(
+        return plan.candidateRoutes()
+                .flatMap(route -> inventory.availableWindows().flatMap(
                         window -> pricing.discountRules().map(
                             rule -> route.regionCode() == window.regionCode()
                                     && route.capacityUnits() > window.reservedUnits()
@@ -22,8 +20,7 @@ class LambdaBinaryBodyOpenerSample {
                                     && window.slotCode() == rule.slotCode()
                                     && rule.maximumUnits() < route.maximumUnits()
                         )
-                    )
-                )
+                ))
                 .orElse(false);
     }
 

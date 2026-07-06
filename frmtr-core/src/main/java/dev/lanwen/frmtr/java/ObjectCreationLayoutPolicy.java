@@ -76,6 +76,29 @@ final class ObjectCreationLayoutPolicy {
     }
 
     /**
+     * SPIKE (fan-root-true-column, #190). Reports whether a constructor's argument list is rendered SOURCE-NEUTRALLY —
+     * always by the width-driven {@code Doc.group}, never by the source-multiline-preserving branch — so a chain whose
+     * root is this constructor can be fanned identically on every pass regardless of how the author laid the arguments
+     * out.
+     *
+     * <p>This is exactly the negation of the state in which {@link #shouldPreserveSourceMultilineArguments} could ever
+     * return {@code true}, computed from AST-stable facts alone (no source-column inputs): a constructor with a flat
+     * argument count ({@code <= MAX_FLAT_ARGUMENTS}), no anonymous class body, no contained comments, and not a try
+     * resource always renders its arguments through {@link ObjectCreationPrinter#objectCreation}'s width-driven
+     * {@code Doc.group} — collapsing or breaking them purely by the rendered column. The object-creation-ROOT arm of
+     * {@link VariableInitializerLayout#variableInitializerFanBestFitting} gates on this so it only fans object-creation
+     * roots whose {@code chainFanOut} root doc is column-invariant; roots that could preserve source-multiline arguments
+     * (four-plus args, try resources, anonymous bodies) stay on their existing source-shape-sensitive branches, where
+     * their argument shape is already stable.
+     */
+    boolean constructorArgumentsAreWidthDriven(ObjectCreationExpr expression) {
+        return hasFlatArgumentCount(expression)
+            && expression.getAnonymousClassBody().isEmpty()
+            && expression.getAllContainedComments().isEmpty()
+            && !isTryResourceObjectCreation(expression);
+    }
+
+    /**
      * Reports whether a constructor root can stay compact when a surrounding method-call chain is forced to break.
      */
     boolean canKeepCompactChainRoot(ObjectCreationExpr expression, int compactWidth, int lineWidth) {

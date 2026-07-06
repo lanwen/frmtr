@@ -24,6 +24,7 @@ import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
 
 /**
@@ -82,6 +83,10 @@ final class LambdaExpressionPrinter {
 
     private final BiPredicate<Comment, Node> startsOnSameLine;
 
+    private final Function<MethodCallExpr, Optional<Doc>> lambdaBodyCanonicalFanChain;
+
+    private final Predicate<MethodCallExpr> lambdaBodyChainRootIsTrivialReceiver;
+
     private final ExpressionLambdaArgumentLayout expressionLambdaArguments;
 
     private final LambdaParameterHeaderLayout lambdaParameterHeaders;
@@ -106,6 +111,9 @@ final class LambdaExpressionPrinter {
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
             BiFunction<String, MethodCallExpr, Optional<Doc>> packedMethodCallChainBodyRenderer,
             BiFunction<String, MethodCallExpr, Optional<Doc>> huggedLambdaBodyChainRenderer,
+            Predicate<MethodCallExpr> lambdaBodyChainFansByCanonicalRule,
+            Function<MethodCallExpr, Optional<Doc>> lambdaBodyCanonicalFanChain,
+            Predicate<MethodCallExpr> lambdaBodyChainRootIsTrivialReceiver,
             BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList,
             Function<Node, String> compact,
             Function<Node, String> compactWithoutOwnComment,
@@ -135,6 +143,8 @@ final class LambdaExpressionPrinter {
         this.blockStatementWidth = blockStatementWidth;
         this.startsBefore = startsBefore;
         this.startsOnSameLine = startsOnSameLine;
+        this.lambdaBodyCanonicalFanChain = lambdaBodyCanonicalFanChain;
+        this.lambdaBodyChainRootIsTrivialReceiver = lambdaBodyChainRootIsTrivialReceiver;
         this.lambdaParameterHeaders = new LambdaParameterHeaderLayout(
             rawSource,
             options,
@@ -152,6 +162,7 @@ final class LambdaExpressionPrinter {
             brokenObjectCreationRenderer,
             packedMethodCallChainBodyRenderer,
             huggedLambdaBodyChainRenderer,
+            lambdaBodyChainFansByCanonicalRule,
             statementRenderer,
             methodCallArgumentList,
             compact,
@@ -176,6 +187,25 @@ final class LambdaExpressionPrinter {
 
     Doc parenthesizedLambdaBreak(LambdaExpr expression) {
         String parameters = lambdaParameters(expression);
+        // Trivial-receiver first-selector attach (gjf/prettier-java, comment #3). A parenthesized lambda statement whose body
+        // is a fan-threshold chain rooted at a TRIVIAL RECEIVER keeps the root (and its already-attached first selector, from
+        // {@code chainFanOut}) ANCHORED on the {@code ->} line — {@code (dispatchJob -> orderEvent.validateOrder()}⏎{@code
+        // .deliveryPlan()}… — rather than breaking after the arrow. This mirrors the same anchor
+        // {@link #lambdaBodyChainArrowBestFitting} applies for the argument/return positions and is keyed only on the root's
+        // AST kind, so it stays a structural fixpoint. Every other body keeps the unconditional break-after-arrow below.
+        Optional<Doc> attachedTrivialReceiverBody = expression.getExpressionBody()
+                .filter(MethodCallExpr.class::isInstance)
+                .map(MethodCallExpr.class::cast)
+                .filter(lambdaBodyChainRootIsTrivialReceiver)
+                .flatMap(chainBody -> lambdaBodyCanonicalFanChain.apply(chainBody))
+                .map(fanDoc -> Doc.concat(
+                        Doc.text("(" + parameters + " -> "),
+                        fanDoc,
+                        Doc.text(")")
+                ));
+        if (attachedTrivialReceiverBody.isPresent()) {
+            return attachedTrivialReceiverBody.orElseThrow();
+        }
         return Doc.concat(
             Doc.text("(" + parameters + " ->"),
             Doc.indent(Doc.concat(Doc.HARD_LINE, lambdaExpressionBody(expression))),
@@ -272,6 +302,34 @@ final class LambdaExpressionPrinter {
         if (methodCallBodyWithOpener.isPresent()) {
             return methodCallBodyWithOpener.orElseThrow();
         }
+        // Canonical-fan cutover seam, the lambda-body ARROW position (SPIKE, #190). Checked BEFORE the source-shape-gated
+        // body branches below ({@code methodCallBodyWithHeader}, {@code sourceMultilineMethodCallBodyWithHeader}, and the
+        // broken-after-arrow fallback) — because the oscillation it closes is exactly those branches disagreeing across
+        // passes for a fan-carrying lambda body. A {@code () -> admin.createTopics(...).all().get()} whose flat form does
+        // not fit alternates between break-after-{@code ->} ({@code () ->}⏎{@code admin}⏎{@code .createTopics(…)…}, the
+        // fallback, chosen when the raw body's first source line overflowed after the arrow) and attach-root-to-{@code ->}
+        // ({@code () -> admin}⏎{@code .createTopics(…)…}, chosen by {@code sourceMultilineMethodCallBodyWithHeader} once the
+        // previous pass fanned the body so its first source line is just the bare root) — the same {@code wasMultiline}/raw
+        // first-source-line gate the initializer break-after-{@code =} decider had. Ranking two AST-derived arms with
+        // {@code Doc.bestFitting} at the true rendered column makes the arrow verdict a fixpoint by construction: the U7 fan
+        // (root hugs the arrow, one selector per continuation line) is the attached arm, the same fan under an indented
+        // {@code ->} break is the broken arm, and {@code bestFitting} picks attach whenever the root fits after
+        // {@code params -> } and break only when it overflows.
+        //
+        // Placed AFTER {@code methodCallBodyWithOpener} (which fires only when the body's OUTERMOST call carries arguments,
+        // e.g. {@code entry -> entry.a().b().compose(x, y)} — that call keeps its opener shape, exploding its own argument
+        // list) so this seam does not reshape a chain the opener path already renders stably; the arrow-oscillating kafka
+        // shapes ({@code .all().get()}, {@code .stream()}, {@code .isPresent()}) have an argument-less outermost call, so
+        // the opener path returns empty for them and they fall here. It self-gates to fan-threshold comment/lambda-free
+        // carriers ({@code lambdaBodyCanonicalFanChain} returns empty otherwise — object-creation roots,
+        // chain-selector-hosted lambdas, comment/lambda chains), so every other body still reaches the unchanged branches
+        // below byte-identically.
+        Optional<Doc> chainArrowBestFitting = expressionBody.filter(MethodCallExpr.class::isInstance)
+                .map(MethodCallExpr.class::cast)
+                .flatMap(chainBody -> lambdaBodyChainArrowBestFitting(expression, parameters, chainBody));
+        if (chainArrowBestFitting.isPresent()) {
+            return chainArrowBestFitting.orElseThrow();
+        }
         Optional<Doc> methodCallBodyWithHeader = parametersHaveComments
             ? Optional.empty()
             : expressionBody.filter(MethodCallExpr.class::isInstance)
@@ -314,6 +372,66 @@ final class LambdaExpressionPrinter {
             Doc.text(" ->"),
             Doc.indent(Doc.concat(Doc.HARD_LINE, body))
         );
+    }
+
+    /**
+     * SPIKE (fan-root-true-column, #190). Makes the break-after-{@code ->} versus attach-root-to-{@code ->} verdict of a
+     * fan-carrying expression-lambda body SOURCE-NEUTRAL by ranking two AST-derived shapes with {@link Doc#bestFitting} at
+     * the true rendered column, replacing the {@code wasMultiline}/raw-first-source-line gate (
+     * {@code LambdaBodyHeaderLayout.sourceMultilineMethodCallBodyWithHeader} attaching, the broken-after-arrow fallback
+     * breaking) that picks divergent shapes across passes for a chain whose rendered body force-fans.
+     *
+     * <p>Both arms wrap the SAME fan Doc, produced ONCE by {@code lambdaBodyCanonicalFanChain} through the source-neutral
+     * {@code chainFanOut} with an empty {@link LayoutContext#leftEdgePrefix()} ({@link LayoutContext#root()}):
+     * <ul>
+     *   <li><b>Attached</b> ({@code () -> admin}⏎{@code .createTopics(…)}⏎{@code .all()}⏎{@code .get()}): the header text
+     *       {@code params -> } precedes the fan, so the chain root hugs the arrow line and the fan's own continuation indent
+     *       lays each selector one per line under it — byte-identical to the U7 hug shape and to what
+     *       {@code sourceMultilineMethodCallBodyWithHeader} rendered when it fired.</li>
+     *   <li><b>Broken</b> ({@code () ->}⏎{@code admin}⏎{@code .createTopics(…)}…): the arrow breaks and the same fan renders
+     *       under one continuation indent, byte-identical to the broken-after-arrow fallback's fanned body.</li>
+     * </ul>
+     * Rendering one prefix-agnostic fan and sharing it across arms is load-bearing (the initializer-seam lesson): the fan's
+     * root renders at {@link LayoutContext#root()} in BOTH arms, so a promoted-factory or method-call root's opener group
+     * cannot break differently between the two arms and re-flip. {@code bestFitting} scores line-count + overflow at the
+     * live column, so the attached arm (fewer lines, root hugged) wins whenever the root fits after {@code params -> } and
+     * the broken arm wins only when it overflows; both arms are pure AST functions, so the verdict is a fixpoint.
+     *
+     * <p>Returns empty when {@code lambdaBodyCanonicalFanChain} withholds the fan (a non-fan chain, an object-creation
+     * root, a chain-selector-hosted lambda, or any comment/block-lambda carrier) or when the lambda parameters must break
+     * or carry comments (those keep their dedicated header shapes), so every such body reaches the unchanged branches below.
+     */
+    private Optional<Doc> lambdaBodyChainArrowBestFitting(
+            LambdaExpr lambda,
+            String parameters,
+            MethodCallExpr chainBody
+    ) {
+        if (lambdaParameterHeaders.haveComments(lambda) || lambdaParametersShouldBreak(lambda, parameters)) {
+            return Optional.empty();
+        }
+        Optional<Doc> fan = lambdaBodyCanonicalFanChain.apply(chainBody);
+        if (fan.isEmpty()) {
+            return Optional.empty();
+        }
+        Doc fanDoc = fan.orElseThrow();
+        Doc attached = Doc.concat(Doc.text(parameters + " -> "), fanDoc);
+        // Trivial-receiver first-selector attach (gjf/prettier-java, comment #3). When the body chain's root is a TRIVIAL
+        // RECEIVER, {@code chainFanOut} has already glued the first selector to the root ({@code orderEvent.validateOrder()}),
+        // so the attached arm's opening line is just {@code params -> root.firstSelector()} — short by construction. The
+        // maintainer's convention keeps such a body ANCHORED on the {@code ->} line rather than breaking after the arrow, so
+        // commit the attached shape directly instead of ranking it against a break-after-arrow arm. This is a DETERMINISTIC
+        // STRUCTURAL rule keyed only on the root kind — never on width — so it stays a fixpoint, and it matches the attach the
+        // method-call-argument opener path ({@code dispatchJobForOrder(orderEvent -> orderEvent.validateOrder()}⏎…) already
+        // produces for the identical chain. A call/factory/object-creation root keeps the {@code bestFitting} ranking below,
+        // because there the opening line carries {@code params -> root(args)} and can genuinely overflow after the arrow.
+        if (lambdaBodyChainRootIsTrivialReceiver.test(chainBody)) {
+            return Optional.of(attached);
+        }
+        Doc broken = Doc.concat(
+            Doc.text(parameters + " ->"),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, fanDoc))
+        );
+        return Optional.of(Doc.bestFitting(List.of(attached, broken)));
     }
 
     private Optional<Doc> objectCreationBodyWithOpener(
@@ -1199,6 +1317,28 @@ final class LambdaExpressionPrinter {
      */
     Optional<Doc> huggableMethodCallExpressionLambdaArguments(String prefix, NodeList<Expression> arguments) {
         return expressionLambdaArguments.huggableMethodCallArguments(prefix, arguments);
+    }
+
+    /**
+     * Exposes {@link ExpressionLambdaArgumentLayout#methodCallBodyWithOpener} — the source-neutral lambda-body opener hug
+     * ({@code params -> bodyCall(}⏎ body arguments ⏎{@code )}) — so a fanned chain selector whose sole argument is a
+     * single-method-call-body expression lambda can hug its opener directly ({@code MethodCallChainPrinter}'s
+     * {@code singleCallLambdaBodyOpenerHug}) when the shared {@code huggableMethodCallArguments} renderer handed back only the
+     * degenerate flat one-liner (review round 2, comment #3).
+     */
+    Optional<Doc> expressionLambdaMethodCallBodyOpener(String parameters, MethodCallExpr methodCall) {
+        return expressionLambdaArguments.methodCallBodyWithOpener(parameters, methodCall);
+    }
+
+    /**
+     * Exposes {@link ExpressionLambdaArgumentLayout#logicalBinaryLambdaBodyOpenerHug} — the source-neutral logical-binary
+     * opener hug ({@code param -> <first operand>}⏎ each following {@code &&}/{@code ||} operand ⏎{@code )}) — so a fanned
+     * chain selector whose sole argument is a logical-binary-body expression lambda can hug its opener with a dedented close
+     * ({@code MethodCallChainPrinter}'s {@code expressionBodyOpenerHug}, review round 3) instead of breaking the selector
+     * parenthesis onto its own line.
+     */
+    Optional<Doc> expressionLambdaLogicalBinaryBodyOpenerHug(String prefix, MethodCallExpr expression) {
+        return expressionLambdaArguments.logicalBinaryLambdaBodyOpenerHug(prefix, expression);
     }
 
     Optional<ExpressionLambdaArgumentLayout.Plan> huggableExpressionLambdaArgumentPlan(

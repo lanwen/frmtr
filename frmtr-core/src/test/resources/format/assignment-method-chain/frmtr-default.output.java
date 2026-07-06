@@ -1,8 +1,7 @@
 class AssignmentMethodChainSample {
 
     void tune(Config config) {
-        config = config
-                .withMinimum(12)
+        config = config.withMinimum(12)
                 .withDesired(12)
                 .withMaximum(50)
                 .withMode(SelectionMode.LEASED_PLUS_PENDING);

@@ -26,7 +26,10 @@ public class ThisIsASampleClass extends C1 implements I1, I2, I3, I4, I5 {
         s1 = s2 = s3 = "012345678901456";
         assert i + j + k + l + n + m <= 2 : "assert description";
         int y = 2 > 3 ? 7 + 8 + 9 : 11 + 12 + 13;
-        super.getFoo().foo().getBar().bar();
+        super.getFoo()
+                .foo()
+                .getBar()
+                .bar();
 
         label: if (2 < 3) {
             return;

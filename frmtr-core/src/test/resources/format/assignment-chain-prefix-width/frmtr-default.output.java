@@ -11,6 +11,10 @@ class RoutingTablePrefixWidth {
     }
 
     void fitting() {
-        routeTable = new RouteTableConfigBuilder().setName("primaryRoutingDomainHandler").seal().commit().materialize();
+        routeTable = new RouteTableConfigBuilder()
+                .setName("primaryRoutingDomainHandler")
+                .seal()
+                .commit()
+                .materialize();
     }
 }

@@ -517,30 +517,119 @@ keep `call(() -> inner(` on one opener when the author broke a lambda body) appl
 `openerOverflows`: they measure the opener at the lambda's rendered indentation (`LayoutWidth.nodeIndentWidth`, which
 counts every enclosing type and block) and take the wider of that and the historical shallow baseline, so a hug nested
 inside `if`/`for` bodies that overflows at its true depth breaks instead of being frozen over width while shallow fitting
-hugs stay unchanged. When the lambda body is instead a **bare-call-rooted method-call chain** that overflows
-(`someCall(x -> assertThat(x).extracting(...).containsOnly("v"))`, #221 Case A), `ExpressionLambdaArgumentLayout` fans it
-by dots — the compact root on the lambda-header line, each `.selector(...)` on its own dotted continuation line, a
-single-simple-argument tail kept compact, and the **enclosing call's `)` dedented to its own line at the opener's column**
-(`someCall(x -> assertThat(x)`⏎`.extracting(...)`⏎`.containsOnly("v")`⏎`)`) — rather than packing the flat chain and
-opening only the tail argument (`…containsOnly(`⏎`"v"`⏎`)`). The dedented close is the same shape a broken argument list
-renders (`foo(`⏎`arg`⏎`)`, close back at the statement-start column) and the packed lambda-body shapes'
-`PackedLambdaBody.CLOSING_ON_OWN_LINE` produce: the fanned chain carries its own continuation indent while the trailing
-`HARD_LINE` + `)` stay outside any extra indent, so they land at the enclosing statement's column; a header opening several
-calls before the break stacks their closes on that one dedented line. The branch runs after the compact-flat shape
-(`compactBodyWithClosingLine`) and before the packed-opener shapes (`packedLambdaBody`), and its gate
-(`overflowingHuggedBareRootChainBody`) is deliberately narrow so it moves only genuine Case-A chains and nothing else: the
-chain root is an **unscoped call** (`assertThat(x)`, which the scoped-root packer `packedExpressionLambdaBodyChain` cannot
-fan — chains rooted at a name/type/field keep that packer's greedy shape); **every call stays flat** (no
-lambda/comment/source-multiline argument, mirroring the chain printer's `compactMethodCallChainSegmentCanStayFlat`, so a
-lambda-tail or text-block-argument chain keeps the opener-packing shape); the compact chain **overflows at its real
-rendered column** (`nodeIndentWidth` + the `someCall(x -> ` header prefix + compact chain, not the shallow baseline the
-sibling body probes use); and the fan is a **width-safe improvement** (`huggedFanFits`: at least two dotted selectors so it
-is a fan and not a one-dot break, the root fits after the header, and every selector fits at the double continuation
-indent). All four conditions read AST text and block/type nesting only, so the decision is identical whether the input
-arrived flat or already fanned — a fixpoint. It renders through
-`huggedLambdaBodyChain` → `forcedMethodCallChain(expr, layout.withLeftEdgePrefix(firstLine + " "))`, the forced-chain
-entry that (unlike `brokenMethodCall`, which for a source-single-line chain opens the tail argument) reaches the chain
-printer's segment fan-out directly; the `leftEdgePrefix` conveys the header column to the forced chain's own width gates.
+hugs stay unchanged. When the lambda body is instead a **method-call chain** that reaches the End-state A canonical-fan
+threshold (`MethodCallChainPrinter.lambdaBodyChainFansByCanonicalRule`, the U7 lambda-body position of the canonical-fan
+cutover), `ExpressionLambdaArgumentLayout` fans it by dots — the chain root on the lambda-header line, each
+`.selector(...)` on its own dotted continuation line, a single-simple-argument tail kept compact, and the **enclosing
+call's `)` dedented to its own line at the opener's column**
+(`someCall(x -> assertThat(x)`⏎`.extracting(...)`⏎`.containsOnly("v")`⏎`)`; `verifier.each(h -> journalWriter`⏎`.atInfo()`⏎`.addValue(...)`⏎`.log(...))`)
+— rather than packing the flat chain and opening only the tail argument (`…containsOnly(`⏎`"v"`⏎`)`). This is the same
+source-neutral fan every other chain position cuts over to: a chain that structurally fans by link count / root kind fans
+here **even when the flat body would fit**, matching gjf/prettier's "one segment per line once the chain is a builder"
+convention. The dedented close is the same shape a broken argument list renders (`foo(`⏎`arg`⏎`)`, close back at the
+statement-start column) and the packed lambda-body shapes' `PackedLambdaBody.CLOSING_ON_OWN_LINE` produce: the fanned
+chain carries its own continuation indent while the trailing `HARD_LINE` + `)` stay outside any extra indent, so they land
+at the enclosing statement's column; a header opening several calls before the break stacks their closes on that one
+dedented line. The branch runs before the compact-flat shape (`compactBodyWithClosingLine`) — so a fan-threshold chain
+fans instead of staying flat — and before the packed-opener shapes (`packedLambdaBody`).
+
+This lambda-body fan is one host position of the **End-state A canonical-fan cutover**, the formatter's chain-wrapping
+policy: a multi-link chain that meets the structural fan threshold (`MethodCallChainSourcePlanner.chainBreaksByRule` —
+a call/factory/constructor root at two or more selectors, a plain receiver `NameExpr`/`FieldAccessExpr`/`this`/`super`
+at three or more) fans one selector per dotted line **even when the flat form would fit**, matching google-java-format /
+prettier-java's "one segment per line once the chain is a builder" convention. #163 tried this rule imperatively and
+regressed idempotence (source-shape-sensitive per-printer decisions oscillated between passes); the cutover instead makes
+each enclosing attach/break/dispatch verdict **renderer-resolved** — it emits the one source-neutral fan Doc from
+`MethodCallChainPrinter.chainFanOut` (a pure function of the AST, built once at `LayoutContext.root()` and shared across
+arms) and ranks it against the attached/compact alternative with `Doc.bestFitting`/`Doc.conditionalGroup` at the true
+output column, so the shape is a fixpoint by construction. The same seam is replicated at every chain host: local-variable
+and field initializers (`VariableInitializerLayout.variableInitializerFanBestFitting`), assignment RHS, `return`,
+method-call and object-creation arguments (`MethodCallPrinter`), binary / logical / string-concat operands
+(`BinaryExpressionPrinter` + `BreakableArgumentExpressionPrinter`), statement expressions, the expression-lambda body
+(above), and the factory- and object-creation chain root itself (rendered as a width-driven `Doc.group` so its argument
+list breaks at the true column). Comment-bearing chains are withheld from the fan and kept on the imperative
+comment-preserving cascade — including a trailing line comment in the root→first-selector gap
+(`MethodCallChainPrinter.rootHasTrailingLineCommentBeforeFirstSegment`, folded into `hasComments`), whose omission would
+otherwise drop the comment when the source-neutral root re-render discards it (comments are not AST nodes, so
+`--verify`/AST-equivalence cannot catch such a drop — `CommentPresenceDiagnosticTest` is the gate). The cutover is
+idempotence net-positive on the corpus — apache/kafka 179→151, apache/camel 193→186 non-idempotent files, AST-equivalent
+throughout — and its residual per-file oscillations are tracked as follow-ups: the chain-selector lambda-body hug
+(`huggableExpressionLambdaArguments` source-neutrality), a condition-path binary re-break, and a trailing-comment reflow.
+
+Three google-java-format / prettier-java **attach nuances** refine that one-selector-per-line default, each keyed only on
+AST structure (never width or source shape) so they stay fixpoints:
+
+- **Trivial-receiver first-selector attach.** When the fan root is a *trivial receiver* — a bare
+  `NameExpr`/`FieldAccessExpr`/`this`/`super` (`MethodCallChainPrinter.chainRootIsTrivialReceiver`), not a
+  call/factory/constructor root — `chainFanOut` keeps `root.firstSelector()` on the opening line and fans from the SECOND
+  selector: `return argument.getRange()`⏎`.map(...)`, `((OffsetFetchRequestData) response.unsentRequests.get(0)`⏎
+  `.requestBuilder()`…, and the lambda-body form `dispatchJob -> orderEvent.validateOrder()`⏎`.deliveryPlan()`… (anchored on
+  the `->` line via `LambdaExpressionPrinter.parenthesizedLambdaBreak` / `lambdaBodyChainArrowBestFitting`, not broken after
+  the arrow). Gated to a genuine canonical fan (`calls.size() >= 3`, the plain-receiver threshold — not a width-driven
+  two-selector chain), to a first selector that is ATTACH-SAFE (`firstSelectorAttachesSafely` — no type arguments and only
+  simple leaf arguments, so it is an atomic token that never opens its own broken argument list), and to a root at least one
+  indent unit wide (`rootAvoidsShortRootPadding`, so `chainContinuation`'s short-root padding branch — which diverges from the
+  imperative fall-through's fan-from-first shape — never fires). A call/factory/constructor root keeps the fan-from-first
+  shape.
+- **Single expression-lambda argument hugs its call opener.** A fanned chain selector whose sole argument is an expression
+  lambda keeps the lambda opener glued to the selector rather than breaking the selector parenthesis onto its own line,
+  restoring the `huggableExpressionLambdaArguments` hug the one-per-line fan over-broke. Review round 2 broadened this from
+  the round-1 object-creation-only hug to the SOURCE-NEUTRAL hug shapes (`MethodCallChainPrinter.expressionBodyOpenerHug`):
+  an OBJECT CREATION (`.reduce((left, right) -> new ImageCounter(`⏎…), an object-creation-rooted chain with a non-empty
+  outermost call (`.map(listener -> new VotersEndpoint().setName(…).setHost(`⏎…), and a TERNARY
+  (`.onErrorResume(ex -> cond`⏎`? then`⏎`: else`⏎`)`, review comment #2, whose shared `packedConditionalBody` hug is a pure
+  width function of the AST). Review round 3 adds a LOGICAL BINARY body (`&&`/`||`,
+  `.map(region -> region.beginOffset() == expected.beginOffset()`⏎`&& region.endOffset() == expected.endOffset()`⏎`)`),
+  hugging the first operand on the selector line, stacking each following operand one per line, and dedenting the close.
+  Unlike the object-creation/ternary hug it is built through the DIRECT source-neutral
+  `ExpressionLambdaArgumentLayout.logicalBinaryLambdaBodyOpenerHug` (a pure `nestedLines` AST render with a fixed dedented
+  close), NOT the shared `huggableExpressionLambdaArguments` `plan` path — whose `sourceMultilineBody` entry gate and
+  source-shaped close placement (`ExpressionLambdaClosingLayout.callClosingStaysOnLambdaBodyLine`) flip the shape across
+  passes, which is why round 2 dropped the binary hug. The separately-gated `binaryMethodCallBodyWithOpener`
+  (`sourceMultilineBinaryMethodCallBody`, which oscillated `.map(x -> x.f(a) == ALLOWED)` in `AuthHelper`) is never touched;
+  a top-level RELATIONAL body (`x -> f(...) == ALLOWED`) is not a logical binary, so it stays on the source-neutral
+  broken-segment shape and does not oscillate. A SINGLE-method-call body whose
+  source lambda body started on the selector line — for which the shared renderer hands back only a degenerate flat
+  one-liner — hugs its opener through a direct, source-neutral `MethodCallChainPrinter.singleCallLambdaBodyOpenerHug`
+  (`.forEach((tp, partitionData) -> replicaBuffer.addFetchedData(`⏎…⏎`))`, review comment #3), which wraps
+  `ExpressionLambdaArgumentLayout.methodCallBodyWithOpener` in the selector parenthesis. Scoped to a FANNED selector
+  (`segmentOnOwnLine`, a stable continuation column) and to an object-creation-rooted chain whose outermost call carries
+  arguments (an empty trailing `.build()` has no argument list to break and would malform); a single-selector tail
+  (`spanFor(x).orElseThrow(() -> new X(…))`) keeps the broken-segment shape.
+- **Binary / string-concat operand break.** A binary whose fan-chain operand is NOT the last operand
+  (`MethodCallChainPrinter.binaryNonFinalOperandFansChain`) renders one operand per line — each operator-led operand on its
+  own line — instead of the flat operators-inline shape, so a following operator no longer glues onto the previous operand's
+  fanned tail (`.orElse("")`⏎`+ routeAssemblyStep.templateTypeArguments()`…, `ReturnExpressionPrinter`). A binary whose only
+  fan-chain operand is the last one keeps the flat commit.
+- **Factory / type-like root keeps `Type.factory` glued (review round 2).** A `promotesFirstCall` root (an uppercase
+  `NameExpr`/type `FieldAccessExpr`) folds its first call onto the root/continuation line so the type qualifier never splits
+  from its selector — "class + method should not break until there is a space left". `MethodCallChainPrinter.promotedFactoryRootDoc`
+  renders a ZERO-ARGUMENT factory call (`CacheFactory.newBuilder()`) as ATOMIC text rather than the `softChainContinuation`
+  group that would split `CacheFactory`⏎`.newBuilder()`, and folds a MULTI-ARGUMENT lambda-carrying factory call
+  (`Flux.usingWhen(a, connection -> …, Connection::close)`, `expressionLambdaFactoryCallFoldsAsMultiArgGroup`) through the
+  width-driven multi-argument group (`Flux.usingWhen(` on the root line, arguments fanned, `)` dedented) instead of leaving
+  `Flux` on its own line. In the initializer, this makes the break-after-`=` verdict a pure fit-gate decision in
+  `VariableInitializerLayout.variableInitializerFanBestFitting`: both `bestFitting` arms share one prefix-agnostic fan Doc, so
+  a long-typed declaration whose attached first line (`NAME = CacheFactory.newBuilder()`) overflows drops the attached arm and
+  breaks after `=` (`NAME =`⏎`CacheFactory.newBuilder()`⏎`.maximumSize(…)`…), while a short LHS (`Number result = Flux.usingWhen(`)
+  keeps the factory root attached because the atomic opener fits there.
+
+The gate is the shared `chainFansByCanonicalRule` (structural fan threshold; comment / block-lambda / lambda-arrow chains
+withheld) scoped further for the lambda-body position: **object-creation-rooted chains are deferred**
+(`!(root instanceof ObjectCreationExpr)`). The lambda-body fan renders the chain root through `chainFanOut` at
+`LayoutContext.root()` (column zero) regardless of the header's real column — sound for a column-invariant root (a bare
+`NameExpr`/`FieldAccessExpr`/`this` receiver, or an unscoped bare call whose flat form is atomic) but not for
+`new X()`, which hugs its first selector on a flat-source pass and breaks onto its own line on a source-multiline pass, so
+a `.map(x -> new Record().setA(...).setB(...))` body fanned here would oscillate `new Record().setA(` ⇄
+`new Record()`⏎`.setA(` forever. Object-creation-rooted lambda-body chains therefore stay on the packed / opener-breaking
+shapes below (already source-shape-stable for them) and remain the deferred slice of this cutover — the nested-root gap
+the chain-path-unification plan names for `chainFanOut` rendering a non-name root at `root()`. The narrower legacy gate
+`overflowingHuggedBareRootChainBody` (unscoped bare-call root, every call flat, overflows at its real rendered column, and
+`huggedFanFits`) is retained as a subsumed fallback after `compactBodyWithClosingLine`. Both triggers render through the
+shared `huggedLambdaBodyChain` → `forcedMethodCallChain(expr, layout.withLeftEdgePrefix(firstLine + " "))`, the
+forced-chain entry that (unlike `brokenMethodCall`, which for a source-single-line chain opens the tail argument) reaches
+the chain printer's segment fan-out directly; the `leftEdgePrefix` conveys the header column to the forced chain's own
+width gates.
 The first-line hug gate that decides whether that plan is built at all
 (`ExpressionLambdaArgumentLayout.expressionLineWidth`, which measures the call prefix, leading arguments, and lambda
 header up to `->`) uses the same rendered-column rule: it previously reconstructed the prefix's start column from the
@@ -786,13 +875,14 @@ serve non-positional callers (a plain `methodCall`/`methodReference` with no bro
 carries the same-line text ahead of the node; its reader is `MethodCallChainPrinter.compactRootLineWidth`, which the
 `return` chain feeds `withLeftEdgePrefix("return ")` and the variable-initializer chain feeds
 `withLeftEdgePrefix(flatName + " = ")` (LDM-2f, #190, above) so the gate measures at the exact rendered column and drops
-its source-column floor. The expression-lambda body chain is the third feeder (#221 Case A): when a lambda body is a
-bare-call-rooted method-call chain (`someCall(x -> assertThat(x).extracting(...).containsOnly("v"))`) that overflows at
-its real rendered column, `ExpressionLambdaArgumentLayout` fans it onto dotted continuation lines while it hugs the lambda
+its source-column floor. The expression-lambda body chain is the third feeder (#221 Case A, generalized to the
+canonical-fan U7 lambda-body position): when a lambda body is a non-object-creation-rooted method-call chain that fans by
+the End-state A rule (`someCall(x -> assertThat(x).extracting(...).containsOnly("v"))`, `verifier.each(h -> journalWriter.atInfo().addValue(...).log(...))`),
+`ExpressionLambdaArgumentLayout` fans it onto dotted continuation lines while it hugs the lambda
 header, routing through `ExpressionPrinters.huggedLambdaBodyChain` →
 `MethodCallPrinter.forcedMethodCallChain(expr, CURRENT, layout.withLeftEdgePrefix(firstLine + " "))` so every width gate
 the forced chain consults measures past the `someCall(x -> ` prefix (detailed with the expression-lambda layout helpers
-above). The record stays a plain record with a `root()` default of no prefix, no
+above; object-creation-rooted lambda bodies are deferred because that root is not column-invariant at `root()`). The record stays a plain record with a `root()` default of no prefix, no
 trailer, and no leading break, plus `withTrailingContent`, `withLeadingBreak`, and `withLeftEdgePrefix` derivations, so it
 is native-image safe and every non-header, non-broken, non-prefixed call site is unaffected.
 The throws gate's *measurement* now runs at the declaration's real rendered column (`LayoutWidth.nodeLine` floored by

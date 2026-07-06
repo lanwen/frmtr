@@ -64,7 +64,7 @@ The biggest opportunities are therefore not "rewrite," but targeted leverage:
 ## 🟥 Big — architectural, high-leverage
 
 ### B1. Centralize source-shape coupling into one explicit policy
-**Status:** ✅ Done — `SourceShapePolicy` consolidation + shape-independent comment ownership landed; the comment-drop backlog is drained (`CommentPresenceDiagnosticTest.KNOWN_DROPS` empty). One residual, reassigned to B2 and now **underway**: the `strict-claims` guardrail stays off. B2's ownership consolidation has begun — Stage 1 migrated the trailing-line-comment family to an explicit pre-claim ownership pre-pass + `ownsHere` filter (output-neutral; the trailing family is the unique one a source-order rule reproduces byte-for-byte). The residual that still keeps strict-claims off is the not-yet-migrated traversal-order families (leading/adjacent/own/interleaved/orphan, where a pure source-order rule diverges ~12% on contested leading/own comments — the parent-interleaver-beats-child cases) plus the eager `Optional<Doc>` candidate-ladder probe re-claims; enabling strict-claims needs both all families migrated and claim-free probe rendering (the B2 conditionalGroup/lineSuffix migration). · _focused proposal:_ [source-shape-policy-consolidation.md](source-shape-policy-consolidation.md)
+**Status:** ✅ Done — `SourceShapePolicy` consolidation + shape-independent comment ownership landed; the comment-drop backlog is drained (`CommentPresenceDiagnosticTest.KNOWN_DROPS` empty). One residual, reassigned to B2 and now **underway**: the `strict-claims` guardrail stays off. B2's ownership consolidation has begun — Stage 1 migrated the trailing-line-comment family to an explicit pre-claim ownership pre-pass + `ownsHere` filter (output-neutral; the trailing family is the unique one a source-order rule reproduces byte-for-byte). The residual that still keeps strict-claims off is the not-yet-migrated traversal-order families (leading/adjacent/own/interleaved/orphan, where a pure source-order rule diverges ~12% on contested leading/own comments — the parent-interleaver-beats-child cases) plus the eager `Optional<Doc>` candidate-ladder probe re-claims; enabling strict-claims needs both all families migrated and claim-free probe rendering (the B2 conditionalGroup/lineSuffix migration). · _focused proposal:_ [source-shape-policy-consolidation.md](source-shape-policy-consolidation.md) · _successor:_ [B4 / reprint-by-default-break-rules.md](reprint-by-default-break-rules.md)
 
 > **Investigation finding:** ~115 distinct source-peeking call sites (26 `sourceShape.*`, 41
 > `rawSource.*`, 43 `compactSource.*`, 5 hand-rolled blank-line probes) answer the same few
@@ -177,6 +177,17 @@ is why an earlier change silently dropped enum separators undetected. Add three 
 
 - **Serves:** correctness, plus the confidence to do B1/B2 aggressively.
 - **Effort:** medium-large; layer 1 is small and high-value alone.
+
+---
+
+### B4. Reprint by default: structural break rules + a closed source-shape exception set
+**Status:** 🔵 Proposed — successor to B1, sibling to the layout decision model. Flip the default from
+preserve-the-author's-shape to reprint-from-scratch: keep source-shape reads only as a closed,
+justified, ratchet-guarded `SourceShapeException` set; retire the `wasMultiline` family behind named
+structural `BreakRule`s (a pure-AST predicate + a source-neutral layout ranked at the true output
+column — the canonical fan #256 is the landed precedent); and attribute every break via `--explain`.
+Scopes out AST-changing rewrites; keeps the data-driven config surface reachable via a closed
+combinator vocabulary. · _focused proposal:_ [reprint-by-default-break-rules.md](reprint-by-default-break-rules.md)
 
 ---
 
@@ -425,6 +436,7 @@ Drafted for this roadmap:
 | S7/S9 | Comment-handling findings → B-work map | [comment-handling-findings.md](comment-handling-findings.md) |
 | B2/B3 | Context-dependent layout decision model (rank broken layouts; LDM-1…LDM-5) | [layout-decision-model.md](layout-decision-model.md) |
 | LDM-3 follow-up | Convergence redesign: source-neutral fan-out + opener-attachment ranking (unblocks #191/#221/#220) | [convergence-redesign.md](convergence-redesign.md) |
+| B4 | Reprint by default: structural break rules + closed source-shape exception set | [reprint-by-default-break-rules.md](reprint-by-default-break-rules.md) |
 
 Pre-existing, related:
 

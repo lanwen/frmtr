@@ -67,9 +67,12 @@ final class LambdaExpressionArgumentOpener {
         return cacheTemplate
                 .<String, byte[]>opsForHash()
                 .entries(imagesKey)
-                .collectMap(Map.Entry::getKey, entry -> Long.parseLong(
+                .collectMap(
+                    Map.Entry::getKey,
+                    entry -> Long.parseLong(
                         new String(entry.getValue(), StandardCharsets.UTF_8)
-                ));
+                    )
+                );
     }
 
     GatewayPlan route(GatewayPlan plan, Resolver resolver) {
@@ -82,8 +85,7 @@ final class LambdaExpressionArgumentOpener {
     }
 
     ResponseSpec keepsSourceMultilineChainLambda(WebClient client, Map<String, String> query, String account) {
-        return client
-                .get()
+        return client.get()
                 .uri(spec -> spec.path("/metrics/{account}/summary").queryParams(MultiValueMap.fromSingleValue(query))
                             .build(account)
                 )
@@ -129,8 +131,7 @@ final class LambdaExpressionArgumentOpener {
     }
 
     StubFlow fallsThroughManagers(AuthToken authentication, List<ReactiveAuthenticationManager> managers, int index) {
-        return managers
-                .get(index)
+        return managers.get(index)
                 .authenticate(authentication)
                 .onErrorResume(ex -> index + 1 < managers.size()
                         ? authenticate(authentication, managers, index + 1)
@@ -145,8 +146,7 @@ final class LambdaExpressionArgumentOpener {
     }
 
     StubFlow repeatsUntilEvent(StubFlow source, EventConsumer consumer, Predicate<Event> filter) {
-        return source
-                .records()
+        return source.records()
                 .filter(filter)
                 .map(EventRecord::value)
                 .doFinally(signal -> consumer.unsubscribe())
@@ -162,15 +162,17 @@ final class LambdaExpressionArgumentOpener {
 
     ClientSpec keepsLastLambdaArgumentAttached(ClientSpec builder) {
         return builder
-                .defaultStatusHandler(StatusCode.NOT_FOUND::isSameCodeAs, resp -> resp.releaseBody().ofType(
+                .defaultStatusHandler(
+                    StatusCode.NOT_FOUND::isSameCodeAs,
+                    resp -> resp.releaseBody().ofType(
                         Exception.class
-                ))
+                    )
+                )
                 .filter(new FilterStep("alpha"));
     }
 
     StubFlow keepsLoggingBodyUnderLimit(StubFlow source, Logger log, String itemId) {
-        return source
-                .prepare()
+        return source.prepare()
                 .then(source.expire(itemId, DEFAULT_TTL))
                 .doOnError(error -> log.atError().addValue("item.id", itemId).log(
                         "Failed to persist buffered event for item",
@@ -283,14 +285,11 @@ final class LambdaExpressionArgumentOpener {
             String tenantId,
             List<LocalDate> windows
     ) {
-        return usageRepository
-                .fetchRows(tenantId)
+        return usageRepository.fetchRows(tenantId)
                 .collectList()
-                .map(knownRows -> windows
-                            .stream()
+                .map(knownRows -> windows.stream()
                             .map(window -> {
-                                return knownRows
-                                        .stream()
+                                return knownRows.stream()
                                         .filter(row -> row.window().equals(window))
                                         .findFirst()
                                         .orElseGet(() -> WindowUsage.builder()
@@ -309,14 +308,11 @@ final class LambdaExpressionArgumentOpener {
             String tenantId,
             List<LocalDate> accountingWindows
     ) {
-        return projectionRepository
-                .fetchRows(tenantId)
+        return projectionRepository.fetchRows(tenantId)
                 .collectList()
-                .map(projectedRows -> accountingWindows
-                            .stream()
+                .map(projectedRows -> accountingWindows.stream()
                             .map(accountingWindow -> {
-                                return projectedRows
-                                        .stream()
+                                return projectedRows.stream()
                                         .filter(
                                             projectedWindowUsage -> projectedWindowUsage.accountingWindow().equals(accountingWindow)
                                         )
@@ -332,11 +328,9 @@ final class LambdaExpressionArgumentOpener {
     }
 
     FlowResult combinesCounters(CounterStream counterStream) {
-        return counterStream
-                .grouped()
+        return counterStream.grouped()
                 .flatMapIterable(Map::values)
-                .map(counters -> counters
-                            .stream()
+                .map(counters -> counters.stream()
                             .reduce((left, right) -> new ImageCounter(
                                     left.projectedImageReference(),
                                     left.projectedContainerCount() + right.projectedContainerCount()

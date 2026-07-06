@@ -9,6 +9,7 @@ import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Renders expression arguments that may need their own broken form inside a broken argument list.
@@ -33,6 +34,8 @@ final class BreakableArgumentExpressionPrinter {
 
     private final Function<Expression, String> compact;
 
+    private final Predicate<Expression> binaryFansChainOperand;
+
     private final ConditionalExpressionLineProjection conditionalProjection;
 
     private final LayoutWidth layoutWidth;
@@ -43,6 +46,7 @@ final class BreakableArgumentExpressionPrinter {
             Function<Expression, Doc> expressionRenderer,
             Function<Expression, Optional<Doc>> brokenArgumentRenderer,
             Function<Expression, String> compact,
+            Predicate<Expression> binaryFansChainOperand,
             LayoutWidth layoutWidth
     ) {
         this.sourceShapePolicy = sourceShapePolicy;
@@ -50,6 +54,7 @@ final class BreakableArgumentExpressionPrinter {
         this.expressionRenderer = expressionRenderer;
         this.brokenArgumentRenderer = brokenArgumentRenderer;
         this.compact = compact;
+        this.binaryFansChainOperand = binaryFansChainOperand;
         this.conditionalProjection = new ConditionalExpressionLineProjection(compact);
         this.layoutWidth = layoutWidth;
     }
@@ -70,6 +75,23 @@ final class BreakableArgumentExpressionPrinter {
     // object-creation argument lists that do not thread a context yet).
     Doc argument(Expression argument, String suffix) {
         Doc flat = expressionRenderer.apply(argument);
+        // Canonical-fan cutover seam U8: when this argument is a binary/ternary whose dispatched {@code flat} rendering
+        // already fans a fluent chain operand by the End-state A structural rule, commit that {@code flat} shape and do
+        // not offer the operand-per-line {@code broken} alternative. The {@code flat}/{@code broken} choice below is gated
+        // on the source-shape {@code wasMultiline(argument)} signal, which flips once {@code flat}'s first pass makes the
+        // operand span source lines; {@code flat} fans the operand (via the dispatched source-neutral {@code chainFanOut})
+        // while {@code broken} keeps it flat with the operator on its own line, so the two arms are different byte shapes
+        // and {@code ifBreak} oscillates between them forever (KafkaConsumerTest {@code chain + 1}, SinglePointMetricTest
+        // {@code chain || chain}). {@code flat} is itself a pure function of the AST — the chain fans by the width-
+        // independent link-count rule on every pass — so returning it unconditionally is the fixpoint. Chains the rule
+        // does not fan (a plain-receiver 1–2-link operand, the #119 {@code binary-chain-wrap-converge} guard) and
+        // comment / lambda chains are excluded by {@code binaryFansChainOperand}, so those arguments keep the width- and
+        // source-shape-driven {@code broken} arm below byte-for-byte. The carve-out predicate is the shared
+        // {@link MethodCallChainPrinter#binaryFansChainOperand}, so every binary-operand carrier (this argument path, the
+        // single-binary-argument path, the broken object-creation binary argument) applies one carve-out definition.
+        if (binaryFansChainOperand.test(argument)) {
+            return flat;
+        }
         Optional<Doc> broken = brokenArgument(argument);
         if (
             broken.isPresent()
@@ -89,6 +111,16 @@ final class BreakableArgumentExpressionPrinter {
     Doc sourceMultilineArgument(Expression argument, String suffix) {
         Doc flat = expressionRenderer.apply(argument);
         if (binaryPlusContainsSourceMultilineMethodCallArgument(argument)) {
+            return flat;
+        }
+        // Canonical-fan cutover seam U8: same convergence as {@link #argument(Expression, String)}, on the
+        // source-multiline argument-list path (a method-call argument list whose arguments already span source lines, e.g.
+        // {@code assertTrue("...", chain.equals(a) || chain.equals(b))} once its second argument wrapped). Here the arm
+        // choice returns {@code broken} outright rather than {@code ifBreak}, so a binary/ternary argument whose {@code flat}
+        // rendering fans a chain operand by the End-state A rule must commit {@code flat} — the source-neutral fan — or it
+        // flips to the operand-per-line {@code broken} shape on the pass that observes the wrapped argument list. Non-fan /
+        // comment / lambda chains are excluded by {@code binaryFansChainOperand} and keep the {@code broken} arm.
+        if (binaryFansChainOperand.test(argument)) {
             return flat;
         }
         Optional<Doc> broken = brokenArgument(argument);

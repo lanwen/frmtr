@@ -15,8 +15,7 @@ public class IgnoredFormatterSections {
             int auditLevel
     ) {
         for (int i = 0; i < accountId; i++) {
-            catalogClient
-                    .loadCatalog()
+            catalogClient.loadCatalog()
                     .loadCatalog()
                     .loadCatalog()
                     .loadCatalog()

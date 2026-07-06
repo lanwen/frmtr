@@ -200,7 +200,9 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
         }
 
         K getKey(int index) {
-            return keyIndex.keySet().asList().get(index);
+            return keyIndex.keySet()
+                    .asList()
+                    .get(index);
         }
 
         abstract String getKeyRole();
@@ -813,7 +815,8 @@ public final class ArrayTable<R, C, V> extends AbstractTable<R, C, V> implements
         countryRepository.saveAndFlush(country);
 
         // Get all the countryList
-        restCountryMockMvc.perform(get("/api/countries?sort=id,desc"))
+        restCountryMockMvc
+                .perform(get("/api/countries?sort=id,desc"))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON_UTF8_VALUE))
                 .andExpect(jsonPath("$.[*].id").value(hasItem(country.getId().intValue())))

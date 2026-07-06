@@ -15,6 +15,7 @@ import com.github.javaparser.ast.expr.CastExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
@@ -65,6 +66,20 @@ final class VariableInitializerLayout {
         Optional<Doc> apply(MethodCallExpr expression, ToIntFunction<String> firstLineWidth, LayoutContext layout);
     }
 
+    /**
+     * SPIKE (fan-root-true-column, #190). The source-neutral canonical-fan callback: emits {@code chainFanOut} for a
+     * fan-threshold, comment/lambda-free chain independent of the author's source shape, or empty when the chain is
+     * withheld (comment / block-lambda / expression-lambda chains — the deferred lambda-arrow seam). This is the same
+     * delegate the return-value path uses; the initializer's break-after-{@code =} decider ranks the fan it produces
+     * against the break-after-{@code =} shape at the true column, so a fan-threshold chain (even one with source-multiline
+     * selector arguments, which the imperative {@code forcedMethodCallChain} would render source-sensitively via
+     * {@code canAttachFirstSegmentToSimpleRoot}) is idempotent.
+     */
+    @FunctionalInterface
+    interface CanonicalFanChain {
+        Optional<Doc> apply(MethodCallExpr expression, String suffix, LayoutContext layout);
+    }
+
     private final CommentTracker comments;
 
     private final JavaCommentPlacementPolicy commentPlacement;
@@ -113,6 +128,8 @@ final class VariableInitializerLayout {
 
     private final ForcedChainWithLayout forcedMethodCallChain;
 
+    private final CanonicalFanChain canonicalFanChain;
+
     private final BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> packedMethodCallChain;
 
     private final Function<MethodCallExpr, Optional<String>> compactMethodCallChainRoot;
@@ -156,6 +173,8 @@ final class VariableInitializerLayout {
 
     private final Predicate<Expression> shouldPrintScopeAsDoc;
 
+    private final Predicate<Expression> binaryFansChainOperand;
+
     private final Function<MethodCallExpr, String> methodCallPrefix;
 
     private final BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList;
@@ -183,6 +202,7 @@ final class VariableInitializerLayout {
             Function<MethodCallExpr, Doc> brokenMethodCall,
             Function<MethodCallExpr, Optional<Doc>> mixedFieldMethodCallChain,
             ForcedChainWithLayout forcedMethodCallChain,
+            CanonicalFanChain canonicalFanChain,
             BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> packedMethodCallChain,
             Function<MethodCallExpr, Optional<String>> compactMethodCallChainRoot,
             Function<MethodCallExpr, Doc> methodCallWithSemicolon,
@@ -203,6 +223,7 @@ final class VariableInitializerLayout {
             Function<ClassOrInterfaceType, String> typeNameWithoutArguments,
             Function<ClassOrInterfaceType, Doc> brokenClassOrInterfaceType,
             Predicate<Expression> shouldPrintScopeAsDoc,
+            Predicate<Expression> binaryFansChainOperand,
             Function<MethodCallExpr, String> methodCallPrefix,
             BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList,
             FieldDeclarationPrinter.HuggableArgumentsRenderer huggableBlockLambdaArguments,
@@ -234,6 +255,7 @@ final class VariableInitializerLayout {
         this.brokenMethodCall = brokenMethodCall;
         this.mixedFieldMethodCallChain = mixedFieldMethodCallChain;
         this.forcedMethodCallChain = forcedMethodCallChain;
+        this.canonicalFanChain = canonicalFanChain;
         this.packedMethodCallChain = packedMethodCallChain;
         this.compactMethodCallChainRoot = compactMethodCallChainRoot;
         this.methodCallWithSemicolon = methodCallWithSemicolon;
@@ -254,6 +276,7 @@ final class VariableInitializerLayout {
         this.typeNameWithoutArguments = typeNameWithoutArguments;
         this.brokenClassOrInterfaceType = brokenClassOrInterfaceType;
         this.shouldPrintScopeAsDoc = shouldPrintScopeAsDoc;
+        this.binaryFansChainOperand = binaryFansChainOperand;
         this.methodCallPrefix = methodCallPrefix;
         this.methodCallArgumentList = methodCallArgumentList;
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
@@ -502,6 +525,29 @@ final class VariableInitializerLayout {
     ) {
         String flat = declarationPrefix + variable.getNameAsString() + " = " + compact.apply(initializer) + ";";
         String name = variableName(variable);
+        // SPIKE (fan-root-true-column, #190 foundation). Checked FIRST — ahead of BOTH the source-shape preempt tier and
+        // the (A) renderer-measured gate — because the oscillation it closes is exactly those source-shape-gated routes
+        // disagreeing across passes for a fan-carrying initializer. The source-shape tier's chain branches
+        // (shouldForceSourceMultilineInitializerChain, the object-creation source-multiline branches) fire on a
+        // source-multiline pass and produce a shape the (A) gate's flat-source pass does not, so a fan-threshold chain
+        // routed through them oscillates. Claiming the fan-carrying initializer here — with a Doc.bestFitting whose two
+        // AST-derived arms (attach after `NAME = ` versus break after `=`) are ranked at the true column — makes the
+        // break-after-`=` verdict a fixpoint by construction and pre-empts the source-shape routes for exactly these
+        // chains. It self-gates to comment-free fan carriers (returns empty otherwise), so every comment-bearing or
+        // non-fan initializer still reaches the preempt tier and (A) gate below byte-identically.
+        if (groupTerminator != Doc.EMPTY) {
+            Optional<Doc> fanBestFitting = variableInitializerFanBestFitting(
+                variable,
+                initializer,
+                name,
+                declarationPrefix,
+                flat,
+                groupTerminator
+            );
+            if (fanBestFitting.isPresent()) {
+                return fanBestFitting.orElseThrow();
+            }
+        }
         // Comment-around-`=`, source-leading comments, and the source-shape/self-breaking preempts run first and, when one
         // fires, own the whole shape. They are terminator-agnostic, so the caller's same-line terminator is appended after
         // whichever shape they return (byte-identical to the historical `concat(declaration, ";")`). Only when none fires
@@ -796,6 +842,244 @@ final class VariableInitializerLayout {
     }
 
     /**
+     * SPIKE (fan-root-true-column, #190 foundation). Makes the break-after-{@code =} verdict of a fan-carrying initializer
+     * SOURCE-NEUTRAL by ranking two AST-derived shapes with {@link Doc#bestFitting} at the true rendered column, instead of
+     * letting the {@code wasMultiline}-gated dual decider (renderer-measured {@code conditionalGroup} on a flat-source pass,
+     * imperative cascade on a multiline-source pass) pick divergent shapes across passes.
+     *
+     * <p>The dominant NEW oscillation of the canonical-fan cutover (measured: 16 of 45 kafka files, bucket A) is exactly
+     * this dual decider disagreeing for an initializer whose rendered value <em>force-fans</em> an internal chain — the
+     * value's {@link Doc} then carries a hard break the {@code conditionalGroup} flat arm can never absorb, so the
+     * flat-source pass picks break-after-{@code =}, while the imperative cascade (compact width under the limit ⇒
+     * {@code overWidth=false}) picks attach. Both {@link Doc#bestFitting} arms are pure AST functions, so both passes rank
+     * the same two candidates and pick the same one; the verdict is a fixpoint by construction.
+     *
+     * <p>Two carriers, each rendered so BOTH arms are source-neutral:
+     * <ul>
+     *   <li><b>Direct fan-threshold method-call chain</b> ({@code = adminClient.listConsumerGroupOffsets(...).…}). Both
+     *       arms render the chain through {@link #forcedMethodCallChain} → {@code chainFanOut} (root then one dotted
+     *       selector per line, a pure AST function — never the source-gated {@code canAttachFirstSegmentToSimpleRoot} that
+     *       {@code expression.apply} would reach). The attached arm threads the {@code NAME = } leftEdgePrefix; the broken
+     *       arm renders the chain at its own indented column with an empty prefix. Object-creation roots are excluded here
+     *       (their packed/broken-constructor branches own their shape).</li>
+     *   <li><b>Object creation whose constructor argument is a fan-threshold chain</b>
+     *       ({@code = new ArrayList<>(entry.entity().entries().size())}). The constructor body already renders
+     *       source-neutrally (its argument chain fans by the AST rule regardless of source), so both arms use ordinary
+     *       {@code expression.apply}; only the enclosing attach verdict needs stabilizing.</li>
+     * </ul>
+     * Comment-bearing and block-lambda-bearing values are excluded (they carry their own comment/hug shape and stay on the
+     * imperative cascade, where first-claim-wins comment safety is preserved).
+     */
+    private Optional<Doc> variableInitializerFanBestFitting(
+            VariableDeclarator variable,
+            Expression initializer,
+            String name,
+            String declarationPrefix,
+            String flat,
+            Doc groupTerminator
+    ) {
+        if (!initializer.getAllContainedComments().isEmpty() || initializer.getComment().isPresent()) {
+            return Optional.empty();
+        }
+        String flatName = declarationPrefix + variable.getNameAsString();
+        if (initializer instanceof MethodCallExpr methodCall
+                && !methodCallChainRootIsObjectCreation.test(methodCall)) {
+            // Direct fan-threshold chain: render the fan through the SOURCE-NEUTRAL canonicalFanChain (chainFanOut) — not
+            // the imperative forcedMethodCallChain, whose canAttachFirstSegmentToSimpleRoot reads the author's
+            // source-multiline shape and flips the first-selector attach across passes (bucket D). chainFanOut renders the
+            // root at LayoutContext.root() and each selector on its own dotted line, a pure AST function; canonicalFanChain
+            // emits it regardless of sourceMultilineArguments (the same delegate the return path uses, why return has zero
+            // oscillations). Both arms wrap that ONE fan, so the only remaining choice is attach-versus-break-after-`=`,
+            // ranked by Doc.bestFitting at the true column — a fixpoint by construction. Object-creation roots keep their
+            // dedicated branches; comment / block-lambda / expression-lambda chains are withheld inside canonicalFanChain
+            // (it returns empty), so this falls through to the imperative cascade for them unchanged.
+            //
+            // Both arms wrap the SAME fan Doc, rendered ONCE with an empty leftEdgePrefix (LayoutContext.root()). This is
+            // load-bearing: a promoted FACTORY root (`CacheFactory.newBuilder()`) and a method-call root render their
+            // opener through a column-sensitive Doc.group; threading the `NAME = ` prefix into only the attached arm would
+            // make that group break differently between the two arms (the field-chain-initializer regression:
+            // `= CacheFactory`⏎`.newBuilder()` in the attach arm versus `CacheFactory.newBuilder()` together in the broken
+            // arm), so bestFitting would flip. Rendering one prefix-agnostic fan and letting bestFitting measure the
+            // attach-versus-break line count of the whole arm (its `NAME = ` text included) at the true column keeps the
+            // fan byte-identical across arms and passes; the promoted opener's own fit is then judged by the renderer at
+            // the arm's real column, not by a threaded static prefix.
+            Optional<Doc> fan = canonicalFanChain.apply(methodCall, "", LayoutContext.root());
+            if (fan.isPresent()) {
+                Doc fanDoc = fan.orElseThrow();
+                Doc attached = Doc.concat(Doc.text(name + " = "), fanDoc, groupTerminator);
+                Doc brokenAfterEquals = Doc.concat(
+                    Doc.text(name + " ="),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, fanDoc)),
+                    groupTerminator
+                );
+                return Optional.of(Doc.bestFitting(List.of(attached, brokenAfterEquals)));
+            }
+        }
+        // Object-creation-ROOT fan-threshold chain ({@code = new X.Builder(a, b).withRaftProtocol(...)....build()}). This
+        // is the object-creation analogue of the direct-chain arm above, guarded to constructor roots whose argument list
+        // is ALWAYS width-driven (never source-preserved — flat arg count, no anonymous body, no contained comments, not a
+        // try resource), so {@code chainFanOut}'s {@code expressionRenderer.format(root, root())} root doc is
+        // column-invariant. Without this arm such an initializer oscillates: the source lays the constructor arguments on
+        // their own lines, so the multiline-source pass routes through {@code variableWithSourceMultilineMethodCallInitializer}
+        // / the object-creation branches (breaking the constructor arg list) while the collapsed-source pass measures the
+        // whole {@code new X(a, b)} root on one line and keeps it flat — the same {@code wasMultiline} dual decider the
+        // direct-chain arm removed for name/factory roots. Routing through the SAME source-neutral {@code canonicalFanChain}
+        // fan and ranking attach-versus-break-after-{@code =} with {@code Doc.bestFitting} at the true column makes the
+        // constructor-arg break the renderer's width verdict on both passes — a fixpoint by construction. Object-creation
+        // roots that could preserve source-multiline arguments (four-plus args, try resources, anonymous bodies) are
+        // withheld here (their {@code chainFanOut} root doc would carry a source-gated hard break, so the fan would still
+        // flip) and keep their existing packed / broken-constructor branches, which are already source-shape-stable for
+        // them; comment / block-lambda / expression-lambda chains are withheld inside {@code canonicalFanChain}.
+        if (initializer instanceof MethodCallExpr objectRootChain
+                && methodCallChainRootIsObjectCreation.test(objectRootChain)
+                && methodCallChainInitializerShape.apply(objectRootChain).objectCreationRootFansSourceNeutrally()) {
+            Optional<Doc> fan = canonicalFanChain.apply(objectRootChain, "", LayoutContext.root());
+            if (fan.isPresent()) {
+                Doc fanDoc = fan.orElseThrow();
+                Doc attached = Doc.concat(Doc.text(name + " = "), fanDoc, groupTerminator);
+                Doc brokenAfterEquals = Doc.concat(
+                    Doc.text(name + " ="),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, fanDoc)),
+                    groupTerminator
+                );
+                return Optional.of(Doc.bestFitting(List.of(attached, brokenAfterEquals)));
+            }
+        }
+        // Field-access-TAIL fan-threshold chain ({@code = StreamsConfig.configDef().configKeys().get(configKey).validator}).
+        // The initializer is a {@link FieldAccessExpr} whose scope is a fan-threshold method-call chain and whose {@code .field}
+        // trailer stays glued to the chain's final selector on both passes; only the enclosing break-after-{@code =} verdict
+        // flips (the flat-source pass measures the whole {@code X.a().b().field} value at the initializer column and breaks
+        // after {@code =}, while the broken-after-{@code =} pass collapses it back onto the {@code =} line — the same
+        // {@code wasMultiline} dual decider the direct-chain arm removes). Render the scope chain through the SAME
+        // source-neutral {@code canonicalFanChain} with the {@code .field} appended as the final-segment suffix, then rank
+        // attach-versus-break-after-{@code =} with {@code Doc.bestFitting} at the true column. Gated to a direct
+        // {@code MethodCallExpr} scope that fans by the canonical rule (the suffix is a single trailing field access on the
+        // chain's last selector); comment / block-lambda / expression-lambda chains are withheld inside
+        // {@code canonicalFanChain}. Object-creation-scoped field-access tails ({@code = new X(...).a().b().field}) inherit
+        // the same {@code chainFanOut} object-root render, so the {@code objectCreationRootFansSourceNeutrally} guard is
+        // reused to keep that root doc column-invariant when the scope root is a constructor.
+        if (initializer instanceof FieldAccessExpr fieldAccess
+                && fieldAccess.getScope() instanceof MethodCallExpr fieldScopeChain
+                && (!methodCallChainRootIsObjectCreation.test(fieldScopeChain)
+                    || methodCallChainInitializerShape.apply(fieldScopeChain).objectCreationRootFansSourceNeutrally())) {
+            Optional<Doc> fan = canonicalFanChain.apply(
+                fieldScopeChain,
+                "." + fieldAccess.getNameAsString(),
+                LayoutContext.root()
+            );
+            if (fan.isPresent()) {
+                Doc fanDoc = fan.orElseThrow();
+                Doc attached = Doc.concat(Doc.text(name + " = "), fanDoc, groupTerminator);
+                Doc brokenAfterEquals = Doc.concat(
+                    Doc.text(name + " ="),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, fanDoc)),
+                    groupTerminator
+                );
+                return Optional.of(Doc.bestFitting(List.of(attached, brokenAfterEquals)));
+            }
+        }
+        if (initializer instanceof ObjectCreationExpr objectCreation
+                && objectCreation.getAnonymousClassBody().isEmpty()
+                && objectCreation.getArguments().stream()
+                        .anyMatch(this::argumentCarriesFanThresholdChain)) {
+            Doc attached = Doc.concat(Doc.text(name + " = "), expression.apply(initializer), groupTerminator);
+            Doc brokenAfterEquals = Doc.concat(
+                variableInitializerBrokenOrFlat(variable, initializer, name, declarationPrefix, flat, true),
+                groupTerminator
+            );
+            return Optional.of(Doc.bestFitting(List.of(attached, brokenAfterEquals)));
+        }
+        // Binary/logical/string-concat initializer whose operand is a fan-threshold chain (the "G bucket":
+        // {@code long newOffset = log.segments().activeSegment().baseOffset() + 1},
+        // {@code String appId = getClass().getSimpleName().toLowerCase(...) + testId}). The dispatched flat rendering
+        // ({@code expression.apply}) already fans that operand by the End-state A rule (its inner {@code chainFanOut} is a
+        // pure AST function, operator kept inline), so — exactly like the object-creation-argument arm above — both arms
+        // are AST-pure and the only remaining choice is attach-after-{@code NAME = } versus break-after-{@code =}, ranked by
+        // {@code Doc.bestFitting} at the true column. Without this the binary initializer falls to the {@code (A)}
+        // conditionalGroup gate, whose flat arm carries the operand's hard break and can never be chosen, so it breaks
+        // after {@code =} on a flat-source pass while the imperative cascade
+        // ({@code binaryInitializerCanKeepFirstOperandWithEquals}) attaches on a source-multiline pass — the same
+        // {@code wasMultiline} dual decider the direct-chain arm removed, oscillating forever. Comment-bearing binaries were
+        // already excluded above; non-fan binaries return empty here and keep the {@code (A)} gate byte-for-byte.
+        if (initializer instanceof BinaryExpr binaryExpr && binaryFansChainOperand.test(binaryExpr)) {
+            Doc attached = Doc.concat(Doc.text(name + " = "), expression.apply(initializer), groupTerminator);
+            Doc brokenAfterEquals = Doc.concat(
+                variableInitializerBrokenOrFlat(variable, initializer, name, declarationPrefix, flat, true),
+                groupTerminator
+            );
+            return Optional.of(Doc.bestFitting(List.of(attached, brokenAfterEquals)));
+        }
+        // Cast-ROOT fan-threshold chain ({@code = ((AccessControlEntryRecord) createResult.records().get(0).message()).id()}).
+        // The initializer is a method call ({@code .id()}) whose receiver descends through a parenthesized cast to a
+        // fan-threshold chain ({@code createResult.records().get(0).message()}). That inner chain fans by the canonical rule
+        // on both passes (its {@code chainFanOut} is a pure AST function), so the value's flat rendering
+        // ({@code expression.apply}) carries a hard break the {@code (A)} conditionalGroup flat arm can never absorb — it
+        // breaks after {@code =} on a flat-source pass while the imperative cascade collapses the whole cast-rooted value
+        // onto the {@code =} line on a source-multiline pass, the same {@code wasMultiline} dual decider the direct-chain and
+        // object-creation-argument arms remove. Ranking the same {@code expression.apply} flat shape against the
+        // break-after-{@code =} shape with {@code Doc.bestFitting} at the true column makes the verdict a fixpoint. Guarded to
+        // a cast whose inner chain fans source-neutrally ({@code canonicalFanChain} non-empty — comment / block-lambda /
+        // expression-lambda chains are withheld there), so this only claims initializers whose flat arm genuinely fans.
+        if (initializer instanceof MethodCallExpr castRootedCall
+                && castRootedCallInnerChainFansSourceNeutrally(castRootedCall)) {
+            Doc attached = Doc.concat(Doc.text(name + " = "), expression.apply(initializer), groupTerminator);
+            Doc brokenAfterEquals = Doc.concat(
+                variableInitializerBrokenOrFlat(variable, initializer, name, declarationPrefix, flat, true),
+                groupTerminator
+            );
+            return Optional.of(Doc.bestFitting(List.of(attached, brokenAfterEquals)));
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * SPIKE (fan-root-true-column, #190). Reports whether {@code call} is a method call whose receiver descends through a
+     * parenthesized cast to a fan-threshold method-call chain that {@link CanonicalFanChain} would fan source-neutrally —
+     * the {@code ((Cast) a.b().c()).selector()} initializer shape. Only such a value has a flat rendering that hard-breaks
+     * (from the inner fan) yet is currently routed through the {@code wasMultiline}-gated dual decider; ranking its flat and
+     * break-after-{@code =} shapes with {@code Doc.bestFitting} stabilizes it. The walk stops at the FIRST enclosing cast in
+     * the receiver spine: a chain whose root is a plain receiver (no cast) is already handled by the direct-chain arm, and
+     * an object-creation or method-call root is handled by its own arm, so this keys strictly on the cast-rooted shape.
+     */
+    private boolean castRootedCallInnerChainFansSourceNeutrally(MethodCallExpr call) {
+        Expression receiver = call.getScope().orElse(null);
+        while (receiver instanceof MethodCallExpr receiverCall) {
+            receiver = receiverCall.getScope().orElse(null);
+        }
+        if (!(receiver instanceof EnclosedExpr enclosed) || !(enclosed.getInner() instanceof CastExpr cast)) {
+            return false;
+        }
+        return cast.getExpression() instanceof MethodCallExpr innerChain
+            && canonicalFanChain.apply(innerChain, "", LayoutContext.root()).isPresent();
+    }
+
+    /**
+     * SPIKE (fan-root-true-column, #190). Reports whether an object-creation constructor argument carries a fan-threshold
+     * method-call chain — either the argument IS such a chain ({@code new ArrayList<>(entry.entity().entries().size())}) or a
+     * fanning chain is NESTED inside it ({@code new BrokerDirs(admin.describeLogDirs(IntStream.range(0, 4).boxed().toList()),
+     * 0)}, whose {@code describeLogDirs(...)} argument is itself a fanning chain). Either way the whole {@code new X(...)}
+     * value force-fans (its flat {@code Doc} carries the inner fan's hard break), so the enclosing break-after-{@code =}
+     * verdict must be ranked source-neutrally with {@link Doc#bestFitting} rather than left to the {@code wasMultiline} dual
+     * decider — the {@code ReassignPartitionsCommandTest} residual.
+     *
+     * <p>The direct-argument case reuses the {@code chainBreaksByRule} shape verdict (the one source of truth for the fan
+     * rule). The nested case walks the argument subtree for any {@code MethodCallExpr} whose chain fans source-neutrally
+     * ({@code canonicalFanChain} non-empty, which withholds comment / block-lambda / expression-lambda chains); a nested fan
+     * is what gives the value its hard break. Descending through the whole argument subtree is safe here because this only
+     * decides the enclosing attach verdict — the inner fan renders identically ({@code chainFanOut}, a pure AST function) in
+     * both {@code bestFitting} arms, so widening the trigger cannot change the inner shape, only whether the value attaches
+     * to {@code NAME = } or breaks after it.
+     */
+    private boolean argumentCarriesFanThresholdChain(Expression argument) {
+        if (argument instanceof MethodCallExpr argumentChain
+                && methodCallChainInitializerShape.apply(argumentChain).chainBreaksByRule()) {
+            return true;
+        }
+        return argument.findAll(MethodCallExpr.class).stream()
+                .anyMatch(nested -> methodCallChainInitializerShape.apply(nested).chainBreaksByRule());
+    }
+
+    /**
      * Dispatches the construct-specific broken initializer shape, reached from the {@code (A)} master gate's broken arm
      * (and, unchanged, from the comment-bearing imperative path).
      *
@@ -859,6 +1143,33 @@ final class VariableInitializerLayout {
             );
             if (rankedConvergence.isPresent()) {
                 return rankedConvergence.orElseThrow();
+            }
+            // Canonical-fan cutover seam (End-state A): a multi-link fluent chain that reaches its link-count/root-kind
+            // threshold fans one selector per line, and it must do so through the SAME source-neutral fan on every pass.
+            // Placed here, ahead of the source-shape-sensitive object-creation, source-multiline, and attachable-scope
+            // branches below, so a fan-threshold plain-receiver / type-like chain is claimed by the fan before those
+            // branches can pick a source-dependent shape. That source-dependence is exactly the oscillation this seam
+            // closes: a flat-source `NAME = a.b().c().find(x)` reaches methodCallHasAttachableScope (the outer selector's
+            // scope ends on the name line) and renders the argument-break `find(⏎ x ⏎)`, while its already-fanned re-format
+            // fails that same source-line test, falls through to variableWithForcedMethodCallChain, and renders the +8 fan
+            // — so the two passes disagree forever. Routing through variableWithForcedMethodCallChain (which threads the
+            // `NAME = ` leftEdgePrefix and reaches MethodCallChainPrinter.chainFanOut, a pure function of the AST) makes
+            // both passes rebuild the identical fan. This extends the #191 pattern (rankedSimpleRootSingleCallConvergence,
+            // above): #191 withheld the source-sensitive conditionalGroup arms for a SINGLE-call initializer and emitted one
+            // deterministic ranked shape; this withholds them for the MULTI-LINK fan-threshold case and emits the one
+            // deterministic fan shape. Object-creation-rooted chains are intentionally excluded — their dedicated
+            // packed / compact / broken-constructor branches below (and the #48 / #221 Case B convergence) own their shape,
+            // and chainFanOut renders an object-creation root differently than those branches; widening the fan to them is
+            // a later cutover seam. Comment- and block-lambda-bearing chains stay on the imperative cascade (re-rendering a
+            // comment-bearing root through the fan would double-claim its comments — the same guard the landed rankers use).
+            Optional<Doc> canonicalFan = variableInitializerCanonicalFan(
+                variable,
+                name,
+                declarationPrefix + variable.getNameAsString(),
+                methodCall
+            );
+            if (canonicalFan.isPresent()) {
+                return canonicalFan.orElseThrow();
             }
             if (
                 initializerSingleSimpleArgTailDotSplits(
@@ -1465,6 +1776,21 @@ final class VariableInitializerLayout {
     }
 
     private Doc brokenObjectCreationArgument(Expression argument) {
+        // Canonical-fan cutover seam (End-state A), the binary/logical/string-concat OPERAND carrier at the broken
+        // object-creation argument position (the "G bucket"). When this constructor argument is a binary/ternary whose
+        // dispatched flat rendering ({@code expression.apply}) already fans a fluent chain operand by the End-state A rule
+        // ({@code new StatusData(summary.percentiles().get(0).value() * step + min, …)}), commit that flat shape and do not
+        // take the {@code wasMultiline}-gated operand-per-line break below. The break gate is exactly the
+        // {@code wasMultiline}/source-shape dual decider the U8 argument seam removed elsewhere: on a flat-source pass it is
+        // false and the flat shape renders the chain fanned with the operator kept on its line, but once that pass makes
+        // the binary span source lines the gate flips true and {@code binaryExpressionLines} lays the operator on its own
+        // line, so the two shapes alternate forever. The flat shape is a pure function of the AST (the chain fans by the
+        // width-independent link-count rule on every pass), so committing it is the fixpoint. Chains the rule does not fan
+        // and comment / lambda chains are withheld by {@code binaryFansChainOperand}, so those arguments keep the
+        // source-shape- and width-driven break below byte-for-byte.
+        if (argument instanceof BinaryExpr binaryExpr && binaryFansChainOperand.test(binaryExpr)) {
+            return expression.apply(argument);
+        }
         if (
             argument instanceof BinaryExpr binaryExpr
             && (sourceShapePolicy.wasMultiline(binaryExpr)
@@ -1651,6 +1977,46 @@ final class VariableInitializerLayout {
             Doc.indent(Doc.concat(Doc.HARD_LINE, expression.apply(methodCall)))
         );
         return Optional.of(Doc.bestFitting(List.of(argumentBreak, collapse), new int[] {1, 0}));
+    }
+
+    /**
+     * Routes a multi-link fan-threshold initializer chain onto the source-neutral canonical fan
+     * ({@code MethodCallChainPrinter.chainFanOut}, reached through {@link #variableWithForcedMethodCallChain}), the
+     * multi-link sibling of {@link #rankedSimpleRootSingleCallConvergence}'s single-call convergence. Present only for the
+     * exact shape the canonical-fan cutover claims: the chain reaches the End-state A link-count/root-kind threshold
+     * ({@link MethodCallChainSourcePlanner.InitializerChainShape#chainBreaksByRule()} — the one source of truth for the
+     * rule), the root is not an object creation (those keep their dedicated packed / broken-constructor branches, whose
+     * collapse shapes {@code chainFanOut} would not reproduce), and the chain carries no own or contained comment and no
+     * block-lambda argument (a fan re-renders the root once, so a comment- or block-lambda-bearing root would be
+     * double-claimed — the guard the landed {@code chainFanOut} rankers share).
+     *
+     * <p><strong>Why it is a fixpoint.</strong> The forced-chain path threads the initializer's {@code NAME = }
+     * {@link LayoutContext#leftEdgePrefix() leftEdgePrefix} and lands in {@code MethodCallChainPrinter.methodCallChain},
+     * whose canonical-fan route emits {@code chainFanOut} for a fan-threshold, comment-free chain. {@code chainFanOut}
+     * builds the root plus one dotted selector per line purely from the AST, so a flat-source initializer and its
+     * already-fanned re-format both rebuild the identical fan. Emitting it here — ahead of the object-creation,
+     * source-multiline, and {@code methodCallHasAttachableScope} argument-break branches — is what removes the source
+     * dependence those branches introduce (the attachable-scope branch reads whether the outer selector's scope ends on
+     * the name line, a source-shape fact that flips once the chain is fanned), the direct cause of the flat↔fan
+     * oscillation this seam closes.
+     */
+    private Optional<Doc> variableInitializerCanonicalFan(
+            VariableDeclarator variable,
+            String name,
+            String flatName,
+            MethodCallExpr methodCall
+    ) {
+        MethodCallChainSourcePlanner.InitializerChainShape chainShape = methodCallChainInitializerShape.apply(methodCall);
+        if (
+            !chainShape.chainBreaksByRule()
+            || chainShape.rootIsObjectCreation()
+            || methodCallHasOwnComment(methodCall)
+            || !methodCall.getAllContainedComments().isEmpty()
+            || methodCallHasBlockLambdaArgument(methodCall)
+        ) {
+            return Optional.empty();
+        }
+        return variableWithForcedMethodCallChain(variable, name, flatName, methodCall);
     }
 
     /**

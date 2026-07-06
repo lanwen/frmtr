@@ -282,7 +282,18 @@ public final class DocRenderer {
         }
     }
 
-    private static boolean containsHardLine(Doc doc) {
+    /**
+     * Reports whether {@code doc} contains a forced newline ({@link Doc.HardLine}) anywhere in its tree — i.e. whether it
+     * is a genuinely multi-line layout that can never render flat.
+     *
+     * <p>Exposed as a pure structural query (it touches no {@link DocWidths}/renderer state) so a printer can enforce the
+     * {@link Doc#conditionalGroup(java.util.List) conditionalGroup} contract locally: only the LAST alternative may be a
+     * broken layout, and a non-last alternative that carries a forced break is dead. A printer that assembles its broken
+     * fallback from a source-shape-dependent helper (which may hand back a FLAT one-liner instead of a broken shape) uses
+     * this to detect that degenerate flat result and substitute a real broken layout, so the fallback always carries a
+     * forced break as the contract requires.
+     */
+    public static boolean containsHardLine(Doc doc) {
         return switch (doc) {
             case Doc.HardLine ignored -> true;
             case Doc.Concat concat -> concat.docs().stream().anyMatch(DocRenderer::containsHardLine);

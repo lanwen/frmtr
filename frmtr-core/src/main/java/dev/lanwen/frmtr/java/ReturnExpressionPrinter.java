@@ -68,6 +68,13 @@ final class ReturnExpressionPrinter {
     // attribute the {@code return } prefix at the rendered column instead of inferring it from the value's source column.
     private final ChainWithLayout<LayoutWidth.LineBudget> compactRootWithBrokenFinalChainSegment;
 
+    // Canonical-fan cutover seam (End-state A): emits the source-neutral one-selector-per-line {@code chainFanOut} for a
+    // fan-threshold, comment/lambda-free return chain, independent of the value's source shape. The width shape here is the
+    // final-segment suffix ({@code ";"} for a return terminator carried into the fan). The return caller threads
+    // {@code withLeftEdgePrefix("return ")} so a promoted factory root measures its opener at the rendered column, exactly
+    // like the imperative forced-chain callbacks below.
+    private final ChainWithLayout<String> canonicalFanChain;
+
     private final ChainWithLayout<LayoutWidth.LineBudget> forcedMethodCallChain;
 
     private final ChainWithLayout<ToIntFunction<String>> forcedMethodCallChainWithFirstLine;
@@ -108,6 +115,8 @@ final class ReturnExpressionPrinter {
 
     private final ToIntFunction<BinaryExpr> binaryFlatLineWithCommentsWidth;
 
+    private final Predicate<Expression> binaryFansChainOperand;
+
     private final ReturnBinaryExpressionLayout binaryReturns;
 
     ReturnExpressionPrinter(
@@ -122,6 +131,7 @@ final class ReturnExpressionPrinter {
             Function<MethodCallExpr, Optional<Doc>> sourceMultilineExpressionLambda,
             Function<MethodCallExpr, Optional<Doc>> sourceMultilineMethodCall,
             ChainWithLayout<LayoutWidth.LineBudget> compactRootWithBrokenFinalChainSegment,
+            ChainWithLayout<String> canonicalFanChain,
             ChainWithLayout<LayoutWidth.LineBudget> forcedMethodCallChain,
             ChainWithLayout<ToIntFunction<String>> forcedMethodCallChainWithFirstLine,
             Function<MethodCallExpr, Doc> brokenMethodCall,
@@ -141,7 +151,8 @@ final class ReturnExpressionPrinter {
             Predicate<BinaryExpr> binaryHasLineComments,
             Function<BinaryExpr, Doc> binaryLinesWithComments,
             Function<BinaryExpr, Optional<Doc>> binaryFlatLineWithComments,
-            ToIntFunction<BinaryExpr> binaryFlatLineWithCommentsWidth
+            ToIntFunction<BinaryExpr> binaryFlatLineWithCommentsWidth,
+            Predicate<Expression> binaryFansChainOperand
     ) {
         this.options = options;
         this.layoutWidth = layoutWidth;
@@ -154,6 +165,7 @@ final class ReturnExpressionPrinter {
         this.sourceMultilineExpressionLambda = sourceMultilineExpressionLambda;
         this.sourceMultilineMethodCall = sourceMultilineMethodCall;
         this.compactRootWithBrokenFinalChainSegment = compactRootWithBrokenFinalChainSegment;
+        this.canonicalFanChain = canonicalFanChain;
         this.forcedMethodCallChain = forcedMethodCallChain;
         this.forcedMethodCallChainWithFirstLine = forcedMethodCallChainWithFirstLine;
         this.brokenMethodCall = brokenMethodCall;
@@ -174,6 +186,7 @@ final class ReturnExpressionPrinter {
         this.binaryLinesWithComments = binaryLinesWithComments;
         this.binaryFlatLineWithComments = binaryFlatLineWithComments;
         this.binaryFlatLineWithCommentsWidth = binaryFlatLineWithCommentsWidth;
+        this.binaryFansChainOperand = binaryFansChainOperand;
         this.binaryReturns = new ReturnBinaryExpressionLayout(
             options,
             layoutWidth,
@@ -236,6 +249,31 @@ final class ReturnExpressionPrinter {
             // dropped and the two passes diverge. The imperative oracle renders the value exactly once, so comment-bearing
             // returns stay on it (byte-identical to before); only comment-free returns move to the renderer-measured gate.
             return Doc.concat(Doc.text("return "), returnExpression(expression, layout), Doc.text(";"));
+        }
+        // SPIKE (fan-root-true-column, #190). A binary return whose operand is a fan-threshold chain
+        // ({@code return promotesFirstCall(analysis.root()) || analysis.calls().stream()….anyMatch(ref);}) commits a
+        // source-neutral operand-per-line shape rather than falling to the flat-versus-broken conditionalGroup below, whose
+        // flat arm carries the fanned operand's hard break and can never be chosen — a flat-source pass would fan the operand
+        // while a source-multiline pass takes {@code directBinaryReturn}'s {@code wasMultiline}-gated continuation, the same
+        // dual decider the initializer G bucket ({@link VariableInitializerLayout#binaryFansChainOperand}) removes. Both the
+        // operand-per-line skeleton and the operand fan below it are pure AST functions (link-count rule, no {@code wasMultiline}
+        // gate), so committing this shape unconditionally here reaches it on BOTH passes and is a fixpoint. Comment-bearing
+        // binaries are handled above (they never reach here); non-fan binaries fall through to the conditionalGroup byte-for-byte.
+        if (expression instanceof BinaryExpr operandFanBinary && binaryFansChainOperand.test(operandFanBinary)) {
+            // Binary / logical / string-concat operand break (gjf/prettier-java, comment #1). Render one operand per line —
+            // each operator-led operand on its own line, its chain fanning below when the operand overflows — through the
+            // source-neutral {@code binaryLines(…, forceBreak=true)}. This is the same operand-per-line convention the
+            // {@code if}/{@code while} control-condition path already applies to a logical whose LAST operand is a fanning
+            // chain ({@code lines.size() < 3 || lines.stream().skip(1)….anyMatch(...)}); the return path now matches it, so
+            // {@code || <chainRoot>} leads the second operand on its own line instead of gluing onto the first operand's tail.
+            // Both the operand-per-line skeleton and the per-operand fan are pure AST functions (the fan is the
+            // width-independent link-count rule and the skeleton has no {@code wasMultiline} gate), so committing this shape
+            // unconditionally — for a fanning operand in ANY position, last included — is a fixpoint reached on both passes.
+            return Doc.concat(
+                Doc.text("return "),
+                Doc.indent(binaryLines.apply(expression, true)),
+                Doc.text(";")
+            );
         }
         // Judge "does `return value;` fit on one line" at the true rendered column: build the flat return line and the
         // broken return line and let the renderer choose via Doc.conditionalGroup. The earlier gate compared a
@@ -529,6 +567,21 @@ final class ReturnExpressionPrinter {
         // compact chain root at nodeIndentWidth + "return " + text; every branch that can reach that gate threads the same
         // prefix so the fit decision is identical on every pass (idempotent).
         LayoutContext chainLayout = layout.withLeftEdgePrefix("return ");
+        // Canonical-fan cutover seam (End-state A): a fan-threshold, comment/lambda-free return chain fans one selector per
+        // line, and it must do so through the SAME source-neutral fan on every pass — otherwise a source-multiline-argument
+        // pass folds the first selector onto the value (`return data.configResources()...`) via the imperative
+        // {@code canAttachFirstSegmentToSimpleRoot} branch, and the fanned re-format (single-line arguments now) splits it
+        // (`return data`⏎`.configResources()...`), flipping split<->attach forever. {@code chainFanOut} is a pure function of
+        // the AST, so both passes rebuild the identical fan. This precedes the source-multiline branches below, which are
+        // exactly the source-shape-sensitive routes that produce the flip; the fan carries the empty final-segment suffix
+        // (the return terminator `;` is appended by {@link #returnStatement} outside the value) and the `return ` left-edge
+        // prefix so a promoted factory root measures its opener at the rendered column. Expression-lambda-bodied return
+        // chains are withheld inside {@code canonicalFanChain} (deferred lambda-arrow seam), so they fall through to the
+        // source-multiline-lambda handling below unchanged.
+        Optional<Doc> canonicalFan = canonicalFanChain.apply(methodCall, "", chainLayout);
+        if (canonicalFan.isPresent()) {
+            return canonicalFan;
+        }
         Optional<Doc> expressionLambda = sourceMultilineExpressionLambda.apply(methodCall);
         if (expressionLambda.isPresent()) {
             return expressionLambda;

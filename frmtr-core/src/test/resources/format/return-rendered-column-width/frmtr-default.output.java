@@ -13,8 +13,7 @@ class ReturnRenderedColumnWidth {
     }
 
     String describeFailureMode(ProcessingTarget target) {
-        return target
-                .getConfigurationRegistry()
+        return target.getConfigurationRegistry()
                 .resolveActiveProfileSelector()
                 .formatEventProcessingFailureHandlingModeLabel();
     }

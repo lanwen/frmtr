@@ -33,13 +33,17 @@ class BinaryChainWrapConverge {
     }
 
     void chainFlatSource(SessionStore sessionStore) {
-        sessionProvider = sessionKey -> SlidingWindowSessionCache.builder().key(sessionKey).maxEntries(10)
+        sessionProvider = sessionKey -> SlidingWindowSessionCache.builder()
+                .key(sessionKey)
+                .maxEntries(10)
                 .sessionStore(sessionStore)
                 .build();
     }
 
     void chainBrokenSource(SessionStore sessionStore) {
-        sessionProvider = sessionKey -> SlidingWindowSessionCache.builder().key(sessionKey).maxEntries(10)
+        sessionProvider = sessionKey -> SlidingWindowSessionCache.builder()
+                .key(sessionKey)
+                .maxEntries(10)
                 .sessionStore(sessionStore)
                 .build();
     }

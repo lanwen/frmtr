@@ -9,6 +9,7 @@ import dev.lanwen.frmtr.FormatterOptions;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
 
@@ -116,8 +117,20 @@ final class MethodCallChainSourcePlanner {
         boolean singleCall,
         boolean tailHasArguments,
         boolean rootObjectCreationArgumentsSpanMultipleLines,
-        boolean expressionSpansMultipleSourceLines
+        boolean rootObjectCreationArgumentsAreWidthDriven,
+        boolean expressionSpansMultipleSourceLines,
+        boolean chainBreaksByRule
     ) {
+        /**
+         * SPIKE (fan-root-true-column, #190). Reports whether this initializer's chain root is an object creation whose
+         * constructor arguments are always width-driven (never source-preserved) AND whose selector links reach the
+         * canonical-fan threshold — the exact shape the object-creation-ROOT arm of
+         * {@link VariableInitializerLayout#variableInitializerFanBestFitting} may fan source-neutrally. Roots that could
+         * preserve source-multiline arguments are excluded so the fan doc stays column-invariant across passes.
+         */
+        boolean objectCreationRootFansSourceNeutrally() {
+            return rootIsObjectCreation && rootObjectCreationArgumentsAreWidthDriven && chainBreaksByRule;
+        }
         boolean shouldForceSourceMultilineInitializerChain() {
             return expressionSpansMultipleSourceLines && (typeLikeRoot || rootObjectCreationArgumentsSpanMultipleLines);
         }
@@ -153,7 +166,8 @@ final class MethodCallChainSourcePlanner {
             Predicate<MethodCallExpr> segmentHasNameComment,
             Predicate<MethodCallExpr> segmentHasArgumentGapComment,
             Predicate<MethodCallExpr> segmentHasBlockLambdaArgument,
-            Predicate<List<MethodCallExpr>> chainHasTrailingLineComments
+            Predicate<List<MethodCallExpr>> chainHasTrailingLineComments,
+            BiPredicate<Expression, List<MethodCallExpr>> rootHasTrailingLineComment
     ) {
         List<MethodCallExpr> calls = new ArrayList<>();
         Expression root = methodCallChainRoot(expression, calls);
@@ -162,9 +176,19 @@ final class MethodCallChainSourcePlanner {
         boolean rootHasBlockLambdaArgument = root instanceof MethodCallExpr methodRoot
             && segmentHasBlockLambdaArgument.test(methodRoot);
         boolean hasTrailingLineComments = chainHasTrailingLineComments.test(calls);
+        // A line comment JavaParser attaches as the ROOT's own trailing comment (the root-to-first-selector gap, e.g.
+        // {@code new Zone(...) // note}⏎{@code .with(...)}) is invisible to {@code rootHasComments} (the containment scan
+        // omits a node's own comment) and to the between/after-selector {@code hasTrailingLineComments} scan. Fold it into
+        // {@code hasComments} only — NOT into {@code rootHasComments} or {@code hasTrailingLineComments}, whose other
+        // consumers (the FieldAccess-root promotion and {@code shouldPromoteFirstCallForTrailingComments}) must not treat a
+        // pure root-trailing comment as a promotion trigger — so every source-neutral fan gate withholds and the chain stays
+        // on the imperative path, which re-emits the comment via {@code rootTrailingLineCommentBeforeFirstSegment}. Without
+        // this the fan re-renders the root comment-free and drops the comment (a correctness data-loss bug).
+        boolean rootHasTrailingLineCommentBeforeFirstSelector = rootHasTrailingLineComment.test(root, calls);
         boolean hasComments = rootHasComments
             || calls.stream().anyMatch(segmentHasComment)
-            || hasTrailingLineComments;
+            || hasTrailingLineComments
+            || rootHasTrailingLineCommentBeforeFirstSelector;
         boolean hasBlockLambdaArgument = rootHasBlockLambdaArgument
             || calls.stream().anyMatch(segmentHasBlockLambdaArgument);
         boolean singleCommentedSegment = calls.size() == 1 && segmentHasNameComment.test(calls.getFirst());
@@ -277,6 +301,9 @@ final class MethodCallChainSourcePlanner {
         boolean rootObjectCreationArgumentsSpanMultipleLines =
             analysis.root() instanceof ObjectCreationExpr objectCreation
             && sourceShapePolicy.objectCreationArgumentsSpanMultipleLines(objectCreation);
+        boolean rootObjectCreationArgumentsAreWidthDriven =
+            analysis.root() instanceof ObjectCreationExpr widthDrivenRoot
+            && objectCreationLayoutPolicy.constructorArgumentsAreWidthDriven(widthDrivenRoot);
         MethodCallExpr tail = analysis.calls().isEmpty() && analysis.root() instanceof MethodCallExpr methodRoot
             ? methodRoot
             : analysis.calls().getLast();
@@ -287,7 +314,9 @@ final class MethodCallChainSourcePlanner {
             analysis.calls().size() == 1,
             !tail.getArguments().isEmpty(),
             rootObjectCreationArgumentsSpanMultipleLines,
-            analysis.expressionSpansMultipleSourceLines()
+            rootObjectCreationArgumentsAreWidthDriven,
+            analysis.expressionSpansMultipleSourceLines(),
+            chainBreaksByRule(analysis)
         );
     }
 
@@ -298,6 +327,42 @@ final class MethodCallChainSourcePlanner {
                     .map(MethodCallExpr::getScope)
                     .flatMap(Optional::stream)
                     .anyMatch(this::promotesFirstCall);
+    }
+
+    /**
+     * The canonical-fan structural rule (End-state A): decides whether a fluent chain fans one selector per line purely
+     * by its structural shape, independent of the author's source layout and independent of width. This is the single
+     * source of truth for the rule; {@code MethodCallChainPrinter.chainBreaksByRule} delegates here, and
+     * {@link #initializerShape(MethodCallChainAnalysis)} folds the same verdict into
+     * {@link InitializerChainShape#chainBreaksByRule()} so the initializer layout routes a fan-threshold chain onto the
+     * same source-neutral fan without re-deriving the rule (and without threading a new callback through the declaration
+     * printer graph). Lifted verbatim from PR #163 ({@code fix/method-chain-source-shape-independent}).
+     *
+     * <ul>
+     *   <li><b>Call / constructor root → threshold 2.</b> An {@link ObjectCreationExpr} or {@link MethodCallExpr} root
+     *   folds the leading invocation into {@code analysis.root()}, so every entry in {@code analysis.calls()} is a
+     *   selector after that invocation; two or more selectors fan the chain.</li>
+     *   <li><b>Static / factory root → threshold 2 selectors after the factory call.</b> A type-like qualifier surfaces
+     *   as {@code analysis.root()} with the factory call as the first entry of {@code calls()}; count selectors after
+     *   it.</li>
+     *   <li><b>Plain receiver root → threshold 3.</b> A variable / field access / {@code this} / {@code super}; three or
+     *   more selectors hang off it before the chain fans.</li>
+     * </ul>
+     */
+    boolean chainBreaksByRule(MethodCallChainAnalysis analysis) {
+        Expression root = analysis.root();
+        int callRootedLinks = analysis.calls().size();
+        if (root instanceof ObjectCreationExpr || root instanceof MethodCallExpr) {
+            // Constructor or no-scope-call root: every selector in calls() is a link applied after the invocation root.
+            return callRootedLinks >= 2;
+        }
+        if (promotesFirstCall(root) && !analysis.calls().isEmpty()) {
+            // Static/factory root: the type-like qualifier is the root and its first call is the factory invocation, so
+            // links are the selectors after that factory call.
+            return callRootedLinks - 1 >= 2;
+        }
+        // Plain receiver root (variable / field / this / super / lowercase name): selectors hang directly off it.
+        return callRootedLinks >= 3;
     }
 
     /**

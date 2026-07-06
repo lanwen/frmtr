@@ -21,6 +21,7 @@ import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.BiPredicate;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
 
 /**
@@ -52,6 +53,8 @@ final class ExpressionLambdaArgumentLayout {
     private final BiFunction<String, MethodCallExpr, Optional<Doc>> packedMethodCallChainBodyRenderer;
 
     private final BiFunction<String, MethodCallExpr, Optional<Doc>> huggedLambdaBodyChainRenderer;
+
+    private final Predicate<MethodCallExpr> lambdaBodyChainFansByCanonicalRule;
 
     private final JavaFormatRule<Statement> statementRenderer;
 
@@ -87,6 +90,7 @@ final class ExpressionLambdaArgumentLayout {
             Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer,
             BiFunction<String, MethodCallExpr, Optional<Doc>> packedMethodCallChainBodyRenderer,
             BiFunction<String, MethodCallExpr, Optional<Doc>> huggedLambdaBodyChainRenderer,
+            Predicate<MethodCallExpr> lambdaBodyChainFansByCanonicalRule,
             JavaFormatRule<Statement> statementRenderer,
             BiFunction<NodeList<Expression>, Doc, Doc> methodCallArgumentList,
             Function<Node, String> compact,
@@ -105,6 +109,7 @@ final class ExpressionLambdaArgumentLayout {
         this.brokenObjectCreationRenderer = brokenObjectCreationRenderer;
         this.packedMethodCallChainBodyRenderer = packedMethodCallChainBodyRenderer;
         this.huggedLambdaBodyChainRenderer = huggedLambdaBodyChainRenderer;
+        this.lambdaBodyChainFansByCanonicalRule = lambdaBodyChainFansByCanonicalRule;
         this.statementRenderer = statementRenderer;
         this.methodCallArgumentList = methodCallArgumentList;
         this.compact = compact;
@@ -348,6 +353,25 @@ final class ExpressionLambdaArgumentLayout {
                 )
             );
         }
+        // Canonical-fan cutover seam (End-state A), the lambda-body position (U7). A method-call chain that IS a lambda
+        // body and reaches the structural fan threshold ({@code lambdaBodyChainFansByCanonicalRule}) fans one selector per
+        // line — root on the {@code ->} line, each {@code .call(...)} on its own continuation line — the same
+        // source-neutral shape every other chain position already cuts over to, even when the flat body would fit. This
+        // runs BEFORE the fitting {@code compactBodyWithClosingLine} shape so a fan-threshold chain fans instead of staying
+        // flat, matching gjf/prettier's "one segment per line once the chain is a builder" convention. Comment-bearing,
+        // block-lambda, and lambda-arrow (attachable expression-lambda-body) chains are withheld by the shared canonical
+        // rule; object-creation-rooted chains ({@code new X().setA(...)}) are additionally withheld by the lambda-body gate
+        // because the hugged fan renders that root at column zero and would oscillate the {@code new X()} hug across passes
+        // (the deferred nested-root slice). All withheld shapes fall through to the unchanged layouts below.
+        if (
+            bodyExpression instanceof MethodCallExpr chainBody
+            && lambdaBodyChainFansByCanonicalRule.test(chainBody)
+        ) {
+            Optional<Doc> canonicalFan = huggedLambdaBodyChain(firstLine, chainBody);
+            if (canonicalFan.isPresent()) {
+                return canonicalFan;
+            }
+        }
         Optional<Doc> compactBody = compactBodyWithClosingLine(firstLine, bodyExpression);
         if (compactBody.isPresent()) {
             return compactBody;
@@ -356,22 +380,9 @@ final class ExpressionLambdaArgumentLayout {
             bodyExpression instanceof MethodCallExpr chainBody
             && overflowingHuggedBareRootChainBody(firstLine, chainBody)
         ) {
-            Optional<Doc> huggedChain = huggedLambdaBodyChainRenderer.apply(firstLine, chainBody);
+            Optional<Doc> huggedChain = huggedLambdaBodyChain(firstLine, chainBody);
             if (huggedChain.isPresent()) {
-                // The enclosing call's close dedents to its own line at the opener's column, the same shape a broken
-                // argument list renders ({@code foo(}⏎{@code arg}⏎{@code )}) and the packed lambda-body shapes'
-                // {@code PackedLambdaBody.CLOSING_ON_OWN_LINE} produce. The fanned chain already carries its own
-                // continuation indent, so the {@code HARD_LINE} + close stay outside any extra indent and land back at the
-                // enclosing statement's column; a lambda header opening several calls before the break would stack their
-                // closes on this one dedented line.
-                return Optional.of(
-                    Doc.concat(
-                        Doc.text(firstLine + " "),
-                        huggedChain.orElseThrow(),
-                        Doc.HARD_LINE,
-                        Doc.text(")")
-                    )
-                );
+                return huggedChain;
             }
         }
         Optional<PackedLambdaBody> packedBody = packedLambdaBody(lambdaExpr, firstLine, bodyExpression);
@@ -402,6 +413,33 @@ final class ExpressionLambdaArgumentLayout {
                 Doc.text(")")
             )
         );
+    }
+
+    /**
+     * Renders a lambda-body method-call chain fanned onto dotted continuation lines while it hugs the lambda header on the
+     * first line ({@code call(handler -> assertThat(handler)}⏎{@code .extracting(...)}⏎{@code .containsOnly(...))}), then
+     * dedents the enclosing call close to its own line.
+     *
+     * <p>The fan itself is built by {@code huggedLambdaBodyChainRenderer} — the shared method-chain printer, which threads
+     * {@code firstLine + " "} as the chain's {@link LayoutContext#leftEdgePrefix()} so every width gate measures at the
+     * real rendered column and re-derives the identical source-neutral fan across passes. Both the canonical-fan cutover
+     * seam (End-state A, fan a fan-threshold chain even when it fits) and the historical over-width bare-root branch reuse
+     * this one shape so the two triggers produce byte-identical layouts for the chains they share.
+     *
+     * <p>The close dedents to its own line at the opener's column, the same shape a broken argument list renders
+     * ({@code foo(}⏎{@code arg}⏎{@code )}) and the packed lambda-body shapes' {@code PackedLambdaBody.CLOSING_ON_OWN_LINE}
+     * produce. The fanned chain already carries its own continuation indent, so the {@code HARD_LINE} + close stay outside
+     * any extra indent and land back at the enclosing statement's column; a lambda header opening several calls before the
+     * break would stack their closes on this one dedented line.
+     */
+    private Optional<Doc> huggedLambdaBodyChain(String firstLine, MethodCallExpr chainBody) {
+        return huggedLambdaBodyChainRenderer.apply(firstLine, chainBody)
+                .map(huggedChain -> Doc.concat(
+                        Doc.text(firstLine + " "),
+                        huggedChain,
+                        Doc.HARD_LINE,
+                        Doc.text(")")
+                ));
     }
 
     /**
@@ -946,6 +984,75 @@ final class ExpressionLambdaArgumentLayout {
             }
             return lines;
         });
+    }
+
+    /**
+     * Single expression-lambda argument hugs its call opener (gjf/prettier-java) for a LOGICAL BINARY body: builds the
+     * opener-hugged broken layout for a fanned chain selector whose sole argument is an expression lambda whose body is a
+     * {@code &&}/{@code ||} chain, keeping {@code .selector(param -> <first operand>} on the selector line and stacking each
+     * following operand one per line below it, then dedenting the enclosing {@code )} to its own line at the selector column:
+     *
+     * <pre>{@code
+     * .map(region -> region.beginOffset() == expected.beginOffset()
+     *         && region.endOffset() == expected.endOffset()
+     * )
+     * }</pre>
+     *
+     * <p>This is the BINARY sibling of the round-2 source-neutral TERNARY hug ({@code packedConditionalBody}). It is built
+     * DIRECTLY here — reusing the source-neutral {@link #logicalBinaryBodyDoc} render (a pure {@code nestedLines} function of
+     * the AST) and always dedenting the close ({@link PackedLambdaBody#closingOnOwnLine}) — rather than routing through the
+     * shared {@code plan}/{@link #huggableMethodCallArguments} path the way the round-1 object-creation / round-2 ternary hug
+     * do. The shared path carries two source-shape reads that flip this shape across passes and are why review round 2
+     * DROPPED the binary hug: {@code plan}'s {@code sourceMultilineBody} entry gate (a single-line-flat body withholds the
+     * hug on pass 1, then the re-formatted multiline body admits it on pass 2), and
+     * {@code ExpressionLambdaClosingLayout#callClosingStaysOnLambdaBodyLine} (attaches vs. dedents the close by whether the
+     * source put {@code )} on the body's last line). Bypassing both makes this a fixpoint: the render is a pure function of
+     * the AST and the close placement is fixed. The separately-gated {@code binaryMethodCallBodyWithOpener}
+     * (the {@code sourceMultilineBinaryMethodCallBody} path that oscillated on {@code .map(x -> x.f(a) == ALLOWED)} in kafka
+     * {@code AuthHelper}) is never touched.
+     *
+     * <p>Scoped to LOGICAL ({@code &&}/{@code ||}) bodies: a top-level RELATIONAL body ({@code x -> f(...) == ALLOWED}) is not
+     * a {@link #logicalBinaryBody} and is left unclaimed, so the {@code AuthHelper} shape — whose left operand is a wide
+     * method call the base layout breaks by its argument list — keeps its existing broken-segment shape and does not
+     * oscillate. Guarded on the FIRST flattened operand fitting the opener line at the lambda's real rendered column
+     * ({@link #openerOverflows}, a pure-AST depth-aware probe like {@code packedConditionalBody}'s condition-fits guard), so a
+     * logical body whose first operand is itself too wide to hug is withheld rather than hugged over-width. Returns empty for
+     * a comment-bearing body so no comment is dropped. The caller wraps the result as the broken arm of the selector's
+     * {@link Doc#conditionalGroup}, so the flat {@code .selector(param -> a == b)} still renders when it fits and this hugged
+     * form renders only when it does not — the true-column flat-vs-broken decision stays with that conditional group.
+     */
+    Optional<Doc> logicalBinaryLambdaBodyOpenerHug(String prefix, MethodCallExpr expression) {
+        NodeList<Expression> arguments = expression.getArguments();
+        if (arguments.size() != 1 || !(arguments.get(0) instanceof LambdaExpr lambdaExpr)) {
+            return Optional.empty();
+        }
+        Optional<Expression> body = lambdaExpr.getExpressionBody();
+        if (body.isEmpty() || !lambdaExpr.getAllContainedComments().isEmpty()) {
+            return Optional.empty();
+        }
+        Expression bodyExpression = body.orElseThrow();
+        Optional<BinaryExpr> logicalBody = logicalBinaryBody(bodyExpression);
+        if (logicalBody.isEmpty() || !bodyExpression.getAllContainedComments().isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<Doc> bodyLines = logicalBinaryBodyDoc(bodyExpression);
+        if (bodyLines.isEmpty()) {
+            return Optional.empty();
+        }
+        String parameters = lambdaParameters.apply(lambdaExpr);
+        if (lambdaParametersShouldBreak.test(lambdaExpr, parameters)) {
+            return Optional.empty();
+        }
+        // {@code firstLine} carries no trailing space: {@link PackedLambdaBody#render} rejoins it as {@code firstLine + " "},
+        // gluing the first operand after {@code ->} the same way the shared renderer's {@code lambdaFirstLine} does.
+        String firstLine = prefix + "(" + parameters + " ->";
+        String firstOperand = compact.apply(firstBinaryOperand(logicalBody.orElseThrow()));
+        if (openerOverflows(lambdaExpr, firstLine + " " + firstOperand)) {
+            return Optional.empty();
+        }
+        return Optional.of(
+            PackedLambdaBody.closingOnOwnLine(bodyLines.orElseThrow(), ")").render(firstLine)
+        );
     }
 
     private boolean isLogicalBinaryOperator(BinaryExpr expression) {

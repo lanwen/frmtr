@@ -12,7 +12,8 @@ class BinaryMethodCallOperandSample {
     boolean any(Items<Item> items, String declarationPrefix, Options options) {
         return items
                 .stream()
-                .anyMatch(item -> currentIndentedWidth.applyAsInt(
+                .anyMatch(
+                    item -> currentIndentedWidth.applyAsInt(
                         declarationPrefix + item.getNameAsString()
                     ) > options.lineWidth()
                 );
@@ -48,14 +49,11 @@ class BinaryMethodCallOperandSample {
     }
 
     String selectorPrefix(RouteAssemblyStep routeAssemblyStep, RouteTextFormatter routeTextFormatter) {
-        return (
-            routeAssemblyStep.context().map(routeContext -> routeTextFormatter.compact(routeContext) + ".").orElse("")
-            + routeAssemblyStep
-                    .templateTypeArguments()
+        return routeAssemblyStep.context().map(routeContext -> routeTextFormatter.compact(routeContext) + ".").orElse("")
+            + routeAssemblyStep.templateTypeArguments()
                     .map(typeArguments -> "<" + routeTextFormatter.compactQualifiedTypes(typeArguments) + ">")
                     .resolveRouteSelector()
-            + (routeAssemblyStep.localRoute() ? "local" : "remote")
-        );
+            + (routeAssemblyStep.localRoute() ? "local" : "remote");
     }
 
     String routeImport(RouteDeclaration declaration) {
@@ -79,8 +77,7 @@ class BinaryMethodCallOperandSample {
         return argument.getRange()
                 .map(
                     argumentRange -> argumentRange.begin.line
-                            > expression
-                                    .getType()
+                            > expression.getType()
                                     .getRange()
                                     .map(typeRange -> typeRange.end.line)
                                     .orElse(argumentRange.begin.line)

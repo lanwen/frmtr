@@ -1,8 +1,7 @@
 class ReturnChainMultiSegmentRankedSample {
 
     String describeActiveProfile(DeploymentTarget deploymentTarget) {
-        return deploymentTarget
-                .getConfigurationRegistry()
+        return deploymentTarget.getConfigurationRegistry()
                 .resolveActiveProfileSelector()
                 .formatActiveProfileLabelForDisplay();
     }
@@ -14,6 +13,8 @@ class ReturnChainMultiSegmentRankedSample {
     }
 
     ExecutionResult submitForExecution(TaskScheduler taskScheduler, WorkloadDescriptor workloadDescriptor) {
-        return taskScheduler.enqueuePending(workloadDescriptor).awaitScheduledStart().collectExecutionResult();
+        return taskScheduler.enqueuePending(workloadDescriptor)
+                .awaitScheduledStart()
+                .collectExecutionResult();
     }
 }

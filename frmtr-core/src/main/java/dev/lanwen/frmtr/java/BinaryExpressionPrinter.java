@@ -54,6 +54,8 @@ final class BinaryExpressionPrinter {
 
     private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer;
 
+    private final BiFunction<MethodCallExpr, LayoutContext, Optional<Doc>> canonicalFanChainRenderer;
+
     private final SourceShapePolicy sourceShapePolicy;
 
     private final Function<Node, String> compact;
@@ -72,6 +74,7 @@ final class BinaryExpressionPrinter {
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
             BiFunction<MethodCallExpr, String, Doc> brokenMethodCallWithClosingLineRenderer,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer,
+            BiFunction<MethodCallExpr, LayoutContext, Optional<Doc>> canonicalFanChainRenderer,
             SourceShapePolicy sourceShapePolicy,
             Function<Node, String> compact,
             Function<Node, String> compactWithoutOwnComment,
@@ -85,6 +88,7 @@ final class BinaryExpressionPrinter {
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
         this.brokenMethodCallWithClosingLineRenderer = brokenMethodCallWithClosingLineRenderer;
         this.forcedMethodCallChainRenderer = forcedMethodCallChainRenderer;
+        this.canonicalFanChainRenderer = canonicalFanChainRenderer;
         this.sourceShapePolicy = sourceShapePolicy;
         this.compact = compact;
         this.compactWithoutOwnComment = compactWithoutOwnComment;
@@ -239,8 +243,7 @@ final class BinaryExpressionPrinter {
         if (operand instanceof MethodCallExpr && operand.getAllContainedComments().isEmpty()) {
             MethodCallExpr methodCall = (MethodCallExpr) operand;
             if (methodCallOperandShouldBreak(binaryLine, methodCall, nestedContinuationLine)) {
-                return forcedMethodCallChainRenderer.apply(methodCall)
-                        .orElseGet(() -> brokenMethodCallRenderer.apply(methodCall));
+                return brokenMethodCallChainOperand(methodCall);
             }
             String flat = compact.apply(operand);
             if (binaryLine.width(flat, nestedContinuationLine) <= options.lineWidth()) {
@@ -249,10 +252,58 @@ final class BinaryExpressionPrinter {
             if (!binaryLine.hasLeadingOperator()) {
                 return expressionRenderer.format(operand, LayoutContext.root());
             }
-            return forcedMethodCallChainRenderer.apply(methodCall)
-                    .orElseGet(() -> brokenMethodCallRenderer.apply(methodCall));
+            return brokenMethodCallChainOperand(methodCall);
         }
         return expressionRenderer.format(operand, LayoutContext.root());
+    }
+
+    /**
+     * Renders a broken-binary method-call operand whose {@linkplain #methodCallOperandShouldBreak break decision} has
+     * already fired, routing a fan-threshold, comment/lambda-free fluent chain through the source-neutral canonical fan
+     * ({@code chainFanOut}) before falling back to the pre-existing forced-chain / broken-call shape.
+     *
+     * <p>Canonical-fan cutover seam U8 (End-state A). The break <em>gate</em> ({@link #methodCallOperandShouldBreak}) is
+     * unchanged — it is the #119-hardened width+AST-only predicate — and this method is reached only once the gate has
+     * decided the operand breaks. Only the delegate <em>shape</em> changes: when the broken operand is itself a
+     * 3+-link (or call/factory-rooted 2+-link) chain that the structural rule fans, both a flat-source pass and a
+     * pre-broken-argument pass must emit the <em>same</em> fan, or the operand oscillates between the fanned shape
+     * (root⏎{@code .selector(...)}) and the flat-chain-with-broken-binary shape the imperative delegate produces once its
+     * arguments span source lines. {@code chainFanOut} is a pure function of the AST, so both passes rebuild the identical
+     * fan — the same fixpoint-by-construction argument the statement / return / argument / assignment-RHS cutover seams
+     * rely on. This is the operand analogue of {@code MethodCallPrinter}'s argument first-selector seam: the operand's
+     * extra offset is pure continuation indentation the surrounding binary line applies at render time (the fan's relative
+     * {@link Doc#indent} continuation reproduces it), so the {@link LayoutContext} carries an empty {@code leftEdgePrefix}
+     * and the {@link LayoutWidth.LineBudget#CONTINUATION} budget at which operands render; the fan fires by the
+     * width-independent link-count rule, so the unmodelled continuation indent never affects whether it fires.
+     *
+     * <p>Sub-fan-threshold chains (a plain-receiver 1–2-link operand such as {@code rx.fileLabelName().equals(...)}, the
+     * #119 {@code binary-chain-wrap-converge} guard) and expression-lambda / comment-bearing chains are all withheld
+     * inside {@code canonicalFanChain}, so they keep the pre-existing forced-chain / broken-call delegate byte-for-byte;
+     * expression-lambda-bodied operand chains are the deferred lambda-arrow seam. The fan attempt runs
+     * {@linkplain CommentTracker#speculatively speculatively} so a withheld chain never leaves a half-claimed comment.
+     */
+    private Doc brokenMethodCallChainOperand(MethodCallExpr methodCall) {
+        // The operand sits on a binary continuation line; its extra offset is pure continuation indentation the
+        // surrounding line applies, which the fan's relative {@link Doc#indent} reproduces, so no textual leftEdgePrefix
+        // is threaded (matching the argument first-selector seam). The CONTINUATION budget is the only field the fan
+        // reads — through {@code recordChainWidthBreak} for {@code --explain} — and names the column operands render at.
+        // EnclosingConstruct stays ROOT: no chain rule consumes it here, and a binary operand is not itself a statement /
+        // argument / return / condition position, so fabricating one of those would be misleading.
+        LayoutContext operandLayout = new LayoutContext(
+            EnclosingConstruct.ROOT,
+            "",
+            LayoutWidth.LineBudget.CONTINUATION,
+            "",
+            false
+        );
+        Optional<Doc> canonicalFan = comments.speculatively(
+            () -> canonicalFanChainRenderer.apply(methodCall, operandLayout)
+        );
+        if (canonicalFan.isPresent()) {
+            return canonicalFan.orElseThrow();
+        }
+        return forcedMethodCallChainRenderer.apply(methodCall)
+                .orElseGet(() -> brokenMethodCallRenderer.apply(methodCall));
     }
 
     /**

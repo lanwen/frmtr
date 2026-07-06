@@ -129,8 +129,7 @@ final class FrmtrTest {
         assertThat(second).contains(
             """
                     void call() {
-                        target
-                                .first()
+                        target.first()
                                 .second()
                                 .third();
                     }

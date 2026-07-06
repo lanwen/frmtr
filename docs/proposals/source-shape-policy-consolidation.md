@@ -274,6 +274,12 @@ Non-goals:
 
 ## Relationship to other proposals and roadmap items
 
+- **Successor — `reprint-by-default-break-rules.md` (Proposed):** takes this consolidation's next step.
+  It flips the default to reprint-from-scratch and turns the source-shape reads centralized here into a
+  *closed*, ratchet-guarded `SourceShapeException` set, retiring the fragile `wasMultiline` family behind
+  named structural break rules. This doc is the prerequisite (one place for the reads); that one is the
+  payoff (fewer reads, enforced).
+
 - **`formatter-owned-syntax-view.md` (Proposed, held for architecture review):** That proposal argues a formatter-owned
   metadata boundary is worth adopting only as a *narrow slice with an immediate consumer*, specifically calling out
   "source-shape checks" and "consolidate source/trivia lookup" as candidate first slices (see its Migration Plan steps

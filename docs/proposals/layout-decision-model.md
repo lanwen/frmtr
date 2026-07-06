@@ -9,6 +9,13 @@ that closes it. A [prior-art reference](#prior-art--existing-formatters-referenc
 the model against existing formatters; the design here is described in frmtr's own terms and is not a
 port of any of them.
 
+The **authoring layer above this decision model** — how complex break rules are *declared* as named,
+composable structural rules, and the reprint-by-default governance that retires source-shape reads onto
+them — is proposed separately in
+[reprint-by-default-break-rules.md](reprint-by-default-break-rules.md). This doc owns the *ranking
+mechanism* (how to choose among broken layouts); that one owns *how rules are expressed* and consumes
+this mechanism.
+
 ## Why this doc exists
 
 The maintainer's framing: *"a complicated set of interconnected printers, which limit our flexibility

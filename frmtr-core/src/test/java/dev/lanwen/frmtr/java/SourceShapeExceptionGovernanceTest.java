@@ -78,7 +78,7 @@ class SourceShapeExceptionGovernanceTest {
         // retirement metric; a change here must be a deliberate retirement (or a reviewed new fragile read), never silent.
         assertThat(retirementTargets)
             .as("fragile (RETIREMENT_TARGET) source-shape reads still to replace with structural rules")
-            .isEqualTo(7L);
+            .isEqualTo(6L);
     }
 
     private static Set<String> enumeratedReadNames() {

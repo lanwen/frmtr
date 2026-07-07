@@ -59,7 +59,6 @@ enum SourceShapeException {
         List.of(
             "wasMultiline",
             "methodCallArgumentsSpanMultipleLines",
-            "containsSourceMultilineMethodCallArgument",
             "expressionLambdaStartsOnSelectorLine",
             "objectCreationArgumentsSpanMultipleLines"
         )

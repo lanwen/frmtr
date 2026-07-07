@@ -915,9 +915,20 @@ source-shape decision:
   delegating containment itself to the run-indexed `JavaCommentPlacementPolicy.hasContainedComments` rather than
   re-scanning JavaParser (compact-source reconstruction that strips comments on clones keeps its own direct scan because
   the run index reports an unknown clone as comment-free); and
-- the syntax-specific predicates built on `wasMultiline` (multiline argument lists, same-line starts, throws-clause and
-  try-with-resources shape, method-call operand and logical-condition shape), so a printer asks one source-shape object
-  rather than reaching for the same multiline answer two different ways.
+- the syntax-specific predicates built on `wasMultiline` (multiline argument lists, same-line starts, and
+  try-with-resources shape), so a printer asks one source-shape object rather than reaching for the same multiline answer
+  two different ways.
+
+The control-condition logical break no longer reads source shape. A logical `&&`/`||` condition that overflows breaks
+through `ControlConditionPrinter.brokenCondition` → the width-driven `BinaryExpressionPrinter` operand-by-operand layout
+(the same `brokenExpressionLines` path every other broken binary uses), which explodes each over-wide operand — including
+a negated method call `!call(args)` — by rendered width. This retired the `sourceMultilineLogicalCondition` and
+`methodCallOperandSpansMultipleLines` reads (and deleted the control-condition-specific `brokenLogicalCondition` /
+`sourceMultilineLogicalOperand` renderer that kept an operand broken off the author's line shape), converging control
+conditions on the standard binary printer and dropping the reprint-by-default `RETIREMENT_TARGET` count to 8. A
+condition the author wrote across multiple source lines that now fits on one line collapses to a single line; a
+mixed-operator condition breaks in the same precedence-grouped, operator-spaced shape as every other broken binary
+(`(A && B)` ⏎ `|| (C && D)`) instead of the old flat operand-per-line list.
 
 Raw recovery/fallback text generation is not a source-shape decision and is not funneled through the policy: a printer
 that must emit a node's raw source for recovery or a fallback reads it straight from `RawSource` (the `raw` /

@@ -84,10 +84,7 @@ class T {
                     throw new IllegalArgumentException("Age cannot be negative");
                 }
 
-                if (
-                    name == null
-                    || name.isBlank()
-                ) {
+                if (name == null || name.isBlank()) {
                     throw new IllegalArgumentException("Name cannot be blank");
                 }
             }

@@ -4,7 +4,6 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
-import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
@@ -13,7 +12,6 @@ import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.IfStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
@@ -131,87 +129,10 @@ final class ControlConditionPrinter {
         if (hasDetachedConditionLineComment(expression)) {
             return brokenCondition(expression);
         }
-        if (sourceMultilineLogicalCondition(expression)) {
-            return brokenLogicalCondition(expression).orElseGet(() -> brokenCondition(expression));
-        }
-        if (logicalConditionWithControlContextOverflows(expression, flat, opening, closing, conditionLineWidth)) {
-            return brokenLogicalCondition(expression).orElseGet(() -> brokenCondition(expression));
-        }
         if (conditionLineWidth.applyAsInt(opening + flat + closing) <= options.lineWidth()) {
             return Doc.text("(" + flat + ")");
         }
         return brokenCondition(expression);
-    }
-
-    private boolean logicalConditionWithControlContextOverflows(
-            Expression expression,
-            String flat,
-            String opening,
-            String closing,
-            ToIntFunction<String> conditionLineWidth
-    ) {
-        return sourceMultilineLogicalConditionExpression(expression)
-            && !sourceShapePolicy.wasMultiline(expression)
-            && conditionLineWidth.applyAsInt(opening + flat + closing) > options.lineWidth();
-    }
-
-    private Optional<Doc> brokenLogicalCondition(Expression expression) {
-        List<LogicalConditionTerm> terms = new ArrayList<>();
-        collectLogicalConditionTerms(expression, "", terms);
-        if (terms.size() < 2) {
-            return Optional.empty();
-        }
-        return Optional.of(
-            Doc.concat(
-                Doc.text("("),
-                Doc.indent(
-                    Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(
-                            Doc.HARD_LINE,
-                            terms.stream()
-                                    .map(LogicalConditionTerm::doc)
-                                    .toList()
-                        )
-                    )
-                ),
-                Doc.HARD_LINE,
-                Doc.text(")")
-            )
-        );
-    }
-
-    private void collectLogicalConditionTerms(
-            Expression expression,
-            String operator,
-            List<LogicalConditionTerm> terms
-    ) {
-        Expression current = expression;
-        if (current instanceof BinaryExpr binaryExpr && isLogicalConditionOperator(binaryExpr)) {
-            collectLogicalConditionTerms(binaryExpr.getLeft(), operator, terms);
-            collectLogicalConditionTerms(binaryExpr.getRight(), binaryExpr.getOperator().asString(), terms);
-            return;
-        }
-        Doc operand = methodCallLayout
-                .sourceMultilineLogicalOperand(current)
-                .orElseGet(
-                    () ->
-                        logicalConditionOperandShouldBreak(current)
-                            ? brokenExpressionLines.apply(current)
-                            : sourceShapePolicy.wasMultiline(current)
-                                ? expressionRenderer.apply(current)
-                                : Doc.text(compact.apply(current))
-                );
-        terms.add(new LogicalConditionTerm(operator, operand));
-    }
-
-    private boolean logicalConditionOperandShouldBreak(Expression expression) {
-        return blockStatementWidth.applyAsInt(compact.apply(expression)) > options.lineWidth();
-    }
-
-    private boolean isLogicalConditionOperator(BinaryExpr expression) {
-        return expression.getOperator() == BinaryExpr.Operator.AND
-            || expression.getOperator() == BinaryExpr.Operator.OR;
     }
 
     /**
@@ -219,8 +140,9 @@ final class ControlConditionPrinter {
      * grammar.
      *
      * <p>The width gate includes the {@code if} keyword and an empty block because if conditions have a slightly wider
-     * surrounding line than loop tails. Source-multiline logical conditions intentionally keep a broken operand layout
-     * even when the compact condition would fit the formatter's local width estimate.
+     * surrounding line than loop tails. A logical condition that overflows its budget breaks through
+     * {@link #brokenCondition(Expression)}, whose operand-by-operand binary layout explodes each over-wide operand by
+     * width — no longer keyed off whether the author wrote the condition across multiple source lines.
      */
     Doc ifCondition(Expression expression) {
         if (commentedLogicalCondition(expression)) {
@@ -229,12 +151,6 @@ final class ControlConditionPrinter {
         Optional<Doc> commented = commentedCondition(expression);
         if (commented.isPresent()) {
             return commented.orElseThrow();
-        }
-        if (sourceMultilineLogicalCondition(expression)) {
-            if (methodCallLayout.sourceMultilineLogicalConditionHasMethodCallOperand(expression)) {
-                return brokenLogicalCondition(expression).orElseGet(() -> brokenCondition(expression));
-            }
-            return brokenCondition(expression);
         }
         if (hasDetachedConditionLineComment(expression)) {
             return brokenCondition(expression);
@@ -651,11 +567,6 @@ final class ControlConditionPrinter {
         return text.substring(0, end);
     }
 
-    private boolean sourceMultilineLogicalCondition(Expression condition) {
-        return sourceMultilineLogicalConditionExpression(condition)
-            && sourceShapePolicy.sourceMultilineLogicalCondition(condition);
-    }
-
     private boolean sourceMultilineLogicalConditionExpression(Expression condition) {
         return sourceShapePolicy.logicalConditionExpression(condition);
     }
@@ -735,7 +646,7 @@ final class ControlConditionPrinter {
      * byte-identical.
      *
      * <p>Logical {@code &&}/{@code ||} conditions are intentionally excluded: their operand-leading comments are rendered
-     * by the operand-by-operand path ({@link #brokenLogicalCondition(Expression)} / {@code brokenExpressionLines}), and a
+     * by the operand-by-operand path ({@code brokenExpressionLines}), and a
      * multi-line logical condition's first operand-leading comment is already a control-statement orphan at the
      * {@code @default} shape. Feeding it into the line-based leading-comment render gate would hijack the logical layout
      * and drop the per-operand comments, so the logical case keeps its existing handling.
@@ -803,11 +714,5 @@ final class ControlConditionPrinter {
             return text.value();
         }
         return "";
-    }
-
-    private record LogicalConditionTerm(String operator, Doc operand) {
-        Doc doc() {
-            return operator.isEmpty() ? operand : Doc.concat(Doc.text(operator + " "), operand);
-        }
     }
 }

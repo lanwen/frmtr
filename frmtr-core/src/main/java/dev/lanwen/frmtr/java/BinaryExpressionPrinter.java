@@ -10,6 +10,7 @@ import com.github.javaparser.ast.expr.InstanceOfExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
+import com.github.javaparser.ast.expr.UnaryExpr;
 import com.github.javaparser.ast.stmt.IfStmt;
 import com.github.javaparser.ast.stmt.SwitchStmt;
 import com.github.javaparser.ast.stmt.WhileStmt;
@@ -194,6 +195,14 @@ final class BinaryExpressionPrinter {
      * <p>{@code ||} operands that are {@code &&} groups are parenthesized as a readability boundary, and they use nested
      * binary lines when the inner group itself is too wide. Other nested binary operands are parenthesized only when the
      * operator-family rules require it to preserve the source expression's grouping.
+     *
+     * <p>A negated method call ({@code !call(args)}) operand explodes its argument list under the same width-driven
+     * {@link #methodCallOperandShouldBreak} gate as a bare {@code call(args)} operand — the {@code !} prefix rides the
+     * broken call's opening line. Without this arm a negated call fell through to the flat {@link #expressionRenderer}
+     * rendering and could overflow the operand line; the bare-call arm below never saw it because the operand is a
+     * {@link UnaryExpr}, not a {@link MethodCallExpr}. This is the source-neutral replacement for the retired
+     * control-condition {@code sourceMultilineLogicalOperand} read, which broke the same operand off the author's source
+     * shape instead of its rendered width.
      */
     private Doc binaryExpressionLineOperand(
             BinaryExpressionLine binaryLine,
@@ -239,6 +248,15 @@ final class BinaryExpressionPrinter {
             && shouldParenthesizeNestedBinary(binaryLine.operator(), binaryOperand.getOperator())
         ) {
             return Doc.concat(Doc.text("("), expressionRenderer.format(binaryOperand, LayoutContext.root()), Doc.text(")"));
+        }
+        if (
+            operand instanceof UnaryExpr unaryOperand
+            && unaryOperand.getOperator() == UnaryExpr.Operator.LOGICAL_COMPLEMENT
+            && unaryOperand.getExpression() instanceof MethodCallExpr complementedCall
+            && operand.getAllContainedComments().isEmpty()
+            && methodCallOperandShouldBreak(binaryLine, complementedCall, nestedContinuationLine)
+        ) {
+            return Doc.concat(Doc.text("!"), brokenMethodCallChainOperand(complementedCall));
         }
         if (operand instanceof MethodCallExpr && operand.getAllContainedComments().isEmpty()) {
             MethodCallExpr methodCall = (MethodCallExpr) operand;

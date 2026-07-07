@@ -112,12 +112,9 @@ public class ExpressionOperatorSamples {
         }
 
         switch (
-            statusCode != 42
-            && 42/42
-            || statusCode & 42
-            && statusCode > 42
-            || statusCode < 42
-            && statusCode == 42
+            (statusCode != 42 && 42 / 42)
+            || (statusCode & 42 && statusCode > 42)
+            || (statusCode < 42 && statusCode == 42)
         ) {
         }
 
@@ -138,12 +135,9 @@ public class ExpressionOperatorSamples {
         ) {}
 
         while (
-            statusCode != 42
-            && 42/42
-            || statusCode & 42
-            && statusCode > 42
-            || statusCode < 42
-            && statusCode == 42
+            (statusCode != 42 && 42 / 42)
+            || (statusCode & 42 && statusCode > 42)
+            || (statusCode < 42 && statusCode == 42)
         ) {}
 
         while (statusCode != 42) {}
@@ -163,12 +157,9 @@ public class ExpressionOperatorSamples {
         do {
             System.out.println("Formatter input is ready!");
         } while (
-            statusCode != 42
-            && 42/42
-            || statusCode & 42
-            && statusCode > 42
-            || statusCode < 42
-            && statusCode == 42
+            (statusCode != 42 && 42 / 42)
+            || (statusCode & 42 && statusCode > 42)
+            || (statusCode < 42 && statusCode == 42)
         );
 
         do {
@@ -190,12 +181,9 @@ public class ExpressionOperatorSamples {
         }
 
         synchronized (
-            statusCode != 42
-            && 42/42
-            || statusCode & 42
-            && statusCode > 42
-            || statusCode < 42
-            && statusCode == 42
+            (statusCode != 42 && 42 / 42)
+            || (statusCode & 42 && statusCode > 42)
+            || (statusCode < 42 && statusCode == 42)
         ) {
             System.out.println("Formatter input is ready!");
         }

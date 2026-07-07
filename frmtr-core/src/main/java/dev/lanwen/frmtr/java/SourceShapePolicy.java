@@ -188,13 +188,6 @@ final class SourceShapePolicy {
     }
 
     /**
-     * Reports whether a method call with arguments occupied more than one source line as an expression operand.
-     */
-    boolean methodCallOperandSpansMultipleLines(MethodCallExpr expression) {
-        return !expression.getArguments().isEmpty() && wasMultiline(expression);
-    }
-
-    /**
      * Reports whether the first method-call argument starts after the selector line.
      */
     boolean methodCallFirstArgumentStartsAfterName(MethodCallExpr expression) {
@@ -237,13 +230,6 @@ final class SourceShapePolicy {
         return expression instanceof BinaryExpr binaryExpr
             && (binaryExpr.getOperator() == BinaryExpr.Operator.AND
                 || binaryExpr.getOperator() == BinaryExpr.Operator.OR);
-    }
-
-    /**
-     * Reports whether a logical control condition was already split across source lines.
-     */
-    boolean sourceMultilineLogicalCondition(Expression condition) {
-        return logicalConditionExpression(condition) && wasMultiline(condition);
     }
 
     /**

@@ -1697,125 +1697,184 @@ final class MethodCallChainPrinter {
             MethodCallChainTail tail,
             LayoutContext layout
     ) {
-        // Factory / type-like root cutover seam: a {@code promotesFirstCall} root (an uppercase {@code NameExpr} or
-        // {@code FieldAccessExpr} type qualifier, e.g. {@code ClusterConfig}) with two or more calls folds its FIRST call —
-        // the factory invocation ({@code .defaultBuilder()}) — onto the root line and fans only the remaining selectors,
-        // {@code Type.factory()}⏎{@code .next()}⏎{@code .build()}. This mirrors {@code MethodCallChainSourcePlanner.plan}'s
-        // first-call promotion for a static/factory root (which counts that factory call as part of the root — the
-        // {@code calls - 1} arm of {@link MethodCallChainSourcePlanner#chainBreaksByRule}), so the RENDERING now agrees with
-        // the RULE'S link counting. It also makes the whole chain source-neutral: the early canonical-fan route reaches
-        // {@code chainFanOut} on a flat-source pass, while a re-format whose inner selector arguments now span source lines
-        // ({@code sourceMultilineArguments}) skips the early route and lands on {@code plan}'s promotion tail below — both
-        // must produce the identical {@code Type.factory()}-on-the-root-line shape or the chain flips split<->attach forever.
-        // The factory call reaching here is always source-compact (a source-multiline factory call would have tripped
-        // {@code sourceMultilineArguments} and skipped the early route), so {@link #promotedFactoryRootDoc} renders it
-        // through the same width-driven promotion doc {@code plan}'s {@code GROUPED_PROMOTED_METHOD_CALL} /
-        // {@code EXPRESSION_RENDERER} rootRendering produces — byte-identical, and idempotent because that doc is a pure
-        // function of the AST plus the render column.
-        //
-        // Review round 2 (comment #4, "class + method should not break until there is a space left"). A factory call
-        // carrying an expression lambda folds onto the root line in two source-neutral cases: (a) its whole compact form
-        // fits flat ({@link #expressionLambdaFactoryCallPromotesFlat} — {@code IntStream.iterate(50, n -> n + 7)}), and
-        // (b) it has TWO OR MORE arguments ({@link #expressionLambdaFactoryCallFoldsAsMultiArgGroup} —
-        // {@code Flux.usingWhen(connectionFactory.create(), connection -> …, Connection::close)}), which
-        // {@link #promotedFactoryRootDoc} renders through its width-driven multi-argument {@link Doc#group} — {@code
-        // Flux.usingWhen(} on the root line, arguments fanned one per line, {@code )} dedented — never through
-        // {@link #groupedPromotedMethodCall}'s source-shape-sensitive lambda-hug branches. Both routes are a pure function
-        // of the AST plus the render column, so the fold stays a fixpoint. A SINGLE expression-lambda-argument factory call
-        // that does not promote flat ({@code Type.of(x -> body)}) is still held back: it would route through
-        // {@code groupedPromotedMethodCall}'s {@code groupedPromotedExpressionLambda} / packed-body branches, which read the
-        // author's source shape, so it stays on the split shape until the deferred lambda-arrow seam lands. A block-lambda
-        // factory call is likewise held back.
-        if (
-            methodChainPlanner.promotesFirstCall(root)
+        ChainFanCandidate candidate = new ChainFanCandidate(root, calls, tail, layout);
+        return fanShapeRules.select(candidate)
+            .orElseThrow(() -> new IllegalStateException("no chain-fan shape rule matched"))
+            .layout(candidate);
+    }
+
+    /**
+     * The decomposed parts of a chain a fan host has already committed to fanning, handed to the {@link #fanShapeRules}.
+     * Positional context travels on {@code layout}; the shape rules read only these AST-derived facts.
+     */
+    private record ChainFanCandidate(
+        Expression root,
+        List<MethodCallExpr> calls,
+        MethodCallChainTail tail,
+        LayoutContext layout
+    ) {}
+
+    /**
+     * The fan SHAPE rules, resolved first-match-wins — the four one-per-line shapes {@link #chainFanOut} chooses among
+     * once a chain is being fanned, extracted from its former imperative {@code if} cascade (reprint-by-default Stage 1,
+     * {@code docs/proposals/reprint-by-default-break-rules.md}). Declaration order is precedence and reproduces the
+     * cascade exactly: the factory-root fold is tried first (it can fold a two-selector chain), then the single-selector
+     * fan, then the trivial-receiver first-selector attach, and finally the always-matching fanned-selectors fallback
+     * stands in for the cascade's {@code else}. Each rule is a pure function of its {@link ChainFanCandidate} and emits
+     * one source-neutral {@link Doc}, and only the winning rule's layout runs, so the extraction is byte-identical.
+     */
+    private final BreakRuleRegistry<ChainFanCandidate> fanShapeRules = BreakRuleRegistry.of(List.of(
+        BreakRule.of("chain-fan-factory-root-fold", this::fanFoldsFactoryRoot, this::fanFactoryRootFoldLayout),
+        BreakRule.of("chain-fan-single-selector", candidate -> candidate.calls().size() == 1, this::fanSingleSelectorLayout),
+        BreakRule.of(
+            "chain-fan-trivial-receiver-attach",
+            this::fanAttachesTrivialReceiverFirstSelector,
+            this::fanTrivialReceiverAttachLayout
+        ),
+        BreakRule.of("chain-fan-selectors", candidate -> true, this::fanSelectorsLayout)
+    ));
+
+    // Factory / type-like root cutover seam: a {@code promotesFirstCall} root (an uppercase {@code NameExpr} or
+    // {@code FieldAccessExpr} type qualifier, e.g. {@code ClusterConfig}) with two or more calls folds its FIRST call —
+    // the factory invocation ({@code .defaultBuilder()}) — onto the root line and fans only the remaining selectors,
+    // {@code Type.factory()}⏎{@code .next()}⏎{@code .build()}. This mirrors {@code MethodCallChainSourcePlanner.plan}'s
+    // first-call promotion for a static/factory root (which counts that factory call as part of the root — the
+    // {@code calls - 1} arm of {@link MethodCallChainSourcePlanner#chainBreaksByRule}), so the RENDERING now agrees with
+    // the RULE'S link counting. It also makes the whole chain source-neutral: the early canonical-fan route reaches
+    // {@code chainFanOut} on a flat-source pass, while a re-format whose inner selector arguments now span source lines
+    // ({@code sourceMultilineArguments}) skips the early route and lands on {@code plan}'s promotion tail below — both
+    // must produce the identical {@code Type.factory()}-on-the-root-line shape or the chain flips split<->attach forever.
+    // The factory call reaching here is always source-compact (a source-multiline factory call would have tripped
+    // {@code sourceMultilineArguments} and skipped the early route), so {@link #promotedFactoryRootDoc} renders it
+    // through the same width-driven promotion doc {@code plan}'s {@code GROUPED_PROMOTED_METHOD_CALL} /
+    // {@code EXPRESSION_RENDERER} rootRendering produces — byte-identical, and idempotent because that doc is a pure
+    // function of the AST plus the render column.
+    //
+    // Review round 2 (comment #4, "class + method should not break until there is a space left"). A factory call
+    // carrying an expression lambda folds onto the root line in two source-neutral cases: (a) its whole compact form
+    // fits flat ({@link #expressionLambdaFactoryCallPromotesFlat} — {@code IntStream.iterate(50, n -> n + 7)}), and
+    // (b) it has TWO OR MORE arguments ({@link #expressionLambdaFactoryCallFoldsAsMultiArgGroup} —
+    // {@code Flux.usingWhen(connectionFactory.create(), connection -> …, Connection::close)}), which
+    // {@link #promotedFactoryRootDoc} renders through its width-driven multi-argument {@link Doc#group} — {@code
+    // Flux.usingWhen(} on the root line, arguments fanned one per line, {@code )} dedented — never through
+    // {@link #groupedPromotedMethodCall}'s source-shape-sensitive lambda-hug branches. Both routes are a pure function
+    // of the AST plus the render column, so the fold stays a fixpoint. A SINGLE expression-lambda-argument factory call
+    // that does not promote flat ({@code Type.of(x -> body)}) is still held back: it would route through
+    // {@code groupedPromotedMethodCall}'s {@code groupedPromotedExpressionLambda} / packed-body branches, which read the
+    // author's source shape, so it stays on the split shape until the deferred lambda-arrow seam lands. A block-lambda
+    // factory call is likewise held back.
+    private boolean fanFoldsFactoryRoot(ChainFanCandidate candidate) {
+        List<MethodCallExpr> calls = candidate.calls();
+        return methodChainPlanner.promotesFirstCall(candidate.root())
             && calls.size() >= 2
             && !methodCallSegmentHasBlockLambdaArgument(calls.getFirst())
             && (!methodCallSegmentHasExpressionLambdaArgument(calls.getFirst())
                 || expressionLambdaFactoryCallPromotesFlat(calls.getFirst())
-                || expressionLambdaFactoryCallFoldsAsMultiArgGroup(calls.getFirst()))
-        ) {
-            MethodCallExpr factoryCall = calls.getFirst();
-            List<MethodCallExpr> selectors = new ArrayList<>(calls.subList(1, calls.size()));
-            return Doc.concat(
-                promotedFactoryRootDoc(factoryCall),
-                chainContinuation(factoryCall, methodCallChainSegments(selectors, tail))
-            );
-        }
-        // Object-creation root cutover seam (End-state A), the constructor-root analogue of the factory-root promotion
-        // above: a comment-free, non-anonymous, non-empty-argument {@code new Type(args)} root renders SOURCE-NEUTRALLY
-        // through {@link #promotedObjectCreationRootDoc} (a width-driven {@code Doc.group} of the constructor argument
-        // list), so the constructor arguments break by the renderer's width verdict at the true column on every pass
-        // rather than through {@code ObjectCreationPrinter}'s source-multiline preservation or the imperative
-        // fall-through's {@code brokenObjectCreationRenderer} force-break. This is what lets the fall-through route a
-        // constructor-rooted fan-threshold chain through this builder and converge with the flat-selector pass — see
-        // {@link #promotedObjectCreationRootDoc}. Roots outside that scope keep the plain {@code expressionRenderer.format}
-        // doc.
-        Doc rootDoc = objectCreationRootIsWidthDrivenFanEligible(root)
+                || expressionLambdaFactoryCallFoldsAsMultiArgGroup(calls.getFirst()));
+    }
+
+    private Doc fanFactoryRootFoldLayout(ChainFanCandidate candidate) {
+        List<MethodCallExpr> calls = candidate.calls();
+        MethodCallExpr factoryCall = calls.getFirst();
+        List<MethodCallExpr> selectors = new ArrayList<>(calls.subList(1, calls.size()));
+        return Doc.concat(
+            promotedFactoryRootDoc(factoryCall),
+            chainContinuation(factoryCall, methodCallChainSegments(selectors, candidate.tail()))
+        );
+    }
+
+    // Object-creation root cutover seam (End-state A), the constructor-root analogue of the factory-root promotion
+    // above: a comment-free, non-anonymous, non-empty-argument {@code new Type(args)} root renders SOURCE-NEUTRALLY
+    // through {@link #promotedObjectCreationRootDoc} (a width-driven {@code Doc.group} of the constructor argument
+    // list), so the constructor arguments break by the renderer's width verdict at the true column on every pass
+    // rather than through {@code ObjectCreationPrinter}'s source-multiline preservation or the imperative
+    // fall-through's {@code brokenObjectCreationRenderer} force-break. This is what lets the fall-through route a
+    // constructor-rooted fan-threshold chain through this builder and converge with the flat-selector pass — see
+    // {@link #promotedObjectCreationRootDoc}. Roots outside that scope keep the plain {@code expressionRenderer.format}
+    // doc. Shared by the fan shapes that keep the root on its own opening line (single-selector, trivial-receiver
+    // attach, fanned selectors); the factory-root fold renders its own root and does not call this.
+    private Doc fanRootDoc(Expression root) {
+        return objectCreationRootIsWidthDrivenFanEligible(root)
             ? promotedObjectCreationRootDoc((ObjectCreationExpr) root)
             : expressionRenderer.format(root, LayoutContext.root());
-        if (calls.size() == 1) {
-            // Single selector: the lone segment fans onto its own dotted continuation line. This reproduces the exact
-            // shape rankedSingleSegmentChain / rankedObjectRootSingleSegmentChain built inline before this extraction —
-            // the segment renders through the ordinary (not on-own-line) segment group so a single-simple-arg tail stays
-            // compact — so those callers stay byte-identical.
-            return Doc.concat(rootDoc, chainContinuation(methodCallChainSegment(calls.getFirst(), tail)));
-        }
-        // Trivial-receiver first-selector attach (gjf/prettier-java). When the chain root is a TRIVIAL RECEIVER — a bare
-        // {@code NameExpr}/{@code FieldAccessExpr}/{@code this}/{@code super} (see {@link #chainRootIsTrivialReceiver}), NOT
-        // a call/factory/constructor root — the FIRST selector stays glued to the root on the opening line and the fan
-        // begins at the SECOND selector ({@code orderEvent.validateOrder()}⏎{@code .deliveryPlan()}…, {@code response
-        // .unsentRequests.get(0)}⏎{@code .requestBuilder()}…). This matches google-java-format / prettier-java, which anchor
-        // the first segment on the receiver and only fan the builder tail below it. It is a DETERMINISTIC STRUCTURAL rule
-        // keyed strictly on the root kind — never on width or the author's source shape — so it stays a fixpoint by
-        // construction: both passes see the same root kind and rebuild the identical attach. A call/factory/constructor
-        // root keeps the fan-from-first shape above/below. The attached first selector renders through the ordinary (not
-        // on-own-line) segment group, so {@code .selector(args)} stays flat when it fits at the root's live column and opens
-        // its own argument list only on genuine overflow, exactly like the single-selector case; the remaining selectors
-        // fan one per line under the same continuation indent, the final one carrying the tail.
-        //
-        // Gated on {@code calls.size() >= 3}: that is exactly {@code chainBreaksByRule}'s plain-receiver threshold — a
-        // trivial receiver is always a plain-receiver root — so the attach fires ONLY for a genuine CANONICAL fan (three or
-        // more selectors) and never for a sub-threshold TWO-selector chain that reached this builder purely because its flat
-        // form was over-width ({@code builder.defaultStatusHandler(a, b).filter(c)}). Attaching the first selector on such a
-        // width-driven fan would put an over-wide {@code root.firstSelector(args)} opener on the first line, whose own
-        // argument-list break then flips across passes — the oscillation Rule 1 must not introduce. A width-driven
-        // two-selector fan keeps the fan-from-first shape below ({@code builder}⏎{@code .defaultStatusHandler(…)}⏎{@code
-        // .filter(…)}), which is already a fixpoint.
-        //
-        // Additionally gated on the first selector being ATTACH-SAFE ({@link #firstSelectorAttachesSafely}): no arguments or
-        // only simple leaf arguments ({@code .getRange()}, {@code .get(0)}, {@code .entrySet()}, {@code .validateOrder()}),
-        // so it renders as one atomic {@code .selector(...)} token that NEVER opens its own broken argument list. A first
-        // selector with a lambda, nested call, or multi-argument list ({@code target.computeIfAbsent(topicId, __ -> new X()
-        // …)}) can break INTERNALLY, and that inner break's indentation is measured relative to the segment's live column —
-        // which shifts once the previous pass glued the selector to the root — so the attached block reindents across passes
-        // (the kafka {@code ConsumerGroupMember} oscillation). Such a chain keeps the fan-from-first shape below ({@code
-        // target}⏎{@code .computeIfAbsent(…)}⏎…), where the selector's argument list breaks at a stable continuation column.
-        //
-        // Additionally gated on the root NOT being SHORTER than the indent unit ({@link #rootAvoidsShortRootPadding}). A
-        // root shorter than one indent ({@code p}, {@code res}) drives {@code chainContinuation}'s short-root PADDING branch,
-        // which dedent-aligns the fanned selectors under the root text rather than at the plain continuation indent. Attaching
-        // the first selector there ({@code p.recordErrors()}⏎padded{@code .stream()}) diverges from the fan-from-first shape
-        // the imperative fall-through renders once a re-format makes the selector arguments span source lines and the early
-        // canonical route is skipped, so the padded-attach and the fan-from-first alternate across passes (the kafka
-        // {@code Sender} / {@code DescribeConsumerGroupTest} indent oscillation). A short-rooted chain keeps the fan-from-first
-        // shape, whose padding branch is already a fixpoint. Long roots (the maintainer's targets — {@code argument},
-        // {@code response.unsentRequests}, {@code counterStream}) never touch the padding branch and attach cleanly.
-        if (
-            calls.size() >= 3
-            && chainRootIsTrivialReceiver(root)
+    }
+
+    // Single selector: the lone segment fans onto its own dotted continuation line. This reproduces the exact
+    // shape rankedSingleSegmentChain / rankedObjectRootSingleSegmentChain built inline before this extraction —
+    // the segment renders through the ordinary (not on-own-line) segment group so a single-simple-arg tail stays
+    // compact — so those callers stay byte-identical.
+    private Doc fanSingleSelectorLayout(ChainFanCandidate candidate) {
+        return Doc.concat(
+            fanRootDoc(candidate.root()),
+            chainContinuation(methodCallChainSegment(candidate.calls().getFirst(), candidate.tail()))
+        );
+    }
+
+    // Trivial-receiver first-selector attach (gjf/prettier-java). When the chain root is a TRIVIAL RECEIVER — a bare
+    // {@code NameExpr}/{@code FieldAccessExpr}/{@code this}/{@code super} (see {@link #chainRootIsTrivialReceiver}), NOT
+    // a call/factory/constructor root — the FIRST selector stays glued to the root on the opening line and the fan
+    // begins at the SECOND selector ({@code orderEvent.validateOrder()}⏎{@code .deliveryPlan()}…, {@code response
+    // .unsentRequests.get(0)}⏎{@code .requestBuilder()}…). This matches google-java-format / prettier-java, which anchor
+    // the first segment on the receiver and only fan the builder tail below it. It is a DETERMINISTIC STRUCTURAL rule
+    // keyed strictly on the root kind — never on width or the author's source shape — so it stays a fixpoint by
+    // construction: both passes see the same root kind and rebuild the identical attach. A call/factory/constructor
+    // root keeps the fan-from-first shape above/below. The attached first selector renders through the ordinary (not
+    // on-own-line) segment group, so {@code .selector(args)} stays flat when it fits at the root's live column and opens
+    // its own argument list only on genuine overflow, exactly like the single-selector case; the remaining selectors
+    // fan one per line under the same continuation indent, the final one carrying the tail.
+    //
+    // Gated on {@code calls.size() >= 3}: that is exactly {@code chainBreaksByRule}'s plain-receiver threshold — a
+    // trivial receiver is always a plain-receiver root — so the attach fires ONLY for a genuine CANONICAL fan (three or
+    // more selectors) and never for a sub-threshold TWO-selector chain that reached this builder purely because its flat
+    // form was over-width ({@code builder.defaultStatusHandler(a, b).filter(c)}). Attaching the first selector on such a
+    // width-driven fan would put an over-wide {@code root.firstSelector(args)} opener on the first line, whose own
+    // argument-list break then flips across passes — the oscillation Rule 1 must not introduce. A width-driven
+    // two-selector fan keeps the fan-from-first shape below ({@code builder}⏎{@code .defaultStatusHandler(…)}⏎{@code
+    // .filter(…)}), which is already a fixpoint.
+    //
+    // Additionally gated on the first selector being ATTACH-SAFE ({@link #firstSelectorAttachesSafely}): no arguments or
+    // only simple leaf arguments ({@code .getRange()}, {@code .get(0)}, {@code .entrySet()}, {@code .validateOrder()}),
+    // so it renders as one atomic {@code .selector(...)} token that NEVER opens its own broken argument list. A first
+    // selector with a lambda, nested call, or multi-argument list ({@code target.computeIfAbsent(topicId, __ -> new X()
+    // …)}) can break INTERNALLY, and that inner break's indentation is measured relative to the segment's live column —
+    // which shifts once the previous pass glued the selector to the root — so the attached block reindents across passes
+    // (the kafka {@code ConsumerGroupMember} oscillation). Such a chain keeps the fan-from-first shape below ({@code
+    // target}⏎{@code .computeIfAbsent(…)}⏎…), where the selector's argument list breaks at a stable continuation column.
+    //
+    // Additionally gated on the root NOT being SHORTER than the indent unit ({@link #rootAvoidsShortRootPadding}). A
+    // root shorter than one indent ({@code p}, {@code res}) drives {@code chainContinuation}'s short-root PADDING branch,
+    // which dedent-aligns the fanned selectors under the root text rather than at the plain continuation indent. Attaching
+    // the first selector there ({@code p.recordErrors()}⏎padded{@code .stream()}) diverges from the fan-from-first shape
+    // the imperative fall-through renders once a re-format makes the selector arguments span source lines and the early
+    // canonical route is skipped, so the padded-attach and the fan-from-first alternate across passes (the kafka
+    // {@code Sender} / {@code DescribeConsumerGroupTest} indent oscillation). A short-rooted chain keeps the fan-from-first
+    // shape, whose padding branch is already a fixpoint. Long roots (the maintainer's targets — {@code argument},
+    // {@code response.unsentRequests}, {@code counterStream}) never touch the padding branch and attach cleanly.
+    private boolean fanAttachesTrivialReceiverFirstSelector(ChainFanCandidate candidate) {
+        List<MethodCallExpr> calls = candidate.calls();
+        return calls.size() >= 3
+            && chainRootIsTrivialReceiver(candidate.root())
             && firstSelectorAttachesSafely(calls.getFirst())
-            && rootAvoidsShortRootPadding(root)
-        ) {
-            List<MethodCallExpr> fannedSelectors = new ArrayList<>(calls.subList(1, calls.size()));
-            return Doc.concat(
-                rootDoc,
-                attachedFirstSelectorSegment(calls.getFirst()),
-                chainContinuation(root, methodCallChainSegments(fannedSelectors, tail))
-            );
-        }
-        // Multi-segment: one selector per line under the continuation indent, the same one-per-line layout the imperative
-        // broken-chain tail produces (each segment measured at the continuation column, the final one carrying the tail).
-        return Doc.concat(rootDoc, chainContinuation(root, methodCallChainSegments(calls, tail)));
+            && rootAvoidsShortRootPadding(candidate.root());
+    }
+
+    private Doc fanTrivialReceiverAttachLayout(ChainFanCandidate candidate) {
+        List<MethodCallExpr> calls = candidate.calls();
+        List<MethodCallExpr> fannedSelectors = new ArrayList<>(calls.subList(1, calls.size()));
+        return Doc.concat(
+            fanRootDoc(candidate.root()),
+            attachedFirstSelectorSegment(calls.getFirst()),
+            chainContinuation(candidate.root(), methodCallChainSegments(fannedSelectors, candidate.tail()))
+        );
+    }
+
+    // Multi-segment: one selector per line under the continuation indent, the same one-per-line layout the imperative
+    // broken-chain tail produces (each segment measured at the continuation column, the final one carrying the tail).
+    private Doc fanSelectorsLayout(ChainFanCandidate candidate) {
+        return Doc.concat(
+            fanRootDoc(candidate.root()),
+            chainContinuation(candidate.root(), methodCallChainSegments(candidate.calls(), candidate.tail()))
+        );
     }
 
     /**

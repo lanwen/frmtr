@@ -226,9 +226,7 @@ public class Variables {
 
         Object longInvoiceProjectionForIllustrativePurposes = someMethod().anotherMethod();
 
-        Object longInvoiceProjectionForIllustrativePurposes = someBooleanVariable
-            ? new Object()
-            : null;
+        Object longInvoiceProjectionForIllustrativePurposes = someBooleanVariable ? new Object() : null;
 
         Object longInvoiceProjectionForIllustrativePurposes = existingInvoiceProjection != null
             ? existingInvoiceProjection

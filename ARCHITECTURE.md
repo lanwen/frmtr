@@ -542,7 +542,14 @@ regressed idempotence (source-shape-sensitive per-printer decisions oscillated b
 each enclosing attach/break/dispatch verdict **renderer-resolved** — it emits the one source-neutral fan Doc from
 `MethodCallChainPrinter.chainFanOut` (a pure function of the AST, built once at `LayoutContext.root()` and shared across
 arms) and ranks it against the attached/compact alternative with `Doc.bestFitting`/`Doc.conditionalGroup` at the true
-output column, so the shape is a fixpoint by construction. The same seam is replicated at every chain host: local-variable
+output column, so the shape is a fixpoint by construction. The fan-position decision — whether a chain fans at all — is
+expressed as the first named `BreakRule` (`canonical-fan`), resolved through a `BreakRuleRegistry` in
+`MethodCallChainPrinter.canonicalFanChain`: the Stage-0 seam of the reprint-by-default break-rule model
+(`docs/proposals/reprint-by-default-break-rules.md`). A `BreakRule<C>` pairs a pure predicate over a construct-specific
+candidate (here a `ChainFanRequest` carrying the chain plus the caller's final-segment suffix and `LayoutContext`) with
+the source-neutral `Doc` it emits, resolved first-match-wins — distinct from the type-dispatched `JavaFormatRule`
+node→`Doc` handoff. The `chainFanOut` fan sub-shapes (factory-root fold, single-selector, trivial-receiver attach,
+fanned selectors) remain inline as the Stage-1 extraction targets. The same seam is replicated at every chain host: local-variable
 and field initializers (`VariableInitializerLayout.variableInitializerFanBestFitting`), assignment RHS, `return`,
 method-call and object-creation arguments (`MethodCallPrinter`), binary / logical / string-concat operands
 (`BinaryExpressionPrinter` + `BreakableArgumentExpressionPrinter`), statement expressions, the expression-lambda body

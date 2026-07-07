@@ -188,9 +188,41 @@ final class MethodCallChainPrinter {
      * left on the imperative ladder untouched.
      */
     Optional<Doc> canonicalFanChain(MethodCallExpr expression, String finalSegmentSuffix, LayoutContext layout) {
-        if (!chainFansByCanonicalRuleAdmittingTrailingComment(expression)) {
-            return Optional.empty();
-        }
+        ChainFanRequest request = new ChainFanRequest(expression, finalSegmentSuffix, layout);
+        return chainFanRules.select(request).map(rule -> rule.layout(request));
+    }
+
+    /**
+     * The fan-position break rules, resolved first-match-wins. Stage 0 of the reprint-by-default break-rule model
+     * ({@code docs/proposals/reprint-by-default-break-rules.md}) hosts exactly one — the End-state A canonical fan — so
+     * this registry answers the same question {@link #canonicalFanChain} asked inline: fan the chain when the canonical
+     * rule admits it, otherwise (no match &rarr; {@link Optional#empty()}) leave it to the imperative cascade the caller
+     * falls back to. The chain-shaped {@link ChainFanRequest} candidate carries the caller-appended final-segment suffix
+     * so the general {@link BreakRule}/{@link BreakRuleRegistry} abstraction hosts the chain without a leaky node-level
+     * signature. The remaining fan sub-shapes inside {@link #chainFanOut} (factory-root fold, single-selector,
+     * trivial-receiver attach, fanned selectors) are the Stage-1 extraction targets.
+     */
+    private final BreakRuleRegistry<ChainFanRequest> chainFanRules = BreakRuleRegistry.of(List.of(
+        BreakRule.of(
+            "canonical-fan",
+            request -> chainFansByCanonicalRuleAdmittingTrailingComment(request.expression()),
+            this::canonicalFanLayout
+        )
+    ));
+
+    /**
+     * The candidate handed to the fan-position break rules: the chain expression plus the caller-appended final-segment
+     * suffix and positional context that {@link #canonicalFanLayout} needs to build the fan.
+     */
+    private record ChainFanRequest(MethodCallExpr expression, String finalSegmentSuffix, LayoutContext layout) {}
+
+    /**
+     * Builds the source-neutral fan {@link Doc} for a chain the canonical rule admits — the layout of the
+     * {@code canonical-fan} {@link BreakRule}. Lifted verbatim from the former {@link #canonicalFanChain} body, so the
+     * fan Doc and its {@code --explain} width-break recording are byte-identical.
+     */
+    private Doc canonicalFanLayout(ChainFanRequest request) {
+        MethodCallExpr expression = request.expression();
         MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
         // Record the width-break for {@code --explain} exactly as the in-{@code methodCallChain} early canonical-fan route
         // does before it fans (`:748`): a chain fanned here that overflows its rendered line is a width-driven break, and the
@@ -199,8 +231,13 @@ final class MethodCallChainPrinter {
         // so a chain fanned purely by the link-count/root-kind rule while it still fits records nothing (it is not a width
         // break). The budget is read from the caller's {@link LayoutContext}, matching the {@code lineBudget} the early route
         // threads.
-        recordChainWidthBreak(expression, analysis, layout.widthBudget());
-        return Optional.of(chainFanOut(analysis.root(), analysis.calls(), MethodCallChainTail.of(finalSegmentSuffix), layout));
+        recordChainWidthBreak(expression, analysis, request.layout().widthBudget());
+        return chainFanOut(
+            analysis.root(),
+            analysis.calls(),
+            MethodCallChainTail.of(request.finalSegmentSuffix()),
+            request.layout()
+        );
     }
 
     /**

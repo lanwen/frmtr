@@ -259,10 +259,17 @@ Why the model stays a fixpoint, and how it is enforced:
 
 Staged, low-risk, output-neutral until the last stages.
 
-0. **Introduce the model, extract one real rule (output-neutral).** Add `BreakRule`, `RuleContext`,
-   `BreakRuleRegistry`. Extract the *existing* canonical-fan chain decision into a named rule and prove
-   byte-identical output on the whole fixture + corpus. This validates the model can host a real,
-   shipped rule without moving output.
+0. **Introduce the model, extract one real rule (output-neutral).** Add `BreakRule` and
+   `BreakRuleRegistry`. The `RuleContext` the sketch above named already exists as `LayoutContext` (the
+   LDM positional-context record), so it is reused rather than re-introduced; and `BreakRule` is generic
+   over a construct-specific *candidate* (for the chain, a small `ChainFanRequest` record carrying the
+   chain plus the caller's final-segment suffix and context) so the one abstraction hosts a construct
+   whose layout needs more than a bare node. Extract the *existing* canonical-fan chain decision
+   (`MethodCallChainPrinter.canonicalFanChain`) into the first named rule (`canonical-fan`) and prove
+   byte-identical output on the whole fixture suite + corpus. This validates the model can host a real,
+   shipped rule without moving output. _(As built: layered on the existing `JavaFormatRule` /
+   `LayoutContext` substrate from LDM-2f/LDM-3; the `chainFanOut` fan sub-shapes are the Stage-1 targets
+   below.)_
 1. **Extract the remaining implicit chain/argument rules** into named `BreakRule`s, each extraction
    byte-identical and each with a fixture. `MethodCallChainPrinter` shrinks as rules move out.
 2. **Close the exception set + ratchet + provenance (output-neutral).** Introduce

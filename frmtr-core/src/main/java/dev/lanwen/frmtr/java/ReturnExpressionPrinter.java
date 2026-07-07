@@ -461,12 +461,6 @@ final class ReturnExpressionPrinter {
                 return forcedChain.orElseThrow();
             }
         }
-        if (
-            expression instanceof BinaryExpr binaryExpr
-            && binaryReturns.shouldUseExpressionRenderer(binaryExpr)
-        ) {
-            return this.expression.apply(binaryExpr);
-        }
         return brokenReturnExpression(expression, layout).orElseGet(() -> this.expression.apply(expression));
     }
 

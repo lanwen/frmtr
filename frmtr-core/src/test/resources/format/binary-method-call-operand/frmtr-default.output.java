@@ -93,8 +93,13 @@ class BinaryMethodCallOperandSample {
     }
 
     String selectorSegment(RouteCall scopeCall, RouteCall methodCall) {
-        return "." + selector.apply(scopeCall) + "(" + compactJoin.apply(
-            scopeCall.getArguments()
-        ) + ")" + "." + selector.apply(methodCall) + "()";
+        return "."
+            + selector.apply(scopeCall)
+            + "("
+            + compactJoin.apply(scopeCall.getArguments())
+            + ")"
+            + "."
+            + selector.apply(methodCall)
+            + "()";
     }
 }

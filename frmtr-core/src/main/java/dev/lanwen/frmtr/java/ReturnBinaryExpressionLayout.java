@@ -68,15 +68,6 @@ final class ReturnBinaryExpressionLayout {
         return directBinaryReturn(binaryExpr, widthAnchor, layout, false);
     }
 
-    /**
-     * Reports whether return rendering should let ordinary expression dispatch keep a source-multiline string
-     * concatenation around a multiline method-call argument.
-     */
-    boolean shouldUseExpressionRenderer(BinaryExpr expression) {
-        return expression.getOperator() == BinaryExpr.Operator.PLUS
-            && sourceShapePolicy.containsSourceMultilineMethodCallArgument(expression);
-    }
-
     private Optional<Doc> directBinaryReturn(
             BinaryExpr binaryExpr,
             Expression widthAnchor,
@@ -166,7 +157,6 @@ final class ReturnBinaryExpressionLayout {
             allowSourceMultilineOverflowContinuation
             && sourceShapePolicy.wasMultiline(expression)
             && !hasUnparenthesizedAndUnderOr(expression)
-            && !sourceShapePolicy.containsSourceMultilineMethodCallArgument(expression)
         ) {
             return true;
         }

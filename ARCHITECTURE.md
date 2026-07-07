@@ -938,6 +938,14 @@ relaxation (`methodCallFirstArgumentStartsAfterName`) was retired, so a near-bou
 arguments now collapses to one line regardless of how the author wrapped it (`if-condition-multiarg-argument-reflow`
 fixture). These two retirements dropped the reprint-by-default `RETIREMENT_TARGET` count to 7.
 
+Direct binary `return` layout (`ReturnBinaryExpressionLayout`) likewise stopped reading whether a returned expression
+tree contained a source-multiline method-call argument. Previously a `+` string-concatenation return that wrapped such a
+call was force-routed to the ordinary expression renderer (preserving the author's mid-concatenation break), and the
+un-parenthesized source-multiline continuation shortcut excluded those trees as a width-safety guard. Both uses of
+`containsSourceMultilineMethodCallArgument` were retired: the concatenation now reflows through the standard
+operand-per-line binary continuation, and the continuation shortcut relies on `binaryLines` breaking each over-wide
+operand by width rather than on a source-shape exclusion. This dropped the `RETIREMENT_TARGET` count to 6.
+
 Raw recovery/fallback text generation is not a source-shape decision and is not funneled through the policy: a printer
 that must emit a node's raw source for recovery or a fallback reads it straight from `RawSource` (the `raw` /
 `rawWithoutOwnComment` string forms), while genuine raw-output passes that must account for the comments they emit use

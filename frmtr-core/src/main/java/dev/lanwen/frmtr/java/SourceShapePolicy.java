@@ -188,23 +188,6 @@ final class SourceShapePolicy {
     }
 
     /**
-     * Reports whether an expression tree contains a method call whose argument list was source-multiline.
-     */
-    boolean containsSourceMultilineMethodCallArgument(Expression expression) {
-        if (expression instanceof MethodCallExpr methodCall) {
-            return methodCallArgumentsSpanMultipleLines(methodCall);
-        }
-        if (expression instanceof EnclosedExpr enclosedExpr) {
-            return containsSourceMultilineMethodCallArgument(enclosedExpr.getInner());
-        }
-        if (expression instanceof BinaryExpr binaryExpr) {
-            return containsSourceMultilineMethodCallArgument(binaryExpr.getLeft())
-                || containsSourceMultilineMethodCallArgument(binaryExpr.getRight());
-        }
-        return false;
-    }
-
-    /**
      * Reports whether a control-condition expression is a logical binary expression after source parentheses are peeled.
      */
     boolean logicalConditionExpression(Expression condition) {

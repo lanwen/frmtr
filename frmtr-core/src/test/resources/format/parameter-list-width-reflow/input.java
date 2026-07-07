@@ -18,4 +18,19 @@ class ParameterListWidthReflow {
     Invoice issueInvoice(Order order, TaxProfile taxProfile) {
         return billing.issue(order, taxProfile);
     }
+
+    // throws sticks to ")": signature with throws fits, so the whole thing stays on one line even though the
+    // author wrote throws on its own line.
+    Report buildReport(
+            ReportContext reportContext
+    )
+            throws ReportException {
+        return reportBuilder.build(reportContext);
+    }
+
+    // throws sticks to ")": parameters alone fit, but the signature plus throws is over width, so the args
+    // expand first and throws follows the ")" rather than breaking onto its own line.
+    Snapshot captureSnapshot(RegionSelector regionSelector, RetentionPolicy retentionPolicy) throws SnapshotStoreException {
+        return snapshotService.capture(regionSelector, retentionPolicy);
+    }
 }

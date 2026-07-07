@@ -50,11 +50,9 @@ public abstract class Throws {
         throw new RuntimeException();
     }
 
-    void aVeryLongNameForAMethodWhichShouldBreakTheThrowsClause()
-        throws VeryLongException {}
+    void aVeryLongNameForAMethodWhichShouldBreakTheThrowsClause() throws VeryLongException {}
 
-    void aVeryLongNameForAMethodWhichShouldBreakTheThrowsClause()
-        throws VeryLongException, VeryLongException {}
+    void aVeryLongNameForAMethodWhichShouldBreakTheThrowsClause() throws VeryLongException, VeryLongException {}
 
     void aVeryLongNameForAMethodWhichShouldBreakTheThrowsClause()
         throws ValidationException, TransportException, RetryableException, TimeoutException, AuthorizationException,

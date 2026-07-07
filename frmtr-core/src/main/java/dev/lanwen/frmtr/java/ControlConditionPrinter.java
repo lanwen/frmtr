@@ -161,8 +161,6 @@ final class ControlConditionPrinter {
             expression instanceof MethodCallExpr methodCall
             && methodCall.getArguments().size() > 1
             && (flatWidth > options.lineWidth()
-                || (sourceMultilineMethodCallArguments(methodCall)
-                    && flatWidth > options.lineWidth() - options.indentUnit().length())
                 || (methodCallLayout.hasComplexArgument(methodCall)
                     && flatWidth > options.lineWidth() - options.indentUnit().length()))
         ) {
@@ -263,10 +261,6 @@ final class ControlConditionPrinter {
             return Optional.empty();
         }
         return methodCallLayout.brokenCondition(expression);
-    }
-
-    private boolean sourceMultilineMethodCallArguments(MethodCallExpr expression) {
-        return methodCallLayout.sourceMultilineArgumentsStartAfterName(expression);
     }
 
     private Doc brokenCondition(Expression expression) {

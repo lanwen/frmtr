@@ -68,10 +68,6 @@ final class ControlConditionMethodCallLayout {
         return Optional.of(parenthesizedBrokenMethodCall(expression, prefix));
     }
 
-    boolean sourceMultilineArgumentsStartAfterName(MethodCallExpr expression) {
-        return sourceShapePolicy.methodCallFirstArgumentStartsAfterName(expression);
-    }
-
     boolean hasComplexArgument(MethodCallExpr expression) {
         return expression.getArguments()
                 .stream()

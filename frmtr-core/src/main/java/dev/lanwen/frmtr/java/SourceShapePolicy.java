@@ -188,21 +188,6 @@ final class SourceShapePolicy {
     }
 
     /**
-     * Reports whether the first method-call argument starts after the selector line.
-     */
-    boolean methodCallFirstArgumentStartsAfterName(MethodCallExpr expression) {
-        return expression.getArguments()
-                .stream()
-                .findFirst()
-                .flatMap(first -> first.getRange().flatMap(
-                        firstRange -> expression.getName()
-                                .getRange()
-                                .map(nameRange -> firstRange.begin.line > nameRange.end.line)
-                ))
-                .orElse(false);
-    }
-
-    /**
      * Reports whether an expression tree contains a method call whose argument list was source-multiline.
      */
     boolean containsSourceMultilineMethodCallArgument(Expression expression) {

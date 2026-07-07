@@ -280,11 +280,7 @@ final class LambdaExpressionArgumentOpener {
         return range;
     }
 
-    FlowResult fillsMissingRows(
-            UsageRepository usageRepository,
-            String tenantId,
-            List<LocalDate> windows
-    ) {
+    FlowResult fillsMissingRows(UsageRepository usageRepository, String tenantId, List<LocalDate> windows) {
         return usageRepository.fetchRows(tenantId)
                 .collectList()
                 .map(knownRows -> windows.stream()

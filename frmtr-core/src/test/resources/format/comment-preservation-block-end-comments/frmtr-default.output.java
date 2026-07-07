@@ -69,9 +69,7 @@ class ParameterCommentCases {
 
     void nine() {}
 
-    void one(
-            String accountName
-    ) {}
+    void one(String accountName) {}
 
     void two(String accountName) {}
 

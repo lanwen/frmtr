@@ -71,8 +71,7 @@ enum SourceShapeException {
             "containsSourceMultilineMethodCallArgument",
             "sourceMultilineLogicalCondition",
             "expressionLambdaStartsOnSelectorLine",
-            "objectCreationArgumentsSpanMultipleLines",
-            "callableParametersSpanMultipleLines"
+            "objectCreationArgumentsSpanMultipleLines"
         )
     ),
 

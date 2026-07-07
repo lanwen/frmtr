@@ -4,7 +4,6 @@ import com.github.javaparser.Range;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.CallableDeclaration;
-import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
@@ -276,25 +275,6 @@ final class SourceShapePolicy {
                 ? Optional.empty()
                 : expression.getRange()
         );
-    }
-
-    /**
-     * Reports whether a callable declaration's parameter list was already multiline.
-     */
-    boolean callableParametersSpanMultipleLines(CallableDeclaration<?> declaration) {
-        NodeList<Parameter> parameters = declaration.getParameters();
-        if (parameters.isEmpty()) {
-            return false;
-        }
-        Optional<Range> nameRange = declaration.getName().getRange();
-        Optional<Range> firstParameterRange = firstRange(parameters);
-        if (nameRange.isEmpty() || firstParameterRange.isEmpty()) {
-            return false;
-        }
-        if (firstParameterRange.orElseThrow().begin.line > nameRange.orElseThrow().end.line) {
-            return true;
-        }
-        return entriesStartOnMultipleLines(parameters);
     }
 
     /**

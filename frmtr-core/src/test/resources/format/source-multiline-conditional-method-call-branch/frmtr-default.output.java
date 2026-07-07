@@ -1,10 +1,6 @@
 class SourceMultilineConditionalMethodCallBranch {
 
-    RoutePlan initializerBranch(
-            RouteContext routeContext,
-            RouteBuilder routeBuilder,
-            RouteFallback routeFallback
-    ) {
+    RoutePlan initializerBranch(RouteContext routeContext, RouteBuilder routeBuilder, RouteFallback routeFallback) {
         RoutePlan selectedRoute = routeContext.primaryReady()
             ? routeBuilder.composeRoute(
                 routeContext.primaryCluster(),
@@ -16,11 +12,7 @@ class SourceMultilineConditionalMethodCallBranch {
         return selectedRoute;
     }
 
-    RoutePlan returnBranch(
-            RouteContext routeContext,
-            RouteBuilder routeBuilder,
-            RouteFallback routeFallback
-    ) {
+    RoutePlan returnBranch(RouteContext routeContext, RouteBuilder routeBuilder, RouteFallback routeFallback) {
         return routeContext.secondaryReady()
             ? routeFallback.basicRoute(routeContext.queueName())
             : routeBuilder.composeRoute(
@@ -31,11 +23,7 @@ class SourceMultilineConditionalMethodCallBranch {
             );
     }
 
-    RoutePlan thenMethodCallBranch(
-            RouteContext routeContext,
-            RouteBuilder routeBuilder,
-            RouteFallback routeFallback
-    ) {
+    RoutePlan thenMethodCallBranch(RouteContext routeContext, RouteBuilder routeBuilder, RouteFallback routeFallback) {
         return routeContext.primaryReady()
             ? routeBuilder.composeRoute(
                 routeContext.primaryCluster(),
@@ -46,11 +34,7 @@ class SourceMultilineConditionalMethodCallBranch {
             : routeFallback.basicRoute(routeContext.queueName());
     }
 
-    RoutePlan elseMethodCallBranch(
-            RouteContext routeContext,
-            RouteBuilder routeBuilder,
-            RouteFallback routeFallback
-    ) {
+    RoutePlan elseMethodCallBranch(RouteContext routeContext, RouteBuilder routeBuilder, RouteFallback routeFallback) {
         return routeContext.primaryReady()
             ? routeFallback.basicRoute(routeContext.queueName())
             : routeBuilder.composeRoute(

@@ -3,8 +3,6 @@ package dev.lanwen.frmtr.java;
 import com.github.javaparser.Range;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.body.CallableDeclaration;
-import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
@@ -276,41 +274,6 @@ final class SourceShapePolicy {
                 ? Optional.empty()
                 : expression.getRange()
         );
-    }
-
-    /**
-     * Reports whether a callable declaration's parameter list was already multiline.
-     */
-    boolean callableParametersSpanMultipleLines(CallableDeclaration<?> declaration) {
-        NodeList<Parameter> parameters = declaration.getParameters();
-        if (parameters.isEmpty()) {
-            return false;
-        }
-        Optional<Range> nameRange = declaration.getName().getRange();
-        Optional<Range> firstParameterRange = firstRange(parameters);
-        if (nameRange.isEmpty() || firstParameterRange.isEmpty()) {
-            return false;
-        }
-        if (firstParameterRange.orElseThrow().begin.line > nameRange.orElseThrow().end.line) {
-            return true;
-        }
-        return entriesStartOnMultipleLines(parameters);
-    }
-
-    /**
-     * Reports whether a method's throws keyword starts its own source line.
-     */
-    boolean throwsStartsOnOwnLine(CallableDeclaration<?> declaration) {
-        Optional<Range> firstExceptionRange = declaration.getThrownExceptions()
-                .stream()
-                .findFirst()
-                .flatMap(Node::getRange);
-        if (firstExceptionRange.isEmpty()) {
-            return false;
-        }
-        String linePrefix = sourceText.linePrefix(firstExceptionRange.orElseThrow().begin);
-        String trimmedPrefix = linePrefix.stripLeading();
-        return trimmedPrefix.startsWith("throws") && trimmedPrefix.substring("throws".length()).isBlank();
     }
 
     /**

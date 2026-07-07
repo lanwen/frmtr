@@ -141,9 +141,7 @@ public class Lambda {
         );
     }
 
-    private static <T extends Group> Function<Constructor<?>, T> createInstance(
-            Group entity
-    ) {
+    private static <T extends Group> Function<Constructor<?>, T> createInstance(Group entity) {
         return ctor -> Try.of(a, () -> {
             @SuppressWarnings("unchecked")
             var ng = (T) ctor.newInstance(

@@ -4,10 +4,7 @@ class QualifiedReceiverSamples {
     InteractionService.@Valid InteractionRecord interactionRecord = interactionService.getInteractions().get(0);
 
     // Fix for https://github.com/jhipster/prettier-java/issues/444
-    void process(
-            Map.@NonNull Entry<String, ProcessorConfiguration> entry,
-            @NonNull Map<String, Object> context
-    ) {}
+    void process(Map.@NonNull Entry<String, ProcessorConfiguration> entry, @NonNull Map<String, Object> context) {}
 }
 
 // Fix for https://github.com/jhipster/prettier-java/issues/607

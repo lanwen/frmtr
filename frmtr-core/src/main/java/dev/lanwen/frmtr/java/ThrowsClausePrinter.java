@@ -57,7 +57,6 @@ final class ThrowsClausePrinter {
             NodeList<Parameter> parameters,
             NodeList<? extends Node> thrownExceptions,
             LayoutContext layout,
-            boolean forceBreak,
             boolean parametersBreak
     ) {
         // The same-line content the caller emits after the throws clause — the "{" of a body or the ";" of an abstract
@@ -86,9 +85,6 @@ final class ThrowsClausePrinter {
             layoutWidth.nodeLine(declaration, sameLine),
             currentIndentedWidth.applyAsInt(sameLine)
         );
-        if (forceBreak && (!parametersBreak || sameLineWidth > options.lineWidth())) {
-            return brokenThrowsClause(thrownExceptions);
-        }
         if (sameLineWidth <= options.lineWidth()) {
             return Doc.text(" " + throwsText);
         }

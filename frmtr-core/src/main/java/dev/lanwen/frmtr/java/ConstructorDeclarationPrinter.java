@@ -90,7 +90,6 @@ final class ConstructorDeclarationPrinter {
                     declaration.getParameters(),
                     declaration.getThrownExceptions(),
                     LayoutContext.root().withTrailingContent(" {"),
-                    false,
                     parametersBreak && callableSignatures.parametersCanBreak(declaration)
                 )
             );
@@ -124,7 +123,6 @@ final class ConstructorDeclarationPrinter {
                     NodeList.nodeList(),
                     declaration.getThrownExceptions(),
                     LayoutContext.root().withTrailingContent(" {"),
-                    false,
                     false
                 )
             );
@@ -167,7 +165,6 @@ final class ConstructorDeclarationPrinter {
                 NodeList<Parameter> parameters,
                 NodeList<? extends Node> thrownExceptions,
                 LayoutContext layout,
-                boolean forceBreak,
                 boolean parametersBreak
         );
     }

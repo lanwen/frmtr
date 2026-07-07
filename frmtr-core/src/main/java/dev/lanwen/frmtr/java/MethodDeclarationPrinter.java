@@ -147,12 +147,11 @@ final class MethodDeclarationPrinter {
         String signature = returnType + " " + declaration.getNameAsString();
         prefix += signature;
         boolean breakReturnType = shouldBreakReturnType(declaration, prefix);
-        boolean sourceParametersBreak = sourceShapePolicy.callableParametersSpanMultipleLines(declaration);
         boolean parametersBreak = !breakReturnType
             && callableSignatures.parametersBreak(prefix, declaration, methodParameterSuffix(declaration));
         boolean compactContinuationParameters = !declaration.getThrownExceptions().isEmpty();
         docs.add(returnType(declaration, returnType, breakReturnType));
-        docs.add(parameters(declaration, sourceParametersBreak, parametersBreak, compactContinuationParameters));
+        docs.add(parameters(declaration, parametersBreak, compactContinuationParameters));
         if (!declaration.getThrownExceptions().isEmpty()) {
             docs.add(
                 throwsClause.render(
@@ -161,8 +160,7 @@ final class MethodDeclarationPrinter {
                     declaration.getParameters(),
                     declaration.getThrownExceptions(),
                     LayoutContext.root().withTrailingContent(declaration.getBody().isPresent() ? " {" : ";"),
-                    sourceShapePolicy.throwsStartsOnOwnLine(declaration),
-                    (sourceParametersBreak || parametersBreak) && callableSignatures.parametersCanBreak(declaration)
+                    parametersBreak && callableSignatures.parametersCanBreak(declaration)
                 )
             );
         }
@@ -365,7 +363,6 @@ final class MethodDeclarationPrinter {
 
     private Doc parameters(
             MethodDeclaration declaration,
-            boolean sourceParametersBreak,
             boolean parametersBreak,
             boolean compactContinuationParameters
     ) {
@@ -376,7 +373,7 @@ final class MethodDeclarationPrinter {
         ) {
             return callableSignatures.compactContinuationParameters(declaration);
         }
-        return callableSignatures.parameters(declaration, sourceParametersBreak || parametersBreak);
+        return callableSignatures.parameters(declaration, parametersBreak);
     }
 
     private String compactJoin(List<? extends Node> nodes) {
@@ -419,7 +416,6 @@ final class MethodDeclarationPrinter {
                 NodeList<Parameter> parameters,
                 NodeList<? extends Node> thrownExceptions,
                 LayoutContext layout,
-                boolean forceBreak,
                 boolean parametersBreak
         );
     }

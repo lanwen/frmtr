@@ -36,13 +36,6 @@ enum SourceShapeException {
         List.of("fitsOnOneLine")
     ),
 
-    /** Whether a method's {@code throws} clause starts its own source line. */
-    THROWS_ON_OWN_LINE(
-        Stability.FIXPOINT_SAFE,
-        "throws-on-its-own-line is reproduced verbatim in the output, so the read round-trips to a fixpoint.",
-        List.of("throwsStartsOnOwnLine")
-    ),
-
     /** The source-only try-with-resources section shape (multiline sections, trailing semicolon). */
     TRY_RESOURCES_SHAPE(
         Stability.FIXPOINT_SAFE,
@@ -71,8 +64,7 @@ enum SourceShapeException {
             "containsSourceMultilineMethodCallArgument",
             "sourceMultilineLogicalCondition",
             "expressionLambdaStartsOnSelectorLine",
-            "objectCreationArgumentsSpanMultipleLines",
-            "callableParametersSpanMultipleLines"
+            "objectCreationArgumentsSpanMultipleLines"
         )
     ),
 

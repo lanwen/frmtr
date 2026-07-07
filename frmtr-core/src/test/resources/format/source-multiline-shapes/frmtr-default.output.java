@@ -46,19 +46,12 @@ class MultilineShapes {
         );
     }
 
-    public void serialize(
-            Predicate value,
-            JsonGenerator gen,
-            SerializerProvider serializers
-    ) throws IOException {
+    public void serialize(Predicate value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
         consume(value, gen, serializers);
     }
 
     @Route("throws(value)")
-    public Result annotated(
-            @Named(")") Predicate value,
-            Mapper mapper
-    ) throws IOException {
+    public Result annotated(@Named(")") Predicate value, Mapper mapper) throws IOException {
         return mapper.map(value);
     }
 

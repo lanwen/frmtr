@@ -925,10 +925,18 @@ through `ControlConditionPrinter.brokenCondition` → the width-driven `BinaryEx
 a negated method call `!call(args)` — by rendered width. This retired the `sourceMultilineLogicalCondition` and
 `methodCallOperandSpansMultipleLines` reads (and deleted the control-condition-specific `brokenLogicalCondition` /
 `sourceMultilineLogicalOperand` renderer that kept an operand broken off the author's line shape), converging control
-conditions on the standard binary printer and dropping the reprint-by-default `RETIREMENT_TARGET` count to 8. A
+conditions on the standard binary printer. A
 condition the author wrote across multiple source lines that now fits on one line collapses to a single line; a
 mixed-operator condition breaks in the same precedence-grouped, operator-spaced shape as every other broken binary
 (`(A && B)` ⏎ `|| (C && D)`) instead of the old flat operand-per-line list.
+
+The multi-argument method-call `if`-condition break is likewise structural. Such a condition explodes its argument list
+only when the flat `if (...)` line overflows the budget or — within one indent unit of the budget — the call carries a
+*complex* argument (`ControlConditionMethodCallLayout.hasComplexArgument`: any argument that is not a bare
+name/field/`this`/`super`/literal). The old near-boundary "the author already wrote the arguments across source lines"
+relaxation (`methodCallFirstArgumentStartsAfterName`) was retired, so a near-boundary condition with only simple
+arguments now collapses to one line regardless of how the author wrapped it (`if-condition-multiarg-argument-reflow`
+fixture). These two retirements dropped the reprint-by-default `RETIREMENT_TARGET` count to 7.
 
 Raw recovery/fallback text generation is not a source-shape decision and is not funneled through the policy: a printer
 that must emit a node's raw source for recovery or a fallback reads it straight from `RawSource` (the `raw` /

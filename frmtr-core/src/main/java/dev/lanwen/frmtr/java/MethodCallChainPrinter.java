@@ -1313,7 +1313,7 @@ final class MethodCallChainPrinter {
                 }
             }
             Optional<Doc> expressionLambdaRoot = comments.speculatively(
-                () -> expressionLambdaRootWithSingleSegment(methodRoot, probeCall, finalSegmentSuffix, lineBudget)
+                () -> expressionLambdaRootWithSingleSegment(methodRoot, probeCall, finalSegmentSuffix, lineBudget, layout)
             );
             if (expressionLambdaRoot.isPresent()) {
                 return expressionLambdaRoot;
@@ -1340,7 +1340,8 @@ final class MethodCallChainPrinter {
                     methodRoot,
                     calls.getFirst(),
                     finalSegmentSuffix,
-                    lineBudget
+                    lineBudget,
+                    layout
                 )) {
                 Optional<Doc> compactRootWithBrokenSegment = comments.speculatively(
                     () -> compactRootWithBrokenFinalSegment(methodRoot, probeCall, finalSegmentSuffix, lineBudget, layout)
@@ -1356,7 +1357,7 @@ final class MethodCallChainPrinter {
                 // source root that only overflows because it renders at a deep nesting column (a wrapped call argument or
                 // nested initializer), the column the caller threads through {@code lineBudget}/{@code firstLineWidth}.
                 Optional<Doc> brokenRootWithAttachedSegment = comments.speculatively(
-                    () -> brokenRootWithAttachedFinalSegment(methodRoot, probeCall, finalSegmentSuffix, lineBudget)
+                    () -> brokenRootWithAttachedFinalSegment(methodRoot, probeCall, finalSegmentSuffix, lineBudget, layout)
                 );
                 if (brokenRootWithAttachedSegment.isPresent()) {
                     return brokenRootWithAttachedSegment;
@@ -1486,11 +1487,24 @@ final class MethodCallChainPrinter {
                 .isPresent();
     }
 
+    /**
+     * Reports whether a method-call root's compact first line, with the single final segment attached
+     * ({@code root.selector(args)…}), overflows — the flat-gate that decides whether the statement/field single-segment
+     * chain must break onto the {@link #compactRootWithBrokenFinalSegment} / {@link #brokenRootWithAttachedFinalSegment}
+     * broken shapes.
+     *
+     * <p>D1e (#190) threads {@code layout} so the true continuation column ({@link LayoutContext#leftEdgePrefix()}) is
+     * available at this flat-gate for the eventual reflow-by-width flip. It is NOT yet consulted: the decision still uses
+     * the fixed-budget {@code layoutWidth.line(lineBudget, …)} floor exactly as before, so threading it is byte-identical.
+     * The statement/field callers pass their real {@link LayoutContext} (a {@code STATEMENT}/{@code root()} context whose
+     * {@code leftEdgePrefix} is empty), matching the sibling {@link #compactRootLineWidth} gate this parameter mirrors.
+     */
     private boolean compactRootFinalSegmentLineOverflows(
             MethodCallExpr methodRoot,
             MethodCallExpr call,
             MethodCallChainTail finalSegmentSuffix,
-            LayoutWidth.LineBudget lineBudget
+            LayoutWidth.LineBudget lineBudget,
+            LayoutContext layout
     ) {
         if (call.getArguments().stream().anyMatch(argument -> argument instanceof LambdaExpr)) {
             return false;
@@ -1519,12 +1533,18 @@ final class MethodCallChainPrinter {
      * because it renders at a deep nesting column. Returns empty (leaving the existing flat layout) unless the root
      * carries breakable arguments, is not already source-multiline, has no comments, and its opener {@code Type.create(}
      * itself fits at {@code lineBudget}, so the broken shape is only chosen when it is both needed and valid.
+     *
+     * <p>D1e (#190) threads {@code layout} so the true continuation column ({@link LayoutContext#leftEdgePrefix()}) is
+     * available at this statement/field single-segment flat-gate for the eventual reflow-by-width flip. It is NOT yet
+     * consulted: the opener-fit decision still uses the fixed-budget {@code layoutWidth.line(lineBudget, …)} floor exactly
+     * as before, so threading it is byte-identical (the statement/field callers pass an empty-prefix context).
      */
     private Optional<Doc> brokenRootWithAttachedFinalSegment(
             MethodCallExpr methodRoot,
             MethodCallExpr call,
             MethodCallChainTail finalSegmentSuffix,
-            LayoutWidth.LineBudget lineBudget
+            LayoutWidth.LineBudget lineBudget,
+            LayoutContext layout
     ) {
         if (
             methodRoot.getArguments().isEmpty()
@@ -3306,11 +3326,22 @@ final class MethodCallChainPrinter {
         return Optional.empty();
     }
 
+    /**
+     * Breaks an expression-lambda-argument method-call root's argument list and glues the single final segment to its
+     * close, the expression-lambda sibling of {@link #brokenRootWithAttachedFinalSegment} on the statement/field
+     * single-segment chain path.
+     *
+     * <p>D1e (#190) threads {@code layout} so the true continuation column ({@link LayoutContext#leftEdgePrefix()}) is
+     * available at this flat-gate for the eventual reflow-by-width flip. It is NOT yet consulted: the opener-fit decision
+     * still uses the fixed-budget {@code layoutWidth.line(lineBudget, …)} floor exactly as before, so threading it is
+     * byte-identical (the statement/field callers pass an empty-prefix context).
+     */
     private Optional<Doc> expressionLambdaRootWithSingleSegment(
             MethodCallExpr methodRoot,
             MethodCallExpr call,
             MethodCallChainTail finalSegmentSuffix,
-            LayoutWidth.LineBudget lineBudget
+            LayoutWidth.LineBudget lineBudget,
+            LayoutContext layout
     ) {
         if (
             !hasSingleExpressionLambdaArgument(methodRoot)

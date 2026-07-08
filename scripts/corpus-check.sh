@@ -146,6 +146,9 @@ run_verify() {
   split -l "$CHUNK" "$WORK/files.list" "$WORK/${pfx}_ck_"
   local vfail=0
   for ch in "$WORK/${pfx}_ck_"*; do
+    # Unquoted $(cat) is INTENTIONAL: it word-splits the chunk into one CLI arg per file so a single
+    # invocation formats up to $CHUNK files (the whole point of --chunk, which caps JVM arg length).
+    # Corpus .java paths contain no spaces; do not "fix" this into a quoted single arg — it breaks batching.
     "$cli" --check --verify --progress=never $(cat "$ch") >/dev/null 2>"$WORK/_ck.err"
     local ce=$?
     [ "$ce" = 3 ] && vfail=1

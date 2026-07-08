@@ -76,7 +76,7 @@ final class MethodCallPrinter {
 
     private final BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument;
 
-    private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments;
+    private final ExpressionLambdaArgumentLayout.HuggableExpressionLambdaArguments huggableExpressionLambdaArguments;
 
     private final ExpressionLambdaArgumentLayout.PlanFactory expressionLambdaArgumentPlan;
 
@@ -99,12 +99,12 @@ final class MethodCallPrinter {
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableMethodChainBlockLambdaArguments,
             BiFunction<String, NodeList<Expression>, Optional<String>> huggableBlockLambdaFirstLine,
             BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument,
-            BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments,
+            ExpressionLambdaArgumentLayout.HuggableExpressionLambdaArguments huggableExpressionLambdaArguments,
             ExpressionLambdaArgumentLayout.PlanFactory expressionLambdaArgumentPlan,
             Function<LambdaExpr, Optional<Doc>> huggedGapCommentedLambdaBody,
             Function<LambdaExpr, String> lambdaParameters,
-            BiFunction<String, MethodCallExpr, Optional<Doc>> expressionLambdaMethodCallBodyOpener,
-            BiFunction<String, MethodCallExpr, Optional<Doc>> expressionLambdaLogicalBinaryBodyOpenerHug,
+            ExpressionLambdaArgumentLayout.ExpressionLambdaMethodCallBodyOpener expressionLambdaMethodCallBodyOpener,
+            ExpressionLambdaArgumentLayout.ExpressionLambdaLogicalBinaryBodyOpenerHug expressionLambdaLogicalBinaryBodyOpenerHug,
             Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer,
             Function<Expression, Optional<Doc>> brokenArgumentExpressionRenderer
     ) {
@@ -165,6 +165,18 @@ final class MethodCallPrinter {
 
     private ToIntFunction<String> lineWidth(LayoutWidth.LineBudget lineBudget) {
         return text -> layoutWidth.line(lineBudget, text);
+    }
+
+    /**
+     * The fixed-budget column oracle handed to the expression-lambda hug seams at the top-level method-call argument
+     * positions this printer owns (not a fanned chain selector).
+     *
+     * <p>D3 keystone: reproduces the seam's historical {@code expressionFirstLineWidth} baseline exactly
+     * ({@code layoutWidth.line(CONTINUATION, text)}), so threading it is byte-identical. Consuming the true column is the
+     * atomic D3 flip, out of scope for this slice.
+     */
+    private ToIntFunction<String> expressionLambdaColumnWidthFallback() {
+        return lineWidth(LayoutWidth.LineBudget.CONTINUATION);
     }
 
     Doc methodCall(MethodCallExpr expression) {
@@ -337,7 +349,11 @@ final class MethodCallPrinter {
             return commentedExpressionLambda.orElseThrow();
         }
         Optional<Doc> huggableExpressionLambda = comments.speculatively(
-            () -> huggableExpressionLambdaArguments.apply(prefix, expression.getArguments())
+            () -> huggableExpressionLambdaArguments.render(
+                prefix,
+                expression.getArguments(),
+                expressionLambdaColumnWidthFallback()
+            )
         );
         if (huggableExpressionLambda.isPresent()) {
             return huggableExpressionLambda.orElseThrow();
@@ -1324,7 +1340,11 @@ final class MethodCallPrinter {
         ) {
             return Optional.empty();
         }
-        return huggableExpressionLambdaArguments.apply(prefix, expression.getArguments());
+        return huggableExpressionLambdaArguments.render(
+            prefix,
+            expression.getArguments(),
+            expressionLambdaColumnWidthFallback()
+        );
     }
 
     private boolean sourceMultilineMethodCallScope(MethodCallExpr expression) {

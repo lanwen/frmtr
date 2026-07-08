@@ -1315,8 +1315,12 @@ final class LambdaExpressionPrinter {
      * ending at {@code ->}. Once the flat call is too wide but that first line still fits, the body can break underneath
      * the lambda header without switching the whole method call to the generic argument-list shape.
      */
-    Optional<Doc> huggableMethodCallExpressionLambdaArguments(String prefix, NodeList<Expression> arguments) {
-        return expressionLambdaArguments.huggableMethodCallArguments(prefix, arguments);
+    Optional<Doc> huggableMethodCallExpressionLambdaArguments(
+            String prefix,
+            NodeList<Expression> arguments,
+            ToIntFunction<String> columnWidth
+    ) {
+        return expressionLambdaArguments.huggableMethodCallArguments(prefix, arguments, columnWidth);
     }
 
     /**
@@ -1326,8 +1330,12 @@ final class LambdaExpressionPrinter {
      * {@code singleCallLambdaBodyOpenerHug}) when the shared {@code huggableMethodCallArguments} renderer handed back only the
      * degenerate flat one-liner (review round 2, comment #3).
      */
-    Optional<Doc> expressionLambdaMethodCallBodyOpener(String parameters, MethodCallExpr methodCall) {
-        return expressionLambdaArguments.methodCallBodyWithOpener(parameters, methodCall);
+    Optional<Doc> expressionLambdaMethodCallBodyOpener(
+            String parameters,
+            MethodCallExpr methodCall,
+            ToIntFunction<String> columnWidth
+    ) {
+        return expressionLambdaArguments.methodCallBodyWithOpener(parameters, methodCall, columnWidth);
     }
 
     /**
@@ -1337,8 +1345,12 @@ final class LambdaExpressionPrinter {
      * ({@code MethodCallChainPrinter}'s {@code expressionBodyOpenerHug}, review round 3) instead of breaking the selector
      * parenthesis onto its own line.
      */
-    Optional<Doc> expressionLambdaLogicalBinaryBodyOpenerHug(String prefix, MethodCallExpr expression) {
-        return expressionLambdaArguments.logicalBinaryLambdaBodyOpenerHug(prefix, expression);
+    Optional<Doc> expressionLambdaLogicalBinaryBodyOpenerHug(
+            String prefix,
+            MethodCallExpr expression,
+            ToIntFunction<String> columnWidth
+    ) {
+        return expressionLambdaArguments.logicalBinaryLambdaBodyOpenerHug(prefix, expression, columnWidth);
     }
 
     /**

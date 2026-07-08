@@ -137,6 +137,23 @@ final class ExpressionLambdaArgumentLayout {
      * Renders a lambda expression body as {@code parameters -> methodCall(} when that opener fits by itself.
      */
     Optional<Doc> methodCallBodyWithOpener(String parameters, MethodCallExpr methodCall) {
+        return methodCallBodyWithOpener(parameters, methodCall, this::expressionFirstLineWidth);
+    }
+
+    /**
+     * Column-carrying overload of {@link #methodCallBodyWithOpener(String, MethodCallExpr)}.
+     *
+     * <p>D3 keystone: {@code columnWidth} carries the true segment column the chain-segment call-site threads. It is
+     * threaded-but-NOT-consulted (byte-identical): the opener-fit comparison below still uses the fixed-budget
+     * {@link #expressionFirstLineWidth} / {@link #brokenArgumentListLambdaBodyWidth} probes exactly as before, and the
+     * 2-arg form defaults {@code columnWidth} to {@link #expressionFirstLineWidth}. Consuming it — measuring the opener at
+     * the true column — is the atomic D3 flip, out of scope for this slice.
+     */
+    Optional<Doc> methodCallBodyWithOpener(
+            String parameters,
+            MethodCallExpr methodCall,
+            ToIntFunction<String> columnWidth
+    ) {
         if (
             methodCall.getArguments().isEmpty()
             || methodCall.getScope().filter(sourceShapePolicy::wasMultiline).isPresent()
@@ -248,7 +265,28 @@ final class ExpressionLambdaArgumentLayout {
      * Renders a method-call argument list containing a single eligible expression lambda.
      */
     Optional<Doc> huggableMethodCallArguments(String prefix, NodeList<Expression> arguments) {
-        Optional<Plan> huggable = plan(prefix, arguments);
+        return huggableMethodCallArguments(prefix, arguments, this::expressionFirstLineWidth);
+    }
+
+    /**
+     * Column-carrying overload of {@link #huggableMethodCallArguments(String, NodeList)}.
+     *
+     * <p>D3 keystone (see {@code docs/proposals/layout-decision-model.md}): {@code columnWidth} carries the true segment
+     * column — the width oracle the chain-segment call-site threads (its {@code compactSegmentWidth}), measuring at the
+     * real fanned continuation column rather than the fixed shallow baseline the internal probes assume. It is
+     * threaded-but-NOT-consulted here (byte-identical): every body-shape probe below still decides flat-vs-break with the
+     * fixed-budget {@link #expressionFirstLineWidth} / {@code nodeIndentWidth}-based expressions exactly as before, and the
+     * 2-arg form above defaults {@code columnWidth} to {@link #expressionFirstLineWidth} so
+     * {@code columnWidth.applyAsInt(text)} reproduces today's value. Consuming it — routing the hug body-shape gates
+     * ({@link #openerOverflows}, {@link #compactBodyWithClosingLine}, the fan probes) through the true column — is the
+     * atomic D3 flip, out of scope for this slice.
+     */
+    Optional<Doc> huggableMethodCallArguments(
+            String prefix,
+            NodeList<Expression> arguments,
+            ToIntFunction<String> columnWidth
+    ) {
+        Optional<Plan> huggable = plan(prefix, arguments, LayoutContext.root(), columnWidth);
         if (huggable.isEmpty()) {
             return Optional.empty();
         }
@@ -264,7 +302,8 @@ final class ExpressionLambdaArgumentLayout {
                     .map(MethodCallExpr.class::cast)
                     .flatMap(methodCall -> methodCallBodyWithOpener(
                             lambdaParameters.apply(nestedLambda.orElseThrow()),
-                            methodCall
+                            methodCall,
+                            columnWidth
                     ));
             if (nestedMethodCallBody.isPresent() && !bodyFirstSourceLineFits(firstLine, bodyExpression)) {
                 return Optional.of(
@@ -372,20 +411,20 @@ final class ExpressionLambdaArgumentLayout {
                 return canonicalFan;
             }
         }
-        Optional<Doc> compactBody = compactBodyWithClosingLine(firstLine, bodyExpression);
+        Optional<Doc> compactBody = compactBodyWithClosingLine(firstLine, bodyExpression, columnWidth);
         if (compactBody.isPresent()) {
             return compactBody;
         }
         if (
             bodyExpression instanceof MethodCallExpr chainBody
-            && overflowingHuggedBareRootChainBody(firstLine, chainBody)
+            && overflowingHuggedBareRootChainBody(firstLine, chainBody, columnWidth)
         ) {
             Optional<Doc> huggedChain = huggedLambdaBodyChain(firstLine, chainBody);
             if (huggedChain.isPresent()) {
                 return huggedChain;
             }
         }
-        Optional<PackedLambdaBody> packedBody = packedLambdaBody(lambdaExpr, firstLine, bodyExpression);
+        Optional<PackedLambdaBody> packedBody = packedLambdaBody(lambdaExpr, firstLine, bodyExpression, columnWidth);
         if (packedBody.isPresent()) {
             return Optional.of(packedBody.orElseThrow().render(firstLine));
         }
@@ -401,7 +440,7 @@ final class ExpressionLambdaArgumentLayout {
         }
         if (
             bodyExpression instanceof MethodCallExpr methodCall
-            && methodCallBodyWithOpener(argument.parameters(), methodCall).isPresent()
+            && methodCallBodyWithOpener(argument.parameters(), methodCall, columnWidth).isPresent()
         ) {
             return Optional.empty();
         }
@@ -464,6 +503,28 @@ final class ExpressionLambdaArgumentLayout {
     }
 
     Optional<Plan> plan(String prefix, NodeList<Expression> arguments, LayoutContext layout) {
+        return plan(prefix, arguments, layout, this::expressionFirstLineWidth);
+    }
+
+    /**
+     * Column-carrying overload of {@link #plan(String, NodeList, LayoutContext)}.
+     *
+     * <p>D3 keystone: {@code columnWidth} carries the true segment column the chain-segment call-site threads (its
+     * {@code compactSegmentWidth}), so the eventual reflow-by-width flip can admit-vs-withhold and shape the hug body at
+     * the real fanned continuation column. It is threaded-but-NOT-consulted (byte-identical): the admission gate below
+     * still decides with the fixed-budget {@link #expressionFirstLineWidth} and {@code nodeIndentWidth}-based
+     * {@link #expressionLineWidth} probes exactly as before, and the 3-arg form defaults {@code columnWidth} to
+     * {@link #expressionFirstLineWidth}. It is threaded on to the body-shape probes ({@link #methodCallBodyWithOpener},
+     * the {@code packed*} openers) purely so they carry the same oracle. Consuming it is the atomic D3 flip, out of scope
+     * for this slice — this seam is distinct from the D1g {@link LayoutContext} plumbing, which threads the
+     * {@code leftEdgePrefix} column instead.
+     */
+    Optional<Plan> plan(
+            String prefix,
+            NodeList<Expression> arguments,
+            LayoutContext layout,
+            ToIntFunction<String> columnWidth
+    ) {
         int lambdaIndex = expressionLambdaArgumentIndex(arguments);
         if (
             lambdaIndex < 0
@@ -536,9 +597,9 @@ final class ExpressionLambdaArgumentLayout {
         );
         if (
             bodyExpression instanceof MethodCallExpr methodCall
-            && methodCallBodyWithOpener(parameters, methodCall).isPresent()
-            && packedBodyCallWithoutClosingLine(lambdaExpr, firstLine, bodyExpression).isEmpty()
-            && packedBodyCallScopeWithoutClosingLine(lambdaExpr, firstLine, bodyExpression).isEmpty()
+            && methodCallBodyWithOpener(parameters, methodCall, columnWidth).isPresent()
+            && packedBodyCallWithoutClosingLine(lambdaExpr, firstLine, bodyExpression, columnWidth).isEmpty()
+            && packedBodyCallScopeWithoutClosingLine(lambdaExpr, firstLine, bodyExpression, columnWidth).isEmpty()
             && !bodyFirstSourceLineFits(firstLine, bodyExpression)
         ) {
             return Optional.empty();
@@ -627,12 +688,16 @@ final class ExpressionLambdaArgumentLayout {
      *   render a shape no better than the opener-packing fallback.</li>
      * </ul>
      */
-    private boolean overflowingHuggedBareRootChainBody(String firstLine, MethodCallExpr methodCall) {
+    private boolean overflowingHuggedBareRootChainBody(
+            String firstLine,
+            MethodCallExpr methodCall,
+            ToIntFunction<String> columnWidth
+    ) {
         return methodCall.getScope().filter(MethodCallExpr.class::isInstance).isPresent()
             && chainRootIsBareCall(methodCall)
             && chainCallsCanStayFlat(methodCall)
-            && chainOverflowsHuggedColumn(firstLine, methodCall)
-            && huggedFanFits(firstLine, methodCall);
+            && chainOverflowsHuggedColumn(firstLine, methodCall, columnWidth)
+            && huggedFanFits(firstLine, methodCall, columnWidth);
     }
 
     private boolean chainRootIsBareCall(MethodCallExpr methodCall) {
@@ -643,7 +708,13 @@ final class ExpressionLambdaArgumentLayout {
         return scope.isEmpty();
     }
 
-    private boolean chainOverflowsHuggedColumn(String firstLine, MethodCallExpr methodCall) {
+    private boolean chainOverflowsHuggedColumn(
+            String firstLine,
+            MethodCallExpr methodCall,
+            ToIntFunction<String> columnWidth
+    ) {
+        // D3 keystone: {@code columnWidth} (the true segment column) is threaded-but-NOT-consulted; this probe still
+        // measures at the {@code nodeIndentWidth}-based rendered column exactly as before. Consuming it is the D3 flip.
         return layoutWidth.nodeIndentWidth(methodCall) + firstLine.length() + 1 + compact.apply(methodCall).length()
             > options.lineWidth();
     }
@@ -661,7 +732,10 @@ final class ExpressionLambdaArgumentLayout {
      * then the double continuation indent for selectors), so the decision matches the shape the forced chain actually emits
      * and re-derives identically whether the input arrived flat or already fanned.
      */
-    private boolean huggedFanFits(String firstLine, MethodCallExpr methodCall) {
+    private boolean huggedFanFits(String firstLine, MethodCallExpr methodCall, ToIntFunction<String> columnWidth) {
+        // D3 keystone: {@code columnWidth} (the true segment column) is threaded-but-NOT-consulted; every width gate
+        // below still measures at the {@code nodeIndentWidth}-based rendered column exactly as before. The D3 flip is
+        // what will route these gates through the true segment column.
         MethodCallExpr root = bareCallRoot(methodCall);
         List<MethodCallExpr> segments = chainSegmentsAboveRoot(methodCall, root);
         if (segments.size() < 2) {
@@ -721,7 +795,14 @@ final class ExpressionLambdaArgumentLayout {
                         || sourceShapePolicy.wasMultiline(argument));
     }
 
-    private Optional<Doc> compactBodyWithClosingLine(String firstLine, Expression bodyExpression) {
+    private Optional<Doc> compactBodyWithClosingLine(
+            String firstLine,
+            Expression bodyExpression,
+            ToIntFunction<String> columnWidth
+    ) {
+        // D3 keystone: {@code columnWidth} (the true segment column) is threaded-but-NOT-consulted; the closing-line fit
+        // below still measures at the fixed {@code LAMBDA_ARGUMENT_CLOSING} budget exactly as before. The D3 flip is
+        // what will measure this compact body-with-closing-line at the true segment column.
         if (sourceMultilineBinaryMethodCallBody(bodyExpression)) {
             return Optional.empty();
         }
@@ -742,26 +823,27 @@ final class ExpressionLambdaArgumentLayout {
     private Optional<PackedLambdaBody> packedLambdaBody(
             LambdaExpr lambdaExpr,
             String firstLine,
-            Expression bodyExpression
+            Expression bodyExpression,
+            ToIntFunction<String> columnWidth
     ) {
-        return packedObjectCreationWithoutClosingLine(lambdaExpr, firstLine, bodyExpression)
+        return packedObjectCreationWithoutClosingLine(lambdaExpr, firstLine, bodyExpression, columnWidth)
                 .map(doc -> PackedLambdaBody.closingOnOwnLine(doc, "))"))
-                .or(() -> packedBodyCallWithBlockLambda(lambdaExpr, firstLine, bodyExpression).map(
+                .or(() -> packedBodyCallWithBlockLambda(lambdaExpr, firstLine, bodyExpression, columnWidth).map(
                         doc -> PackedLambdaBody.attachedClosing(doc, "))")
                 ))
                 .or(() -> packedConditionalBody(firstLine, bodyExpression).map(
                         doc -> PackedLambdaBody.closingOnOwnLine(doc, ")")
                 ))
-                .or(() -> packedBodyCallWithoutClosingLine(lambdaExpr, firstLine, bodyExpression).map(
+                .or(() -> packedBodyCallWithoutClosingLine(lambdaExpr, firstLine, bodyExpression, columnWidth).map(
                         doc -> PackedLambdaBody.closingOnOwnLine(doc, "))")
                 ))
                 .or(() -> packedMethodCallChainBody(firstLine, bodyExpression).map(
                         doc -> PackedLambdaBody.closingOnOwnLine(doc, ")")
                 ))
-                .or(() -> packedBodyEmptyCallScope(lambdaExpr, firstLine, bodyExpression).map(
+                .or(() -> packedBodyEmptyCallScope(lambdaExpr, firstLine, bodyExpression, columnWidth).map(
                         doc -> PackedLambdaBody.closingOnOwnLine(doc, ")")
                 ))
-                .or(() -> packedBodyCallScopeWithoutClosingLine(lambdaExpr, firstLine, bodyExpression).map(
+                .or(() -> packedBodyCallScopeWithoutClosingLine(lambdaExpr, firstLine, bodyExpression, columnWidth).map(
                         doc -> PackedLambdaBody.closingOnOwnLine(doc, "))")
                 ));
     }
@@ -804,7 +886,8 @@ final class ExpressionLambdaArgumentLayout {
     private Optional<Doc> packedBodyCallWithoutClosingLine(
             LambdaExpr lambdaExpr,
             String firstLine,
-            Expression bodyExpression
+            Expression bodyExpression,
+            ToIntFunction<String> columnWidth
     ) {
         if (
             !(bodyExpression instanceof MethodCallExpr methodCall)
@@ -814,7 +897,7 @@ final class ExpressionLambdaArgumentLayout {
             return Optional.empty();
         }
         String opener = methodCallPrefix(methodCall) + "(";
-        if (openerOverflows(lambdaExpr, firstLine + " " + opener)) {
+        if (openerOverflows(lambdaExpr, firstLine + " " + opener, columnWidth)) {
             return Optional.empty();
         }
         return Optional.of(
@@ -828,7 +911,8 @@ final class ExpressionLambdaArgumentLayout {
     private Optional<Doc> packedBodyCallWithBlockLambda(
             LambdaExpr outerLambda,
             String firstLine,
-            Expression bodyExpression
+            Expression bodyExpression,
+            ToIntFunction<String> columnWidth
     ) {
         if (
             !(bodyExpression instanceof MethodCallExpr methodCall)
@@ -848,7 +932,7 @@ final class ExpressionLambdaArgumentLayout {
         String parameters = lambdaParameters.apply(lambdaExpr);
         if (
             lambdaParametersShouldBreak.test(lambdaExpr, parameters)
-            || openerOverflows(outerLambda, firstLine + " " + opener + parameters + " -> {")
+            || openerOverflows(outerLambda, firstLine + " " + opener + parameters + " -> {", columnWidth)
         ) {
             return Optional.empty();
         }
@@ -880,7 +964,8 @@ final class ExpressionLambdaArgumentLayout {
     private Optional<Doc> packedObjectCreationWithoutClosingLine(
             LambdaExpr lambdaExpr,
             String firstLine,
-            Expression bodyExpression
+            Expression bodyExpression,
+            ToIntFunction<String> columnWidth
     ) {
         if (
             !(bodyExpression instanceof ObjectCreationExpr objectCreation)
@@ -889,7 +974,7 @@ final class ExpressionLambdaArgumentLayout {
             return Optional.empty();
         }
         String opener = objectCreationPrefix(objectCreation) + "(";
-        if (openerOverflows(lambdaExpr, firstLine + " " + opener)) {
+        if (openerOverflows(lambdaExpr, firstLine + " " + opener, columnWidth)) {
             return Optional.empty();
         }
         return Optional.of(
@@ -908,7 +993,8 @@ final class ExpressionLambdaArgumentLayout {
     private Optional<Doc> packedBodyCallScopeWithoutClosingLine(
             LambdaExpr lambdaExpr,
             String firstLine,
-            Expression bodyExpression
+            Expression bodyExpression,
+            ToIntFunction<String> columnWidth
     ) {
         if (
             !(bodyExpression instanceof MethodCallExpr methodCall)
@@ -921,7 +1007,7 @@ final class ExpressionLambdaArgumentLayout {
         if (!bodyFirstLine.endsWith("(") && !bodyFirstLine.equals(scope)) {
             return Optional.empty();
         }
-        if (openerOverflows(lambdaExpr, firstLine + " " + scope)) {
+        if (openerOverflows(lambdaExpr, firstLine + " " + scope, columnWidth)) {
             return Optional.empty();
         }
         return Optional.of(
@@ -942,7 +1028,8 @@ final class ExpressionLambdaArgumentLayout {
     private Optional<Doc> packedBodyEmptyCallScope(
             LambdaExpr lambdaExpr,
             String firstLine,
-            Expression bodyExpression
+            Expression bodyExpression,
+            ToIntFunction<String> columnWidth
     ) {
         if (
             !(bodyExpression instanceof MethodCallExpr methodCall)
@@ -957,10 +1044,10 @@ final class ExpressionLambdaArgumentLayout {
             return Optional.empty();
         }
         String compactCall = scope + "." + methodCallSelector(methodCall) + "()";
-        if (!openerOverflows(lambdaExpr, firstLine + " " + compactCall)) {
+        if (!openerOverflows(lambdaExpr, firstLine + " " + compactCall, columnWidth)) {
             return Optional.of(Doc.text(compactCall));
         }
-        if (openerOverflows(lambdaExpr, firstLine + " " + scope)) {
+        if (openerOverflows(lambdaExpr, firstLine + " " + scope, columnWidth)) {
             return Optional.empty();
         }
         return Optional.of(
@@ -1040,6 +1127,23 @@ final class ExpressionLambdaArgumentLayout {
      * form renders only when it does not — the true-column flat-vs-broken decision stays with that conditional group.
      */
     Optional<Doc> logicalBinaryLambdaBodyOpenerHug(String prefix, MethodCallExpr expression) {
+        return logicalBinaryLambdaBodyOpenerHug(prefix, expression, this::expressionFirstLineWidth);
+    }
+
+    /**
+     * Column-carrying overload of {@link #logicalBinaryLambdaBodyOpenerHug(String, MethodCallExpr)}.
+     *
+     * <p>D3 keystone: {@code columnWidth} carries the true segment column the chain-segment call-site threads. It is
+     * threaded-but-NOT-consulted (byte-identical): the first-operand-fits guard below still uses the depth-aware
+     * {@link #openerOverflows} probe exactly as before, and the 2-arg form defaults {@code columnWidth} to
+     * {@link #expressionFirstLineWidth}. Consuming it — measuring the opener at the true segment column — is the atomic
+     * D3 flip, out of scope for this slice.
+     */
+    Optional<Doc> logicalBinaryLambdaBodyOpenerHug(
+            String prefix,
+            MethodCallExpr expression,
+            ToIntFunction<String> columnWidth
+    ) {
         NodeList<Expression> arguments = expression.getArguments();
         if (arguments.size() != 1 || !(arguments.get(0) instanceof LambdaExpr lambdaExpr)) {
             return Optional.empty();
@@ -1065,7 +1169,7 @@ final class ExpressionLambdaArgumentLayout {
         // gluing the first operand after {@code ->} the same way the shared renderer's {@code lambdaFirstLine} does.
         String firstLine = prefix + "(" + parameters + " ->";
         String firstOperand = compact.apply(firstBinaryOperand(logicalBody.orElseThrow()));
-        if (openerOverflows(lambdaExpr, firstLine + " " + firstOperand)) {
+        if (openerOverflows(lambdaExpr, firstLine + " " + firstOperand, columnWidth)) {
             return Optional.empty();
         }
         return Optional.of(
@@ -1129,7 +1233,10 @@ final class ExpressionLambdaArgumentLayout {
      * hug that genuinely overflows at its true depth; it never relaxes the gate for shallow calls, keeping fitting hugs
      * unchanged.
      */
-    private boolean openerOverflows(LambdaExpr lambdaExpr, String openerLine) {
+    private boolean openerOverflows(LambdaExpr lambdaExpr, String openerLine, ToIntFunction<String> columnWidth) {
+        // D3 keystone: {@code columnWidth} (the true segment column) is threaded-but-NOT-consulted; the probe still takes
+        // the wider of the fixed baseline and the {@code nodeIndentWidth}-based rendered column exactly as before. The D3
+        // flip is what will measure this opener at the true segment column instead.
         int renderedWidth = layoutWidth.nodeIndentWidth(lambdaExpr) + openerLine.length();
         return Math.max(expressionFirstLineWidth(openerLine), renderedWidth) > options.lineWidth();
     }
@@ -1401,5 +1508,46 @@ final class ExpressionLambdaArgumentLayout {
     @FunctionalInterface
     interface PlanFactory {
         Optional<Plan> plan(String prefix, NodeList<Expression> arguments, LayoutContext layout);
+    }
+
+    /**
+     * The cross-printer boundary for {@link #huggableMethodCallArguments}: the shape the call and chain printers hold so
+     * they can render a hugged expression-lambda argument list at the true segment column.
+     *
+     * <p>D3 keystone: this widens the earlier {@code BiFunction<String, NodeList<Expression>, Optional<Doc>>} to carry
+     * {@code columnWidth}, the true-segment-column oracle the chain-segment call-site threads. It is
+     * threaded-but-NOT-consulted today (byte-identical); the hug body-shape probes still measure at the fixed budget (see
+     * {@link #huggableMethodCallArguments(String, NodeList, ToIntFunction)}). Consuming it is the atomic D3 flip.
+     */
+    @FunctionalInterface
+    interface HuggableExpressionLambdaArguments {
+        Optional<Doc> render(String prefix, NodeList<Expression> arguments, ToIntFunction<String> columnWidth);
+    }
+
+    /**
+     * The cross-printer boundary for {@link #methodCallBodyWithOpener}: the shape the chain printer holds so a fanned
+     * chain selector can hug a single-method-call-body lambda opener at the true segment column.
+     *
+     * <p>D3 keystone: widens the earlier {@code BiFunction<String, MethodCallExpr, Optional<Doc>>} to carry
+     * {@code columnWidth}. Threaded-but-NOT-consulted today (byte-identical); the opener-fit probe still measures at the
+     * fixed budget (see {@link #methodCallBodyWithOpener(String, MethodCallExpr, ToIntFunction)}). Consuming it is the D3 flip.
+     */
+    @FunctionalInterface
+    interface ExpressionLambdaMethodCallBodyOpener {
+        Optional<Doc> render(String parameters, MethodCallExpr methodCall, ToIntFunction<String> columnWidth);
+    }
+
+    /**
+     * The cross-printer boundary for {@link #logicalBinaryLambdaBodyOpenerHug}: the shape the chain printer holds so a
+     * fanned chain selector can hug a logical-binary-body lambda opener at the true segment column.
+     *
+     * <p>D3 keystone: widens the earlier {@code BiFunction<String, MethodCallExpr, Optional<Doc>>} to carry
+     * {@code columnWidth}. Threaded-but-NOT-consulted today (byte-identical); the first-operand-fits guard still measures
+     * at the fixed budget (see {@link #logicalBinaryLambdaBodyOpenerHug(String, MethodCallExpr, ToIntFunction)}).
+     * Consuming it is the D3 flip.
+     */
+    @FunctionalInterface
+    interface ExpressionLambdaLogicalBinaryBodyOpenerHug {
+        Optional<Doc> render(String prefix, MethodCallExpr expression, ToIntFunction<String> columnWidth);
     }
 }

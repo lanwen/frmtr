@@ -444,8 +444,26 @@ final class ExpressionLambdaArgumentLayout {
 
     /**
      * Builds the shared expression-lambda argument plan used by call and chain printers for width decisions.
+     *
+     * <p>D1g (#190) threads {@code layout} so the true continuation column ({@link LayoutContext#leftEdgePrefix()}) is
+     * available to this lambda-hug admission gate for the eventual reflow-by-width flip. It is NOT yet consulted: the
+     * entry gate below still decides admit-vs-withhold with the fixed-budget {@link #expressionFirstLineWidth} and
+     * {@code nodeIndentWidth}-based {@link #expressionLineWidth} probes exactly as before, so threading it is
+     * byte-identical. The external callers (return / assignment / initializer / statement-call and single-segment-root
+     * positions) already thread a real {@link LayoutContext} — carrying the {@code "return "} / {@code NAME = } /
+     * segment prefix — into their own Plan-consuming first-line predicates ({@code methodCallRootLineWidth},
+     * {@code compactRootLineWidth}); this makes the SAME context available to the plan's own internal admission probe so
+     * it can measure at the identical rendered column once C10 activates. The internal caller
+     * ({@link #huggableMethodCallArguments}) passes {@link LayoutContext#root()}: it owns the hug body-shape column
+     * decisions ({@link #openerOverflows}, {@link #compactBodyWithClosingLine}, the fan probes) separately from this
+     * admission gate, and its own chain-segment / attach entry points are the chain-track / D2d-owned positions whose
+     * true column is a segment column, not a {@code leftEdgePrefix} (see the flip-map).
      */
     Optional<Plan> plan(String prefix, NodeList<Expression> arguments) {
+        return plan(prefix, arguments, LayoutContext.root());
+    }
+
+    Optional<Plan> plan(String prefix, NodeList<Expression> arguments, LayoutContext layout) {
         int lambdaIndex = expressionLambdaArgumentIndex(arguments);
         if (
             lambdaIndex < 0
@@ -1369,5 +1387,19 @@ final class ExpressionLambdaArgumentLayout {
         boolean bodyOpenerOverflows(ToIntFunction<String> bodyOpenerWidth, int lineWidth) {
             return !callBodyOpenerLine.isEmpty() && bodyOpenerWidth.applyAsInt(callBodyOpenerLine) > lineWidth;
         }
+    }
+
+    /**
+     * The cross-printer boundary for {@link #plan}: the shape the call and chain printers hold so they can build a
+     * {@link Plan} at the true continuation column.
+     *
+     * <p>D1g (#190) widened this from the earlier {@code BiFunction<String, NodeList<Expression>, Optional<Plan>>} to
+     * carry the caller's {@link LayoutContext}. The context is threaded-but-not-consulted today (byte-identical); it
+     * exists so the lambda-hug admission gate can measure at the same rendered column its callers already use for their
+     * Plan-consuming first-line predicates once C10 activates.
+     */
+    @FunctionalInterface
+    interface PlanFactory {
+        Optional<Plan> plan(String prefix, NodeList<Expression> arguments, LayoutContext layout);
     }
 }

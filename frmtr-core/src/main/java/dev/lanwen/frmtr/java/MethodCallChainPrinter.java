@@ -75,7 +75,7 @@ final class MethodCallChainPrinter {
 
     private final BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument;
 
-    private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments;
+    private final ExpressionLambdaArgumentLayout.HuggableExpressionLambdaArguments huggableExpressionLambdaArguments;
 
     private final ExpressionLambdaArgumentLayout.PlanFactory expressionLambdaArgumentPlan;
 
@@ -87,9 +87,9 @@ final class MethodCallChainPrinter {
 
     private final Function<LambdaExpr, Optional<Doc>> huggedGapCommentedLambdaBody;
 
-    private final BiFunction<String, MethodCallExpr, Optional<Doc>> expressionLambdaMethodCallBodyOpener;
+    private final ExpressionLambdaArgumentLayout.ExpressionLambdaMethodCallBodyOpener expressionLambdaMethodCallBodyOpener;
 
-    private final BiFunction<String, MethodCallExpr, Optional<Doc>> expressionLambdaLogicalBinaryBodyOpenerHug;
+    private final ExpressionLambdaArgumentLayout.ExpressionLambdaLogicalBinaryBodyOpenerHug expressionLambdaLogicalBinaryBodyOpenerHug;
 
     MethodCallChainPrinter(
             JavaFormatContext context,
@@ -103,12 +103,12 @@ final class MethodCallChainPrinter {
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,
             BiFunction<String, NodeList<Expression>, Optional<String>> huggableBlockLambdaFirstLine,
             BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument,
-            BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments,
+            ExpressionLambdaArgumentLayout.HuggableExpressionLambdaArguments huggableExpressionLambdaArguments,
             ExpressionLambdaArgumentLayout.PlanFactory expressionLambdaArgumentPlan,
             Function<LambdaExpr, Optional<Doc>> huggedGapCommentedLambdaBody,
             Function<LambdaExpr, String> lambdaParameters,
-            BiFunction<String, MethodCallExpr, Optional<Doc>> expressionLambdaMethodCallBodyOpener,
-            BiFunction<String, MethodCallExpr, Optional<Doc>> expressionLambdaLogicalBinaryBodyOpenerHug
+            ExpressionLambdaArgumentLayout.ExpressionLambdaMethodCallBodyOpener expressionLambdaMethodCallBodyOpener,
+            ExpressionLambdaArgumentLayout.ExpressionLambdaLogicalBinaryBodyOpenerHug expressionLambdaLogicalBinaryBodyOpenerHug
     ) {
         this.comments = context.comments;
         this.commentPlacement = context.commentPlacementPolicy;
@@ -2365,7 +2365,11 @@ final class MethodCallChainPrinter {
                 return sourceMultilineLambdaBody.orElseThrow();
             }
             Optional<Doc> huggableExpressionLambda = comments.speculatively(
-                () -> huggableExpressionLambdaArguments.apply(plan.chainSegmentPrefix(), firstCall.getArguments())
+                () -> huggableExpressionLambdaArguments.render(
+                    plan.chainSegmentPrefix(),
+                    firstCall.getArguments(),
+                    expressionLambdaColumnWidthFallback()
+                )
             );
             if (huggableExpressionLambda.isPresent()) {
                 return Doc.concat(expressionRenderer.format(root, LayoutContext.root()), huggableExpressionLambda.orElseThrow());
@@ -2668,7 +2672,11 @@ final class MethodCallChainPrinter {
                                     .orElse("")
                             + expression.getNameAsString()
                 )
-                .flatMap(prefix -> huggableExpressionLambdaArguments.apply(prefix, expression.getArguments()));
+                .flatMap(prefix -> huggableExpressionLambdaArguments.render(
+                    prefix,
+                    expression.getArguments(),
+                    expressionLambdaColumnWidthFallback()
+                ));
     }
 
     private Doc groupedPromotedRootWithSingleSegment(
@@ -2852,7 +2860,11 @@ final class MethodCallChainPrinter {
                 return Optional.empty();
             }
             Optional<Doc> huggableExpressionLambda = comments.speculatively(
-                () -> huggableExpressionLambdaArguments.apply(callPrefix, call.getArguments())
+                () -> huggableExpressionLambdaArguments.render(
+                    callPrefix,
+                    call.getArguments(),
+                    expressionLambdaColumnWidthFallback()
+                )
             );
             if (huggableExpressionLambda.isPresent()) {
                 if (
@@ -3650,6 +3662,23 @@ final class MethodCallChainPrinter {
     }
 
     /**
+     * The fixed-budget column oracle handed to the expression-lambda hug/opener seams
+     * ({@link ExpressionLambdaArgumentLayout.HuggableExpressionLambdaArguments},
+     * {@link ExpressionLambdaArgumentLayout.ExpressionLambdaMethodCallBodyOpener},
+     * {@link ExpressionLambdaArgumentLayout.ExpressionLambdaLogicalBinaryBodyOpenerHug}) at every call-site that is NOT a
+     * fanned chain selector.
+     *
+     * <p>D3 keystone: reproduces the seams' historical {@code expressionFirstLineWidth} baseline exactly —
+     * {@code expressionFirstLineWidth(text) == layoutWidth.line(BLOCK, indentUnit + text) == layoutWidth.line(CONTINUATION, text)}
+     * — so threading it is byte-identical. A fanned chain selector instead threads its own {@code compactSegmentWidth} (the
+     * true segment column) at the segment call-site; consuming either column is the atomic D3 flip, out of scope for this
+     * slice, which is why this fallback and the segment column are still interchangeable today.
+     */
+    private ToIntFunction<String> expressionLambdaColumnWidthFallback() {
+        return lineWidth(LayoutWidth.LineBudget.CONTINUATION);
+    }
+
+    /**
      * Measures the selector's line width when the selector was broken onto its own continuation line after the scope.
      *
      * <p>C10 (#217): the sole caller ({@link #promotedRootArgumentsShouldBreak}) reaches it only when
@@ -3963,7 +3992,14 @@ final class MethodCallChainPrinter {
         // picks hug-vs-break at the true live column. Block-lambda and comment-carrying lambdas are handled by the earlier
         // branches (they never reach here), so this only ever sees a clean expression lambda.
         Optional<Doc> sourceNeutralExpressionLambda = comments.speculatively(
-            () -> sourceNeutralExpressionLambdaSegment(prefix, expression, segmentPrefix, finalSegmentSuffix, segmentOnOwnLine)
+            () -> sourceNeutralExpressionLambdaSegment(
+                prefix,
+                expression,
+                segmentPrefix,
+                finalSegmentSuffix,
+                segmentOnOwnLine,
+                compactSegmentWidth
+            )
         );
         if (sourceNeutralExpressionLambda.isPresent()) {
             return sourceNeutralExpressionLambda.orElseThrow();
@@ -4345,7 +4381,8 @@ final class MethodCallChainPrinter {
             MethodCallExpr expression,
             Doc segmentPrefix,
             MethodCallChainTail finalSegmentSuffix,
-            boolean segmentOnOwnLine
+            boolean segmentOnOwnLine,
+            ToIntFunction<String> compactSegmentWidth
     ) {
         Optional<LambdaExpr> lambda = soleTrailingExpressionLambdaSelectorArgument(expression);
         if (lambda.isEmpty()) {
@@ -4394,7 +4431,11 @@ final class MethodCallChainPrinter {
         Doc hugBody;
         if (body instanceof MethodCallExpr bodyChain && !methodCallChainRootIsObjectCreation(bodyChain)) {
             Optional<Doc> hug = comments.speculatively(
-                () -> huggableExpressionLambdaArguments.apply(prefix, expression.getArguments())
+                () -> huggableExpressionLambdaArguments.render(
+                    prefix,
+                    expression.getArguments(),
+                    compactSegmentWidth
+                )
             );
             // The hug is only a valid conditionalGroup FALLBACK when it is a genuinely broken layout. The shared
             // huggableExpressionLambdaArguments renderer stays source-shape-gated for a short single-call body: its
@@ -4428,7 +4469,15 @@ final class MethodCallChainPrinter {
             Doc hugDoc = hug.orElseThrow();
             hugBody = DocRenderer.containsHardLine(hugDoc) || !bodyIsSingleCallSafeForBrokenSegment(bodyChain)
                 ? Doc.concat(hugDoc, finalSegmentSuffix.doc())
-                : singleCallBodyOpenerHugOrBrokenSegment(prefix, expression, lambdaExpr, bodyChain, finalSegmentSuffix, segmentOnOwnLine);
+                : singleCallBodyOpenerHugOrBrokenSegment(
+                    prefix,
+                    expression,
+                    lambdaExpr,
+                    bodyChain,
+                    finalSegmentSuffix,
+                    segmentOnOwnLine,
+                    compactSegmentWidth
+                );
         } else {
             // Single expression-lambda argument hugs its call opener (gjf/prettier-java, comments #2/#3/#5/#6). Any NON-
             // method-call body — an OBJECT CREATION ({@code (left, right) -> new ImageCounter(…)}), an OBJECT-CREATION-ROOTED
@@ -4452,7 +4501,7 @@ final class MethodCallChainPrinter {
             // genuine broken layout the conditionalGroup fallback contract requires); its FLAT degenerate case (redundant with
             // {@code flatBody}) and any body it withholds fall through to {@link #brokenMethodCallSegment} too.
             Optional<Doc> openerHug = segmentOnOwnLine
-                ? expressionBodyOpenerHug(prefix, expression, body, finalSegmentSuffix)
+                ? expressionBodyOpenerHug(prefix, expression, body, finalSegmentSuffix, compactSegmentWidth)
                 : Optional.empty();
             hugBody = openerHug.orElseGet(
                 () -> brokenMethodCallSegment(expression, prefix, Doc.EMPTY, finalSegmentSuffix)
@@ -4508,7 +4557,8 @@ final class MethodCallChainPrinter {
             String prefix,
             MethodCallExpr expression,
             Expression body,
-            MethodCallChainTail finalSegmentSuffix
+            MethodCallChainTail finalSegmentSuffix,
+            ToIntFunction<String> compactSegmentWidth
     ) {
         // A LOGICAL BINARY body ({@code region -> region.beginOffset() == expected.beginOffset() && …}, review round 3) hugs
         // its opener with the first operand on the selector line, each following {@code &&}/{@code ||} operand one per line
@@ -4520,7 +4570,11 @@ final class MethodCallChainPrinter {
         // Relational-with-wide-method-call bodies ({@code x -> x.f(a) == ALLOWED}, kafka {@code AuthHelper}) are not logical
         // binaries, so the helper leaves them unclaimed and they keep the broken-segment shape and stay idempotent.
         Optional<Doc> binaryHug = comments.speculatively(
-            () -> expressionLambdaLogicalBinaryBodyOpenerHug.apply(prefix, expression)
+            () -> expressionLambdaLogicalBinaryBodyOpenerHug.render(
+                prefix,
+                expression,
+                compactSegmentWidth
+            )
         );
         if (binaryHug.isPresent()) {
             return binaryHug.filter(DocRenderer::containsHardLine)
@@ -4533,7 +4587,11 @@ final class MethodCallChainPrinter {
             return Optional.empty();
         }
         Optional<Doc> hug = comments.speculatively(
-            () -> huggableExpressionLambdaArguments.apply(prefix, expression.getArguments())
+            () -> huggableExpressionLambdaArguments.render(
+                prefix,
+                expression.getArguments(),
+                compactSegmentWidth
+            )
         );
         return hug.filter(DocRenderer::containsHardLine)
                 .map(hugDoc -> Doc.concat(hugDoc, finalSegmentSuffix.doc()));
@@ -4563,13 +4621,14 @@ final class MethodCallChainPrinter {
             LambdaExpr lambdaExpr,
             MethodCallExpr bodyCall,
             MethodCallChainTail finalSegmentSuffix,
-            boolean segmentOnOwnLine
+            boolean segmentOnOwnLine,
+            ToIntFunction<String> compactSegmentWidth
     ) {
         // Reached only when the shared renderer handed back the DEGENERATE FLAT one-liner (no forced break) for this
         // single-call body, so re-fetching it would find the same flat shape; build the opener hug directly instead.
         if (segmentOnOwnLine) {
             Optional<Doc> directOpener = comments.speculatively(
-                () -> singleCallLambdaBodyOpenerHug(prefix, lambdaExpr, bodyCall, finalSegmentSuffix)
+                () -> singleCallLambdaBodyOpenerHug(prefix, lambdaExpr, bodyCall, finalSegmentSuffix, compactSegmentWidth)
             );
             if (directOpener.isPresent()) {
                 return directOpener.orElseThrow();
@@ -4591,10 +4650,11 @@ final class MethodCallChainPrinter {
             String prefix,
             LambdaExpr lambdaExpr,
             MethodCallExpr bodyCall,
-            MethodCallChainTail finalSegmentSuffix
+            MethodCallChainTail finalSegmentSuffix,
+            ToIntFunction<String> compactSegmentWidth
     ) {
         String parameters = lambdaParameters.apply(lambdaExpr);
-        return expressionLambdaMethodCallBodyOpener.apply(parameters, bodyCall)
+        return expressionLambdaMethodCallBodyOpener.render(parameters, bodyCall, compactSegmentWidth)
                 .map(bodyOpener -> Doc.concat(
                         Doc.text(prefix + "("),
                         bodyOpener,

@@ -189,6 +189,7 @@ column — the canonical fan #256 is the landed precedent); and attribute every 
 Scopes out AST-changing rewrites; keeps the data-driven config surface reachable via a closed
 combinator vocabulary. · _focused proposal:_ [reprint-by-default-break-rules.md](reprint-by-default-break-rules.md)
 · _execution plan for the hub:_ [hub-canonicalization-atomic-rewrite.md](hub-canonicalization-atomic-rewrite.md)
+· _D3 atomic-flip map (per-read consumer/replacement guide):_ [hub-canonicalization-d3-flip-map.md](hub-canonicalization-d3-flip-map.md)
 
 The satellite constructs (params, throws, control-condition, ternary, enclosed-binary-operand,
 try-resource) landed as small verified commits. The method-call / chain / object-creation / lambda

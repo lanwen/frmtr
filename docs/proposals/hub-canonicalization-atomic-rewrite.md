@@ -4,6 +4,8 @@ Status: 🔵 Proposed — execution plan. Consumes [layout-decision-model.md](la
 (the ranking/measurement mechanism) and [reprint-by-default-break-rules.md](reprint-by-default-break-rules.md)
 (the read-retirement governance). This doc owns *how to actually land* the method-call / chain /
 object-creation / lambda **hub** canonicalization without the reverts that four incremental attempts hit.
+The per-read consumer/replacement guide the D3 flip works from is
+[hub-canonicalization-d3-flip-map.md](hub-canonicalization-d3-flip-map.md).
 
 ## Why the incremental approach reverts, and why this one won't
 

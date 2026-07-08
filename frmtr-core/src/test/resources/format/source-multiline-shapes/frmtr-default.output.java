@@ -17,12 +17,8 @@ class MultilineShapes {
         Key key = new KeyMaker(Curve.P_256)
                 .algorithm(Algo.ES)
                 .build();
-        value = input == null || input.isEmpty()
-            ? List.of()
-            : List.copyOf(input);
-        var routed = keys.isEmpty()
-            ? trimmedValues(source.entries())
-            : List.<String>of();
+        value = input == null || input.isEmpty() ? List.of() : List.copyOf(input);
+        var routed = keys.isEmpty() ? trimmedValues(source.entries()) : List.<String>of();
         int calendarShift = (
             CalendarWindow.from(clock.instant(), ZoneOffset.UTC).dayIndex()
             == CalendarWindow.from(clock.instant(), tenantOffset).dayIndex()

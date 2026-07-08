@@ -52,11 +52,11 @@ final class ConditionalExpressionPrinter {
 
     private final CommentTracker comments;
 
+    private final JavaCommentPlacementPolicy commentPlacement;
+
     private final FormatterOptions options;
 
     private final SourceShapePolicy sourceShapePolicy;
-
-    private final RawSource rawSource;
 
     private final CompactSourceText compactSource;
 
@@ -122,9 +122,9 @@ final class ConditionalExpressionPrinter {
             Predicate<Expression> expressionHasParenthesizedNestedBinary
     ) {
         this.comments = context.comments;
+        this.commentPlacement = context.commentPlacementPolicy;
         this.options = context.options;
         this.sourceShapePolicy = context.sourceShapePolicy;
-        this.rawSource = context.rawSource;
         this.compactSource = context.compactSource;
         this.layoutWidth = context.layoutWidth;
         this.layoutDecisions = context.layoutDecisions;
@@ -225,14 +225,22 @@ final class ConditionalExpressionPrinter {
         if (commented.isPresent()) {
             return commented.orElseThrow();
         }
-        // A caller-forced context and a source-multiline conditional both print the broken ternary shape unconditionally:
-        // those are caller and source-shape decisions, not width decisions, so they never consult the renderer's column.
-        // This is the imperative path: the broken shape is built directly as HardLines, so the renderer only ever sees a
-        // forced break and cannot narrate the width arithmetic. When the caller forced this conditional apart *because*
-        // its flat form overflowed (an assignment/initializer whose one-line ternary was too wide), record that width
-        // decision so --explain can attribute the wrap to width. Recording runs after the broken shape is chosen and
-        // never influences the produced Doc, so output stays byte-identical.
-        if (breakMode.isForced() || sourceShapePolicy.wasMultiline(expression)) {
+        // A caller-forced context prints the broken ternary shape unconditionally: that is a caller decision, not a width
+        // decision, so it never consults the renderer's column. This is the imperative path: the broken shape is built
+        // directly as HardLines, so the renderer only ever sees a forced break and cannot narrate the width arithmetic.
+        // When the caller forced this conditional apart *because* its flat form overflowed (an assignment/initializer
+        // whose one-line ternary was too wide), record that width decision so --explain can attribute the wrap to width.
+        // Recording runs after the broken shape is chosen and never influences the produced Doc, so output stays
+        // byte-identical. A conditional the author happened to write across multiple source lines is NOT forced here —
+        // it reflows through the width-driven auto path below like any other, per reprint-by-default canonicalization.
+        //
+        // A conditional that carries a line comment the flat arm cannot represent is forced broken as well: this is a
+        // comment-safety gate (COMMENT_PRESENCE_GATE), not a source-shape read. {@link #commentedConditionalExpression}
+        // above already handles comments that sit around this ternary's own {@code ?}/{@code :} operators; the remaining
+        // line comments live inside a branch sub-expression (e.g. a binary branch's between-operand {@code //} comment),
+        // which the flat {@code compact} arm would swallow to end-of-line. The broken shape renders each branch through
+        // the ordinary expression renderer, which places those inner comments correctly.
+        if (breakMode.isForced() || conditionalContainsLineComment(expression)) {
             recordTernaryWidthBreak(expression);
             return brokenConditionalExpression(expression);
         }
@@ -777,9 +785,18 @@ final class ConditionalExpressionPrinter {
         if (branch instanceof ConditionalExpr conditionalExpr) {
             return conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED);
         }
-        if (branch instanceof MethodCallExpr && sourceShapePolicy.wasMultiline(branch)) {
-            return Doc.text(rawSource.rawWithoutOwnComment(branch));
-        }
         return expressionRenderer.apply(branch);
+    }
+
+    /**
+     * Reports whether the conditional carries a line comment the flat single-line arm cannot represent, so the broken
+     * ternary shape must be forced to keep the comment. A {@code //} comment runs to end of line, so it cannot sit on the
+     * flat {@code cond ? then : else} line without swallowing the operators after it. Block comments are not gated here:
+     * they can ride the flat line inline. This is the comment-safety companion to the width-driven auto path — the
+     * canonical replacement for the retired {@code wasMultiline} force, which happened to catch these because a
+     * comment-bearing ternary is usually written across source lines.
+     */
+    private boolean conditionalContainsLineComment(ConditionalExpr expression) {
+        return commentPlacement.hasContainedLineComments(expression);
     }
 }

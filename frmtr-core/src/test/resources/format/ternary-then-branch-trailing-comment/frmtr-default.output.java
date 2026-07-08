@@ -23,9 +23,7 @@ class Sample {
     }
 
     int noComments(boolean flag, int firstOperandValue, int secondOperandValue, int thirdOperandValue, int fallback) {
-        int total = flag
-            ? firstOperandValue + secondOperandValue + thirdOperandValue
-            : fallback;
+        int total = flag ? firstOperandValue + secondOperandValue + thirdOperandValue : fallback;
         return total;
     }
 }

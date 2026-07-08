@@ -23,8 +23,7 @@ class SourceMultilineReturnBinaryExpression {
 
     boolean parenthesizedAndUnderOr(RouteFlags flags) {
         return flags.forceRouteApproval()
-            || (flags.primaryRouteReady()
-                && flags.secondaryRouteReady())
+            || (flags.primaryRouteReady() && flags.secondaryRouteReady())
             || flags.manualRouteOverride();
     }
 
@@ -67,8 +66,7 @@ class SourceMultilineReturnBinaryExpression {
     boolean compactCallBodyOverflows(Call expression, String compact, Width width, Options options) {
         return width.currentIndented(compact) > options.lineWidth()
             || rootLineWidth(expression, compact) > options.lineWidth()
-            || (expression.startsAfterScopeLine()
-                && selectorLineWidth(expression, compact) > options.lineWidth())
+            || (expression.startsAfterScopeLine() && selectorLineWidth(expression, compact) > options.lineWidth())
             || ((sourceMultilineTypeLikeRoot(expression) || expression.startsAfterScopeLine())
                 && width.firstLine(compact) > options.lineWidth());
     }

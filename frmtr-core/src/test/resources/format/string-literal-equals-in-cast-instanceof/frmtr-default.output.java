@@ -5,9 +5,7 @@ import java.util.Map;
 final class StringLiteralEqualsInCastInstanceof {
 
     String pickHeader(boolean primary, Map<String, Object> registry) {
-        String resolved = primary
-            ? (String) registry.get("modeOne=")
-            : (String) registry.get("modeTwo=fallback");
+        String resolved = primary ? (String) registry.get("modeOne=") : (String) registry.get("modeTwo=fallback");
         return resolved;
     }
 

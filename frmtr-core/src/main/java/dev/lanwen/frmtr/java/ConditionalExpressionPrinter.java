@@ -52,6 +52,8 @@ final class ConditionalExpressionPrinter {
 
     private final CommentTracker comments;
 
+    private final JavaCommentPlacementPolicy commentPlacement;
+
     private final FormatterOptions options;
 
     private final SourceShapePolicy sourceShapePolicy;
@@ -120,6 +122,7 @@ final class ConditionalExpressionPrinter {
             Predicate<Expression> expressionHasParenthesizedNestedBinary
     ) {
         this.comments = context.comments;
+        this.commentPlacement = context.commentPlacementPolicy;
         this.options = context.options;
         this.sourceShapePolicy = context.sourceShapePolicy;
         this.compactSource = context.compactSource;
@@ -794,6 +797,6 @@ final class ConditionalExpressionPrinter {
      * comment-bearing ternary is usually written across source lines.
      */
     private boolean conditionalContainsLineComment(ConditionalExpr expression) {
-        return expression.getAllContainedComments().stream().anyMatch(LineComment.class::isInstance);
+        return commentPlacement.hasContainedLineComments(expression);
     }
 }

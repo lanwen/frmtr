@@ -63,17 +63,50 @@ final class BreakableArgumentExpressionPrinter {
         return argument(argument, "");
     }
 
+    Doc argument(Expression argument, String suffix) {
+        return argument(argument, suffix, argumentLayout(suffix));
+    }
+
+    /**
+     * Derives the per-argument {@link LayoutContext} the break-gate is threaded (D1a/#190): an {@code ARGUMENT}-position
+     * context whose {@link LayoutContext#trailingContent()} carries the caller's {@code suffix} (the trailing comma or
+     * call tail) and whose {@link LayoutContext#leftEdgePrefix()} is deliberately empty.
+     *
+     * <p>The prefix is empty because an argument's extra offset is pure continuation indentation applied by the enclosing
+     * list's nested {@code Doc.indent} at render time, not a textual left-edge prefix like an assignment's {@code NAME = }
+     * (see the sibling reasoning in {@code MethodCallPrinter}'s argument-chain seam). The budget stays {@code CONTINUATION}
+     * to match the fixed floor the gate still uses. This reproduces the ad-hoc {@code suffix} the seam already carried, so
+     * deriving it changes no decision.
+     */
+    private LayoutContext argumentLayout(String suffix) {
+        return new LayoutContext(
+            EnclosingConstruct.ARGUMENT,
+            "",
+            LayoutWidth.LineBudget.CONTINUATION,
+            suffix,
+            false
+        );
+    }
+
     /**
      * Keeps an expression argument breakable when its source shape or rendered continuation would otherwise overflow.
      *
      * <p>The suffix is only part of the width probe; callers still own rendering commas, semicolons, or call tails.
+     *
+     * <p>D1a (#190): {@code layout} threads the argument's positional context so the true continuation column
+     * ({@link LayoutContext#leftEdgePrefix()}) and the trailing separator ({@link LayoutContext#trailingContent()})
+     * become AVAILABLE at this arg break-gate for the eventual reflow-by-width flip. It is NOT yet consulted: the gate
+     * keeps its {@link SourceShapePolicy#wasMultiline(com.github.javaparser.ast.Node) wasMultiline} source read and its
+     * {@link LayoutWidth#nodeLine} + fixed-{@code CONTINUATION}-floor probe over the ad-hoc {@code suffix} string exactly
+     * as before, so threading it is byte-identical. Retiring the source read and floor in favour of a renderer-measured
+     * group at the threaded column is the reverted Phase-3 decision change (atomic-rewrite plan rows 3/4/5) and stays out
+     * of this seam.
      */
     // C10 (#220): the continuation-line width is measured at the argument's real rendered depth, floored by the fixed
-    // CONTINUATION budget, rather than at the fixed budget alone (see continuationWidth). The trailing comma/tail still
-    // arrives as an ad-hoc `suffix` string; threading a LayoutContext through the argument seam to source it from
-    // LayoutContext.trailingContent() is a separate concern and stays deferred (the seam is shared by method-call and
-    // object-creation argument lists that do not thread a context yet).
-    Doc argument(Expression argument, String suffix) {
+    // CONTINUATION budget, rather than at the fixed budget alone (see continuationWidth). The trailing comma/tail arrives
+    // both as the ad-hoc `suffix` string (still the value the gate measures) and, since D1a, as layout.trailingContent();
+    // sourcing the gate from layout.trailingContent() instead of `suffix` is a decision change (Phase-3) and stays out.
+    Doc argument(Expression argument, String suffix, LayoutContext layout) {
         Doc flat = expressionRenderer.apply(argument);
         // Canonical-fan cutover seam U8: when this argument is a binary/ternary whose dispatched {@code flat} rendering
         // already fans a fluent chain operand by the End-state A structural rule, commit that {@code flat} shape and do
@@ -109,6 +142,18 @@ final class BreakableArgumentExpressionPrinter {
     }
 
     Doc sourceMultilineArgument(Expression argument, String suffix) {
+        return sourceMultilineArgument(argument, suffix, argumentLayout(suffix));
+    }
+
+    /**
+     * Source-multiline-list sibling of {@link #argument(Expression, String, LayoutContext)}.
+     *
+     * <p>D1a (#190): {@code layout} threads the same {@code ARGUMENT}-position context so the true continuation column and
+     * trailing separator are AVAILABLE at this break-gate for the eventual reflow-by-width flip. It is NOT yet consulted:
+     * the gate keeps its {@code wasMultiline} / {@code methodCallArgumentsSpanMultipleLines} source reads and the
+     * {@code nodeLine}+floor probe over the {@code suffix} string exactly as before, so threading it is byte-identical.
+     */
+    Doc sourceMultilineArgument(Expression argument, String suffix, LayoutContext layout) {
         Doc flat = expressionRenderer.apply(argument);
         if (binaryPlusContainsSourceMultilineMethodCallArgument(argument)) {
             return flat;

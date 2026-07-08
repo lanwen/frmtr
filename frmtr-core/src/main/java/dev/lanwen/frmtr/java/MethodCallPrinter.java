@@ -1618,10 +1618,25 @@ final class MethodCallPrinter {
                 return chain.orElseThrow();
             }
         }
+        // D1a (#190): thread a real ARGUMENT-position LayoutContext into the breakable-argument seam so the trailing
+        // separator (LayoutContext#trailingContent, here the same `suffix` the gate measures) and the true continuation
+        // column (LayoutContext#leftEdgePrefix) become AVAILABLE at BreakableArgumentExpressionPrinter's break-gate. It is
+        // NOT consulted yet — the gate keeps its wasMultiline/source reads and the nodeLine+CONTINUATION-floor probe over
+        // `suffix` exactly as before, so this is byte-identical. The leftEdgePrefix is EMPTY for the same reason the AUTO
+        // chain route above leaves it empty: an argument's offset is pure continuation indentation applied by the
+        // enclosing list's Doc.indent at render time, not a textual left-edge prefix. Retiring the source read/floor for a
+        // renderer-measured group at the threaded column is the reverted Phase-3 decision change and stays out of here.
+        LayoutContext argumentGateLayout = new LayoutContext(
+            EnclosingConstruct.ARGUMENT,
+            "",
+            LayoutWidth.LineBudget.CONTINUATION,
+            suffix,
+            false
+        );
         if (sourceMultilineList) {
-            return breakableArguments.sourceMultilineArgument(argument, suffix);
+            return breakableArguments.sourceMultilineArgument(argument, suffix, argumentGateLayout);
         }
-        return breakableArguments.argument(argument, suffix);
+        return breakableArguments.argument(argument, suffix, argumentGateLayout);
     }
 
     private Optional<Doc> textBlockRootChainArgumentWithSuffix(MethodCallExpr expression, String suffix) {

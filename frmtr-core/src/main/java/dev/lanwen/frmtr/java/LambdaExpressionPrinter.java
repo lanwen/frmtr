@@ -1341,10 +1341,19 @@ final class LambdaExpressionPrinter {
         return expressionLambdaArguments.logicalBinaryLambdaBodyOpenerHug(prefix, expression);
     }
 
+    /**
+     * Exposes {@link ExpressionLambdaArgumentLayout#plan} to the call and chain printers.
+     *
+     * <p>D1g (#190) threads {@code layout} so the true continuation column is available to the lambda-hug admission gate.
+     * It is not yet consulted (byte-identical); see the {@code plan} Javadoc for why the internal hug-renderer caller
+     * keeps {@link LayoutContext#root()} while the return / assignment / initializer / single-segment-root positions
+     * thread their real context.
+     */
     Optional<ExpressionLambdaArgumentLayout.Plan> huggableExpressionLambdaArgumentPlan(
             String prefix,
-            NodeList<Expression> arguments
+            NodeList<Expression> arguments,
+            LayoutContext layout
     ) {
-        return expressionLambdaArguments.plan(prefix, arguments);
+        return expressionLambdaArguments.plan(prefix, arguments, layout);
     }
 }

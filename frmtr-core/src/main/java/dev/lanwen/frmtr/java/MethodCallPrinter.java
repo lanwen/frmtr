@@ -78,11 +78,7 @@ final class MethodCallPrinter {
 
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments;
 
-    private final BiFunction<
-        String,
-        NodeList<Expression>,
-        Optional<ExpressionLambdaArgumentLayout.Plan>
-    > expressionLambdaArgumentPlan;
+    private final ExpressionLambdaArgumentLayout.PlanFactory expressionLambdaArgumentPlan;
 
     private final Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer;
 
@@ -104,11 +100,7 @@ final class MethodCallPrinter {
             BiFunction<String, NodeList<Expression>, Optional<String>> huggableBlockLambdaFirstLine,
             BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments,
-            BiFunction<
-                String,
-                NodeList<Expression>,
-                Optional<ExpressionLambdaArgumentLayout.Plan>
-            > expressionLambdaArgumentPlan,
+            ExpressionLambdaArgumentLayout.PlanFactory expressionLambdaArgumentPlan,
             Function<LambdaExpr, Optional<Doc>> huggedGapCommentedLambdaBody,
             Function<LambdaExpr, String> lambdaParameters,
             BiFunction<String, MethodCallExpr, Optional<Doc>> expressionLambdaMethodCallBodyOpener,
@@ -589,9 +581,10 @@ final class MethodCallPrinter {
             MethodCallExpr expression,
             LayoutContext layout
     ) {
-        Optional<ExpressionLambdaArgumentLayout.Plan> plan = expressionLambdaArgumentPlan.apply(
+        Optional<ExpressionLambdaArgumentLayout.Plan> plan = expressionLambdaArgumentPlan.plan(
             prefix,
-            expression.getArguments()
+            expression.getArguments(),
+            layout
         );
         if (plan.filter(argument -> expressionLambdaBodyOpenerOverflows(expression, argument, layout)).isEmpty()) {
             return Optional.empty();
@@ -1317,9 +1310,10 @@ final class MethodCallPrinter {
             return Optional.empty();
         }
         String prefix = methodCallPrefix(expression);
-        Optional<ExpressionLambdaArgumentLayout.Plan> plan = expressionLambdaArgumentPlan.apply(
+        Optional<ExpressionLambdaArgumentLayout.Plan> plan = expressionLambdaArgumentPlan.plan(
             prefix,
-            expression.getArguments()
+            expression.getArguments(),
+            layout
         );
         if (
             plan.filter(argument -> argument.firstLineFits(

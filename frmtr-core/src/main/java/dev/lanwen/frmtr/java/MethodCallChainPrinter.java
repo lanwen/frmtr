@@ -77,11 +77,7 @@ final class MethodCallChainPrinter {
 
     private final BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments;
 
-    private final BiFunction<
-        String,
-        NodeList<Expression>,
-        Optional<ExpressionLambdaArgumentLayout.Plan>
-    > expressionLambdaArgumentPlan;
+    private final ExpressionLambdaArgumentLayout.PlanFactory expressionLambdaArgumentPlan;
 
     private final LayoutDecisionLog layoutDecisions;
 
@@ -108,11 +104,7 @@ final class MethodCallChainPrinter {
             BiFunction<String, NodeList<Expression>, Optional<String>> huggableBlockLambdaFirstLine,
             BiFunction<String, MethodCallExpr, Optional<Doc>> commentedExpressionLambdaArgument,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableExpressionLambdaArguments,
-            BiFunction<
-                String,
-                NodeList<Expression>,
-                Optional<ExpressionLambdaArgumentLayout.Plan>
-            > expressionLambdaArgumentPlan,
+            ExpressionLambdaArgumentLayout.PlanFactory expressionLambdaArgumentPlan,
             Function<LambdaExpr, Optional<Doc>> huggedGapCommentedLambdaBody,
             Function<LambdaExpr, String> lambdaParameters,
             BiFunction<String, MethodCallExpr, Optional<Doc>> expressionLambdaMethodCallBodyOpener,
@@ -2851,9 +2843,10 @@ final class MethodCallChainPrinter {
             return Optional.of(Doc.concat(huggableLambda.orElseThrow(), finalSegmentSuffix.doc()));
         }
         if (sourceShapePolicy.expressionLambdaStartsOnSelectorLine(call) && expressionLambdaSpansMultipleLines(call)) {
-            Optional<ExpressionLambdaArgumentLayout.Plan> expressionLambdaPlan = expressionLambdaArgumentPlan.apply(
+            Optional<ExpressionLambdaArgumentLayout.Plan> expressionLambdaPlan = expressionLambdaArgumentPlan.plan(
                 callPrefix,
-                call.getArguments()
+                call.getArguments(),
+                layout
             );
             if (expressionLambdaPlan.isEmpty()) {
                 return Optional.empty();
@@ -2922,9 +2915,10 @@ final class MethodCallChainPrinter {
         ) {
             return false;
         }
-        Optional<ExpressionLambdaArgumentLayout.Plan> expressionLambdaPlan = expressionLambdaArgumentPlan.apply(
+        Optional<ExpressionLambdaArgumentLayout.Plan> expressionLambdaPlan = expressionLambdaArgumentPlan.plan(
             callPrefix,
-            arguments
+            arguments,
+            layout
         );
         return expressionLambdaPlan
                 .map(plan -> plan.firstLineFits(
@@ -2992,7 +2986,7 @@ final class MethodCallChainPrinter {
             NodeList<Expression> arguments,
             LayoutContext layout
     ) {
-        return expressionLambdaArgumentPlan.apply(callPrefix, arguments)
+        return expressionLambdaArgumentPlan.plan(callPrefix, arguments, layout)
                 .filter(plan -> plan.bodyOpenerFitsOnContinuation(lineWidth(LayoutWidth.LineBudget.CONTINUATION), options.lineWidth()))
                 .filter(plan -> plan.bodyOpenerOverflows(
                         line -> compactRootLineWidth(root, line, LayoutWidth.LineBudget.CURRENT, layout),

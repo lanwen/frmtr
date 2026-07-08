@@ -188,6 +188,17 @@ structural `BreakRule`s (a pure-AST predicate + a source-neutral layout ranked a
 column — the canonical fan #256 is the landed precedent); and attribute every break via `--explain`.
 Scopes out AST-changing rewrites; keeps the data-driven config surface reachable via a closed
 combinator vocabulary. · _focused proposal:_ [reprint-by-default-break-rules.md](reprint-by-default-break-rules.md)
+· _execution plan for the hub:_ [hub-canonicalization-atomic-rewrite.md](hub-canonicalization-atomic-rewrite.md)
+
+The satellite constructs (params, throws, control-condition, ternary, enclosed-binary-operand,
+try-resource) landed as small verified commits. The method-call / chain / object-creation / lambda
+**hub** cannot — four corpus-proven attempts showed every partial retirement either oscillates (a
+width-driven level under a source-gated level) or over-widths (an approximate-column probe). The hub is a
+single **atomic** conversion to pure-AST + true-column, and
+[hub-canonicalization-atomic-rewrite.md](hub-canonicalization-atomic-rewrite.md) is the non-reverting
+plan for it: build the renderer-measured measurement substrate and structural residue gates
+byte-identically first, then flip the source-read gates all at once, validated against golden-independent
+corpus invariants (idempotence, AST-equivalence, comment parity, over-width) rather than goldens.
 
 ---
 

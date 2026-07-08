@@ -1612,25 +1612,14 @@ final class MethodCallPrinter {
                 return chain.orElseThrow();
             }
         }
-        // D1a (#190): thread a real ARGUMENT-position LayoutContext into the breakable-argument seam so the trailing
-        // separator (LayoutContext#trailingContent, here the same `suffix` the gate measures) and the true continuation
-        // column (LayoutContext#leftEdgePrefix) become AVAILABLE at BreakableArgumentExpressionPrinter's break-gate. It is
-        // NOT consulted yet — the gate keeps its wasMultiline/source reads and the nodeLine+CONTINUATION-floor probe over
-        // `suffix` exactly as before, so this is byte-identical. The leftEdgePrefix is EMPTY for the same reason the AUTO
-        // chain route above leaves it empty: an argument's offset is pure continuation indentation applied by the
-        // enclosing list's Doc.indent at render time, not a textual left-edge prefix. Retiring the source read/floor for a
-        // renderer-measured group at the threaded column is the reverted Phase-3 decision change and stays out of here.
-        LayoutContext argumentGateLayout = new LayoutContext(
-            EnclosingConstruct.ARGUMENT,
-            "",
-            LayoutWidth.LineBudget.CONTINUATION,
-            suffix,
-            false
-        );
+        // D1a (#190): the breakable-argument seam threads a real ARGUMENT-position LayoutContext (empty leftEdgePrefix +
+        // `suffix` as trailingContent) into its break-gate for the eventual reflow-by-width flip. That context is derived
+        // from `suffix` alone, so BreakableArgumentExpressionPrinter builds it once in argumentLayout(suffix) — the caller
+        // supplies nothing it lacks, and passing a hand-built copy here would only duplicate that factory.
         if (sourceMultilineList) {
-            return breakableArguments.sourceMultilineArgument(argument, suffix, argumentGateLayout);
+            return breakableArguments.sourceMultilineArgument(argument, suffix);
         }
-        return breakableArguments.argument(argument, suffix, argumentGateLayout);
+        return breakableArguments.argument(argument, suffix);
     }
 
     private Optional<Doc> textBlockRootChainArgumentWithSuffix(MethodCallExpr expression, String suffix) {

@@ -106,7 +106,7 @@ final class BreakableArgumentExpressionPrinter {
     // CONTINUATION budget, rather than at the fixed budget alone (see continuationWidth). The trailing comma/tail arrives
     // both as the ad-hoc `suffix` string (still the value the gate measures) and, since D1a, as layout.trailingContent();
     // sourcing the gate from layout.trailingContent() instead of `suffix` is a decision change (Phase-3) and stays out.
-    Doc argument(Expression argument, String suffix, LayoutContext layout) {
+    private Doc argument(Expression argument, String suffix, LayoutContext layout) {
         Doc flat = expressionRenderer.apply(argument);
         // Canonical-fan cutover seam U8: when this argument is a binary/ternary whose dispatched {@code flat} rendering
         // already fans a fluent chain operand by the End-state A structural rule, commit that {@code flat} shape and do
@@ -153,7 +153,7 @@ final class BreakableArgumentExpressionPrinter {
      * the gate keeps its {@code wasMultiline} / {@code methodCallArgumentsSpanMultipleLines} source reads and the
      * {@code nodeLine}+floor probe over the {@code suffix} string exactly as before, so threading it is byte-identical.
      */
-    Doc sourceMultilineArgument(Expression argument, String suffix, LayoutContext layout) {
+    private Doc sourceMultilineArgument(Expression argument, String suffix, LayoutContext layout) {
         Doc flat = expressionRenderer.apply(argument);
         if (binaryPlusContainsSourceMultilineMethodCallArgument(argument)) {
             return flat;

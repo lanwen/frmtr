@@ -63,11 +63,6 @@ final class SourceReadTripwire {
         COUNTS[read.ordinal()].incrementAndGet();
     }
 
-    /** Whether the tripwire is active for this JVM (resolved once at class load). */
-    static boolean enabled() {
-        return ENABLED;
-    }
-
     private static boolean resolveEnabled() {
         boolean on = isTruthy(System.getProperty("frmtr.sourceReadTripwire"))
                 || isTruthy(System.getenv("FRMTR_SOURCE_READ_TRIPWIRE"));

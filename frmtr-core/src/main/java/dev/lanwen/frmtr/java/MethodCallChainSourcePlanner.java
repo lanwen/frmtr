@@ -96,6 +96,7 @@ final class MethodCallChainSourcePlanner {
         boolean firstCallHasArgumentGapComment,
         boolean laterCallsHaveArgumentGapComment,
         boolean hasTrailingLineComments,
+        boolean hasInterSegmentLineComment,
         boolean expressionSpansMultipleSourceLines
     ) {
         MethodCallChainAnalysis {
@@ -167,7 +168,8 @@ final class MethodCallChainSourcePlanner {
             Predicate<MethodCallExpr> segmentHasArgumentGapComment,
             Predicate<MethodCallExpr> segmentHasBlockLambdaArgument,
             Predicate<List<MethodCallExpr>> chainHasTrailingLineComments,
-            BiPredicate<Expression, List<MethodCallExpr>> rootHasTrailingLineComment
+            BiPredicate<Expression, List<MethodCallExpr>> rootHasTrailingLineComment,
+            BiPredicate<Expression, List<MethodCallExpr>> chainHasInterSegmentLineComment
     ) {
         List<MethodCallExpr> calls = new ArrayList<>();
         Expression root = methodCallChainRoot(expression, calls);
@@ -209,6 +211,7 @@ final class MethodCallChainSourcePlanner {
             firstCallHasArgumentGapComment,
             laterCallsHaveArgumentGapComment,
             hasTrailingLineComments,
+            chainHasInterSegmentLineComment.test(root, calls),
             sourceShapePolicy.wasMultiline(expression)
         );
     }

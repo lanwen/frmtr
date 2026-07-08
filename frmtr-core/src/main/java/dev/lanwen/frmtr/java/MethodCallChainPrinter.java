@@ -989,6 +989,13 @@ final class MethodCallChainPrinter {
                 && !analysis.hasComments()
                 && !analysis.hasBlockLambdaArgument()
                 && !analysis.sourceMultilineChain()
+                // D2a comment-safety residue (hub-canonicalization-atomic-rewrite.md, residue "A"): a chain carrying an
+                // inter-segment `//` line comment must not stay flat, so its fan-only comment-preserving render survives
+                // the eventual `selectorBrokeAfter` retirement. Redundant alongside the live read TODAY — a `//` there
+                // forces the selector onto a later source line, so `sourceMultilineChain` above is already `true` and
+                // this conjunct is a strict subset that never flips the gate (byte-identical). See
+                // {@link #chainHasInterSegmentLineComment}.
+                && !analysis.hasInterSegmentLineComment()
                 // SPIKE fanA (canonical fan, End-state A): a chain that reaches its link-count/root-kind threshold
                 // MUST fan one selector per line even when the flat form fits, so it does not stay flat here. This is
                 // #163's structural stay-flat-gate edit (`!chainBreaksByRule`) — but unlike #163 the break is then
@@ -3247,7 +3254,8 @@ final class MethodCallChainPrinter {
             this::methodCallSegmentHasArgumentGapComment,
             this::methodCallSegmentHasBlockLambdaArgument,
             this::methodCallChainHasTrailingLineComments,
-            this::rootHasTrailingLineCommentBeforeFirstSegment
+            this::rootHasTrailingLineCommentBeforeFirstSegment,
+            this::chainHasInterSegmentLineComment
         );
     }
 
@@ -3405,6 +3413,60 @@ final class MethodCallChainPrinter {
             }
         }
         return !calls.isEmpty() && !finalTrailingLineComments(calls.getLast()).isEmpty();
+    }
+
+    /**
+     * Structural comment-safety residue for the eventual retirement of the {@code selectorBrokeAfter} chain backbone
+     * read ({@code CHAIN_SELECTOR_BROKE}; see {@code docs/proposals/hub-canonicalization-atomic-rewrite.md}, residue "A").
+     * Reports whether a chain carries an inter-segment {@code //} <em>line</em> comment — the one comment class whose only
+     * reason to keep the chain fanned is the author's line break, which the source-shape {@code selectorBrokeAfter} read
+     * currently supplies. When that read is removed, a chain that fanned only to preserve such a comment would collapse
+     * flat and the fan-only comment-preserving render would drop it; this predicate is the structural fan gate that must
+     * take over so the fan survives the flip.
+     *
+     * <p>It covers the three inter-segment positions a {@code //} comment can occupy:
+     * <ul>
+     *   <li><b>root → first selector</b> — a line comment the author parked after the root and before the first selector,
+     *       whether owned by the root as its trailing comment / root-to-first-selector-gap
+     *       ({@link #rootHasTrailingLineCommentBeforeFirstSegment}) or attached as the first selector's leading comment
+     *       ({@link #leadingLineCommentsBeforeSegment});</li>
+     *   <li><b>dot-gap</b> — a line comment leading a later selector on its own continuation line, e.g. {@code .a()}⏎
+     *       {@code // note}⏎{@code .b()} ({@link #leadingLineCommentsBeforeSegment} on each call);</li>
+     *   <li><b>between selectors</b> — a trailing line comment in the gap after one selector and before the next, e.g.
+     *       {@code .a() // note}⏎{@code .b()} ({@link #trailingLineCommentsBeforeNextSegment}).</li>
+     * </ul>
+     *
+     * <p><strong>Line comments only, and why that keeps it a strict subset today.</strong> A {@code //} comment runs to
+     * end-of-line, so it forces the next selector onto a later source line — which is exactly what makes
+     * {@code selectorBrokeAfter} (hence {@code MethodCallChainAnalysis.sourceMultilineChain}) fire. So every chain this
+     * predicate flags is one the live read already forces broken: this gate is <em>redundant</em> alongside the read and
+     * the output is byte-identical. Block comments ({@code create() /* doc *}{@code / .seal()}) are deliberately excluded
+     * because they can sit inline without a line break — the chain can stay flat and {@code sourceMultilineChain} can be
+     * {@code false} — so folding them in would fan a chain the read does not, breaking the strict-subset property. This
+     * predicate consults only the same line-comment candidate sets the imperative comment-preserving render consumes; it
+     * claims no comment, so placement stays owned by the render.
+     */
+    private boolean chainHasInterSegmentLineComment(Expression root, List<MethodCallExpr> calls) {
+        if (calls.isEmpty()) {
+            return false;
+        }
+        // root -> first selector: root-owned trailing / gap line comment, or the first selector's own leading comment.
+        if (rootHasTrailingLineCommentBeforeFirstSegment(root, calls)
+            || methodCallSegmentHasLeadingLineComment(calls.getFirst())) {
+            return true;
+        }
+        for (int index = 0; index < calls.size(); index++) {
+            // dot-gap: a line comment leading a later selector on its own continuation line.
+            if (index > 0 && methodCallSegmentHasLeadingLineComment(calls.get(index))) {
+                return true;
+            }
+            // between selectors: a trailing line comment after this selector and before the next.
+            if (index + 1 < calls.size()
+                && !trailingLineCommentsBeforeNextSegment(calls.get(index), calls.get(index + 1)).isEmpty()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean methodCallSegmentHasBlockLambdaArgument(MethodCallExpr expression) {

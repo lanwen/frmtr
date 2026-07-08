@@ -76,6 +76,7 @@ final class SourceShapePolicy {
      * to reason about for idempotence rather than several range-vs-raw definitions that could disagree on the same node.
      */
     boolean wasMultiline(Node node) {
+        SourceReadTripwire.record(SourceReadTripwire.Read.WAS_MULTILINE);
         return node.getRange()
                 .map(range -> range.begin.line < range.end.line)
                 .orElseGet(() -> rawSource.rawWithoutOwnComment(node).contains("\n"));
@@ -160,6 +161,7 @@ final class SourceShapePolicy {
      * available and the arithmetic is lifted unchanged from the planner.
      */
     boolean selectorBrokeAfter(Node previous, MethodCallExpr selectorOwner) {
+        SourceReadTripwire.record(SourceReadTripwire.Read.SELECTOR_BROKE_AFTER);
         return previous.getRange()
                 .flatMap(previousRange -> selectorOwner.getName().getRange().map(
                         nameRange -> nameRange.begin.line > previousRange.end.line
@@ -171,6 +173,7 @@ final class SourceShapePolicy {
      * Reports whether two nodes begin on the same source line.
      */
     boolean startsOnSameLine(Node left, Node right) {
+        SourceReadTripwire.record(SourceReadTripwire.Read.STARTS_ON_SAME_LINE);
         return left.getRange()
                 .flatMap(leftRange -> right.getRange().map(rightRange -> leftRange.begin.line == rightRange.begin.line))
                 .orElse(false);
@@ -180,6 +183,7 @@ final class SourceShapePolicy {
      * Reports whether a method call's argument list, excluding the receiver and selector, was already multiline.
      */
     boolean methodCallArgumentsSpanMultipleLines(MethodCallExpr expression) {
+        SourceReadTripwire.record(SourceReadTripwire.Read.METHOD_CALL_ARGUMENTS_SPAN_MULTIPLE_LINES);
         return argumentsSpanMultipleLines(
             expression.getName(),
             expression.getArguments(),
@@ -204,6 +208,7 @@ final class SourceShapePolicy {
      * Reports whether an expression-lambda argument starts on the same source line as the method-call selector.
      */
     boolean expressionLambdaStartsOnSelectorLine(MethodCallExpr expression) {
+        SourceReadTripwire.record(SourceReadTripwire.Read.EXPRESSION_LAMBDA_STARTS_ON_SELECTOR_LINE);
         Optional<Integer> selectorLine = expression.getName().getRange().map(range -> range.begin.line);
         if (selectorLine.isEmpty()) {
             return false;
@@ -221,6 +226,7 @@ final class SourceShapePolicy {
      * Reports whether a constructor call's argument list was already multiline.
      */
     boolean objectCreationArgumentsSpanMultipleLines(ObjectCreationExpr expression) {
+        SourceReadTripwire.record(SourceReadTripwire.Read.OBJECT_CREATION_ARGUMENTS_SPAN_MULTIPLE_LINES);
         return argumentsSpanMultipleLines(
             expression.getType(),
             expression.getArguments(),

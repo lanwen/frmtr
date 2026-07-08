@@ -211,3 +211,41 @@ The flip does not start from scratch — it activates substrate already built an
 At D3 these threaded contexts are *consulted* (the fixed-budget floors replaced by a reading at the threaded true
 column), the structural fan rules (D2b/c/d) are switched on, and all hub source gates are removed in one step —
 iterated in-tree against the corpus invariants until idempotence Δ = 0 and over-width ⊆ base.
+
+## First D3 execution attempt — empirical findings (2026-07-08)
+
+A first corpus-gated execution attempt (parked, non-converged, not merged) validated the atomic thesis on real
+files and sharpened the worklist. It retired **Read 1** (`selectorBrokeAfter`, tripwire → 0) and most of **Read 4**
+(`objectCreationArgumentsSpanMultipleLines`, 6216 → 170 hits) plus a partial D2d fix, leaving Reads 2/3/5/6 gated.
+
+Result on kafka (clean-built CLI): `--verify` 0, comment parity, over-width ⊆ base — but **idempotence +7 net-new
+non-idempotent files** (300-file sample). So a chain+object-creation retirement **in isolation does not converge**,
+exactly as the atomic thesis predicts.
+
+- **The +7 oscillators are one family:** an **object-creation-rooted chain nested inside a broken argument or
+  chain-segment lambda body** — `.add(new X().setA(..).setB(..))`, `Collectors.toMap(.., k -> new X(..))`,
+  `.flatMap(x -> x.stream().filter(..).map(..))`.
+- **Empirical mechanism (tripwire on an oscillator, e.g. `NetworkClient`):** `SELECTOR_BROKE_AFTER` = 0 (Read 1
+  retired) but `WAS_MULTILINE` / `METHOD_CALL_ARGUMENTS_SPAN_MULTIPLE_LINES` still fire in the segment-lambda body.
+  Retiring Read 1 removed the source-multiline signal that had been *stabilizing* these nested chains; the still-live
+  Read 2/6 in `sourceNeutralExpressionLambdaSegment` / `methodCallBodyWithOpener` then observe pass-1's own reflow and
+  flip flat⇄break-after-arrow. This is #191 made concrete: Read 1 cannot be a fixpoint while Read 2/6 gate the
+  enclosed level.
+- **The keystone blocker:** threading the true continuation column (#190 `leftEdgePrefix`) into the **segment-lambda
+  opener-fit probes** (`expressionFirstLineWidth` / the object-creation `fanRootDoc` rendered at `root()`) is the
+  direct fix for all 7 oscillators — without it the object-creation-rooted-chain-in-argument body has no stable
+  width-driven fan. Note this is *not* the clean threaded-but-not-consulted plumbing of D1e/D1a/D1g: those sites have
+  no in-scope `LayoutContext`, so the real segment column must first be established there (design work, likely not
+  byte-identical on its own).
+
+**Refined ordered worklist to reach idempotence Δ = 0 (all in the one atomic step):**
+1. Establish + thread the segment-lambda true column (#190 keystone) into the opener-fit probes above.
+2. Retire **Read 2** (`methodCallArgumentsSpanMultipleLines`) atomically across all ~22 sites — including the central
+   router `chainHasSourceMultilineArguments` → `methodCallChainIsSourceMultiline` — replacing with renderer-measured
+   `conditionalGroup`/`bestFitting` at the threaded column.
+3. Retire **Read 3 + Read 6** hub sites in the same step (lambda hug admission + the segment-lambda opener-fit probes).
+4. Then the residual **Read 4/5** arg-hug gate + `compactRootWithBrokenFinalSegment` site.
+5. Only then drop the `SourceShapeException` entries + flip the governance ratchet.
+
+Read 1 + Read 4 retirement is **correct and load-bearing** but *inert-then-oscillating alone*; it is a valid starting
+diff for the driver (parked on the local `wip/d3-atomic-hub-flip` reference), not a landable increment.

@@ -225,8 +225,7 @@ final class BinaryExpressionPrinter {
         if (
             operand instanceof EnclosedExpr enclosedOperand
             && enclosedOperand.getInner() instanceof BinaryExpr binaryOperand
-            && (sourceShapePolicy.wasMultiline(enclosedOperand)
-                || binaryLine.width(compact.apply(enclosedOperand)) > options.lineWidth())
+            && binaryLine.width(compact.apply(enclosedOperand)) > options.lineWidth()
         ) {
             return Doc.concat(Doc.text("("), nestedLines(binaryOperand, true), Doc.text(")"));
         }

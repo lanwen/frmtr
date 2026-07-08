@@ -1044,12 +1044,12 @@ final class StatementPrinter {
 
     private Doc tryResource(Expression resource) {
         Doc leading = Doc.concat(comments.adjacentLeadingLineComments(resource), comments.leading(resource));
-        Doc body;
-        if (sourceShapePolicy.wasMultiline(resource) && resource instanceof VariableDeclarationExpr declaration) {
-            body = variableDeclarationRenderer.format(declaration, LayoutContext.root());
-        } else {
-            body = Doc.text(compact.apply(resource));
-        }
+        // A try-resource variable declaration renders through the width-driven variable-declaration renderer so its
+        // initializer breaks by rendered width; a non-declaration resource stays compact. No longer keyed on whether the
+        // author wrote the resource across source lines (reprint-by-default canonicalization).
+        Doc body = resource instanceof VariableDeclarationExpr declaration
+            ? variableDeclarationRenderer.format(declaration, LayoutContext.root())
+            : Doc.text(compact.apply(resource));
         return Doc.concat(leading, body);
     }
 

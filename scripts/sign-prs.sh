@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# sign-prs.sh — re-sign all commits of one or more open PRs and force-push.
+# sign-prs.sh — sign unsigned commits of one or more open PRs and force-push.
 #
 # Workflow this enables: let automation create/stack PRs with PLAIN (unsigned)
-# commits to keep things fast, then run this when you're ready to sign — it
-# rewrites each PR's commits with your SSH signing key and updates the PR in
-# place (diff unchanged, so the PR stays open).
+# commits to keep things fast, then run this when you're ready to sign — it signs
+# only commits that need new signed objects and updates the PR in place (diff
+# unchanged, so the PR stays open).
 #
 # Adapted from Joe Miller's `git sign-pr` gist
 # (https://gist.github.com/joemiller/abc8f233e3a71e1b60669c250ff19d87), with
@@ -16,8 +16,8 @@
 #   * GATE the push on the signature actually existing on every commit; a
 #     timed-out / failed sign never results in a force-push (which would empty
 #     the PR by pushing the base).
-#   * Per-commit signing timeout, "already signed -> skip" (prompt-free re-runs),
-#     multiple PRs / --all, and a post-push GitHub verification report.
+#   * Per-commit signing timeout, "already signed -> preserve/skip" (prompt-free
+#     re-runs), multiple PRs / --all, and a post-push GitHub verification report.
 #
 # Usage:
 #   scripts/sign-prs.sh <pr-number> [<pr-number> ...]
@@ -28,14 +28,16 @@
 #   --all                 Sign every open PR (head branches) in the repo.
 #   --verify-only         Only report each PR head's GitHub signature status.
 #   --key <pattern>       ssh-agent key comment to sign with (default: GitHub-SSH-Sign).
-#   --timeout <seconds>   Per-commit signing timeout (default: 180).
+#   --timeout <seconds>   Per-commit signing timeout (default: 45).
 #   --squash              Squash each PR to a single commit before signing
-#                         (keeps the head commit's message). Default: sign every commit.
+#                         (keeps the head commit's message). Default: preserve
+#                         signed commits and sign only unsigned commits.
 #   -h, --help            Show this help.
 #
-# Requires: gh (authenticated or sandbox-proxied), git, an ssh-agent holding the
-# signing key, and that the key is registered as a *signing* key on your GitHub
-# account (so GitHub reports verified=true).
+# Requires: gh (authenticated or sandbox-proxied), git, setsid or perl for
+# process-group cleanup, an ssh-agent holding the signing key, and that the key
+# is registered as a *signing* key on your GitHub account (so GitHub reports
+# verified=true).
 #
 set -euo pipefail
 
@@ -47,7 +49,8 @@ warn() { echo "${YELLOW}==> $*${RESET}" >&2; }
 err()  { echo "${RED}error: $*${RESET}" >&2; }
 
 KEY_PATTERN="GitHub-SSH-Sign"
-SIGN_TIMEOUT=180
+SIGN_TIMEOUT=45
+SIGN_TIMEOUT_EXPLICIT=0
 SQUASH=0
 VERIFY_ONLY=0
 ALL=0
@@ -63,7 +66,7 @@ while [[ $# -gt 0 ]]; do
         --verify-only) VERIFY_ONLY=1; shift ;;
         --squash) SQUASH=1; shift ;;
         --key) KEY_PATTERN="$2"; shift 2 ;;
-        --timeout) SIGN_TIMEOUT="$2"; shift 2 ;;
+        --timeout) SIGN_TIMEOUT="$2"; SIGN_TIMEOUT_EXPLICIT=1; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         -*) err "unknown option: $1"; usage >&2; exit 2 ;;
         *) prs+=("$1"); shift ;;
@@ -75,6 +78,110 @@ trap 'rm -rf "${CLEANUP_DIR:-}" 2>/dev/null || true' EXIT
 
 command -v gh >/dev/null || { err "'gh' (GitHub CLI) is required"; exit 1; }
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { err "run inside a git repository"; exit 1; }
+if [[ ! "$SIGN_TIMEOUT" =~ ^[0-9]+$ || "$SIGN_TIMEOUT" -le 0 ]]; then
+    err "--timeout must be a positive integer number of seconds"
+    exit 2
+fi
+
+start_process_group() {
+    if command -v setsid >/dev/null 2>&1; then
+        exec setsid "$@"
+    fi
+    if command -v perl >/dev/null 2>&1; then
+        exec perl -MPOSIX=setsid -e 'setsid() or die "setsid: $!"; exec @ARGV or die "exec: $!\n";' "$@"
+    fi
+    err "setsid or perl is required to isolate signing process groups"
+    exit 127
+}
+
+stop_heartbeat() {
+    local heartbeat_pid="$1"
+    [[ -n "$heartbeat_pid" ]] || return 0
+    kill "$heartbeat_pid" 2>/dev/null || true
+    wait "$heartbeat_pid" 2>/dev/null || true
+}
+
+run_with_timeout() {
+    local seconds="$1"
+    local label="$2"
+    shift 2
+
+    ( start_process_group "$@" ) &
+    local pid=$!
+    local heartbeat_pid=""
+    local started_at=$SECONDS
+
+    if [[ -n "$label" ]]; then
+        (
+            while true; do
+                sleep 15 || exit 0
+                kill -0 "$pid" 2>/dev/null || exit 0
+                warn "${label}: waiting for Touch ID... $((SECONDS - started_at))s/${seconds}s"
+            done
+        ) &
+        heartbeat_pid=$!
+    fi
+
+    while kill -0 "$pid" 2>/dev/null; do
+        if (( SECONDS - started_at >= seconds )); then
+            stop_heartbeat "$heartbeat_pid"
+            warn "${label:-command}: timed out after ${seconds}s; terminating process group ${pid}"
+            kill -TERM "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+            local kill_started_at=$SECONDS
+            while kill -0 "$pid" 2>/dev/null && (( SECONDS - kill_started_at < 5 )); do
+                sleep 1
+            done
+            if kill -0 "$pid" 2>/dev/null; then
+                warn "${label:-command}: still running after TERM; killing process group ${pid}"
+                kill -KILL "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+            fi
+            wait "$pid" 2>/dev/null || true
+            return 124
+        fi
+        sleep 1
+    done
+
+    stop_heartbeat "$heartbeat_pid"
+    local status
+    if wait "$pid"; then
+        status=0
+    else
+        status=$?
+    fi
+    return "$status"
+}
+
+commit_has_signature() {
+    git cat-file commit "$1" | grep -qE 'BEGIN (SSH|PGP) SIGNATURE'
+}
+
+reap_ssh_signers() {
+    for p in $(pgrep -f 'ssh-keygen -Y sign' 2>/dev/null || true); do
+        local ppid; ppid="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')"
+        local secs; secs="$(ps -o etimes= -p "$p" 2>/dev/null | tr -d ' ')"
+        if [[ "$ppid" == "1" ]]; then
+            warn "reaping orphaned ssh-keygen sign (pid $p) — it was blocking the agent"
+            kill -9 "$p" 2>/dev/null || true
+        elif [[ -n "$secs" && "$secs" -gt 60 ]]; then
+            warn "reaping stuck ssh-keygen sign (pid $p, ${secs}s old) — it was blocking the agent"
+            kill "$p" 2>/dev/null || true
+        fi
+    done
+}
+
+abort_rewrite() {
+    reap_ssh_signers
+    git cherry-pick --abort 2>/dev/null || true
+    git rebase --abort 2>/dev/null || true
+}
+
+if [[ $VERIFY_ONLY -eq 0 && ! -t 2 ]]; then
+    warn "stderr is not a TTY — Touch ID prompts are easy to miss in background runs."
+    if [[ $SIGN_TIMEOUT_EXPLICIT -eq 0 && "$SIGN_TIMEOUT" -gt 45 ]]; then
+        SIGN_TIMEOUT=45
+        warn "using ${SIGN_TIMEOUT}s signing timeout for this non-interactive run"
+    fi
+fi
 
 LOCAL_REPO="$(git rev-parse --show-toplevel)"
 GH_REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
@@ -101,14 +208,8 @@ fi
 # this is the classic "the script hangs" cause. Reap stuck signers and confirm the agent
 # answers, so we fail in seconds with a clear message instead of hanging per-PR.
 preflight_signing() {
-    for p in $(pgrep -f 'ssh-keygen -Y sign' 2>/dev/null || true); do
-        local secs; secs="$(ps -o etimes= -p "$p" 2>/dev/null | tr -d ' ')"
-        if [[ -n "$secs" && "$secs" -gt 60 ]]; then
-            warn "reaping stuck ssh-keygen sign (pid $p, ${secs}s old) — it was blocking the agent"
-            kill "$p" 2>/dev/null || true
-        fi
-    done
-    if ! timeout 8 ssh-add -l >/dev/null 2>&1; then
+    reap_ssh_signers
+    if ! run_with_timeout 8 "" ssh-add -l >/dev/null 2>&1; then
         err "ssh-agent not responding (SSH_AUTH_SOCK=${SSH_AUTH_SOCK}). Start/forward it, then retry."
         exit 1
     fi
@@ -154,6 +255,7 @@ for pr in "${prs[@]}"; do
     # (30/31/40/41) are captured instead of aborting the whole run.
     set +e
     (
+        set -e
         # Clone from HTTPS (proxy-authed), borrowing objects from the local repo for speed.
         git clone --quiet --reference-if-able "$LOCAL_REPO" "$HTTPS_URL" "$TMPDIR"
         cd "$TMPDIR"
@@ -168,40 +270,73 @@ for pr in "${prs[@]}"; do
 
         git checkout --quiet -B "$head" "origin/$head"
         merge_base="$(git merge-base HEAD "origin/${base}")"
-        mapfile -t commits < <(git rev-list "${merge_base}..HEAD")
+        original_head="$(git rev-parse HEAD)"
+        mapfile -t commits < <(git rev-list --reverse "${merge_base}..HEAD")
         if [[ ${#commits[@]} -eq 0 ]]; then
             warn "PR #${pr}: no commits above base — nothing to sign"; exit 30
         fi
 
-        # Skip if every commit is already signed — SSH or PGP (prompt-free re-runs;
-        # also leaves release-automation / web-flow PGP-signed commits untouched).
-        already=1
+        unsigned=0
         for c in "${commits[@]}"; do
-            git cat-file commit "$c" | grep -qE 'BEGIN (SSH|PGP) SIGNATURE' || { already=0; break; }
+            commit_has_signature "$c" || unsigned=$((unsigned + 1))
         done
-        if [[ $already -eq 1 ]]; then
+        if [[ $unsigned -eq 0 ]]; then
             warn "PR #${pr}: all ${#commits[@]} commit(s) already signed — skipping"; exit 31
         fi
 
-        warn "PR #${pr}: approve the Touch ID prompt on your Mac to sign ${#commits[@]} commit(s) (key: ${KEY_PATTERN})…"
+        warn "PR #${pr}: approve the Touch ID prompt on your Mac to sign ${unsigned} unsigned commit(s) (key: ${KEY_PATTERN})…"
+        if ! run_with_timeout 30 "PR #${pr}: warm-up signature" bash -c 'printf test | ssh-keygen -Y sign -n git -f .sign.pub >/dev/null'; then
+            abort_rewrite
+            err "PR #${pr}: test signature failed — fix Secretive/Touch ID and retry"
+            exit 40
+        fi
+
         if [[ $SQUASH -eq 1 ]]; then
             msg "PR #${pr}: squashing ${#commits[@]} commit(s) into one signed commit"
             git reset --soft "$merge_base"
-            timeout "$SIGN_TIMEOUT" git commit -S -C "${commits[0]}" --quiet
-        else
-            msg "PR #${pr}: signing ${#commits[@]} commit(s)"
-            # rebase --exec replays each commit and re-commits it signed; a timed-out
-            # sign aborts the rebase so we never push a partially-signed branch.
-            if ! git rebase --quiet --exec "timeout ${SIGN_TIMEOUT} git commit --amend --no-edit -S --quiet" "$merge_base"; then
-                git rebase --abort 2>/dev/null || true
-                err "PR #${pr}: signing/rebase failed or timed out — remote left UNCHANGED"
+            if ! run_with_timeout "$SIGN_TIMEOUT" "PR #${pr}: squash commit" git commit -S -C "$original_head" --quiet; then
+                abort_rewrite
+                err "PR #${pr}: squash signing failed or timed out — remote left UNCHANGED"
                 exit 40
             fi
+        else
+            msg "PR #${pr}: replaying history and signing only commits that need new signed objects"
+            git checkout --quiet --detach "$merge_base"
+            preserved=0
+            resigned=0
+            signed=0
+            for c in "${commits[@]}"; do
+                if commit_has_signature "$c" && [[ "$(git rev-parse HEAD)" == "$(git rev-parse "${c}^")" ]]; then
+                    git merge --quiet --ff-only "$c"
+                    preserved=$((preserved + 1))
+                    continue
+                fi
+
+                if commit_has_signature "$c"; then
+                    resigned=$((resigned + 1))
+                fi
+                if ! git cherry-pick --quiet --no-commit "$c"; then
+                    abort_rewrite
+                    err "PR #${pr}: failed to replay commit ${c:0:8} — remote left UNCHANGED"
+                    exit 40
+                fi
+                if ! run_with_timeout "$SIGN_TIMEOUT" "PR #${pr}: commit ${c:0:8}" git commit -S -C "$c" --quiet; then
+                    abort_rewrite
+                    err "PR #${pr}: signing failed or timed out at commit ${c:0:8} — remote left UNCHANGED"
+                    exit 40
+                fi
+                signed=$((signed + 1))
+            done
+            git branch --force "$head" HEAD >/dev/null
+            if [[ $resigned -gt 0 ]]; then
+                warn "PR #${pr}: re-signed ${resigned} already-signed descendant commit(s) because an earlier parent changed"
+            fi
+            msg "PR #${pr}: signed ${signed} commit(s), preserved ${preserved} already-signed commit(s)"
         fi
 
         # GATE: verify every commit is now signed before pushing. Never force-push otherwise.
         for c in $(git rev-list "${merge_base}..HEAD"); do
-            if ! git cat-file commit "$c" | grep -q 'BEGIN SSH SIGNATURE'; then
+            if ! commit_has_signature "$c"; then
                 err "PR #${pr}: commit ${c:0:8} is still unsigned — refusing to push (remote UNCHANGED)"
                 exit 41
             fi
@@ -209,7 +344,7 @@ for pr in "${prs[@]}"; do
 
         msg "PR #${pr}: pushing signed commits (force-with-lease)"
         git push --quiet --force-with-lease origin "HEAD:${head}"
-        echo "$(git rev-parse HEAD)" > "$TMPDIR/.newtip"
+        git rev-parse HEAD > "$TMPDIR/.newtip"
     )
     status=$?
     set -e

@@ -249,3 +249,39 @@ exactly as the atomic thesis predicts.
 
 Read 1 + Read 4 retirement is **correct and load-bearing** but *inert-then-oscillating alone*; it is a valid starting
 diff for the driver (parked on the local `wip/d3-atomic-hub-flip` reference), not a landable increment.
+
+## D2b/c validated (prototype, 2026-07-08)
+
+The D2b/c structural fan was designed and prototyped (parked on the local `wip/d2bc-structural-fan` reference,
+not landable standalone — Read 1 retired while Reads 2/4 stay live). Outcome: **the target chain families
+converge idempotently by width; Read 1's structural replacement works.**
+
+**Rule (validated):** a new **width-driven arm** in `MethodCallChainPrinter.methodCallChain`, immediately after the
+early canonical-fan route, gated by a new pure-AST predicate `chainIsWidthDrivenTwoSelectorFan`. `chainBreaksByRule`
+is left unchanged (it stays the always-fan rule).
+- **D2b** (trivial receiver — `NameExpr`/`FieldAccessExpr`/`this`/`super` — with exactly 2 selectors, incl.
+  `x.stream().collect(...)`): `Doc.bestFitting([Doc.text(compact), chainFanOut])` — flat when it fits at the true
+  column, source-neutral fan on overflow. Idempotent because both arms are pure-AST and the renderer measures at the
+  real column.
+- **D2c** (enclosed/cast root wrapping a fanning inner chain): **always-fan** via `chainFanOut` — **not** `bestFitting`.
+  The `bestFitting` flat arm was rejected: `fanRootDoc` renders the enclosed root at `LayoutContext.root()` (column 0),
+  so a real-column flat arm oscillates against the fan arm's column-0 render; an enclosed fanning root is never short
+  enough to stay flat anyway. (This is the architect's predicted fallback, confirmed empirically.)
+- **Carve-out (comment safety):** the arm carries the early-canonical `!hasComments && !hasBlockLambdaArgument &&
+  !sourceMultilineArguments && noneMatch(segmentHasComment)` guard, so comment-bearing chains fall through to the
+  comment-preserving imperative ladder (which never reads `selectorBrokeAfter`). Additionally, the D2a residue is wired
+  in: `methodCallChainIsSourceMultiline` now returns true for a `hasInterSegmentLineComment` chain, so the 2-node
+  `encode(x)`⏎`// note`⏎`.replaceAll(...)` case keeps its comment.
+
+**Evidence.** 6 self-contained target fixtures pass (idempotent + AST-equiv + comment-safe + not over-width):
+`field-root-source-multiline-chain`, `cast-root-fanning-chain`, `trailing-collect-arg-idempotence` (3-selector
+control, stays fanned), plus new `two-selector-width-driven-fan`, `stream-collect-two-selector-flat`,
+`two-selector-inter-segment-comment`. Corpus (kafka 1200-subset): non-idempotent Δ0, comment Δ0, verify 0, over-width
++1 (3 new — all *non-target*: block-lambda / object-creation-root / nested-lambda collapses). Tripwire:
+`SELECTOR_BROKE_AFTER`=0; every residual fires `WAS_MULTILINE`/`METHOD_CALL_ARGUMENTS_SPAN`/`OBJECT_CREATION_ARGS_SPAN`
+(Reads 2/4/5/6) — the enclosing-column entanglement, not a D2b/c defect.
+
+**Remaining flip components** (the non-target residual, in the one atomic cut): **D1c** (object-creation-root / 4+-arg
+constructor width-driven group → retire Read 4), **Read 2** (`methodCallArgumentsSpanMultipleLines`, incl. the central
+`chainHasSourceMultilineArguments`→`methodCallChainIsSourceMultiline` router), and **Read 3/5/6** (lambda hug + nested
++ final-trailing-comment-tail). D2b/c + these + the threaded columns compose into D3.

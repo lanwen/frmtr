@@ -33,15 +33,11 @@ final class FrmtrTest {
      * {@code format(format(x)) == format(x)} sub-assertion is skipped until the deep slice lands and they flip green.
      */
     private static final Set<String> KNOWN_NON_IDEMPOTENT = Set.of(
-        // Single-argument lambda-hug tail: a `x(() -> bodyCall(args))` whose body-call argument list collapses flat on
-        // one pass and breaks on the next (the `assertThatThrownBy(() -> Keys.decode().es256(...))` /
-        // `probe.withVirtualTime(() -> sessionReader.findSessions(...))` shapes). The nested block-lambda body that used
-        // to flatten to one line with stray ` .` joins is fixed (PR #279 lambda-body multi-line render); this residual is
-        // a distinct single-arg hug oscillation. tracked: D3 flip follow-ups.
-        "lambda-expression-argument-opener @ default",
-        // Object-creation-rooted chain initializer: initializer break-after-`=` + sourceFirstLineKeepsChainAfterRoot
-        // (a still-live UNCATALOGUED inline read) re-decides the root attachment on the second pass. tracked: D3 flip
-        // follow-ups.
+        // Object-creation-rooted chain initializer: the residual oscillation is the inter-segment `// marker }` line
+        // comment on the `sourceBrowser` field (comment written on its own line between the `new BrowserClient(...)` root
+        // and the `.withNetwork(...)` selector). It renders compact with the comment glued on one pass and explodes the
+        // constructor on the next — a comment-placement (W3/D4) residual, not the #190 segment-column keystone (which
+        // converged the lambda cases). tracked: D3 flip follow-ups / comment-placement slice.
         "source-multiline-object-chain-initializer @ default"
     );
 

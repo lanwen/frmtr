@@ -172,14 +172,19 @@ final class SourceMultilineLambdaCallLayout {
                 .filter(methodCall -> methodCall.getScope().filter(ObjectCreationExpr.class::isInstance).isEmpty());
     }
 
+    // The #190 segment-column keystone: whether an expression-lambda method-call body "starts after the arrow line" in
+    // source is no longer read. It used to gate the attach-first-segment shape ({@code root.call(p -> body.call(}⏎ broken
+    // args ⏎{@code ))}) that hugs the body-call opener and keeps the enclosing chain compact — but that decision is now
+    // width-driven: the chain fans one selector per line when it fits at its true column (the source-neutral
+    // {@code chainFanOut} / {@code sourceNeutralExpressionLambdaSegment} path), and a segment still opens its own body-call
+    // arguments only on genuine overflow. Reading the author's arrow line here made the hug fire on a body written below
+    // the arrow and vanish once a prior pass attached it, so the shape flipped attach⇄fan forever (the
+    // {@code lambda-expression-argument-opener} fixture's {@code assertThatThrownBy(() -> …)} /
+    // {@code probe.withVirtualTime(() -> …)} cases). Constant false retires that read; the enclosing
+    // {@code canAttachExpressionLambdaBody} / {@code attachedFirstSegment} shapes it fed are now inert and the width path
+    // owns the decision, matching the sibling constant-false {@code bodyFirstSourceLineFits} retirement.
     private boolean lambdaBodyStartsAfterHeader(LambdaExpr expression) {
-        return expression.getExpressionBody()
-                .flatMap(body -> expression.getRange().flatMap(
-                        lambdaRange -> body.getRange().map(
-                            bodyRange -> bodyRange.begin.line > lambdaRange.begin.line
-                        )
-                ))
-                .orElse(false);
+        return false;
     }
 
     @FunctionalInterface

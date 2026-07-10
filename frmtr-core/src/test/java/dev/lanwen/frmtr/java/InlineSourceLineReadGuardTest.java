@@ -100,9 +100,6 @@ final class InlineSourceLineReadGuardTest {
         // "does the method-call scope end on the name line?" (scope.end.line == name.begin.line)
         // deferred: leftEdgePrefix gap; tracked: D3 flip follow-ups — retire when the leftEdgePrefix foundation lands.
         "VariableInitializerLayout#methodCallScopeEndsOnNameLine",
-        // "did the lambda body start after the lambda header line?" (body.begin.line > lambda.begin.line)
-        // deferred: leftEdgePrefix gap; tracked: D3 flip follow-ups — retire when the leftEdgePrefix foundation lands.
-        "SourceMultilineLambdaCallLayout#lambdaBodyStartsAfterHeader",
         // "does the call close stay on the lambda body line?" (parent.end.line == body.end.line)
         // deferred: leftEdgePrefix gap; tracked: D3 flip follow-ups — retire when the leftEdgePrefix foundation lands.
         "ExpressionLambdaClosingLayout#callClosingStaysOnLambdaBodyLine"

@@ -134,9 +134,8 @@ final class LambdaExpressionArgumentOpener {
     }
 
     void rejectsInvalidEncodedKey() {
-        assertThatThrownBy(() -> Keys.decode().es256(
-                Base64.getEncoder().encodeToString("something hidden".getBytes())
-        )).isInstanceOf(ParseException.class);
+        assertThatThrownBy(() -> Keys.decode().es256(Base64.getEncoder().encodeToString("something hidden".getBytes())))
+                .isInstanceOf(ParseException.class);
     }
 
     StubFlow repeatsUntilEvent(StubFlow source, EventConsumer consumer, Predicate<Event> filter) {
@@ -252,12 +251,9 @@ final class LambdaExpressionArgumentOpener {
     }
 
     StepProbe keepsMethodCallLambdaBodyPacked(StepProbe probe, SessionReader sessionReader, Principal principal) {
-        return probe.withVirtualTime(() -> sessionReader.findSessions(
-            principal.groupId(),
-            Source.LOCAL,
-            principal,
-            null
-        )).expectSubscription();
+        return probe
+                .withVirtualTime(() -> sessionReader.findSessions(principal.groupId(), Source.LOCAL, principal, null))
+                .expectSubscription();
     }
 
     WindowRange keepsExceptionSupplierConstructorOpener(List<LedgerEntry> ledgerEntries) {

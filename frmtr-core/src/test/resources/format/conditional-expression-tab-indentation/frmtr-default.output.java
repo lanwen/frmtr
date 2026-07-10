@@ -70,8 +70,9 @@ class ConditionalExpression {
     }
 
     void assignment() {
-        RoutingChoice featureEnabled =
-            quotaAvailable(regionAvailable, planReady, fallbackReady) != policyReady ? primaryResult : backupResult;
+        RoutingChoice featureEnabled = quotaAvailable(regionAvailable, planReady, fallbackReady) != policyReady
+            ? primaryResult
+            : backupResult;
 
         RoutingChoice featureEnabled =
             quotaAvailable(expandedRegionAvailable, planReady, fallbackReady) != policyReady

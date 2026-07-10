@@ -57,10 +57,6 @@ final class ControlConditionMethodCallLayout {
         if (expression.getArguments().isEmpty() || !expression.getAllContainedComments().isEmpty()) {
             return Optional.empty();
         }
-        Optional<Doc> sourceMultilineChain = parenthesizedSourceMultilineMethodCallChain(expression);
-        if (sourceMultilineChain.isPresent()) {
-            return sourceMultilineChain;
-        }
         String prefix = methodCallPrefix(expression);
         if (blockStatementWidth.applyAsInt("if (" + prefix + "(") > options.lineWidth()) {
             return Optional.empty();
@@ -77,19 +73,6 @@ final class ControlConditionMethodCallLayout {
                         || argument.isThisExpr()
                         || argument.isSuperExpr()
                         || argument.isLiteralExpr()
-                ));
-    }
-
-    private Optional<Doc> parenthesizedSourceMultilineMethodCallChain(MethodCallExpr expression) {
-        if (!sourceShapePolicy.wasMultiline(expression)) {
-            return Optional.empty();
-        }
-        return forcedMethodCallChain.apply(expression)
-                .map(chain -> Doc.concat(
-                        Doc.text("("),
-                        Doc.indent(Doc.concat(Doc.HARD_LINE, chain)),
-                        Doc.HARD_LINE,
-                        Doc.text(")")
                 ));
     }
 

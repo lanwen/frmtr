@@ -145,18 +145,6 @@ final class ConditionalExpressionPrinter {
      */
     Optional<Doc> assignmentWithConditionalValue(AssignExpr assignExpr, ConditionalExpr conditionalExpr) {
         if (
-            sourceShapePolicy.wasMultiline(conditionalExpr)
-            && sourceShapePolicy.startsOnSameLine(assignExpr, conditionalExpr)
-        ) {
-            return Optional.of(
-                Doc.concat(
-                    expressionRenderer.apply(assignExpr.getTarget()),
-                    Doc.text(" " + assignExpr.getOperator().asString() + " "),
-                    conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED)
-                )
-            );
-        }
-        if (
             shouldBreakBeforeConditionalInitializer(conditionalExpr)
             || shouldBreakBeforeConditionalAssignment(conditionalExpr)
         ) {
@@ -581,9 +569,8 @@ final class ConditionalExpressionPrinter {
      * <p>This is the flat {@code cond ? // x} shape: the comment begins after the {@code ?} token yet still on the
      * condition's end line, so rendering it as a condition-trailing comment keeps it before the line break. A comment on
      * its own line — before or after {@code ?} — or one inline before {@code ?} leads the {@code ?} branch instead. The
-     * predicate is the source-position equivalent of the previous "comment is after the {@code ?} operator and on the
-     * condition's end line" rule, so it preserves the {@code @default} classification while no longer depending on
-     * reconstructed column arithmetic.
+     * predicate keys off source position — the comment begins after the {@code ?} operator yet on the condition's end
+     * line — so it preserves the {@code @default} classification.
      */
     private boolean conditionTrailsBeforeQuestionBranch(
             ConditionalExpr expression,
@@ -600,8 +587,8 @@ final class ConditionalExpressionPrinter {
      * Reports whether {@code comment} begins before {@code operatorPosition} in source order.
      *
      * <p>When the operator token position is unavailable (a missing range), the comment is treated as <em>not</em>
-     * before it, so a comment with no position falls into the same after-operator branch the previous column logic chose
-     * by default rather than being silently reclassified.
+     * before it, so a comment with no position falls into the after-operator branch by default rather than being
+     * silently reclassified.
      */
     private boolean startsBeforeOperator(Comment comment, Optional<Position> operatorPosition) {
         return operatorPosition.map(position -> CommentIndex.startsBefore(comment, position)).orElse(false);
@@ -792,9 +779,7 @@ final class ConditionalExpressionPrinter {
      * Reports whether the conditional carries a line comment the flat single-line arm cannot represent, so the broken
      * ternary shape must be forced to keep the comment. A {@code //} comment runs to end of line, so it cannot sit on the
      * flat {@code cond ? then : else} line without swallowing the operators after it. Block comments are not gated here:
-     * they can ride the flat line inline. This is the comment-safety companion to the width-driven auto path — the
-     * canonical replacement for the retired {@code wasMultiline} force, which happened to catch these because a
-     * comment-bearing ternary is usually written across source lines.
+     * they can ride the flat line inline. This is the comment-safety companion to the width-driven auto path.
      */
     private boolean conditionalContainsLineComment(ConditionalExpr expression) {
         return commentPlacement.hasContainedLineComments(expression);

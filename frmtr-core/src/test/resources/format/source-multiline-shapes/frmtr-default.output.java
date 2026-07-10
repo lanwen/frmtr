@@ -31,15 +31,10 @@ class MultilineShapes {
     }
 
     Object wrapper() {
-        return Fixture.strict(
-            "alpha",
-            Surface.REMOTE,
-            Event.Type.class,
-            ref -> {
-                ref.accept("x");
-                return new Wrapped("id", new Done());
-            }
-        );
+        return Fixture.strict("alpha", Surface.REMOTE, Event.Type.class, ref -> {
+            ref.accept("x");
+            return new Wrapped("id", new Done());
+        });
     }
 
     public void serialize(Predicate value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
@@ -58,9 +53,10 @@ class MultilineShapes {
         return value;
     }
 
-    private Mono<
-        sample.platform.identity.DirectoryLookup.ProxyRoute.RouteKey
-    > resolveRoute(sample.security.ActorRef actor, String handle) {
+    private Mono<sample.platform.identity.DirectoryLookup.ProxyRoute.RouteKey> resolveRoute(
+            sample.security.ActorRef actor,
+            String handle
+    ) {
         return routes.resolve(actor, handle);
     }
 
@@ -68,10 +64,7 @@ class MultilineShapes {
         var map = new HashMap<String, Object>(
             Map.of(
                 "short",
-                "%s/card#code=%s".formatted(
-                    props.baseUrl(),
-                    record.shortCode()
-                ),
+                "%s/card#code=%s".formatted(props.baseUrl(), record.shortCode()),
                 "long",
                 "%s/card#code=%s".formatted(
                     props.baseUrl(),

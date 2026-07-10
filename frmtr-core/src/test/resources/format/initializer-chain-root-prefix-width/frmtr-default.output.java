@@ -24,8 +24,6 @@ class InitializerChainRootPrefixWidthSample {
 
     void buildConditionalStrategy() {
         WaitStrategy strategy = new AggregateWaitAllStrategy(AggregateWaitOuterConfiguration.WITH_LIMIT)
-            .withStartupCondition(
-                startupContext -> startupContext.isReady()
-            );
+            .withStartupCondition(startupContext -> startupContext.isReady());
     }
 }

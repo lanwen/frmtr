@@ -17,10 +17,12 @@ class MethodCallArgumentContextWidth {
     }
 
     void recordGroupedBranch() {
-        Doc doc = Doc.group(Doc.concat(
-            Doc.text("prefix"),
-            Doc.ifBreak(Doc.text("-broken-branch"), Doc.text("-flat"))
-        ));
+        Doc doc = Doc.group(
+            Doc.concat(
+                Doc.text("prefix"),
+                Doc.ifBreak(Doc.text("-broken-branch"), Doc.text("-flat"))
+            )
+        );
         sink(doc);
     }
 

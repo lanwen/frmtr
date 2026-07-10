@@ -12,7 +12,7 @@ The four invariants (from the plan):
 | **AST-equivalence** | Count of files whose `--check --verify` reports a non-equivalent / non-parsing output (CLI exit 3). Must be 0 throughout. |
 | **Comment parity** | Total comment-token count (`//` + block-comment openers, fast grep proxy) across the formatted outputs. Optional authoritative lexer-multiset net via `--comment-thorough`. Never drop a comment. |
 | **Idempotence** | Count of files that differ between a first `--write` pass and a second `--write` pass. The north-star "pure-AST" signal — hits 0 when no source-shape read fires. |
-| **Over-width** | Set of files with any line > 120 columns; reports the count and whether the worktree set is a subset of the base set. |
+| **Over-width** | Set of once-formatted files carrying any line > `LINE_WIDTH` (120) columns; reports the count and whether the worktree set is a subset of the base set. This is the raw ">line-width" definition (character length on the formatted output), *not* the CLI's breakable-only `--check --verify` warnings — those are a strict subset and under-report the raw set. |
 
 On a branch with **no formatter change**, every delta must be `0` and `worktree ⊆ base` must hold.
 
@@ -59,6 +59,7 @@ export JAVA_TOOL_OPTIONS=""; export FRMTR_HEAP="-Xmx2500m"
 | --- | --- | --- |
 | `CORPUS_ROOT` | `/tmp/frmtr-corpus` | Scratch root: corpus clones (`runs/<name>/src`), base-CLI build cache (`cli-cache/<sha>`), and per-run work (`check/<name>`). Never written into the repo. |
 | `FRMTR_HEAP` | `-Xmx2500m` | CLI heap (also caps metaspace). |
+| `FRMTR_LINE_WIDTH` | `120` | Over-width threshold in columns. Keep in lockstep with the CLI's formatting width (the harness formats at the formatter default). |
 
 ### Caching & robustness
 
@@ -84,26 +85,52 @@ FRMTR_SOURCE_READ_TRIPWIRE=1 frmtr-cli --write --progress=never SomeFile.java
 The tripwire is a diagnostic gated **off by default** (`SourceReadTripwire`); with the flag unset it
 is zero-overhead and output is byte-identical.
 
+## Reference probes (`idem-probe.sh`, `ow-probe.sh`)
+
+Two single-metric probes back the harness's idempotence and over-width figures. They are the
+independent reference implementations `corpus-check.sh` is validated against — for the same CLI and
+`N` they report the same counts *and* the same file sets. Reach for them to double-check a harness
+number in isolation, or to diff two CLIs' file sets by hand.
+
+```bash
+# <cli-bin> [N] [tag] [corpus]; both share corpus-check.sh's $CORPUS_ROOT convention.
+CLI=frmtr-cli/build/install/frmtr-cli/bin/frmtr-cli
+scripts/idem-probe.sh "$CLI" 400 base kafka   # → $CORPUS_ROOT/idem-probe/base/nidem.list
+scripts/ow-probe.sh   "$CLI" 400 base kafka   # → $CORPUS_ROOT/ow-probe/base/ow.list
+```
+
+`idem-probe.sh` formats a subset twice and counts files that differ between the passes;
+`ow-probe.sh` formats once and lists files with any line wider than `FRMTR_LINE_WIDTH` (raw
+character-length `>` width, the same definition the harness uses). Both resolve the corpus under
+`$CORPUS_ROOT/runs/<corpus>/src` (or an absolute path) and keep all scratch under `$CORPUS_ROOT`, so
+neither writes into the repo.
+
 ## Known base numbers
 
-Base ref `github/main @ 9b38eca8` (the D0 branch point), kafka **subset of 800 files**, default
-options (line width 120), harness defaults (`--chunk 400`):
+Base ref `github/main @ b0257f75`, kafka subsets, default options (line width 120), harness default
+chunking (`--chunk 400`):
 
-| Invariant | Base value |
-| --- | --- |
-| verify failures | 0 |
-| comment tokens (grep proxy) | 9094 |
-| non-idempotent files | 0 |
-| over-width files | 49 |
+| Invariant | N=400 | N=800 |
+| --- | --- | --- |
+| verify failures | 0 | 0 |
+| comment tokens (grep proxy) | 5909 | — |
+| non-idempotent files | 8 | 12 |
+| over-width files | 138 | 205 |
 
-(The 49 over-width files are pre-existing in the base output — files the current formatter already
-leaves with a `>120` line; both CLIs reproduce them identically, so the worktree set equals the base
-set and `worktree ⊆ base` holds. The hub rewrite's job at completion is to keep this set from
-*growing*, not to zero it here.)
+These match the standalone reference probes file-for-file (`scripts/idem-probe.sh` for
+idempotence, `scripts/ow-probe.sh` for over-width): the harness and the probes report the
+same counts *and* the same file sets for the same CLI + N.
 
-On the D0 branch (harness + tripwire only, **no formatter change**) the worktree reproduces every
-one of these exactly, so all four deltas are `0` and over-width `worktree ⊆ base` holds — which is
-the D0 gate ("harness reproduces the known base numbers; tooling-only, no formatter output change").
+The non-idempotent and over-width files are pre-existing in the base output — files the current
+formatter already re-shapes on a second pass, or already leaves with a `>120` line. On a **no-formatter-change**
+branch both CLIs reproduce them identically, so every delta is `0` and over-width `worktree ⊆ base`
+holds. The hub rewrite's job at completion is to keep these sets from *growing*, not to zero them here.
 
-> Numbers above are for the 800-file kafka subset used during D0 development. The full-corpus and
-> other-repo figures are larger; capture them the same way when you run `--full` at a milestone.
+> The over-width count is the raw ">line-width" set (any formatted line whose character length exceeds
+> `LINE_WIDTH`), measured over the once-formatted pass-A outputs — the same definition `ow-probe.sh`
+> uses. It is deliberately **not** the CLI's `--check --verify` "line is N columns" warnings, which
+> only flag *breakable* over-width lines (a strict subset) and so under-count the raw set. Override the
+> threshold with `FRMTR_LINE_WIDTH` if you run the CLI at a non-default width.
+
+> Numbers above are for kafka subsets used during development. The full-corpus and other-repo figures
+> are larger; capture them the same way when you run `--full` at a milestone.

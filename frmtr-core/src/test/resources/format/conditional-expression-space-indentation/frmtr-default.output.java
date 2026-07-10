@@ -46,8 +46,13 @@ class ConditionalExpression {
     }
 
     void nestedTernary() {
-        var selectedPlan =
-            featureEnabled ? quotaAvailable : regionAvailable ? planReady : fallbackReady ? policyReady : primaryResult;
+        var selectedPlan = featureEnabled
+            ? quotaAvailable
+            : regionAvailable
+                ? planReady
+                : fallbackReady
+                    ? policyReady
+                    : primaryResult;
     }
 
     void ternaryWithComments() {
@@ -76,8 +81,9 @@ class ConditionalExpression {
     }
 
     void assignment() {
-        RoutingChoice featureEnabled =
-            quotaAvailable(regionAvailable, planReady, fallbackReady) != policyReady ? primaryResult : backupResult;
+        RoutingChoice featureEnabled = quotaAvailable(regionAvailable, planReady, fallbackReady) != policyReady
+            ? primaryResult
+            : backupResult;
 
         RoutingChoice featureEnabled =
             quotaAvailable(expandedRegionAvailable, planReady, fallbackReady) != policyReady

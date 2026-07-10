@@ -96,11 +96,9 @@ final class BreakableArgumentExpressionPrinter {
      * <p>D1a (#190): {@code layout} threads the argument's positional context so the true continuation column
      * ({@link LayoutContext#leftEdgePrefix()}) and the trailing separator ({@link LayoutContext#trailingContent()})
      * become AVAILABLE at this arg break-gate for the eventual reflow-by-width flip. It is NOT yet consulted: the gate
-     * keeps its {@link SourceShapePolicy#wasMultiline(com.github.javaparser.ast.Node) wasMultiline} source read and its
-     * {@link LayoutWidth#nodeLine} + fixed-{@code CONTINUATION}-floor probe over the ad-hoc {@code suffix} string exactly
-     * as before, so threading it is byte-identical. Retiring the source read and floor in favour of a renderer-measured
-     * group at the threaded column is the reverted Phase-3 decision change (atomic-rewrite plan rows 3/4/5) and stays out
-     * of this seam.
+     * decides from its {@link LayoutWidth#nodeLine} + fixed-{@code CONTINUATION}-floor probe over the ad-hoc
+     * {@code suffix} string. Sourcing the break decision from a renderer-measured group at the threaded column instead is
+     * a Phase-3 decision change (atomic-rewrite plan rows 3/4/5) and stays out of this seam.
      */
     // C10 (#220): the continuation-line width is measured at the argument's real rendered depth, floored by the fixed
     // CONTINUATION budget, rather than at the fixed budget alone (see continuationWidth). The trailing comma/tail arrives
@@ -110,16 +108,15 @@ final class BreakableArgumentExpressionPrinter {
         Doc flat = expressionRenderer.apply(argument);
         // Canonical-fan cutover seam U8: when this argument is a binary/ternary whose dispatched {@code flat} rendering
         // already fans a fluent chain operand by the End-state A structural rule, commit that {@code flat} shape and do
-        // not offer the operand-per-line {@code broken} alternative. The {@code flat}/{@code broken} choice below is gated
-        // on the source-shape {@code wasMultiline(argument)} signal, which flips once {@code flat}'s first pass makes the
-        // operand span source lines; {@code flat} fans the operand (via the dispatched source-neutral {@code chainFanOut})
-        // while {@code broken} keeps it flat with the operator on its own line, so the two arms are different byte shapes
-        // and {@code ifBreak} oscillates between them forever (KafkaConsumerTest {@code chain + 1}, SinglePointMetricTest
+        // not offer the operand-per-line {@code broken} alternative. Below, {@code flat} fans the operand (via the
+        // dispatched source-neutral {@code chainFanOut}) while the {@code broken} alternative keeps it flat with the
+        // operator on its own line, so the two arms are different byte shapes and offering both through {@code ifBreak}
+        // oscillates between them forever (KafkaConsumerTest {@code chain + 1}, SinglePointMetricTest
         // {@code chain || chain}). {@code flat} is itself a pure function of the AST — the chain fans by the width-
         // independent link-count rule on every pass — so returning it unconditionally is the fixpoint. Chains the rule
         // does not fan (a plain-receiver 1–2-link operand, the #119 {@code binary-chain-wrap-converge} guard) and
-        // comment / lambda chains are excluded by {@code binaryFansChainOperand}, so those arguments keep the width- and
-        // source-shape-driven {@code broken} arm below byte-for-byte. The carve-out predicate is the shared
+        // comment / lambda chains are excluded by {@code binaryFansChainOperand}, so those arguments keep the width-driven
+        // {@code broken} arm below. The carve-out predicate is the shared
         // {@link MethodCallChainPrinter#binaryFansChainOperand}, so every binary-operand carrier (this argument path, the
         // single-binary-argument path, the broken object-creation binary argument) applies one carve-out definition.
         if (binaryFansChainOperand.test(argument)) {
@@ -128,8 +125,7 @@ final class BreakableArgumentExpressionPrinter {
         Optional<Doc> broken = brokenArgument(argument);
         if (
             broken.isPresent()
-            && (sourceShapePolicy.wasMultiline(argument)
-                || conditionalArgumentLineOverflows(argument, suffix)
+            && (conditionalArgumentLineOverflows(argument, suffix)
                 || continuationWidth(argument, compact.apply(argument) + suffix) > options.lineWidth())
         ) {
             return Doc.ifBreak(broken.orElseThrow(), flat);
@@ -149,9 +145,9 @@ final class BreakableArgumentExpressionPrinter {
      * Source-multiline-list sibling of {@link #argument(Expression, String, LayoutContext)}.
      *
      * <p>D1a (#190): {@code layout} threads the same {@code ARGUMENT}-position context so the true continuation column and
-     * trailing separator are AVAILABLE at this break-gate for the eventual reflow-by-width flip. It is NOT yet consulted:
-     * the gate keeps its {@code wasMultiline} / {@code methodCallArgumentsSpanMultipleLines} source reads and the
-     * {@code nodeLine}+floor probe over the {@code suffix} string exactly as before, so threading it is byte-identical.
+     * trailing separator are AVAILABLE at this break-gate. It is not yet consulted: the gate breaks purely from the
+     * {@code conditionalArgumentLineOverflows} width test and the {@code nodeLine}+floor continuation-width probe over the
+     * {@code suffix} string.
      */
     private Doc sourceMultilineArgument(Expression argument, String suffix, LayoutContext layout) {
         Doc flat = expressionRenderer.apply(argument);
@@ -171,9 +167,7 @@ final class BreakableArgumentExpressionPrinter {
         Optional<Doc> broken = brokenArgument(argument);
         if (
             broken.isPresent()
-            && (sourceShapePolicy.wasMultiline(argument)
-                || sourceMultilineMethodCallArguments(argument)
-                || conditionalArgumentLineOverflows(argument, suffix)
+            && (conditionalArgumentLineOverflows(argument, suffix)
                 || continuationWidth(argument, compact.apply(argument) + suffix) > options.lineWidth())
         ) {
             return broken.orElseThrow();
@@ -218,11 +212,6 @@ final class BreakableArgumentExpressionPrinter {
         );
     }
 
-    private boolean sourceMultilineMethodCallArguments(Expression argument) {
-        return argument instanceof MethodCallExpr methodCall
-            && sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall);
-    }
-
     private boolean binaryPlusContainsSourceMultilineMethodCallArgument(Expression argument) {
         if (argument instanceof BinaryExpr binaryExpr) {
             return binaryExpr.getOperator() == BinaryExpr.Operator.PLUS
@@ -232,6 +221,6 @@ final class BreakableArgumentExpressionPrinter {
         if (argument instanceof EnclosedExpr enclosedExpr) {
             return binaryPlusContainsSourceMultilineMethodCallArgument(enclosedExpr.getInner());
         }
-        return sourceMultilineMethodCallArguments(argument);
+        return false;
     }
 }

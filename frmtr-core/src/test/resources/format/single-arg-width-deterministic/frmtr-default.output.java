@@ -1,18 +1,12 @@
 class SingleArgumentWidthDeterministicSample {
 
     void attachedHugFitsAtItsColumn(EnvironmentResolver environmentResolver) {
-        var resolved = environmentResolver.resolveAll(buildEnvironmentConfiguration(
-            primaryName,
-            secondaryName
-        ));
+        var resolved = environmentResolver.resolveAll(buildEnvironmentConfiguration(primaryName, secondaryName));
     }
 
     void attachedMethodCallHugOverflowsAtAssignmentColumn(ConfigurationResolver configurationResolver) {
         java.util.List<String> resolvedRuntimeConfiguration = configurationResolver.resolveAll(
-            buildEnvironmentConfiguration(
-                primaryEnvironmentName,
-                secondaryEnvironmentName
-            )
+            buildEnvironmentConfiguration(primaryEnvironmentName, secondaryEnvironmentName)
         );
     }
 

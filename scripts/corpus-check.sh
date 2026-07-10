@@ -10,7 +10,10 @@
 #   Comment parity   — total comment-token count across all formatted outputs (fast grep proxy; optional
 #                       thorough lexer-multiset net via CommentDropCheck.java with --comment-thorough).
 #   Idempotence      — count of files that differ between a first `--write` pass and a second `--write` pass.
-#   Over-width       — set of files carrying any line > line-width (120); count + whether worktree set ⊆ base set.
+#   Over-width       — set of formatted files carrying any line > LINE_WIDTH (120) columns; count + whether the
+#                      worktree set ⊆ base set. Measured directly over the once-formatted (pass-A) outputs — the same
+#                      raw ">line-width" definition the reference ow-probe.sh uses — NOT the CLI's breakable-only
+#                      `--check --verify` warnings (those are a strict subset and under-report the raw set).
 #
 # On a no-formatter-change branch every delta must be 0. A non-zero idempotence delta on a hub change is the
 # north-star signal that a source-shape read still fires — pair it with FRMTR_SOURCE_READ_TRIPWIRE=1 to see which.
@@ -68,6 +71,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
 CORPUS_ROOT="${CORPUS_ROOT:-/tmp/frmtr-corpus}"
 HEAP="${FRMTR_HEAP:--Xmx2500m}"
+# Over-width threshold in columns. The harness never passes --line-width, so the CLI formats at the formatter default
+# (120); keep this in lockstep with that default (and with ow-probe.sh, which hardcodes 120).
+LINE_WIDTH="${FRMTR_LINE_WIDTH:-120}"
 export JAVA_OPTS="$HEAP -XX:MaxMetaspaceSize=512m"
 
 # Resolve the corpus source directory.
@@ -137,12 +143,14 @@ COMMENT_LIB="$REPO_ROOT/frmtr-cli/build/install/frmtr-cli/lib/*"
 COMMENT_HARNESS="$CORPUS_ROOT/CommentDropCheck.java"
 
 # ------------------------------------------------------------------ measurement
-# run_verify <cli> <outprefix> : count files whose --check --verify reports a non-equivalent / non-parse output;
-#                                also capture the over-width line set.
+# run_verify <cli> <outprefix> : count files whose --check --verify reports a non-equivalent / non-parse output.
+# (Over-width is NOT captured here: the CLI's `line is N columns` warnings only cover *breakable* over-width lines,
+#  a strict subset of "any line > LINE_WIDTH". The raw over-width set is measured over the pass-A outputs in
+#  scan_overwidth so it matches ow-probe.sh exactly.)
 VIOL_PAT='not AST-equivalent|AST-equivalence verify failed|did not parse under|formatted output did not parse'
 run_verify() {
   local cli="$1" pfx="$2"
-  : > "$WORK/$pfx.verify.err"; : > "$WORK/$pfx.overwidth"
+  : > "$WORK/$pfx.verify.err"
   split -l "$CHUNK" "$WORK/files.list" "$WORK/${pfx}_ck_"
   local vfail=0
   for ch in "$WORK/${pfx}_ck_"*; do
@@ -153,7 +161,6 @@ run_verify() {
     local ce=$?
     [ "$ce" = 3 ] && vfail=1
     grep -nE "$VIOL_PAT" "$WORK/_ck.err" >> "$WORK/$pfx.verify.err" 2>/dev/null || true
-    grep -oE '[^ ]+\.java:[0-9]+: line is [0-9]+ columns' "$WORK/_ck.err" >> "$WORK/$pfx.overwidth" 2>/dev/null || true
   done
   rm -f "$WORK/${pfx}_ck_"* "$WORK/_ck.err"
   # File-granular verify count (a verify failure aborts a chunk's remaining files, so re-run per-file when any hit).
@@ -164,8 +171,24 @@ run_verify() {
       [ "$?" = 3 ] && echo "$f" >> "$WORK/$pfx.verify.files"
     done < "$WORK/files.list"
   fi
-  # Over-width file set (unique files, sorted).
-  sed -E 's/:[0-9]+: line is [0-9]+ columns//' "$WORK/$pfx.overwidth" | sort -u > "$WORK/$pfx.overwidth.files"
+}
+
+# scan_overwidth <passA-dir> <outfile> : the raw over-width file set — every once-formatted file carrying any line
+# wider than LINE_WIDTH columns, reduced to its original basename (the flat 000123_ index prefix stripped) and
+# deduped/sorted. This is the SAME definition ow-probe.sh uses (character length > LINE_WIDTH on the formatted
+# output), so the two agree file-for-file. Width is UTF-16 String#length() the way frmtr/LayoutWidth measures it;
+# awk's byte length matches for the ASCII-dominant corpus and is the reproducible proxy the probe relies on too.
+scan_overwidth() {
+  local dir="$1" out="$2"
+  : > "$out"
+  local jf
+  for jf in "$dir"/*.java; do
+    [ -e "$jf" ] || continue
+    if awk -v w="$LINE_WIDTH" '{ if (length($0) > w) { found = 1 } } END { exit !found }' "$jf"; then
+      basename "$jf" | sed -E 's/^[0-9]+_//' >> "$out"
+    fi
+  done
+  sort -u "$out" -o "$out"
 }
 
 # run_idempotence <cli> <outprefix> : two --write passes over a private copy; count files that differ.
@@ -188,7 +211,14 @@ run_idempotence() {
   split -l "$CHUNK" "$WORK/$pfx.copyB.list" "$WORK/${pfx}_wb_"
   for ch in "$WORK/${pfx}_wb_"*; do "$cli" --write --progress=never $(cat "$ch") >/dev/null 2>>"$WORK/$pfx.write.err"; done
   rm -f "$WORK/${pfx}_wb_"*
-  diff -rq "$A" "$B" 2>/dev/null | grep -c differ > "$WORK/$pfx.nidem" || echo 0 > "$WORK/$pfx.nidem"
+  # Idempotence count. `diff -rq` exits 1 whenever it finds a difference, so with `set -o pipefail` the
+  # `diff | grep -c` pipe reports the DIFF's exit 1 — the old `|| echo 0` fallback then clobbered the real
+  # count with 0, silently under-reporting every non-idempotent run to zero. Run diff to a file first, then
+  # count the anchored " differ$" lines outside any pipe so no exit status can override the tally.
+  diff -rq "$A" "$B" > "$WORK/$pfx.diffout" 2>/dev/null || true
+  grep -c ' differ$' "$WORK/$pfx.diffout" > "$WORK/$pfx.nidem" || echo 0 > "$WORK/$pfx.nidem"
+  # Over-width set: measure it here, over the once-formatted (pass-A) outputs, so it matches ow-probe.sh exactly.
+  scan_overwidth "$A" "$WORK/$pfx.overwidth.files"
   # Comment-token proxy: count // and block-comment openers across the ONCE-formatted (passA) outputs.
   grep -rhoE '//|/\*' "$A" 2>/dev/null | wc -l | tr -d ' ' > "$WORK/$pfx.comments"
   # Keep passA around for the optional thorough comment net; drop copies otherwise (or when --keep).

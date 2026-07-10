@@ -4,13 +4,10 @@ class MethodChainSegmentArgumentsSample {
         return Waiter.await()
                 .pollInterval(shortDelay)
                 .atMost(totalDelay)
-                .until(
-                    () -> {
-                        var entries = context.entries();
-                        return entries.isEmpty() ? null : entries.getFirst();
-                    },
-                    Objects::nonNull
-                );
+                .until(() -> {
+                    var entries = context.entries();
+                    return entries.isEmpty() ? null : entries.getFirst();
+                }, Objects::nonNull);
     }
 
     Receipt acknowledgeRouteAccess(AccessRequest request) {
@@ -64,11 +61,9 @@ class MethodChainSegmentArgumentsSample {
     }
 
     boolean hasExpressionLambdaBeforeFinalSegment(List<RouteCall> calls) {
-        if (
-            calls.stream()
-                    .limit(Math.max(0, calls.size() - 1))
-                    .anyMatch(this::methodCallSegmentHasExpressionLambdaArgument)
-        ) {
+        if (calls.stream().limit(Math.max(0, calls.size() - 1)).anyMatch(
+                this::methodCallSegmentHasExpressionLambdaArgument
+            )) {
             return true;
         }
         return false;

@@ -107,8 +107,20 @@ final class AnnotationExpressionPrinter {
         return annotation.getParentNode().filter(ArrayInitializerExpr.class::isInstance).isPresent();
     }
 
-    Doc annotationPreservingSourceBreaks(AnnotationExpr annotation) {
-        if (!sourceMultilineAnnotation(annotation)) {
+    /**
+     * Renders a parameter or record-component annotation, breaking it structured when it cannot stay flat at its true
+     * rendered column.
+     *
+     * <p>The break decision is width-driven at the annotation's real
+     * column, threaded by the caller through {@code layout}: {@link LayoutContext#leftEdgePrefix()} carries the text that
+     * already occupies the annotation's first line ahead of it (the annotation-column indent plus any earlier prefix
+     * parts) and {@link LayoutContext#trailingContent()} carries the {@code " Type name"} the caller emits immediately
+     * after the annotation on the same line. When the flat annotation plus that same-line context overflows, the
+     * annotation renders structured so its {@code )} can carry the trailing type/name onto a relieved line; otherwise it
+     * stays flat and every other branch decides by its own width as usual.
+     */
+    Doc annotationPreservingSourceBreaks(AnnotationExpr annotation, LayoutContext layout) {
+        if (!annotationOverflowsAtColumn(annotation, layout)) {
             return annotation(annotation);
         }
         if (annotation instanceof NormalAnnotationExpr normalAnnotation) {
@@ -121,6 +133,19 @@ final class AnnotationExpressionPrinter {
             );
         }
         return annotation(annotation);
+    }
+
+    /**
+     * Whether the flat annotation, rendered at its true column and followed by the caller's same-line trailing content,
+     * exceeds the line width. A marker annotation ({@code @Name}) is never broken because it has no parenthesized body to
+     * break; only normal and single-member annotations carry a group the structured shape can open.
+     */
+    private boolean annotationOverflowsAtColumn(AnnotationExpr annotation, LayoutContext layout) {
+        if (!(annotation instanceof NormalAnnotationExpr) && !(annotation instanceof SingleMemberAnnotationExpr)) {
+            return false;
+        }
+        String firstLine = layout.leftEdgePrefix() + annotationFlatText(annotation) + layout.trailingContent();
+        return currentIndentedWidth.applyAsInt(firstLine) > options.lineWidth();
     }
 
     /**
@@ -336,8 +361,7 @@ final class AnnotationExpressionPrinter {
         }
         if (
             value instanceof BinaryExpr binaryExpr
-            && (sourceSpansMultipleLines(value)
-                || currentIndentedWidth.applyAsInt(compactAnnotationValue(value)) > options.lineWidth())
+            && currentIndentedWidth.applyAsInt(compactAnnotationValue(value)) > options.lineWidth()
         ) {
             return nestedBinaryLines.apply(binaryExpr, true);
         }
@@ -361,12 +385,6 @@ final class AnnotationExpressionPrinter {
             );
         }
         return expressionRenderer.format(annotation, LayoutContext.root());
-    }
-
-    private boolean sourceSpansMultipleLines(Node node) {
-        return node.getRange()
-                .map(range -> range.begin.line < range.end.line)
-                .orElse(false);
     }
 
     private void addCommentDocs(List<Doc> lines, List<JavaCommentTrivia> sourceComments) {
@@ -421,9 +439,4 @@ final class AnnotationExpressionPrinter {
         ) || commentPlacement.leadingComment(value).filter(JavaCommentTrivia::isLine).isPresent();
     }
 
-    private boolean sourceMultilineAnnotation(AnnotationExpr annotation) {
-        return annotation.getRange()
-                .map(range -> range.begin.line < range.end.line)
-                .orElse(false);
-    }
 }

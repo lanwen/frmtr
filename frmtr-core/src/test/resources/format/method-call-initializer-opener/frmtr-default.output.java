@@ -36,19 +36,14 @@ class MethodCallInitializerOpenerSample {
             }),
             "sample-%s".formatted(alpha())
         );
-        var handle = openFixtureEntry(
-            new FixtureRequest(DEFAULT_GROUP, owner),
-            FixtureSupport.KEY
-        ).handle();
+        var handle = openFixtureEntry(new FixtureRequest(DEFAULT_GROUP, owner), FixtureSupport.KEY).handle();
         SampleHealthIndicator indicator = indicator(
             cluster("cluster-alpha", primaryStub),
             cluster("cluster-beta", secondaryStub)
         );
         DispatchRecipe transformed = withAuditMode(
             "allow",
-            () -> new RouteTransformPipeline(List.of(new SegmentSortTransform())).transform(
-                plan
-            )
+            () -> new RouteTransformPipeline(List.of(new SegmentSortTransform())).transform(plan)
         );
         withAuditMode("allow", () -> verifyNoFailure(() -> RouteLayout.render(
                 """
@@ -56,7 +51,7 @@ class MethodCallInitializerOpenerSample {
                     import south.Primary;
                     enum Route { GREEN, AMBER, BLUE }
                     """
-            )).hasNoRouteFailures()
+        )).hasNoRouteFailures()
         );
         var sampleNameWithEnoughLengthToForceTheReceiverCallOpenerOntoAContinuationLineWhenTheInitializerBreaks =
             receiver.call(

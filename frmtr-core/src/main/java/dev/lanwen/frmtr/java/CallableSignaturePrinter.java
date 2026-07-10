@@ -199,15 +199,13 @@ final class CallableSignaturePrinter {
     /**
      * Decides whether the callable parameter list must break before later signature clauses are appended.
      *
-     * <p>C10 (#220): the flat signature is measured at the declaration's real rendered column, not the fixed
-     * one-indent-level baseline. A declaration inside an inner class or nested type renders one block/type level deeper
-     * per enclosing scope, so a signature that fits at one unit can overflow at its true column; the old fixed baseline
-     * under-counted that and left the parameters unbroken against reality. {@link LayoutWidth#nodeLine} counts every
-     * enclosing {@code TypeDeclaration}/{@code BlockStmt} and floors at one level, and the {@code currentIndentedWidth}
-     * term is kept as a floor so a top-level declaration is still measured against at least one unit — leaving top-level
-     * signatures byte-identical while correcting deeper-nested ones. The caller's {@code prefix} and {@code suffix} (the
-     * {@code "throws … {"}/{@code ";"} the header appends on this line) are folded into the measured text exactly as
-     * before, mirroring the throws-clause and try-with-resources rendered-column gates.
+     * <p>C10 (#220): the flat signature is measured at the declaration's real rendered column. A declaration inside an
+     * inner class or nested type renders one block/type level deeper per enclosing scope, so a signature that fits at
+     * one unit can overflow at its true column. {@link LayoutWidth#nodeLine} counts every enclosing
+     * {@code TypeDeclaration}/{@code BlockStmt} and floors at one level, and the {@code currentIndentedWidth} term is
+     * kept as a floor so a top-level declaration is still measured against at least one unit. The caller's
+     * {@code prefix} and {@code suffix} (the {@code "throws … {"}/{@code ";"} the header appends on this line) are
+     * folded into the measured text, mirroring the throws-clause and try-with-resources rendered-column gates.
      */
     boolean parametersBreak(String prefix, CallableDeclaration<?> declaration, String suffix) {
         String parameters = callableParameterText(declaration);
@@ -217,6 +215,23 @@ final class CallableSignaturePrinter {
             currentIndentedWidth(signatureLine)
         );
         return width > options.lineWidth();
+    }
+
+    /**
+     * Reports whether a declaration's return type (or its name-and-open-paren opener) is itself too wide to leave the
+     * parameter list any room on the signature's first line, the width-driven signal that the return type's own type
+     * arguments must break rather than the parameter list.
+     *
+     * <p>A generic return type such as
+     * {@code Function<Collection<X>, Publisher<Y>> decode()} or {@code Mono<VeryLongRouteKey> resolveRoute(a, b)}
+     * overflows because the type itself is wide; breaking the parameters cannot rescue it (the opener up to {@code (}
+     * already overruns, or there are no parameters to break), so the type's arguments must fan. Measured at the
+     * declaration's rendered column ({@link LayoutWidth#nodeLine} floored by the current indent), mirroring
+     * {@link #parametersBreak(String, CallableDeclaration, String)}.
+     */
+    boolean returnTypeOverflows(String returnTypeNamePrefix) {
+        String openerLine = returnTypeNamePrefix + "(";
+        return currentIndentedWidth(openerLine) > options.lineWidth();
     }
 
     /**
@@ -527,13 +542,17 @@ final class CallableSignaturePrinter {
         if (parts.isEmpty()) {
             return Doc.EMPTY;
         }
-        if (!parameterAnnotationSourceBreaks(parameter, parts)) {
+        if (!parameterAnnotationPrefixOverflows(parameter, parts)) {
             return Doc.text(parameterPrefixText(parts));
+        }
+        List<Doc> partDocs = new ArrayList<>();
+        for (int index = 0; index < parts.size(); index++) {
+            partDocs.add(parameterPrefixPartDoc(parts.get(index), parts, index, parameter));
         }
         return Doc.concat(
             Doc.join(
                 Doc.text(" "),
-                parts.stream().map(this::parameterPrefixPartDoc).toList()
+                partDocs
             ),
             Doc.text(" ")
         );
@@ -568,8 +587,40 @@ final class CallableSignaturePrinter {
         return parts;
     }
 
-    private Doc parameterPrefixPartDoc(ParameterPrefixPart part) {
-        return part.annotation().map(node -> annotation.format(node, LayoutContext.root())).orElseGet(() -> Doc.text(part.flatText()));
+    private Doc parameterPrefixPartDoc(
+            ParameterPrefixPart part,
+            List<ParameterPrefixPart> parts,
+            int index,
+            Parameter parameter
+    ) {
+        return part.annotation()
+                .map(node -> annotation.format(node, parameterAnnotationLayout(parts, index, parameter)))
+                .orElseGet(() -> Doc.text(part.flatText()));
+    }
+
+    /**
+     * Builds the {@link LayoutContext} that tells a breakable parameter annotation where it actually renders, so its
+     * flat/structured choice is width-driven at the real column instead of reading the author's source line breaks.
+     *
+     * <p>A broken parameter list indents its parameters one unit past the member baseline that {@link
+     * #currentIndentedWidth} already assumes, so {@link LayoutContext#leftEdgePrefix()} contributes that extra unit plus
+     * every prefix part before this one (joined by the same {@code " "} the render uses). The trailing content is the
+     * rest of the prefix, then the {@code " Type name"} the parameter emits after the prefix on the same line — so the
+     * annotation breaks only when keeping it flat would push that type/name past the width.
+     */
+    private LayoutContext parameterAnnotationLayout(List<ParameterPrefixPart> parts, int index, Parameter parameter) {
+        StringBuilder leftEdge = new StringBuilder(options.indentUnit());
+        for (int before = 0; before < index; before++) {
+            leftEdge.append(parts.get(before).flatText()).append(' ');
+        }
+        StringBuilder trailing = new StringBuilder();
+        for (int after = index + 1; after < parts.size(); after++) {
+            trailing.append(' ').append(parts.get(after).flatText());
+        }
+        trailing.append(' ').append(parameterTypeAndNameText(parameter));
+        return LayoutContext.root()
+                .withLeftEdgePrefix(leftEdge.toString())
+                .withTrailingContent(trailing.toString());
     }
 
     private int rangeBeginLine(Optional<Range> range) {
@@ -588,10 +639,11 @@ final class CallableSignaturePrinter {
                 .orElse("");
     }
 
-    private boolean parameterAnnotationSourceBreaks(Parameter parameter, List<ParameterPrefixPart> parts) {
-        return parameter.getAnnotations().stream().flatMap(annotation -> annotation.getRange().stream()).anyMatch(
-            range -> range.begin.line < range.end.line
-        ) && currentIndentedWidth(parameterFlat(parameter, parts)) > options.lineWidth();
+    private boolean parameterAnnotationPrefixOverflows(Parameter parameter, List<ParameterPrefixPart> parts) {
+        // A parameter's annotation prefix renders structured (each annotation breakable) purely when the flat
+        // parameter overflows the line.
+        return !parameter.getAnnotations().isEmpty()
+            && currentIndentedWidth(parameterFlat(parameter, parts)) > options.lineWidth();
     }
 
     /**

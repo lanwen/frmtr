@@ -143,7 +143,12 @@ Expression printers own layout decisions after `ExpressionDispatcher` selects a 
   text-block literal content remains with `TextBlockPrinter`.
   `BreakableArgumentExpressionPrinter` owns the shared break policy for method-call arguments whose expression form must
   stay broken, including over-wide or source-multiline binary string concatenations reused by initializer and
-  try-resource opener paths. `MethodCallChainPrinter`
+  try-resource opener paths. `ArgumentHeaviness` owns the structural (source-shape-free) predicate that forces a
+  call/constructor argument list to break one-per-line even when it fits — a constructor with five or more arguments, or
+  any list that both nests a call/constructor argument and reaches the nested-token threshold — which the method-call,
+  object-creation, and `super(...)`/`this(...)` printers compose with their width-driven groups (via `Doc.BREAK_PARENT`)
+  and which also suppresses the block-lambda hug when a sibling argument carries a heavy constructor root.
+  `MethodCallChainPrinter`
   owns chain doc assembly: chain comments including same-line comments between chained calls and leading line-comment
   clusters before chained segments, source-multiline first-segment lambda call attachment via
   `SourceMultilineLambdaCallLayout`, source-multiline single-object-creation call statements, field-root fluent-chain

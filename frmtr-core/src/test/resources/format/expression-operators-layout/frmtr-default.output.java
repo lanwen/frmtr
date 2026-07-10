@@ -222,9 +222,27 @@ public class ExpressionOperatorSamples {
 
     public void unannTypePrimitiveWithMethodReferenceSuffix(String[] args) {
         List.of(
-            new double[][] { 1, 2, 3, 4.1, 5.6846465 },
-            new double[][] { 1, 2, 3, 4.1, 5.6846465 },
-            new double[][] { 1, 2, 3, 4.1, 5.6846465 }
+            new double[][] {
+                1,
+                2,
+                3,
+                4.1,
+                5.6846465,
+            },
+            new double[][] {
+                1,
+                2,
+                3,
+                4.1,
+                5.6846465,
+            },
+            new double[][] {
+                1,
+                2,
+                3,
+                4.1,
+                5.6846465,
+            }
         ).toArray(double[][]::new);
     }
 
@@ -242,8 +260,7 @@ public class ExpressionOperatorSamples {
     }
 
     public void nonStaticMultipleChainedMethodInvocations() {
-        registry
-                .of(firstProjectionArgument, firstProjectionArgument)
+        registry.of(firstProjectionArgument, firstProjectionArgument)
                 .chained(firstProjectionArgument, firstProjectionArgument);
     }
 
@@ -269,7 +286,7 @@ public class ExpressionOperatorSamples {
             ) -> resolve;
         }
 
-        return (primaryReady && secondaryReady && regionReady && acceptedResult && fallbackResult && resolve);
+        return primaryReady && secondaryReady && regionReady && acceptedResult && fallbackResult && resolve;
     }
 
     void parenthesesWithTrailingBreak() {

@@ -37,14 +37,7 @@ class DataLossCases {
             @Override
             String encode(Recorder recorder, String source) throws IOException {
                 String output = "/tmp/capture.archive";
-                recorder.exec(
-                    "encoder",
-                    "-i",
-                    source,
-                    "-codec",
-                    "copy",
-                    output
-                );
+                recorder.exec("encoder", "-i", source, "-codec", "copy", output);
                 return output;
             }
         };

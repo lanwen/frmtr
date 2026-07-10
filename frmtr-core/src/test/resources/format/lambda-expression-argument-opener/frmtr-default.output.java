@@ -56,8 +56,7 @@ final class LambdaExpressionArgumentOpener {
             Clock clock,
             String requestId
     ) {
-        return dispatchRepository
-                .findByIdWithOwner(requestId)
+        return dispatchRepository.findByIdWithOwner(requestId)
                 .flatMap(record -> imageCounter.count(record).map(
                         counts -> DispatchDetails.from(clock, record, counts)
                 ));
@@ -69,9 +68,7 @@ final class LambdaExpressionArgumentOpener {
                 .entries(imagesKey)
                 .collectMap(
                     Map.Entry::getKey,
-                    entry -> Long.parseLong(
-                        new String(entry.getValue(), StandardCharsets.UTF_8)
-                    )
+                    entry -> Long.parseLong(new String(entry.getValue(), StandardCharsets.UTF_8))
                 );
     }
 
@@ -123,10 +120,7 @@ final class LambdaExpressionArgumentOpener {
                 .save(new Member(org.getId(), user.getId(), Member.Role.ADMIN))
                 .onErrorResume(
                     DuplicateKeyException.class,
-                    ex -> memberRepository.findByUserIdAndOrganizationIdWithSnapshot(
-                        user.getId(),
-                        org.getId()
-                    )
+                    ex -> memberRepository.findByUserIdAndOrganizationIdWithSnapshot(user.getId(), org.getId())
                 );
     }
 
@@ -164,9 +158,7 @@ final class LambdaExpressionArgumentOpener {
         return builder
                 .defaultStatusHandler(
                     StatusCode.NOT_FOUND::isSameCodeAs,
-                    resp -> resp.releaseBody().ofType(
-                        Exception.class
-                    )
+                    resp -> resp.releaseBody().ofType(Exception.class)
                 )
                 .filter(new FilterStep("alpha"));
     }
@@ -244,16 +236,17 @@ final class LambdaExpressionArgumentOpener {
             DirectoryClient directoryClient,
             Principal principal
     ) {
-        return probe.withVirtualTime(
-                    () -> new SessionReader(
-                        packetRepository,
-                        eventJournal,
-                        remoteReader,
-                        clock,
-                        databaseClient,
-                        agentLedger,
-                        directoryClient
-                    ).findSessions(principal.groupId(), Source.REMOTE, principal, null)
+        return probe
+                .withVirtualTime(() -> new SessionReader(
+                    packetRepository,
+                    eventJournal,
+                    remoteReader,
+                    clock,
+                    databaseClient,
+                    agentLedger,
+                    directoryClient
+                )
+                    .findSessions(principal.groupId(), Source.REMOTE, principal, null)
                 )
                 .expectSubscription();
     }
@@ -284,18 +277,18 @@ final class LambdaExpressionArgumentOpener {
         return usageRepository.fetchRows(tenantId)
                 .collectList()
                 .map(knownRows -> windows.stream()
-                            .map(window -> {
-                                return knownRows.stream()
-                                        .filter(row -> row.window().equals(window))
-                                        .findFirst()
-                                        .orElseGet(() -> WindowUsage.builder()
-                                                    .tenantId(tenantId)
-                                                    .window(window)
-                                                    .usage(UsageCount.EMPTY)
-                                                    .build()
-                                        );
-                            })
-                            .collect(Collectors.toList())
+                        .map(window -> {
+                            return knownRows.stream()
+                                    .filter(row -> row.window().equals(window))
+                                    .findFirst()
+                                    .orElseGet(() -> WindowUsage.builder()
+                                            .tenantId(tenantId)
+                                            .window(window)
+                                            .usage(UsageCount.EMPTY)
+                                            .build()
+                                    );
+                        })
+                        .collect(Collectors.toList())
                 );
     }
 
@@ -307,19 +300,19 @@ final class LambdaExpressionArgumentOpener {
         return projectionRepository.fetchRows(tenantId)
                 .collectList()
                 .map(projectedRows -> accountingWindows.stream()
-                            .map(accountingWindow -> {
-                                return projectedRows.stream()
-                                        .filter(
-                                            projectedWindowUsage -> projectedWindowUsage.accountingWindow().equals(accountingWindow)
-                                        )
-                                        .findFirst()
-                                        .orElseGet(() -> ProjectedWindowUsageSnapshot.builder().tenantId(tenantId)
-                                                    .accountingWindow(accountingWindow)
-                                                    .usage(UsageCount.EMPTY)
-                                                    .build()
-                                        );
-                            })
-                            .collect(Collectors.toList())
+                        .map(accountingWindow -> {
+                            return projectedRows.stream()
+                                    .filter(
+                                        projectedWindowUsage -> projectedWindowUsage.accountingWindow().equals(accountingWindow)
+                                    )
+                                    .findFirst()
+                                    .orElseGet(() -> ProjectedWindowUsageSnapshot.builder().tenantId(tenantId)
+                                                .accountingWindow(accountingWindow)
+                                                .usage(UsageCount.EMPTY)
+                                                .build()
+                                    );
+                        })
+                        .collect(Collectors.toList())
                 );
     }
 
@@ -327,11 +320,11 @@ final class LambdaExpressionArgumentOpener {
         return counterStream.grouped()
                 .flatMapIterable(Map::values)
                 .map(counters -> counters.stream()
-                            .reduce((left, right) -> new ImageCounter(
-                                    left.projectedImageReference(),
-                                    left.projectedContainerCount() + right.projectedContainerCount()
-                            ))
-                            .orElseThrow()
+                        .reduce((left, right) -> new ImageCounter(
+                                left.projectedImageReference(),
+                                left.projectedContainerCount() + right.projectedContainerCount()
+                        ))
+                        .orElseThrow()
                 );
     }
 

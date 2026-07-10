@@ -38,11 +38,25 @@ public class Variables {
 
     private Object[] arrayVariable3 = new Object[] {};
 
-    private Object[] arrayVariable4 = new Object[] { "draft", "review", "approved" };
+    private Object[] arrayVariable4 = new Object[] {
+        "draft",
+        "review",
+        "approved",
+    };
 
-    private Object[] arrayVariable5 = new Object[] { "draft", "review", "approved", "archived", "restored" };
+    private Object[] arrayVariable5 = new Object[] {
+        "draft",
+        "review",
+        "approved",
+        "archived",
+        "restored",
+    };
 
-    private Object[] arrayVariable6 = { "draft", "review", "approved" };
+    private Object[] arrayVariable6 = {
+        "draft",
+        "review",
+        "approved",
+    };
 
     private Range creator1 = this.dateRangeField.new Range(from, to);
 

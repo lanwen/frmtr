@@ -7,8 +7,7 @@ final class MethodChainTrailingEmptyCallComment {
     private static final int WORKER_PORT = 6379;
 
     @Managed
-    private static RelaySubject relaySubject = new RelaySubject<>(ImageName.parse("relay:4.4"))
-            .withoutAuthentication(); // disable credentials
+    private static RelaySubject relaySubject = new RelaySubject<>(ImageName.parse("relay:4.4")).withoutAuthentication(); // disable credentials
 
     @Managed
     public ComposeHarness environment = new ComposeHarness(

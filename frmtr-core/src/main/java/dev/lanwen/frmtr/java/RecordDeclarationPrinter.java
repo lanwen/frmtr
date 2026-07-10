@@ -166,7 +166,7 @@ final class RecordDeclarationPrinter {
         List<Doc> parameters = layouts.stream()
                 .flatMap(layout -> layout.docs().stream())
                 .toList();
-        // A component's own trailing line comment no longer forces the hard-line shape here: it emits BreakParent, which
+        // A component's own trailing line comment does not force the hard-line shape here: it emits BreakParent, which
         // poisons this group's fit so it breaks while its soft lines render as the same newlines the hard-line shape
         // produced. Gap line comments still force hard lines directly because they print on their own interleaved lines.
         Doc line = forceBreak || hasGapLineComment ? Doc.HARD_LINE : Doc.SOFT_LINE;
@@ -249,9 +249,12 @@ final class RecordDeclarationPrinter {
             parts.add(leading);
         }
         if (recordComponentAnnotationsShouldBreak(parameter)) {
+            // Each annotation is on its own component-indented line here, so its only same-line context is the extra
+            // indent past the member baseline; a wide annotation still breaks internally when it overflows that column.
+            LayoutContext stackedLayout = LayoutContext.root().withLeftEdgePrefix(options.indentUnit());
             parameter.getAnnotations()
                     .stream()
-                    .map(node -> annotation.format(node, LayoutContext.root()))
+                    .map(node -> annotation.format(node, stackedLayout))
                     .map(doc -> Doc.concat(doc, Doc.HARD_LINE))
                     .forEach(parts::add);
         } else if (!parameter.getAnnotations().isEmpty()) {
@@ -342,51 +345,60 @@ final class RecordDeclarationPrinter {
         if (parameter.getAnnotations().isEmpty()) {
             return false;
         }
-        if (recordComponentAnnotationsStartOnDifferentLines(parameter)) {
-            return true;
-        }
-        if (
-            recordComponentHasSourceMultilineAnnotation(parameter)
-            || recordComponentHasWidthDrivenMultilineAnnotation(parameter)
-        ) {
+        // A component whose annotations fit inline reprints inline regardless of source shape. A component whose
+        // annotation is itself width-driven-multiline lets that annotation break internally rather than forcing the
+        // whole component prefix to stack.
+        if (recordComponentHasWidthDrivenMultilineAnnotation(parameter)) {
             return false;
         }
         return currentIndentedWidth.applyAsInt(recordComponentFlat(parameter)) > options.lineWidth();
     }
 
     private Doc recordComponentAnnotationPrefix(Parameter parameter) {
+        List<AnnotationExpr> annotations = parameter.getAnnotations();
+        List<Doc> docs = new ArrayList<>();
+        for (int index = 0; index < annotations.size(); index++) {
+            docs.add(annotation.format(
+                annotations.get(index),
+                recordComponentAnnotationLayout(parameter, annotations, index)
+            ));
+        }
         return Doc.concat(
             Doc.join(
                 Doc.text(" "),
-                parameter.getAnnotations()
-                        .stream()
-                        .map(node -> annotation.format(node, LayoutContext.root()))
-                        .toList()
+                docs
             ),
             Doc.text(" ")
         );
     }
 
-    private boolean recordComponentAnnotationsStartOnDifferentLines(Parameter parameter) {
-        Optional<Integer> firstAnnotationLine = parameter.getAnnotations()
-                .stream()
-                .findFirst()
-                .flatMap(annotation -> annotation.getRange().map(range -> range.begin.line));
-        if (firstAnnotationLine.isEmpty()) {
-            return false;
+    /**
+     * Builds the {@link LayoutContext} that tells a breakable inline record-component annotation where it renders, so its
+     * flat/structured choice is width-driven at the real column rather than reading the author's source line breaks.
+     *
+     * <p>A broken record header indents its components one unit past the member baseline {@link #currentIndentedWidth}
+     * assumes, so {@link LayoutContext#leftEdgePrefix()} contributes that extra unit plus every earlier annotation
+     * (joined by the same {@code " "} the render uses). The trailing content is the remaining annotations then the
+     * {@code " Type name"} tail the component emits after the prefix on the same line, so the annotation breaks only when
+     * keeping it flat would push that tail past the width.
+     */
+    private LayoutContext recordComponentAnnotationLayout(
+            Parameter parameter,
+            List<AnnotationExpr> annotations,
+            int index
+    ) {
+        StringBuilder leftEdge = new StringBuilder(options.indentUnit());
+        for (int before = 0; before < index; before++) {
+            leftEdge.append(compact.apply(annotations.get(before))).append(' ');
         }
-        int firstLine = firstAnnotationLine.orElseThrow();
-        return parameter.getAnnotations()
-                .stream()
-                .flatMap(annotation -> annotation.getRange().stream())
-                .anyMatch(range -> range.begin.line > firstLine);
-    }
-
-    private boolean recordComponentHasSourceMultilineAnnotation(Parameter parameter) {
-        return parameter.getAnnotations()
-                .stream()
-                .flatMap(annotation -> annotation.getRange().stream())
-                .anyMatch(range -> range.begin.line < range.end.line);
+        StringBuilder trailing = new StringBuilder();
+        for (int after = index + 1; after < annotations.size(); after++) {
+            trailing.append(' ').append(compact.apply(annotations.get(after)));
+        }
+        trailing.append(' ').append(recordComponentTail(parameter));
+        return LayoutContext.root()
+                .withLeftEdgePrefix(leftEdge.toString())
+                .withTrailingContent(trailing.toString());
     }
 
     private boolean recordComponentHasWidthDrivenMultilineAnnotation(Parameter parameter) {

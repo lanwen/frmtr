@@ -82,14 +82,19 @@ final class ExpressionLambdaMethodCallBodyLayout {
         if (scopeCall.getArguments().isEmpty()) {
             return Optional.empty();
         }
+        // The single-argument scope-call branch below renders {@code scopeCall.getScope()} on the header line, so a
+        // bare-call scope ({@code assertThat(x).isNull()} whose {@code assertThat(x)} has no receiver) has nothing to
+        // place there. Bodies of this shape route through this layout, so guard the empty-scope single-argument case and
+        // defer to the packed/broken body renderer rather than throwing on the missing scope.
+        if (scopeCall.getArguments().size() <= 1 && scopeCall.getScope().isEmpty()) {
+            return Optional.empty();
+        }
         // Defer to the packed chain renderer when the single-argument scope call carries a lambda argument: a lambda
         // body cannot be collapsed onto the single inlined continuation line this layout builds below, so that case
         // belongs to the chain renderer that keeps the lambda multiline. This intentionally keys off a deterministic AST
-        // property (the argument kind) rather than whether the scope call happened to be multiline in the input. The
-        // earlier {@code wasMultiline(scopeCall)} read re-observed the previous pass's own broken shape, so this layout
-        // and the packed fallback alternated every pass for a near-boundary chain whose scope call broke on one pass and
-        // packed on the next, and the body never converged (#117). A simple non-lambda single argument (a name, literal,
-        // or short call) does inline cleanly here, so it keeps this fitting single-line continuation shape.
+        // property (the argument kind) rather than whether the scope call happened to be multiline in the input. A simple
+        // non-lambda single argument (a name, literal, or short call) does inline cleanly here, so it keeps this fitting
+        // single-line continuation shape.
         if (
             scopeCall.getArguments().size() <= 1
             && scopeCall.getArguments().stream().anyMatch(LambdaExpr.class::isInstance)

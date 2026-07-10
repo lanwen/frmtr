@@ -10,7 +10,14 @@ public class ObjectCreationSamples {
             "quantity",
             "of",
             "arguments",
-            new NestedPayload("that", "carry", "nested", new NestedPayload("object creation"), "everywhere", "!"),
+            new NestedPayload(
+                "that",
+                "carry",
+                "nested",
+                new NestedPayload("object creation"),
+                "everywhere",
+                "!"
+            ),
             "should",
             "wrap"
         );

@@ -169,7 +169,7 @@ final class VariableDeclarationPrinter {
      * Forces a hard-line declarator list when a single local declaration has multiple initialized variables.
      *
      * <p>The formatter keeps uninitialized comma lists groupable, but initializers make each declarator own enough
-     * layout state around {@code =} that the legacy local-variable path separated them with hard lines.
+     * layout state around {@code =} to warrant separating them with hard lines.
      */
     private boolean localVariableDeclaratorsShouldBreak(NodeList<VariableDeclarator> variables) {
         return variables.size() > 1 && variables.stream().anyMatch(variable -> variable.getInitializer().isPresent());

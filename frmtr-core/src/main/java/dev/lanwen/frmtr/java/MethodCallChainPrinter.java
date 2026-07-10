@@ -913,7 +913,9 @@ final class MethodCallChainPrinter {
             && !methodCallSegmentHasComment(calls.getFirst())
             && methodCallSegmentHasBlockLambdaArgument(calls.getFirst())
             && blockLambdaSegmentFirstLine(compactSource.compact(methodRoot), calls.getFirst())
-                    .filter(firstLine -> layoutWidth.line(LayoutWidth.LineBudget.BLOCK, firstLine) <= options.lineWidth())
+                    // C10-b: measure the block-lambda root first line at the root's true rendered block/type depth
+                    // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
+                    .filter(firstLine -> layoutWidth.nodeLine(methodRoot, firstLine) <= options.lineWidth())
                     .isPresent()
         ) {
             return Optional.empty();
@@ -987,7 +989,9 @@ final class MethodCallChainPrinter {
             if (
                 methodCallSegmentHasBlockLambdaArgument(calls.getFirst())
                 && blockLambdaSegmentFirstLine(compactSource.compact(methodRoot), calls.getFirst())
-                        .filter(firstLine -> layoutWidth.line(LayoutWidth.LineBudget.BLOCK, firstLine) <= options.lineWidth())
+                        // C10-b: measure the block-lambda root first line at the root's true rendered block/type depth
+                        // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
+                        .filter(firstLine -> layoutWidth.nodeLine(methodRoot, firstLine) <= options.lineWidth())
                         .isPresent()
             ) {
                 return Optional.empty();
@@ -1480,8 +1484,10 @@ final class MethodCallChainPrinter {
         MethodCallExpr firstCall = calls.getFirst();
         return (
             !methodCallSegmentHasBlockLambdaArgument(firstCall)
-            && (sourceShapePolicy.fitsOnOneLine(firstCall, lineWidth(LayoutWidth.LineBudget.CURRENT))
-                || layoutWidth.line(LayoutWidth.LineBudget.CURRENT, this.calls.methodCallPrefix(firstCall) + "(") <= options.lineWidth())
+            // C10-b: measure the first segment's fit at its true rendered block/type depth ({@link LayoutWidth#nodeLine})
+            // instead of the fixed CURRENT baseline.
+            && (sourceShapePolicy.fitsOnOneLine(firstCall, text -> layoutWidth.nodeLine(firstCall, text))
+                || layoutWidth.nodeLine(firstCall, this.calls.methodCallPrefix(firstCall) + "(") <= options.lineWidth())
         );
     }
 
@@ -1518,7 +1524,8 @@ final class MethodCallChainPrinter {
             }
             return Doc.concat(expressionRenderer.format(root, LayoutContext.root()), methodCallChainSegment(firstCall));
         }
-        if (sourceShapePolicy.fitsOnOneLine(firstCall, lineWidth(LayoutWidth.LineBudget.CURRENT))) {
+        // C10-b: measure the first segment's fit at its true rendered block/type depth (nodeLine) instead of CURRENT.
+        if (sourceShapePolicy.fitsOnOneLine(firstCall, text -> layoutWidth.nodeLine(firstCall, text))) {
             return inlineMethodCall(firstCall);
         }
         return brokenFirstSegmentAttachedToSimpleRoot(root, firstCall);
@@ -1550,7 +1557,8 @@ final class MethodCallChainPrinter {
     }
 
     private String firstSegmentAttachedToSimpleRootFirstLine(Expression root, MethodCallExpr firstCall) {
-        if (sourceShapePolicy.fitsOnOneLine(firstCall, lineWidth(LayoutWidth.LineBudget.CURRENT))) {
+        // C10-b: measure the first segment's fit at its true rendered block/type depth (nodeLine) instead of CURRENT.
+        if (sourceShapePolicy.fitsOnOneLine(firstCall, text -> layoutWidth.nodeLine(firstCall, text))) {
             return compactSource.compact(firstCall);
         }
         String typeArguments = firstCall.getTypeArguments()
@@ -1710,7 +1718,8 @@ final class MethodCallChainPrinter {
             return brokenScopedMethodRoot.orElseThrow();
         }
         if (
-            layoutWidth.line(LayoutWidth.LineBudget.CURRENT, compactSourceWidthText(methodRoot)) > options.lineWidth()
+            // C10-b: measure the method root at its true rendered block/type depth (nodeLine) instead of CURRENT.
+            layoutWidth.nodeLine(methodRoot, compactSourceWidthText(methodRoot)) > options.lineWidth()
             || methodCallRootScopeOverflows(methodRoot)
         ) {
             return methodCallChain(methodRoot, MethodCallBreakMode.FORCED, LayoutContext.root())
@@ -1725,7 +1734,8 @@ final class MethodCallChainPrinter {
                 .map(MethodCallExpr.class::cast)
                 .filter(call -> call.getArguments().size() > 1)
                 .filter(call -> call.getScope().filter(methodChainPlanner::promotesFirstCall).isPresent())
-                .filter(call -> layoutWidth.line(LayoutWidth.LineBudget.CURRENT, compactSourceWidthText(call)) > options.lineWidth());
+                // C10-b: measure the scoped call at its true rendered block/type depth (nodeLine) instead of CURRENT.
+                .filter(call -> layoutWidth.nodeLine(call, compactSourceWidthText(call)) > options.lineWidth());
         if (scopedCall.isEmpty()) {
             return Optional.empty();
         }
@@ -1741,7 +1751,8 @@ final class MethodCallChainPrinter {
         return methodRoot.getScope()
                 .filter(MethodCallExpr.class::isInstance)
                 .map(MethodCallExpr.class::cast)
-                .map(scopedCall -> layoutWidth.line(LayoutWidth.LineBudget.CURRENT, 
+                // C10-b: measure the scoped call at its true rendered block/type depth (nodeLine) instead of CURRENT.
+                .map(scopedCall -> layoutWidth.nodeLine(scopedCall,
                         compactSourceWidthText(scopedCall)
                     ) > options.lineWidth()
                 )
@@ -1760,7 +1771,8 @@ final class MethodCallChainPrinter {
         }
         if (
             expression.getArguments().size() > 1
-            && !sourceShapePolicy.fitsOnOneLine(expression, lineWidth(LayoutWidth.LineBudget.CURRENT))
+            // C10-b: measure the promoted method call at its true rendered block/type depth (nodeLine) instead of CURRENT.
+            && !sourceShapePolicy.fitsOnOneLine(expression, text -> layoutWidth.nodeLine(expression, text))
         ) {
             return calls.brokenMethodCall(expression);
         }
@@ -1771,7 +1783,9 @@ final class MethodCallChainPrinter {
         }
         if (methodCallSegmentHasBlockLambdaArgument(expression)) {
             return blockLambdaSegmentFirstLine(compactSource.compact(expression.getScope().orElseThrow()), expression)
-                    .filter(firstLine -> layoutWidth.line(LayoutWidth.LineBudget.BLOCK, firstLine) <= options.lineWidth())
+                    // C10-b: measure the promoted block-lambda first line at its true rendered block/type depth
+                    // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
+                    .filter(firstLine -> layoutWidth.nodeLine(expression, firstLine) <= options.lineWidth())
                     .map(ignored -> expressionRenderer.format(expression, LayoutContext.root()))
                     .orElseGet(() -> Doc.concat(
                             expressionRenderer.format(expression.getScope().orElseThrow(), LayoutContext.root()),
@@ -1805,7 +1819,9 @@ final class MethodCallChainPrinter {
     ) {
         if (methodCallSegmentHasBlockLambdaArgument(expression)) {
             return blockLambdaSegmentFirstLine(compactSource.compact(root), expression)
-                    .filter(firstLine -> layoutWidth.line(LayoutWidth.LineBudget.BLOCK, firstLine) <= options.lineWidth())
+                    // C10-b: measure the promoted-root block-lambda first line at the root's true rendered block/type
+                    // depth ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
+                    .filter(firstLine -> layoutWidth.nodeLine(root, firstLine) <= options.lineWidth())
                     .map(ignored -> Doc.concat(rootDoc, methodCallChainSegment(expression, finalSegmentSuffix)))
                     .orElseGet(() -> Doc.concat(
                             rootDoc,
@@ -2316,10 +2332,13 @@ final class MethodCallChainPrinter {
         if (hasSingleExpressionLambdaArgument(methodRoot)) {
             return Optional.of(prefix + "(");
         }
-        if (promotedRootArgumentsShouldBreak(methodRoot, lineWidth(LayoutWidth.LineBudget.CURRENT), LayoutContext.root())) {
+        // C10-b: measure the promoted method root at its true rendered block/type depth (nodeLine) instead of CURRENT.
+        // (promotedRootArgumentsShouldBreak ignores the oracle post-C10-a; the fitsOnOneLine gate reads it.)
+        ToIntFunction<String> methodRootWidth = text -> layoutWidth.nodeLine(methodRoot, text);
+        if (promotedRootArgumentsShouldBreak(methodRoot, methodRootWidth, LayoutContext.root())) {
             return Optional.of(prefix + "(");
         }
-        if (!sourceShapePolicy.fitsOnOneLine(methodRoot, lineWidth(LayoutWidth.LineBudget.CURRENT))) {
+        if (!sourceShapePolicy.fitsOnOneLine(methodRoot, methodRootWidth)) {
             return Optional.of(prefix + "(");
         }
         if (methodCallSegmentHasBlockLambdaArgument(methodRoot)) {

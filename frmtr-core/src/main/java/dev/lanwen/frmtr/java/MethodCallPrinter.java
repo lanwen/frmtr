@@ -755,7 +755,9 @@ final class MethodCallPrinter {
                 .filter(EnclosedExpr.class::isInstance)
                 .map(EnclosedExpr.class::cast)
                 .filter(scope -> leadingBreak
-                        || layoutWidth.line(LayoutWidth.LineBudget.BLOCK, compactSource.compact(expression) + ";")
+                        // C10-b: measure the enclosed-scope call at its true rendered block/type depth
+                        // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
+                        || layoutWidth.nodeLine(expression, compactSource.compact(expression) + ";")
                             > options.lineWidth()
                 )
                 .map(scope -> Doc.concat(
@@ -1242,7 +1244,9 @@ final class MethodCallPrinter {
     private boolean attachedOpenerOverflows(MethodCallExpr expression, String openerLine) {
         return sharedFirstLineWidth(expression)
                 .map(prefixedIndent -> prefixedIndent + openerLine.length())
-                .orElseGet(() -> layoutWidth.line(LayoutWidth.LineBudget.CURRENT, openerLine))
+                // C10-b: the own-line fallback (a call that starts its own line, no shared prefix) measures at the call's
+                // true rendered block/type depth ({@link LayoutWidth#nodeLine}) instead of the fixed CURRENT baseline.
+                .orElseGet(() -> layoutWidth.nodeLine(expression, openerLine))
             > options.lineWidth();
     }
 

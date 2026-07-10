@@ -236,7 +236,10 @@ preflight_signing() {
 # Build the PR list. Descending order signs a number-ordered stack top-down, so each PR
 # signs only its own commit(s) before its base branch is rewritten (no rebase cascade).
 if [[ $ALL -eq 1 ]]; then
-    mapfile -t prs < <(gh pr list --repo "$GH_REPO" --state open --limit 200 --json number --jq '.[].number' | sort -rn)
+    # `while read` (not mapfile/readarray) so this runs on macOS's stock bash 3.2 too.
+    prs=()
+    while IFS= read -r _prnum; do prs+=("$_prnum"); done \
+        < <(gh pr list --repo "$GH_REPO" --state open --limit 200 --json number --jq '.[].number' | sort -rn)
 fi
 [[ ${#prs[@]} -gt 0 ]] || { err "no PRs given (pass PR numbers or --all)"; usage >&2; exit 2; }
 
@@ -288,7 +291,9 @@ for pr in "${prs[@]}"; do
         git checkout --quiet -B "$head" "origin/$head"
         merge_base="$(git merge-base HEAD "origin/${base}")"
         original_head="$(git rev-parse HEAD)"
-        mapfile -t commits < <(git rev-list --reverse "${merge_base}..HEAD")
+        commits=()
+        while IFS= read -r _sha; do commits+=("$_sha"); done \
+            < <(git rev-list --reverse "${merge_base}..HEAD")
         if [[ ${#commits[@]} -eq 0 ]]; then
             warn "PR #${pr}: no commits above base — nothing to sign"; exit 30
         fi

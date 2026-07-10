@@ -300,14 +300,14 @@ final class BinaryExpressionPrinter {
     private Doc brokenMethodCallChainOperand(MethodCallExpr methodCall) {
         // The operand sits on a binary continuation line; its extra offset is pure continuation indentation the
         // surrounding line applies, which the fan's relative {@link Doc#indent} reproduces, so no textual leftEdgePrefix
-        // is threaded (matching the argument first-selector seam). The CONTINUATION budget is the only field the fan
-        // reads — through {@code recordChainWidthBreak} for {@code --explain} — and names the column operands render at.
-        // EnclosingConstruct stays ROOT: no chain rule consumes it here, and a binary operand is not itself a statement /
-        // argument / return / condition position, so fabricating one of those would be misleading.
+        // is threaded (matching the argument first-selector seam). The fan reads nothing else from this context: its
+        // {@code --explain} width-break diagnostic now measures at the operand's rendered column, so the transitional
+        // widthBudget selector this context once carried is retired (U9 / #190). EnclosingConstruct stays ROOT: no chain
+        // rule consumes it here, and a binary operand is not itself a statement / argument / return / condition position,
+        // so fabricating one of those would be misleading.
         LayoutContext operandLayout = new LayoutContext(
             EnclosingConstruct.ROOT,
             "",
-            LayoutWidth.LineBudget.CONTINUATION,
             "",
             false
         );

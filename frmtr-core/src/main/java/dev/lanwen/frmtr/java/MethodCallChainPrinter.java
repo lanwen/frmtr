@@ -681,7 +681,7 @@ final class MethodCallChainPrinter {
             && !sourceMultilineArguments
             && calls.stream().noneMatch(this::methodCallSegmentHasComment)
         ) {
-            chainWidthBreakExplain.record(expression, analysis, lineBudget);
+            chainWidthBreakExplain.record(expression, analysis, layout);
             return Optional.of(chainFanOut(root, calls, finalSegmentSuffix, layout));
         }
         // The two chain families the canonical link-count/root-kind rule does NOT claim — a trivial-receiver TWO-selector
@@ -702,7 +702,7 @@ final class MethodCallChainPrinter {
             && !sourceMultilineArguments
             && calls.stream().noneMatch(this::methodCallSegmentHasComment)
         ) {
-            chainWidthBreakExplain.record(expression, analysis, lineBudget);
+            chainWidthBreakExplain.record(expression, analysis, layout);
             Doc fanOut = chainFanOut(root, calls, finalSegmentSuffix, layout);
             if (rootIsEnclosedFanningChain(root)) {
                 return Optional.of(fanOut);
@@ -1081,7 +1081,7 @@ final class MethodCallChainPrinter {
         // this method's PrinterWrap describes. The earlier deferral branches hand rendering to a different printer that
         // does not lay the chain out one per line, so recording before them could attribute a "N segments, one per line"
         // layout to a path that never produced it.
-        chainWidthBreakExplain.record(expression, analysis, lineBudget);
+        chainWidthBreakExplain.record(expression, analysis, layout);
         // The multi-segment fall-through builds the exact one-segment-per-line fan-out
         // {@code chainFanOut} produces — root then each selector on its own dotted continuation line
         // ({@code Doc.concat(root, chainContinuation(root, methodCallChainSegments(calls, tail)))}) — so route it through

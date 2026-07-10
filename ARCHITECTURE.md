@@ -1000,9 +1000,25 @@ consumers have not yet been reviewed for the same activation.
 
 The per-node *positional* facts a width gate needs — distinct from the run-scoped `JavaFormatContext` services and
 from per-type dispatch — travel in an immutable `LayoutContext` record threaded down the descent
-(`EnclosingConstruct` position, `leftEdgePrefix`, a transitional `LayoutWidth.LineBudget` selector, the
-`trailingContent` the caller will emit on the same line after the node, and a `leadingBreak` flag recording whether
-the caller has already committed the node to lead with a break). `trailingContent` carries the one fact
+(`EnclosingConstruct` position, `leftEdgePrefix`, the `trailingContent` the caller will emit on the same line after the
+node, and a `leadingBreak` flag recording whether the caller has already committed the node to lead with a break). An
+earlier transitional `LayoutWidth.LineBudget` selector once rode on this record to reproduce fixed indentation baselines
+for per-node width probes; it has now been **fully retired** (U2/U9, #190) and the field deleted. The return-path reads
+went first: the two `returnLineWidth` gates (`ReturnExpressionPrinter`, `ReturnBinaryExpressionLayout`) drop the
+fixed-budget floor and measure purely at the rendered column,
+`ReturnBinaryExpressionLayout.directBinaryReturnMethodCallFirstLineFits` folds its bare first-line probe into that same
+measurement, and the comment-bearing-chain tail and the `returnWithForcedMethodCallChain` callee budget take a fixed
+`LineBudget.BLOCK` baseline (the return keyword's rendered column is already threaded through `chainLayout`'s
+`leftEdgePrefix`, so the prefix-aware chain gates do the real measuring). The last reader was `ChainFanLayout`'s
+`--explain`-only width-break diagnostic (`ChainWidthBreakExplain`), now measured at the chain's rendered column
+(`nodeIndentWidth` + `leftEdgePrefix` + compact text) exactly like the sibling `MethodCallChainPrinter.compactRootLineWidth`
+gate; with no readers left the `widthBudget` field was removed from the record and dropped from its `root()`/`with*` copies
+and the writer construction sites (`StatementPrinter`, `BinaryExpressionPrinter`, `MethodCallPrinter`,
+`BreakableArgumentExpressionPrinter`). The retirement is byte-identical across the format-fixture suite and the
+kafka/camel/cayenne/tomcat/zookeeper corpora (0 files move; only the `--explain` diagnostic's recorded flat-width value
+shifts to the correct rendered column). `LayoutWidth.LineBudget` itself survives as the fixed-baseline probe vocabulary
+the width helpers still use directly through `LayoutWidth.line(budget, …)`; only the per-node `LayoutContext` override is
+gone. `trailingContent` carries the one fact
 node-local IR cannot see: the same-line opener a header appends after a clause. The canonical case is the throws
 clause — a declaration header's `throws …` width has to include the `" {"` (body) or `";"` (abstract) the caller
 glues on that line — so `MethodDeclarationPrinter`/`ConstructorDeclarationPrinter` thread that opener as

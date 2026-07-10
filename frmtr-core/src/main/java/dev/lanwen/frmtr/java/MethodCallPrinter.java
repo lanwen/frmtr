@@ -234,7 +234,6 @@ final class MethodCallPrinter {
         LayoutContext statementLayout = new LayoutContext(
             EnclosingConstruct.STATEMENT,
             "",
-            lineBudget,
             "",
             false
         );
@@ -1461,7 +1460,6 @@ final class MethodCallPrinter {
             LayoutContext canonicalFanLayout = new LayoutContext(
                 EnclosingConstruct.ARGUMENT,
                 "",
-                LayoutWidth.LineBudget.CONTINUATION,
                 "",
                 false
             );
@@ -1495,7 +1493,7 @@ final class MethodCallPrinter {
         // break the chain at its actual position. A chain that still fits at this depth returns empty and falls through
         // to the unchanged flat rendering, so non-overflowing arguments stay byte-identical.
         //
-        // LDM-2f / chain-unify U3 (#190): thread a real LayoutContext (ARGUMENT position, CONTINUATION budget) for the
+        // LDM-2f / chain-unify U3 (#190): thread a real LayoutContext (ARGUMENT position) for the
         // argument chain instead of the implicit root(), so the argument caller is ready to list a chainFanOut arm through
         // bestFitting in U4. The leftEdgePrefix is left EMPTY on purpose: unlike a return/initializer value — whose whole
         // same-line prefix is textual (`return `, `NAME = `) and whose column nodeIndentWidth already captures — an
@@ -1510,7 +1508,6 @@ final class MethodCallPrinter {
             LayoutContext argumentLayout = new LayoutContext(
                 EnclosingConstruct.ARGUMENT,
                 "",
-                LayoutWidth.LineBudget.CONTINUATION,
                 "",
                 false
             );

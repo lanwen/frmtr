@@ -127,7 +127,7 @@ final class ReturnBinaryExpressionLayout {
             LayoutContext layout
     ) {
         String line = "return " + methodCallPrefix.apply(methodCall) + "(";
-        return layoutWidth.line(layout.widthBudget(), line) <= options.lineWidth();
+        return returnLineWidth(methodCall, line, layout) <= options.lineWidth();
     }
 
     private boolean directBinaryReturnMethodCallClosingLineFits(BinaryExpr binaryExpr) {
@@ -187,14 +187,16 @@ final class ReturnBinaryExpressionLayout {
      * enclosing block/type nesting to reproduce the deterministic rendered indentation ({@code "return "} at the block
      * indent) regardless of source column, matching the source-column-to-rendered-column correction from #155/#161.
      *
-     * <p>The fixed-budget term reads its {@link LayoutWidth.LineBudget} from the return value's {@link LayoutContext}
-     * rather than a loose parameter (LDM-2 / #198); {@code widthBudget()} reproduces the prior budget exactly, so this
-     * stays byte-identical.
+     * <p>The transitional {@link LayoutWidth.LineBudget} floor ({@code max(line(widthBudget), renderedColumn)}) is retired
+     * here too (U2, #190), for the same reason as the sibling {@link ReturnExpressionPrinter} gate: a {@code return}
+     * renders at least two block/type levels deep so the {@code nodeLine} term already dominates the {@code BLOCK} budget,
+     * and the deeper {@code METHOD_CHAIN_LAMBDA_BODY} budget is not load-bearing because the direct-binary layout's own
+     * continuation/first-line probes re-gate the shape. Byte-identical across the fixture suite and corpora; removes a
+     * return-path read of the transitional {@code widthBudget} selector. {@link #directBinaryReturnMethodCallFirstLineFits}
+     * now folds its bare first-line probe into this same rendered-column measurement rather than the fixed budget.
      */
     private int returnLineWidth(Expression expression, String line, LayoutContext layout) {
-        int budgetWidth = layoutWidth.line(layout.widthBudget(), line);
-        int renderedColumnWidth = layoutWidth.nodeLine(expression, line);
-        return Math.max(budgetWidth, renderedColumnWidth);
+        return layoutWidth.nodeLine(expression, line);
     }
 
     private String directBinaryReturnLastLinePrefix(BinaryExpr expression) {

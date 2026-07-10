@@ -20,10 +20,6 @@ package dev.lanwen.frmtr.java;
  * @param enclosing the syntactic position this node occupies relative to its parent
  * @param leftEdgePrefix text that already occupies this node's first line ahead of it (for example an assignment
  *     prefix); the empty string when the node owns its own first column
- * @param widthBudget <strong>transitional.</strong> The {@link LayoutWidth.LineBudget} a width probe should assume for
- *     this node. The end state measures fit at the node's real rendered column via the renderer, so this selector is a
- *     crutch and is removed when measurement parity (LDM-2 / C10) lands; until then it reproduces today's fixed
- *     baselines so no probe value changes
  * @param trailingContent same-line content the <em>caller</em> will emit immediately after this node, which node-local
  *     IR cannot see but a width gate must account for. The canonical case is a declaration header's throws clause: its
  *     width has to include the {@code " {"} (body) or {@code ";"} (abstract) opener the caller appends on the same
@@ -44,18 +40,17 @@ package dev.lanwen.frmtr.java;
 record LayoutContext(
     EnclosingConstruct enclosing,
     String leftEdgePrefix,
-    LayoutWidth.LineBudget widthBudget,
     String trailingContent,
     boolean leadingBreak
 ) {
 
     /**
      * The compilation-unit-level starting context: at the root, with no left-edge prefix, no caller-emitted trailing
-     * content, no committed leading break, and the current-line width budget. This reproduces the defaults every call
-     * site assumed before {@code LayoutContext} existed, so threading it through changes no formatting decision.
+     * content, and no committed leading break. This reproduces the defaults every call site assumed before
+     * {@code LayoutContext} existed, so threading it through changes no formatting decision.
      */
     static LayoutContext root() {
-        return new LayoutContext(EnclosingConstruct.ROOT, "", LayoutWidth.LineBudget.CURRENT, "", false);
+        return new LayoutContext(EnclosingConstruct.ROOT, "", "", false);
     }
 
     /**
@@ -65,7 +60,7 @@ record LayoutContext(
      * produces a fresh value rather than mutating; the original is unchanged.
      */
     LayoutContext withTrailingContent(String trailingContent) {
-        return new LayoutContext(enclosing, leftEdgePrefix, widthBudget, trailingContent, leadingBreak);
+        return new LayoutContext(enclosing, leftEdgePrefix, trailingContent, leadingBreak);
     }
 
     /**
@@ -76,7 +71,7 @@ record LayoutContext(
      * a fresh value rather than mutating; the original is unchanged.
      */
     LayoutContext withLeadingBreak(boolean leadingBreak) {
-        return new LayoutContext(enclosing, leftEdgePrefix, widthBudget, trailingContent, leadingBreak);
+        return new LayoutContext(enclosing, leftEdgePrefix, trailingContent, leadingBreak);
     }
 
     /**
@@ -88,6 +83,6 @@ record LayoutContext(
      * original is unchanged.
      */
     LayoutContext withLeftEdgePrefix(String leftEdgePrefix) {
-        return new LayoutContext(enclosing, leftEdgePrefix, widthBudget, trailingContent, leadingBreak);
+        return new LayoutContext(enclosing, leftEdgePrefix, trailingContent, leadingBreak);
     }
 }

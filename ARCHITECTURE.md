@@ -544,12 +544,15 @@ each enclosing attach/break/dispatch verdict **renderer-resolved** — it emits 
 arms) and ranks it against the attached/compact alternative with `Doc.bestFitting`/`Doc.conditionalGroup` at the true
 output column, so the shape is a fixpoint by construction. The fan-position decision — whether a chain fans at all — is
 expressed as the first named `BreakRule` (`canonical-fan`), resolved through a `BreakRuleRegistry` in
-`MethodCallChainPrinter.canonicalFanChain`: the Stage-0 seam of the reprint-by-default break-rule model
-(`docs/proposals/reprint-by-default-break-rules.md`). A `BreakRule<C>` pairs a pure predicate over a construct-specific
-candidate (here a `ChainFanRequest` carrying the chain plus the caller's final-segment suffix and `LayoutContext`) with
-the source-neutral `Doc` it emits, resolved first-match-wins — distinct from the type-dispatched `JavaFormatRule`
-node→`Doc` handoff. The `chainFanOut` fan sub-shapes (factory-root fold, single-selector, trivial-receiver attach,
-fanned selectors) remain inline as the Stage-1 extraction targets. The same seam is replicated at every chain host: local-variable
+`ChainFanLayout` (reached via the `MethodCallChainPrinter.canonicalFanChain` delegate): the Stage-0 seam of the
+reprint-by-default break-rule model (`docs/proposals/reprint-by-default-break-rules.md`). A `BreakRule<C>` pairs a pure
+predicate over a construct-specific candidate (here a `ChainFanRequest` carrying the chain plus the caller's
+final-segment suffix and `LayoutContext`) with the source-neutral `Doc` it emits, resolved first-match-wins — distinct
+from the type-dispatched `JavaFormatRule` node→`Doc` handoff. The `chainFanOut` fan sub-shapes (factory-root fold,
+single-selector, trivial-receiver attach, fanned selectors) are a second `BreakRuleRegistry`, also in `ChainFanLayout`:
+the break-rules Stage-1b extraction relocated both registries, the source-neutral fan builders, and the AST-only
+fan-admission predicates out of `MethodCallChainPrinter`, which keeps thin delegates for the fan entry points other
+printers still call. The same seam is replicated at every chain host: local-variable
 and field initializers (`VariableInitializerLayout.variableInitializerFanBestFitting`), assignment RHS, `return`,
 method-call and object-creation arguments (`MethodCallPrinter`), binary / logical / string-concat operands
 (`BinaryExpressionPrinter` + `BreakableArgumentExpressionPrinter`), statement expressions, the expression-lambda body
@@ -593,7 +596,7 @@ AST structure (never width or source shape) so they stay fixpoints:
 - **Single expression-lambda argument hugs its call opener.** A fanned chain selector whose sole argument is an expression
   lambda keeps the lambda opener glued to the selector rather than breaking the selector parenthesis onto its own line,
   restoring the `huggableExpressionLambdaArguments` hug the one-per-line fan over-broke. Review round 2 broadened this from
-  the round-1 object-creation-only hug to the SOURCE-NEUTRAL hug shapes (`MethodCallChainPrinter.expressionBodyOpenerHug`):
+  the round-1 object-creation-only hug to the SOURCE-NEUTRAL hug shapes (`ChainSelectorLambdaLayout.expressionBodyOpenerHug`):
   an OBJECT CREATION (`.reduce((left, right) -> new ImageCounter(`⏎…), an object-creation-rooted chain with a non-empty
   outermost call (`.map(listener -> new VotersEndpoint().setName(…).setHost(`⏎…), and a TERNARY
   (`.onErrorResume(ex -> cond`⏎`? then`⏎`: else`⏎`)`, review comment #2, whose shared `packedConditionalBody` hug is a pure
@@ -609,7 +612,7 @@ AST structure (never width or source shape) so they stay fixpoints:
   a top-level RELATIONAL body (`x -> f(...) == ALLOWED`) is not a logical binary, so it stays on the source-neutral
   broken-segment shape and does not oscillate. A SINGLE-method-call body whose
   source lambda body started on the selector line — for which the shared renderer hands back only a degenerate flat
-  one-liner — hugs its opener through a direct, source-neutral `MethodCallChainPrinter.singleCallLambdaBodyOpenerHug`
+  one-liner — hugs its opener through a direct, source-neutral `ChainSelectorLambdaLayout.singleCallLambdaBodyOpenerHug`
   (`.forEach((tp, partitionData) -> replicaBuffer.addFetchedData(`⏎…⏎`))`, review comment #3), which wraps
   `ExpressionLambdaArgumentLayout.methodCallBodyWithOpener` in the selector parenthesis. Scoped to a FANNED selector
   (`segmentOnOwnLine`, a stable continuation column) and to an object-creation-rooted chain whose outermost call carries
@@ -673,7 +676,7 @@ AST structure (never width or source shape) so they stay fixpoints:
   fan-chain operand is the last one keeps the flat commit.
 - **Factory / type-like root keeps `Type.factory` glued (review round 2).** A `promotesFirstCall` root (an uppercase
   `NameExpr`/type `FieldAccessExpr`) folds its first call onto the root/continuation line so the type qualifier never splits
-  from its selector — "class + method should not break until there is a space left". `MethodCallChainPrinter.promotedFactoryRootDoc`
+  from its selector — "class + method should not break until there is a space left". `ChainFanLayout.promotedFactoryRootDoc`
   renders a ZERO-ARGUMENT factory call (`CacheFactory.newBuilder()`) as ATOMIC text rather than the `softChainContinuation`
   group that would split `CacheFactory`⏎`.newBuilder()`, and folds a MULTI-ARGUMENT lambda-carrying factory call
   (`Flux.usingWhen(a, connection -> …, Connection::close)`, `expressionLambdaFactoryCallFoldsAsMultiArgGroup`) through the

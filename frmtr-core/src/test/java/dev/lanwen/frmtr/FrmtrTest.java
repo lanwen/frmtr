@@ -32,14 +32,10 @@ final class FrmtrTest {
      * CommentPresenceDiagnosticTest still guards every one of them for comment data-loss; only the
      * {@code format(format(x)) == format(x)} sub-assertion is skipped until the deep slice lands and they flip green.
      */
-    private static final Set<String> KNOWN_NON_IDEMPOTENT = Set.of(
-        // Object-creation-rooted chain initializer: the residual oscillation is the inter-segment `// marker }` line
-        // comment on the `sourceBrowser` field (comment written on its own line between the `new BrowserClient(...)` root
-        // and the `.withNetwork(...)` selector). It renders compact with the comment glued on one pass and explodes the
-        // constructor on the next — a comment-placement (W3/D4) residual, not the #190 segment-column keystone (which
-        // converged the lambda cases). tracked: D3 flip follow-ups / comment-placement slice.
-        "source-multiline-object-chain-initializer @ default"
-    );
+    // Currently empty: both formerly-deferred fixtures now converge to one-pass idempotence — the lambda-hug case via
+    // the #190 segment-column keystone (#284) and the object-creation chain-initializer inter-segment-comment case via
+    // the D4 comment-placement fix (this PR). Re-add an entry only with a tracked idempotence justification.
+    private static final Set<String> KNOWN_NON_IDEMPOTENT = Set.of();
 
     @ParameterizedTest(name = "{0}")
     @ResourceFixtureSource(glob = "format/**/input.java")

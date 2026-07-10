@@ -170,7 +170,6 @@ final class MethodCallChainPrinter {
             brokenObjectCreationRenderer,
             this::methodCallChainAnalysis,
             methodChainPlanner::rootIsObjectCreation,
-            this::lineWidth,
             this::compactMethodCallChainRoot,
             this::compactMethodCallChainSegmentCanStayFlat,
             (objectCreation, rootDoc, call, rootRendering, sourceMultilineChain, lineBudget, firstLineWidth, layout) ->
@@ -2085,7 +2084,7 @@ final class MethodCallChainPrinter {
             LayoutContext layout
     ) {
         return expressionLambdaArgumentPlan.plan(callPrefix, arguments, layout)
-                .filter(plan -> plan.bodyOpenerFitsOnContinuation(lineWidth(LayoutWidth.LineBudget.CONTINUATION), options.lineWidth()))
+                .filter(plan -> plan.bodyOpenerFitsOnContinuation(layoutWidth::continuationStatement, options.lineWidth()))
                 .filter(plan -> plan.bodyOpenerOverflows(
                         line -> compactRootLineWidth(root, line, LayoutWidth.LineBudget.CURRENT, layout),
                         options.lineWidth()
@@ -2668,12 +2667,12 @@ final class MethodCallChainPrinter {
      * {@link ExpressionLambdaArgumentLayout.ExpressionLambdaLogicalBinaryBodyOpenerHug}) at every call-site that is NOT a
      * fanned chain selector.
      *
-     * <p>This returns the same fixed budget the seams measure at when the call-site is not a fanned selector:
-     * {@code layoutWidth.line(BLOCK, indentUnit + text) == layoutWidth.line(CONTINUATION, text)}. A fanned chain selector
+     * <p>This returns the same fixed shallow-common-case budget the seams measure at when the call-site is not a fanned
+     * selector: the three-unit continuation depth ({@link LayoutWidth#continuationStatement}). A fanned chain selector
      * instead threads its own {@code compactSegmentWidth} (the true segment column) at the segment call-site.
      */
     private ToIntFunction<String> expressionLambdaColumnWidthFallback() {
-        return lineWidth(LayoutWidth.LineBudget.CONTINUATION);
+        return layoutWidth::continuationStatement;
     }
 
     /**
@@ -2683,8 +2682,9 @@ final class MethodCallChainPrinter {
      * {@link ExpressionLambdaArgumentLayout} measures the hugged body at), widened with {@code Math.max} against the
      * fixed budget the caller already threads so it is monotone (it can only ever measure the hug WIDER, never relax a
      * break, so it cannot introduce a new over-width and stays a pure function of the AST). This corrects the fixed
-     * {@link LayoutWidth.LineBudget#CONTINUATION} budget's one-level under-count for a chain nested below a top-level
-     * statement, so the lambda-hug admission gate sees the selector's real overflow. It still under-counts a selector
+     * three-unit continuation budget's ({@link LayoutWidth#continuationStatement}) one-level under-count for a chain
+     * nested below a top-level statement, so the lambda-hug admission gate sees the selector's real overflow. It still
+     * under-counts a selector
      * nested several argument levels deep — the general case needs the {@code leftEdgePrefix} column threaded through the
      * fan — but is never worse than the budget it replaces.
      */
@@ -2728,7 +2728,7 @@ final class MethodCallChainPrinter {
     }
 
     private Doc methodCallChainSegment(MethodCallExpr expression, boolean reserveStatementTerminator) {
-        return methodCallChainSegment(expression, reserveStatementTerminator, lineWidth(LayoutWidth.LineBudget.CONTINUATION));
+        return methodCallChainSegment(expression, reserveStatementTerminator, layoutWidth::continuationStatement);
     }
 
     private Doc methodCallChainSegmentAttachedToRootClose(
@@ -2891,7 +2891,7 @@ final class MethodCallChainPrinter {
                     call,
                     Optional.empty(),
                     finalSegmentSuffix,
-                    lineWidth(LayoutWidth.LineBudget.CONTINUATION),
+                    layoutWidth::continuationStatement,
                     true
                 ))
             );
@@ -3331,7 +3331,7 @@ final class MethodCallChainPrinter {
                     calls.get(i),
                     next,
                     next.isEmpty() ? finalSegmentSuffix : MethodCallChainTail.EMPTY,
-                    lineWidth(LayoutWidth.LineBudget.CONTINUATION),
+                    layoutWidth::continuationStatement,
                     true
                 )
             );
@@ -3348,7 +3348,7 @@ final class MethodCallChainPrinter {
             Optional<MethodCallExpr> nextCall,
             MethodCallChainTail finalSegmentSuffix
     ) {
-        return methodCallChainSegment(expression, nextCall, finalSegmentSuffix, lineWidth(LayoutWidth.LineBudget.CONTINUATION));
+        return methodCallChainSegment(expression, nextCall, finalSegmentSuffix, layoutWidth::continuationStatement);
     }
 
     private Doc methodCallChainSegment(

@@ -144,13 +144,9 @@ final class MethodCallPrinter {
         this.objectCreationWithSuffix = objectCreationWithSuffix;
         this.brokenArgumentExpressionRenderer = brokenArgumentExpressionRenderer;
         this.breakableArguments = new BreakableArgumentExpressionPrinter(
-            context.sourceShapePolicy,
-            context.options,
             node -> expressionRenderer.format(node, LayoutContext.root()),
             brokenArgumentExpressionRenderer,
-            compactSource::compact,
-            methodChains::binaryFansChainOperand,
-            context.layoutWidth
+            methodChains::binaryFansChainOperand
         );
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.commentedExpressionLambdaArgument = commentedExpressionLambdaArgument;
@@ -173,12 +169,12 @@ final class MethodCallPrinter {
      * The fixed-budget column oracle handed to the expression-lambda hug seams at the top-level method-call argument
      * positions this printer owns (not a fanned chain selector).
      *
-     * <p>D3 keystone: reproduces the seam's historical {@code expressionFirstLineWidth} baseline exactly
-     * ({@code layoutWidth.line(CONTINUATION, text)}), so threading it is byte-identical. Consuming the true column is the
-     * atomic D3 flip, out of scope for this slice.
+     * <p>D3 keystone: reproduces the seam's historical {@code expressionFirstLineWidth} baseline exactly (the fixed
+     * three-unit continuation depth, {@link LayoutWidth#continuationStatement}), so threading it is byte-identical.
+     * Consuming the true column is the atomic D3 flip, out of scope for this slice.
      */
     private ToIntFunction<String> expressionLambdaColumnWidthFallback() {
-        return lineWidth(LayoutWidth.LineBudget.CONTINUATION);
+        return layoutWidth::continuationStatement;
     }
 
     Doc methodCall(MethodCallExpr expression) {
@@ -1291,7 +1287,7 @@ final class MethodCallPrinter {
             LayoutContext layout
     ) {
         return !argument.bodyFirstSourceLineFits()
-            && argument.bodyOpenerFitsOnContinuation(lineWidth(LayoutWidth.LineBudget.CONTINUATION), options.lineWidth())
+            && argument.bodyOpenerFitsOnContinuation(layoutWidth::continuationStatement, options.lineWidth())
             && argument.bodyOpenerOverflows(line -> methodCallRootLineWidth(expression, line, layout), options.lineWidth());
     }
 
@@ -1525,7 +1521,7 @@ final class MethodCallPrinter {
                     MethodCallBreakMode.AUTO,
                     suffix,
                     LayoutWidth.LineBudget.CONTINUATION,
-                    lineWidth(LayoutWidth.LineBudget.CONTINUATION),
+                    layoutWidth::continuationStatement,
                     argumentLayout
                 )
             );
@@ -1533,14 +1529,14 @@ final class MethodCallPrinter {
                 return chain.orElseThrow();
             }
         }
-        // D1a (#190): the breakable-argument seam threads a real ARGUMENT-position LayoutContext (empty leftEdgePrefix +
-        // `suffix` as trailingContent) into its break-gate for the eventual reflow-by-width flip. That context is derived
-        // from `suffix` alone, so BreakableArgumentExpressionPrinter builds it once in argumentLayout(suffix) — the caller
-        // supplies nothing it lacks, and passing a hand-built copy here would only duplicate that factory.
+        // C10-d (#191 settled): the breakable-argument seam offers the argument's broken form as a renderer-measured
+        // conditionalGroup arm rather than a fixed-CONTINUATION-budget width probe, so the argument breaks at its true
+        // rendered column and the trailing `suffix` (rendered by the enclosing list) is accounted for by the renderer's
+        // line-fit lookahead — the seam no longer threads a width suffix or positional context.
         if (sourceMultilineList) {
-            return breakableArguments.sourceMultilineArgument(argument, suffix);
+            return breakableArguments.sourceMultilineArgument(argument);
         }
-        return breakableArguments.argument(argument, suffix);
+        return breakableArguments.argument(argument);
     }
 
     private Optional<Doc> textBlockRootChainArgumentWithSuffix(MethodCallExpr expression, String suffix) {
@@ -1591,7 +1587,7 @@ final class MethodCallPrinter {
         String code =
             (trailingComments.isEmpty() ? compactSource.compact(expression) : compactSource.commentFree(expression))
             + suffix;
-        if (layoutWidth.line(LayoutWidth.LineBudget.CONTINUATION, code) > options.lineWidth()) {
+        if (layoutWidth.continuationStatement(code) > options.lineWidth()) {
             return Optional.empty();
         }
         List<Doc> renderedTrailing = trailingComments.stream()

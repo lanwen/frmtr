@@ -945,20 +945,30 @@ body local but under-counted a field in a nested type or a local nested inside f
 renders past the line width there (the #137/#155 measure-at-the-wrong-column family). Because `openerLineWidth` is never
 narrower than the true rendered column, a genuinely over-width opener always trips a gate, and flooring by
 `currentIndented` keeps every already-correct shallow position byte-identical (#216). The declaration-header throws
-clause (`ThrowsClausePrinter`), the callable parameter-list break (`CallableSignaturePrinter.parametersBreak`), and the
-breakable-argument continuation gate (`BreakableArgumentExpressionPrinter`) close the same family (#220): each measured
-its same-line width at a fixed baseline (the one-indent `currentIndented` for the throws clause and parameter list, the
-three-unit `CONTINUATION` budget for a breakable argument), so a `throws …`, a signature, or an argument on a member of
-an inner class or nested type — which renders one block/type level deeper per enclosing scope — was judged against a
-shallower column than it occupies and kept inline/flat over width. They now take the wider of that historical baseline
-and `LayoutWidth.nodeLine` at the node's real block/type depth: the floor leaves top-level declarations byte-identical
-(the whole fixture corpus was unchanged) while a deeper-nested `throws` list, parameter list, or binary/conditional
-argument breaks at its true column. The deeper-nesting rebaselining is guarded by
-`format/throws-clause-nested-depth` (the same method and constructor at class depth stay inline but break one level
-down) and `format/breakable-argument-nested-depth` (a binary-sum argument that fits flat at method depth breaks
-one-operand-per-line inside three nested classes). A method-call argument stays on the earlier chain-argument path
-(`MethodCallPrinter`'s `CONTINUATION`-budget chain probe), which is a separate seam left on its fixed budget, so the
-breakable-argument gate change is observable for non-method-call arguments (binary, conditional).
+clause (`ThrowsClausePrinter`) and the callable parameter-list break (`CallableSignaturePrinter.parametersBreak`) close
+the same family (#220): each measured its same-line width at a fixed one-indent `currentIndented` baseline, so a
+`throws …` or a signature on a member of an inner class or nested type — which renders one block/type level deeper per
+enclosing scope — was judged against a shallower column than it occupies and kept inline over width. They now take the
+wider of that historical baseline and `LayoutWidth.nodeLine` at the node's real block/type depth: the floor leaves
+top-level declarations byte-identical (the whole fixture corpus was unchanged) while a deeper-nested `throws` list or
+parameter list breaks at its true column, guarded by `format/throws-clause-nested-depth` (the same method and
+constructor at class depth stay inline but break one level down).
+
+The breakable-argument gate (`BreakableArgumentExpressionPrinter`) initially joined that family with a
+`max(nodeLine, CONTINUATION)` continuation-width probe, but C10-d (#191, once the hub reflows purely by width) replaces
+that probe with a renderer-measured `Doc.conditionalGroup([flat, broken])`: instead of pre-computing whether the
+argument's continuation line overflows a fixed baseline, it offers the flat rendering and the argument's
+expression-specific broken form as ranked alternatives and lets `DocRenderer` pick by flat fit at the argument's true
+output column (the trailing comma/tail the enclosing list appends is accounted for by the renderer's line-fit lookahead,
+so no width suffix is threaded). Because both arms are pure functions of the AST the choice is a fixpoint — the same
+conversion oscillated (+53 non-idempotent files) before the hub stopped reading source shape, but post-flip it does
+not — and it retires the gate's `nodeLine`/`CONTINUATION` arithmetic and the printer's `LayoutWidth`/`options`/`compact`
+fields entirely. It is a strict determinism improvement: over-width is cleared for deeply nested binary/conditional
+arguments (14 corpus files across kafka/camel/cayenne/tomcat/zookeeper) with zero new non-idempotence and no fixture
+moved. `format/breakable-argument-nested-depth` (a binary-sum argument that fits flat at method depth breaks
+one-operand-per-line inside three nested classes) still guards the deep-nesting break, now driven by the renderer's
+true-column fit rather than the probe. A method-call argument stays on the earlier chain-argument path
+(`MethodCallPrinter`'s `CONTINUATION`-budget chain probe), a separate seam left on its fixed budget.
 
 Chain-unify U3 (LDM-2f, #190) then wired the **statement** and **argument** chain callers — the last two that reached the
 chain gates through an implicit `LayoutContext.root()` — with a real `LayoutContext`, and activated the prefix read on
@@ -1016,9 +1026,16 @@ gate; with no readers left the `widthBudget` field was removed from the record a
 and the writer construction sites (`StatementPrinter`, `BinaryExpressionPrinter`, `MethodCallPrinter`,
 `BreakableArgumentExpressionPrinter`). The retirement is byte-identical across the format-fixture suite and the
 kafka/camel/cayenne/tomcat/zookeeper corpora (0 files move; only the `--explain` diagnostic's recorded flat-width value
-shifts to the correct rendered column). `LayoutWidth.LineBudget` itself survives as the fixed-baseline probe vocabulary
+shifts to the correct rendered column). `LayoutWidth.LineBudget` survives as the fixed-baseline probe vocabulary
 the width helpers still use directly through `LayoutWidth.line(budget, …)`; only the per-node `LayoutContext` override is
-gone. `trailingContent` carries the one fact
+gone. C10-d (#191) then moved the direct continuation-family width probes off the enum onto standalone
+`LayoutWidth` arithmetic — `continuationStatement` (three units), `lambdaArgumentClosing` (four units, the fixed floor the
+packed-lambda closing gate keeps under its threaded true-column oracle), and `methodChainLambdaBody` (five units) — so no
+direct probe names `CONTINUATION`/`LAMBDA_ARGUMENT_CLOSING`/`METHOD_CHAIN_LAMBDA_BODY`; the `LAMBDA_ARGUMENT_CLOSING`
+constant was deleted outright, and `CONTINUATION`/`METHOD_CHAIN_LAMBDA_BODY` survive only as the value each of two deeply
+threaded `lineBudget` selectors still carries (the argument-chain seam in `MethodCallPrinter.methodCallArgumentDoc` and
+the block-lambda-body statement path from `StatementPrinters.methodChainLambdaBlock`), which the terminal slice retires
+together with the enum. `trailingContent` carries the one fact
 node-local IR cannot see: the same-line opener a header appends after a clause. The canonical case is the throws
 clause — a declaration header's `throws …` width has to include the `" {"` (body) or `";"` (abstract) the caller
 glues on that line — so `MethodDeclarationPrinter`/`ConstructorDeclarationPrinter` thread that opener as

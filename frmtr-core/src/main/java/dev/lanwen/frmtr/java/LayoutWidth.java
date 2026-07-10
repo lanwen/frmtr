@@ -26,11 +26,14 @@ final class LayoutWidth {
         /** A statement line inside one ordinary Java block. */
         BLOCK(2),
 
-        /** A continuation line under a broken statement or member initializer. */
+        /**
+         * A continuation line under a broken statement or member initializer.
+         *
+         * <p>C10-d: the direct continuation-width probes have moved off this constant to the standalone
+         * {@link #continuationStatement(String)} arithmetic; only the deeply threaded {@code lineBudget} selector still
+         * carries it (the terminal slice retires that thread + this constant together).
+         */
         CONTINUATION(3),
-
-        /** The closing line of an expression-lambda argument packed inside a broken call argument list. */
-        LAMBDA_ARGUMENT_CLOSING(4),
 
         /** A statement line inside a block-lambda argument that is itself nested under a broken method chain. */
         METHOD_CHAIN_LAMBDA_BODY(5);
@@ -72,10 +75,43 @@ final class LayoutWidth {
     }
 
     /**
-     * Measures a continuation line under a broken statement or member initializer.
+     * Measures a continuation line under a broken statement or member initializer (three indentation units).
+     *
+     * <p>C10-d: computed directly from the fixed three-unit continuation depth rather than routed through
+     * {@link LineBudget#CONTINUATION}, so a continuation-width probe no longer names the enum. It stays the fixed
+     * shallow-common-case estimate; a fanned selector that renders deeper already measures at its true column through
+     * {@code MethodCallChainPrinter.fannedSelectorColumnWidth}, which floors on this same value.
      */
     int continuationStatement(String text) {
-        return line(LineBudget.CONTINUATION, text);
+        return indentColumns(3) + text.length();
+    }
+
+    /**
+     * Measures the closing line of an expression-lambda argument packed inside a broken call argument list (four
+     * indentation units).
+     *
+     * <p>C10-d: this is the fixed floor the packed-lambda closing gate keeps under its threaded true-column oracle
+     * ({@code ExpressionLambdaArgumentLayout} takes {@code max(this, columnWidth)}); computing it directly retires the
+     * former {@code LAMBDA_ARGUMENT_CLOSING} budget constant.
+     */
+    int lambdaArgumentClosing(String text) {
+        return indentColumns(4) + text.length();
+    }
+
+    /**
+     * Measures a statement line inside a block-lambda argument nested under a broken method chain (five indentation
+     * units).
+     *
+     * <p>C10-d: the direct method-chain-lambda-body probe computes this depth directly instead of naming
+     * {@link LineBudget#METHOD_CHAIN_LAMBDA_BODY}; only the threaded {@code lineBudget} selector still carries the enum
+     * value for the terminal slice.
+     */
+    int methodChainLambdaBody(String text) {
+        return indentColumns(5) + text.length();
+    }
+
+    private int indentColumns(int levels) {
+        return options.indentUnit().length() * levels;
     }
 
     /**

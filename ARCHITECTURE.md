@@ -990,7 +990,17 @@ The per-node *positional* facts a width gate needs — distinct from the run-sco
 from per-type dispatch — travel in an immutable `LayoutContext` record threaded down the descent
 (`EnclosingConstruct` position, `leftEdgePrefix`, a transitional `LayoutWidth.LineBudget` selector, the
 `trailingContent` the caller will emit on the same line after the node, and a `leadingBreak` flag recording whether
-the caller has already committed the node to lead with a break). `trailingContent` carries the one fact
+the caller has already committed the node to lead with a break). The `LayoutWidth.LineBudget` selector is transitional and
+being retired reader-by-reader: the five **return-path** reads of `widthBudget()` are gone (U2, #190) — the two
+`returnLineWidth` gates (`ReturnExpressionPrinter`, `ReturnBinaryExpressionLayout`) drop the fixed-budget floor and measure
+purely at the rendered column, `ReturnBinaryExpressionLayout.directBinaryReturnMethodCallFirstLineFits` folds its bare
+first-line probe into that same rendered-column measurement, and the comment-bearing-chain tail and the
+`returnWithForcedMethodCallChain` callee budget take a fixed `LineBudget.BLOCK` baseline (the return keyword's rendered
+column is already threaded through `chainLayout`'s `leftEdgePrefix`, so the prefix-aware chain gates do the real measuring).
+The retirement is byte-identical across the format-fixture suite and the kafka/camel/cayenne/tomcat/zookeeper corpora (0
+files move, guarded by the `method-chain-lambda-body-return-width` fixture for the `METHOD_CHAIN_LAMBDA_BODY` shape); the
+sole remaining reader is `ChainFanLayout`'s `--explain` diagnostic, so the selector is one reader from deletable.
+`trailingContent` carries the one fact
 node-local IR cannot see: the same-line opener a header appends after a clause. The canonical case is the throws
 clause — a declaration header's `throws …` width has to include the `" {"` (body) or `";"` (abstract) the caller
 glues on that line — so `MethodDeclarationPrinter`/`ConstructorDeclarationPrinter` thread that opener as

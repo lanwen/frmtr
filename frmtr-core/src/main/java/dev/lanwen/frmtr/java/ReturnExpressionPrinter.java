@@ -209,9 +209,13 @@ final class ReturnExpressionPrinter {
             expression instanceof MethodCallExpr methodCall
             && methodCallChainHasFinalTrailingLineComment.test(methodCall)
         ) {
+            // The comment-bearing return chain hands its tail renderer the ordinary block baseline rather than the
+            // transitional widthBudget selector. The renderer already measures the chain through its own width gates, and
+            // this shape is only reached for a return that owns its own first column (the common block statement), so the
+            // fixed BLOCK baseline reproduces the selector the return statement carried here without reading it back.
             return Doc.concat(
                 Doc.text("return "),
-                expressionWithTail.render(methodCall, ExpressionTail.SEMICOLON, layout.widthBudget())
+                expressionWithTail.render(methodCall, ExpressionTail.SEMICOLON, LayoutWidth.LineBudget.BLOCK)
             );
         }
         if (expression instanceof BinaryExpr binaryExpr && binaryHasLineComments.test(binaryExpr)) {
@@ -503,17 +507,19 @@ final class ReturnExpressionPrinter {
      * openers in #161). The {@link LayoutWidth#currentIndented} floor is kept so a {@code return} nested directly under a
      * member (no enclosing block) is still measured against at least one indentation unit.
      *
-     * <p>The fixed-budget term reads its {@link LayoutWidth.LineBudget} from the return value's {@link LayoutContext}
-     * rather than a loose parameter threaded from the statement dispatcher (LDM-2 / #198). {@code widthBudget()}
-     * reproduces exactly the budget the statement carried, so this stays byte-identical to the prior parameter form.
+     * <p>The transitional {@link LayoutWidth.LineBudget} floor ({@code max(line(widthBudget), renderedColumn)}) is retired
+     * (U2, #190): a {@code return} always renders at least two block/type levels deep, so the rendered-column term already
+     * dominates the {@code BLOCK} budget, and the only deeper budget ({@code METHOD_CHAIN_LAMBDA_BODY}, a return nested in a
+     * block-lambda body under a broken chain) is not load-bearing here — the return value's own renderer (object creation,
+     * binary, chain) re-gates its width, so an optimistic fit verdict is caught downstream. Dropping the floor is
+     * byte-identical across the format-fixture suite and the kafka/camel/cayenne/tomcat/zookeeper corpora, and removes a
+     * return-path read of the transitional {@code widthBudget} selector.
      */
     private int returnLineWidth(Expression expression, String line, LayoutContext layout) {
-        int budgetWidth = layoutWidth.line(layout.widthBudget(), line);
-        int renderedColumnWidth = Math.max(
+        return Math.max(
             layoutWidth.nodeLine(expression, line),
             layoutWidth.currentIndented(line)
         );
-        return Math.max(budgetWidth, renderedColumnWidth);
     }
 
     /**
@@ -547,9 +553,11 @@ final class ReturnExpressionPrinter {
         if (!(expression instanceof MethodCallExpr methodCall)) {
             return Optional.empty();
         }
-        // The chain callees keep their LineBudget signatures (LDM-3 pilot, #190), so read the budget back from the
-        // return value's context to feed them.
-        LayoutWidth.LineBudget lineBudget = layout.widthBudget();
+        // The chain callees keep their LineBudget signatures (LDM-3 pilot, #190), but the return path no longer feeds
+        // them the transitional widthBudget selector: the return keyword's rendered column is threaded through
+        // chainLayout's leftEdgePrefix below, so the prefix-aware chain gates (MethodCallChainPrinter.compactRootLineWidth)
+        // measure at the true column and the residual fixed-budget probes only need the ordinary block baseline.
+        LayoutWidth.LineBudget lineBudget = LayoutWidth.LineBudget.BLOCK;
         // LDM-2f (#190): the return keyword shares the value's first line, so hand the chain gates that fixed prefix. The
         // gate that reads it (MethodCallChainPrinter.compactRootLineWidth) drops its source-column floor and measures the
         // compact chain root at nodeIndentWidth + "return " + text; every branch that can reach that gate threads the same

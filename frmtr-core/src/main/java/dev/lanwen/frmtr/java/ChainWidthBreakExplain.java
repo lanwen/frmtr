@@ -42,18 +42,27 @@ final class ChainWidthBreakExplain {
      * Records the chain's flat-width decision when width is the actual cause of the break, so explain can report real
      * arithmetic instead of an opaque forced break.
      *
-     * <p>Only a chain whose compact single-line form overflows the line budget is recorded as a width break: chains
+     * <p>Only a chain whose compact single-line form overflows the line width is recorded as a width break: chains
      * forced apart purely by comments or by already-multiline source are not width decisions, so attributing them to
      * width would mislead. This is called after the printer has already committed to breaking, so it never changes the
      * layout that is produced.
+     *
+     * <p>The flat width is measured at the chain's real RENDERED column, mirroring the prefix-aware chain gate
+     * ({@code MethodCallChainPrinter.compactRootLineWidth}): the chain's block/type indentation
+     * ({@link LayoutWidth#nodeIndentWidth}) plus any same-line prefix the caller threaded through
+     * {@link LayoutContext#leftEdgePrefix()} (a returned chain's {@code "return "}) plus the compact chain text. This
+     * replaces the retired transitional {@code LayoutContext.widthBudget} fixed-baseline probe. Because this is an
+     * {@code --explain}-only diagnostic it never changes the emitted {@link dev.lanwen.frmtr.doc.Doc}: measuring at the
+     * rendered column only changes the recorded {@code flatWidth} value (to the correct one) and the self-gate that
+     * decides whether this break is attributed to width.
      */
     void record(
             MethodCallExpr expression,
             MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis,
-            LayoutWidth.LineBudget lineBudget
+            LayoutContext layout
     ) {
         String compact = compactSource.compact(expression);
-        int flatWidth = layoutWidth.line(lineBudget, compact);
+        int flatWidth = layoutWidth.nodeIndentWidth(expression) + layout.leftEdgePrefix().length() + compact.length();
         if (flatWidth <= options.lineWidth()) {
             return;
         }

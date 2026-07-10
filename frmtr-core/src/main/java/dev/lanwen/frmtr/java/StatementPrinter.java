@@ -272,7 +272,7 @@ final class StatementPrinter {
     Doc statement(Statement statement, LayoutWidth.LineBudget lineBudget) {
         return switch (statement) {
             case BlockStmt blockStmt -> blockRenderer.format(blockStmt, LayoutContext.root());
-            case ReturnStmt returnStmt -> returnStatement(returnStmt, lineBudget);
+            case ReturnStmt returnStmt -> returnStatement(returnStmt);
             case ThrowStmt throwStmt -> throwStatement(throwStmt);
             case YieldStmt yieldStmt -> yieldStatement(yieldStmt);
             case ExplicitConstructorInvocationStmt constructorInvocation -> Doc.concat(
@@ -364,11 +364,12 @@ final class StatementPrinter {
             : " " + commentText(labelComment) + " " + label.asString();
     }
 
-    private Doc returnStatement(ReturnStmt statement, LayoutWidth.LineBudget lineBudget) {
+    private Doc returnStatement(ReturnStmt statement) {
         // Build the positional context for the returned value: it sits in RETURN_VALUE position and owns its own first
-        // column after the "return " keyword. widthBudget carries the statement's line budget so the return width helpers
-        // read it back from the context (LDM-2 / #198).
-        LayoutContext layout = new LayoutContext(EnclosingConstruct.RETURN_VALUE, "", lineBudget, "", false);
+        // column after the "return " keyword. The return width helpers measure at that rendered column (nodeLine +
+        // leftEdgePrefix "return "), so no line-budget selector is threaded onto the context (the transitional
+        // widthBudget field is retired, U9 / #190).
+        LayoutContext layout = new LayoutContext(EnclosingConstruct.RETURN_VALUE, "", "", false);
         return statement.getExpression()
                 .map(expression -> returnStatementRenderer.apply(expression, layout))
                 .orElse(Doc.text("return;" + trailingStatementBlockComment(statement)));

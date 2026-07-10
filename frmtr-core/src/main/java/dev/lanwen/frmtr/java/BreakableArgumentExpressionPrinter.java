@@ -74,15 +74,13 @@ final class BreakableArgumentExpressionPrinter {
      *
      * <p>The prefix is empty because an argument's extra offset is pure continuation indentation applied by the enclosing
      * list's nested {@code Doc.indent} at render time, not a textual left-edge prefix like an assignment's {@code NAME = }
-     * (see the sibling reasoning in {@code MethodCallPrinter}'s argument-chain seam). The budget stays {@code CONTINUATION}
-     * to match the fixed floor the gate still uses. This reproduces the ad-hoc {@code suffix} the seam already carried, so
-     * deriving it changes no decision.
+     * (see the sibling reasoning in {@code MethodCallPrinter}'s argument-chain seam). This reproduces the ad-hoc
+     * {@code suffix} the seam already carried, so deriving it changes no decision.
      */
     private LayoutContext argumentLayout(String suffix) {
         return new LayoutContext(
             EnclosingConstruct.ARGUMENT,
             "",
-            LayoutWidth.LineBudget.CONTINUATION,
             suffix,
             false
         );

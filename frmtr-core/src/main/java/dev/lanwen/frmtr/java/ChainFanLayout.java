@@ -242,9 +242,10 @@ final class ChainFanLayout {
         // explain report must attribute it as "method chain … flat width … > N available … segments, one per line" rather
         // than dropping to a bare rule-driven break. {@code ChainWidthBreakExplain#record} self-gates on {@code flatWidth > lineWidth},
         // so a chain fanned purely by the link-count/root-kind rule while it still fits records nothing (it is not a width
-        // break). The budget is read from the caller's {@link LayoutContext}, matching the {@code lineBudget} the early route
-        // threads.
-        chainWidthBreakExplain.record(expression, analysis, request.layout().widthBudget());
+        // break). The width is measured at the chain's real rendered column (its {@code nodeIndentWidth} plus the caller's
+        // {@code leftEdgePrefix}), so the record no longer reads the transitional {@code LayoutContext.widthBudget} selector;
+        // this is an {@code --explain}-only diagnostic and never changes the emitted {@code Doc}.
+        chainWidthBreakExplain.record(expression, analysis, request.layout());
         return chainFanOut(
             analysis.root(),
             analysis.calls(),

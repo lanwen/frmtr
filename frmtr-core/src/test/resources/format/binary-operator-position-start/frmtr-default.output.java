@@ -42,9 +42,8 @@ public class BinaryOperations {
     }
 
     public void method() {
-        new ProfileRequest(profileId, accountId, "customer profile payload with long details", "more details").submit(
-            10
-        );
+        new ProfileRequest(profileId, accountId, "customer profile payload with long details", "more details")
+            .submit(10);
         submitProfile(profileId, accountId, "some very long customer activity notes", "more details").submit(10);
     }
 

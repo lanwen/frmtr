@@ -142,7 +142,7 @@ final class ControlConditionPrinter {
      * <p>The width gate includes the {@code if} keyword and an empty block because if conditions have a slightly wider
      * surrounding line than loop tails. A logical condition that overflows its budget breaks through
      * {@link #brokenCondition(Expression)}, whose operand-by-operand binary layout explodes each over-wide operand by
-     * width — no longer keyed off whether the author wrote the condition across multiple source lines.
+     * width.
      */
     Doc ifCondition(Expression expression) {
         if (commentedLogicalCondition(expression)) {

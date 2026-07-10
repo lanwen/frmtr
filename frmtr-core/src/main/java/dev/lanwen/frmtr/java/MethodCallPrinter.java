@@ -86,6 +86,8 @@ final class MethodCallPrinter {
 
     private final LayoutDecisionLog layoutDecisions;
 
+    private final ArgumentHeaviness argumentHeaviness = new ArgumentHeaviness();
+
     MethodCallPrinter(
             JavaFormatContext context,
             TypePrinter types,
@@ -314,7 +316,22 @@ final class MethodCallPrinter {
             if (chain.isPresent()) {
                 return chain.orElseThrow();
             }
-        } else if (methodCallChainIsSourceMultiline(expression)) {
+        } else if (methodCallChainIsSourceMultiline(expression) || chainFansByCanonicalRule(expression)) {
+            // A FORCED chain that fans by the canonical rule
+            // ({@code chainBreaksByRule}: an object-creation / no-scope-call root with two or more selectors, a factory
+            // root with two or more selectors after the factory call, or a plain receiver with three or more) routes to
+            // the source-neutral {@code chainFanOut} through {@code chainFansByCanonicalRule}, which admits it even when
+            // {@code methodCallChainIsSourceMultiline} is false (as it is for a reads-clean chain). Such a FORCED chain reached
+            // through {@code brokenMethodCall} — the object-creation-rooted-chain lambda body / initializer over-width
+            // blocker ({@code map(entry -> new OffsetFetchRequestTopics().setName(...).setPartitionIndexes(...))}), and
+            // every other canonical-fan chain rendered via a broken enclosing construct — would otherwise fall through to
+            // the plain method-call render that keeps the chain flat and breaks only the final call's arguments (the
+            // over-width blocker). {@code chainFanOut} renders the root width-driven (an object-creation root through
+            // {@code promotedObjectCreationRootDoc}'s {@code Doc.group}, whose constructor argument list breaks at the
+            // renderer's live column) and fans every selector onto its own dotted continuation line — a pure function of
+            // the AST, so both passes rebuild the identical fan (idempotence Δ0). {@code chainFansByCanonicalRule} already
+            // excludes comment-bearing and block-lambda chains, so this only routes the clean fan-threshold chains a
+            // FORCED render must break anyway.
             Optional<Doc> chain = comments.speculatively(() -> methodCallChain(expression, breakMode, "", layout));
             if (chain.isPresent()) {
                 return chain.orElseThrow();
@@ -336,11 +353,20 @@ final class MethodCallPrinter {
             }
             return Doc.text(prefix + "()");
         }
-        Optional<Doc> huggableLambda = comments.speculatively(
-            () -> huggableBlockLambdaArguments.apply(prefix, expression.getArguments())
-        );
-        if (huggableLambda.isPresent()) {
-            return huggableLambda.orElseThrow();
+        // A heavy argument list (see {@link ArgumentHeaviness}) must break one-per-line, so a trailing lambda argument
+        // must NOT hug the opener — hugging keeps the sibling arguments on the opener line. Skip the pure lambda-hug
+        // branches when heavy and let the call fall through to the generic exploded argument list below, which forces the
+        // break. Method calls do not opt into the wide-argument-count rule (a five-argument method call is common); only
+        // the nested-token signal marks a plain call heavy. The commented-expression-lambda branch is left ungated so a
+        // heavy call still preserves an argument comment through its own comment-aware layout.
+        boolean heavy = argumentHeaviness.isHeavy(expression.getArguments(), false);
+        if (!heavy) {
+            Optional<Doc> huggableLambda = comments.speculatively(
+                () -> huggableBlockLambdaArguments.apply(prefix, expression.getArguments())
+            );
+            if (huggableLambda.isPresent()) {
+                return huggableLambda.orElseThrow();
+            }
         }
         Optional<Doc> commentedExpressionLambda = comments.speculatively(
             () -> commentedExpressionLambdaArgument.apply(prefix, expression)
@@ -348,15 +374,17 @@ final class MethodCallPrinter {
         if (commentedExpressionLambda.isPresent()) {
             return commentedExpressionLambda.orElseThrow();
         }
-        Optional<Doc> huggableExpressionLambda = comments.speculatively(
-            () -> huggableExpressionLambdaArguments.render(
-                prefix,
-                expression.getArguments(),
-                expressionLambdaColumnWidthFallback()
-            )
-        );
-        if (huggableExpressionLambda.isPresent()) {
-            return huggableExpressionLambda.orElseThrow();
+        if (!heavy) {
+            Optional<Doc> huggableExpressionLambda = comments.speculatively(
+                () -> huggableExpressionLambdaArguments.render(
+                    prefix,
+                    expression.getArguments(),
+                    expressionLambdaColumnWidthFallback()
+                )
+            );
+            if (huggableExpressionLambda.isPresent()) {
+                return huggableExpressionLambda.orElseThrow();
+            }
         }
         Optional<Doc> brokenExpressionLambdaArguments = comments.speculatively(
             () -> brokenExpressionLambdaArgumentsForOverflow(prefix, expression, layout)
@@ -376,20 +404,19 @@ final class MethodCallPrinter {
         if (singleObjectCreationArgument.isPresent()) {
             return singleObjectCreationArgument.orElseThrow();
         }
-        // Canonical-fan cutover seam, the single-CHAIN-ARGUMENT hug position (SPIKE, #190). Checked BEFORE the
-        // source-shape-gated {@link #singleMethodCallArgument} hug and the generic exploded argument list below — because
+        // Canonical-fan cutover seam, the single-CHAIN-ARGUMENT hug position (#190). Checked BEFORE the
+        // {@link #singleMethodCallArgument} hug and the generic exploded argument list below — because
         // the oscillation it closes is exactly those two disagreeing across passes for a call whose sole argument is a
         // fan-threshold chain ({@code assertTrue(result.getExecutionInfo().get(0).contains(...))},
         // {@code Arrays.stream(res.getKey().trim().split(...))}, {@code Optional.of(description.partitions()....leader())}).
-        // {@link #singleMethodCallArgument} HUGS the chain onto the opener ({@code assertTrue(result}⏎{@code .getExecutionInfo()…})
-        // only when the argument's inner call arguments {@code methodCallArgumentsSpanMultipleLines} in the source and its
-        // root {@code startsOnSameLine}; once a prior pass fans the chain, its inner arguments are single-line, that gate
-        // flips false, and the generic exploded list breaks the argument onto its own indented line
-        // ({@code assertTrue(}⏎{@code result}⏎{@code .getExecutionInfo()…}⏎{@code )}) — so the two shapes alternate forever.
+        // One shape hugs the chain onto the opener ({@code assertTrue(result}⏎{@code .getExecutionInfo()…}) while the other
+        // breaks the argument onto its own indented line
+        // ({@code assertTrue(}⏎{@code result}⏎{@code .getExecutionInfo()…}⏎{@code )}), so an unranked verdict alternates
+        // between the two shapes.
         // Ranking the hug and the exploded arm with {@code Doc.bestFitting} at the true rendered column makes the verdict a
         // fixpoint by construction, the same {@code bestFitting}-over-one-{@code chainFanOut} technique the initializer
         // break-after-{@code =} and lambda-body arrow seams use. Self-gates to fan-threshold comment/lambda-free single
-        // chain arguments; every other single-call argument still reaches the unchanged hug / generic paths below.
+        // chain arguments; every other single-call argument still reaches the hug / generic paths below.
         Optional<Doc> singleFanChainArgument = comments.speculatively(
             () -> singleFanChainArgumentBestFitting(prefix, expression)
         );
@@ -415,6 +442,7 @@ final class MethodCallPrinter {
             return commentedArguments.orElseThrow();
         }
         Doc call = Doc.concat(
+            heavy ? Doc.BREAK_PARENT : Doc.EMPTY,
             Doc.text(prefix + "("),
             Doc.indent(
                 Doc.concat(
@@ -707,6 +735,7 @@ final class MethodCallPrinter {
         }
         return Doc.group(
             Doc.concat(
+                argumentHeaviness.isHeavy(expression.getArguments(), false) ? Doc.BREAK_PARENT : Doc.EMPTY,
                 Doc.text(prefix + "("),
                 Doc.indent(
                     Doc.concat(
@@ -944,10 +973,6 @@ final class MethodCallPrinter {
         return methodChains.methodCallChainIsSourceMultiline(expression);
     }
 
-    boolean hasSourceMultilineExpressionLambdaBody(MethodCallExpr expression) {
-        return SourceMultilineLambdaCallLayout.hasMultilineExpressionLambdaMethodCallBody(expression, sourceShapePolicy);
-    }
-
     MethodCallChainSourcePlanner.InitializerChainShape methodCallChainInitializerShape(MethodCallExpr expression) {
         return methodChains.methodCallChainInitializerShape(expression);
     }
@@ -1077,87 +1102,41 @@ final class MethodCallPrinter {
         );
     }
 
+    /**
+     * Always empty: a method call's argument list breaks purely by the renderer's width verdict at its true column, with
+     * no source-multiline preservation. Kept (returning empty) so its callers' source-multiline hook wiring stays wired.
+     */
     Optional<Doc> sourceMultilineArguments(MethodCallExpr expression) {
-        if (
-            expression.getArguments().isEmpty()
-            || !expression.getAllContainedComments().isEmpty()
-            || hasSingleAttachableObjectCreationArgument(expression)
-            || hasSingleAttachableMethodCallArgument(expression)
-            || (hasHuggableExpressionLambdaArgument(expression)
-                && sourceShapePolicy.expressionLambdaStartsOnSelectorLine(expression))
-            || !sourceShapePolicy.methodCallArgumentsSpanMultipleLines(expression)
-        ) {
-            return Optional.empty();
-        }
-        Optional<Doc> scopedPrefix = sourceMultilineArgumentScopedPrefix(expression);
-        if (scopedPrefix.isPresent()) {
-            String prefix = methodCallPrefix(expression);
-            return Optional.of(
-                Doc.concat(
-                    scopedPrefix.orElseThrow(),
-                    sourceMultilineArgumentBlock(expression, prefix),
-                    Doc.HARD_LINE,
-                    Doc.text(")")
-                )
-            );
-        }
-        String prefix = methodCallPrefix(expression);
-        return Optional.of(
-            Doc.concat(
-                Doc.text(prefix + "("),
-                sourceMultilineArgumentBlock(expression, prefix),
-                Doc.HARD_LINE,
-                Doc.text(")")
-            )
-        );
-    }
-
-    private Doc sourceMultilineArgumentBlock(MethodCallExpr expression, String prefix) {
-        Doc arguments = Doc.concat(
-            Doc.HARD_LINE,
-            methodCallArgumentList(prefix, expression.getArguments(), Doc.HARD_LINE)
-        );
-        if (singleTextBlockInsideExpressionLambda(expression)) {
-            return textBlockArguments.expressionLambdaSourceMultilineArgument(
-                (TextBlockLiteralExpr) expression.getArgument(0)
-            );
-        }
-        return Doc.indent(arguments);
-    }
-
-    private Optional<Doc> singleObjectCreationArgument(String prefix, MethodCallExpr expression) {
-        if (!hasSingleAttachableObjectCreationArgument(expression)) {
-            return Optional.empty();
-        }
-        ObjectCreationExpr argument = (ObjectCreationExpr) expression.getArgument(0);
-        String objectPrefix = compactSource.compact(argument).split("\\(", 2)[0];
-        if (attachedOpenerOverflows(expression, prefix + "(" + objectPrefix + "(")) {
-            return Optional.empty();
-        }
-        return Optional.of(Doc.concat(Doc.text(prefix + "("), objectCreationWithSuffix.apply(argument, ")")));
+        return Optional.empty();
     }
 
     /**
-     * SPIKE (fan-root-true-column, #190). Makes the hug-versus-explode verdict of a call whose sole argument is a
+     * Always empty: a single inner-object-creation argument is not hugged onto the opener — it breaks by width through the
+     * generic path. Kept (returning empty) so the dispatch hook stays wired.
+     */
+    private Optional<Doc> singleObjectCreationArgument(String prefix, MethodCallExpr expression) {
+        return Optional.empty();
+    }
+
+    /**
+     * Makes the hug-versus-explode verdict of a call whose sole argument is a
      * fan-threshold method-call chain SOURCE-NEUTRAL by ranking two AST-derived shapes with {@link Doc#bestFitting} at the
-     * true rendered column, replacing the {@code methodCallArgumentsSpanMultipleLines}/{@code startsOnSameLine} gate that
-     * picks divergent shapes across passes for a chain argument whose rendered form force-fans.
+     * true rendered column (#190), so a chain argument whose rendered form force-fans resolves to the same shape on every
+     * pass instead of picking divergent shapes from the source line layout.
      *
-     * <p>The dominant residual NEW oscillation after the initializer / lambda-arrow seams (measured: the
-     * {@code assertTrue(chain)} / {@code Arrays.stream(chain)} / {@code Optional.of(chain)} family) is exactly this: the
-     * argument printer HUGS the chain onto the call opener ({@link #singleMethodCallArgument}) when the source has the
-     * chain's inner arguments spanning lines and its root on the opener line, but once a prior pass fans the chain the inner
-     * arguments become single-line, the hug gate flips, and the generic exploded list breaks the argument onto its own
-     * indented line. Both {@code Doc.bestFitting} arms wrap the SAME source-neutral fan and are pure AST functions, so both
-     * passes rank the same two candidates and pick the same one; the verdict is a fixpoint by construction.
+     * <p>The affected family is {@code assertTrue(chain)} / {@code Arrays.stream(chain)} / {@code Optional.of(chain)}:
+     * without ranking, such a call can hug the chain onto the opener on one pass and explode it onto its own indented line
+     * on the next, alternating forever. Both {@code Doc.bestFitting} arms wrap the SAME source-neutral fan and are pure AST
+     * functions, so both passes rank the same two candidates and pick the same one; the verdict is a fixpoint by
+     * construction.
      *
      * <p>Both arms wrap ONE fan Doc, produced ONCE by {@code canonicalFanChain} through the source-neutral
      * {@code chainFanOut} with an empty {@link LayoutContext#leftEdgePrefix()} ({@link LayoutContext#root()}):
      * <ul>
      *   <li><b>Hugged</b> ({@code assertTrue(result}⏎{@code .getExecutionInfo()}⏎{@code .get(0)}⏎{@code .contains(…))}): the
      *       opener text {@code prefix + "("} precedes the fan, so the chain root hugs the opener line and the fan's own
-     *       continuation indent lays each selector one per line under it, the closing {@code )} glued to the final selector
-     *       — byte-identical to what {@link #singleMethodCallArgument} rendered when it fired.</li>
+     *       continuation indent lays each selector one per line under it, the closing {@code )} glued to the final
+     *       selector.</li>
      *   <li><b>Exploded</b> ({@code assertTrue(}⏎{@code result}⏎{@code .getExecutionInfo()}…⏎{@code )}): the opener breaks and
      *       the same fan renders under one argument indent, the closing {@code )} dedented — byte-identical to the generic
      *       exploded argument list's shape.</li>
@@ -1203,7 +1182,15 @@ final class MethodCallPrinter {
             Doc.HARD_LINE,
             Doc.text(")")
         );
-        return Optional.of(Doc.bestFitting(List.of(hugged, exploded)));
+        // PR #279 review (#3/#4): prefer breaking right after the call's `(` — the chain argument on its own indented
+        // line, the closing `)` dedented to the opener's column ({@code Response.listUsers(}⏎ chain ⏎{@code )},
+        // {@code buffer.append(}⏎ chain ⏎{@code )}) — over hugging the chain root onto the opener line and dangling the
+        // `)` on the final selector. The exploded arm carries priority 1, so among the arms that FIT the renderer keeps
+        // it regardless of line count; the hugged arm (priority 0) stays as a fitting-fallback for the (unreachable in
+        // practice) case where the exploded opener itself overflows. Because the exploded first line is a strict prefix
+        // of the hugged first line and both wrap the SAME source-neutral fan, the exploded arm fits whenever the hugged
+        // one does, so the verdict is deterministic and idempotent — both passes rebuild and rank the same two shapes.
+        return Optional.of(Doc.bestFitting(List.of(exploded, hugged), new int[] {1, 0}));
     }
 
     /**
@@ -1221,19 +1208,12 @@ final class MethodCallPrinter {
                 .isPresent();
     }
 
+    /**
+     * Always empty: a single inner-method-call argument is not hugged onto the opener — it breaks by width through the
+     * generic path. Kept (returning empty) so the dispatch hook stays wired.
+     */
     private Optional<Doc> singleMethodCallArgument(String prefix, MethodCallExpr expression) {
-        if (!hasSingleAttachableMethodCallArgument(expression)) {
-            return Optional.empty();
-        }
-        MethodCallExpr argument = (MethodCallExpr) expression.getArgument(0);
-        String argumentPrefix = methodCallPrefix(argument);
-        if (attachedOpenerOverflows(expression, prefix + "(" + argumentPrefix + "(")) {
-            return Optional.empty();
-        }
-        return Optional.of(Doc.concat(
-            Doc.text(prefix + "("),
-            methodCallWithTail(argument, ExpressionTail.of(")"))
-        ));
+        return Optional.empty();
     }
 
     /**
@@ -1241,11 +1221,11 @@ final class MethodCallPrinter {
      * the shared first line ({@code outer(inner(}) past the line width, measured at the call's <em>real</em> rendered
      * column rather than the bare block indent.
      *
-     * <p>The single-argument hug gates used to probe the {@code CURRENT} line budget on {@code prefix + "(" + innerPrefix +
-     * "("} alone, which is prefix-blind: when the call is the value of an initializer or assignment
-     * ({@code NAME = outer(inner(…))}) the {@code NAME = } prefix sharing the line is never counted, so the hug attaches
-     * even when the opener visibly overflows, and the over-wide shape is stable (idempotent but wrong). Making the
-     * decision width-deterministic — attach only when the hugged opener fits — mirrors the prefix-aware first-line probe
+     * <p>Probing the {@code CURRENT} line budget on {@code prefix + "(" + innerPrefix +
+     * "("} alone is prefix-blind: when the call is the value of an initializer or assignment
+     * ({@code NAME = outer(inner(…))}) the {@code NAME = } prefix sharing the line is not counted, so a naive probe
+     * attaches the hug even when the opener visibly overflows. Measuring at the real rendered column — attach only when
+     * the hugged opener fits — mirrors the prefix-aware first-line probe
      * threaded into method-chain layout for the assignment column (#161) and the chain arm's stay-flat rule (#163): the
      * column where the value begins, not just its indentation, decides whether the flat shape is legal.
      *
@@ -1253,10 +1233,10 @@ final class MethodCallPrinter {
      * column minus its enclosing statement's start column is exactly the width of whatever precedes the call on that line
      * (the {@code NAME = }, {@code target op }, {@code return }, …), and that delta is invariant under reindentation. The
      * real first-line width is therefore the statement's rendered indentation plus that prefix delta plus the opener text,
-     * which is measured against the enclosing statement's nesting depth rather than the bare-call indent the prefix-blind
-     * probe assumed. The delta is taken only when the call and its statement begin on the same source line; a call that
-     * already starts its own line has no shared prefix, so the probe falls back to the plain indented width and preserves
-     * the previous behavior for those callers.
+     * which is measured against the enclosing statement's nesting depth rather than the bare-call indent a prefix-blind
+     * probe assumes. The delta is taken only when the call and its statement begin on the same source line; a call that
+     * already starts its own line has no shared prefix, so the probe falls back to the plain indented width for those
+     * callers.
      */
     private boolean attachedOpenerOverflows(MethodCallExpr expression, String openerLine) {
         return sharedFirstLineWidth(expression)
@@ -1287,82 +1267,17 @@ final class MethodCallPrinter {
         return Optional.empty();
     }
 
-    private boolean hasSingleAttachableObjectCreationArgument(MethodCallExpr expression) {
-        return expression.getArguments().size() == 1
-            && expression.getArgument(0) instanceof ObjectCreationExpr objectCreation
-            && sourceShapePolicy.objectCreationArgumentsSpanMultipleLines(objectCreation)
-            && sourceShapePolicy.startsOnSameLine(expression.getName(), objectCreation)
-            && objectCreation.getAnonymousClassBody().isEmpty()
-            && objectCreation.getAllContainedComments().isEmpty();
-    }
-
-    private boolean hasSingleAttachableMethodCallArgument(MethodCallExpr expression) {
-        return expression.getArguments().size() == 1
-            && expression.getArgument(0) instanceof MethodCallExpr methodCall
-            && sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall)
-            && sourceShapePolicy.startsOnSameLine(expression.getName(), methodCall)
-            && methodCall.getAllContainedComments().isEmpty();
-    }
-
-    private boolean singleTextBlockInsideExpressionLambda(MethodCallExpr expression) {
-        return expression.getArguments().size() == 1
-            && expression.getArgument(0) instanceof TextBlockLiteralExpr
-            && textBlockArguments.methodCallIsExpressionLambdaBody(expression);
-    }
-
     Optional<Doc> sourceMultilineExpressionLambda(MethodCallExpr expression) {
         return sourceMultilineExpressionLambda(expression, LayoutContext.root());
     }
 
+    /**
+     * Always empty: a trailing expression lambda is hugged or exploded purely by the width-driven plan
+     * ({@link ExpressionLambdaArgumentLayout#plan}) reached through the generic argument path, with no source-multiline
+     * preservation. Kept (returning empty) so the dispatch hook stays wired.
+     */
     Optional<Doc> sourceMultilineExpressionLambda(MethodCallExpr expression, LayoutContext layout) {
-        if (
-            expression.getArguments().isEmpty()
-            || !expression.getAllContainedComments().isEmpty()
-            || sourceMultilineChainWithConditionalLambda(expression)
-            || sourceMultilineMethodCallScope(expression)
-            || !sourceShapePolicy.expressionLambdaStartsOnSelectorLine(expression)
-            || !expressionLambdaSpansMultipleLines(expression)
-        ) {
-            return Optional.empty();
-        }
-        String prefix = methodCallPrefix(expression);
-        Optional<ExpressionLambdaArgumentLayout.Plan> plan = expressionLambdaArgumentPlan.plan(
-            prefix,
-            expression.getArguments(),
-            layout
-        );
-        if (
-            plan.filter(argument -> argument.firstLineFits(
-                    line -> methodCallRootLineWidth(expression, line, layout),
-                    options.lineWidth()
-            )).isEmpty()
-            || plan.filter(argument -> expressionLambdaBodyOpenerOverflows(expression, argument, layout)).isPresent()
-        ) {
-            return Optional.empty();
-        }
-        return huggableExpressionLambdaArguments.render(
-            prefix,
-            expression.getArguments(),
-            expressionLambdaColumnWidthFallback()
-        );
-    }
-
-    private boolean sourceMultilineMethodCallScope(MethodCallExpr expression) {
-        return methodCallChainIsSourceMultiline(
-            expression
-        ) && expression.getScope().filter(MethodCallExpr.class::isInstance).isPresent();
-    }
-
-    private boolean sourceMultilineChainWithConditionalLambda(MethodCallExpr expression) {
-        return (
-            methodCallChainIsSourceMultiline(expression)
-            && expression.getArguments()
-                    .stream()
-                    .filter(LambdaExpr.class::isInstance)
-                    .map(LambdaExpr.class::cast)
-                    .flatMap(lambda -> lambda.getExpressionBody().stream())
-                    .anyMatch(ConditionalExpr.class::isInstance)
-        );
+        return Optional.empty();
     }
 
     private boolean expressionLambdaBodyOpenerOverflows(
@@ -1452,30 +1367,11 @@ final class MethodCallPrinter {
         return Optional.empty();
     }
 
-    private boolean expressionLambdaSpansMultipleLines(MethodCallExpr expression) {
-        return expression.getArguments()
-                .stream()
-                .filter(LambdaExpr.class::isInstance)
-                .map(LambdaExpr.class::cast)
-                .filter(lambda -> lambda.getExpressionBody().isPresent())
-                .flatMap(lambda -> lambda.getRange().stream())
-                .anyMatch(range -> range.begin.line < range.end.line);
-    }
-
     /**
      * Keeps a source-multiline method-call scope structured when a later call's arguments force their own multiline
      * layout, instead of compacting that scope into the later call prefix.
      */
-    private Optional<Doc> sourceMultilineArgumentScopedPrefix(MethodCallExpr expression) {
-        return expression.getScope()
-                .filter(MethodCallExpr.class::isInstance)
-                .map(MethodCallExpr.class::cast)
-                .filter(sourceShapePolicy::wasMultiline)
-                .map(scope -> Doc.concat(
-                        expressionRenderer.format(scope, LayoutContext.root()),
-                        Doc.text("." + methodCallSelector(expression) + "(")
-                ));
-    }
+
 
     private String methodCallSelector(MethodCallExpr expression) {
         return (
@@ -1649,7 +1545,7 @@ final class MethodCallPrinter {
         List<MethodCallExpr> calls = new ArrayList<>();
         Expression cursor = expression;
         while (cursor instanceof MethodCallExpr call) {
-            if (call.getScope().isEmpty() || sourceShapePolicy.methodCallArgumentsSpanMultipleLines(call)) {
+            if (call.getScope().isEmpty()) {
                 return Optional.empty();
             }
             calls.add(0, call);
@@ -1675,10 +1571,15 @@ final class MethodCallPrinter {
     }
 
     private Optional<Doc> compactMethodCallArgumentWithSuffix(MethodCallExpr expression, String suffix) {
-        List<JavaCommentTrivia> trailingComments = methodCallArgumentTrailingLineComments(expression);
-        if (trailingComments.isEmpty() && sourceShapePolicy.wasMultiline(expression)) {
+        // A compact (flat text) rendering hides every break inside the argument, so decline it when the argument holds a
+        // call/constructor whose argument list is heavy (see ArgumentHeaviness) — that list must still break one-per-line
+        // even though the whole argument fits on the line. The argument then falls through to the chain/tail path, which
+        // renders the heavy call through the break-aware printer (PR #279 comment #1: a heavy constructor root breaks even
+        // when it sits inside a fitting chain argument).
+        if (argumentHeaviness.containsHeavyArgumentList(expression)) {
             return Optional.empty();
         }
+        List<JavaCommentTrivia> trailingComments = methodCallArgumentTrailingLineComments(expression);
         if (!trailingComments.isEmpty() && hasNonTrailingContainedComments(expression, trailingComments)) {
             return Optional.empty();
         }
@@ -1747,21 +1648,18 @@ final class MethodCallPrinter {
      * <p>Binary expressions have their own continuation policy, so the call printer only decides that the binary
      * argument gets the entire broken argument list to itself.
      *
-     * <p>Canonical-fan cutover seam (End-state A), the binary/logical/string-concat OPERAND carrier at the single-binary
-     * argument position (the "G bucket"). This is the flat-source-pass sibling of the source-multiline argument path: a
-     * call whose sole argument is a binary/ternary that fans a fluent chain operand ({@code assertTrue(chain.isPresent()
-     * && chain2)}, {@code println("..." + chain)}, {@code assertTrue((Double) chain.metricValue() > 0.0)}) reaches HERE on
-     * a flat-source pass (its argument list is not yet source-multiline, so {@link #sourceMultilineArguments} declines and
-     * this method fires with a forced break), but reaches {@link BreakableArgumentExpressionPrinter#sourceMultilineArgument}
-     * on the pass that observes the wrapped argument list the first pass produced. That source-multiline path commits the
-     * dispatched {@code flat} — the chain-fanned operand with the operator kept on its line — whenever the binary fans a
-     * chain operand by the rule ({@code binaryFansChainOperand}), while the historical broken-argument delegate below lays
-     * the operator on its own line, so the two shapes alternate forever. Committing the same source-neutral {@code flat}
-     * here when {@code binaryFansChainOperand} holds makes the verdict a fixpoint by construction: {@code flat} is a pure
-     * function of the AST (the chain fans by the width-independent link-count rule on every pass), and both passes emit it.
-     * Chains the rule does not fan (a plain-receiver 1–2-link operand, the #119 {@code binary-chain-wrap-converge} guard)
-     * and comment / lambda chains are withheld by {@code binaryFansChainOperand}, so those arguments keep the historical
-     * broken-argument delegate byte-for-byte.
+     * <p>Canonical-fan cutover seam (G bucket): the binary/logical/string-concat OPERAND carrier at the single-binary
+     * argument position. When the sole argument is a binary/ternary that fans a fluent chain operand
+     * ({@code assertTrue(chain.isPresent()
+     * && chain2)}, {@code println("..." + chain)}, {@code assertTrue((Double) chain.metricValue() > 0.0)}), committing the
+     * source-neutral {@code flat} — the chain-fanned operand with the operator kept on its line — whenever the binary fans a
+     * chain operand by the rule ({@code binaryFansChainOperand}) makes the verdict a fixpoint by construction: {@code flat}
+     * is a pure function of the AST (the chain fans by the width-independent link-count rule on every pass), so this path
+     * and {@link BreakableArgumentExpressionPrinter#sourceMultilineArgument} — which observes the wrapped argument list a
+     * prior pass produced — emit the same shape rather than alternating between the operand-fanned form and the
+     * broken-argument delegate's operator-on-its-own-line form. Chains the rule does not fan (a plain-receiver 1–2-link
+     * operand, the #119 {@code binary-chain-wrap-converge} guard) and comment / lambda chains are withheld by
+     * {@code binaryFansChainOperand}, so those arguments keep the broken-argument delegate below byte-for-byte.
      */
     private Optional<Doc> singleBinaryArgument(
             String prefix,

@@ -1,9 +1,7 @@
 class ObjectCreationStatementArgumentSample {
 
     void notifyAccepted(Reference<Command<Result<Item>>> command, String serial, Reply<Item> reply) {
-        sink.tell(
-            new InternalSignal.AcceptedSignal(command, serial, reply.getValue())
-        );
+        sink.tell(new InternalSignal.AcceptedSignal(command, serial, reply.getValue()));
         sink.recover(
             FixtureRecords.started("sample"),
             new FixtureTransitionRecords.PersistentBehavior.Event.CancelRequested(
@@ -14,11 +12,8 @@ class ObjectCreationStatementArgumentSample {
     }
 
     void collectPrefixParts(List<PrefixPart> parts, AnnotationEntry annotation, int fallbackOrder, String text) {
-        parts.add(new PrefixPart(
-            annotation.range(),
-            fallbackOrder++,
-            text,
-            Optional.of(annotation)
-        ));
+        parts.add(
+            new PrefixPart(annotation.range(), fallbackOrder++, text, Optional.of(annotation))
+        );
     }
 }

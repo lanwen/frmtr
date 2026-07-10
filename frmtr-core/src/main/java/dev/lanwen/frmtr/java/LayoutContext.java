@@ -83,7 +83,7 @@ record LayoutContext(
      * Derives a copy of this context whose node renders after {@code leftEdgePrefix} on the same first line — for example
      * a {@code return } keyword ahead of a returned method-call chain, or an assignment prefix ({@code NAME = }) ahead of
      * an initializer. A width gate that measures the node's first line reads this back and adds its width at the rendered
-     * column, so the prefix no longer has to be inferred from the node's stale source column. Every other positional fact
+     * column, so the prefix does not have to be inferred from the node's stale source column. Every other positional fact
      * is preserved. Following the {@code LayoutContext} discipline this produces a fresh value rather than mutating; the
      * original is unchanged.
      */

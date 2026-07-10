@@ -31,7 +31,7 @@ import java.util.function.ToIntFunction;
  * <p>{@link JavaPrinter} still owns broad expression dispatch, compact source text, statement width calculations,
  * enclosed suffix handling, binary expression layout, object creation layout, method-call assignment layout, and
  * conditional assignment layout. This helper receives those decisions as callbacks and only walks the assignment
- * decision tree in the same order as the previous inline printer path.
+ * decision tree.
  */
 final class AssignmentExpressionPrinter {
 
@@ -310,7 +310,7 @@ final class AssignmentExpressionPrinter {
     }
 
     /**
-     * Tries the width-triggered assignment branches in the same order as the old inline printer.
+     * Tries the width-triggered assignment branches in order of local layout-constraint strength.
      *
      * <p>Earlier branches handle shapes that have stronger local layout constraints: enclosed suffixes must stay attached
      * to their broken receiver, binary expressions have operator-position rules, constructor calls can break their

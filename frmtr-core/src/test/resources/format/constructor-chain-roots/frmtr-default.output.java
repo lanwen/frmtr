@@ -20,17 +20,21 @@ class ConstructorChainRoots {
                 .blockFirst(Duration.ofSeconds(1));
 
         var nested = registry.attach(
-            new ChannelActor(alpha, beta, gamma, delta, epsilon, zeta, eta).create(),
+            new ChannelActor(
+                alpha,
+                beta,
+                gamma,
+                delta,
+                epsilon,
+                zeta,
+                eta
+            ).create(),
             () -> {
                 return monitor.ready();
             }
         );
 
-        var fromSourceMultiline = new EndpointFactory(
-            alpha,
-            beta,
-            gamma
-        ).connect(certificate);
+        var fromSourceMultiline = new EndpointFactory(alpha, beta, gamma).connect(certificate);
 
         ManagedEndpointWithVerboseType fromSourceMultilineWithLongDeclarationPrefix = new EndpointFactory(
             alpha,
@@ -74,7 +78,13 @@ public class ConstructorSamples {
     }
 
     ConstructorSamples() {
-        super("primary", "secondary", "archival", "when capacity is constrained", "should wrap well");
+        super(
+            "primary",
+            "secondary",
+            "archival",
+            "when capacity is constrained",
+            "should wrap well"
+        );
         System.out.println("constructor with super that wraps");
     }
 
@@ -84,7 +94,13 @@ public class ConstructorSamples {
     }
 
     ConstructorSamples() {
-        this("primary", "secondary", "archival", "when capacity is constrained", "should wrap well");
+        this(
+            "primary",
+            "secondary",
+            "archival",
+            "when capacity is constrained",
+            "should wrap well"
+        );
         System.out.println("constructor with this that wraps");
     }
 

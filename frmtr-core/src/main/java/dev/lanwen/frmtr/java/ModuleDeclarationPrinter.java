@@ -17,7 +17,7 @@ import java.util.function.Predicate;
  * It intentionally delegates comment reconstruction to {@link CommentedModulePrinter}, declaration annotation rendering
  * and compact module-name text back to {@link JavaPrinter}, and brace-delimited directive rendering to
  * {@link ModuleBlockPrinter}. It also receives the existing block-comment text conversion as a callback so the raw
- * fallback can preserve the old leading-block-comment behavior without creating a second comment-text policy.
+ * fallback can preserve the existing leading-block-comment behavior without creating a second comment-text policy.
  * Compilation-unit sequencing stays in {@link CompilationUnitPrinter}.
  *
  * <p>Representative fixture pairs live at

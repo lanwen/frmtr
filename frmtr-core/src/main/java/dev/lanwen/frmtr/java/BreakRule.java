@@ -13,7 +13,7 @@ import java.util.function.Predicate;
  * a {@code JavaFormatRule} is the type-dispatched node&rarr;{@link Doc} handoff a dispatcher selects by node kind,
  * whereas a {@code BreakRule} is consulted by a printer to choose <em>which break shape</em> a construct takes when an
  * AST predicate holds. Rules are gathered in a {@link BreakRuleRegistry} and resolved first-match-wins, so a set of
- * rules expresses what used to be an imperative {@code if}/{@code else} cascade as named, enumerable units.
+ * rules expresses a construct's break choices as named, enumerable units.
  *
  * <p>The candidate type {@code C} is whatever facts a construct hands its rules — for the first consumer, a method-call
  * chain in a fan position ({@code MethodCallChainPrinter}'s {@code ChainFanRequest}: the chain expression plus the

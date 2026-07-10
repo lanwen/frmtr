@@ -190,8 +190,8 @@ final class SwitchPrinter {
     /**
      * Prints a statement switch after {@link StatementRuleEnvelope} has applied pragmas and leading comment policy.
      *
-     * <p>Empty switch statements keep the legacy expanded block shape because statement switches used that shape before
-     * this helper existed. Non-empty switches enter the shared switch block path after the selector has been rendered by
+     * <p>Empty switch statements keep the expanded block shape used by statement switches. Non-empty switches enter the
+     * shared switch block path after the selector has been rendered by
      * the shared control-condition policy.
      */
     Doc switchStatement(SwitchStmt statement) {

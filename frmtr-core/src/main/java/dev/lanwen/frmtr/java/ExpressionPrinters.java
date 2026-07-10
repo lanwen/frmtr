@@ -321,7 +321,6 @@ final class ExpressionPrinters {
             methodCalls::methodCallPrefix,
             methodCalls::methodCallChainIsSourceMultiline,
             methodCalls::methodCallChainHasFinalTrailingLineComment,
-            methodCalls::hasSourceMultilineExpressionLambdaBody,
             objectCreations::brokenObjectCreation,
             objectCreations::objectCreationWithSuffix,
             conditionals::conditionalExpression,
@@ -392,8 +391,8 @@ final class ExpressionPrinters {
         return annotationExpressions.annotation(annotation);
     }
 
-    Doc annotationPreservingSourceBreaks(AnnotationExpr annotation) {
-        return annotationExpressions.annotationPreservingSourceBreaks(annotation);
+    Doc annotationPreservingSourceBreaks(AnnotationExpr annotation, LayoutContext layout) {
+        return annotationExpressions.annotationPreservingSourceBreaks(annotation, layout);
     }
 
     String annotationFlatText(AnnotationExpr annotation) {

@@ -72,8 +72,8 @@ final class ThrowsClausePrinter {
         String flatSignature = prefix + flatParameters;
         // C10 (#220): the same-line throws width is measured at the declaration's real rendered column, not the fixed
         // one-indent-level `currentIndented` baseline. A `throws …` on a member of an inner class / nested type renders
-        // one block/type level deeper per enclosing scope, and the old baseline under-counted that indentation, so an
-        // over-width nested clause was kept inline against reality. `LayoutWidth.nodeLine` counts every enclosing
+        // one block/type level deeper per enclosing scope, which the fixed baseline under-counts, so an over-width
+        // nested clause would be kept inline against reality. `LayoutWidth.nodeLine` counts every enclosing
         // TypeDeclaration/BlockStmt around the declaration and floors at one level, and the `currentIndentedWidth` term
         // is kept as a floor so a top-level member is still measured against at least one unit — leaving top-level
         // declarations byte-identical while correcting the deeper-nested ones (mirrors the LDM-2 unary/ternary/return
@@ -97,9 +97,7 @@ final class ThrowsClausePrinter {
      *
      * <p>The clause keyword stays glued to the first exception, then a {@link Doc#fill(List)} drives the inter-exception
      * separators: each {@code ,} plus {@link Doc#LINE} is laid out flat while the next exception still fits on the
-     * current line and broken to a fresh continuation line only where it does not. This replaces the prior
-     * all-or-nothing shape, where a long exception list moved to its own line but still overflowed because it was a
-     * single {@link Doc#text(String)} string.
+     * current line and broken to a fresh continuation line only where it does not.
      *
      * @param thrownExceptions the declared thrown exceptions; must be non-empty, since the keyword is glued to
      *     {@code .get(0)} and the packing loop assumes at least one exception. Every call site already guards

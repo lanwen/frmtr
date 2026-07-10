@@ -7,9 +7,7 @@ class QualifiedStaticChainRootSample {
     }
 
     void configure(Client client, Settings settings) {
-        var proxy = Signal.create(
-            client.resources(Route.class).withName(settings.routeName())::get
-        )
+        var proxy = Signal.create(client.resources(Route.class).withName(settings.routeName())::get)
                 .subscribeOn(Schedulers.worker())
                 .mapNotNull(value -> value.status().host())
                 .timeout(Duration.ofSeconds(5));

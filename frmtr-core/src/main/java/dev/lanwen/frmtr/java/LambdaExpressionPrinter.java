@@ -51,6 +51,8 @@ final class LambdaExpressionPrinter {
 
     private final ObjectCreationLayoutPolicy objectCreationLayoutPolicy;
 
+    private final ArgumentHeaviness argumentHeaviness = new ArgumentHeaviness();
+
     private final FormatterOptions options;
 
     private final LayoutWidth layoutWidth;
@@ -90,8 +92,6 @@ final class LambdaExpressionPrinter {
     private final ExpressionLambdaArgumentLayout expressionLambdaArguments;
 
     private final LambdaParameterHeaderLayout lambdaParameterHeaders;
-
-    private final LambdaBodyHeaderLayout lambdaBodyHeaders;
 
     LambdaExpressionPrinter(
             CommentTracker comments,
@@ -173,16 +173,6 @@ final class LambdaExpressionPrinter {
             blockStatementWidth,
             layoutWidth
         );
-        this.lambdaBodyHeaders = new LambdaBodyHeaderLayout(
-            sourceShapePolicy,
-            rawSource,
-            options,
-            expressionRenderer,
-            lambdaParameterHeaders::haveComments,
-            this::lambdaParametersShouldBreak,
-            lambdaParameterHeaders::forHeader,
-            currentIndentedWidth
-        );
     }
 
     Doc parenthesizedLambdaBreak(LambdaExpr expression) {
@@ -250,15 +240,13 @@ final class LambdaExpressionPrinter {
         String flat = parameters
             + " -> "
             + expressionBody.map(compact).orElseGet(() -> compact.apply(expression.getBody()));
+        // The flat-lambda gate admits the flat form purely on the width+comment invariants, which are pass-invariant
+        // functions of the AST: no contained line comments, the flat text fits the current column, and the flat text
+        // would still fit inside a broken argument list. A body whose flat form fits reprints flat; one whose flat form
+        // overflows falls through to the width-driven broken shapes below.
         if (
             !parametersHaveComments
             && expressionBody.filter(commentPlacement::hasContainedLineComments).isEmpty()
-            && expressionBody.filter(expressionLambdaArguments::sourceMultilineLogicalBody).isEmpty()
-            && expressionBody.filter(expressionLambdaArguments::sourceMultilineMethodCallBody).isEmpty()
-            && expressionBody.filter(expressionLambdaArguments::sourceMultilineBinaryMethodCallBody).isEmpty()
-            && expressionBody.filter(body -> lambdaBodyStartsAfterHeader(expression, body))
-                    .filter(this::sourceMultilineBodyMustStayBroken)
-                    .isEmpty()
             && !lambdaFlatOverflowsInBrokenArgumentList(flat)
             && expressionBody.filter(this::methodCallBodyOverflowsInBrokenArgumentList).isEmpty()
             && currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()
@@ -302,18 +290,15 @@ final class LambdaExpressionPrinter {
         if (methodCallBodyWithOpener.isPresent()) {
             return methodCallBodyWithOpener.orElseThrow();
         }
-        // Canonical-fan cutover seam, the lambda-body ARROW position (SPIKE, #190). Checked BEFORE the source-shape-gated
-        // body branches below ({@code methodCallBodyWithHeader}, {@code sourceMultilineMethodCallBodyWithHeader}, and the
-        // broken-after-arrow fallback) — because the oscillation it closes is exactly those branches disagreeing across
-        // passes for a fan-carrying lambda body. A {@code () -> admin.createTopics(...).all().get()} whose flat form does
-        // not fit alternates between break-after-{@code ->} ({@code () ->}⏎{@code admin}⏎{@code .createTopics(…)…}, the
-        // fallback, chosen when the raw body's first source line overflowed after the arrow) and attach-root-to-{@code ->}
-        // ({@code () -> admin}⏎{@code .createTopics(…)…}, chosen by {@code sourceMultilineMethodCallBodyWithHeader} once the
-        // previous pass fanned the body so its first source line is just the bare root) — the same {@code wasMultiline}/raw
-        // first-source-line gate the initializer break-after-{@code =} decider had. Ranking two AST-derived arms with
-        // {@code Doc.bestFitting} at the true rendered column makes the arrow verdict a fixpoint by construction: the U7 fan
-        // (root hugs the arrow, one selector per continuation line) is the attached arm, the same fan under an indented
-        // {@code ->} break is the broken arm, and {@code bestFitting} picks attach whenever the root fits after
+        // Canonical-fan cutover seam, the lambda-body ARROW position (SPIKE, #190). Checked BEFORE the body branches
+        // below ({@code methodCallBodyWithHeader} and the broken-after-arrow fallback) — because the oscillation it closes
+        // is exactly those branches disagreeing across passes for a fan-carrying lambda body. A
+        // {@code () -> admin.createTopics(...).all().get()} whose flat form does not fit could otherwise alternate between
+        // break-after-{@code ->} ({@code () ->}⏎{@code admin}⏎{@code .createTopics(…)…}) and attach-root-to-{@code ->}
+        // ({@code () -> admin}⏎{@code .createTopics(…)…}) depending on the body's rendered shape. Ranking two AST-derived
+        // arms with {@code Doc.bestFitting} at the true rendered column makes the arrow verdict a fixpoint by construction:
+        // the U7 fan (root hugs the arrow, one selector per continuation line) is the attached arm, the same fan under an
+        // indented {@code ->} break is the broken arm, and {@code bestFitting} picks attach whenever the root fits after
         // {@code params -> } and break only when it overflows.
         //
         // Placed AFTER {@code methodCallBodyWithOpener} (which fires only when the body's OUTERMOST call carries arguments,
@@ -338,12 +323,6 @@ final class LambdaExpressionPrinter {
         if (methodCallBodyWithHeader.isPresent()) {
             return methodCallBodyWithHeader.orElseThrow();
         }
-        Optional<Doc> sourceMultilineMethodCallBody = expressionBody.flatMap(
-            body -> lambdaBodyHeaders.sourceMultilineMethodCallBodyWithHeader(expression, parameters, body)
-        );
-        if (sourceMultilineMethodCallBody.isPresent()) {
-            return sourceMultilineMethodCallBody.orElseThrow();
-        }
         Optional<Doc> binaryMethodCallBodyWithOpener = expressionBody.filter(BinaryExpr.class::isInstance)
                 .map(BinaryExpr.class::cast)
                 .flatMap(binary -> expressionLambdaArguments.binaryMethodCallBodyWithOpener(parameters, binary));
@@ -366,6 +345,29 @@ final class LambdaExpressionPrinter {
         if (objectCreationBodyWithOpener.isPresent()) {
             return objectCreationBodyWithOpener.orElseThrow();
         }
+        // PR #279 review (#3/#4, arrow-hug rule): a method-call chain body whose receiver carries a BLOCK lambda
+        // ({@code Try.of(a, () -> { … }).getOrElseThrow(…)}, the {@code createInstance} shape) renders through the full
+        // chain printer as {@code Try.of(a, () -> {}⏎ block ⏎{@code }).getOrElseThrow(…)} — a short opener head above an
+        // already-multi-line block. Breaking the outer lambda after {@code ->} would orphan the arrow above that head, so
+        // hug the body's first line onto the arrow line ({@code ctor -> Try.of(a, () -> {}) and let only the contained
+        // block break, the same {@code -> } + body render {@link #bodyEndsInBlock} applies to a directly block-bodied
+        // body. {@code brokenNonBinaryLambdaBody} already renders this receiver-block-lambda body through
+        // {@link JavaFormatRule#format} (its {@code brokenMethodCallReceiverCompactsCleanly} guard declines the compact
+        // reconstruction), so the hugged body is byte-identical to the broken-after-arrow body — a pure AST function, so
+        // the hug is a fixpoint.
+        if (
+            !parametersHaveComments
+            && expressionBody.filter(MethodCallExpr.class::isInstance)
+                    .map(MethodCallExpr.class::cast)
+                    .filter(chain -> !brokenMethodCallReceiverCompactsCleanly(chain))
+                    .isPresent()
+        ) {
+            return Doc.concat(
+                lambdaParameterHeaders.forHeader(expression, parameters),
+                Doc.text(" -> "),
+                expressionRenderer.format(expressionBody.orElseThrow(), LayoutContext.root())
+            );
+        }
         Doc body = brokenLambdaExpressionBody(expression);
         return Doc.concat(
             lambdaParameterHeaders.forHeader(expression, parameters),
@@ -377,17 +379,14 @@ final class LambdaExpressionPrinter {
     /**
      * SPIKE (fan-root-true-column, #190). Makes the break-after-{@code ->} versus attach-root-to-{@code ->} verdict of a
      * fan-carrying expression-lambda body SOURCE-NEUTRAL by ranking two AST-derived shapes with {@link Doc#bestFitting} at
-     * the true rendered column, replacing the {@code wasMultiline}/raw-first-source-line gate (
-     * {@code LambdaBodyHeaderLayout.sourceMultilineMethodCallBodyWithHeader} attaching, the broken-after-arrow fallback
-     * breaking) that picks divergent shapes across passes for a chain whose rendered body force-fans.
+     * the true rendered column, so the two shapes cannot diverge across passes for a chain whose rendered body force-fans.
      *
      * <p>Both arms wrap the SAME fan Doc, produced ONCE by {@code lambdaBodyCanonicalFanChain} through the source-neutral
      * {@code chainFanOut} with an empty {@link LayoutContext#leftEdgePrefix()} ({@link LayoutContext#root()}):
      * <ul>
      *   <li><b>Attached</b> ({@code () -> admin}⏎{@code .createTopics(…)}⏎{@code .all()}⏎{@code .get()}): the header text
      *       {@code params -> } precedes the fan, so the chain root hugs the arrow line and the fan's own continuation indent
-     *       lays each selector one per line under it — byte-identical to the U7 hug shape and to what
-     *       {@code sourceMultilineMethodCallBodyWithHeader} rendered when it fired.</li>
+     *       lays each selector one per line under it — byte-identical to the U7 hug shape.</li>
      *   <li><b>Broken</b> ({@code () ->}⏎{@code admin}⏎{@code .createTopics(…)}…): the arrow breaks and the same fan renders
      *       under one continuation indent, byte-identical to the broken-after-arrow fallback's fanned body.</li>
      * </ul>
@@ -439,10 +438,13 @@ final class LambdaExpressionPrinter {
             String parameters,
             ObjectCreationExpr objectCreation
     ) {
+        // D3 flip-assembly (Read retirement): drop the {@code lambdaBodyStartsAfterHeader} source-shape disjunct so the
+        // broken-object-creation body is chosen purely when the flat form does not fit ({@code objectCreationLambdaBodyFits}
+        // false). Keying on whether the author broke the body forced a broken layout on a body whose flat form fits,
+        // oscillating with the flat gate above.
         if (
             objectCreation.getArguments().isEmpty()
-            || (!lambdaBodyStartsAfterHeader(lambda, objectCreation)
-                && objectCreationLambdaBodyFits(parameters, objectCreation))
+            || objectCreationLambdaBodyFits(parameters, objectCreation)
         ) {
             return Optional.empty();
         }
@@ -489,16 +491,6 @@ final class LambdaExpressionPrinter {
                 Doc.indent(binaryBody.orElseThrow())
             )
         );
-    }
-
-    private boolean lambdaBodyStartsAfterHeader(LambdaExpr lambda, Expression body) {
-        return lambda.getRange()
-                .flatMap(lambdaRange -> body.getRange().map(bodyRange -> bodyRange.begin.line > lambdaRange.begin.line))
-                .orElse(false);
-    }
-
-    private boolean sourceMultilineBodyMustStayBroken(Expression body) {
-        return !(body instanceof BinaryExpr binaryExpr && !isLogicalBinaryOperator(binaryExpr));
     }
 
     private boolean methodCallBodyOverflowsInBrokenArgumentList(Expression body) {
@@ -569,10 +561,33 @@ final class LambdaExpressionPrinter {
         if (
             body instanceof MethodCallExpr methodCall
             && currentIndentedWidth.applyAsInt(compact.apply(methodCall)) > options.lineWidth()
+            && brokenMethodCallReceiverCompactsCleanly(methodCall)
         ) {
             return brokenMethodCallRenderer.apply(methodCall);
         }
         return expressionRenderer.format(body, LayoutContext.root());
+    }
+
+    /**
+     * Reports whether the over-wide chain body can render through {@code brokenMethodCallRenderer} — which breaks only the
+     * OUTERMOST call's argument list and reconstructs the whole receiver chain from a single compacted line — without that
+     * receiver reconstruction collapsing a multi-line construct.
+     *
+     * <p>The compact receiver reconstruction has no {@link com.github.javaparser.ast.expr.LambdaExpr} case, so a receiver
+     * that carries a BLOCK lambda ({@code Try.of(a, () -> { … }).getOrElseThrow(…)}, the {@code createInstance} shape) would
+     * flatten its {@code { … }} onto one over-wide line, and a contained comment would de-indent and merge into the
+     * following token — the malformed shapes PR #279 flagged. When the receiver carries either, this yields {@code false} so
+     * {@link #brokenNonBinaryLambdaBody} falls through to {@link JavaFormatRule#format} — the full method-chain printer,
+     * which renders the block lambda / comment through their own multi-line printers. This mirrors the identical guard
+     * {@code ExpressionLambdaArgumentLayout#brokenMethodCallReceiverCompactsCleanly} applies on the call-argument side.
+     */
+    private boolean brokenMethodCallReceiverCompactsCleanly(MethodCallExpr methodCall) {
+        return methodCall.getScope()
+                .map(receiver -> receiver.findAll(LambdaExpr.class)
+                        .stream()
+                        .noneMatch(lambda -> lambda.getBody().isBlockStmt())
+                    && receiver.getAllContainedComments().isEmpty())
+                .orElse(true);
     }
 
     private boolean isLogicalBinaryOperator(BinaryExpr expression) {
@@ -861,6 +876,12 @@ final class LambdaExpressionPrinter {
         Expression root = methodCallChainRoot(expression, calls);
         if (calls.isEmpty() || !(root instanceof ObjectCreationExpr objectCreation)) {
             return false;
+        }
+        // A "heavy" root constructor breaks its argument list even when it fits the width (see ArgumentHeaviness), so a
+        // trailing lambda must not hug it flat onto the opener; suppress the hug so the enclosing call explodes its
+        // arguments and the constructor root breaks on its own line (PR #279 comment #1 cascade).
+        if (argumentHeaviness.isHeavy(objectCreation.getArguments(), true)) {
+            return true;
         }
         int compactRootWidth = currentIndentedWidth.applyAsInt(compact.apply(objectCreation));
         boolean compactRootCanStay = objectCreationLayoutPolicy.canKeepCompactChainRoot(

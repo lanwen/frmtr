@@ -23,9 +23,10 @@ final class LambdaBodyChainDottedFan {
     List<VotersEndpoint> keepsObjectCreationRootedLambdaBodyPacked(Map<ListenerName, InetSocketAddress> listeners) {
         return listeners.entrySet()
                 .stream()
-                .map(listener -> new VotersEndpoint().setName(listener.getKey().value()).setHost(
-                        listener.getValue().getHostString()
-                ))
+                .map(listener -> new VotersEndpoint()
+                        .setName(listener.getKey().value())
+                        .setHost(listener.getValue().getHostString())
+                )
                 .collect(Collectors.toList());
     }
 

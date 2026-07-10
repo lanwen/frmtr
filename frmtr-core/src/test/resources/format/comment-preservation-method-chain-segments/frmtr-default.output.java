@@ -25,8 +25,7 @@ class MethodChainSegmentCommentSample {
     }
 
     void waitForSignal() {
-        StepRunner.begin()
-                .interval(tick)
+        StepRunner.begin().interval(tick)
                 // keep later segment note
                 .deadline(limit)
                 .verify(() -> {

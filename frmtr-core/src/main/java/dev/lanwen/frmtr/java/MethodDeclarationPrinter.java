@@ -63,7 +63,7 @@ final class MethodDeclarationPrinter {
 
     private final Function<Doc, String> commentText;
 
-    private final Function<Node, String> compact;
+    private final Function<Node, String> compactTypeLike;
 
     private final Function<Type, Doc> typeBody;
 
@@ -88,7 +88,7 @@ final class MethodDeclarationPrinter {
             Function<NodeList<TypeParameter>, String> flatTypeParameters,
             Function<NodeWithAnnotations<?>, String> inlineAnnotations,
             Function<Doc, String> commentText,
-            Function<Node, String> compact,
+            Function<Node, String> compactTypeLike,
             Function<Type, Doc> typeBody,
             Function<ClassOrInterfaceType, Doc> brokenClassOrInterfaceType,
             Predicate<Type> typeCanBreak,
@@ -107,7 +107,7 @@ final class MethodDeclarationPrinter {
         this.flatTypeParameters = flatTypeParameters;
         this.inlineAnnotations = inlineAnnotations;
         this.commentText = commentText;
-        this.compact = compact;
+        this.compactTypeLike = compactTypeLike;
         this.typeBody = typeBody;
         this.brokenClassOrInterfaceType = brokenClassOrInterfaceType;
         this.typeCanBreak = typeCanBreak;
@@ -143,7 +143,7 @@ final class MethodDeclarationPrinter {
             docs.add(callableSignatures.typeParameters(declaration.getTypeParameters()));
             docs.add(Doc.text(" "));
         }
-        String returnType = inlineAnnotations.apply(declaration) + compact.apply(declaration.getType());
+        String returnType = inlineAnnotations.apply(declaration) + compactTypeLike.apply(declaration.getType());
         String signature = returnType + " " + declaration.getNameAsString();
         prefix += signature;
         boolean breakReturnType = shouldBreakReturnType(declaration, prefix);
@@ -377,14 +377,17 @@ final class MethodDeclarationPrinter {
     }
 
     private String compactJoin(List<? extends Node> nodes) {
-        return nodes.stream().map(compact).reduce((left, right) -> left + ", " + right).orElse("");
+        return nodes.stream().map(compactTypeLike).reduce((left, right) -> left + ", " + right).orElse("");
     }
 
     private boolean shouldBreakReturnType(MethodDeclaration declaration, String prefix) {
+        // The return type's own type arguments break only when the signature overflows AND the return-type-plus-name
+        // opener is itself too wide for the parameter list to rescue by breaking (an empty or narrow parameter list
+        // cannot bring a wide {@code Function<...>}/{@code Mono<...>} return type under width).
         return declaration.getReceiverParameter().isEmpty()
             && typeCanBreak.test(declaration.getType())
-            && sourceShapePolicy.wasMultiline(declaration.getType())
-            && callableSignatures.parametersBreak(prefix, declaration, methodParameterSuffix(declaration));
+            && callableSignatures.parametersBreak(prefix, declaration, methodParameterSuffix(declaration))
+            && callableSignatures.returnTypeOverflows(prefix);
     }
 
     private Doc returnType(MethodDeclaration declaration, String returnType, boolean breakReturnType) {

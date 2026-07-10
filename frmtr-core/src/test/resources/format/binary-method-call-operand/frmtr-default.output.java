@@ -10,8 +10,7 @@ class BinaryMethodCallOperandSample {
     }
 
     boolean any(Items<Item> items, String declarationPrefix, Options options) {
-        return items
-                .stream()
+        return items.stream()
                 .anyMatch(
                     item -> currentIndentedWidth.applyAsInt(
                         declarationPrefix + item.getNameAsString()
@@ -23,9 +22,7 @@ class BinaryMethodCallOperandSample {
         if (
             pair.value() instanceof ArrayValue arrayValue
             && currentIndentedWidth.applyAsInt(
-                pair.name()
-                    + " = "
-                    + compactArrayValue(arrayValue)
+                pair.name() + " = " + compactArrayValue(arrayValue)
             ) > options.lineWidth()
         ) {
             return true;
@@ -37,9 +34,7 @@ class BinaryMethodCallOperandSample {
         if (
             pair.value() instanceof ArrayValue arrayValue
             && currentIndentedWidth.applyAsInt(
-                pair.name()
-                    + " = "
-                    + compactArrayValue(arrayValue)
+                pair.name() + " = " + compactArrayValue(arrayValue)
                ) > options.lineWidth()
             && pair.name().length() > 0
         ) {
@@ -66,10 +61,7 @@ class BinaryMethodCallOperandSample {
         return routePlan.hasOrigin()
             && routePlan.hasDestination()
             && segmentBudget.continuationRouteWidth(
-                ") "
-                    + routePlan.selectedOperator().displayText()
-                    + " "
-                    + segmentBudget.remainingSegmentExpression()
+                ") " + routePlan.selectedOperator().displayText() + " " + segmentBudget.remainingSegmentExpression()
             ) <= options.lineWidth();
     }
 

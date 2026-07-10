@@ -17,8 +17,6 @@ import com.github.javaparser.ast.stmt.TryStmt;
  */
 final class ObjectCreationLayoutPolicy {
 
-    private static final int MAX_FLAT_ARGUMENTS = 3;
-
     private final SourceShapePolicy sourceShapePolicy;
 
     ObjectCreationLayoutPolicy(SourceShapePolicy sourceShapePolicy) {
@@ -26,26 +24,22 @@ final class ObjectCreationLayoutPolicy {
     }
 
     /**
-     * Reports whether an existing source-multiline constructor argument list should be kept multiline.
-     *
-     * <p>Try resources keep their legacy source-multiline behavior. Other direct constructor calls need more than three
-     * arguments before the source break is honored, so compact small constructors can still collapse when they fit.
+     * Always false: no constructor argument list is preserved as source-multiline, so every constructor's arguments —
+     * including try-resource constructors — break by width. Kept (returning false) so its callers stay wired.
      */
     boolean shouldPreserveSourceMultilineArguments(ObjectCreationExpr expression) {
-        return sourceShapePolicy.objectCreationArgumentsSpanMultipleLines(expression)
-            && expression.getAllContainedComments().isEmpty()
-            && (isTryResourceObjectCreation(expression) || !hasFlatArgumentCount(expression));
+        return false;
     }
 
     /**
-     * Reports whether an anonymous-class constructor should keep an existing source-multiline argument list.
+     * Always false: anonymous-class constructors do not preserve a source-multiline argument list — their argument header
+     * breaks by width like every other constructor.
      *
-     * <p>Anonymous class bodies often contain comments under the same object-creation subtree. Those body comments must
-     * not make the constructor header collapse or get treated as argument comments, so this variant keeps the same
-     * argument-count rule while ignoring comments that belong to the anonymous body.
+     * <p>Anonymous-class bodies own the visible layout after the header, so the header argument list is rendered by the
+     * width-driven {@code Doc.group} in {@link ObjectCreationPrinter#anonymousObjectCreationHeader}.
      */
     boolean shouldPreserveAnonymousSourceMultilineArguments(ObjectCreationExpr expression) {
-        return sourceShapePolicy.objectCreationArgumentsSpanMultipleLines(expression) && !hasFlatArgumentCount(expression);
+        return false;
     }
 
     /**
@@ -55,62 +49,41 @@ final class ObjectCreationLayoutPolicy {
      * leaving the return printer to decide whether width alone also forces the same broken constructor document.
      */
     boolean shouldPreserveReturnSourceMultilineArguments(ObjectCreationExpr expression) {
-        return (
-            expression.getArguments().size() > 2
-            && sourceShapePolicy.wasMultiline(expression)
-            && expression
-                    .getArguments()
-                    .stream()
-                    .anyMatch(argument -> argument.getRange()
-                                .map(
-                                    argumentRange -> argumentRange.begin.line
-                                            > expression
-                                                    .getType()
-                                                    .getRange()
-                                                    .map(typeRange -> typeRange.end.line)
-                                                    .orElse(argumentRange.begin.line)
-                                )
-                                .orElse(false)
-                    )
-        );
+        return false;
     }
 
     /**
-     * SPIKE (fan-root-true-column, #190). Reports whether a constructor's argument list is rendered SOURCE-NEUTRALLY —
-     * always by the width-driven {@code Doc.group}, never by the source-multiline-preserving branch — so a chain whose
-     * root is this constructor can be fanned identically on every pass regardless of how the author laid the arguments
-     * out.
+     * Reports whether a constructor's argument list is rendered SOURCE-NEUTRALLY — always by the width-driven
+     * {@code Doc.group}, never by a source-multiline-preserving branch — so a chain whose root is this constructor can be
+     * fanned identically on every pass regardless of how the author laid the arguments out.
      *
-     * <p>This is exactly the negation of the state in which {@link #shouldPreserveSourceMultilineArguments} could ever
-     * return {@code true}, computed from AST-stable facts alone (no source-column inputs): a constructor with a flat
-     * argument count ({@code <= MAX_FLAT_ARGUMENTS}), no anonymous class body, no contained comments, and not a try
-     * resource always renders its arguments through {@link ObjectCreationPrinter#objectCreation}'s width-driven
-     * {@code Doc.group} — collapsing or breaking them purely by the rendered column. The object-creation-ROOT arm of
-     * {@link VariableInitializerLayout#variableInitializerFanBestFitting} gates on this so it only fans object-creation
-     * roots whose {@code chainFanOut} root doc is column-invariant; roots that could preserve source-multiline arguments
-     * (four-plus args, try resources, anonymous bodies) stay on their existing source-shape-sensitive branches, where
-     * their argument shape is already stable.
+     * <p>ANY non-anonymous, comment-free, non-try-resource constructor renders its arguments through
+     * {@link ObjectCreationPrinter#objectCreation}'s (or {@link ObjectCreationPrinter#widthDrivenObjectCreation}'s)
+     * width-driven {@code Doc.group}, collapsing or breaking them purely by the rendered column, independent of argument
+     * count: a four-plus-argument constructor root is as column-invariant as a two-argument one, so the
+     * object-creation-ROOT arm of {@link VariableInitializerLayout#variableInitializerFanBestFitting} may fan it
+     * source-neutrally too. Try resources render through the try-statement printer's own header-width layout, so they are
+     * excluded here; anonymous bodies keep their own body-owned layout after the header.
      */
     boolean constructorArgumentsAreWidthDriven(ObjectCreationExpr expression) {
-        return hasFlatArgumentCount(expression)
-            && expression.getAnonymousClassBody().isEmpty()
+        return expression.getAnonymousClassBody().isEmpty()
             && expression.getAllContainedComments().isEmpty()
             && !isTryResourceObjectCreation(expression);
     }
 
     /**
-     * Reports whether a constructor root can stay compact when a surrounding method-call chain is forced to break.
+     * Reports whether a constructor root can stay compact (its whole argument list on one line) when a surrounding
+     * method-call chain is forced to break — purely a WIDTH verdict.
+     *
+     * <p>A constructor root stays compact exactly when its compact rendering fits the line, regardless of how many
+     * arguments it has or how the author laid them out. A wide root (e.g. {@code new LogValidator(12 args)}) fails
+     * {@code compactWidth <= lineWidth} and so breaks its argument list; a narrow four-plus-argument root that fits stays
+     * on one line, identically on every pass.
      */
     boolean canKeepCompactChainRoot(ObjectCreationExpr expression, int compactWidth, int lineWidth) {
-        return hasFlatArgumentCount(expression)
-            && expression.getAnonymousClassBody().isEmpty()
+        return expression.getAnonymousClassBody().isEmpty()
             && expression.getAllContainedComments().isEmpty()
-            && !sourceShapePolicy.objectCreationArgumentsSpanMultipleLines(expression)
             && compactWidth <= lineWidth;
-    }
-
-    private boolean hasFlatArgumentCount(ObjectCreationExpr expression) {
-        return expression.getArguments().size() <= MAX_FLAT_ARGUMENTS;
     }
 
     private boolean isTryResourceObjectCreation(ObjectCreationExpr expression) {

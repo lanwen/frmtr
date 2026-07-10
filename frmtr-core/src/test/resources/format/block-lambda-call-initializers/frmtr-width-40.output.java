@@ -7,14 +7,11 @@ class BlockLambdaCallInitializersSample {
     ) {
         var partitioned =
             entries.partition(entry -> {
-                return (
-                    request.mode() == SelectionMode.ANY
-                    && entry
-                            .state()
+                return request.mode() == SelectionMode.ANY
+                    && entry.state()
                             .shouldPrioritize(
                                 subject.owner()
-                            )
-                );
+                            );
             });
         var selected =
             partitioned.getSelected();
@@ -34,14 +31,11 @@ class BlockLambdaCallInitializersSample {
         var partitioned =
             entries.partition(
                 (_, entry) -> {
-                    return (
-                        request.mode() == SelectionMode.ANY
-                        && entry
-                                .state()
+                    return request.mode() == SelectionMode.ANY
+                        && entry.state()
                                 .shouldPrioritize(
                                     subject.owner()
-                                )
-                    );
+                                );
                 }
             );
         publishSelection(
@@ -60,16 +54,13 @@ class BlockLambdaCallInitializersSample {
         var partitioned =
             entries.partition(
                 (_, entry, cursor) -> {
-                    return (
-                        request.mode() == SelectionMode.ANY
-                        && entry
-                                .state()
+                    return request.mode() == SelectionMode.ANY
+                        && entry.state()
                                 .shouldPrioritize(
                                     subject.owner(
                                         cursor
                                     )
-                                )
-                    );
+                                );
                 }
             );
         publishSelection(
@@ -88,14 +79,11 @@ class BlockLambdaCallInitializersSample {
         var partitioned =
             entryCollectionWithExtremelyLongFormatterFixturePrefixBeforeLambdaArgumentFallback
                     .partition(entry -> {
-                        return (
-                            request.mode() == SelectionMode.ANY
-                            && entry
-                                    .state()
+                        return request.mode() == SelectionMode.ANY
+                            && entry.state()
                                     .shouldPrioritize(
                                         subject.owner()
-                                    )
-                        );
+                                    );
                     });
         publishSelection(
             subject,

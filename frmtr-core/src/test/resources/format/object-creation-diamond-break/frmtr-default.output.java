@@ -13,12 +13,7 @@ final class DiamondBreak {
     );
 
     void createAnonymousStrategy(Clock clock, Backoff minBackoff, Backoff maxBackoff, Duration maxDuration) {
-        FixturePlan plan = new FixtureAnonymousStrategy(
-            clock,
-            minBackoff,
-            maxBackoff,
-            maxDuration
-        ) {
+        FixturePlan plan = new FixtureAnonymousStrategy(clock, minBackoff, maxBackoff, maxDuration) {
             @Override
             public void reset() {
                 super.reset();

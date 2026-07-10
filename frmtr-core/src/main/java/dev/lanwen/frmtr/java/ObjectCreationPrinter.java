@@ -56,6 +56,8 @@ final class ObjectCreationPrinter {
 
     private final Function<Doc, String> commentText;
 
+    private final ArgumentHeaviness argumentHeaviness = new ArgumentHeaviness();
+
     ObjectCreationPrinter(
             JavaFormatContext context,
             TypePrinter types,
@@ -133,6 +135,7 @@ final class ObjectCreationPrinter {
         String prefix = objectCreationPrefix(expression);
         return Doc.group(
             Doc.concat(
+                heavyArgumentBreak(expression),
                 Doc.text(prefix + "("),
                 Doc.indent(
                     Doc.concat(
@@ -146,6 +149,20 @@ final class ObjectCreationPrinter {
                 Doc.text(")")
             )
         );
+    }
+
+    /**
+     * Emits a {@link Doc#BREAK_PARENT} when this constructor's argument list is "heavy" (see {@link ArgumentHeaviness}),
+     * so the enclosing width-driven {@link Doc#group} breaks the arguments one-per-line even when the flat form would
+     * fit. Returns {@link Doc#EMPTY} otherwise, leaving the group's flat/break decision purely to the renderer's width
+     * verdict. Anonymous-class and comment-carrying constructors are excluded because their arguments are already
+     * rendered through body-owned or comment-aware branches before reaching the width-driven group.
+     */
+    private Doc heavyArgumentBreak(ObjectCreationExpr expression) {
+        boolean heavy = expression.getAnonymousClassBody().isEmpty()
+            && expression.getAllContainedComments().isEmpty()
+            && argumentHeaviness.isHeavy(expression.getArguments(), true);
+        return heavy ? Doc.BREAK_PARENT : Doc.EMPTY;
     }
 
     /**
@@ -174,9 +191,14 @@ final class ObjectCreationPrinter {
         if (sourceMultilineArguments.isPresent()) {
             return sourceMultilineArguments.orElseThrow();
         }
-        Optional<Doc> huggableLambda = huggableLambdaArgument(prefix, expression.getArguments());
-        if (huggableLambda.isPresent()) {
-            return Doc.concat(huggableLambda.orElseThrow(), Doc.text(suffix));
+        // A heavy argument list must break one-per-line, so a trailing block/expression lambda argument must NOT hug the
+        // opener (that keeps the sibling arguments on the opener line); let it fall through to the exploded list below.
+        boolean heavy = argumentHeaviness.isHeavy(expression.getArguments(), true);
+        if (!heavy) {
+            Optional<Doc> huggableLambda = huggableLambdaArgument(prefix, expression.getArguments());
+            if (huggableLambda.isPresent()) {
+                return Doc.concat(huggableLambda.orElseThrow(), Doc.text(suffix));
+            }
         }
         Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(
             prefix,
@@ -187,6 +209,7 @@ final class ObjectCreationPrinter {
             return Doc.concat(commentedArguments.orElseThrow(), Doc.text(suffix));
         }
         Doc call = Doc.concat(
+            heavy ? Doc.BREAK_PARENT : Doc.EMPTY,
             Doc.text(prefix + "("),
             Doc.indent(
                 Doc.concat(

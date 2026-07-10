@@ -109,7 +109,7 @@ final class ReturnBinaryExpressionLayout {
         if (
             !(binaryExpr.getLeft() instanceof MethodCallExpr methodCall)
             || methodCall.getArguments().isEmpty()
-            || (methodCall.getArguments().size() == 1 && !sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall))
+            || methodCall.getArguments().size() == 1
             || !methodCall.getAllContainedComments().isEmpty()
             || !binaryExpr.getRight().getAllContainedComments().isEmpty()
             || !directBinaryReturnMethodCallFirstLineFits(methodCall, layout)
@@ -153,13 +153,6 @@ final class ReturnBinaryExpressionLayout {
             BinaryExpr expression,
             boolean allowSourceMultilineOverflowContinuation
     ) {
-        if (
-            allowSourceMultilineOverflowContinuation
-            && sourceShapePolicy.wasMultiline(expression)
-            && !hasUnparenthesizedAndUnderOr(expression)
-        ) {
-            return true;
-        }
         String line = directBinaryReturnLastLinePrefix(expression)
             + compact.apply(lastBinaryOperand(expression))
             + ";";
@@ -202,30 +195,6 @@ final class ReturnBinaryExpressionLayout {
         int budgetWidth = layoutWidth.line(layout.widthBudget(), line);
         int renderedColumnWidth = layoutWidth.nodeLine(expression, line);
         return Math.max(budgetWidth, renderedColumnWidth);
-    }
-
-    private boolean hasUnparenthesizedAndUnderOr(Expression expression) {
-        if (expression instanceof EnclosedExpr) {
-            return false;
-        }
-        if (!(expression instanceof BinaryExpr binaryExpr)) {
-            return false;
-        }
-        if (
-            binaryExpr.getOperator() == BinaryExpr.Operator.OR
-            && (unparenthesizedOperator(binaryExpr.getLeft(), BinaryExpr.Operator.AND)
-                || unparenthesizedOperator(binaryExpr.getRight(), BinaryExpr.Operator.AND))
-        ) {
-            return true;
-        }
-        return hasUnparenthesizedAndUnderOr(binaryExpr.getLeft())
-            || hasUnparenthesizedAndUnderOr(binaryExpr.getRight());
-    }
-
-    private boolean unparenthesizedOperator(Expression expression, BinaryExpr.Operator operator) {
-        return !(expression instanceof EnclosedExpr)
-            && expression instanceof BinaryExpr binaryExpr
-            && binaryExpr.getOperator() == operator;
     }
 
     private String directBinaryReturnLastLinePrefix(BinaryExpr expression) {

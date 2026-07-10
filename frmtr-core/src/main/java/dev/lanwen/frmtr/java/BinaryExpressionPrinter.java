@@ -198,11 +198,9 @@ final class BinaryExpressionPrinter {
      *
      * <p>A negated method call ({@code !call(args)}) operand explodes its argument list under the same width-driven
      * {@link #methodCallOperandShouldBreak} gate as a bare {@code call(args)} operand — the {@code !} prefix rides the
-     * broken call's opening line. Without this arm a negated call fell through to the flat {@link #expressionRenderer}
-     * rendering and could overflow the operand line; the bare-call arm below never saw it because the operand is a
-     * {@link UnaryExpr}, not a {@link MethodCallExpr}. This is the source-neutral replacement for the retired
-     * control-condition {@code sourceMultilineLogicalOperand} read, which broke the same operand off the author's source
-     * shape instead of its rendered width.
+     * broken call's opening line. Without this arm a negated call falls through to the flat {@link #expressionRenderer}
+     * rendering and can overflow the operand line; the bare-call arm below never sees it because the operand is a
+     * {@link UnaryExpr}, not a {@link MethodCallExpr}.
      */
     private Doc binaryExpressionLineOperand(
             BinaryExpressionLine binaryLine,
@@ -334,9 +332,9 @@ final class BinaryExpressionPrinter {
      * {@link #leadingOperatorMethodCallBinaryOperandShouldNest}, so the closing-line suffix wins whenever it fits and the
      * call and right operand carry no comments; the nest form remains the fallback when the suffix cannot align (the
      * closing line would overflow) or comments force the operand through the comment-aware renderer. Keeping the suffix on
-     * the closing line is also what makes the layout width-deterministic: it no longer depends on whether the source had
-     * the call's argument list flat or pre-broken (issue #119), because both shapes converge on this single closing-line
-     * suffix.
+     * the closing line is also what makes the layout width-deterministic: it does not depend on whether the call's
+     * argument list was flat or pre-broken in the source (issue #119), because both shapes converge on this single
+     * closing-line suffix.
      */
     private boolean leadingOperatorMethodCallBinarySuffixCanAlign(BinaryExpressionLine binaryLine, Expression operand) {
         if (
@@ -359,14 +357,13 @@ final class BinaryExpressionPrinter {
      *
      * <p>The decision is width- and AST-deterministic on purpose. A binary operand breaks its args only when the flat
      * operand would overflow the available width on its broken line, or — for a nested continuation whose call carries
-     * breakable structure — when it sits within one indent unit of overflowing. It deliberately does <em>not</em> key off
-     * {@code sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall)}: that is a source-shape signal (true iff
-     * the call's args were already broken across lines in the input bytes), not a fixed property of the AST. Keying the
-     * break on it made the layout depend on the previous pass's incidental line shape, so once a pass exploded an
-     * operand's args the next pass re-observed the broken shape and re-exploded, producing two different stable outputs
-     * for the same tree (flat vs args-exploded) and, near the width boundary, a layout that never converged. This is the
-     * same source-shape-coupling root cause as the #98/#117 wrap-convergence family (issue #119); the fit decision must
-     * be computed from the flat width, not from how the author happened to wrap the call.
+     * breakable structure — when it sits within one indent unit of overflowing. The fit decision is computed from the flat
+     * width, a fixed property of the AST, not from how the author happened to wrap the call: keying it on whether the
+     * call's args were already broken across lines would make the layout depend on the previous pass's incidental line
+     * shape, so once a pass exploded an operand's args the next pass would re-observe the broken shape and re-explode,
+     * producing two different stable outputs for the same tree (flat vs args-exploded) and, near the width boundary, a
+     * layout that never converges. This is the same source-shape-coupling root cause as the #98/#117 wrap-convergence
+     * family (issue #119).
      */
     private boolean methodCallOperandShouldBreak(
             BinaryExpressionLine binaryLine,
@@ -383,10 +380,9 @@ final class BinaryExpressionPrinter {
     /**
      * Reports whether a leading-operator method-call binary operand should break its left call's argument list.
      *
-     * <p>Like {@link #methodCallOperandShouldBreak}, this is width-deterministic and intentionally ignores the
-     * source-shape {@code methodCallArgumentsSpanMultipleLines} signal (see that method for the #119 rationale): the
-     * operand explodes its args only when the flat operand overflows the broken line, or sits at the boundary while the
-     * call carries breakable structure.
+     * <p>Like {@link #methodCallOperandShouldBreak}, this is width-deterministic (see that method for the #119
+     * rationale): the operand explodes its args only when the flat operand overflows the broken line, or sits at the
+     * boundary while the call carries breakable structure.
      */
     private boolean methodCallBinaryOperandShouldBreak(BinaryExpressionLine binaryLine, BinaryExpr binaryOperand) {
         MethodCallExpr methodCall = (MethodCallExpr) binaryOperand.getLeft();
@@ -411,13 +407,9 @@ final class BinaryExpressionPrinter {
      * Reports whether a leading-operator method-call binary operand should nest its inner chain rather than align its
      * closing line with the trailing operator.
      *
-     * <p>This break-shape decision is width-deterministic and intentionally ignores the source-shape
-     * {@code methodCallArgumentsSpanMultipleLines} signal (see {@link #methodCallOperandShouldBreak} for the #119
-     * rationale). The previous {@code !methodCallArgumentsSpanMultipleLines(...)} guard nested only when the call's args
-     * were <em>not</em> already broken in the input, so two identical trees nested differently depending on how the
-     * author had wrapped the call — the same source-shape coupling that prevented convergence. The operand now nests
-     * whenever it is a leading-operator multi-argument call that overflows the available width, independent of the input
-     * line shape.
+     * <p>This break-shape decision is width-deterministic (see {@link #methodCallOperandShouldBreak} for the #119
+     * rationale). The operand nests whenever it is a leading-operator multi-argument call that overflows the available
+     * width, independent of the input line shape.
      *
      * <p>This is the fallback for {@link #leadingOperatorMethodCallBinarySuffixCanAlign}, which the caller checks first:
      * when the operator and right operand can ride the call's closing-paren line ({@code ) op rhs}) that suffix shape
@@ -478,12 +470,10 @@ final class BinaryExpressionPrinter {
      * operator appear visually separated from the operand. This check lets the binary renderer first break the call
      * arguments, then attach the operator after that broken operand.
      *
-     * <p>The break fires only for a multi-argument call that overflows the available width. It deliberately does not key
-     * off {@code sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall)} (see
-     * {@link #methodCallOperandShouldBreak} for the #119 rationale): keying a single-argument call's break on whether the
-     * author had already wrapped its one argument made the operand shape depend on the input's incidental line shape
-     * rather than a fixed property of the AST. A single-argument overflowing call now falls through to the deterministic
-     * operand renderer instead.
+     * <p>The break fires only for a multi-argument call that overflows the available width; the decision is computed from
+     * that width, a fixed property of the AST, rather than from the input's incidental line shape (see
+     * {@link #methodCallOperandShouldBreak} for the #119 rationale). A single-argument overflowing call falls through to
+     * the deterministic operand renderer.
      */
     private boolean shouldBreakEndPositionMethodCallOperand(BinaryExpressionLine binaryLine, Expression operand) {
         return binaryLine.hasTrailingOperator()

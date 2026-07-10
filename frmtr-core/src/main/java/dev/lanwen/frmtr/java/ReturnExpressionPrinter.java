@@ -89,8 +89,6 @@ final class ReturnExpressionPrinter {
 
     private final Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment;
 
-    private final Predicate<MethodCallExpr> sourceMultilineExpressionLambdaBody;
-
     private final Function<ObjectCreationExpr, Doc> brokenObjectCreation;
 
     private final BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix;
@@ -139,7 +137,6 @@ final class ReturnExpressionPrinter {
             Function<MethodCallExpr, String> methodCallPrefix,
             Predicate<MethodCallExpr> methodCallChainIsSourceMultiline,
             Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment,
-            Predicate<MethodCallExpr> sourceMultilineExpressionLambdaBody,
             Function<ObjectCreationExpr, Doc> brokenObjectCreation,
             BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
             BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression,
@@ -173,7 +170,6 @@ final class ReturnExpressionPrinter {
         this.methodCallPrefix = methodCallPrefix;
         this.methodCallChainIsSourceMultiline = methodCallChainIsSourceMultiline;
         this.methodCallChainHasFinalTrailingLineComment = methodCallChainHasFinalTrailingLineComment;
-        this.sourceMultilineExpressionLambdaBody = sourceMultilineExpressionLambdaBody;
         this.brokenObjectCreation = brokenObjectCreation;
         this.objectCreationWithSuffix = objectCreationWithSuffix;
         this.conditionalExpression = conditionalExpression;
@@ -236,8 +232,8 @@ final class ReturnExpressionPrinter {
         // Source-multiline entries whose broken shape is a source-preserved layout (a source-multiline object creation,
         // or an enclosed binary the direct-binary/parenthesized layout owns) keep the imperative oracle for that
         // broken-shape selection; they pre-empt the renderer-measured gate below. The object-creation-rooted method-call
-        // chain used to pre-empt here too (LDM-3), but now routes through the renderer: it falls through to the
-        // flat-versus-broken conditional group, whose broken arm is the chain's ranked Doc.bestFitting (LDM-3g, #210).
+        // chain routes through the renderer instead: it falls through to the flat-versus-broken conditional group, whose
+        // broken arm is the chain's ranked Doc.bestFitting (LDM-3g, #210).
         Optional<Doc> preempted = preemptedReturnValue(expression, layout);
         if (preempted.isPresent()) {
             return Doc.concat(Doc.text("return "), preempted.orElseThrow(), Doc.text(";"));
@@ -253,22 +249,20 @@ final class ReturnExpressionPrinter {
         // SPIKE (fan-root-true-column, #190). A binary return whose operand is a fan-threshold chain
         // ({@code return promotesFirstCall(analysis.root()) || analysis.calls().stream()….anyMatch(ref);}) commits a
         // source-neutral operand-per-line shape rather than falling to the flat-versus-broken conditionalGroup below, whose
-        // flat arm carries the fanned operand's hard break and can never be chosen — a flat-source pass would fan the operand
-        // while a source-multiline pass takes {@code directBinaryReturn}'s {@code wasMultiline}-gated continuation, the same
-        // dual decider the initializer G bucket ({@link VariableInitializerLayout#binaryFansChainOperand}) removes. Both the
-        // operand-per-line skeleton and the operand fan below it are pure AST functions (link-count rule, no {@code wasMultiline}
-        // gate), so committing this shape unconditionally here reaches it on BOTH passes and is a fixpoint. Comment-bearing
-        // binaries are handled above (they never reach here); non-fan binaries fall through to the conditionalGroup byte-for-byte.
+        // flat arm carries the fanned operand's hard break and can never be chosen. Both the operand-per-line skeleton and
+        // the operand fan below it are pure AST functions (link-count rule), so committing this shape unconditionally here
+        // reaches it on BOTH passes and is a fixpoint. Comment-bearing binaries are handled above (they never reach here);
+        // non-fan binaries fall through to the conditionalGroup byte-for-byte.
         if (expression instanceof BinaryExpr operandFanBinary && binaryFansChainOperand.test(operandFanBinary)) {
             // Binary / logical / string-concat operand break (gjf/prettier-java, comment #1). Render one operand per line —
             // each operator-led operand on its own line, its chain fanning below when the operand overflows — through the
             // source-neutral {@code binaryLines(…, forceBreak=true)}. This is the same operand-per-line convention the
             // {@code if}/{@code while} control-condition path already applies to a logical whose LAST operand is a fanning
-            // chain ({@code lines.size() < 3 || lines.stream().skip(1)….anyMatch(...)}); the return path now matches it, so
+            // chain ({@code lines.size() < 3 || lines.stream().skip(1)….anyMatch(...)}); the return path matches it, so
             // {@code || <chainRoot>} leads the second operand on its own line instead of gluing onto the first operand's tail.
             // Both the operand-per-line skeleton and the per-operand fan are pure AST functions (the fan is the
-            // width-independent link-count rule and the skeleton has no {@code wasMultiline} gate), so committing this shape
-            // unconditionally — for a fanning operand in ANY position, last included — is a fixpoint reached on both passes.
+            // width-independent link-count rule), so committing this shape unconditionally — for a fanning operand in ANY
+            // position, last included — is a fixpoint reached on both passes.
             return Doc.concat(
                 Doc.text("return "),
                 Doc.indent(binaryLines.apply(expression, true)),
@@ -412,9 +406,9 @@ final class ReturnExpressionPrinter {
      * source-multiline object creation. Each internally decides flat-versus-broken and, when broken, which broken shape to
      * use; the renderer-measured gate cannot express that until those printers expose their own ranked candidates
      * (layout-decision-model milestone LDM-4, context-as-data → enum), so they pre-empt it. The object-creation-rooted
-     * method-call chain that also used to pre-empt here has moved off this path (LDM-3g, #210): it now falls through to the
-     * flat-versus-broken conditional group in {@link #returnStatement}, whose broken arm is the chain's ranked
-     * {@link Doc#bestFitting(java.util.List)}. Everything else falls through to that conditional group too.
+     * method-call chain falls through to the flat-versus-broken conditional group in {@link #returnStatement}, whose
+     * broken arm is the chain's ranked {@link Doc#bestFitting(java.util.List)} (LDM-3g, #210). Everything else falls
+     * through to that conditional group too.
      */
     private Optional<Doc> preemptedReturnValue(Expression expression, LayoutContext layout) {
         Optional<BinaryExpr> sourceMultilineEnclosedBinary = sourceMultilineEnclosedBinary(expression);
@@ -452,9 +446,7 @@ final class ReturnExpressionPrinter {
     private Doc brokenReturnValue(Expression expression, LayoutContext layout) {
         if (
             expression instanceof MethodCallExpr methodCall
-            && (methodCallChainIsSourceMultiline.test(methodCall)
-                || sourceSpansMultipleLines(methodCall)
-                || sourceMultilineExpressionLambdaBody.test(methodCall))
+            && methodCallChainIsSourceMultiline.test(methodCall)
         ) {
             Optional<Doc> forcedChain = returnWithForcedMethodCallChain(methodCall, layout);
             if (forcedChain.isPresent()) {
@@ -465,10 +457,16 @@ final class ReturnExpressionPrinter {
     }
 
     private Optional<BinaryExpr> sourceMultilineEnclosedBinary(Expression expression) {
+        // A return value that is a redundantly-parenthesized binary ({@code return (a && b);}) is owned by the
+        // direct-binary / parenthesized-break layout regardless of the author's line shape: that layout strips the
+        // redundant parens when the binary fits ({@code return a && b;}) and preserves any interior line comments through
+        // {@code binaryLinesWithComments} when it must break. The width-driven conditional group in
+        // {@link #returnStatement} cannot express either — its flat arm renders the {@code EnclosedExpr} verbatim (parens
+        // kept) and would drop between-operand comments — so this enclosed-binary shape stays on the imperative oracle,
+        // which itself decides flat-versus-broken by width internally ({@code directBinaryReturn}).
         if (
             expression instanceof EnclosedExpr enclosedExpr
             && enclosedExpr.getInner() instanceof BinaryExpr binaryExpr
-            && sourceShapePolicy.wasMultiline(expression)
         ) {
             return Optional.of(binaryExpr);
         }
@@ -478,10 +476,6 @@ final class ReturnExpressionPrinter {
     private boolean sourceMultilineObjectCreation(Expression expression) {
         return expression instanceof ObjectCreationExpr objectCreationExpr
             && objectCreationLayoutPolicy.shouldPreserveSourceMultilineArguments(objectCreationExpr);
-    }
-
-    private boolean sourceSpansMultipleLines(Expression expression) {
-        return sourceShapePolicy.wasMultiline(expression);
     }
 
     private boolean returnLineFits(Expression expression, LayoutContext layout) {
@@ -523,7 +517,7 @@ final class ReturnExpressionPrinter {
     }
 
     /**
-     * Tries the width-triggered return branches in the same order as the old inline printer.
+     * Tries the width-triggered return branches in precedence order.
      *
      * <p>Method calls and conditionals are tried first because their helpers already know how to force a useful break for
      * the whole expression. Parenthesized-looking values are handled next so the long part moves inside parentheses
@@ -702,7 +696,13 @@ final class ReturnExpressionPrinter {
             if (directBinary.isPresent()) {
                 return directBinary;
             }
-            return Optional.of(parenthesizedBreak.apply(binaryExpr, false));
+            // A bare (unparenthesized) binary return value that {@code directBinaryReturn} cannot lay out
+            // flat/first-line-fit breaks operand-per-line through {@code binaryLines} WITHOUT adding parentheses — the
+            // author wrote none and the value is not enclosed. {@code directBinaryReturn} returns empty here, so fall back
+            // to the same operand-per-line skeleton the direct-binary branch itself emits
+            // ({@code Doc.indent(binaryLines(expr, true))}) rather than wrapping the value in a spurious
+            // {@code return (}⏎{@code …}⏎{@code )}.
+            return Optional.of(Doc.indent(binaryLines.apply(binaryExpr, true)));
         }
         return Optional.empty();
     }

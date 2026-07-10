@@ -118,6 +118,7 @@ final class ArrayExpressionPrinter {
         );
         return expression.getInitializer()
                 .map(initializer -> compactArrayCreation(expression, initializer)
+                            .filter(flat -> !arrayInitializerFansOnePerLine(initializer))
                             .filter(flat -> currentIndentedWidth.applyAsInt(flat) <= options.lineWidth())
                             .map(Doc::text)
                             .orElseGet(() -> Doc.concat(
@@ -134,6 +135,23 @@ final class ArrayExpressionPrinter {
 
     private boolean arrayCreationInitializerRequiresStructuredBreak(ArrayInitializerExpr initializer) {
         return initializer.getValues().stream().anyMatch(value -> !value.isLiteralExpr());
+    }
+
+    /**
+     * Reports whether an array initializer fans one element per line purely because of how many elements it holds.
+     *
+     * <p>This is a <em>structural</em> rule, not a width-driven one: an initializer with three or more elements always
+     * breaks one-element-per-line even when the compact {@code {a, b, c}} form would fit the line. A one- or two-element
+     * list stays compact (and still breaks by width when it overflows). The convention mirrors the one-per-line shape the
+     * formatter already forces for constructor-root and nested-array-row lists: past two elements the vertical shape reads
+     * better and stays stable under edits — adding or removing an element touches exactly one line instead of reflowing
+     * the whole row. Both the bare {@code = {...}} initializer gate ({@link #arrayInitializer(ArrayInitializerExpr,
+     * boolean)}) and the {@code new T[] {...}} creation compact gate ({@link #arrayCreation(ArrayCreationExpr)}) consult
+     * this, so an eligible initializer fans regardless of which syntax introduced it. Annotation member arrays are not
+     * routed through this printer and keep their own width-driven shape.
+     */
+    private boolean arrayInitializerFansOnePerLine(ArrayInitializerExpr initializer) {
+        return initializer.getValues().size() >= 3;
     }
 
     /**
@@ -166,7 +184,6 @@ final class ArrayExpressionPrinter {
     private Optional<String> compactArrayInitializer(ArrayInitializerExpr initializer) {
         if (
             !initializer.getAllContainedComments().isEmpty()
-            || sourceSpansMultipleLines(initializer)
             || initializer.getValues().stream().anyMatch(value -> !compactArrayInitializerValue(value))
         ) {
             return Optional.empty();
@@ -208,15 +225,8 @@ final class ArrayExpressionPrinter {
         return (
             value.isLiteralExpr()
             || (value.getAllContainedComments().isEmpty()
-                && !sourceSpansMultipleLines(value)
                 && !compact.apply(value).contains("\n"))
         );
-    }
-
-    private boolean sourceSpansMultipleLines(Node node) {
-        return node.getRange()
-                .map(range -> range.begin.line < range.end.line)
-                .orElse(false);
     }
 
     /**
@@ -296,6 +306,7 @@ final class ArrayExpressionPrinter {
         Optional<String> compact = compactArrayInitializer(expression);
         if (
             !forceBreak
+            && !arrayInitializerFansOnePerLine(expression)
             && compact.isPresent()
             && currentIndentedWidth.applyAsInt(compact.orElseThrow()) <= options.lineWidth()
         ) {

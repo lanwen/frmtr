@@ -19,6 +19,13 @@ import java.util.List;
  * "preserve the author's line breaks" read: because the formatter overwrites the very line breaks it reads, the output
  * depends on incidental input shape and is not a one-pass fixpoint, so each is slated to be replaced by a deterministic
  * structural {@link BreakRule} and then deleted. The retirement-target count is the roadmap's progress metric.
+ *
+ * <p>That count is at its <strong>terminal state of zero</strong>: no catalogued retirement-target read remains on
+ * {@link SourceShapePolicy}, and the method-call / chain / object-creation / lambda hub reflows by width. Only the
+ * four {@code FIXPOINT_SAFE} reads below remain. The
+ * {@link Stability#RETIREMENT_TARGET} case is kept for the ratchet: any future "preserve the author's line breaks" read
+ * added here must be declared {@code RETIREMENT_TARGET}, which trips {@code SourceShapeExceptionGovernanceTest} unless
+ * the pinned count is deliberately raised.
  */
 enum SourceShapeException {
 
@@ -48,35 +55,6 @@ enum SourceShapeException {
         Stability.FIXPOINT_SAFE,
         "Gates compact reconstruction on comment presence — a correctness gate, not an aesthetic; comments are preserved verbatim.",
         List.of("hasContainedComments")
-    ),
-
-    /** "The author broke this node across lines, so keep it broken" — the base preserve-the-source-shape read. */
-    WAS_MULTILINE(
-        Stability.RETIREMENT_TARGET,
-        "\"The author broke this node across lines, so keep it broken.\" The formatter overwrites the very line breaks it "
-            + "reads, so the output depends on incidental input shape and is not a one-pass fixpoint; replace with a "
-            + "deterministic structural BreakRule.",
-        List.of(
-            "wasMultiline",
-            "methodCallArgumentsSpanMultipleLines",
-            "expressionLambdaStartsOnSelectorLine",
-            "objectCreationArgumentsSpanMultipleLines"
-        )
-    ),
-
-    /** Whether two nodes began on the same source line. */
-    STARTS_ON_SAME_LINE(
-        Stability.RETIREMENT_TARGET,
-        "Keys on whether two nodes shared a source line — a wasMultiline-flavored read the formatter overwrites.",
-        List.of("startsOnSameLine")
-    ),
-
-    /** Whether a chain selector started a later source line than the previous segment ended. */
-    CHAIN_SELECTOR_BROKE(
-        Stability.RETIREMENT_TARGET,
-        "Keys on whether a chain selector started a new source line; superseded by the canonical-fan BreakRule and "
-            + "slated for deletion once its remaining callers drop it.",
-        List.of("selectorBrokeAfter")
     );
 
     /** How stable across formatting passes a read is — the property that decides whether it stays or is retired. */

@@ -119,7 +119,7 @@ final class SourceMultilineLambdaCallLayout {
             if (
                 body.getArguments().isEmpty()
                 || body.getArguments().stream().anyMatch(argument -> argument instanceof LambdaExpr)
-                || (!lambdaBodyStartsAfterHeader(lambda) && !lambdaBodyArgumentsCanBreakAfterHeader(body))
+                || !lambdaBodyStartsAfterHeader(lambda)
             ) {
                 return Optional.empty();
             }
@@ -158,21 +158,7 @@ final class SourceMultilineLambdaCallLayout {
             return false;
         }
         Optional<MethodCallExpr> body = lambdaBodyMethodCall(lambda);
-        return body.isPresent()
-            && (lambdaBodyStartsAfterHeader(lambda)
-                || sourceShapePolicy.wasMultiline(call)
-                || body.filter(sourceShapePolicy::methodCallArgumentsSpanMultipleLines).isPresent());
-    }
-
-    static boolean hasMultilineExpressionLambdaMethodCallBody(MethodCallExpr expression, SourceShapePolicy sourceShapePolicy) {
-        return expression.findAll(LambdaExpr.class)
-                .stream()
-                .flatMap(lambda -> lambda.getExpressionBody().stream())
-                .filter(MethodCallExpr.class::isInstance)
-                .map(MethodCallExpr.class::cast)
-                .anyMatch(methodCall -> sourceShapePolicy.wasMultiline(methodCall)
-                        || sourceShapePolicy.methodCallArgumentsSpanMultipleLines(methodCall)
-                );
+        return body.isPresent() && lambdaBodyStartsAfterHeader(lambda);
     }
 
     private String chainSegmentPrefix(MethodCallExpr expression) {
@@ -194,12 +180,6 @@ final class SourceMultilineLambdaCallLayout {
                         )
                 ))
                 .orElse(false);
-    }
-
-    private boolean lambdaBodyArgumentsCanBreakAfterHeader(MethodCallExpr body) {
-        return sourceShapePolicy.methodCallArgumentsSpanMultipleLines(body)
-            && body.getArguments().stream().noneMatch(argument -> argument instanceof LambdaExpr)
-            && body.getArguments().stream().noneMatch(TextBlockLiteralExpr.class::isInstance);
     }
 
     @FunctionalInterface

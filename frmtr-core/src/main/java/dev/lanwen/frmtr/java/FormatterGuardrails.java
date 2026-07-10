@@ -29,9 +29,8 @@ final class FormatterGuardrails {
 
     /**
      * Toggles the stricter "each comment is claimed at most once" invariant in {@link #claimComment}. Separate from
-     * {@link #ENABLED_PROPERTY} because it gates a different failure mode (a duplicate claim, not a dropped comment) and
-     * historically did not hold; as of roadmap <strong>B2</strong> it does, and it is now enabled as a CI gate (see
-     * {@code frmtr-core/build.gradle.kts}).
+     * {@link #ENABLED_PROPERTY} because it gates a different failure mode (a duplicate claim, not a dropped comment). It
+     * is enabled as a CI gate (see {@code frmtr-core/build.gradle.kts}).
      *
      * <p>{@code CommentTracker} couples claim and render — every render path is
      * {@code commentPlacement.X(node).filter(this::claim)…} — so first-claim-wins both de-dupes and renders. Comment

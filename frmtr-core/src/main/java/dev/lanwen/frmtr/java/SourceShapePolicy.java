@@ -6,9 +6,6 @@ import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
-import com.github.javaparser.ast.expr.LambdaExpr;
-import com.github.javaparser.ast.expr.MethodCallExpr;
-import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.stmt.TryStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import java.util.Optional;
@@ -33,10 +30,14 @@ import java.util.function.ToIntFunction;
  * ({@link RawPreservedSource}), or parse-recovery boundary rules. It calls them; it does not re-own them.
  *
  * <p>This is the first concrete slice of the deferred formatter-owned syntax view: a narrow metadata owner for
- * layout-from-source decisions that a larger view could later absorb. It is the single home for source-shape reads:
- * the canonical {@link #wasMultiline(Node)} definition and the syntax-specific predicates that build on it (multiline
- * argument lists, same-line starts, throws layout, try-with-resources shape, and so on) all live here, so a printer
- * asks one source-shape object rather than reaching for the same "was this multiline?" answer two different ways.
+ * layout-from-source decisions that a larger view could later absorb. The method-call / chain / object-creation /
+ * lambda hub reflows by width or by a structural {@link BreakRule} rather than preserving the author's incidental
+ * line breaks, so no {@code RETIREMENT_TARGET} "was this multiline?"-family reads remain (see
+ * {@link SourceShapeException}). What remains here are the {@code FIXPOINT_SAFE} reads
+ * the formatter's own output reproduces or normalizes: the width-fit gate ({@link #fitsOnOneLine}), deliberate
+ * blank-line preservation ({@link #hadBlankLineBetween}), the comment-presence gate ({@link #hasContainedComments}),
+ * and the try-with-resources section shape ({@link #tryResources}). Each round-trips to a fixpoint, so a printer can ask
+ * this one object for the layout-from-source answers that survive a reprint.
  */
 final class SourceShapePolicy {
 
@@ -62,24 +63,6 @@ final class SourceShapePolicy {
         this.compactSource = compactSource;
         this.commentPolicy = commentPolicy;
         this.options = options;
-    }
-
-    /**
-     * Reports whether the node's own source spanned more than one line, the single canonical "was this multiline?"
-     * definition for the whole formatter.
-     *
-     * <p>The decision is range-first with a raw-text fallback: when JavaParser exposes a position range, a node is
-     * multiline iff its begin and end lines differ; when the range is absent (for example inside unparsed or recovered
-     * regions), it falls back to scanning the node's raw source for a newline after its own attached comment is removed
-     * so the comment's own line breaks do not count. Every printer that needs to know whether the author already broke a
-     * call, lambda, initializer, or chain across lines asks this one method, so the formatter has exactly one fixed point
-     * to reason about for idempotence rather than several range-vs-raw definitions that could disagree on the same node.
-     */
-    boolean wasMultiline(Node node) {
-        SourceReadTripwire.record(SourceReadTripwire.Read.WAS_MULTILINE);
-        return node.getRange()
-                .map(range -> range.begin.line < range.end.line)
-                .orElseGet(() -> rawSource.rawWithoutOwnComment(node).contains("\n"));
     }
 
     /**
@@ -148,50 +131,6 @@ final class SourceShapePolicy {
     }
 
     /**
-     * Reports whether a method-call chain segment's selector started on a later source line than the previous segment
-     * ended, the single canonical definition of an author-broken chain split.
-     *
-     * <p>A fluent chain such as {@code a.b().c()} is "source-multiline" when the author put a selector on its own line;
-     * the planner detects that one segment at a time by asking whether this call's name token begins after the previous
-     * segment's last line. The selector is the call's name rather than the whole call, so a scope that itself spans
-     * lines does not count as the author breaking before this selector. The comparison is range-only: when either the
-     * previous segment or the selector name lacks a source range the answer is {@code false}, because without positions
-     * the formatter cannot claim the author split the chain here. This is the {@code selectorOwner} typed as
-     * {@link MethodCallExpr} (not the proposal sketch's bare {@code Node}) precisely so the selector-name range stays
-     * available and the arithmetic is lifted unchanged from the planner.
-     */
-    boolean selectorBrokeAfter(Node previous, MethodCallExpr selectorOwner) {
-        SourceReadTripwire.record(SourceReadTripwire.Read.SELECTOR_BROKE_AFTER);
-        return previous.getRange()
-                .flatMap(previousRange -> selectorOwner.getName().getRange().map(
-                        nameRange -> nameRange.begin.line > previousRange.end.line
-                ))
-                .orElse(false);
-    }
-
-    /**
-     * Reports whether two nodes begin on the same source line.
-     */
-    boolean startsOnSameLine(Node left, Node right) {
-        SourceReadTripwire.record(SourceReadTripwire.Read.STARTS_ON_SAME_LINE);
-        return left.getRange()
-                .flatMap(leftRange -> right.getRange().map(rightRange -> leftRange.begin.line == rightRange.begin.line))
-                .orElse(false);
-    }
-
-    /**
-     * Reports whether a method call's argument list, excluding the receiver and selector, was already multiline.
-     */
-    boolean methodCallArgumentsSpanMultipleLines(MethodCallExpr expression) {
-        SourceReadTripwire.record(SourceReadTripwire.Read.METHOD_CALL_ARGUMENTS_SPAN_MULTIPLE_LINES);
-        return argumentsSpanMultipleLines(
-            expression.getName(),
-            expression.getArguments(),
-            expression.getRange()
-        );
-    }
-
-    /**
      * Reports whether a control-condition expression is a logical binary expression after source parentheses are peeled.
      */
     boolean logicalConditionExpression(Expression condition) {
@@ -202,38 +141,6 @@ final class SourceShapePolicy {
         return expression instanceof BinaryExpr binaryExpr
             && (binaryExpr.getOperator() == BinaryExpr.Operator.AND
                 || binaryExpr.getOperator() == BinaryExpr.Operator.OR);
-    }
-
-    /**
-     * Reports whether an expression-lambda argument starts on the same source line as the method-call selector.
-     */
-    boolean expressionLambdaStartsOnSelectorLine(MethodCallExpr expression) {
-        SourceReadTripwire.record(SourceReadTripwire.Read.EXPRESSION_LAMBDA_STARTS_ON_SELECTOR_LINE);
-        Optional<Integer> selectorLine = expression.getName().getRange().map(range -> range.begin.line);
-        if (selectorLine.isEmpty()) {
-            return false;
-        }
-        return expression.getArguments()
-                .stream()
-                .filter(LambdaExpr.class::isInstance)
-                .map(LambdaExpr.class::cast)
-                .filter(lambda -> lambda.getExpressionBody().isPresent())
-                .flatMap(lambda -> lambda.getRange().stream())
-                .anyMatch(range -> range.begin.line == selectorLine.orElseThrow());
-    }
-
-    /**
-     * Reports whether a constructor call's argument list was already multiline.
-     */
-    boolean objectCreationArgumentsSpanMultipleLines(ObjectCreationExpr expression) {
-        SourceReadTripwire.record(SourceReadTripwire.Read.OBJECT_CREATION_ARGUMENTS_SPAN_MULTIPLE_LINES);
-        return argumentsSpanMultipleLines(
-            expression.getType(),
-            expression.getArguments(),
-            expression.getAnonymousClassBody().isPresent()
-                ? Optional.empty()
-                : expression.getRange()
-        );
     }
 
     /**

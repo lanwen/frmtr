@@ -5,8 +5,7 @@ class Demo {
             AbstractChainFactory
                     .start(AbstractEvent.class)
                     .next(AbstractEvent.Step.class, item -> {
-                        item
-                                .target()
+                        item.target()
                                 .send(
                                     Result.failure(
                                         problem

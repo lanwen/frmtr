@@ -129,7 +129,7 @@ final class CastExpressionPrinter {
      *
      * <p>The enclosed-expression caller uses this as a small readability fork: up to two nested cast scopes can stay
      * inline, while deeper cast chains break inside the surrounding parentheses. Only the method-call scope shape is
-     * followed because that is the legacy pattern that produced hard-to-scan nested cast expressions.
+     * followed because that is the pattern that produces hard-to-scan nested cast expressions.
      */
     int nestedCastDepth(Expression expression) {
         if (!(expression instanceof CastExpr castExpr)) {

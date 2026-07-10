@@ -166,6 +166,8 @@ final class StatementPrinter {
 
     private final ToIntFunction<String> currentIndentedWidth;
 
+    private final ArgumentHeaviness argumentHeaviness = new ArgumentHeaviness();
+
     StatementPrinter(
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
@@ -365,9 +367,7 @@ final class StatementPrinter {
     private Doc returnStatement(ReturnStmt statement, LayoutWidth.LineBudget lineBudget) {
         // Build the positional context for the returned value: it sits in RETURN_VALUE position and owns its own first
         // column after the "return " keyword. widthBudget carries the statement's line budget so the return width helpers
-        // read it back from the context instead of the loose parameter that used to be threaded here (LDM-2 / #198). This
-        // is the first LayoutContext read in the codebase; the value it carries reproduces the prior lineBudget exactly,
-        // so the returned Doc is byte-identical.
+        // read it back from the context (LDM-2 / #198).
         LayoutContext layout = new LayoutContext(EnclosingConstruct.RETURN_VALUE, "", lineBudget, "", false);
         return statement.getExpression()
                 .map(expression -> returnStatementRenderer.apply(expression, layout))
@@ -664,9 +664,14 @@ final class StatementPrinter {
         if (statement.getArguments().isEmpty()) {
             return Doc.text(prefix + "()");
         }
-        Optional<Doc> huggableLambda = huggableBlockLambdaArguments.render(prefix, statement.getArguments());
-        if (huggableLambda.isPresent()) {
-            return huggableLambda.orElseThrow();
+        // super(...)/this(...) are constructor invocations, so they opt into the wide-argument-count rule the same way
+        // object creation does (PR #279 comment #1). A heavy list must break one-per-line, so skip the lambda hug.
+        boolean heavy = argumentHeaviness.isHeavy(statement.getArguments(), true);
+        if (!heavy) {
+            Optional<Doc> huggableLambda = huggableBlockLambdaArguments.render(prefix, statement.getArguments());
+            if (huggableLambda.isPresent()) {
+                return huggableLambda.orElseThrow();
+            }
         }
         // super(...)/this(...) reach the plain argument list directly, so they otherwise miss the comment-aware
         // breaking that method-call and object-creation printers get from CommentedExpressionListPrinter. Without it an
@@ -681,6 +686,7 @@ final class StatementPrinter {
         }
         return Doc.group(
             Doc.concat(
+                heavy ? Doc.BREAK_PARENT : Doc.EMPTY,
                 Doc.text(prefix + "("),
                 Doc.indent(
                     Doc.concat(
@@ -1045,8 +1051,7 @@ final class StatementPrinter {
     private Doc tryResource(Expression resource) {
         Doc leading = Doc.concat(comments.adjacentLeadingLineComments(resource), comments.leading(resource));
         // A try-resource variable declaration renders through the width-driven variable-declaration renderer so its
-        // initializer breaks by rendered width; a non-declaration resource stays compact. No longer keyed on whether the
-        // author wrote the resource across source lines (reprint-by-default canonicalization).
+        // initializer breaks by rendered width; a non-declaration resource stays compact.
         Doc body = resource instanceof VariableDeclarationExpr declaration
             ? variableDeclarationRenderer.format(declaration, LayoutContext.root())
             : Doc.text(compact.apply(resource));

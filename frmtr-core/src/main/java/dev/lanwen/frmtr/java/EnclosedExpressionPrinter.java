@@ -81,7 +81,7 @@ final class EnclosedExpressionPrinter {
     /**
      * Chooses the shape of a normal parenthesized expression.
      *
-     * <p>The forks mirror the old inline printer order. Cast chains stay inline up to depth two, but deeper chains break
+     * <p>Cast chains stay inline up to depth two, but deeper chains break
      * inside the parentheses because repeated cast-plus-scope nesting becomes hard to scan. Parenthesized conditionals
      * use the assignment-style conditional break only when the compact parenthesized text overflows continuation width.
      * A lambda used as a whole expression statement needs the lambda-specific parenthesized break so the body does not

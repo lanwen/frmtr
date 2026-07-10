@@ -9,64 +9,17 @@ import com.github.javaparser.Providers;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import dev.lanwen.frmtr.FormatterOptions;
 import org.junit.jupiter.api.Test;
 
 /**
- * Exercises {@link SourceShapePolicy}'s source-shape decisions directly, so the single canonical definitions of
- * "was multiline" and "had a blank line between" are observable without round-tripping a whole golden fixture.
+ * Exercises {@link SourceShapePolicy}'s surviving {@code FIXPOINT_SAFE} source-shape decisions directly (blank-line
+ * preservation, the width-fit gate, and the comment-presence gate), so their single canonical definitions are observable
+ * without round-tripping a whole golden fixture. The six {@code RETIREMENT_TARGET} reads
+ * ({@code wasMultiline}/{@code selectorBrokeAfter}/…) were deleted in the D3 flip, so this test no longer exercises them.
  */
 final class SourceShapePolicyTest {
-
-    @Test
-    void wasMultilineUsesRangeWhenBeginAndEndLinesDiffer() {
-        String source = "class Demo {\n    int value = call(\n        first,\n        second);\n}\n";
-        MethodCallExpr call = call(source);
-
-        assertThat(call.getRange()).isPresent();
-        assertThat(policy(source).wasMultiline(call)).isTrue();
-    }
-
-    @Test
-    void wasMultilineUsesRangeWhenNodeStaysOnOneLine() {
-        String source = "class Demo {\n    int value = call(first, second);\n}\n";
-        MethodCallExpr call = call(source);
-
-        assertThat(call.getRange()).isPresent();
-        assertThat(policy(source).wasMultiline(call)).isFalse();
-    }
-
-    @Test
-    void wasMultilineFallsBackToRawNewlineWhenRangeIsMissing() {
-        String multilineSource = "class Demo {\n    int value = call(\n        first,\n        second);\n}\n";
-        MethodCallExpr multilineCall = call(multilineSource);
-        multilineCall.setRange(null);
-
-        String flatSource = "class Demo {\n    int value = call(first, second);\n}\n";
-        MethodCallExpr flatCall = call(flatSource);
-        flatCall.setRange(null);
-
-        // With no range the policy must consult the raw token text, which still carries the author's line breaks.
-        assertThat(multilineCall.getRange()).isEmpty();
-        assertThat(flatCall.getRange()).isEmpty();
-        assertThat(policy(multilineSource).wasMultiline(multilineCall)).isTrue();
-        assertThat(policy(flatSource).wasMultiline(flatCall)).isFalse();
-    }
-
-    @Test
-    void wasMultilineRawFallbackIgnoresTheNodesOwnLeadingComment() {
-        // The node's own comment spans several lines, but the code token itself stays on one line; the raw fallback must
-        // strip that own comment before scanning for a newline so a one-line statement is not misreported as multiline.
-        String source = "class Demo {\n    int value =\n        /*\n         * note\n         */ call(first);\n}\n";
-        Expression initializer = initializer(source);
-        initializer.setRange(null);
-
-        assertThat(initializer.getRange()).isEmpty();
-        assertThat(initializer.getComment()).isPresent();
-        assertThat(policy(source).wasMultiline(initializer)).isFalse();
-    }
 
     @Test
     void hadBlankLineBetweenIsTrueWhenABlankLineSeparatesTheNodes() {
@@ -134,38 +87,6 @@ final class SourceShapePolicyTest {
     }
 
     @Test
-    void selectorBrokeAfterIsFalseWhenTheSelectorStaysOnThePreviousSegmentLine() {
-        // a.first().second() on one line: the "second" selector begins on the same line the "first()" segment ends.
-        String source = "class Demo {\n    Object value = a.first().second();\n}\n";
-        MethodCallExpr outerCall = outermostChainCall(source);
-        MethodCallExpr previousSegment = (MethodCallExpr) outerCall.getScope().orElseThrow();
-
-        assertThat(policy(source).selectorBrokeAfter(previousSegment, outerCall)).isFalse();
-    }
-
-    @Test
-    void selectorBrokeAfterIsTrueWhenTheSelectorBeginsOnALaterLine() {
-        // The "second" selector is broken onto its own line after the "first()" segment, an author-broken chain split.
-        String source = "class Demo {\n    Object value = a.first()\n        .second();\n}\n";
-        MethodCallExpr outerCall = outermostChainCall(source);
-        MethodCallExpr previousSegment = (MethodCallExpr) outerCall.getScope().orElseThrow();
-
-        assertThat(policy(source).selectorBrokeAfter(previousSegment, outerCall)).isTrue();
-    }
-
-    @Test
-    void selectorBrokeAfterMeasuresTheSelectorNameNotTheWholeCallRange() {
-        // The previous segment spans two source lines, but the "second" selector still starts on the line that segment
-        // ends, so the chain was not broken before this selector: the gate measures the selector name, not the call span.
-        String source = "class Demo {\n    Object value = a.first(\n        arg).second();\n}\n";
-        MethodCallExpr outerCall = outermostChainCall(source);
-        MethodCallExpr previousSegment = (MethodCallExpr) outerCall.getScope().orElseThrow();
-
-        assertThat(policy(source).wasMultiline(previousSegment)).isTrue();
-        assertThat(policy(source).selectorBrokeAfter(previousSegment, outerCall)).isFalse();
-    }
-
-    @Test
     void hasContainedCommentsIsTrueForANodeThatEnclosesAComment() {
         // The method body encloses a block comment, so the method declaration carries a contained comment and a
         // compact/source-shaped layout of it would risk dropping that comment content.
@@ -202,24 +123,6 @@ final class SourceShapePolicyTest {
 
     private static MethodCallExpr call(String source) {
         return parse(source).findFirst(MethodCallExpr.class).orElseThrow();
-    }
-
-    /**
-     * Returns the outermost method call of a fluent chain. JavaParser nests {@code a.first().second()} so the trailing
-     * {@code second()} call is the expression root and the first node visited in pre-order, with {@code first()} as its
-     * scope; tests use it to feed a chain segment and its previous segment to {@code selectorBrokeAfter}.
-     */
-    private static MethodCallExpr outermostChainCall(String source) {
-        return parse(source).findFirst(MethodCallExpr.class).orElseThrow();
-    }
-
-    private static Expression initializer(String source) {
-        return parse(source)
-                .findFirst(FieldDeclaration.class)
-                .orElseThrow()
-                .getVariable(0)
-                .getInitializer()
-                .orElseThrow();
     }
 
     private static SourceShapePolicy policy(String source) {

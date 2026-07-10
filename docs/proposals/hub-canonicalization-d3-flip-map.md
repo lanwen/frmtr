@@ -285,3 +285,120 @@ control, stays fanned), plus new `two-selector-width-driven-fan`, `stream-collec
 constructor width-driven group → retire Read 4), **Read 2** (`methodCallArgumentsSpanMultipleLines`, incl. the central
 `chainHasSourceMultilineArguments`→`methodCallChainIsSourceMultiline` router), and **Read 3/5/6** (lambda hug + nested
 + final-trailing-comment-tail). D2b/c + these + the threaded columns compose into D3.
+
+## The uncatalogued INLINE source-read tier (post-D3 follow-up, 2026-07-09)
+
+The six reads above were the *catalogued* `SourceShapePolicy` retirement targets that governance
+(`SourceShapeExceptionGovernanceTest`) enumerates. A second, **inline** tier of raw
+`range.begin.line < range.end.line` "was this node multiline in source?" reads lived directly in the
+per-printer helpers and never passed through `SourceShapePolicy`, so the closed-set ratchet never saw
+them. They are the same `RETIREMENT_TARGET` species — "preserve the author's line breaks" — and are
+retired here toward full source-independence. Playbook per read: PROBE the read to `false`, measure the
+`FrmtrTest` + `scripts/corpus-check.sh` blast radius, then delete (redundant, the surrounding path
+already width-checks — cf. #265) or add a width-driven arm; if it can't retire without regressing
+idempotence/over-width, REVERT and defer (do not force). Gate: kafka `--subset 800` (and camel where the
+subset under-exercises the path) vs `2d5e7f23` — idempotence ⊆ base, over-width ⊆ base, verify 0, comment
+parity.
+
+**RETIRED (5 inline reads):**
+- `ArrayExpressionPrinter.sourceSpansMultipleLines` (2 uses: `compactArrayInitializer`,
+  `compactArrayInitializerValue`) — **redundant delete**. Both `arrayCreation` and `arrayInitializer` already
+  width-check the compact array text before using it; the source-multiline gate only forced the broken shape on
+  an array that would otherwise fit. A source-multiline array that fits now collapses; one that overflows still
+  breaks.
+- `AnnotationExpressionPrinter.annotationArrayValueLine` binary-value break — **width-driven arm**: a `BinaryExpr`
+  annotation-array value breaks purely when its compact text overflows, not additionally when it was source-multiline.
+- `CallableSignaturePrinter.parameterAnnotationSourceBreaks` → `parameterAnnotationPrefixOverflows` — **width-driven
+  arm**: a parameter's annotation prefix renders structured whenever the flat parameter overflows (source-multiline
+  requirement dropped). Monotonic on over-width — the structured arm only relieves an overflowing flat prefix.
+- `RecordDeclarationPrinter.recordComponentHasSourceMultilineAnnotation` — **redundant delete**: the component-break
+  suppression now keys only on the width-driven `recordComponentHasWidthDrivenMultilineAnnotation` sibling.
+- `VariableInitializerLayout.sourceSpansMultipleLines` (overflowing array-initializer branch) — **redundant delete /
+  shape unification**: every overflowing array initializer now converges on the canonical `= {`-on-the-assignment-line
+  shape a source-multiline array already produced, instead of routing single-line-source arrays through a divergent
+  break-after-`=` ladder.
+
+**DEFERRED (genuinely load-bearing — proved by PROBE→regression, then reverted):**
+- `AnnotationExpressionPrinter.sourceMultilineAnnotation` (`annotationPreservingSourceBreaks`, ~:419). Removing the
+  force-break flattens a source-multiline parameter annotation rendered at `LayoutContext.root()`, where the true
+  parameter column is invisible; `source-multiline-shapes` gained a 137-col over-width line (`@Lookup(...) Type name`).
+  Blocked on the annotation render receiving its enclosing column (left-edge-prefix), the same enclosing-column
+  entanglement the D3 residuals hit.
+- `TypePrinter.sourceMultilineAnnotation` (:341, gates `sourceAnnotatedGenericArgumentBody` + `typeAnnotation`).
+  PROBE→`false` gave `source-multiline-annotation-placement` +3 over-width (122/123/122 cols). It is the *only*
+  break mechanism for wide type-use annotations — there is no width-driven fallback — and renders at `root()`.
+- `ClassExpressionPrinter.sourceMultiline` (:118) + `startsOnLaterLine` (:111). PROBE→`false` gave
+  `class-literal-qualified-name` +2 over-width (139/181 cols). The `Type.class` multiline preservation is the only
+  mechanism to break a wide qualified class literal; no width-driven arm exists.
+- `VariableInitializerLayout.sourceFirstLineKeepsChainAfterRoot` (:1541), `initializerStartsOnContinuationLine`
+  (:1557), `methodCallScopeEndsOnNameLine` (:2244). The object-creation-initializer break-after-`=` / chain-attach
+  seam (#221); tied to the enclosing-column deferral above and the D3 chain track.
+- `SourceMultilineLambdaCallLayout.lambdaBodyStartsAfterHeader` (:175). Previously found +13 over-width if naively
+  removed; blocked on the segment-lambda source-neutral render + `#190` leftEdgePrefix.
+
+**EXCLUDED (not aesthetic line-break reads):** `CallableSignaturePrinter.rangeBeginLine` (:594, stable source-order
+SORTING of parameter prefix parts), `MethodCallPrinter.sharedFirstLineWidth` (:1238,
+`statementRange.begin.line == callRange.begin.line` reconstructs the true first-line column — width-measurement
+*correctness*, the opposite of a retirement target), plus the comment/blank-line/order reads named in the task
+(`CommentIndex.*`, `DeclarationPrefixPrinter`/`ControlConditionPrinter` `Integer.compare`, `BlockPrinter.effectiveBeginLine`,
+`SourceText`/`CommentedMethodSignaturePrinter`).
+
+**RESIDUAL (aesthetic, not attempted — outside the named "was-multiline" set):**
+`RecordDeclarationPrinter.recordComponentAnnotationsStartOnDifferentLines` (:382, "author put the component's
+annotations on separate source lines") is a distinct multi-annotation-stacking read. A PROBE→`false` changed no
+fixture (the difference is uncovered), so its new shape cannot be validated; left live pending a fixture that
+exercises it. It belongs to a future governance-lint that flags any inline `begin.line`/`end.line` aesthetic read,
+not just `SourceShapePolicy` methods.
+
+After this follow-up the inline "was-multiline" (`begin.line < end.line`) reads still live are exactly three —
+`AnnotationExpressionPrinter:419`, `ClassExpressionPrinter:118`, `TypePrinter:341` — all deferred above and all
+blocked on the same enclosing-column (left-edge-prefix) gap.
+
+## Threading the enclosing column into the deferred inline reads (follow-up, 2026-07-09)
+
+This batch attacks the deferred inline tier by threading the *true enclosing column* into the render sites — the
+`leftEdgePrefix`/`trailingContent` mechanism the merged keystone/D1a/D1e/D1g use — so a break that was source-gated
+becomes width-driven at the real column. Gate: `scripts/corpus-check.sh kafka --subset 800 --base f95f6d27`
+(idempotence ⊆ base, over-width ⊆ base, verify 0, comment parity) + full `./gradlew test`.
+
+**RETIRED (2 reads — the enclosing column was reachable):**
+- `AnnotationExpressionPrinter.sourceMultilineAnnotation` (`annotationPreservingSourceBreaks`). The parameter
+  (`CallableSignaturePrinter`) and record-component (`RecordDeclarationPrinter`) callers already had the enclosing
+  column in reach: both build the broken list's continuation indent + earlier prefix parts into
+  `LayoutContext.leftEdgePrefix()` and the same-line `" Type name"` tail into `LayoutContext.trailingContent()`, and
+  `annotationPreservingSourceBreaks(annotation, layout)` now breaks the annotation purely when the flat form plus that
+  same-line context overflows. The `@Lookup(...) StreamProcessingDefinition definition` case still breaks (its trailing
+  type/name pushes the flat annotation past width); an annotation that fits reprints flat. Rebaselined
+  `annotated-generic-type-width` (two fitting component annotations collapse flat). Corpus Δ0.
+  *(This is the earlier DEFERRED "+137 over-width without threading" case — resolved by actually threading the column.)*
+- `RecordDeclarationPrinter.recordComponentAnnotationsStartOnDifferentLines` (the RESIDUAL multi-annotation-stacking
+  read). Clean delete: a component's annotations reprint inline regardless of source shape, and the prefix stacks only
+  on the existing width-driven `recordComponentFlat` overflow gate. PROBE→`false` changed no *existing* fixture (still
+  uncovered) and was corpus-Δ0, so the retirement adds a new fixture `record-component-annotations-reprint-inline` to
+  lock the width-driven shape (source-split-but-fitting annotations collapse inline).
+
+**DEFERRED (3 reads / 5 sites — the enclosing column is genuinely unreachable at the render site):**
+- `TypePrinter.sourceMultilineAnnotation` (gates `sourceAnnotatedGenericArgumentBody` + `typeAnnotation`).
+  PROBE→`false` re-confirmed: `source-multiline-annotation-placement` gains +2 over-width (`@EncodedKeys({...})` 123,
+  `@MergeFormula(value = …)` 122). The wide *type-use* annotation renders deep inside `genericArgumentBody`, which
+  receives no `LayoutContext` and cannot know the type-argument continuation column; it is the only break mechanism
+  (no width-driven fallback). Threading the column here requires pervasive `LayoutContext` plumbing through the whole
+  type renderer (`typeBody`→`classOrInterfaceTypeBody`→`genericArgumentBody`→`typeAnnotation`) — the deeper foundation.
+- `ClassExpressionPrinter.sourceMultiline` + `startsOnLaterLine`. PROBE→`false` re-confirmed:
+  `class-literal-qualified-name` gains +2 over-width (139, 181). `classExpression(ClassExpr)` receives no
+  `LayoutContext`, and the source-multiline preservation is the *only* mechanism to break a wide qualified `Type.class`
+  — there is no width-driven fill/wrap over the dotted segments (the break points are keyed on where the source broke).
+  Blocked on both threading a column in and building a width-driven segment-wrap algorithm.
+- `VariableInitializerLayout.initializerStartsOnContinuationLine` + `methodCallScopeEndsOnNameLine` (+ the sibling
+  `sourceFirstLineKeepsChainAfterRoot`, a `rawSource.lines()` read outside the guard's line-compare scope). These gate
+  the object-creation-initializer break-after-`=` / chain-attach seam (#221) via `InitializerChainShape` — the D3 chain
+  track. The attach decision needs the true continuation column (#190 `leftEdgePrefix`); retiring them in isolation
+  re-oscillates against the still-source-gated enclosing chain level (the #191 invariant). Not forced.
+- `SourceMultilineLambdaCallLayout.lambdaBodyStartsAfterHeader` + `ExpressionLambdaClosingLayout.callClosingStaysOnLambdaBodyLine`.
+  The chain-segment lambda hug/close seam; blocked on the segment-lambda source-neutral render + #190 leftEdgePrefix
+  (the D2d track). Not forced.
+
+Net: the inline aesthetic-read allowlist drops from **9 → 7**. The two retired reads were exactly the ones whose
+enclosing declaration (parameter / record component) already knew its column; the remaining seven all render at a
+column the AST cannot reconstruct (type-argument continuation, class-literal continuation, initializer chain-attach,
+segment-lambda body) and are blocked on the same enclosing-column / `leftEdgePrefix` foundation as the D3 chain track.

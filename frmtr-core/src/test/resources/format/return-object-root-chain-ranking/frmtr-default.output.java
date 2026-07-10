@@ -9,9 +9,6 @@ class ObjectRootReturnChainRankingSample {
 
     ConnectionPool fanOutWhenSelectorOpenerOverflows(DataSourceConfiguration dataSourceConfiguration) {
         return new PooledConnectionFactoryBuilder(configuredPrimaryReplicaDataSourceHandle)
-            .establishValidatedConnectionPool(
-                retryPolicyName,
-                healthProbeInterval
-            );
+            .establishValidatedConnectionPool(retryPolicyName, healthProbeInterval);
     }
 }

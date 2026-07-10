@@ -76,9 +76,16 @@ class SourceShapeExceptionGovernanceTest {
             .sum();
         // Drop this number as fragile reads are replaced by structural BreakRules and deleted. It is the reprint-by-default
         // retirement metric; a change here must be a deliberate retirement (or a reviewed new fragile read), never silent.
+        // As of the D3 flip the ratchet has reached its terminal state: every catalogued RETIREMENT_TARGET read on
+        // SourceShapePolicy has been retired and deleted, so the method-call/chain/object-creation/lambda hub reflows by
+        // width. A non-zero value here again means a new "preserve the author's line breaks" read was added and must be
+        // reviewed. Note: this pins only the CATALOGUED SourceShapePolicy reads; a residual tier of UNCATALOGUED inline
+        // getRange() line reads (e.g. lambdaBodyStartsAfterHeader, sourceFirstLineKeepsChainAfterRoot, ~8 begin.line<end.line
+        // reads) is still live in the printers and must be catalogued + retired for FULL source-independence (see
+        // ARCHITECTURE.md "residual follow-ups").
         assertThat(retirementTargets)
             .as("fragile (RETIREMENT_TARGET) source-shape reads still to replace with structural rules")
-            .isEqualTo(6L);
+            .isEqualTo(0L);
     }
 
     private static Set<String> enumeratedReadNames() {

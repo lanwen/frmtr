@@ -7,26 +7,27 @@ class SourceMultilineObjectChainInitializer {
         ArtifactName.parse("runner:3.17")
     ).withLabels(labelMap);
 
-    public CatalogContainer sourceContainerWithFile = new CatalogContainer(
-        ArtifactName.parse("runner:3.17")
-    ).withFileInHomeFolder(MountableFile.forHostPath("src/test/resources/additionalFile.txt"), "/path/in/home/folder");
+    public CatalogContainer sourceContainerWithFile = new CatalogContainer(ArtifactName.parse("runner:3.17"))
+        .withFileInHomeFolder(
+            MountableFile.forHostPath("src/test/resources/additionalFile.txt"),
+            "/path/in/home/folder"
+        );
 
-    public CatalogContainer firstPassContainerWithFile = new CatalogContainer(
-        ArtifactName.parse("runner:3.17")
-    ).withFileInHomeFolder(MountableFile.forHostPath("src/test/resources/additionalFile.txt"), "/path/in/home/folder");
+    public CatalogContainer firstPassContainerWithFile = new CatalogContainer(ArtifactName.parse("runner:3.17"))
+        .withFileInHomeFolder(
+            MountableFile.forHostPath("src/test/resources/additionalFile.txt"),
+            "/path/in/home/folder"
+        );
 
     Client sourceDetachedBuild(ContainerProbe container) {
-        Client client = new HttpClientBuilder(
-            "http://" + container.host() + ":" + container.controlPort() + "/api"
-        ).build();
+        Client client = new HttpClientBuilder("http://" + container.host() + ":" + container.controlPort() + "/api")
+                .build();
         return client;
     }
 
     Client firstPassDetachedBuild(ContainerProbe container) {
         if (client == null) {
-            client = new HttpClientBuilder(
-                "http://" + container.host() + ":" + container.controlPort() + "/api"
-            ).build();
+            client = new HttpClientBuilder("http://" + container.host() + ":" + container.controlPort() + "/api").build();
         }
         return client;
     }
@@ -68,11 +69,8 @@ class SourceMultilineObjectChainInitializer {
     }
 
     // sampleRule {
-    public BrowserClient sourceBrowser = new BrowserClient(
-        "browser/standalone-stable:4.13.0"
-    )
-            // marker }
-            .withNetwork(NETWORK);
+    public BrowserClient sourceBrowser = new BrowserClient("browser/standalone-stable:4.13.0")// marker }
+    .withNetwork(NETWORK);
 
     // sampleRule {
     public BrowserClient firstPassBrowser = new BrowserClient(

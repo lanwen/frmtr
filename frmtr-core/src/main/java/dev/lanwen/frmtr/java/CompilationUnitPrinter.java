@@ -214,7 +214,7 @@ final class CompilationUnitPrinter {
      * two imports, is still file-boundary content; only a comment under the whole structural prologue and immediately
      * before the first type is type documentation. When there is no structural prologue the caller collapses the boundary
      * to the first-type line, so {@code beginLine < firstTypeLine} already implies {@code beginLine <= boundary} and this
-     * slot keeps every before-type orphan exactly as it did before this split existed.
+     * slot keeps every before-type orphan.
      */
     private Doc orphanCommentsBeforeFirstType(
             CompilationUnit unit,

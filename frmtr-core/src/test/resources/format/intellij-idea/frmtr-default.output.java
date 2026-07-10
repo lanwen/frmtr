@@ -16,7 +16,13 @@ public class ThisIsASampleClass extends C1 implements I1, I2, I3, I4, I5 {
     public static void longerMethod() throws Exception1, Exception2, Exception3 {
         // todo something
         int i = 0;
-        int[] a = new int[] { 1, 2, 0x0052, 0x0053, 0x0054 };
+        int[] a = new int[] {
+            1,
+            2,
+            0x0052,
+            0x0053,
+            0x0054,
+        };
         int[] empty = new int[] {};
         int var1 = 1;
         int var2 = 2;

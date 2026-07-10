@@ -190,6 +190,7 @@ Scopes out AST-changing rewrites; keeps the data-driven config surface reachable
 combinator vocabulary. · _focused proposal:_ [reprint-by-default-break-rules.md](reprint-by-default-break-rules.md)
 · _execution plan for the hub:_ [hub-canonicalization-atomic-rewrite.md](hub-canonicalization-atomic-rewrite.md)
 · _D3 atomic-flip map (per-read consumer/replacement guide):_ [hub-canonicalization-d3-flip-map.md](hub-canonicalization-d3-flip-map.md)
+· _post-flip true-column foundation (the residual `leftEdgePrefix` work; decisions ratified):_ [left-edge-prefix-foundation.md](left-edge-prefix-foundation.md)
 
 The satellite constructs (params, throws, control-condition, ternary, enclosed-binary-operand,
 try-resource) landed as small verified commits. The method-call / chain / object-creation / lambda

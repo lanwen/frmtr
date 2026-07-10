@@ -605,7 +605,9 @@ final class MethodCallPrinter {
     private void recordArgumentListWidthBreak(MethodCallExpr expression, String prefix) {
         String compactArguments = compactSource.compactJoin(expression.getArguments());
         String compactCall = prefix + "(" + compactArguments + ")";
-        int flatWidth = layoutWidth.line(LayoutWidth.LineBudget.CURRENT, compactCall);
+        // C10-a: --explain-only measurement at the call's rendered column (mirrors ChainWidthBreakExplain#record);
+        // never influences the emitted Doc, only the recorded flatWidth and the self-gate below.
+        int flatWidth = layoutWidth.nodeLine(expression, compactCall);
         if (flatWidth <= options.lineWidth()) {
             return;
         }
@@ -1327,7 +1329,9 @@ final class MethodCallPrinter {
                 .map(range -> Math.max(
                     Math.max(0, range.begin.column + 1) + firstLine.length(),
                     layoutWidth.nodeIndentWidth(expression) + firstLine.length()))
-                .orElseGet(() -> layoutWidth.line(LayoutWidth.LineBudget.CURRENT, firstLine));
+                // C10-a: rangeless (synthetic) fallback measures at the rendered column, mirroring the wider-of arm's
+                // nodeIndentWidth term above, instead of the fixed one-indent baseline.
+                .orElseGet(() -> layoutWidth.nodeIndentWidth(expression) + firstLine.length());
     }
 
     private boolean hasHuggableExpressionLambdaArgument(MethodCallExpr expression) {

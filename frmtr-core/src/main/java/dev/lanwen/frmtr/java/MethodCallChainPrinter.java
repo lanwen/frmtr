@@ -2057,7 +2057,9 @@ final class MethodCallChainPrinter {
                 .map(range -> Math.max(
                     Math.max(0, range.begin.column + 1) + firstLine.length(),
                     layoutWidth.nodeIndentWidth(root) + firstLine.length()))
-                .orElseGet(() -> layoutWidth.line(lineBudget, firstLine));
+                // C10-a: rangeless (synthetic) fallback measures at the rendered column, mirroring the prefix-set arm's
+                // nodeIndentWidth term, instead of the fixed lineBudget baseline.
+                .orElseGet(() -> layoutWidth.nodeIndentWidth(root) + firstLine.length());
     }
 
     private boolean expressionLambdaBodyOpenerOverflows(
@@ -2555,7 +2557,9 @@ final class MethodCallChainPrinter {
                 .map(range -> Math.max(
                     Math.max(0, range.begin.column - 1) + text.length(),
                     layoutWidth.nodeIndentWidth(root) + text.length()))
-                .orElseGet(() -> layoutWidth.line(LayoutWidth.LineBudget.CURRENT, text));
+                // C10-a: rangeless (synthetic) fallback measures at the rendered column, mirroring the wider-of arm's
+                // nodeIndentWidth term, instead of the fixed one-indent baseline.
+                .orElseGet(() -> layoutWidth.nodeIndentWidth(root) + text.length());
     }
 
     private Doc inlineMethodCall(MethodCallExpr expression) {
@@ -2628,8 +2632,10 @@ final class MethodCallChainPrinter {
             return false;
         }
         String compact = compactSource.compact(expression);
-        return layoutWidth.line(LayoutWidth.LineBudget.CURRENT, compact) > options.lineWidth()
-            || rootLineWidth(expression, compact, layout) > options.lineWidth();
+        // C10-a: the fixed one-indent term was OR-dominated — rootLineWidth is never smaller than
+        // nodeIndentWidth(root) + compact.length(), which already dominates the one-indent baseline — so the
+        // rendered-column comparison alone yields the identical verdict.
+        return rootLineWidth(expression, compact, layout) > options.lineWidth();
     }
 
     private ToIntFunction<String> lineWidth(LayoutWidth.LineBudget lineBudget) {

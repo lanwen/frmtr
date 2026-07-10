@@ -114,9 +114,13 @@ filtered shapes.
   (the **source-column floor** — still load-bearing for pos 1/2/5/6/7/9).
 - `refuseOpeningSingleSimpleReturnChainTail` (`:1730`) and the object-root fan-out tail (`:2741`): both gated on
   `!leftEdgePrefix().isEmpty()` — **return-chain-only** refinements.
-- Three sibling gates thread `layout` but **do not read the prefix yet** (pure plumbing, source-column floor unchanged):
-  `rootLineWidth` (`:2466`), `selectorLineWidth` (`:2572`), and `MethodCallPrinter.methodCallRootLineWidth`
-  (per `ARCHITECTURE.md:564`). These are the "floors that survive" the doc's slice-6 names.
+- Sibling gates that thread `layout`: `MethodCallPrinter.methodCallRootLineWidth` (activated in U3) and
+  `rootLineWidth` (activated in the U3 floor-drop) now **read** the prefix
+  (`nodeIndentWidth + leftEdgePrefix.length() + text`, floor dropped, mirroring `compactRootLineWidth`); only
+  `selectorLineWidth` stays plumbed-but-no-op (its broken-selector consumers await the same review). `rootLineWidth`'s
+  activation is byte-identical on the frmtr/kafka/camel/cayenne/tomcat/zookeeper corpora (0 files move: the branch fires
+  but the rendered-column correction never crosses the line width, so no verdict flips). These were the "floors that
+  survive" the doc's slice-6 names.
 
 `LayoutContext.widthBudget` (`LayoutContext.java:23`, marked **transitional**) and the `LayoutWidth.LineBudget` enum
 (`LayoutWidth.java:22`) are the fixed-per-depth crutch the rendered-column end state retires.

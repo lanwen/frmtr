@@ -2535,13 +2535,21 @@ final class MethodCallChainPrinter {
      * leading prefix accounted for (dropping it under-measures the initializer/return chains). The wider-of rule can only
      * measure wider, never relax a break.
      *
-     * <p>{@code layout} is threaded here (#190) so a follow-up can attribute the same-line {@code layout.leftEdgePrefix()}
-     * at the rendered column. Unlike {@link #compactRootLineWidth}, this gate does NOT read the prefix: its sole consumer
-     * {@link #promotedRootArgumentsShouldBreak} is reached by the <em>initializer</em> chain carrying a real
-     * {@code "NAME = "} prefix, so dropping the source-column floor here would change the initializer's promoted-root
-     * arg-break verdict. The wider-of floor governs every caller.
+     * <p>{@code layout} is read here (chain-unify U3, #190): when a caller threads a same-line prefix through
+     * {@link LayoutContext#leftEdgePrefix()} the rendered column is known exactly
+     * ({@code nodeIndentWidth(root) + leftEdgePrefix.length() + text.length()}) and the source-column floor is dropped,
+     * exactly as {@link #compactRootLineWidth} does. Its consumer {@link #promotedRootArgumentsShouldBreak} is reached by
+     * the <em>initializer</em> chain carrying a real {@code "NAME = "} prefix, so the arg-break verdict is now measured at
+     * that chain's true rendered column rather than the value's stale source column — byte-identical on already-formatted
+     * input, a determinism hardening for reindented input. Callers with no prefix ({@code root()}) keep the wider-of
+     * source-column floor, which still stands in for their unmodelled leading prefix.
      */
     private int rootLineWidth(Expression root, String text, LayoutContext layout) {
+        // With the same-line prefix threaded, measure at the exact rendered column and drop the source-column floor,
+        // which is only ever a stand-in for this prefix (mirrors compactRootLineWidth's prefix-set arm).
+        if (!layout.leftEdgePrefix().isEmpty()) {
+            return layoutWidth.nodeIndentWidth(root) + layout.leftEdgePrefix().length() + text.length();
+        }
         return root.getRange()
                 .map(range -> Math.max(
                     Math.max(0, range.begin.column - 1) + text.length(),

@@ -94,14 +94,6 @@ final class InlineSourceLineReadGuardTest {
      * / {@code leftEdgePrefix} gap. Tracked: D3 flip follow-ups — retire when the leftEdgePrefix foundation lands.
      */
     private static final Set<String> ALLOWLISTED_AESTHETIC_READS = Set.of(
-        // "was this annotation/type multiline in source?" (range.begin.line < range.end.line)
-        // deferred: needs the width-driven multiline signal; tracked: D3 flip follow-ups — retire when the
-        // leftEdgePrefix foundation lands.
-        "TypePrinter#sourceMultilineAnnotation",
-        "ClassExpressionPrinter#sourceMultiline",
-        // "did the type name start on a later line than its scope?" (scope.end.line < name.begin.line)
-        // deferred: enclosing-column gap; tracked: D3 flip follow-ups — retire when the leftEdgePrefix foundation lands.
-        "ClassExpressionPrinter#startsOnLaterLine",
         // "did the initializer start on a continuation line after the name?" (initializer.begin.line > name.end.line)
         // deferred: leftEdgePrefix gap; tracked: D3 flip follow-ups — retire when the leftEdgePrefix foundation lands.
         "VariableInitializerLayout#initializerStartsOnContinuationLine",

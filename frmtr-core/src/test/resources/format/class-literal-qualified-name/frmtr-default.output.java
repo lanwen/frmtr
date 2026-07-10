@@ -9,10 +9,8 @@ class QualifiedClassLiteralSample {
 
     void verifyGenericSegment(Context context) {
         assertThat(context).hasSingleBean(
-            FixtureAutoConfigurationForClassLiteralRegression.ProcessingConfigurationWithLongFixtureSegment<
-                RouteProjectionSnapshot,
-                SegmentMetadata
-            >
+            FixtureAutoConfigurationForClassLiteralRegression
+                .ProcessingConfigurationWithLongFixtureSegment<RouteProjectionSnapshot, SegmentMetadata>
                 .RecordProcessorsContainer.class
         );
     }

@@ -11,8 +11,10 @@ class AnnotatedGenericTypeWidth {
                 max = 128,
                 message = "Sample item key must stay within an intentionally long fixture-only limit"
             ) String,
-            @Limit(max = 16384, message = "Sample item value must stay within an intentionally long fixture-only limit")
-            String
+            @Limit(
+                max = 16384,
+                message = "Sample item value must stay within an intentionally long fixture-only limit"
+            ) String
         > items
     ) {}
 }

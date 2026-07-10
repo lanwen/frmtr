@@ -11,6 +11,7 @@ import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.type.TypeParameter;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
@@ -242,11 +243,11 @@ final class TypePrinter {
     }
 
     private Doc genericArgumentBody(Type type) {
-        Optional<Doc> sourceAnnotatedType = sourceAnnotatedGenericArgumentBody(type);
-        if (sourceAnnotatedType.isPresent()) {
-            return sourceAnnotatedType.orElseThrow();
-        }
+        List<AnnotationExpr> annotations = type.getAnnotations();
         Optional<PrefixAnnotatedType> annotated = prefixAnnotatedType(type);
+        if (annotated.isPresent() && annotations.stream().anyMatch(TypePrinter::annotationHasBreakableBody)) {
+            return breakableAnnotatedGenericArgument(annotations, annotated.orElseThrow().tail());
+        }
         if (annotated.filter(parsed -> parsed.annotations().size() > 1).isPresent()) {
             PrefixAnnotatedType parsed = annotated.orElseThrow();
             return Doc.concat(
@@ -264,43 +265,49 @@ final class TypePrinter {
         return groupedTypeBody(type);
     }
 
-    private Optional<Doc> sourceAnnotatedGenericArgumentBody(Type type) {
-        if (
-            type.getAnnotations().isEmpty()
-            || type.getAnnotations().stream().noneMatch(this::sourceMultilineAnnotation)
-        ) {
-            return Optional.empty();
+    /**
+     * Renders an annotated generic argument whose annotation list carries a parenthesized body that can break.
+     *
+     * <p>This is the width-driven replacement for the retired "was any annotation multiline in the source?" probe. The
+     * whole argument stays on one line while the compact form fits and, when it overflows the line at its true rendered
+     * column, breaks the parenthesized body of each breakable annotation while keeping the annotations and the trailing
+     * type inline. The trailing type text rides inside the group so the fit decision measures {@code @Ann(...) Type} as a
+     * unit and never leaves the type name to spill past the line on its own.
+     */
+    private Doc breakableAnnotatedGenericArgument(List<AnnotationExpr> annotations, String tail) {
+        List<Doc> parts = new ArrayList<>();
+        for (int index = 0; index < annotations.size(); index++) {
+            if (index > 0) {
+                parts.add(Doc.text(" "));
+            }
+            parts.add(groupableTypeAnnotation(annotations.get(index)));
         }
-        Optional<PrefixAnnotatedType> annotated = prefixAnnotatedType(type);
-        if (annotated.isEmpty()) {
-            return Optional.empty();
-        }
-        return Optional.of(
-            Doc.concat(
-                Doc.join(
-                    Doc.text(" "),
-                    type.getAnnotations()
-                            .stream()
-                            .map(this::typeAnnotation)
-                            .toList()
-                ),
-                Doc.text(" "),
-                Doc.text(annotated.orElseThrow().tail())
-            )
-        );
+        parts.add(Doc.text(" " + tail));
+        return Doc.group(Doc.concat(parts));
     }
 
-    private Doc typeAnnotation(AnnotationExpr annotation) {
-        if (!sourceMultilineAnnotation(annotation)) {
-            return Doc.text(compactTypeLike.apply(annotation));
-        }
-        if (annotation instanceof NormalAnnotationExpr normalAnnotation) {
-            return brokenNormalAnnotation(normalAnnotation);
+    /**
+     * A type-use annotation that renders compact while its enclosing group stays flat and breaks its parenthesized body
+     * when the group breaks. The flat branch is the caller's compact annotation text, so a fitting argument reproduces
+     * the exact compact spelling; only the overflowing branch rebuilds the structured shape. A marker or empty-parens
+     * annotation has no body to break, so it stays compact in either mode.
+     */
+    private Doc groupableTypeAnnotation(AnnotationExpr annotation) {
+        if (annotation instanceof NormalAnnotationExpr normalAnnotation && !normalAnnotation.getPairs().isEmpty()) {
+            return Doc.ifBreak(brokenNormalAnnotation(normalAnnotation), Doc.text(compactTypeLike.apply(annotation)));
         }
         if (annotation instanceof SingleMemberAnnotationExpr singleMemberAnnotation) {
-            return brokenSingleMemberAnnotation(singleMemberAnnotation);
+            return Doc.ifBreak(
+                brokenSingleMemberAnnotation(singleMemberAnnotation),
+                Doc.text(compactTypeLike.apply(annotation))
+            );
         }
         return Doc.text(compactTypeLike.apply(annotation));
+    }
+
+    private static boolean annotationHasBreakableBody(AnnotationExpr annotation) {
+        return (annotation instanceof NormalAnnotationExpr normalAnnotation && !normalAnnotation.getPairs().isEmpty())
+            || annotation instanceof SingleMemberAnnotationExpr;
     }
 
     private Doc brokenNormalAnnotation(NormalAnnotationExpr annotation) {
@@ -334,12 +341,6 @@ final class TypePrinter {
 
     private Doc annotationPair(MemberValuePair pair) {
         return Doc.text(pair.getNameAsString() + " = " + compactTypeLike.apply(pair.getValue()));
-    }
-
-    private boolean sourceMultilineAnnotation(AnnotationExpr annotation) {
-        return annotation.getRange()
-                .map(range -> range.begin.line < range.end.line)
-                .orElse(false);
     }
 
     private Doc groupedTypeBody(Type type) {

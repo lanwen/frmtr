@@ -288,7 +288,7 @@ final class BinaryExpressionPrinter {
      * rely on. This is the operand analogue of {@code MethodCallPrinter}'s argument first-selector seam: the operand's
      * extra offset is pure continuation indentation the surrounding binary line applies at render time (the fan's relative
      * {@link Doc#indent} continuation reproduces it), so the {@link LayoutContext} carries an empty {@code leftEdgePrefix}
-     * and the {@link LayoutWidth.LineBudget#CONTINUATION} budget at which operands render; the fan fires by the
+     * and the fixed continuation baseline ({@link LayoutWidth#continuationStatement}) at which operands render; the fan fires by the
      * width-independent link-count rule, so the unmodelled continuation indent never affects whether it fires.
      *
      * <p>Sub-fan-threshold chains (a plain-receiver 1–2-link operand such as {@code rx.fileLabelName().equals(...)}, the

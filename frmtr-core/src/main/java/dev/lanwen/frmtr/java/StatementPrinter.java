@@ -136,9 +136,9 @@ final class StatementPrinter {
 
     private final BiFunction<MethodCallExpr, ExpressionStmt, Optional<Doc>> sourceMultilineMethodCallStatementRenderer;
 
-    private final BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Optional<Doc>> forcedMethodCallChainRenderer;
+    private final BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> forcedMethodCallChainRenderer;
 
-    private final BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Doc> forcedMethodCallWithSemicolonRenderer;
+    private final BiFunction<MethodCallExpr, ToIntFunction<String>, Doc> forcedMethodCallWithSemicolonRenderer;
 
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
 
@@ -197,8 +197,8 @@ final class StatementPrinter {
             Function<AnnotationExpr, String> annotationFlatText,
             HuggableArgumentsRenderer huggableBlockLambdaArguments,
             BiFunction<MethodCallExpr, ExpressionStmt, Optional<Doc>> sourceMultilineMethodCallStatementRenderer,
-            BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Optional<Doc>> forcedMethodCallChainRenderer,
-            BiFunction<MethodCallExpr, LayoutWidth.LineBudget, Doc> forcedMethodCallWithSemicolonRenderer,
+            BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> forcedMethodCallChainRenderer,
+            BiFunction<MethodCallExpr, ToIntFunction<String>, Doc> forcedMethodCallWithSemicolonRenderer,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
             Predicate<MethodCallExpr> methodCallChainHasComments,
             Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment,
@@ -266,10 +266,10 @@ final class StatementPrinter {
      * should not be printed from raw source.
      */
     Doc statement(Statement statement) {
-        return statement(statement, LayoutWidth.LineBudget.BLOCK);
+        return statement(statement, layoutWidth::blockStatement);
     }
 
-    Doc statement(Statement statement, LayoutWidth.LineBudget lineBudget) {
+    Doc statement(Statement statement, ToIntFunction<String> lineWidth) {
         return switch (statement) {
             case BlockStmt blockStmt -> blockRenderer.format(blockStmt, LayoutContext.root());
             case ReturnStmt returnStmt -> returnStatement(returnStmt);
@@ -279,7 +279,7 @@ final class StatementPrinter {
                 explicitConstructorInvocation(constructorInvocation),
                 Doc.text(";")
             );
-            case ExpressionStmt expressionStmt -> expressionStatement(expressionStmt, lineBudget);
+            case ExpressionStmt expressionStmt -> expressionStatement(expressionStmt, lineWidth);
             case EmptyStmt ignored -> Doc.text(";");
             case AssertStmt assertStmt -> assertStatement(assertStmt);
             case BreakStmt breakStmt -> breakStatement(breakStmt);
@@ -386,7 +386,7 @@ final class StatementPrinter {
         }
         return Doc.concat(
             Doc.text("throw "),
-            expressionWithTailRenderer.render(thrown, ExpressionTail.SEMICOLON, LayoutWidth.LineBudget.BLOCK)
+            expressionWithTailRenderer.render(thrown, ExpressionTail.SEMICOLON, layoutWidth::blockStatement)
         );
     }
 
@@ -650,7 +650,7 @@ final class StatementPrinter {
             expressionWithTailRenderer.render(
                 statement.getExpression(),
                 ExpressionTail.SEMICOLON,
-                LayoutWidth.LineBudget.BLOCK
+                layoutWidth::blockStatement
             )
         );
     }
@@ -701,7 +701,7 @@ final class StatementPrinter {
         );
     }
 
-    private Doc expressionStatement(ExpressionStmt statement, LayoutWidth.LineBudget lineBudget) {
+    private Doc expressionStatement(ExpressionStmt statement, ToIntFunction<String> lineWidth) {
         Expression expression = statement.getExpression();
         Doc trailing = expressionStatementTrailingComment(statement);
         if (expression instanceof VariableDeclarationExpr variableDeclaration) {
@@ -713,7 +713,7 @@ final class StatementPrinter {
         }
         if (expression instanceof MethodCallExpr methodCall) {
             if (methodCallChainHasFinalTrailingLineComment.test(methodCall)) {
-                return Doc.concat(forcedMethodCallWithSemicolonRenderer.apply(methodCall, lineBudget), trailing);
+                return Doc.concat(forcedMethodCallWithSemicolonRenderer.apply(methodCall, lineWidth), trailing);
             }
             if (!methodCallChainIsSourceMultiline.test(methodCall)) {
                 Optional<Doc> sourceMultilineCall = sourceMultilineMethodCallStatementRenderer.apply(
@@ -724,16 +724,16 @@ final class StatementPrinter {
                     return Doc.concat(sourceMultilineCall.orElseThrow(), ExpressionTail.SEMICOLON.doc(), trailing);
                 }
             }
-            if (methodCallStatementWidth(methodCall, lineBudget) > options.lineWidth()) {
+            if (methodCallStatementWidth(methodCall, lineWidth) > options.lineWidth()) {
                 boolean chainBreak = methodCallChainHasComments.test(methodCall)
                     || methodCallChainIsSourceMultiline.test(methodCall)
                     || methodCallChainRootIsObjectCreation.test(methodCall)
                     || !methodCallChainRootIsFieldAccess.test(methodCall);
                 if (chainBreak) {
-                    return Doc.concat(forcedMethodCallWithSemicolonRenderer.apply(methodCall, lineBudget), trailing);
+                    return Doc.concat(forcedMethodCallWithSemicolonRenderer.apply(methodCall, lineWidth), trailing);
                 }
                 return Doc.concat(
-                    forcedMethodCallWithSemicolonRenderer.apply(methodCall, lineBudget),
+                    forcedMethodCallWithSemicolonRenderer.apply(methodCall, lineWidth),
                     trailing
                 );
             }
@@ -742,7 +742,7 @@ final class StatementPrinter {
             return Doc.concat(assignmentStatementRenderer.apply(assignExpr), trailing);
         }
         return Doc.concat(
-            expressionWithTailRenderer.render(expression, ExpressionTail.SEMICOLON, lineBudget),
+            expressionWithTailRenderer.render(expression, ExpressionTail.SEMICOLON, lineWidth),
             trailing
         );
     }
@@ -764,9 +764,9 @@ final class StatementPrinter {
             : Doc.lineSuffix(Doc.concat(Doc.text(" "), declarationTrailing));
     }
 
-    private int methodCallStatementWidth(MethodCallExpr methodCall, LayoutWidth.LineBudget lineBudget) {
+    private int methodCallStatementWidth(MethodCallExpr methodCall, ToIntFunction<String> lineWidth) {
         String raw = rawSource.normalizeWhitespace(rawSource.rawWithoutOwnComment(methodCall));
-        return layoutWidth.line(lineBudget, raw + ";");
+        return lineWidth.applyAsInt(raw + ";");
     }
 
     private Optional<Comment> conditionalElseStatementTrailingComment(ExpressionStmt statement) {
@@ -924,9 +924,9 @@ final class StatementPrinter {
      * <p>The resource-section fit gates ask whether the flat opener (either {@code try (…) {}} for the whole-section
      * collapse or {@code try (Type name = scope.call(} for the single attached method-call resource) fits on one line.
      * That opener renders at the {@code try} statement's own indentation, which is the enclosing block/type nesting
-     * depth: {@code BLOCK} (two units) for a {@code try} directly inside a method body and one unit deeper for every
+     * depth: two units for a {@code try} directly inside a method body and one unit deeper for every
      * further block ({@code if}, loop, nested {@code try}, …) around it. Measuring against the fixed
-     * {@link LayoutWidth.LineBudget#CURRENT} baseline (one unit) under-counted that indentation for every non-top-level
+     * {@link LayoutWidth#currentIndented} baseline (one unit) under-counted that indentation for every non-top-level
      * {@code try}, so a resource list that overflowed its real column was collapsed flat anyway and rendered past the
      * width limit (#219). Counting the node's rendered nesting through {@link LayoutWidth#nodeLine} reproduces the true
      * column regardless of source layout, mirroring the return/ternary/unary rendered-column corrections in LDM-2 and the

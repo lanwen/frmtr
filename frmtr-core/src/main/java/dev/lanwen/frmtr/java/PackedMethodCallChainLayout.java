@@ -216,7 +216,7 @@ final class PackedMethodCallChainLayout {
                 calls.getFirst(),
                 MethodCallChainSourcePlanner.ChainRootRendering.BROKEN_OBJECT_CREATION,
                 analysis.sourceMultilineChain(),
-                LayoutWidth.LineBudget.CURRENT,
+                layoutWidth::currentIndented,
                 firstLineWidth,
                 LayoutContext.root()
             ));
@@ -258,11 +258,11 @@ final class PackedMethodCallChainLayout {
     }
 
     private int expressionLambdaBodyLineWidth(String line) {
-        return layoutWidth.line(LayoutWidth.LineBudget.BLOCK, options.indentUnit() + line);
+        return layoutWidth.blockStatement(options.indentUnit() + line);
     }
 
     private int packedExpressionLambdaBodyLineWidth(String line) {
-        return layoutWidth.line(LayoutWidth.LineBudget.BLOCK, options.indentUnit().repeat(3) + line);
+        return layoutWidth.blockStatement(options.indentUnit().repeat(3) + line);
     }
 
     /**
@@ -277,7 +277,7 @@ final class PackedMethodCallChainLayout {
                 MethodCallExpr call,
                 MethodCallChainSourcePlanner.ChainRootRendering rootRendering,
                 boolean sourceMultilineChain,
-                LayoutWidth.LineBudget lineBudget,
+                ToIntFunction<String> lineWidth,
                 ToIntFunction<String> firstLineWidth,
                 LayoutContext layout
         );

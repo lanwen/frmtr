@@ -19,67 +19,29 @@ final class LayoutWidth {
 
     private final FormatterOptions options;
 
-    enum LineBudget {
-        /** A top-level member or statement line with one indentation unit already applied. */
-        CURRENT(1),
-
-        /** A statement line inside one ordinary Java block. */
-        BLOCK(2),
-
-        /**
-         * A continuation line under a broken statement or member initializer.
-         *
-         * <p>C10-d: the direct continuation-width probes have moved off this constant to the standalone
-         * {@link #continuationStatement(String)} arithmetic; only the deeply threaded {@code lineBudget} selector still
-         * carries it (the terminal slice retires that thread + this constant together).
-         */
-        CONTINUATION(3),
-
-        /** A statement line inside a block-lambda argument that is itself nested under a broken method chain. */
-        METHOD_CHAIN_LAMBDA_BODY(5);
-
-        private final int indentLevels;
-
-        LineBudget(int indentLevels) {
-            this.indentLevels = indentLevels;
-        }
-
-        int width(FormatterOptions options, String text) {
-            return (options.indentUnit().length() * indentLevels) + text.length();
-        }
-    }
-
     LayoutWidth(FormatterOptions options) {
         this.options = options;
     }
 
     /**
-     * Measures text against an explicitly chosen line budget.
-     */
-    int line(LineBudget budget, String text) {
-        return budget.width(options, text);
-    }
-
-    /**
-     * Measures text from the current member/statement indentation baseline.
+     * Measures text from the current member/statement indentation baseline (one indentation unit).
      */
     int currentIndented(String text) {
-        return line(LineBudget.CURRENT, text);
+        return indentColumns(1) + text.length();
     }
 
     /**
-     * Measures a statement candidate inside one ordinary block.
+     * Measures a statement candidate inside one ordinary block (two indentation units).
      */
     int blockStatement(String text) {
-        return line(LineBudget.BLOCK, text);
+        return indentColumns(2) + text.length();
     }
 
     /**
      * Measures a continuation line under a broken statement or member initializer (three indentation units).
      *
-     * <p>C10-d: computed directly from the fixed three-unit continuation depth rather than routed through
-     * {@link LineBudget#CONTINUATION}, so a continuation-width probe no longer names the enum. It stays the fixed
-     * shallow-common-case estimate; a fanned selector that renders deeper already measures at its true column through
+     * <p>Computed directly from the fixed three-unit continuation depth. It stays the fixed shallow-common-case estimate;
+     * a fanned selector that renders deeper already measures at its true column through
      * {@code MethodCallChainPrinter.fannedSelectorColumnWidth}, which floors on this same value.
      */
     int continuationStatement(String text) {
@@ -102,9 +64,9 @@ final class LayoutWidth {
      * Measures a statement line inside a block-lambda argument nested under a broken method chain (five indentation
      * units).
      *
-     * <p>C10-d: the direct method-chain-lambda-body probe computes this depth directly instead of naming
-     * {@link LineBudget#METHOD_CHAIN_LAMBDA_BODY}; only the threaded {@code lineBudget} selector still carries the enum
-     * value for the terminal slice.
+     * <p>Computes this depth directly. It is threaded (as a {@code ToIntFunction<String>} width measure) into the
+     * statement path of a block-lambda argument nested under a broken method chain, where the block/type-only
+     * {@code nodeLine} cannot see the stacked chain-continuation indentation.
      */
     int methodChainLambdaBody(String text) {
         return indentColumns(5) + text.length();

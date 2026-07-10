@@ -166,7 +166,7 @@ final class AssignmentExpressionPrinter {
             return Doc.concat(
                 this.expression.apply(expression.getTarget()),
                 Doc.text(" " + expression.getOperator().asString() + " "),
-                expressionWithTail.render(methodCall, ExpressionTail.SEMICOLON, LayoutWidth.LineBudget.BLOCK),
+                expressionWithTail.render(methodCall, ExpressionTail.SEMICOLON, blockStatementWidth),
                 // When the assigned value is a method chain, the chain render above already claims and emits its own
                 // final trailing line comment. Re-offering that same comment here only ever rendered empty, so skip it
                 // when already printed to avoid a duplicate claim; output is unchanged because the chain render placed it.

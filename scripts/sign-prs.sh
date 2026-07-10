@@ -32,6 +32,10 @@
 #   --squash              Squash each PR to a single commit before signing
 #                         (keeps the head commit's message). Default: preserve
 #                         signed commits and sign only unsigned commits.
+#   --cooldown-every <n>  Pause after every <n> signatures so the macOS Touch-ID
+#                         throttle (which locks biometrics after a short burst of
+#                         rapid auths) does not kick in (default: 3; 0 disables).
+#   --cooldown-secs <s>   Seconds to pause on each cooldown (default: 15).
 #   -h, --help            Show this help.
 #
 # Requires: gh (authenticated or sandbox-proxied), git, setsid or perl for
@@ -54,10 +58,13 @@ SIGN_TIMEOUT_EXPLICIT=0
 SQUASH=0
 VERIFY_ONLY=0
 ALL=0
+COOLDOWN_EVERY=3          # pause after this many signatures in a burst (0 disables the cooldown)
+COOLDOWN_SECS=15          # seconds to pause each time, letting the macOS Touch-ID throttle reset
+THROTTLE_WARN_AT=5        # warn up front when more than this many commits need signing
 : "${SSH_AUTH_SOCK:=/run/ssh-agent.sock}"
 export SSH_AUTH_SOCK
 
-usage() { sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,44p' "$0" | sed 's/^# \{0,1\}//'; }
 
 prs=()
 while [[ $# -gt 0 ]]; do
@@ -67,6 +74,8 @@ while [[ $# -gt 0 ]]; do
         --squash) SQUASH=1; shift ;;
         --key) KEY_PATTERN="$2"; shift 2 ;;
         --timeout) SIGN_TIMEOUT="$2"; SIGN_TIMEOUT_EXPLICIT=1; shift 2 ;;
+        --cooldown-every) COOLDOWN_EVERY="$2"; shift 2 ;;
+        --cooldown-secs) COOLDOWN_SECS="$2"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         -*) err "unknown option: $1"; usage >&2; exit 2 ;;
         *) prs+=("$1"); shift ;;
@@ -80,6 +89,14 @@ command -v gh >/dev/null || { err "'gh' (GitHub CLI) is required"; exit 1; }
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { err "run inside a git repository"; exit 1; }
 if [[ ! "$SIGN_TIMEOUT" =~ ^[0-9]+$ || "$SIGN_TIMEOUT" -le 0 ]]; then
     err "--timeout must be a positive integer number of seconds"
+    exit 2
+fi
+if [[ ! "$COOLDOWN_EVERY" =~ ^[0-9]+$ ]]; then
+    err "--cooldown-every must be a non-negative integer (0 disables the cooldown)"
+    exit 2
+fi
+if [[ ! "$COOLDOWN_SECS" =~ ^[0-9]+$ ]]; then
+    err "--cooldown-secs must be a non-negative integer"
     exit 2
 fi
 
@@ -284,6 +301,14 @@ for pr in "${prs[@]}"; do
             warn "PR #${pr}: all ${#commits[@]} commit(s) already signed — skipping"; exit 31
         fi
 
+        if [[ $SQUASH -ne 1 && $unsigned -gt $THROTTLE_WARN_AT ]]; then
+            if [[ $COOLDOWN_EVERY -gt 0 ]]; then
+                warn "PR #${pr}: ${unsigned} commits to sign — macOS can throttle Touch ID after a short burst (~${THROTTLE_WARN_AT}) of rapid auths, and Secretive may offer no password fallback. Pausing ${COOLDOWN_SECS}s every ${COOLDOWN_EVERY} signature(s) to mitigate; if it still locks, re-run with --squash for a single signature."
+            else
+                warn "PR #${pr}: ${unsigned} commits to sign with cooldown disabled — macOS may throttle Touch ID after a short burst (~${THROTTLE_WARN_AT}) of rapid auths. Consider --squash (one signature) or a non-zero --cooldown-every."
+            fi
+        fi
+
         warn "PR #${pr}: approve the Touch ID prompt on your Mac to sign ${unsigned} unsigned commit(s) (key: ${KEY_PATTERN})…"
         if ! run_with_timeout 30 "PR #${pr}: warm-up signature" bash -c 'printf test | ssh-keygen -Y sign -n git -f .sign.pub >/dev/null'; then
             abort_rewrite
@@ -291,6 +316,8 @@ for pr in "${prs[@]}"; do
             exit 40
         fi
 
+        # The warm-up above is the first Touch-ID signature; count it toward the cooldown budget.
+        sigcount=1
         if [[ $SQUASH -eq 1 ]]; then
             msg "PR #${pr}: squashing ${#commits[@]} commit(s) into one signed commit"
             git reset --soft "$merge_base"
@@ -305,7 +332,8 @@ for pr in "${prs[@]}"; do
             preserved=0
             resigned=0
             signed=0
-            for c in "${commits[@]}"; do
+            for ((i = 0; i < ${#commits[@]}; i++)); do
+                c="${commits[i]}"
                 if commit_has_signature "$c" && [[ "$(git rev-parse HEAD)" == "$(git rev-parse "${c}^")" ]]; then
                     git merge --quiet --ff-only "$c"
                     preserved=$((preserved + 1))
@@ -326,6 +354,14 @@ for pr in "${prs[@]}"; do
                     exit 40
                 fi
                 signed=$((signed + 1))
+                sigcount=$((sigcount + 1))
+                # Space out Touch-ID requests: after every COOLDOWN_EVERY signatures, pause so the macOS
+                # Secure-Enclave biometric throttle (which locks after a short burst of rapid auths) resets.
+                # Skipped after the final commit so we never sleep for nothing.
+                if [[ $COOLDOWN_EVERY -gt 0 && $((sigcount % COOLDOWN_EVERY)) -eq 0 && $((i + 1)) -lt ${#commits[@]} ]]; then
+                    warn "PR #${pr}: cooldown ${COOLDOWN_SECS}s after ${sigcount} signature(s) to avoid the macOS Touch-ID throttle…"
+                    sleep "$COOLDOWN_SECS"
+                fi
             done
             git branch --force "$head" HEAD >/dev/null
             if [[ $resigned -gt 0 ]]; then

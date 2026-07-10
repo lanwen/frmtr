@@ -140,13 +140,9 @@ final class IdempotencePropertyTest {
      * "residual follow-ups").
      */
     private static final Set<String> KNOWN_NON_IDEMPOTENT = Set.of(
-        // Single-argument lambda-hug tail (`assertThatThrownBy(() -> …)` / `probe.withVirtualTime(() -> …)`) whose
-        // body-call argument list collapses flat on one pass and breaks on the next. The nested block-lambda body that
-        // used to flatten with stray ` .` joins is fixed (PR #279 lambda-body multi-line render). tracked: D3 flip
-        // follow-ups.
-        "lambda-expression-argument-opener",
-        // Object-creation chain initializer: break-after-`=` + sourceFirstLineKeepsChainAfterRoot. tracked: D3 flip
-        // follow-ups.
+        // Object-creation chain initializer: residual inter-segment `// marker }` line-comment oscillation on the
+        // `sourceBrowser` field (comment-placement / W3-D4 residual, not the #190 segment-column keystone). tracked:
+        // D3 flip follow-ups / comment-placement slice.
         "source-multiline-object-chain-initializer"
     );
 

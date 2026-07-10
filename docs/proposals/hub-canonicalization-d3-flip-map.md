@@ -333,8 +333,13 @@ parity.
 - `VariableInitializerLayout.sourceFirstLineKeepsChainAfterRoot` (:1541), `initializerStartsOnContinuationLine`
   (:1557), `methodCallScopeEndsOnNameLine` (:2244). The object-creation-initializer break-after-`=` / chain-attach
   seam (#221); tied to the enclosing-column deferral above and the D3 chain track.
-- `SourceMultilineLambdaCallLayout.lambdaBodyStartsAfterHeader` (:175). Previously found +13 over-width if naively
-  removed; blocked on the segment-lambda source-neutral render + `#190` leftEdgePrefix.
+- `SourceMultilineLambdaCallLayout.lambdaBodyStartsAfterHeader` (:175). **RETIRED — #190 F2 segment-column slice.**
+  Previously found +13 over-width if naively removed; the blocker it was waiting on — the segment-lambda source-neutral
+  render (`ChainSelectorLambdaLayout.sourceNeutralExpressionLambdaSegment`) — has since landed, so the enclosing chain
+  now fans one selector per line at its true column instead of the source-gated attach-first-segment opener hug.
+  PROBE→`false` is now strict-subset (0 new over-width / non-idempotent on kafka-800 + camel-800), and the
+  `lambda-expression-argument-opener` `assertThatThrownBy(() -> …)` / `probe.withVirtualTime(() -> …)` cases converge to
+  a one-pass fixpoint (de-parked from both `KNOWN_NON_IDEMPOTENT` sets).
 
 **EXCLUDED (not aesthetic line-break reads):** `CallableSignaturePrinter.rangeBeginLine` (:594, stable source-order
 SORTING of parameter prefix parts), `MethodCallPrinter.sharedFirstLineWidth` (:1238,

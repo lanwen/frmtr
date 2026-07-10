@@ -722,10 +722,11 @@ final class MethodCallChainPrinter {
             // A chain whose final selector carries a lambda whose body CANNOT render flat (a block lambda, or an expression
             // lambda whose body itself nests a lambda — {@link #lambdaArgumentForcesMultilineBody}) is the exception: its
             // flat compact never "fits flat", so a conditionalGroup would fan the receiver on every pass, but the standalone
-            // lambda-body renderer ({@code LambdaExpressionPrinter}) decides that body's shape from the author's line
-            // breaks (the deferred lambda-arrow keystone read {@code lambdaBodyStartsAfterHeader}), which oscillates
-            // once the receiver is un-collapsed. Such a chain keeps the {@link Doc#bestFitting} arm (rendered collapsed), so
-            // it does not introduce a new oscillation.
+            // lambda-body renderer ({@code LambdaExpressionPrinter}) still decides that body's shape from a deferred
+            // lambda-arrow source-shape read, which oscillates once the receiver is un-collapsed. (The sibling
+            // method-call-body arrow read {@code lambdaBodyStartsAfterHeader} was retired by the #190 F2 slice; the
+            // block/nested-lambda arrow reads here are not yet.) Such a chain keeps the {@link Doc#bestFitting} arm
+            // (rendered collapsed), so it does not introduce a new oscillation.
             List<Doc> arms = List.of(flat, fanOut);
             boolean bodyForcesMultiline = calls.getLast().getArguments().stream()
                     .anyMatch(this::lambdaArgumentForcesMultilineBody);

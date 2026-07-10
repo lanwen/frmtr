@@ -665,10 +665,13 @@ AST structure (never width or source shape) so they stay fixpoints:
   `probe.withVirtualTime(() -> new SessionReader(…)).expectSubscription()` still breaks `probe`⏎`.withVirtualTime` — the
   receiver+first-selector attach (`fanAttachesTrivialReceiverFirstSelector` / `firstSelectorAttachesSafely`) refuses a
   lambda-carrying first selector because attaching it renders the lambda body's fan at a shifted column that oscillates
-  without the `leftEdgePrefix` threaded through the trivial-receiver attach (the same `lambda-expression-argument-opener`
-  KNOWN_NON_IDEMPOTENT `probe.withVirtualTime` shape). The arrow+opener there are already together (`() -> new SessionReader(`);
-  only the receiver attach needs the `leftEdgePrefix` foundation. The deeply-argument-nested
-  `.filter(param -> param.a().equals(b))` selector stays over-width for the same under-counted-column reason.
+  without the `leftEdgePrefix` threaded through the trivial-receiver attach. The arrow+opener there are already together
+  (`() -> new SessionReader(`); only the receiver attach needs the `leftEdgePrefix` foundation. The #190 F2 segment-column
+  slice retired the last source-shape gate (`lambdaBodyStartsAfterHeader`) on the sibling method-call-body variant
+  (`probe.withVirtualTime(() -> sessionReader.findSessions(…))`), so it now fans to this same `probe`⏎`.withVirtualTime`
+  fixpoint on both passes — an idempotent fanned shape, no longer `KNOWN_NON_IDEMPOTENT`; the compact receiver-attach
+  remains the deferred `leftEdgePrefix` ideal. The deeply-argument-nested `.filter(param -> param.a().equals(b))` selector
+  stays over-width for the same under-counted-column reason.
 - **Binary / string-concat operand break.** A binary whose fan-chain operand is NOT the last operand
   (`MethodCallChainPrinter.binaryNonFinalOperandFansChain`) renders one operand per line — each operator-led operand on its
   own line — instead of the flat operators-inline shape, so a following operator no longer glues onto the previous operand's
@@ -1078,11 +1081,15 @@ measured on a real corpus (kafka, 400 files) before deletion — real-corpus ide
   fixpoint that no longer overruns the line, so it is de-parked (removed from both `KNOWN_NON_IDEMPOTENT` sets, its
   `@ collapsed-whitespace` perturbation now converges so `EXCLUDED_AS_FINDINGS` is empty again, and its over-width allowlist
   entry is dropped).
-- **A still-live UNCATALOGUED inline-read tier.** `SourceShapePolicy` is now source-independent, but the printers still
-  make a handful of inline `getRange()` line reads the governance ratchet does not yet cover: `lambdaBodyStartsAfterHeader`
-  (a third site in `SourceMultilineLambdaCallLayout`), `sourceFirstLineKeepsChainAfterRoot`, and roughly eight
-  `begin.line < end.line` comparisons. These must be catalogued and retired for **full** source-independence, and the
-  governance test should be widened to catch inline `getRange()` line reads (not only `SourceShapePolicy` methods).
+- **A still-live inline-read tier (now catalogued).** `SourceShapePolicy` is source-independent, but the printers still
+  make a handful of inline `getRange()` line reads, now pinned by `InlineSourceLineReadGuardTest`'s allowlist:
+  `sourceFirstLineKeepsChainAfterRoot` and roughly eight `begin.line < end.line` comparisons. These must be retired for
+  **full** source-independence. `lambdaBodyStartsAfterHeader` (the lambda-arrow keystone read in
+  `SourceMultilineLambdaCallLayout`) was **retired by the #190 F2 segment-column slice**: whether an expression-lambda
+  method-call body "starts after the arrow line" no longer gates the attach-first-segment opener hug, so the enclosing
+  chain fans one selector per line at its true column on both passes — converging the `lambda-expression-argument-opener`
+  `assertThatThrownBy(() -> …)` / `probe.withVirtualTime(() -> …)` cases to a one-pass fixpoint (de-parked from both
+  `KNOWN_NON_IDEMPOTENT` sets).
 - **The D0 corpus-check metric.** The in-harness `corpus-check` idempotence/over-width columns under-report (they showed
   0 idempotence while the true base non-idempotence was ~8/400); the reliable signal is the format-twice-and-diff
   probe. That metric divergence should be fixed so the harness numbers can be trusted directly.

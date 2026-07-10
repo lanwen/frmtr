@@ -1113,6 +1113,23 @@ operand-per-line binary continuation, and the continuation shortcut relies on `b
 operand by width rather than on a source-shape exclusion. This dropped the `RETIREMENT_TARGET` count to 6 — the last
 step before the D3 flip above retired the remaining six hub reads and drove the count to 0.
 
+Two type-renderer "satellites" outside the hub — type-use annotation lists on a generic argument and qualified class
+literals — likewise stopped reading whether the author wrote them across multiple source lines, and are now driven by
+width at the true column. A generic argument carrying an annotation with a parenthesized body (`Map<@Size(...) String,
+…>`) renders through `TypePrinter.breakableAnnotatedGenericArgument`: a single group keeps the annotations and the
+trailing type inline while the compact form fits and, when it overflows, breaks the parenthesized body of each breakable
+annotation (each annotation is an `ifBreak(brokenAnnotation, compactText)`, so a fitting argument reproduces the exact
+compact spelling and only the overflowing one restructures) while the annotations and the type stay inline — the shape
+the retired `sourceMultilineAnnotation` probe used to gate on the author's line breaks. A qualified `Outer.Inner.class`
+literal (`ClassExpressionPrinter`) is emitted as a `conditionalGroup` whose first alternative is the exact compact text
+and whose fallback packs the dotted segments with a `Doc.fill`, breaking only the dots the line width forces (indenting
+each continued segment one level, `.class` riding on the last segment) and breaking a segment's generic argument list by
+its own width; this retired both `sourceMultiline` and the `startsOnLaterLine` cross-range read. These three retirements
+shrink the `InlineSourceLineReadGuardTest` allowlist (the inline `getRange().line` tier) by their three satellite
+entries; the entries left there are the chain/lambda `leftEdgePrefix` follow-ups, not type-renderer reads. The
+`type-use-annotation-width-wrap` and `class-literal-width-wrap` fixtures pin the compact-fit and the overflow-wrap shapes
+for each.
+
 Raw recovery/fallback text generation is not a source-shape decision and is not funneled through the policy: a printer
 that must emit a node's raw source for recovery or a fallback reads it straight from `RawSource` (the `raw` /
 `rawWithoutOwnComment` string forms), while genuine raw-output passes that must account for the comments they emit use

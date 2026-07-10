@@ -1981,7 +1981,9 @@ final class StatementPrinter {
         Expression iterable = statement.getIterable();
         String header = "for (" + variable + " : " + compact.apply(iterable) + ")";
         if (
-            layoutWidth.blockStatement(header + " {}") <= options.lineWidth()
+            // C10-c: measure the for-each header at the statement's true rendered block/type depth
+            // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
+            layoutWidth.nodeLine(statement, header + " {}") <= options.lineWidth()
             || !(iterable instanceof MethodCallExpr methodCall)
         ) {
             return Doc.text(header);

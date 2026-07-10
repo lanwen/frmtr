@@ -302,7 +302,9 @@ final class AnnotationDeclarationPrinter {
             + " "
             + declaration.getNameAsString()
             + "()";
-        if (layoutWidth.currentIndented(modifierText + flatSignature) <= options.lineWidth()) {
+        // C10-c: measure the annotation member signature at its true rendered type-body depth
+        // ({@link LayoutWidth#nodeLine}) instead of the fixed CURRENT baseline.
+        if (layoutWidth.nodeLine(declaration, modifierText + flatSignature) <= options.lineWidth()) {
             return Doc.text(flatSignature);
         }
         return Doc.concat(

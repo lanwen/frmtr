@@ -1618,7 +1618,9 @@ final class VariableInitializerLayout {
         }
         String prefix = arrayCreationPrefix.apply(arrayCreation);
         ArrayInitializerExpr initializer = arrayCreation.getInitializer().orElseThrow();
-        if (layoutWidth.currentIndented(flatName + " = " + prefix + " {") <= options.lineWidth()) {
+        // C10-c: measure the {@code NAME = new T[] {} opener on the assignment line at the initializer's true rendered
+        // block/type depth ({@link LayoutWidth#nodeLine}) instead of the fixed CURRENT baseline.
+        if (layoutWidth.nodeLine(arrayCreation, flatName + " = " + prefix + " {") <= options.lineWidth()) {
             return Optional.of(
                 Doc.concat(Doc.text(name + " = " + prefix + " "), arrayInitializer.apply(initializer, true))
             );
@@ -2646,7 +2648,9 @@ final class VariableInitializerLayout {
 
     private boolean parenthesizedConditionalConditionOpenerFits(String flatName, ConditionalExpr initializer) {
         return initializer.getCondition() instanceof EnclosedExpr
-            && layoutWidth.currentIndented(flatName + " = (") <= options.lineWidth();
+            // C10-c: measure the {@code NAME = (} opener at the initializer's true rendered block/type depth instead of
+            // the fixed CURRENT baseline.
+            && layoutWidth.nodeLine(initializer, flatName + " = (") <= options.lineWidth();
     }
 
     /**
@@ -2682,13 +2686,15 @@ final class VariableInitializerLayout {
                     LayoutContext.root()
                 )
                 .orElseGet(() -> expression.apply(methodCall));
+        // C10-c: measure the {@code NAME = params -> body} first line at the declarator's true rendered block/type depth
+        // ({@link LayoutWidth#variableInitializer}) instead of the fixed CURRENT baseline.
         if (
-            layoutWidth.currentIndented(flatName + " = " + lambdaPrefix + " " + bodyFirstLine)
+            layoutWidth.variableInitializer(variable, flatName + " = " + lambdaPrefix + " " + bodyFirstLine)
                 <= options.lineWidth()
         ) {
             return Optional.of(Doc.concat(Doc.text(name + " = " + lambdaPrefix + " "), body));
         }
-        if (layoutWidth.currentIndented(flatName + " = " + lambdaPrefix) <= options.lineWidth()) {
+        if (layoutWidth.variableInitializer(variable, flatName + " = " + lambdaPrefix) <= options.lineWidth()) {
             return Optional.of(
                 Doc.concat(
                     Doc.text(name + " = " + lambdaPrefix),
@@ -2742,7 +2748,8 @@ final class VariableInitializerLayout {
         if (
             !lambdaExpr.getBody().isBlockStmt()
             || !lambdaParametersShouldBreak.test(lambdaExpr, parameters)
-            || layoutWidth.currentIndented(flatName + " = (") > options.lineWidth()
+            // C10-c: measure the {@code NAME = (} opener at the lambda's true rendered block/type depth instead of CURRENT.
+            || layoutWidth.nodeLine(lambdaExpr, flatName + " = (") > options.lineWidth()
         ) {
             return Optional.empty();
         }
@@ -2763,7 +2770,9 @@ final class VariableInitializerLayout {
         String parameters = lambdaParameters.apply(lambdaExpr);
         if (
             lambdaParametersShouldBreak.test(lambdaExpr, parameters)
-            || layoutWidth.currentIndented(flatName + " = " + parameters + " -> {") > options.lineWidth()
+            // C10-c: measure the {@code NAME = params -> {} opener at the lambda's true rendered block/type depth instead
+            // of the fixed CURRENT baseline.
+            || layoutWidth.nodeLine(lambdaExpr, flatName + " = " + parameters + " -> {") > options.lineWidth()
         ) {
             return Optional.empty();
         }
@@ -2840,12 +2849,16 @@ final class VariableInitializerLayout {
     }
 
     private boolean castTypeNeedsBreak(String flatName, Type type) {
+        // C10-c: measure the cast opener at the type's true rendered block/type depth instead of the fixed CURRENT
+        // baseline. The cast type sits directly under the declarator (no intervening block/type), so it shares the
+        // declarator's rendered depth.
         return castTypeCanBreak(type)
-            && layoutWidth.currentIndented(flatName + " = (" + compactTypeLike.apply(type) + ")") > options.lineWidth();
+            && layoutWidth.nodeLine(type, flatName + " = (" + compactTypeLike.apply(type) + ")") > options.lineWidth();
     }
 
     private boolean castTypeOpenerFitsOnEqualsLine(String flatName, Type type) {
-        return layoutWidth.currentIndented(flatName + " = " + castTypeOpener(type)) <= options.lineWidth();
+        // C10-c: measure the {@code NAME = (Type)} opener at the type's true rendered block/type depth instead of CURRENT.
+        return layoutWidth.nodeLine(type, flatName + " = " + castTypeOpener(type)) <= options.lineWidth();
     }
 
     private String castTypeOpener(Type type) {

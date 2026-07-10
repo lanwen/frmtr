@@ -1721,8 +1721,12 @@ final class MethodCallPrinter {
             + " "
             + assignExpr.getOperator().asString()
             + " ";
+        // C10-c (U5/F4): the assignment prefix ({@code target op }) already shares the value's first line, so measure the
+        // chain's stay-flat width at the RHS's true rendered block/type column ({@link LayoutWidth#nodeIndentWidth}) plus
+        // that fixed left-edge prefix, instead of the fixed BLOCK baseline. A reindented statement is then measured at the
+        // column it is actually written at (F3), and a value that only overflows once the prefix is counted still breaks.
         ToIntFunction<String> prefixedFirstLineWidth =
-            text -> layoutWidth.line(LayoutWidth.LineBudget.BLOCK, assignmentPrefix + text);
+            text -> layoutWidth.nodeIndentWidth(methodCall) + assignmentPrefix.length() + text.length();
         // Canonical-fan cutover seam (End-state A): a fan-threshold, comment/lambda-free assignment-RHS chain fans one
         // selector per line, and it must do so through the SAME source-neutral fan on every pass — otherwise the RHS
         // opener flips split<->attach. On a source-multiline-argument pass the FORCED methodCallChain below skips its own
@@ -1776,7 +1780,9 @@ final class MethodCallPrinter {
             return Optional.empty();
         }
         String firstLine = assignmentPrefix + methodCallPrefix(methodCall) + "(";
-        if (layoutWidth.line(LayoutWidth.LineBudget.BLOCK, firstLine) > options.lineWidth()) {
+        // C10-c: the broken-call opener shares the assignment line, so measure it at the RHS's true rendered block/type
+        // column ({@link LayoutWidth#nodeLine}, which folds in the already-prefixed firstLine) instead of the fixed BLOCK.
+        if (layoutWidth.nodeLine(methodCall, firstLine) > options.lineWidth()) {
             return Optional.empty();
         }
         return Optional.of(

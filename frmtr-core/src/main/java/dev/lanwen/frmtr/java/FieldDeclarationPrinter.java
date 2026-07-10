@@ -235,7 +235,11 @@ final class FieldDeclarationPrinter {
         return (
             typeCanBreak.test(type)
             && variables.stream()
-                    .anyMatch(variable -> layoutWidth.currentIndented(
+                    // C10-c: measure the field type-and-name at the declarator's true rendered type-body depth
+                    // ({@link LayoutWidth#nodeLine}) instead of the fixed CURRENT baseline, so a field in a nested type is
+                    // measured at the column it renders at (F3).
+                    .anyMatch(variable -> layoutWidth.nodeLine(
+                            variable,
                             declarationPrefix + variable.getNameAsString()
                         ) > options.lineWidth()
                     )

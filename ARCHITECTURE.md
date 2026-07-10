@@ -982,12 +982,21 @@ prefix here under-measures a deeply nested argument and regresses it to an over-
 attribution of an argument's continuation indent is deferred. `methodCallRootLineWidth` (the source-multiline
 expression-lambda hug gate) now reads a non-empty `leftEdgePrefix` the same way `compactRootLineWidth` does
 (`nodeIndentWidth(expression) + leftEdgePrefix.length() + firstLine.length()`, floor dropped); reading an empty prefix
-stays a strict no-op, so it is byte-identical readiness (no current caller threads a non-empty prefix into it). The other
-two sibling gates (`rootLineWidth`, `selectorLineWidth`) stay plumbed-but-no-op: their sole consumer
-`promotedRootArgumentsShouldBreak` is already reached by the **initializer** chain carrying a real `"NAME = "` prefix, so
-activating them would change the initializer's promoted-root argument-break verdict — a corpus regression, not a no-op — so
-their activation waits until that promoted-root path is reviewed. The whole slice is byte-identical across the frmtr,
-kafka, and camel corpora (0 files move) with zero new non-idempotence.
+stays a strict no-op, so it is byte-identical readiness (no current caller threads a non-empty prefix into it). The whole
+U3 slice is byte-identical across the frmtr, kafka, and camel corpora (0 files move) with zero new non-idempotence.
+
+The U3 **floor-drop follow-up** then activated the prefix read on the `rootLineWidth` sibling gate as well
+(`nodeIndentWidth(root) + leftEdgePrefix.length() + text.length()`, floor dropped, mirroring `compactRootLineWidth`).
+Its consumer `promotedRootArgumentsShouldBreak` is reached by the **initializer** chain carrying a real `"NAME = "`
+prefix, so that promoted-root argument-break verdict is now measured at the chain's true rendered column rather than the
+value's stale source column. This was expected to move the corpus, but measurement shows it is byte-identical: across
+kafka (full), camel, cayenne, tomcat, and zookeeper, 0 files move. The branch is live — it fires 22 times on the kafka
+corpus and the rendered-column measurement differs from the old source-column floor in 20 of them (by a few columns each)
+— but the difference never crosses the line width on the corpus, so no break verdict flips and the outputs stay
+identical. It is therefore a genuine determinism hardening (a reindented initializer whose promoted root sits at a stale
+source column across the width boundary is now measured at its true column) that is byte-identical on already-formatted
+and real-world code. The remaining sibling gate `selectorLineWidth` stays plumbed-but-no-op; its broken-selector
+consumers have not yet been reviewed for the same activation.
 
 The per-node *positional* facts a width gate needs — distinct from the run-scoped `JavaFormatContext` services and
 from per-type dispatch — travel in an immutable `LayoutContext` record threaded down the descent

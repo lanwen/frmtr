@@ -69,8 +69,11 @@ class SourceMultilineObjectChainInitializer {
     }
 
     // sampleRule {
-    public BrowserClient sourceBrowser = new BrowserClient("browser/standalone-stable:4.13.0")// marker }
-    .withNetwork(NETWORK);
+    public BrowserClient sourceBrowser = new BrowserClient(
+        "browser/standalone-stable:4.13.0"
+    )
+            // marker }
+            .withNetwork(NETWORK);
 
     // sampleRule {
     public BrowserClient firstPassBrowser = new BrowserClient(

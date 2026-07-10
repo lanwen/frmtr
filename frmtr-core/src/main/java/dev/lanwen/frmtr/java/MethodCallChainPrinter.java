@@ -2795,7 +2795,18 @@ final class MethodCallChainPrinter {
             ToIntFunction<String> firstLineWidth,
             LayoutContext layout
     ) {
-        if (sourceMultilineChain && methodCallSegmentHasLeadingLineComment(call)) {
+        // D4 (leftEdgePrefix foundation, slice F5): an inter-segment {@code //} line comment attached as the sole
+        // selector's LEADING comment ({@code new X(...)}⏎{@code // note}⏎{@code .selector(...)}) must render on the
+        // comment-preserving exploded path — the constructor broken open, the selector re-emitting its leading comment on
+        // its own continuation line — regardless of the author's line breaks. The verdict keys purely on comment presence
+        // ({@link #methodCallSegmentHasLeadingLineComment}, a structural fact), NOT on the retired {@code sourceMultilineChain}
+        // read (now constant-false), so both passes fan identically and the shape is a one-pass fixpoint. Before this the
+        // dead {@code sourceMultilineChain} gate let a comment-on-its-own-line source fall through to the width-driven
+        // compact-glued shape below ({@code new X(...)// note}⏎{@code .selector(...)}), which then re-attached the comment
+        // as the ROOT's trailing comment on the next pass and exploded — the attach⇄explode oscillation this closes. The
+        // segment renderer claims the leading comment exactly once and {@code brokenObjectCreationRenderer} renders a
+        // comment-free constructor, so no comment is double-claimed or dropped (guarded by CommentPresenceDiagnosticTest).
+        if (methodCallSegmentHasLeadingLineComment(call)) {
             return Doc.concat(
                 brokenObjectCreationRenderer.apply(objectCreation),
                 chainContinuation(methodCallChainSegment(call, Optional.empty(), finalSegmentSuffix))

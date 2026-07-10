@@ -1094,12 +1094,20 @@ measured on a real corpus (kafka, 400 files) before deletion — real-corpus ide
 - **+5 bounded corpus over-width files.** The width-driven hub leaves five kafka files with an over-width line the
   source-preserving reads used to avoid: the segment-lambda multi-selector nested-root family, block-lambda bodies, and
   comment-adjacent chains. Bounded and stable, not growing.
-- **Two quarantined edge fixtures.** `lambda-expression-argument-opener` and `source-multiline-object-chain-initializer`
-  produce a legitimate, AST-equivalent pass-1 layout that is not yet a one-pass fixpoint. Their goldens are rebaselined to
-  that pass-1 output and their *idempotence* sub-assertion is allowlisted (`FrmtrTest.KNOWN_NON_IDEMPOTENT` /
-  `IdempotencePropertyTest.KNOWN_NON_IDEMPOTENT`); two comment-drop perturbations (`method-chain-member-access @ expanded`,
-  `source-multiline-object-chain-initializer @ collapsed`) are parked in `CommentPresenceDiagnosticTest.KNOWN_DROPS`. The
-  fixtures stay as trackers that flip green when the deep slice lands; none is deleted or moved.
+- **One quarantined edge fixture.** `lambda-expression-argument-opener` produces a legitimate, AST-equivalent pass-1
+  layout that is not yet a one-pass fixpoint. Its golden is rebaselined to that pass-1 output and its *idempotence*
+  sub-assertion is allowlisted (`FrmtrTest.KNOWN_NON_IDEMPOTENT` / `IdempotencePropertyTest.KNOWN_NON_IDEMPOTENT`); two
+  comment-drop perturbations (`method-chain-member-access @ expanded`, `source-multiline-object-chain-initializer @ collapsed`)
+  are parked in `CommentPresenceDiagnosticTest.KNOWN_DROPS`. The fixture stays as a tracker that flips green when the deep
+  slice lands; it is neither deleted nor moved.
+  `source-multiline-object-chain-initializer` was the second such idempotence tracker; slice **F5** (Decision D4) makes its
+  `sourceBrowser` case a one-pass fixpoint: an inter-segment `//` line comment attached as the sole selector's leading
+  comment on an object-creation-rooted single-call chain now renders the comment-preserving **exploded** shape
+  (`MethodCallChainPrinter.objectRootSingleSegmentChain`) keyed on comment presence
+  (`methodCallSegmentHasLeadingLineComment`) rather than the retired constant-false `sourceMultilineChain` read — so pass 1
+  no longer picks a compact-glued shape that pass 2 re-attaches as a root-trailing comment and explodes. It is de-parked
+  (removed from both `KNOWN_NON_IDEMPOTENT` sets, golden rebaselined to the exploded fixpoint). Its `@ collapsed`
+  comment-drop perturbation is a distinct comment×width fold and stays parked in `KNOWN_DROPS`.
   `method-chain-trailing-empty-call-comment` was the third such tracker; the PR #279 review (#17) empty-tail single-selector
   object-creation break-after-`=` (below), refined by review (#11) into the **dot-break** shape
   (`dotBrokenObjectRootTailChain`: `= new RelaySubject<>(...)` ⏎ `.withoutAuthentication(); // note`), makes it a one-pass

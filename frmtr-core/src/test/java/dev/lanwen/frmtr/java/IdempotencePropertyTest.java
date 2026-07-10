@@ -139,12 +139,10 @@ final class IdempotencePropertyTest {
      * Each mirrors a {@code FrmtrTest.KNOWN_NON_IDEMPOTENT} entry and is a tracked follow-up (see ARCHITECTURE.md
      * "residual follow-ups").
      */
-    private static final Set<String> KNOWN_NON_IDEMPOTENT = Set.of(
-        // Object-creation chain initializer: residual inter-segment `// marker }` line-comment oscillation on the
-        // `sourceBrowser` field (comment-placement / W3-D4 residual, not the #190 segment-column keystone). tracked:
-        // D3 flip follow-ups / comment-placement slice.
-        "source-multiline-object-chain-initializer"
-    );
+    // Currently empty: both formerly-deferred fixtures now converge to one-pass idempotence — the lambda-hug case via
+    // the #190 segment-column keystone (#284) and the object-creation chain-initializer inter-segment-comment case via
+    // the D4 comment-placement fix (this PR). Re-add an entry only with a tracked idempotence justification.
+    private static final Set<String> KNOWN_NON_IDEMPOTENT = Set.of();
 
     /**
      * Over the inputs a developer actually feeds the formatter — every verbatim golden fixture input and every

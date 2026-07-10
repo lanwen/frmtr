@@ -314,7 +314,7 @@ final class ExpressionPrinters {
             methodCalls::sourceMultilineArguments,
             methodCalls::compactRootWithBrokenFinalChainSegment,
             methodCalls::canonicalFanChain,
-            methodCalls::forcedMethodCallChain,
+            methodCalls::forcedMethodCallChainAtBaseline,
             methodCalls::forcedMethodCallChain,
             methodCalls::brokenMethodCall,
             methodCalls::brokenMethodCallWithClosingLine,
@@ -352,13 +352,13 @@ final class ExpressionPrinters {
     }
 
     Doc expressionWithTail(Expression expression, ExpressionTail tail) {
-        return expressionWithTail(expression, tail, LayoutWidth.LineBudget.CURRENT);
+        return expressionWithTail(expression, tail, context.layoutWidth::currentIndented);
     }
 
     Doc expressionWithTail(
             Expression expression,
             ExpressionTail tail,
-            LayoutWidth.LineBudget lineBudget
+            ToIntFunction<String> lineWidth
     ) {
         if (tail.isEmpty()) {
             return expression(expression);
@@ -366,7 +366,7 @@ final class ExpressionPrinters {
         if (expression instanceof MethodCallExpr methodCall) {
             return Doc.label(
                 "java.expression:" + expression.getClass().getSimpleName(),
-                methodCalls.methodCallWithTail(methodCall, tail, lineBudget)
+                methodCalls.methodCallWithTail(methodCall, tail, lineWidth)
             );
         }
         if (expression instanceof ObjectCreationExpr objectCreation) {
@@ -378,9 +378,9 @@ final class ExpressionPrinters {
     Doc forcedMethodCallWithTail(
             MethodCallExpr expression,
             ExpressionTail tail,
-            LayoutWidth.LineBudget lineBudget
+            ToIntFunction<String> lineWidth
     ) {
-        return methodCalls.forcedMethodCallWithTail(expression, tail, lineBudget);
+        return methodCalls.forcedMethodCallWithTail(expression, tail, lineWidth);
     }
 
     Doc expressionWithoutOwnComment(Expression expression) {
@@ -448,9 +448,9 @@ final class ExpressionPrinters {
      * (LDM-2f #190/#236).
      */
     Optional<Doc> huggedLambdaBodyChain(String firstLine, MethodCallExpr expression) {
-        return methodCalls.forcedMethodCallChain(
+        return methodCalls.forcedMethodCallChainAtBaseline(
             expression,
-            LayoutWidth.LineBudget.CURRENT,
+            context.layoutWidth::currentIndented,
             LayoutContext.root().withLeftEdgePrefix(firstLine + " ")
         );
     }
@@ -560,8 +560,8 @@ final class ExpressionPrinters {
         return methodCalls.canonicalFanChain(expression, "", LayoutContext.root());
     }
 
-    Optional<Doc> forcedMethodCallChain(MethodCallExpr expression, LayoutWidth.LineBudget lineBudget) {
-        return methodCalls.forcedMethodCallChain(expression, lineBudget);
+    Optional<Doc> forcedMethodCallChainAtBaseline(MethodCallExpr expression, ToIntFunction<String> baseline) {
+        return methodCalls.forcedMethodCallChainAtBaseline(expression, baseline);
     }
 
     /**

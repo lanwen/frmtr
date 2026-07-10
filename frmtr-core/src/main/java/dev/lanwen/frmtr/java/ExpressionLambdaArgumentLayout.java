@@ -899,14 +899,13 @@ final class ExpressionLambdaArgumentLayout {
             Expression bodyExpression,
             ToIntFunction<String> columnWidth
     ) {
-        // D3 keystone (consumed): take the wider of the fixed {@code LAMBDA_ARGUMENT_CLOSING} budget and the threaded true
-        // segment column ({@code columnWidth}). Monotone: a compact body that overflows at its real fanned continuation
-        // column is withheld here so the caller falls through to a genuinely broken body shape, but a shallow body still
-        // renders compact exactly as before.
+        // D3 keystone (consumed): take the wider of the fixed lambda-argument-closing floor (four units) and the threaded
+        // true segment column ({@code columnWidth}). Monotone: a compact body that overflows at its real fanned
+        // continuation column is withheld here so the caller falls through to a genuinely broken body shape, but a shallow
+        // body still renders compact exactly as before.
         String line = firstLine + " " + compact.apply(bodyExpression) + ")";
         if (
-            Math.max(layoutWidth.line(LayoutWidth.LineBudget.LAMBDA_ARGUMENT_CLOSING, line), columnWidth.applyAsInt(line))
-                > options.lineWidth()
+            Math.max(layoutWidth.lambdaArgumentClosing(line), columnWidth.applyAsInt(line)) > options.lineWidth()
         ) {
             return Optional.empty();
         }
@@ -914,7 +913,7 @@ final class ExpressionLambdaArgumentLayout {
     }
 
     private int brokenArgumentListLambdaBodyWidth(String bodyLine) {
-        return layoutWidth.line(LayoutWidth.LineBudget.METHOD_CHAIN_LAMBDA_BODY, bodyLine);
+        return layoutWidth.methodChainLambdaBody(bodyLine);
     }
 
     /**

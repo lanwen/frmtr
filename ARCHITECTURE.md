@@ -440,8 +440,8 @@ method-call assignment) and the variable initializer path (`VariableInitializerL
 so a chain that fits at the block indent but overflows once the assignment/initializer prefix is counted breaks instead
 of being emitted flat over width. The same `lineBudget`/`firstLineWidth` channel also carries nesting depth: when a
 chain is rendered as a wrapped call argument or a nested initializer it sits at its enclosing argument list's
-continuation indentation, deeper than the `CURRENT` budget the AUTO entry assumes, so the argument-list dispatcher
-(`MethodCallPrinter.methodCallArgumentDoc`) threads the `CONTINUATION` budget into the chain. When the resulting probe
+continuation indentation, deeper than the current-member baseline the AUTO entry assumes, so the argument-list dispatcher
+(`MethodCallPrinter.methodCallArgumentDoc`) threads the continuation baseline (`layoutWidth::continuationStatement`) into the chain. When the resulting probe
 shows the chain over width but its short final segment (`.toRetry()`, `.build()`) has no arguments to wrap, the chain
 printer breaks the root's own argument list and glues the segment to its close, the same shape a source-multiline root
 already produces. Layout-decision-model milestone LDM-3 routes one slice of this single-segment cluster through the
@@ -945,20 +945,30 @@ body local but under-counted a field in a nested type or a local nested inside f
 renders past the line width there (the #137/#155 measure-at-the-wrong-column family). Because `openerLineWidth` is never
 narrower than the true rendered column, a genuinely over-width opener always trips a gate, and flooring by
 `currentIndented` keeps every already-correct shallow position byte-identical (#216). The declaration-header throws
-clause (`ThrowsClausePrinter`), the callable parameter-list break (`CallableSignaturePrinter.parametersBreak`), and the
-breakable-argument continuation gate (`BreakableArgumentExpressionPrinter`) close the same family (#220): each measured
-its same-line width at a fixed baseline (the one-indent `currentIndented` for the throws clause and parameter list, the
-three-unit `CONTINUATION` budget for a breakable argument), so a `throws …`, a signature, or an argument on a member of
-an inner class or nested type — which renders one block/type level deeper per enclosing scope — was judged against a
-shallower column than it occupies and kept inline/flat over width. They now take the wider of that historical baseline
-and `LayoutWidth.nodeLine` at the node's real block/type depth: the floor leaves top-level declarations byte-identical
-(the whole fixture corpus was unchanged) while a deeper-nested `throws` list, parameter list, or binary/conditional
-argument breaks at its true column. The deeper-nesting rebaselining is guarded by
-`format/throws-clause-nested-depth` (the same method and constructor at class depth stay inline but break one level
-down) and `format/breakable-argument-nested-depth` (a binary-sum argument that fits flat at method depth breaks
-one-operand-per-line inside three nested classes). A method-call argument stays on the earlier chain-argument path
-(`MethodCallPrinter`'s `CONTINUATION`-budget chain probe), which is a separate seam left on its fixed budget, so the
-breakable-argument gate change is observable for non-method-call arguments (binary, conditional).
+clause (`ThrowsClausePrinter`) and the callable parameter-list break (`CallableSignaturePrinter.parametersBreak`) close
+the same family (#220): each measured its same-line width at a fixed one-indent `currentIndented` baseline, so a
+`throws …` or a signature on a member of an inner class or nested type — which renders one block/type level deeper per
+enclosing scope — was judged against a shallower column than it occupies and kept inline over width. They now take the
+wider of that historical baseline and `LayoutWidth.nodeLine` at the node's real block/type depth: the floor leaves
+top-level declarations byte-identical (the whole fixture corpus was unchanged) while a deeper-nested `throws` list or
+parameter list breaks at its true column, guarded by `format/throws-clause-nested-depth` (the same method and
+constructor at class depth stay inline but break one level down).
+
+The breakable-argument gate (`BreakableArgumentExpressionPrinter`) initially joined that family with a
+`max(nodeLine, CONTINUATION)` continuation-width probe, but C10-d (#191, once the hub reflows purely by width) replaces
+that probe with a renderer-measured `Doc.conditionalGroup([flat, broken])`: instead of pre-computing whether the
+argument's continuation line overflows a fixed baseline, it offers the flat rendering and the argument's
+expression-specific broken form as ranked alternatives and lets `DocRenderer` pick by flat fit at the argument's true
+output column (the trailing comma/tail the enclosing list appends is accounted for by the renderer's line-fit lookahead,
+so no width suffix is threaded). Because both arms are pure functions of the AST the choice is a fixpoint — the same
+conversion oscillated (+53 non-idempotent files) before the hub stopped reading source shape, but post-flip it does
+not — and it retires the gate's `nodeLine`/`CONTINUATION` arithmetic and the printer's `LayoutWidth`/`options`/`compact`
+fields entirely. It is a strict determinism improvement: over-width is cleared for deeply nested binary/conditional
+arguments (14 corpus files across kafka/camel/cayenne/tomcat/zookeeper) with zero new non-idempotence and no fixture
+moved. `format/breakable-argument-nested-depth` (a binary-sum argument that fits flat at method depth breaks
+one-operand-per-line inside three nested classes) still guards the deep-nesting break, now driven by the renderer's
+true-column fit rather than the probe. A method-call argument stays on the earlier chain-argument path
+(`MethodCallPrinter`'s continuation-baseline chain probe), a separate seam left on its fixed baseline.
 
 Chain-unify U3 (LDM-2f, #190) then wired the **statement** and **argument** chain callers — the last two that reached the
 chain gates through an implicit `LayoutContext.root()` — with a real `LayoutContext`, and activated the prefix read on
@@ -966,15 +976,15 @@ chain gates through an implicit `LayoutContext.root()` — with a real `LayoutCo
 renderer's forced-chain entry, reached only from `StatementPrinters`) now builds a `LayoutContext`
 (`EnclosingConstruct.STATEMENT`, empty `leftEdgePrefix`) and threads a `LayoutWidth.nodeIndentWidth`-based first-line width
 (computed once, then folded into the width closure so it stays O(1) per probe) to the chain instead of the fixed
-`LineBudget.BLOCK` baseline, so the chain measures at the statement's real rendered column. A statement always renders at
+two-unit block baseline, so the chain measures at the statement's real rendered column. A statement always renders at
 its own block depth (no stacked continuation indent an argument can accumulate), so that width is exactly the statement's
 rendered column and the change is byte-identical on already-formatted input while a statement chain nested deeper than the
 two-level budget is now measured at its true depth. The statement's own outer break-or-flat gate
-(`StatementPrinter.methodCallStatementWidth`) is intentionally left on the fixed `LineBudget`: it also gates non-chain
+(`StatementPrinter.methodCallStatementWidth`) is intentionally left on the fixed block baseline: it also gates non-chain
 statement calls, so swapping it to the rendered column breaks pre-existing over-width statements whose forced-break path
 has a latent trailing-line-comment placement non-idempotence, which is out of this byte-identical slice's scope.
-`MethodCallPrinter.methodCallArgumentDoc` likewise builds a `LayoutContext` (`EnclosingConstruct.ARGUMENT`,
-`LineBudget.CONTINUATION`) but with an **empty** `leftEdgePrefix`, because an argument's extra offset is pure continuation
+`MethodCallPrinter.methodCallArgumentDoc` likewise builds a `LayoutContext` (`EnclosingConstruct.ARGUMENT`) and threads
+the fixed continuation baseline (`layoutWidth::continuationStatement`) into the chain, but with an **empty** `leftEdgePrefix`, because an argument's extra offset is pure continuation
 *indentation* applied by the enclosing list's nested `Doc.indent` at render time — an argument can sit under several
 stacked continuations that `nodeIndentWidth` (block/type depth only) does not count — so the chain gates keep their
 wider-of source-column floor, which is where that unmodelled continuation indent still lives; a `nodeIndentWidth`-based
@@ -1002,13 +1012,13 @@ The per-node *positional* facts a width gate needs — distinct from the run-sco
 from per-type dispatch — travel in an immutable `LayoutContext` record threaded down the descent
 (`EnclosingConstruct` position, `leftEdgePrefix`, the `trailingContent` the caller will emit on the same line after the
 node, and a `leadingBreak` flag recording whether the caller has already committed the node to lead with a break). An
-earlier transitional `LayoutWidth.LineBudget` selector once rode on this record to reproduce fixed indentation baselines
+earlier transitional fixed-baseline selector once rode on this record to reproduce fixed indentation baselines
 for per-node width probes; it has now been **fully retired** (U2/U9, #190) and the field deleted. The return-path reads
 went first: the two `returnLineWidth` gates (`ReturnExpressionPrinter`, `ReturnBinaryExpressionLayout`) drop the
 fixed-budget floor and measure purely at the rendered column,
 `ReturnBinaryExpressionLayout.directBinaryReturnMethodCallFirstLineFits` folds its bare first-line probe into that same
-measurement, and the comment-bearing-chain tail and the `returnWithForcedMethodCallChain` callee budget take a fixed
-`LineBudget.BLOCK` baseline (the return keyword's rendered column is already threaded through `chainLayout`'s
+measurement, and the comment-bearing-chain tail and the `returnWithForcedMethodCallChain` callee take a fixed
+two-unit block baseline (the return keyword's rendered column is already threaded through `chainLayout`'s
 `leftEdgePrefix`, so the prefix-aware chain gates do the real measuring). The last reader was `ChainFanLayout`'s
 `--explain`-only width-break diagnostic (`ChainWidthBreakExplain`), now measured at the chain's rendered column
 (`nodeIndentWidth` + `leftEdgePrefix` + compact text) exactly like the sibling `MethodCallChainPrinter.compactRootLineWidth`
@@ -1016,9 +1026,23 @@ gate; with no readers left the `widthBudget` field was removed from the record a
 and the writer construction sites (`StatementPrinter`, `BinaryExpressionPrinter`, `MethodCallPrinter`,
 `BreakableArgumentExpressionPrinter`). The retirement is byte-identical across the format-fixture suite and the
 kafka/camel/cayenne/tomcat/zookeeper corpora (0 files move; only the `--explain` diagnostic's recorded flat-width value
-shifts to the correct rendered column). `LayoutWidth.LineBudget` itself survives as the fixed-baseline probe vocabulary
-the width helpers still use directly through `LayoutWidth.line(budget, …)`; only the per-node `LayoutContext` override is
-gone. `trailingContent` carries the one fact
+shifts to the correct rendered column). C10-d (#191) then moved the direct continuation-family width probes off the enum
+onto standalone `LayoutWidth` arithmetic — `continuationStatement` (three units), `lambdaArgumentClosing` (four units, the
+fixed floor the packed-lambda closing gate keeps under its threaded true-column oracle), and `methodChainLambdaBody` (five
+units). The **C10 terminal slice** then deleted `LayoutWidth.LineBudget` (the enum, its `line(budget, …)` method, and the
+enum-based `currentIndented`/`blockStatement` wrappers) outright. The hub now measures either at the true rendered column
+(via `nodeLine`/`nodeIndentWidth`/`variableInitializer` and the threaded `leftEdgePrefix`) or through the enum-free
+fixed-baseline arithmetic helpers (`currentIndented` = one unit, `blockStatement` = two, `continuationStatement` = three,
+`lambdaArgumentClosing` = four, `methodChainLambdaBody` = five, each a plain `indentUnit.length() * n + text.length()`).
+Where a width baseline genuinely has to be threaded down the descent it now travels as a `ToIntFunction<String>` width
+measure rather than an enum value. The two load-bearing threaded selectors are the argument-chain continuation seam
+(`MethodCallPrinter.methodCallArgumentDoc`, threading `layoutWidth::continuationStatement`) and the block-lambda-body
+statement path (`StatementPrinters.methodChainLambdaBlock`, threading `layoutWidth::methodChainLambdaBody` — a signal the
+block/type-only `nodeLine` cannot reconstruct, since the statement sits about five `Doc.indent` levels under a broken
+chain); the former budget-family chain entries that fed both the residual-probe and first-line slots the same baseline are
+routed through `MethodCallPrinter.forcedMethodCallChainAtBaseline`, kept distinct from the `firstLineWidth` overloads so
+the two `ToIntFunction<String>` families do not collide. The retirement is byte-identical across the format-fixture suite
+and the kafka/camel/cayenne/tomcat/zookeeper corpora (0 files move). `trailingContent` carries the one fact
 node-local IR cannot see: the same-line opener a header appends after a clause. The canonical case is the throws
 clause — a declaration header's `throws …` width has to include the `" {"` (body) or `";"` (abstract) the caller
 glues on that line — so `MethodDeclarationPrinter`/`ConstructorDeclarationPrinter` thread that opener as

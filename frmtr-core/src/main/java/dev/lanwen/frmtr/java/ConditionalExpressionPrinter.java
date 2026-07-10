@@ -167,7 +167,9 @@ final class ConditionalExpressionPrinter {
             + " "
             + compactSource.compact(conditionalExpr.getCondition())
             + ";";
-        if (layoutWidth.blockStatement(conditionLine) <= options.lineWidth()) {
+        // C10-c: measure the {@code target op condition;} line at the conditional's true rendered block/type depth
+        // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
+        if (layoutWidth.nodeLine(conditionalExpr, conditionLine) <= options.lineWidth()) {
             return Optional.of(
                 Doc.concat(
                     expressionRenderer.apply(assignExpr.getTarget()),
@@ -277,7 +279,9 @@ final class ConditionalExpressionPrinter {
      */
     private void recordTernaryWidthBreak(ConditionalExpr expression) {
         String flat = compactSource.compact(expression);
-        int flatWidth = layoutWidth.currentIndented(flat);
+        // C10-c: narrate the flat ternary width at its true rendered block/type depth ({@link LayoutWidth#nodeLine})
+        // instead of the fixed CURRENT baseline. This is observational (feeds --explain only) and never changes the Doc.
+        int flatWidth = layoutWidth.nodeLine(expression, flat);
         if (flatWidth <= options.lineWidth()) {
             return;
         }

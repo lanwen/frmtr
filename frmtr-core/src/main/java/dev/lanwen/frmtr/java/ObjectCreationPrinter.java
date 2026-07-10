@@ -78,13 +78,9 @@ final class ObjectCreationPrinter {
         this.commentedExpressionLists = new CommentedExpressionListPrinter(context, node -> expressionRenderer.format(node, LayoutContext.root()));
         this.expressionRenderer = expressionRenderer;
         this.breakableArguments = new BreakableArgumentExpressionPrinter(
-            context.sourceShapePolicy,
-            context.options,
             node -> expressionRenderer.format(node, LayoutContext.root()),
             brokenArgumentRenderer,
-            compact::apply,
-            binaryFansChainOperand,
-            context.layoutWidth
+            binaryFansChainOperand
         );
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.bodyRenderer = bodyRenderer;

@@ -1173,7 +1173,11 @@ final class SwitchPrinter {
             return switchRuleBlock(statement.asBlockStmt());
         }
         if (statement instanceof ExpressionStmt expressionStmt) {
-            return expressionWithTailRenderer.render(expressionStmt.getExpression(), ExpressionTail.SEMICOLON);
+            return expressionWithTailRenderer.render(
+                expressionStmt.getExpression(),
+                ExpressionTail.SEMICOLON,
+                currentIndentedWidth
+            );
         }
         return Doc.concat(statementRenderer.format(statement, LayoutContext.root()));
     }

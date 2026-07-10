@@ -144,13 +144,9 @@ final class MethodCallPrinter {
         this.objectCreationWithSuffix = objectCreationWithSuffix;
         this.brokenArgumentExpressionRenderer = brokenArgumentExpressionRenderer;
         this.breakableArguments = new BreakableArgumentExpressionPrinter(
-            context.sourceShapePolicy,
-            context.options,
             node -> expressionRenderer.format(node, LayoutContext.root()),
             brokenArgumentExpressionRenderer,
-            compactSource::compact,
-            methodChains::binaryFansChainOperand,
-            context.layoutWidth
+            methodChains::binaryFansChainOperand
         );
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
         this.commentedExpressionLambdaArgument = commentedExpressionLambdaArgument;
@@ -165,20 +161,16 @@ final class MethodCallPrinter {
         this.layoutDecisions = context.layoutDecisions;
     }
 
-    private ToIntFunction<String> lineWidth(LayoutWidth.LineBudget lineBudget) {
-        return text -> layoutWidth.line(lineBudget, text);
-    }
-
     /**
      * The fixed-budget column oracle handed to the expression-lambda hug seams at the top-level method-call argument
      * positions this printer owns (not a fanned chain selector).
      *
-     * <p>D3 keystone: reproduces the seam's historical {@code expressionFirstLineWidth} baseline exactly
-     * ({@code layoutWidth.line(CONTINUATION, text)}), so threading it is byte-identical. Consuming the true column is the
-     * atomic D3 flip, out of scope for this slice.
+     * <p>D3 keystone: reproduces the seam's historical {@code expressionFirstLineWidth} baseline exactly (the fixed
+     * three-unit continuation depth, {@link LayoutWidth#continuationStatement}), so threading it is byte-identical.
+     * Consuming the true column is the atomic D3 flip, out of scope for this slice.
      */
     private ToIntFunction<String> expressionLambdaColumnWidthFallback() {
-        return lineWidth(LayoutWidth.LineBudget.CONTINUATION);
+        return layoutWidth::continuationStatement;
     }
 
     Doc methodCall(MethodCallExpr expression) {
@@ -202,18 +194,18 @@ final class MethodCallPrinter {
     }
 
     Doc methodCallWithTail(MethodCallExpr expression, ExpressionTail tail) {
-        return methodCallWithTail(expression, tail, LayoutWidth.LineBudget.CURRENT);
+        return methodCallWithTail(expression, tail, layoutWidth::currentIndented);
     }
 
     Doc methodCallWithTail(
             MethodCallExpr expression,
             ExpressionTail tail,
-            LayoutWidth.LineBudget lineBudget
+            ToIntFunction<String> lineWidth
     ) {
-        MethodCallBreakMode breakMode = methodCallWithTailOverflows(expression, tail, lineBudget)
+        MethodCallBreakMode breakMode = methodCallWithTailOverflows(expression, tail, lineWidth)
             ? MethodCallBreakMode.FORCED
             : MethodCallBreakMode.AUTO;
-        return methodCallWithTail(expression, tail, breakMode, lineBudget);
+        return methodCallWithTail(expression, tail, breakMode, lineWidth);
     }
 
     // LDM-2f / chain-unify U3 (#190): the statement expression renderer's forced-chain entry (reached only from
@@ -221,15 +213,15 @@ final class MethodCallPrinter {
     // statement caller is ready to list a chainFanOut arm through bestFitting in U4. A statement chain owns its own first
     // column, so the leftEdgePrefix is empty (the gate reads stay a no-op) but the chain's first-line width becomes the
     // statement's real rendered column ({@code nodeLine(expression, ...)}, which counts every enclosing block/type) rather
-    // than the fixed {@code LineBudget.BLOCK} baseline the seam threaded before. Because a statement always renders at its
+    // than the fixed two-unit block baseline the seam threaded before. Because a statement always renders at its
     // own block depth (no stacked continuation indent an argument can accumulate), {@code nodeLine} is exactly that
     // column, so already-formatted input is byte-identical while a statement chain nested deeper than the two-level budget
     // is now measured at its true depth. The outer break-or-flat gate (methodCallStatementWidth) still keys on the
-    // threaded LineBudget and is left unchanged.
+    // threaded budget measure and is left unchanged.
     Doc forcedMethodCallWithTail(
             MethodCallExpr expression,
             ExpressionTail tail,
-            LayoutWidth.LineBudget lineBudget
+            ToIntFunction<String> lineWidth
     ) {
         LayoutContext statementLayout = new LayoutContext(
             EnclosingConstruct.STATEMENT,
@@ -245,7 +237,7 @@ final class MethodCallPrinter {
             expression,
             tail,
             MethodCallBreakMode.FORCED,
-            lineBudget,
+            lineWidth,
             firstLine -> statementIndentWidth + firstLine.length(),
             statementLayout
         );
@@ -463,23 +455,23 @@ final class MethodCallPrinter {
             MethodCallExpr expression,
             ExpressionTail tail,
             MethodCallBreakMode breakMode,
-            LayoutWidth.LineBudget lineBudget
+            ToIntFunction<String> lineWidth
     ) {
-        return methodCallWithTail(expression, tail, breakMode, lineBudget, lineWidth(lineBudget), LayoutContext.root());
+        return methodCallWithTail(expression, tail, breakMode, lineWidth, lineWidth, LayoutContext.root());
     }
 
     // LDM-2f / chain-unify U3 (#190): the with-tail seam threads a caller-chosen first-line width and LayoutContext to
-    // the chain gates. The default overload above still passes {@code lineWidth(lineBudget)} + {@code root()} (so every
+    // the chain gates. The default overload above still passes {@code lineWidth} + {@code root()} (so every
     // existing caller — array elements, expression-with-tail — stays byte-identical). The statement caller
     // (StatementPrinters#forcedMethodCallWithTail) threads a {@code nodeLine}-based first-line width so the chain measures
-    // at the statement's real rendered column instead of the fixed {@code LineBudget.BLOCK} baseline, and a
+    // at the statement's real rendered column instead of the fixed two-unit block baseline, and a
     // {@code LayoutContext} (empty {@code leftEdgePrefix} — a statement chain owns its own first column) so a later slice
     // can route the statement fan-out through {@code bestFitting}.
     private Doc methodCallWithTail(
             MethodCallExpr expression,
             ExpressionTail tail,
             MethodCallBreakMode breakMode,
-            LayoutWidth.LineBudget lineBudget,
+            ToIntFunction<String> lineWidth,
             ToIntFunction<String> firstLineWidth,
             LayoutContext layout
     ) {
@@ -529,14 +521,14 @@ final class MethodCallPrinter {
             return methodCall(expression, breakMode, layout);
         }
         Optional<Doc> chain = comments.speculatively(
-            () -> methodCallChain(expression, breakMode, tail.text(), lineBudget, firstLineWidth, layout)
+            () -> methodCallChain(expression, breakMode, tail.text(), lineWidth, firstLineWidth, layout)
         );
         if (chain.isPresent()) {
             return chain.orElseThrow();
         }
         if (finalTrailingLineComments(expression).isEmpty()) {
             Optional<Doc> unsuffixedChain = comments.speculatively(
-                () -> methodCallChain(expression, breakMode, "", lineBudget, firstLineWidth, layout)
+                () -> methodCallChain(expression, breakMode, "", lineWidth, firstLineWidth, layout)
             );
             if (unsuffixedChain.isPresent()) {
                 return tail.appendTo(unsuffixedChain.orElseThrow());
@@ -552,9 +544,9 @@ final class MethodCallPrinter {
     private boolean methodCallWithTailOverflows(
             MethodCallExpr expression,
             ExpressionTail tail,
-            LayoutWidth.LineBudget lineBudget
+            ToIntFunction<String> lineWidth
     ) {
-        return layoutWidth.line(lineBudget, compactSource.compact(expression) + tail.text()) > options.lineWidth();
+        return lineWidth.applyAsInt(compactSource.compact(expression) + tail.text()) > options.lineWidth();
     }
 
     private Doc appendTailBeforeFinalTrailingLineComment(
@@ -605,7 +597,9 @@ final class MethodCallPrinter {
     private void recordArgumentListWidthBreak(MethodCallExpr expression, String prefix) {
         String compactArguments = compactSource.compactJoin(expression.getArguments());
         String compactCall = prefix + "(" + compactArguments + ")";
-        int flatWidth = layoutWidth.line(LayoutWidth.LineBudget.CURRENT, compactCall);
+        // C10-a: --explain-only measurement at the call's rendered column (mirrors ChainWidthBreakExplain#record);
+        // never influences the emitted Doc, only the recorded flatWidth and the self-gate below.
+        int flatWidth = layoutWidth.nodeLine(expression, compactCall);
         if (flatWidth <= options.lineWidth()) {
             return;
         }
@@ -753,7 +747,9 @@ final class MethodCallPrinter {
                 .filter(EnclosedExpr.class::isInstance)
                 .map(EnclosedExpr.class::cast)
                 .filter(scope -> leadingBreak
-                        || layoutWidth.line(LayoutWidth.LineBudget.BLOCK, compactSource.compact(expression) + ";")
+                        // C10-b: measure the enclosed-scope call at its true rendered block/type depth
+                        // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
+                        || layoutWidth.nodeLine(expression, compactSource.compact(expression) + ";")
                             > options.lineWidth()
                 )
                 .map(scope -> Doc.concat(
@@ -775,22 +771,25 @@ final class MethodCallPrinter {
         return methodChains.forcedMethodCallChain(expression);
     }
 
-    Optional<Doc> forcedMethodCallChain(
+    // The former budget-family entries: measure the residual fixed-baseline probes AND the first-line width at the same
+    // caller-chosen baseline (both slots of the chain printer's four-argument entry). Named distinctly from the
+    // firstLineWidth overloads below — which measure only the first line at the given oracle and keep the current-member
+    // baseline for the residual probes — so the two do not collide now that both carry a {@code ToIntFunction<String>}.
+    Optional<Doc> forcedMethodCallChainAtBaseline(
             MethodCallExpr expression,
-            LayoutWidth.LineBudget lineBudget
+            ToIntFunction<String> baseline
     ) {
-        return methodChains.forcedMethodCallChain(expression, lineBudget);
+        return methodChains.forcedMethodCallChain(expression, baseline, baseline, LayoutContext.root());
     }
 
-    // LDM-2f (#190): the layout-carrying delegators the return chain uses to thread its {@code "return "} left-edge
-    // prefix down to the chain width gates. Callers without a prefix keep the overloads above (which pass {@code root()}),
-    // so they stay byte-identical until their own activation slice.
-    Optional<Doc> forcedMethodCallChain(
+    // LDM-2f (#190): the layout-carrying baseline delegator the return chain uses to thread its {@code "return "} left-edge
+    // prefix down to the chain width gates. Callers without a prefix pass {@code root()}, so they stay byte-identical.
+    Optional<Doc> forcedMethodCallChainAtBaseline(
             MethodCallExpr expression,
-            LayoutWidth.LineBudget lineBudget,
+            ToIntFunction<String> baseline,
             LayoutContext layout
     ) {
-        return methodChains.forcedMethodCallChain(expression, lineBudget, layout);
+        return methodChains.forcedMethodCallChain(expression, baseline, baseline, layout);
     }
 
     Optional<Doc> forcedMethodCallChain(
@@ -821,19 +820,19 @@ final class MethodCallPrinter {
 
     Optional<Doc> compactRootWithBrokenFinalChainSegment(
             MethodCallExpr expression,
-            LayoutWidth.LineBudget lineBudget
+            ToIntFunction<String> lineWidth
     ) {
-        return methodChains.compactRootWithBrokenFinalChainSegment(expression, lineBudget);
+        return methodChains.compactRootWithBrokenFinalChainSegment(expression, lineWidth);
     }
 
     // LDM-2f (#190): the layout-carrying delegator the return chain uses to thread its {@code "return "} left-edge prefix
     // down to {@code compactRootLineWidth}. The no-{@code layout} overload above passes {@code root()}.
     Optional<Doc> compactRootWithBrokenFinalChainSegment(
             MethodCallExpr expression,
-            LayoutWidth.LineBudget lineBudget,
+            ToIntFunction<String> lineWidth,
             LayoutContext layout
     ) {
-        return methodChains.compactRootWithBrokenFinalChainSegment(expression, lineBudget, layout);
+        return methodChains.compactRootWithBrokenFinalChainSegment(expression, lineWidth, layout);
     }
 
     // Canonical-fan cutover seam (End-state A): the delegator the return chain uses so a fan-threshold, comment/lambda-free
@@ -909,23 +908,23 @@ final class MethodCallPrinter {
             MethodCallExpr expression,
             MethodCallBreakMode breakMode,
             String finalSegmentSuffix,
-            LayoutWidth.LineBudget lineBudget
+            ToIntFunction<String> lineWidth
     ) {
-        return methodChains.methodCallChain(expression, breakMode, finalSegmentSuffix, lineBudget, LayoutContext.root());
+        return methodChains.methodCallChain(expression, breakMode, finalSegmentSuffix, lineWidth, LayoutContext.root());
     }
 
     Optional<Doc> methodCallChain(
             MethodCallExpr expression,
             MethodCallBreakMode breakMode,
             String finalSegmentSuffix,
-            LayoutWidth.LineBudget lineBudget,
+            ToIntFunction<String> lineWidth,
             ToIntFunction<String> firstLineWidth
     ) {
         return methodChains.methodCallChain(
             expression,
             breakMode,
             finalSegmentSuffix,
-            lineBudget,
+            lineWidth,
             firstLineWidth,
             LayoutContext.root()
         );
@@ -938,7 +937,7 @@ final class MethodCallPrinter {
             MethodCallExpr expression,
             MethodCallBreakMode breakMode,
             String finalSegmentSuffix,
-            LayoutWidth.LineBudget lineBudget,
+            ToIntFunction<String> lineWidth,
             ToIntFunction<String> firstLineWidth,
             LayoutContext layout
     ) {
@@ -946,7 +945,7 @@ final class MethodCallPrinter {
             expression,
             breakMode,
             finalSegmentSuffix,
-            lineBudget,
+            lineWidth,
             firstLineWidth,
             layout
         );
@@ -1240,7 +1239,9 @@ final class MethodCallPrinter {
     private boolean attachedOpenerOverflows(MethodCallExpr expression, String openerLine) {
         return sharedFirstLineWidth(expression)
                 .map(prefixedIndent -> prefixedIndent + openerLine.length())
-                .orElseGet(() -> layoutWidth.line(LayoutWidth.LineBudget.CURRENT, openerLine))
+                // C10-b: the own-line fallback (a call that starts its own line, no shared prefix) measures at the call's
+                // true rendered block/type depth ({@link LayoutWidth#nodeLine}) instead of the fixed CURRENT baseline.
+                .orElseGet(() -> layoutWidth.nodeLine(expression, openerLine))
             > options.lineWidth();
     }
 
@@ -1285,7 +1286,7 @@ final class MethodCallPrinter {
             LayoutContext layout
     ) {
         return !argument.bodyFirstSourceLineFits()
-            && argument.bodyOpenerFitsOnContinuation(lineWidth(LayoutWidth.LineBudget.CONTINUATION), options.lineWidth())
+            && argument.bodyOpenerFitsOnContinuation(layoutWidth::continuationStatement, options.lineWidth())
             && argument.bodyOpenerOverflows(line -> methodCallRootLineWidth(expression, line, layout), options.lineWidth());
     }
 
@@ -1327,7 +1328,9 @@ final class MethodCallPrinter {
                 .map(range -> Math.max(
                     Math.max(0, range.begin.column + 1) + firstLine.length(),
                     layoutWidth.nodeIndentWidth(expression) + firstLine.length()))
-                .orElseGet(() -> layoutWidth.line(LayoutWidth.LineBudget.CURRENT, firstLine));
+                // C10-a: rangeless (synthetic) fallback measures at the rendered column, mirroring the wider-of arm's
+                // nodeIndentWidth term above, instead of the fixed one-indent baseline.
+                .orElseGet(() -> layoutWidth.nodeIndentWidth(expression) + firstLine.length());
     }
 
     private boolean hasHuggableExpressionLambdaArgument(MethodCallExpr expression) {
@@ -1516,8 +1519,8 @@ final class MethodCallPrinter {
                     methodCall,
                     MethodCallBreakMode.AUTO,
                     suffix,
-                    LayoutWidth.LineBudget.CONTINUATION,
-                    lineWidth(LayoutWidth.LineBudget.CONTINUATION),
+                    layoutWidth::continuationStatement,
+                    layoutWidth::continuationStatement,
                     argumentLayout
                 )
             );
@@ -1525,14 +1528,14 @@ final class MethodCallPrinter {
                 return chain.orElseThrow();
             }
         }
-        // D1a (#190): the breakable-argument seam threads a real ARGUMENT-position LayoutContext (empty leftEdgePrefix +
-        // `suffix` as trailingContent) into its break-gate for the eventual reflow-by-width flip. That context is derived
-        // from `suffix` alone, so BreakableArgumentExpressionPrinter builds it once in argumentLayout(suffix) — the caller
-        // supplies nothing it lacks, and passing a hand-built copy here would only duplicate that factory.
+        // C10-d (#191 settled): the breakable-argument seam offers the argument's broken form as a renderer-measured
+        // conditionalGroup arm rather than a fixed-CONTINUATION-budget width probe, so the argument breaks at its true
+        // rendered column and the trailing `suffix` (rendered by the enclosing list) is accounted for by the renderer's
+        // line-fit lookahead — the seam no longer threads a width suffix or positional context.
         if (sourceMultilineList) {
-            return breakableArguments.sourceMultilineArgument(argument, suffix);
+            return breakableArguments.sourceMultilineArgument(argument);
         }
-        return breakableArguments.argument(argument, suffix);
+        return breakableArguments.argument(argument);
     }
 
     private Optional<Doc> textBlockRootChainArgumentWithSuffix(MethodCallExpr expression, String suffix) {
@@ -1583,7 +1586,7 @@ final class MethodCallPrinter {
         String code =
             (trailingComments.isEmpty() ? compactSource.compact(expression) : compactSource.commentFree(expression))
             + suffix;
-        if (layoutWidth.line(LayoutWidth.LineBudget.CONTINUATION, code) > options.lineWidth()) {
+        if (layoutWidth.continuationStatement(code) > options.lineWidth()) {
             return Optional.empty();
         }
         List<Doc> renderedTrailing = trailingComments.stream()
@@ -1668,8 +1671,7 @@ final class MethodCallPrinter {
         }
         if (
             !breakMode.isForced()
-            && layoutWidth.line(
-                LayoutWidth.LineBudget.CURRENT,
+            && layoutWidth.currentIndented(
                 prefix + "(" + compactSource.compact(binaryExpr) + ")"
             ) <= options.lineWidth()
         ) {
@@ -1713,8 +1715,12 @@ final class MethodCallPrinter {
             + " "
             + assignExpr.getOperator().asString()
             + " ";
+        // C10-c (U5/F4): the assignment prefix ({@code target op }) already shares the value's first line, so measure the
+        // chain's stay-flat width at the RHS's true rendered block/type column ({@link LayoutWidth#nodeIndentWidth}) plus
+        // that fixed left-edge prefix, instead of the fixed BLOCK baseline. A reindented statement is then measured at the
+        // column it is actually written at (F3), and a value that only overflows once the prefix is counted still breaks.
         ToIntFunction<String> prefixedFirstLineWidth =
-            text -> layoutWidth.line(LayoutWidth.LineBudget.BLOCK, assignmentPrefix + text);
+            text -> layoutWidth.nodeIndentWidth(methodCall) + assignmentPrefix.length() + text.length();
         // Canonical-fan cutover seam (End-state A): a fan-threshold, comment/lambda-free assignment-RHS chain fans one
         // selector per line, and it must do so through the SAME source-neutral fan on every pass — otherwise the RHS
         // opener flips split<->attach. On a source-multiline-argument pass the FORCED methodCallChain below skips its own
@@ -1740,7 +1746,7 @@ final class MethodCallPrinter {
                 methodCall,
                 MethodCallBreakMode.FORCED,
                 finalSegmentSuffix,
-                LayoutWidth.LineBudget.BLOCK,
+                layoutWidth::blockStatement,
                 prefixedFirstLineWidth
             );
             if (chain.isPresent()) {
@@ -1757,7 +1763,7 @@ final class MethodCallPrinter {
                 methodCall,
                 MethodCallBreakMode.FORCED,
                 finalSegmentSuffix,
-                LayoutWidth.LineBudget.BLOCK,
+                layoutWidth::blockStatement,
                 prefixedFirstLineWidth
             );
             if (chain.isPresent()) {
@@ -1768,7 +1774,9 @@ final class MethodCallPrinter {
             return Optional.empty();
         }
         String firstLine = assignmentPrefix + methodCallPrefix(methodCall) + "(";
-        if (layoutWidth.line(LayoutWidth.LineBudget.BLOCK, firstLine) > options.lineWidth()) {
+        // C10-c: the broken-call opener shares the assignment line, so measure it at the RHS's true rendered block/type
+        // column ({@link LayoutWidth#nodeLine}, which folds in the already-prefixed firstLine) instead of the fixed BLOCK.
+        if (layoutWidth.nodeLine(methodCall, firstLine) > options.lineWidth()) {
             return Optional.empty();
         }
         return Optional.of(

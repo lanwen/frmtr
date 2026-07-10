@@ -213,7 +213,7 @@ final class ChainSelectorLambdaLayout {
             + "."
             + methodCallSegmentPrefixText.apply(methodCall).substring(1)
             + "(" + header.orElseThrow();
-        if (layoutWidth.line(LayoutWidth.LineBudget.CURRENT, opener) > options.lineWidth()) {
+        if (layoutWidth.currentIndented(opener) > options.lineWidth()) {
             return Optional.empty();
         }
         Optional<Doc> tail = huggedCommentLambdaTail(lambdaExpr);

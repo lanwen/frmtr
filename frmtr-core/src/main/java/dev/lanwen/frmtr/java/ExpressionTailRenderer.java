@@ -2,6 +2,7 @@ package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.expr.Expression;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.function.ToIntFunction;
 
 /**
  * Renders expression docs that need caller-owned suffix or separator tails before trailing line comments.
@@ -12,9 +13,10 @@ import dev.lanwen.frmtr.doc.Doc;
  */
 @FunctionalInterface
 interface ExpressionTailRenderer {
-    Doc render(Expression expression, ExpressionTail tail, LayoutWidth.LineBudget lineBudget);
-
-    default Doc render(Expression expression, ExpressionTail tail) {
-        return render(expression, tail, LayoutWidth.LineBudget.CURRENT);
-    }
+    /**
+     * @param lineWidth measures a candidate flat line at the indentation baseline the caller renders at (for example
+     *     {@code LayoutWidth::currentIndented} for a member/statement line, {@code LayoutWidth::blockStatement} for a
+     *     statement inside one block). The tail-aware method-call renderer uses it to decide whether the flat shape fits.
+     */
+    Doc render(Expression expression, ExpressionTail tail, ToIntFunction<String> lineWidth);
 }

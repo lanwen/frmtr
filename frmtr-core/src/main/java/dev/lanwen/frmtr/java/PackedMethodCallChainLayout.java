@@ -45,8 +45,6 @@ final class PackedMethodCallChainLayout {
 
     private final Predicate<MethodCallExpr> rootIsObjectCreation;
 
-    private final Function<LayoutWidth.LineBudget, ToIntFunction<String>> lineWidth;
-
     private final BiFunction<MethodCallExpr, List<String>, Optional<String>> compactMethodCallChainRoot;
 
     private final Predicate<MethodCallExpr> compactMethodCallChainSegmentCanStayFlat;
@@ -64,7 +62,6 @@ final class PackedMethodCallChainLayout {
             Function<ObjectCreationExpr, Doc> brokenObjectCreationRenderer,
             Function<MethodCallExpr, MethodCallChainSourcePlanner.MethodCallChainAnalysis> methodCallChainAnalysis,
             Predicate<MethodCallExpr> rootIsObjectCreation,
-            Function<LayoutWidth.LineBudget, ToIntFunction<String>> lineWidth,
             BiFunction<MethodCallExpr, List<String>, Optional<String>> compactMethodCallChainRoot,
             Predicate<MethodCallExpr> compactMethodCallChainSegmentCanStayFlat,
             ObjectRootSingleSegmentChain objectRootSingleSegmentChain,
@@ -78,7 +75,6 @@ final class PackedMethodCallChainLayout {
         this.brokenObjectCreationRenderer = brokenObjectCreationRenderer;
         this.methodCallChainAnalysis = methodCallChainAnalysis;
         this.rootIsObjectCreation = rootIsObjectCreation;
-        this.lineWidth = lineWidth;
         this.compactMethodCallChainRoot = compactMethodCallChainRoot;
         this.compactMethodCallChainSegmentCanStayFlat = compactMethodCallChainSegmentCanStayFlat;
         this.objectRootSingleSegmentChain = objectRootSingleSegmentChain;
@@ -98,7 +94,7 @@ final class PackedMethodCallChainLayout {
             Optional<Doc> packed = packedCompactMethodCallChain(
                 expression,
                 firstLineWidth,
-                lineWidth.apply(LayoutWidth.LineBudget.CONTINUATION),
+                layoutWidth::continuationStatement,
                 true
             ).map(this::packedMethodCallChainDoc);
             if (packed.isPresent()) {
@@ -220,7 +216,7 @@ final class PackedMethodCallChainLayout {
                 calls.getFirst(),
                 MethodCallChainSourcePlanner.ChainRootRendering.BROKEN_OBJECT_CREATION,
                 analysis.sourceMultilineChain(),
-                LayoutWidth.LineBudget.CURRENT,
+                layoutWidth::currentIndented,
                 firstLineWidth,
                 LayoutContext.root()
             ));
@@ -262,11 +258,11 @@ final class PackedMethodCallChainLayout {
     }
 
     private int expressionLambdaBodyLineWidth(String line) {
-        return layoutWidth.line(LayoutWidth.LineBudget.BLOCK, options.indentUnit() + line);
+        return layoutWidth.blockStatement(options.indentUnit() + line);
     }
 
     private int packedExpressionLambdaBodyLineWidth(String line) {
-        return layoutWidth.line(LayoutWidth.LineBudget.BLOCK, options.indentUnit().repeat(3) + line);
+        return layoutWidth.blockStatement(options.indentUnit().repeat(3) + line);
     }
 
     /**
@@ -281,7 +277,7 @@ final class PackedMethodCallChainLayout {
                 MethodCallExpr call,
                 MethodCallChainSourcePlanner.ChainRootRendering rootRendering,
                 boolean sourceMultilineChain,
-                LayoutWidth.LineBudget lineBudget,
+                ToIntFunction<String> lineWidth,
                 ToIntFunction<String> firstLineWidth,
                 LayoutContext layout
         );

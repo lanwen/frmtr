@@ -6,6 +6,7 @@ import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import java.util.function.ToIntFunction;
 
 /**
  * Wires statement-formatting helpers behind the statement rule envelope.
@@ -109,11 +110,11 @@ final class StatementPrinters {
             expressions::annotationFlatText,
             expressions::huggableBlockLambdaArguments,
             expressions::sourceMultilineMethodCallStatement,
-            expressions::forcedMethodCallChain,
-            (methodCall, lineBudget) -> expressions.forcedMethodCallWithTail(
+            expressions::forcedMethodCallChainAtBaseline,
+            (methodCall, lineWidth) -> expressions.forcedMethodCallWithTail(
                 methodCall,
                 ExpressionTail.SEMICOLON,
-                lineBudget
+                lineWidth
             ),
             expressions::brokenMethodCall,
             expressions::methodCallChainHasComments,
@@ -142,8 +143,8 @@ final class StatementPrinters {
         return statementRules.statement(statement);
     }
 
-    Doc statement(Statement statement, LayoutWidth.LineBudget lineBudget) {
-        return statementRules.statement(statement, (current, layout) -> statements.statement(current, lineBudget));
+    Doc statement(Statement statement, ToIntFunction<String> lineWidth) {
+        return statementRules.statement(statement, (current, layout) -> statements.statement(current, lineWidth));
     }
 
     Doc block(BlockStmt block) {
@@ -151,9 +152,12 @@ final class StatementPrinters {
     }
 
     Doc methodChainLambdaBlock(BlockStmt block) {
+        // Load-bearing depth signal: a statement inside a block-lambda argument nested under a broken method chain
+        // renders about five indentation units deep, which the block/type-only nodeLine cannot see. Threading the
+        // methodChainLambdaBody width measure keeps the statement's flat-gate probes measuring at that true column.
         return blocks.block(
             block,
-            (statement, layout) -> statement(statement, LayoutWidth.LineBudget.METHOD_CHAIN_LAMBDA_BODY)
+            (statement, layout) -> statement(statement, context.layoutWidth::methodChainLambdaBody)
         );
     }
 

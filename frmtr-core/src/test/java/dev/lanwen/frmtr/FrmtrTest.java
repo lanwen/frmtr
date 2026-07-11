@@ -187,9 +187,12 @@ final class FrmtrTest {
     void methodCallChainEmitsARankedBestFittingForAWidthDrivenCommentFreeChain() {
         // LDM-3 (#208): a comment-free single-segment method-call chain whose final segment carries breakable arguments
         // and whose flat form overflows the budget is laid out by a ranked Doc.bestFitting, not the old Optional<Doc>
-        // width-probe ladder. At 120 columns the compact-with-broken-segment shape (root and selector on one line, the
-        // argument list fanned) wraps the fewest rendered lines, so the renderer keeps it — and reformatting is a
-        // fixpoint because re-ranking the same alternatives at the same column picks the same winner.
+        // width-probe ladder. At 120 columns the one-segment-per-line fan-out (the root on the opening line, then the
+        // single selector with its arguments inline on the continuation line — two lines) wraps FEWER rendered lines than
+        // the compact-with-broken-segment shape (root and selector opener on one line, the argument list fanned — four
+        // lines), so the renderer keeps the fan-out. The fan-out's lone selector is measured at its continuation column
+        // (source-neutral), not the segment's stale source column, so reformatting is a one-pass fixpoint and the shape
+        // matches the comment-bearing sibling on the imperative ladder rather than diverging by argument layout.
         FormatterOptions defaults = FormatterOptions.defaults();
         String chain =
             "class Router {\n"
@@ -203,7 +206,8 @@ final class FrmtrTest {
 
         assertThat(Frmtr.debugDoc(chain, defaults)).contains("BestFitting");
         assertThat(formatted).contains(
-            "ConnectionPlanner.between(primaryDataCenter, secondaryDataCenter).establishRoute("
+            "ConnectionPlanner.between(primaryDataCenter, secondaryDataCenter)\n"
+                + "                .establishRoute(activeSessionToken, fallbackSessionToken);"
         );
         assertThat(Frmtr.format(formatted, defaults)).isEqualTo(formatted);
     }

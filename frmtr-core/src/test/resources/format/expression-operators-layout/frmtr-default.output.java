@@ -247,10 +247,8 @@ public class ExpressionOperatorSamples {
     }
 
     public void staticMethodInvocationWithSingleChainedMethodInvocation() {
-        List.of(firstProjectionArgument, firstProjectionArgument).chained(
-            firstProjectionArgument,
-            firstProjectionArgument
-        );
+        List.of(firstProjectionArgument, firstProjectionArgument)
+                .chained(firstProjectionArgument, firstProjectionArgument);
     }
 
     public void staticMethodInvocationWithMultipleChainedMethodInvocation() {

@@ -78,8 +78,6 @@ final class ExpressionLambdaArgumentLayout {
 
     private final TextBlockArgumentSourceLayout textBlockArguments;
 
-    private final ExpressionLambdaClosingLayout closingLayout;
-
     ExpressionLambdaArgumentLayout(
             SourceShapePolicy sourceShapePolicy,
             RawSource rawSource,
@@ -120,7 +118,6 @@ final class ExpressionLambdaArgumentLayout {
         this.blockStatementWidth = blockStatementWidth;
         this.layoutWidth = layoutWidth;
         this.textBlockArguments = new TextBlockArgumentSourceLayout(sourceText, options, rawSource::raw);
-        this.closingLayout = new ExpressionLambdaClosingLayout();
         this.methodCallBodies = new ExpressionLambdaMethodCallBodyLayout(
             options,
             expressionRenderer,
@@ -350,15 +347,11 @@ final class ExpressionLambdaArgumentLayout {
         }
         if (logicalBinaryBody(bodyExpression).isPresent()) {
             if (logicalBinaryFirstLineFits(firstLine, bodyExpression)) {
-                if (closingLayout.callClosingStaysOnLambdaBodyLine(lambdaExpr, bodyExpression)) {
-                    return Optional.of(
-                        Doc.concat(
-                            Doc.text(firstLine + " "),
-                            bodyDoc,
-                            Doc.text(")")
-                        )
-                    );
-                }
+                // Source-neutral (G3): the enclosing call's {@code )} always dedents onto its own line below a broken
+                // logical lambda body. This matches the sibling {@link #logicalBinaryLambdaBodyOpenerHug}, which builds the
+                // same shape directly and always dedents the close so the render is a fixpoint; the retired
+                // {@code ExpressionLambdaClosingLayout#callClosingStaysOnLambdaBodyLine} used to attach the close on the
+                // body's last line when the author's source put it there, which flipped the shape across passes.
                 return Optional.of(
                     Doc.concat(
                         Doc.text(firstLine + " "),
@@ -1066,14 +1059,15 @@ final class ExpressionLambdaArgumentLayout {
         if (
             !(bodyExpression instanceof MethodCallExpr methodCall)
             || methodCall.getScope().isEmpty()
+            // Source-neutral (G3): a scope that is itself a method-call chain fans one selector per line through the chain
+            // renderer, so decline the packed scope-on-own-line shape here (which would otherwise pack the whole scope
+            // chain flat on the arrow line and overflow). This replaces the retired {@code bodyFirstSourceLine} read, which
+            // used the author's first source line to keep a chain scope off this shape.
+            || methodCall.getScope().filter(MethodCallExpr.class::isInstance).isPresent()
         ) {
             return Optional.empty();
         }
         String scope = compact.apply(methodCall.getScope().orElseThrow());
-        String bodyFirstLine = bodyFirstSourceLine(bodyExpression);
-        if (!bodyFirstLine.endsWith("(") && !bodyFirstLine.equals(scope)) {
-            return Optional.empty();
-        }
         if (openerOverflows(lambdaExpr, firstLine + " " + scope, columnWidth)) {
             return Optional.empty();
         }
@@ -1102,14 +1096,14 @@ final class ExpressionLambdaArgumentLayout {
             !(bodyExpression instanceof MethodCallExpr methodCall)
             || methodCall.getScope().isEmpty()
             || !methodCall.getArguments().isEmpty()
+            // Source-neutral (G3): a chain scope fans through the chain renderer rather than packing flat on the arrow
+            // line (see {@link #packedBodyCallScopeWithoutClosingLine}); this replaces the retired {@code bodyFirstSourceLine}
+            // read that kept a chain scope off this shape via the author's first source line.
+            || methodCall.getScope().filter(MethodCallExpr.class::isInstance).isPresent()
         ) {
             return Optional.empty();
         }
         String scope = compact.apply(methodCall.getScope().orElseThrow());
-        String bodyFirstLine = bodyFirstSourceLine(bodyExpression);
-        if (!bodyFirstLine.equals(scope)) {
-            return Optional.empty();
-        }
         String compactCall = scope + "." + methodCallSelector(methodCall) + "()";
         if (!openerOverflows(lambdaExpr, firstLine + " " + compactCall, columnWidth)) {
             return Optional.of(Doc.text(compactCall));
@@ -1173,11 +1167,11 @@ final class ExpressionLambdaArgumentLayout {
      * <p>This is the BINARY sibling of the source-neutral TERNARY hug ({@code packedConditionalBody}). It is built
      * DIRECTLY here — reusing the source-neutral {@link #logicalBinaryBodyDoc} render (a pure {@code nestedLines} function of
      * the AST) and always dedenting the close ({@link PackedLambdaBody#closingOnOwnLine}) — rather than routing through the
-     * shared {@code plan}/{@link #huggableMethodCallArguments} path the object-creation and ternary hugs use. That shared
-     * path's close placement is source-shape-driven
-     * ({@code ExpressionLambdaClosingLayout#callClosingStaysOnLambdaBodyLine} attaches vs. dedents the close by whether the
-     * source put {@code )} on the body's last line), which would flip this shape across passes. Building directly makes
-     * this a fixpoint: the render is a pure function of the AST and the close placement is fixed. The separately-gated
+     * shared {@code plan}/{@link #huggableMethodCallArguments} path the object-creation and ternary hugs use. The shared
+     * broken-logical-body path {@code huggableExpressionLambdaArgumentWithOpener} now also always dedents the close (its
+     * former {@code ExpressionLambdaClosingLayout#callClosingStaysOnLambdaBodyLine} source read, which attached the close on
+     * the body's last line when the author's source put it there, was retired in G3), so both paths agree. Building directly
+     * makes this a fixpoint: the render is a pure function of the AST and the close placement is fixed. The separately-gated
      * {@code binaryMethodCallBodyWithOpener} is never touched.
      *
      * <p>Scoped to LOGICAL ({@code &&}/{@code ||}) bodies: a top-level RELATIONAL body ({@code x -> f(...) == ALLOWED}) is not
@@ -1378,14 +1372,6 @@ final class ExpressionLambdaArgumentLayout {
             layoutWidth.nodeIndentWidth(methodCall) + firstLine.length() + 1 + compact.apply(methodCall).length(),
             columnWidth.applyAsInt(chainLine)
         ) > options.lineWidth();
-    }
-
-    private String bodyFirstSourceLine(Node node) {
-        return rawSource.rawWithoutOwnComment(node)
-                .strip()
-                .lines()
-                .findFirst()
-                .orElse("");
     }
 
     /**

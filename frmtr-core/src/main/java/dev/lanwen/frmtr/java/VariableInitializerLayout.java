@@ -132,8 +132,6 @@ final class VariableInitializerLayout {
 
     private final BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> packedMethodCallChain;
 
-    private final Function<MethodCallExpr, Optional<String>> compactMethodCallChainRoot;
-
     private final Function<MethodCallExpr, Doc> methodCallWithSemicolon;
 
     private final Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment;
@@ -204,7 +202,6 @@ final class VariableInitializerLayout {
             ForcedChainWithLayout forcedMethodCallChain,
             CanonicalFanChain canonicalFanChain,
             BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> packedMethodCallChain,
-            Function<MethodCallExpr, Optional<String>> compactMethodCallChainRoot,
             Function<MethodCallExpr, Doc> methodCallWithSemicolon,
             Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment,
             Function<MethodCallExpr, Optional<Expression>> mixedFieldMethodCallRoot,
@@ -257,7 +254,6 @@ final class VariableInitializerLayout {
         this.forcedMethodCallChain = forcedMethodCallChain;
         this.canonicalFanChain = canonicalFanChain;
         this.packedMethodCallChain = packedMethodCallChain;
-        this.compactMethodCallChainRoot = compactMethodCallChainRoot;
         this.methodCallWithSemicolon = methodCallWithSemicolon;
         this.methodCallChainHasFinalTrailingLineComment = methodCallChainHasFinalTrailingLineComment;
         this.mixedFieldMethodCallRoot = mixedFieldMethodCallRoot;
@@ -1445,17 +1441,12 @@ final class VariableInitializerLayout {
             String name,
             MethodCallExpr methodCall
     ) {
-        boolean initializerStartsOnContinuationLine = initializerStartsOnContinuationLine(variable, methodCall);
         boolean chainSpansMultipleSourceLines = methodCallChainIsSourceMultiline.test(methodCall);
         MethodCallChainSourcePlanner.InitializerChainShape chainShape = methodCallChainInitializerShape.apply(
             methodCall
         );
         if (
-            !chainShape.canUseCompactObjectCreationInitializer(
-                initializerStartsOnContinuationLine,
-                chainSpansMultipleSourceLines,
-                false
-            )
+            !chainShape.canUseCompactObjectCreationInitializer(chainSpansMultipleSourceLines)
             || !methodCall.getAllContainedComments().isEmpty()
             || commentPlacement.trailingLineComment(variable).isPresent()
             || layoutWidth.continuationStatement(compact.apply(methodCall) + ";") > options.lineWidth()
@@ -1476,7 +1467,6 @@ final class VariableInitializerLayout {
             String flatName,
             MethodCallExpr methodCall
     ) {
-        boolean initializerStartsOnContinuationLine = initializerStartsOnContinuationLine(variable, methodCall);
         boolean chainSpansMultipleSourceLines = methodCallChainIsSourceMultiline.test(methodCall);
         MethodCallChainSourcePlanner.InitializerChainShape chainShape = methodCallChainInitializerShape.apply(
             methodCall
@@ -1484,12 +1474,7 @@ final class VariableInitializerLayout {
         if (
             !methodCallChainRootIsObjectCreation.test(methodCall)
             || !(
-                chainShape.canUseCompactObjectCreationInitializer(
-                    initializerStartsOnContinuationLine,
-                    chainSpansMultipleSourceLines,
-                    false
-                )
-                || sourceFirstLineKeepsChainAfterRoot(methodCall)
+                chainShape.canUseCompactObjectCreationInitializer(chainSpansMultipleSourceLines)
                 // #221 Case B / slice 4. A single-selector object-creation root with a single simple-argument tail whose
                 // opener fits on the assignment line is admitted to this +8 fan-out too, so it fans the constructor root on
                 // the assignment line and {@code .selector(simpleArg)} compact on its own continuation line — the same shape a
@@ -1516,26 +1501,6 @@ final class VariableInitializerLayout {
                 .map(chain -> Doc.concat(Doc.text(name + " = "), chain));
     }
 
-    private boolean sourceFirstLineKeepsChainAfterRoot(MethodCallExpr methodCall) {
-        return compactMethodCallChainRoot.apply(methodCall)
-                .flatMap(rootFirstLine -> rawSource.rawWithoutOwnComment(methodCall)
-                            .lines()
-                            .findFirst()
-                            .map(String::strip)
-                            .filter(firstSourceLine -> firstSourceLine.startsWith(rootFirstLine))
-                            .filter(firstSourceLine -> firstSourceLine.length() > rootFirstLine.length())
-                )
-                .isPresent();
-    }
-
-    private boolean initializerStartsOnContinuationLine(VariableDeclarator variable, Expression initializer) {
-        return variable.getName()
-                .getRange()
-                .flatMap(nameRange -> initializer.getRange().map(
-                        initializerRange -> initializerRange.begin.line > nameRange.end.line
-                ))
-                .orElse(false);
-    }
 
     /**
      * Finds a block comment attached before {@code =}, so the variable name and comment stay together before the

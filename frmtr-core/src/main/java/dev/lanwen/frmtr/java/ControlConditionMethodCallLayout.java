@@ -31,8 +31,6 @@ final class ControlConditionMethodCallLayout {
 
     private final Function<List<? extends Node>, String> compactJoin;
 
-    private final Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain;
-
     private final ToIntFunction<String> blockStatementWidth;
 
     ControlConditionMethodCallLayout(
@@ -41,7 +39,6 @@ final class ControlConditionMethodCallLayout {
             Function<Expression, Doc> expressionRenderer,
             Function<Expression, String> compact,
             Function<List<? extends Node>, String> compactJoin,
-            Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChain,
             ToIntFunction<String> blockStatementWidth
     ) {
         this.sourceShapePolicy = sourceShapePolicy;
@@ -49,7 +46,6 @@ final class ControlConditionMethodCallLayout {
         this.expressionRenderer = expressionRenderer;
         this.compact = compact;
         this.compactJoin = compactJoin;
-        this.forcedMethodCallChain = forcedMethodCallChain;
         this.blockStatementWidth = blockStatementWidth;
     }
 

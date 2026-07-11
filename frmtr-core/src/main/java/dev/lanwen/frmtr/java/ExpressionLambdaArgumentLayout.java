@@ -306,7 +306,7 @@ final class ExpressionLambdaArgumentLayout {
                             methodCall,
                             columnWidth
                     ));
-            if (nestedMethodCallBody.isPresent() && !bodyFirstSourceLineFits(firstLine, bodyExpression)) {
+            if (nestedMethodCallBody.isPresent()) {
                 return Optional.of(
                     Doc.concat(
                         Doc.text(prefix + "("),
@@ -323,22 +323,6 @@ final class ExpressionLambdaArgumentLayout {
                 );
             }
             Doc bodyDoc = huggableExpressionLambdaBody(firstLine, bodyExpression, columnWidth);
-            if (bodyFirstSourceLineFits(firstLine, bodyExpression)) {
-                return Optional.of(
-                    Doc.concat(
-                        Doc.text(prefix + "("),
-                        Doc.indent(
-                            Doc.concat(
-                                Doc.HARD_LINE,
-                                Doc.text(lambdaFirstLine(lambdaExpr, argument.parameters()) + " "),
-                                Doc.indent(bodyDoc)
-                            )
-                        ),
-                        Doc.HARD_LINE,
-                        Doc.text(")")
-                    )
-                );
-            }
             return Optional.of(
                 Doc.concat(
                     Doc.text(prefix + "("),
@@ -444,16 +428,6 @@ final class ExpressionLambdaArgumentLayout {
         Optional<PackedLambdaBody> packedBody = packedLambdaBody(lambdaExpr, firstLine, bodyExpression, columnWidth);
         if (packedBody.isPresent()) {
             return Optional.of(packedBody.orElseThrow().render(firstLine));
-        }
-        if (bodyFirstSourceLineFits(firstLine, bodyExpression)) {
-            return Optional.of(
-                Doc.concat(
-                    Doc.text(firstLine + " "),
-                    Doc.indent(bodyDoc),
-                    Doc.HARD_LINE,
-                    Doc.text(")")
-                )
-            );
         }
         if (
             bodyExpression instanceof MethodCallExpr methodCall
@@ -652,7 +626,6 @@ final class ExpressionLambdaArgumentLayout {
             bodyExpression,
             parameters,
             firstLine,
-            bodyFirstSourceLineFits(firstLine, bodyExpression),
             lambdaBodyOpenerLine(parameters, bodyExpression),
             callBodyOpenerLine(prefix, leadingArguments, parameters, bodyExpression)
         );
@@ -661,7 +634,6 @@ final class ExpressionLambdaArgumentLayout {
             && methodCallBodyWithOpener(parameters, methodCall, columnWidth).isPresent()
             && packedBodyCallWithoutClosingLine(lambdaExpr, firstLine, bodyExpression, columnWidth).isEmpty()
             && packedBodyCallScopeWithoutClosingLine(lambdaExpr, firstLine, bodyExpression, columnWidth).isEmpty()
-            && !bodyFirstSourceLineFits(firstLine, bodyExpression)
         ) {
             return Optional.empty();
         }
@@ -1362,13 +1334,6 @@ final class ExpressionLambdaArgumentLayout {
         return Math.max(expressionFirstLineWidth(line), layoutWidth.nodeIndentWidth(lambdaExpr) + line.length());
     }
 
-    private boolean bodyFirstSourceLineFits(String firstLine, Expression bodyExpression) {
-        // Constant false: a lambda body's first line is never kept from the author's source shape; the hug/explode verdict
-        // is width-driven upstream. This predicate is preserved because it still feeds a record field and several entry
-        // gates whose false-branch is the width-driven fallback.
-        return false;
-    }
-
     private boolean logicalBinaryFirstLineFits(String firstLine, Expression bodyExpression) {
         return logicalBinaryFirstLine(bodyExpression)
                 .map(bodyFirstLine -> expressionFirstLineWidth(firstLine + " " + bodyFirstLine) <= options.lineWidth())
@@ -1578,7 +1543,6 @@ final class ExpressionLambdaArgumentLayout {
         Expression bodyExpression,
         String parameters,
         String firstLine,
-        boolean bodyFirstSourceLineFits,
         String lambdaBodyOpenerLine,
         String callBodyOpenerLine
     ) {

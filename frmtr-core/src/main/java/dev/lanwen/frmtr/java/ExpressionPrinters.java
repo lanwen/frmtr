@@ -304,7 +304,6 @@ final class ExpressionPrinters {
         this.returnExpressions = new ReturnExpressionPrinter(
             options,
             context.layoutWidth,
-            context.objectCreationLayoutPolicy,
             context.sourceShapePolicy,
             this::expression,
             this::expressionWithTail,

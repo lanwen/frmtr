@@ -24,35 +24,6 @@ final class ObjectCreationLayoutPolicy {
     }
 
     /**
-     * Always false: no constructor argument list is preserved as source-multiline, so every constructor's arguments —
-     * including try-resource constructors — break by width. Kept (returning false) so its callers stay wired.
-     */
-    boolean shouldPreserveSourceMultilineArguments(ObjectCreationExpr expression) {
-        return false;
-    }
-
-    /**
-     * Always false: anonymous-class constructors do not preserve a source-multiline argument list — their argument header
-     * breaks by width like every other constructor.
-     *
-     * <p>Anonymous-class bodies own the visible layout after the header, so the header argument list is rendered by the
-     * width-driven {@code Doc.group} in {@link ObjectCreationPrinter#anonymousObjectCreationHeader}.
-     */
-    boolean shouldPreserveAnonymousSourceMultilineArguments(ObjectCreationExpr expression) {
-        return false;
-    }
-
-    /**
-     * Reports whether a returned constructor should break because its source argument list was intentionally multiline.
-     *
-     * <p>This keeps return-specific constructor preservation with the rest of the constructor source-shape policy while
-     * leaving the return printer to decide whether width alone also forces the same broken constructor document.
-     */
-    boolean shouldPreserveReturnSourceMultilineArguments(ObjectCreationExpr expression) {
-        return false;
-    }
-
-    /**
      * Reports whether a constructor's argument list is rendered SOURCE-NEUTRALLY — always by the width-driven
      * {@code Doc.group}, never by a source-multiline-preserving branch — so a chain whose root is this constructor can be
      * fanned identically on every pass regardless of how the author laid the arguments out.

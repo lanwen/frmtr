@@ -107,7 +107,6 @@ final class ControlConditionPrinter {
             expressionRenderer,
             compact,
             compactJoin,
-            forcedMethodCallChain,
             blockStatementWidth
         );
     }

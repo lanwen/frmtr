@@ -1285,8 +1285,7 @@ final class MethodCallPrinter {
             ExpressionLambdaArgumentLayout.Plan argument,
             LayoutContext layout
     ) {
-        return !argument.bodyFirstSourceLineFits()
-            && argument.bodyOpenerFitsOnContinuation(layoutWidth::continuationStatement, options.lineWidth())
+        return argument.bodyOpenerFitsOnContinuation(layoutWidth::continuationStatement, options.lineWidth())
             && argument.bodyOpenerOverflows(line -> methodCallRootLineWidth(expression, line, layout), options.lineWidth());
     }
 

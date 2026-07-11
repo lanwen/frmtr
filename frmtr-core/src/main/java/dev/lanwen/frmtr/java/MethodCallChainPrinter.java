@@ -77,7 +77,6 @@ final class MethodCallChainPrinter {
 
     private final LayoutDecisionLog layoutDecisions;
 
-    private final SourceMultilineLambdaCallLayout sourceMultilineLambdaCalls;
 
     private final ChainWidthBreakExplain chainWidthBreakExplain;
 
@@ -141,14 +140,6 @@ final class MethodCallChainPrinter {
         this.huggedGapCommentedLambdaBody = huggedGapCommentedLambdaBody;
         this.expressionLambdaMethodCallBodyOpener = expressionLambdaMethodCallBodyOpener;
         this.expressionLambdaLogicalBinaryBodyOpenerHug = expressionLambdaLogicalBinaryBodyOpenerHug;
-        this.sourceMultilineLambdaCalls = new SourceMultilineLambdaCallLayout(
-            context.sourceShapePolicy,
-            node -> expressionRenderer.format(node, LayoutContext.root()),
-            lambdaParameters,
-            calls::methodCallPrefix,
-            this::methodCallSegmentPrefixText,
-            calls::methodCallArgumentList
-        );
         this.chainWidthBreakExplain = new ChainWidthBreakExplain(
             context.compactSource,
             context.layoutWidth,
@@ -336,40 +327,6 @@ final class MethodCallChainPrinter {
         return packedChains.packedMethodCallChain(expression, firstLineWidth);
     }
 
-    private record SourceMultilineLambdaChainPlan(
-        boolean rootCanAttachExpressionLambdaBody,
-        List<Boolean> callCanAttachExpressionLambdaBody,
-        Optional<SourceMultilineLambdaCallLayout.AttachedFirstSegment> firstCall
-    ) {
-        SourceMultilineLambdaChainPlan {
-            callCanAttachExpressionLambdaBody = List.copyOf(callCanAttachExpressionLambdaBody);
-        }
-
-        boolean callCanAttachExpressionLambdaBody(int index) {
-            return index >= 0
-                && index < callCanAttachExpressionLambdaBody.size()
-                && callCanAttachExpressionLambdaBody.get(index);
-        }
-
-        boolean anyNonFinalCallCanAttachExpressionLambdaBody() {
-            for (int index = 0; index < Math.max(0, callCanAttachExpressionLambdaBody.size() - 1); index++) {
-                if (callCanAttachExpressionLambdaBody.get(index)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        /**
-         * Reports whether the root or any selector in this chain has a source-multiline expression-lambda body that could
-         * hug its call opener. The canonical-fan cutover ({@link #canonicalFanChain}) withholds any such chain so the
-         * lambda-hug↔break shape stays with the deferred lambda-arrow seam rather than being flattened into the fan.
-         */
-        boolean canAttachAnyExpressionLambdaBody() {
-            return rootCanAttachExpressionLambdaBody || callCanAttachExpressionLambdaBody.stream().anyMatch(Boolean::booleanValue);
-        }
-    }
-
     // The lineWidth/firstLineWidth pair lets a caller measure the residual fixed-baseline probes and the first-line
     // width at independent depths. Package-visible so {@link MethodCallPrinter} can thread a caller's fixed baseline into
     // both slots (its former budget-family entry) without a colliding two-argument overload.
@@ -411,19 +368,6 @@ final class MethodCallChainPrinter {
     ) {
         List<MethodCallExpr> calls = new ArrayList<>();
         Expression root = methodChainPlanner.methodCallChainRoot(expression, calls);
-        SourceMultilineLambdaChainPlan sourceMultilineLambdaPlan = sourceMultilineLambdaChainPlan(root, calls);
-        Optional<Doc> sourceMultilineFirstExpressionLambda = comments.speculatively(
-            () -> sourceMultilineFirstExpressionLambdaChain(
-                expression,
-                root,
-                calls,
-                MethodCallChainTail.EMPTY,
-                sourceMultilineLambdaPlan
-            )
-        );
-        if (sourceMultilineFirstExpressionLambda.isPresent()) {
-            return sourceMultilineFirstExpressionLambda;
-        }
         if (
             !calls.isEmpty()
             && methodCallChainIsSourceMultiline(expression)
@@ -606,8 +550,6 @@ final class MethodCallChainPrinter {
     ) {
         MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
         boolean rootObjectCreationNeedsBreak = methodChainPlanner.rootObjectCreationNeedsBreak(analysis);
-        SourceMultilineLambdaChainPlan sourceMultilineLambdaPlan = sourceMultilineLambdaChainPlan(analysis);
-        boolean sourceMultilineArguments = chainHasSourceMultilineArguments(analysis, sourceMultilineLambdaPlan);
         if (
             !breakMode.isForced()
             && finalBlockLambdaSegmentCanStayCompact(expression, lineWidth)
@@ -627,7 +569,6 @@ final class MethodCallChainPrinter {
                 // the source-neutral `chainFanOut` builder (the early canonical-fan route below), not the imperative
                 // ladder downstream.
                 && !chainBreaksByRule(analysis)
-                && !sourceMultilineArguments
                 && !rootObjectCreationNeedsBreak
                 // The stay-flat probe must measure the chain at the same line position it will actually occupy. When the
                 // chain shares its line with a prefix (an assignment target plus operator, an initializer name, etc.) the
@@ -672,7 +613,6 @@ final class MethodCallChainPrinter {
             chainBreaksByRule(analysis)
             && !analysis.hasComments()
             && !analysis.hasBlockLambdaArgument()
-            && !sourceMultilineArguments
             && calls.stream().noneMatch(this::methodCallSegmentHasComment)
         ) {
             chainWidthBreakExplain.record(expression, analysis, layout);
@@ -693,7 +633,6 @@ final class MethodCallChainPrinter {
             chainIsWidthDrivenTwoSelectorFan(analysis)
             && !analysis.hasComments()
             && !analysis.hasBlockLambdaArgument()
-            && !sourceMultilineArguments
             && calls.stream().noneMatch(this::methodCallSegmentHasComment)
         ) {
             chainWidthBreakExplain.record(expression, analysis, layout);
@@ -753,7 +692,7 @@ final class MethodCallChainPrinter {
         if (flatHeadHuggedFinalLambda.isPresent()) {
             return flatHeadHuggedFinalLambda;
         }
-        if (canBreakAfterCompactExpressionLambdaRoot(breakMode, root, calls, sourceMultilineLambdaPlan, layout)) {
+        if (canBreakAfterCompactExpressionLambdaRoot(breakMode, root, calls, layout)) {
             return Optional.of(
                 Doc.concat(
                     Doc.text(compactSource.compact(root)),
@@ -849,7 +788,6 @@ final class MethodCallChainPrinter {
         chainPlan = promoteFirstBlockLambdaCallWithLambdaBodyComments(analysis, chainPlan).orElse(chainPlan);
         root = chainPlan.root();
         calls = chainPlan.calls();
-        sourceMultilineLambdaPlan = sourceMultilineLambdaChainPlan(root, calls);
         Doc rootDoc = methodCallChainRootDoc(chainPlan, firstLineWidth, layout);
         // Track whether {@code rootDoc} is still the plain {@code expressionRenderer.format(root, root())} doc — the exact
         // root {@link #chainFanOut} rebuilds — so the multi-segment fall-through below can route through the shared fan-out
@@ -867,29 +805,13 @@ final class MethodCallChainPrinter {
             && !analysis.hasComments()
             && !expressionRenderedChainRootBreaksMethodCall(chainPlan.root(), firstLineWidth);
         boolean firstSegmentAttachedToRoot = false;
-        Expression sourceMultilineProbeRoot = root;
-        List<MethodCallExpr> sourceMultilineProbeCalls = calls;
-        SourceMultilineLambdaChainPlan sourceMultilineProbePlan = sourceMultilineLambdaPlan;
-        Optional<Doc> sourceMultilineFirstExpressionLambda = comments.speculatively(
-            () -> sourceMultilineFirstExpressionLambdaChain(
-                expression,
-                sourceMultilineProbeRoot,
-                sourceMultilineProbeCalls,
-                finalSegmentSuffix,
-                sourceMultilineProbePlan
-            )
-        );
-        if (sourceMultilineFirstExpressionLambda.isPresent()) {
-            return sourceMultilineFirstExpressionLambda;
-        }
         if (canAttachFirstSegmentToSimpleRoot(expression, chainPlan, calls, analysis)) {
             MethodCallExpr firstCall = calls.getFirst();
             root = firstCall;
             calls = new ArrayList<>(calls.subList(1, calls.size()));
             rootDoc = firstSegmentAttachedToSimpleRootDoc(
                 chainPlan.root(),
-                firstCall,
-                sourceMultilineLambdaPlan.firstCall()
+                firstCall
             );
             firstSegmentAttachedToRoot = true;
             // The first segment is now glued onto the root, so {@code rootDoc} is the attached-root shape, not the plain
@@ -1224,7 +1146,6 @@ final class MethodCallChainPrinter {
         if (
             methodRoot.getArguments().isEmpty()
             || !methodRoot.getAllContainedComments().isEmpty()
-            || methodCallSegmentHasSourceMultilineBlockLambdaArgument(methodRoot)
             || methodRoot.getArguments().stream().anyMatch(argument -> argument instanceof LambdaExpr)
         ) {
             return Optional.empty();
@@ -1278,7 +1199,6 @@ final class MethodCallChainPrinter {
             rootRendering != MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER
             || analysis.hasComments()
             || analysis.sourceMultilineChain()
-            || methodCallSegmentHasSourceMultilineBlockLambdaArgument(methodRoot)
             || call.getArguments().isEmpty()
             || call.getArguments().stream().anyMatch(LambdaExpr.class::isInstance)
             || methodCallSegmentHasBlockLambdaArgument(call)
@@ -1495,59 +1415,13 @@ final class MethodCallChainPrinter {
 
     private Doc firstSegmentAttachedToSimpleRootDoc(
             Expression root,
-            MethodCallExpr firstCall,
-            Optional<SourceMultilineLambdaCallLayout.AttachedFirstSegment> sourceMultilineLambdaPlan
+            MethodCallExpr firstCall
     ) {
-        if (sourceMultilineLambdaPlan.isPresent()) {
-            SourceMultilineLambdaCallLayout.AttachedFirstSegment plan = sourceMultilineLambdaPlan.orElseThrow();
-            Optional<Doc> sourceMultilineLambdaBody = comments.speculatively(
-                () -> sourceMultilineLambdaCalls.attachedFirstSegment(root, firstCall)
-            );
-            if (sourceMultilineLambdaBody.isPresent()) {
-                return sourceMultilineLambdaBody.orElseThrow();
-            }
-            Optional<Doc> huggableExpressionLambda = comments.speculatively(
-                () -> huggableExpressionLambdaArguments.render(
-                    plan.chainSegmentPrefix(),
-                    firstCall.getArguments(),
-                    expressionLambdaColumnWidthFallback()
-                )
-            );
-            if (huggableExpressionLambda.isPresent()) {
-                return Doc.concat(expressionRenderer.format(root, LayoutContext.root()), huggableExpressionLambda.orElseThrow());
-            }
-            return Doc.concat(expressionRenderer.format(root, LayoutContext.root()), methodCallChainSegment(firstCall));
-        }
         // C10-b: measure the first segment's fit at its true rendered block/type depth (nodeLine) instead of CURRENT.
         if (sourceShapePolicy.fitsOnOneLine(firstCall, text -> layoutWidth.nodeLine(firstCall, text))) {
             return inlineMethodCall(firstCall);
         }
         return brokenFirstSegmentAttachedToSimpleRoot(root, firstCall);
-    }
-
-    private Optional<Doc> sourceMultilineFirstExpressionLambdaChain(
-            MethodCallExpr expression,
-            Expression root,
-            List<MethodCallExpr> calls,
-            MethodCallChainTail finalSegmentSuffix,
-            SourceMultilineLambdaChainPlan sourceMultilineLambdaPlan
-    ) {
-        if (
-            calls.size() != 2
-            || root instanceof MethodCallExpr
-            || root instanceof ObjectCreationExpr
-            || !hasSingleExpressionLambdaArgumentAnyShape(calls.getFirst())
-            || sourceMultilineLambdaPlan.firstCall().isEmpty()
-            || sourceFirstLineIsOnlyChainRoot(root, expression)
-        ) {
-            return Optional.empty();
-        }
-        return Optional.of(
-            Doc.concat(
-                firstSegmentAttachedToSimpleRootDoc(root, calls.getFirst(), sourceMultilineLambdaPlan.firstCall()),
-                methodCallChainSegment(calls.get(1), finalSegmentSuffix)
-            )
-        );
     }
 
     private String firstSegmentAttachedToSimpleRootFirstLine(Expression root, MethodCallExpr firstCall) {
@@ -1600,59 +1474,6 @@ final class MethodCallChainPrinter {
             && expression.getScope().isPresent()
             && methodCallSegmentHasBlockLambdaArgument(expression)
             && lineWidth.applyAsInt(calls.methodCallPrefix(expression) + "(") > options.lineWidth();
-    }
-
-    private boolean chainHasSourceMultilineArguments(
-            MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis,
-            SourceMultilineLambdaChainPlan sourceMultilineLambdaPlan
-    ) {
-        if (
-            analysis.root() instanceof MethodCallExpr methodRoot
-            && !analysis.calls().isEmpty()
-            && sourceMultilineLambdaPlan.rootCanAttachExpressionLambdaBody()
-        ) {
-            return true;
-        }
-        for (int index = 0; index < Math.max(0, analysis.calls().size() - 1); index++) {
-            MethodCallExpr call = analysis.calls().get(index);
-            if (
-                methodCallSegmentHasSourceMultilineBlockLambdaArgument(call)
-                || sourceMultilineLambdaPlan.callCanAttachExpressionLambdaBody(index)
-            ) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private SourceMultilineLambdaChainPlan sourceMultilineLambdaChainPlan(
-            MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis
-    ) {
-        return sourceMultilineLambdaChainPlan(analysis.root(), analysis.calls());
-    }
-
-    private SourceMultilineLambdaChainPlan sourceMultilineLambdaChainPlan(
-            Expression root,
-            List<MethodCallExpr> calls
-    ) {
-        Optional<SourceMultilineLambdaCallLayout.AttachedFirstSegment> firstCall = calls.isEmpty()
-            ? Optional.empty()
-            : sourceMultilineLambdaCalls.attachedFirstSegmentPlan(calls.getFirst());
-        boolean rootCanAttachExpressionLambdaBody = root instanceof MethodCallExpr methodRoot
-            && sourceMultilineLambdaCalls.canAttachExpressionLambdaBody(methodRoot);
-        List<Boolean> callCanAttachExpressionLambdaBody = new ArrayList<>(calls.size());
-        for (int index = 0; index < calls.size(); index++) {
-            callCanAttachExpressionLambdaBody.add(
-                index == 0
-                    ? firstCall.isPresent()
-                    : sourceMultilineLambdaCalls.canAttachExpressionLambdaBody(calls.get(index))
-            );
-        }
-        return new SourceMultilineLambdaChainPlan(
-            rootCanAttachExpressionLambdaBody,
-            callCanAttachExpressionLambdaBody,
-            firstCall
-        );
     }
 
     private Doc methodCallChainRootDoc(
@@ -1918,12 +1739,6 @@ final class MethodCallChainPrinter {
             return Optional.empty();
         }
         if (refuseOpeningSingleSimpleObjectRootChainTail(root, call)) {
-            return Optional.empty();
-        }
-        if (
-            root instanceof MethodCallExpr methodRoot
-            && methodCallSegmentHasSourceMultilineBlockLambdaArgument(methodRoot)
-        ) {
             return Optional.empty();
         }
         // The object-creation-root compact-root path has no source-shape bail: whether the constructor root stays compact
@@ -2246,7 +2061,6 @@ final class MethodCallChainPrinter {
      */
     boolean methodCallChainIsSourceMultiline(MethodCallExpr expression) {
         MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
-        SourceMultilineLambdaChainPlan sourceMultilineLambdaPlan = sourceMultilineLambdaChainPlan(analysis);
         return (
             analysis.sourceMultilineChain()
             // A chain carrying an inter-segment `//` line comment is reported source-multiline here so the caller stays
@@ -2258,11 +2072,6 @@ final class MethodCallChainPrinter {
             // covered here and remains a known comment-placement gap — the `method-chain-member-access @ expanded`
             // perturbation.
             || analysis.hasInterSegmentLineComment()
-            || chainHasSourceMultilineArguments(analysis, sourceMultilineLambdaPlan)
-            // An object-creation-rooted chain is not reported source-multiline on account of its constructor argument
-            // shape: the constructor root's argument list breaks by width (`widthDrivenObjectCreation` /
-            // `promotedObjectCreationRootDoc`), so this router keys on the method-call-root read and the chain-arg /
-            // comment signals.
         );
     }
 
@@ -2502,17 +2311,10 @@ final class MethodCallChainPrinter {
                 );
     }
 
-    // A block-lambda argument body is never kept broken by its source shape, so this is constant false. Retained so its
-    // several callers (the chain-fan guards) stay wired.
-    private boolean methodCallSegmentHasSourceMultilineBlockLambdaArgument(MethodCallExpr expression) {
-        return false;
-    }
-
     private boolean canBreakAfterCompactExpressionLambdaRoot(
             MethodCallBreakMode breakMode,
             Expression root,
             List<MethodCallExpr> calls,
-            SourceMultilineLambdaChainPlan sourceMultilineLambdaPlan,
             LayoutContext layout
     ) {
         if (
@@ -2520,8 +2322,6 @@ final class MethodCallChainPrinter {
             || calls.size() != 1
             || !(root instanceof MethodCallExpr methodRoot)
             || !methodCallSegmentHasExpressionLambdaArgument(methodRoot)
-            || sourceMultilineLambdaPlan.rootCanAttachExpressionLambdaBody()
-            || sourceMultilineLambdaPlan.anyNonFinalCallCanAttachExpressionLambdaBody()
             || !methodCallSegmentHasNoOwnContainedComments(calls.getFirst())
             || methodCallSegmentHasComment(calls.getFirst())
         ) {
@@ -2646,21 +2446,6 @@ final class MethodCallChainPrinter {
         // nodeIndentWidth(root) + compact.length(), which already dominates the one-indent baseline — so the
         // rendered-column comparison alone yields the identical verdict.
         return rootLineWidth(expression, compact, layout) > options.lineWidth();
-    }
-
-    /**
-     * The fixed-budget column oracle handed to the expression-lambda hug/opener seams
-     * ({@link ExpressionLambdaArgumentLayout.HuggableExpressionLambdaArguments},
-     * {@link ExpressionLambdaArgumentLayout.ExpressionLambdaMethodCallBodyOpener},
-     * {@link ExpressionLambdaArgumentLayout.ExpressionLambdaLogicalBinaryBodyOpenerHug}) at every call-site that is NOT a
-     * fanned chain selector.
-     *
-     * <p>This returns the same fixed shallow-common-case budget the seams measure at when the call-site is not a fanned
-     * selector: the three-unit continuation depth ({@link LayoutWidth#continuationStatement}). A fanned chain selector
-     * instead threads its own {@code compactSegmentWidth} (the true segment column) at the segment call-site.
-     */
-    private ToIntFunction<String> expressionLambdaColumnWidthFallback() {
-        return layoutWidth::continuationStatement;
     }
 
     /**

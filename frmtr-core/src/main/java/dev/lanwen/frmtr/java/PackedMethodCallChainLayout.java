@@ -215,7 +215,6 @@ final class PackedMethodCallChainLayout {
                 rootDoc,
                 calls.getFirst(),
                 MethodCallChainSourcePlanner.ChainRootRendering.BROKEN_OBJECT_CREATION,
-                analysis.sourceMultilineChain(),
                 layoutWidth::currentIndented,
                 firstLineWidth,
                 LayoutContext.root()
@@ -276,7 +275,6 @@ final class PackedMethodCallChainLayout {
                 Doc rootDoc,
                 MethodCallExpr call,
                 MethodCallChainSourcePlanner.ChainRootRendering rootRendering,
-                boolean sourceMultilineChain,
                 ToIntFunction<String> lineWidth,
                 ToIntFunction<String> firstLineWidth,
                 LayoutContext layout

@@ -246,7 +246,6 @@ final class ChainSelectorLambdaLayout {
     ) {
         if (
             analysis.calls().isEmpty()
-            || analysis.sourceMultilineChain()
             || analysis.rootHasComments()
         ) {
             return Optional.empty();

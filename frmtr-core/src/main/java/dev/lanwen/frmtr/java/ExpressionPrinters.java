@@ -242,6 +242,7 @@ final class ExpressionPrinters {
             lambdas::huggedGapCommentedLambdaBody,
             lambdas::lambdaParameters,
             lambdas::expressionLambdaMethodCallBodyOpener,
+            lambdas::expressionLambdaObjectCreationBodyOpener,
             lambdas::expressionLambdaLogicalBinaryBodyOpenerHug,
             textBlocks::renderUnformattedTextBlock,
             this::brokenArgument

@@ -1360,6 +1360,21 @@ final class LambdaExpressionPrinter {
     }
 
     /**
+     * Exposes {@link ExpressionLambdaArgumentLayout#objectCreationBodyWithOpener} — the source-neutral bare
+     * object-creation lambda-body opener hug ({@code params -> new Type(}⏎ constructor arguments ⏎{@code )}) — so a fanned
+     * chain selector whose sole argument is a bare {@code new Type(args)}-body expression lambda can hug its constructor
+     * opener directly ({@code ChainSelectorLambdaLayout}'s {@code objectCreationLambdaBodyOpenerHug}) instead of dropping
+     * the whole lambda flat, the object-creation sibling of {@link #expressionLambdaMethodCallBodyOpener}.
+     */
+    Optional<Doc> expressionLambdaObjectCreationBodyOpener(
+            String parameters,
+            ObjectCreationExpr objectCreation,
+            ToIntFunction<String> columnWidth
+    ) {
+        return expressionLambdaArguments.objectCreationBodyWithOpener(parameters, objectCreation, columnWidth);
+    }
+
+    /**
      * Exposes {@link ExpressionLambdaArgumentLayout#logicalBinaryLambdaBodyOpenerHug} — the source-neutral logical-binary
      * opener hug ({@code param -> <first operand>}⏎ each following {@code &&}/{@code ||} operand ⏎{@code )}) — so a fanned
      * chain selector whose sole argument is a logical-binary-body expression lambda can hug its opener with a dedented close

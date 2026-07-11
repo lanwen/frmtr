@@ -106,6 +106,7 @@ final class MethodCallPrinter {
             Function<LambdaExpr, Optional<Doc>> huggedGapCommentedLambdaBody,
             Function<LambdaExpr, String> lambdaParameters,
             ExpressionLambdaArgumentLayout.ExpressionLambdaMethodCallBodyOpener expressionLambdaMethodCallBodyOpener,
+            ExpressionLambdaArgumentLayout.ExpressionLambdaObjectCreationBodyOpener expressionLambdaObjectCreationBodyOpener,
             ExpressionLambdaArgumentLayout.ExpressionLambdaLogicalBinaryBodyOpenerHug expressionLambdaLogicalBinaryBodyOpenerHug,
             Function<TextBlockLiteralExpr, String> unformattedTextBlockRenderer,
             Function<Expression, Optional<Doc>> brokenArgumentExpressionRenderer
@@ -137,6 +138,7 @@ final class MethodCallPrinter {
             huggedGapCommentedLambdaBody,
             lambdaParameters,
             expressionLambdaMethodCallBodyOpener,
+            expressionLambdaObjectCreationBodyOpener,
             expressionLambdaLogicalBinaryBodyOpenerHug
         );
         this.expressionRenderer = expressionRenderer;

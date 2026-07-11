@@ -94,8 +94,6 @@ final class ChainFanLayout {
 
     private final BiFunction<Expression, List<Doc>, Doc> rootChainContinuation;
 
-    private final BiFunction<MethodCallExpr, MethodCallChainTail, Doc> methodCallChainSegment;
-
     private final BiFunction<List<MethodCallExpr>, MethodCallChainTail, List<Doc>> methodCallChainSegments;
 
     private final RootLineWidth rootLineWidth;
@@ -145,7 +143,6 @@ final class ChainFanLayout {
             MethodCallArgumentList methodCallArgumentList,
             Function<Doc, Doc> chainContinuation,
             BiFunction<Expression, List<Doc>, Doc> rootChainContinuation,
-            BiFunction<MethodCallExpr, MethodCallChainTail, Doc> methodCallChainSegment,
             BiFunction<List<MethodCallExpr>, MethodCallChainTail, List<Doc>> methodCallChainSegments,
             RootLineWidth rootLineWidth,
             Function<Expression, Optional<String>> compactSingleLineRoot
@@ -170,7 +167,6 @@ final class ChainFanLayout {
         this.methodCallArgumentList = methodCallArgumentList;
         this.chainContinuation = chainContinuation;
         this.rootChainContinuation = rootChainContinuation;
-        this.methodCallChainSegment = methodCallChainSegment;
         this.methodCallChainSegments = methodCallChainSegments;
         this.rootLineWidth = rootLineWidth;
         this.compactSingleLineRoot = compactSingleLineRoot;
@@ -646,12 +642,24 @@ final class ChainFanLayout {
             : expressionRenderer.format(root, LayoutContext.root());
     }
 
-    // Single selector: the lone segment fans onto its own dotted continuation line. The segment renders through the
-    // ordinary (not on-own-line) segment group so a single-simple-arg tail stays compact.
+    // Single selector: the lone segment fans onto its own dotted continuation line. It renders through the SAME
+    // on-own-line segment renderer as the multi-selector fan below ({@code methodCallChainSegments}), so its
+    // force-break decision is measured at the continuation column, not the segment's stale source column. A
+    // single-SIMPLE-argument tail still stays compact (its argument never force-breaks regardless of that width basis),
+    // and a single NON-simple-argument tail ({@code .withRegistryAddress(entry.getKey())}) no longer breaks its argument
+    // list apart on a flat-source pass and then collapses on the re-format: the ordinary (not-on-own-line) renderer used
+    // to measure the final segment through the source-relative {@code MethodCallChainPrinter.methodCallSegmentWidth},
+    // which places the segment BESIDE its preceding source token, so a flat source (selector on the root's line) read
+    // as over width and exploded while the already-fanned re-format (selector on its own line) read as fitting and
+    // collapsed — flipping exploded<->flat forever (the testcontainers {@code RegistryAuthLocator} idempotence break).
+    // The lone segment is wrapped with the single-Doc {@code chainContinuation} (never the multi-selector's short-root
+    // padding branch), so the rendered indentation is byte-for-byte the previous single-selector shape.
     private Doc fanSingleSelectorLayout(ChainFanCandidate candidate) {
         return Doc.concat(
             fanRootDoc(candidate.root()),
-            chainContinuation.apply(methodCallChainSegment.apply(candidate.calls().getFirst(), candidate.tail()))
+            chainContinuation.apply(
+                methodCallChainSegments.apply(candidate.calls(), candidate.tail()).getFirst()
+            )
         );
     }
 

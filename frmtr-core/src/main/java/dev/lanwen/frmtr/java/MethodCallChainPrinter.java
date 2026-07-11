@@ -225,7 +225,6 @@ final class MethodCallChainPrinter {
             calls::methodCallArgumentList,
             this::chainContinuation,
             this::chainContinuation,
-            this::methodCallChainSegment,
             this::methodCallChainSegments,
             this::rootLineWidth,
             this::compactSingleLineRoot

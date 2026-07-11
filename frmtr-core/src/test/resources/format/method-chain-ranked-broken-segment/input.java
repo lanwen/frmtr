@@ -1,5 +1,5 @@
 class MethodChainRankedBrokenSegmentSample {
-    void rankedCompactBrokenSegment(RouteRegistry registry) {
+    void rankedSingleSelectorFansByWidth(RouteRegistry registry) {
         ConnectionPlanner.between(primaryDataCenter, secondaryDataCenter).establishRoute(activeSessionToken, fallbackSessionToken);
     }
 

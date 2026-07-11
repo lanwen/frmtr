@@ -467,8 +467,13 @@ nested `bestFitting` ranks the two broken shapes). This is again byte-identical 
 with the retired first-line probe. The `one-per-line fan-out` alternative both rankers rank against the compact shape is
 built by the shared `MethodCallChainPrinter.chainFanOut(root, calls, tail, layout)` helper (convergence-redesign
 Mechanism 1, slice 2): it constructs the fan-out — `root` then each selector on its own dotted continuation line via
-`chainContinuation`, each segment rendered through the ordinary `methodCallChainSegment` group so a single-simple-argument
-tail stays compact — **from the AST alone, never gating on `openerFits` or `sourceMultilineChain`**. That source-neutrality
+`chainContinuation`, each segment — including the lone tail of a single-selector fan (`ChainFanLayout.fanSingleSelectorLayout`),
+now rendered through the same on-own-line `methodCallChainSegments` group as the multi-selector fan — measured at its
+continuation column, so a single-simple-argument tail stays compact and a non-simple / multi-argument tail
+(`CONFIG_MAPPER.readValue(node, T.class)` ⏎ `.withSourceKey(section.getKey())`) breaks by width there rather than by its
+stale beside-a-token source column; the earlier source-column measurement made such a tail explode from a flat source and
+collapse on the re-format, the testcontainers `RegistryAuthLocator` one-pass idempotence break (fixture
+`single-selector-fan-nonsimple-argument`) — **from the AST alone, never gating on `openerFits` or `sourceMultilineChain`**. That source-neutrality
 is invisible to these two callers (they only reach the builder for width-driven, source-neutral single-segment chains, and
 it reproduces the exact `Doc` they built inline before the extraction, so the corpus stays byte-identical), but it is the
 point of the extraction: it is the builder the initializer's collapse arm will route through in convergence-redesign

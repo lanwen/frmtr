@@ -26,6 +26,7 @@ class ShipmentLedger {
                     shipmentTotals.merge(
                         new ParcelKey(route.routeId(), parcel.index(), route.carrier()),
                         parcel.weight()
-                    )));
+                    )
+                ));
     }
 }

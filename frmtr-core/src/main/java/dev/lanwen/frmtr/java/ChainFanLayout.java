@@ -709,8 +709,34 @@ final class ChainFanLayout {
         List<MethodCallExpr> calls = candidate.calls();
         return calls.size() >= 2
             && chainRootIsTrivialReceiver(candidate.root())
-            && firstSelectorAttachesSafely(calls.getFirst())
+            && (firstSelectorAttachesSafely(calls.getFirst())
+                || bareNameReceiverFirstSelectorHugsLambda(candidate.root(), calls.getFirst()))
             && rootAvoidsShortRootPadding(candidate.root());
+    }
+
+    // Bare-name-receiver lambda-selector hug (PR #279 review #2). Extends the trivial-receiver first-selector attach to a
+    // first selector whose sole trailing argument is an EXPRESSION LAMBDA ({@code probe.withVirtualTime(() -> …)}), so the
+    // receiver name and its lambda-carrying first selector stay on the opening line rather than fanning the receiver onto
+    // its own line ({@code return probe}⏎{@code .withVirtualTime(…)}). Restricted to a bare {@code NameExpr} receiver — NOT
+    // the broader trivial-receiver set: a {@code FieldAccessExpr} or {@code this}/{@code super} root keeps the fan-from-first
+    // shape for the lambda case (the reviewer's "keep field-access roots fanning" guard). The attached selector is rendered
+    // through the ordinary source-neutral segment renderer (NOT the atomic-text {@link #attachedFirstSelectorSegment}), so
+    // its expression-lambda body breaks by WIDTH at the attached column exactly like a fanned selector would; because the
+    // attach itself is a deterministic structural verdict keyed only on the root/selector AST kind, both passes rebuild the
+    // identical attached shape and the body's width-driven break is measured at the same (attached) column, keeping the
+    // layout a fixpoint.
+    private boolean bareNameReceiverFirstSelectorHugsLambda(Expression root, MethodCallExpr firstSelector) {
+        return root.isNameExpr() && firstSelectorHugsExpressionLambda(firstSelector);
+    }
+
+    private boolean firstSelectorHugsExpressionLambda(MethodCallExpr firstSelector) {
+        if (firstSelector.getTypeArguments().isPresent() || methodCallSegmentHasComment.test(firstSelector)) {
+            return false;
+        }
+        NodeList<Expression> arguments = firstSelector.getArguments();
+        return arguments.size() == 1
+            && arguments.get(0) instanceof LambdaExpr lambda
+            && lambda.getExpressionBody().isPresent();
     }
 
     private Doc fanTrivialReceiverAttachLayout(ChainFanCandidate candidate) {
@@ -718,9 +744,21 @@ final class ChainFanLayout {
         List<MethodCallExpr> fannedSelectors = new ArrayList<>(calls.subList(1, calls.size()));
         return Doc.concat(
             fanRootDoc(candidate.root()),
-            attachedFirstSelectorSegment(calls.getFirst()),
+            attachedFirstSelectorDoc(calls.getFirst()),
             rootChainContinuation.apply(candidate.root(), methodCallChainSegments.apply(fannedSelectors, candidate.tail()))
         );
+    }
+
+    // Renders the attached first selector for {@link #fanTrivialReceiverAttachLayout}. An attach-SAFE leaf selector renders
+    // as one flat atomic {@code .selector(...)} token ({@link #attachedFirstSelectorSegment}); a bare-name-receiver
+    // lambda-carrying first selector renders through the ordinary source-neutral segment renderer so its lambda body can
+    // break by width at the attached column ({@link #bareNameReceiverFirstSelectorHugsLambda}). The lambda selector is the
+    // sole element of the segment list, so the renderer measures it as a standalone segment with no trailing suffix.
+    private Doc attachedFirstSelectorDoc(MethodCallExpr firstSelector) {
+        if (firstSelectorAttachesSafely(firstSelector)) {
+            return attachedFirstSelectorSegment(firstSelector);
+        }
+        return methodCallChainSegments.apply(List.of(firstSelector), MethodCallChainTail.of("")).getFirst();
     }
 
     // Multi-segment: one selector per line under the continuation indent, the same one-per-line layout the imperative

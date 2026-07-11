@@ -1,19 +1,14 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.GeneratedJavaParserConstants;
-import com.github.javaparser.JavaToken;
-import com.github.javaparser.Position;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.Parameter;
-import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
-import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
@@ -45,7 +40,6 @@ import com.github.javaparser.ast.stmt.YieldStmt;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -169,6 +163,10 @@ final class StatementPrinter {
 
     private final TryStatementLayout tryStatementLayout;
 
+    private final IfStatementLayout ifStatementLayout;
+
+    private final LoopStatementLayout loopStatementLayout;
+
     StatementPrinter(
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
@@ -275,6 +273,42 @@ final class StatementPrinter {
             currentIndentedWidth,
             this::commentText
         );
+        this.ifStatementLayout = new IfStatementLayout(
+            comments,
+            commentPlacement,
+            controlConditions,
+            statementRenderer,
+            ifConditionRenderer,
+            sameLineBlockCommentBeforeNode,
+            compact,
+            this::nestedStatement,
+            this::commentText,
+            this::emptyBodyOwnBlockComment,
+            this::trailingEmptyBodyBlockComment,
+            this::trailingLineComment
+        );
+        this.loopStatementLayout = new LoopStatementLayout(
+            comments,
+            commentPlacement,
+            rawSource,
+            options,
+            layoutWidth,
+            controlConditions,
+            statementRenderer,
+            blockRenderer,
+            brokenMethodCallRenderer,
+            compact,
+            compactWithoutOwnComment,
+            compactJoin,
+            compactTypeLike,
+            compactWithOwnBlockComment,
+            annotationFlatText,
+            modifiers,
+            this::nestedStatement,
+            this::commentText,
+            this::emptyBodyOwnBlockComment,
+            this::trailingEmptyBodyBlockComment
+        );
     }
 
     /**
@@ -310,9 +344,9 @@ final class StatementPrinter {
             case LocalRecordDeclarationStmt localRecordDeclaration -> bodyRenderer.format(
                 localRecordDeclaration.getRecordDeclaration()
             , LayoutContext.root());
-            case IfStmt ifStmt -> ifStatement(ifStmt);
-            case WhileStmt whileStmt -> whileStatement(whileStmt);
-            case DoStmt doStmt -> doStatement(doStmt);
+            case IfStmt ifStmt -> ifStatementLayout.ifStatement(ifStmt);
+            case WhileStmt whileStmt -> loopStatementLayout.whileStatement(whileStmt);
+            case DoStmt doStmt -> loopStatementLayout.doStatement(doStmt);
             case TryStmt tryStmt -> tryStatementLayout.tryStatement(tryStmt);
             case SynchronizedStmt synchronizedStmt -> Doc.concat(
                 Doc.text("synchronized "),
@@ -325,8 +359,8 @@ final class StatementPrinter {
                 Doc.text(" "),
                 blockRenderer.format(synchronizedStmt.getBody(), LayoutContext.root())
             );
-            case ForStmt forStmt -> forStatement(forStmt);
-            case ForEachStmt forEachStmt -> forEachStatement(forEachStmt);
+            case ForStmt forStmt -> loopStatementLayout.forStatement(forStmt);
+            case ForEachStmt forEachStmt -> loopStatementLayout.forEachStatement(forEachStmt);
             case SwitchStmt switchStmt -> switchStatementRenderer.format(switchStmt, LayoutContext.root());
             default -> Doc.text(compact.apply(statement));
         };
@@ -802,442 +836,6 @@ final class StatementPrinter {
     }
 
     /**
-     * Prints if/else chains while preserving the comment slots between the condition, then branch, and else branch.
-     *
-     * <p>The forks here are driven by source layout rather than Java syntax alone: empty bodies can keep comments inside
-     * the header line, comments between {@code then} and {@code else} stay between those tokens, and nested {@code else
-     * if} routes back through the outer statement callback so it gets the same raw/pragma/comment gate and switch
-     * routing as any other nested statement.
-     */
-    private Doc ifStatement(IfStmt statement) {
-        if (statement.getThenStmt().isEmptyStmt()) {
-            return ifWithEmptyThenStatement(statement);
-        }
-        List<Doc> docs = new ArrayList<>();
-        // A line comment on the then branch's `}` line that is followed by `else`/`else if` belongs to the else-leading
-        // gap block, not to a separate then-trailing slot: a collapse can re-attach such a gap line as the then block's
-        // own trailing comment, and claiming it here would let elseChainSeparator's then-trailing branch render it alone
-        // and drop the rest of the block. When the then is a block and an else follows, let the gap block (computed in
-        // the else branch below) own every gap line; only claim the standalone then-trailing slot otherwise.
-        boolean elseLeadingGapOwnsThenTrailing = statement.getThenStmt().isBlockStmt()
-            && statement.getElseStmt().filter(elseStatement -> !elseStatement.isEmptyStmt()).isPresent();
-        Doc thenTrailingLineComment = elseLeadingGapOwnsThenTrailing
-            ? Doc.EMPTY
-            : trailingLineComment(statement.getThenStmt());
-        // Claim the else-leading gap block before rendering the then branch so the dry-run records the whole block as the
-        // gap's own (in Doc-construction order, which is what the record-only pre-pass follows), even though it renders
-        // after the then branch's `}`. Otherwise a gap line that a collapse re-attached as the then block's own trailing
-        // comment would be claimed by the block printer first and render on the `}` line, splitting the block.
-        // A braceless (non-`else if`) else body owns its own leading `//` block through the braceless-body handler
-        // (the same family the then/while/for bodies use), so its leading comments are placed indented under `else`,
-        // not hoisted above the `else` keyword. The separator gap slot below is then bounded to the genuine
-        // then-`}`-to-`else` gap (comments that start before the `else` keyword), and the body block is claimed here so
-        // the two slots never double-own a line. The `else` keyword position is the boundary between the two slots: a
-        // comment before it is a separator comment, one after it leads the body.
-        Optional<Statement> bracelessElse = statement.getElseStmt()
-                .filter(elseStatement -> !elseStatement.isEmptyStmt())
-                .filter(elseStatement -> !elseStatement.isIfStmt())
-                .filter(elseStatement -> !elseStatement.isBlockStmt());
-        Optional<Position> elseKeyword = bracelessElse.isPresent() ? elseKeywordPosition(statement) : Optional.empty();
-        Doc elseLeadingLineComment = statement.getElseStmt()
-                .filter(elseStatement -> !elseStatement.isEmptyStmt())
-                .map(elseStatement -> elseLeadingLineComment(statement, elseStatement, elseKeyword))
-                .orElse(Doc.EMPTY);
-        // Render the braceless else body here, in Doc-construction order, before the then branch and the separator, so
-        // the dry-run records its leading `//` block under the else body's leading slot first: a collapse that
-        // re-buckets a body-leading line onto the if orphan pool then cannot let the separator slot reclaim it and split
-        // the block off the body it leads. This is the sole renderer for a braceless else body, so a separator comment
-        // that a collapse re-attaches as the body's own leading trivia does not trip the generic leading-comment body
-        // break in nestedStatement (it stays in the separator slot, the body collapses onto the `else` line).
-        Optional<Doc> bracelessElseBody = bracelessElse
-                .map(elseStatement -> bracelessElseBody(statement, elseStatement, elseKeyword));
-        Doc conditionTrailingLineComment = controlConditions.closeParenTrailingLineComment(statement.getCondition());
-        Doc betweenThenAndElseBlockComment = blockCommentBetweenThenAndElse(statement);
-        docs.add(ifCondition(statement));
-        if (conditionTrailingLineComment != Doc.EMPTY) {
-            docs.add(Doc.text(" "));
-            docs.add(conditionTrailingLineComment);
-            docs.add(ifThenStatementAfterConditionTrailingComment(statement));
-        } else {
-            docs.add(Doc.text(" "));
-            docs.add(ifThenStatement(statement));
-        }
-        statement
-                .getElseStmt()
-                .ifPresent(elseStatement -> {
-                    if (elseStatement.isEmptyStmt()) {
-                        docs.add(emptyElseStatement(statement, elseStatement));
-                        return;
-                    }
-                    // A block comment between the then-block close and else is recovered by blockCommentBetweenThenAndElse
-                    // above and takes priority in elseChainSeparator; for `} /* c */ else {` that same comment is also a
-                    // same-line block comment before the else statement. Only offer the else-leading block comment when
-                    // the between-then-and-else slot did not already claim it, so the comment is claimed once. Output is
-                    // unchanged because elseChainSeparator returns on the between slot before it ever reads the else
-                    // leading block comment.
-                    Doc elseLeadingBlockComment = betweenThenAndElseBlockComment == Doc.EMPTY
-                        ? sameLineBlockCommentBeforeNode.apply(elseStatement)
-                        : Doc.EMPTY;
-                    Doc elseTrailingLineComment = elseTrailingLineComment(statement, elseStatement);
-                    docs.add(
-                        elseChainSeparator(
-                            statement,
-                            elseStatement,
-                            conditionTrailingLineComment,
-                            thenTrailingLineComment,
-                            betweenThenAndElseBlockComment,
-                            elseLeadingLineComment,
-                            elseLeadingBlockComment
-                        )
-                    );
-                    if (bracelessElseBody.isPresent()) {
-                        // A braceless (non-`else if`) else body is rendered entirely by bracelessElseBody (computed
-                        // above): it breaks and indents the body when an after-`else` leading `//` block is present and
-                        // otherwise collapses the body onto the `else` line, claiming the leading block exactly once.
-                        docs.add(bracelessElseBody.orElseThrow());
-                    } else {
-                        docs.add(
-                            elseStatement.isIfStmt()
-                                ? statementRenderer.format(elseStatement, LayoutContext.root())
-                                : nestedStatement(elseStatement)
-                        );
-                    }
-                    if (elseTrailingLineComment != Doc.EMPTY) {
-                        docs.add(Doc.text(" "));
-                        docs.add(elseTrailingLineComment);
-                    }
-                });
-        if (statement.getElseStmt().isEmpty() && thenTrailingLineComment != Doc.EMPTY) {
-            docs.add(Doc.text(" "));
-            docs.add(thenTrailingLineComment);
-        }
-        return Doc.concat(docs);
-    }
-
-    /**
-     * Recovers the {@code //} comment block that leads the {@code else} keyword ({@code } // note\nelse}), independent of
-     * source shape, as a single together-rendered cluster.
-     *
-     * <p>A multi-line block written between the then branch's {@code }} and {@code else}/{@code else if} is not held by a
-     * single node: JavaParser keeps the trailing lines as the enclosing {@code if}'s orphan trivia while the line
-     * directly above the {@code else}/{@code else if} node becomes that node's own leading trivia. Reading only one of
-     * those two slots (own first, orphan fallback) split the block — one line rendered above {@code else}, the rest
-     * folded into the nested {@code else if}'s leading cluster, which mangled {@code else if} into {@code else //\n if}
-     * and rotated the lines every pass because re-parsing re-split the block onto different nodes. We instead claim the
-     * whole gap block in one slot (see
-     * {@link JavaCommentPlacementPolicy#gapLeadingLineCommentBlock(Node, Node, java.util.Collection)}) so it renders once,
-     * together, above {@code else}, and the nested {@code else if} can no longer reclaim a leading line. At
-     * {@code @default} the block is a single contiguous run, so this renders the same lines in the same order.
-     *
-     * <p>{@code elseKeywordUpperBound}, when present, restricts this slot to the genuine separator gap — comments that
-     * start before the {@code else} keyword ({@code } // note\nelse}). It is supplied only for a braceless (non-{@code
-     * else if}) else body, whose own leading {@code //} block lives <em>after</em> the {@code else} keyword and is owned
-     * by {@link #bracelessElseBody(IfStmt, Statement, java.util.Optional)} instead. For an {@code else if} or a block
-     * else the bound is absent and this keeps recovering the whole gap block as before, so the #115 rotation fix and the
-     * block-else separator placement are unchanged.
-     */
-    private Doc elseLeadingLineComment(IfStmt statement, Statement elseStatement, Optional<Position> elseKeywordUpperBound) {
-        return comments.gapLeadingLineCommentBlock(
-            statement,
-            statement.getThenStmt(),
-            elseStatement,
-            List.of(statement),
-            elseKeywordUpperBound
-        );
-    }
-
-    /**
-     * Renders a braceless (non-{@code else if}) else body that carries a leading {@code //} block, claiming each line of
-     * that block exactly once under the else body's leading slot and placing it indented under {@code else}, above the
-     * body statement.
-     *
-     * <p>This is the else-body counterpart of {@link #bracelessLoopBody(Node, Node, Statement)}: a braceless else body
-     * normally collapses onto the {@code else} line ({@code else return 2;}), but a leading line comment cannot share
-     * that line without commenting out the body, so the body breaks to an indented next line with the comment kept above
-     * it. The leading block lives in the gap between the {@code else} keyword and the body, but JavaParser splits it: the
-     * line directly above the body is the body's own leading trivia (rendered by {@link #statementRenderer}); earlier
-     * lines re-bucket onto the enclosing {@code if}'s orphan pool or the then branch under whitespace perturbation. We
-     * recover the re-bucketed lines from those buckets through {@link JavaCommentPlacementPolicy#gapLineCommentsBefore},
-     * bounded to comments that start <em>after</em> the {@code else} keyword so a genuine then-{@code }}-to-{@code else}
-     * separator comment (owned by {@link #elseLeadingLineComment}) is never pulled into the body. Each recovered line is
-     * claimed once under the body's leading slot — the same slot the body renderer would claim its own line in — so the
-     * whole block is neither dropped under perturbation nor double-printed at {@code @default}.
-     *
-     * <p>This is the sole renderer for a braceless else body. When no after-{@code else} leading line comment is present
-     * it returns the body collapsed onto the {@code else} line, exactly as {@link #nestedStatement(Statement)} would, so
-     * a separator comment that a collapse re-attaches as the body's own leading trivia (it belongs to
-     * {@link #elseLeadingLineComment}, not the body) does not trip the generic leading-comment body break in
-     * {@link #nestedStatement(Statement)} on a later pass.
-     */
-    private Doc bracelessElseBody(IfStmt statement, Statement elseStatement, Optional<Position> elseKeyword) {
-        List<JavaCommentTrivia> aboveBodyComments = commentPlacement
-                .gapLineCommentsBefore(statement.getThenStmt(), elseStatement, List.of(statement, statement.getThenStmt()))
-                .stream()
-                .filter(trivia -> elseKeyword.map(position -> CommentIndex.startsAfter(trivia.comment(), position))
-                        .orElse(true))
-                .toList();
-        // The body's own leading comment counts only when it sits after the `else` keyword. A collapse can re-attach a
-        // genuine separator comment (one written before `else`) onto the else statement as its own leading trivia; that
-        // comment belongs to the separator slot, not the body, so the else-keyword bound keeps it from triggering a
-        // body break here.
-        boolean bodyOwnsLeadingLineComment = commentPlacement.leadingComment(elseStatement)
-                .filter(JavaCommentTrivia::isLine)
-                .filter(trivia -> !trivia.startsAfterEndOf(elseStatement))
-                .filter(trivia -> elseKeyword.map(position -> CommentIndex.startsAfter(trivia.comment(), position))
-                        .orElse(true))
-                .isPresent();
-        if (aboveBodyComments.isEmpty() && !bodyOwnsLeadingLineComment) {
-            return statementRenderer.format(elseStatement, LayoutContext.root());
-        }
-        List<Doc> indented = new ArrayList<>();
-        indented.add(Doc.HARD_LINE);
-        for (JavaCommentTrivia aboveComment : aboveBodyComments) {
-            Doc rendered = comments.comment(aboveComment, elseStatement, OwnerSlot.LEADING);
-            if (rendered == Doc.EMPTY) {
-                continue;
-            }
-            indented.add(rendered);
-            indented.add(Doc.HARD_LINE);
-        }
-        indented.add(statementRenderer.format(elseStatement, LayoutContext.root()));
-        return Doc.indent(Doc.concat(indented));
-    }
-
-    /**
-     * Locates the source position of the {@code else} keyword that follows the then branch, scanning the {@code if}
-     * statement's token range for the {@code ELSE} token whose position is after the then branch ends.
-     *
-     * <p>The {@code else} keyword has no AST node of its own, so callers that must classify a comment as a separator
-     * (before {@code else}) or an else-body leading comment (after {@code else}) read its token position directly, the
-     * same way {@link ConditionalExpressionPrinter} reads the {@code ?}/{@code :} token positions. Returns
-     * {@link Optional#empty()} when the token range is unavailable, in which case callers fall back to treating the whole
-     * gap as the separator (the pre-existing behavior).
-     */
-    private Optional<Position> elseKeywordPosition(IfStmt statement) {
-        Optional<Position> thenEnd = statement.getThenStmt().getRange().map(range -> range.end);
-        return statement.getTokenRange().flatMap(tokenRange -> {
-            for (JavaToken token : tokenRange) {
-                if (token.getKind() != GeneratedJavaParserConstants.ELSE) {
-                    continue;
-                }
-                Optional<Position> tokenStart = token.getRange().map(range -> range.begin);
-                if (tokenStart.isPresent() && thenEnd.map(end -> tokenStart.orElseThrow().isAfter(end)).orElse(true)) {
-                    return tokenStart;
-                }
-            }
-            return Optional.empty();
-        });
-    }
-
-    /**
-     * Recovers the line comment that trails the {@code else} body ({@code } else {} // note}), independent of source
-     * shape.
-     *
-     * <p>This mirrors the try-clause {@code clauseTrailingComment} recovery in {@link TryStatementLayout}. At
-     * {@code @default} the comment sits on the else body's end line, so {@link CommentTracker#trailingLineComment(Node)}
-     * (via {@link #trailingLineComment(Node)}) owns it. When a collapse perturbation places it on the shared else
-     * {@code }} position so {@code startsAfterEndOf(elseStatement)} fails, JavaParser re-buckets it onto the
-     * {@link IfStmt} orphan pool; we then recover the {@code if} orphan line comment that source-orders after the else
-     * body ends (open to the statement's end, since the else is the last clause).
-     */
-    private Doc elseTrailingLineComment(IfStmt statement, Statement elseStatement) {
-        Doc own = trailingLineComment(elseStatement);
-        if (own != Doc.EMPTY) {
-            return own;
-        }
-        return comments.trailingLineCommentsAfter(statement, elseStatement, Optional.empty());
-    }
-
-    private Doc ifWithEmptyThenStatement(IfStmt statement) {
-        List<Doc> docs = new ArrayList<>();
-        docs.add(Doc.text("if (" + ifEmptyThenCondition(statement) + ");"));
-        statement
-                .getElseStmt()
-                .ifPresent(elseStatement -> {
-                    docs.add(Doc.HARD_LINE);
-                    docs.add(
-                        elseStatement.isEmptyStmt()
-                            ? Doc.text("else;" + trailingEmptyBodyBlockComment(elseStatement))
-                            : Doc.concat(Doc.text("else "), nestedStatement(elseStatement))
-                    );
-                });
-        return Doc.concat(docs);
-    }
-
-    private String ifEmptyThenCondition(IfStmt statement) {
-        List<String> parts = new ArrayList<>();
-        parts.add(compact.apply(statement.getCondition()));
-        String thenComment = commentText(emptyBodyOwnBlockComment(statement.getThenStmt()));
-        if (!thenComment.isEmpty()) {
-            parts.add(thenComment);
-        }
-        String betweenThenAndElse = commentText(blockCommentBetweenThenAndElse(statement));
-        if (!betweenThenAndElse.isEmpty()) {
-            parts.add(betweenThenAndElse);
-        }
-        statement.getElseStmt()
-                .filter(Statement::isEmptyStmt)
-                .map(this::emptyBodyOwnBlockComment)
-                .map(this::commentText)
-                .filter(comment -> !comment.isEmpty())
-                .ifPresent(parts::add);
-        return String.join(" ", parts);
-    }
-
-    /**
-     * Recovers the block comment that sits between the then branch's {@code }} and the {@code else} keyword
-     * ({@code } /* note *}{@code / else}), independent of source shape.
-     *
-     * <p>The own path keeps the original column arithmetic: at {@code @default} JavaParser attaches the comment to the
-     * else node as its own trivia, and the comment shares the then-end line immediately after {@code }} (within two
-     * columns) and lies before the {@code else} node on that line. That column window is what distinguishes a
-     * {@code } /* note *}{@code / else} comment from an {@code else /* note *}{@code / {} comment — both are the else
-     * node's own block comment on the same line, but only the former sits immediately after {@code }}. Keeping that
-     * window means {@code @default} renders byte-identically and the {@code else}-leading comment still falls through to
-     * {@link #ifStatement(IfStmt)}'s {@code elseLeadingBlockComment} slot.
-     *
-     * <p>A whitespace perturbation that pushes the {@code } /* note *}{@code / else} comment onto its own line below the
-     * {@code }} re-buckets it as a {@link IfStmt} orphan even though the AST is otherwise identical, so the own path's
-     * line/column predicates lose it. The orphan fallback then recovers the {@code if} orphan block comment that
-     * source-orders strictly between the then branch end and the else node begin. The fallback only sees orphans, so an
-     * {@code else}-leading comment (which stays the else node's own trivia under perturbation) is never claimed here and
-     * still renders through the {@code elseLeadingBlockComment} slot.
-     */
-    private Doc blockCommentBetweenThenAndElse(IfStmt statement) {
-        if (statement.getElseStmt().isEmpty()) {
-            return Doc.EMPTY;
-        }
-        Statement thenStatement = statement.getThenStmt();
-        Statement elseStatement = statement.getElseStmt().orElseThrow();
-        Doc own = statement.getAllContainedComments()
-                .stream()
-                .filter(BlockComment.class::isInstance)
-                .filter(comment -> comment.getRange()
-                            .flatMap(commentRange -> thenStatement.getRange().flatMap(
-                                    thenRange -> elseStatement.getRange().map(
-                                        elseRange -> commentRange.begin.line == thenRange.end.line
-                                                && commentRange.begin.column > thenRange.end.column
-                                                && commentRange.begin.column <= thenRange.end.column + 2
-                                                && commentRange.begin.line == elseRange.begin.line
-                                                && commentRange.begin.column < elseRange.begin.column
-                                    )
-                            ))
-                            .orElse(false)
-                )
-                .findFirst()
-                .map(comments::comment)
-                .orElse(Doc.EMPTY);
-        if (own != Doc.EMPTY) {
-            return own;
-        }
-        return commentPlacement.orphanComments(statement)
-                .stream()
-                .filter(JavaCommentTrivia::isBlock)
-                .filter(comment -> comment.liesBetween(thenStatement, elseStatement))
-                .sorted(Comparator.comparing(JavaCommentTrivia::comment, CommentIndex.sourceOrderComparator()))
-                .findFirst()
-                .map(comments::comment)
-                .filter(doc -> doc != Doc.EMPTY)
-                .orElse(Doc.EMPTY);
-    }
-
-    private Doc emptyElseStatement(IfStmt statement, Statement elseStatement) {
-        String elseComment = commentText(emptyBodyOwnBlockComment(elseStatement));
-        String prefix = elseComment.isEmpty() ? " else;" : " " + elseComment + " else;";
-        return Doc.text(prefix + trailingEmptyBodyBlockComment(elseStatement));
-    }
-
-    private Doc ifCondition(IfStmt statement) {
-        return Doc.concat(Doc.text("if "), ifConditionRenderer.apply(statement.getCondition()));
-    }
-
-    private boolean conditionCommentStartsBeforeExpression(Expression condition, Comment comment) {
-        return CommentIndex.startsBefore(comment, condition);
-    }
-
-    private Doc ifThenStatement(IfStmt statement) {
-        if (
-            statement.getElseStmt().isEmpty()
-            && statement.getThenStmt().isBlockStmt()
-            && statement.getThenStmt().asBlockStmt().getStatements().isEmpty()
-            && statement.getThenStmt().asBlockStmt().getOrphanComments().isEmpty()
-            && compact.apply(statement.getCondition()).contains("instanceof")
-        ) {
-            return Doc.concat(Doc.text("{"), Doc.HARD_LINE, Doc.text("}"));
-        }
-        return nestedStatement(statement.getThenStmt());
-    }
-
-    private Doc ifThenStatementAfterConditionTrailingComment(IfStmt statement) {
-        if (statement.getThenStmt().isBlockStmt()) {
-            return Doc.concat(Doc.HARD_LINE, ifThenStatement(statement));
-        }
-        return Doc.indent(Doc.concat(Doc.HARD_LINE, statementRenderer.format(statement.getThenStmt(), LayoutContext.root())));
-    }
-
-    private Doc elseChainSeparator(
-            IfStmt statement,
-            Statement elseStatement,
-            Doc conditionTrailingLineComment,
-            Doc thenTrailingLineComment,
-            Doc betweenThenAndElseBlockComment,
-            Doc elseLeadingLineComment,
-            Doc elseLeadingBlockComment
-    ) {
-        if (conditionTrailingLineComment != Doc.EMPTY && !statement.getThenStmt().isBlockStmt()) {
-            // The condition trailing comment is rendered on the `if` line by ifStatement; this slot only emits the
-            // separator. A braceless then whose first leading line comment bubbled up as the condition trailing comment
-            // does not silence the then-trailing and else-leading slots: the remaining then-leading lines can surface as
-            // the then statement's own trailing comment, and the else body's leading `//` block has already been claimed
-            // by the elseLeadingLineComment gap slot. Returning the bare separator would leave both already-claimed
-            // clusters unrendered and silently drop them, so emit whichever of them is present before `else`.
-            return separatorWithThenTrailingAndElseLeading(thenTrailingLineComment, elseLeadingLineComment);
-        }
-        if (thenTrailingLineComment != Doc.EMPTY) {
-            return Doc.concat(Doc.HARD_LINE, thenTrailingLineComment, Doc.HARD_LINE, Doc.text("else "));
-        }
-        if (betweenThenAndElseBlockComment != Doc.EMPTY) {
-            return Doc.concat(Doc.text(" "), betweenThenAndElseBlockComment, Doc.text(" else "));
-        }
-        if (elseLeadingLineComment != Doc.EMPTY) {
-            return Doc.concat(Doc.HARD_LINE, elseLeadingLineComment, Doc.HARD_LINE, Doc.text("else "));
-        }
-        if (elseLeadingBlockComment != Doc.EMPTY) {
-            return Doc.concat(Doc.text(" else "), elseLeadingBlockComment, Doc.text(" "));
-        }
-        if (elseStatement.isIfStmt() && !statement.getThenStmt().isBlockStmt()) {
-            return Doc.concat(Doc.HARD_LINE, Doc.text("else "));
-        }
-        return Doc.text(" else ");
-    }
-
-    /**
-     * Builds the {@code else} separator for the condition-trailing-comment branch, carrying through both the then
-     * statement's own trailing line comment and the else body's already-claimed leading {@code //} block.
-     *
-     * <p>The two slots are distinct comment clusters that both survive elsewhere when no condition trailing comment is
-     * present (the then-trailing and elseLeadingLineComment branches below render them in turn). Once a braceless then's
-     * leading comment has bubbled onto the {@code if} line as the condition trailing comment, this branch is the only one
-     * reached, so it must render whichever of the two remaining clusters exist rather than dropping a cluster the dry-run
-     * already recorded as owned here. Each present cluster gets its own line above {@code else}, in source order
-     * (then-trailing first, else-leading second), matching the layout the no-condition-comment branches produce.
-     */
-    private Doc separatorWithThenTrailingAndElseLeading(Doc thenTrailingLineComment, Doc elseLeadingLineComment) {
-        List<Doc> docs = new ArrayList<>();
-        if (thenTrailingLineComment != Doc.EMPTY) {
-            docs.add(Doc.HARD_LINE);
-            docs.add(thenTrailingLineComment);
-        }
-        if (elseLeadingLineComment != Doc.EMPTY) {
-            docs.add(Doc.HARD_LINE);
-            docs.add(elseLeadingLineComment);
-        }
-        docs.add(Doc.HARD_LINE);
-        docs.add(Doc.text("else "));
-        return Doc.concat(docs);
-    }
-
-    /**
      * Chooses how a control-flow body attaches to its header.
      *
      * <p>Empty if-blocks keep the two-line block shape used by existing fixtures, block bodies stay on the same line as
@@ -1272,79 +870,10 @@ final class StatementPrinter {
     }
 
     /**
-     * Renders a braceless {@code while}/{@code for}/{@code for-each} body that carries a {@code //} line comment between
-     * the loop header and the body, claiming the comment exactly once and placing it the same way the {@code if}
-     * close-paren path places a condition comment.
-     *
-     * <p>A braceless loop body normally collapses onto the header line ({@code while (cond) call();}). A line comment in
-     * the header-to-body gap cannot share that line with the body statement: the {@code //} would comment out everything
-     * after it. The comment's intended position is read from where it sits in source: a comment that begins on the same
-     * line as the header end ({@code while (cond) // note}) is a header-trailing comment and stays inline on the header
-     * line, exactly as {@link ControlConditions#closeParenTrailingLineComment} keeps an {@code if (cond) // note} inline;
-     * a comment on its own line below the header ({@code while (cond)\n // note\n body}) leads the body and moves above
-     * the indented body statement. Either way the body breaks to an indented next line.
-     *
-     * <p>The comment lives in a single grammar slot — the header-to-body gap — but JavaParser attaches it to different
-     * nodes depending on source whitespace: at the {@code @default} shape an own-line comment is the body's own leading
-     * trivia (the {@link #statementRenderer} envelope prints it); a collapse re-buckets it onto the header expression
-     * named by {@code afterNode} as that node's trailing trivia, and an expand re-buckets it onto the {@code controlStmt}
-     * as an orphan. {@link JavaCommentPlacementPolicy#gapLineCommentsBefore(Node, Node, java.util.Collection)} recovers
-     * the comment from whichever bucket holds it while deliberately excluding the body's own comment, and every recovered
-     * comment is claimed once under the body's leading slot — the same slot {@link CommentTracker#gapLineCommentsBefore}
-     * would claim it in — so exactly one of the two paths (gap recovery here, or the body renderer) prints it. It is
-     * therefore neither dropped under perturbation nor duplicated at {@code @default}. Returns {@link Optional#empty()}
-     * when no leading line comment is present in any bucket, leaving the caller's existing same-line collapse intact.
-     */
-    private Optional<Doc> bracelessLoopBody(Node controlStmt, Node afterNode, Statement body) {
-        if (body.isBlockStmt()) {
-            return Optional.empty();
-        }
-        List<JavaCommentTrivia> gapComments = commentPlacement.gapLineCommentsBefore(
-            afterNode,
-            body,
-            List.of(controlStmt, afterNode)
-        );
-        boolean bodyOwnsLeadingLineComment = commentPlacement.leadingComment(body)
-                .filter(JavaCommentTrivia::isLine)
-                .filter(trivia -> !trivia.startsAfterEndOf(body))
-                .isPresent();
-        if (gapComments.isEmpty() && !bodyOwnsLeadingLineComment) {
-            return Optional.empty();
-        }
-        List<Doc> headerTrailing = new ArrayList<>();
-        List<Doc> aboveBody = new ArrayList<>();
-        for (JavaCommentTrivia gapComment : gapComments) {
-            Doc rendered = comments.comment(gapComment, body, OwnerSlot.LEADING);
-            if (rendered == Doc.EMPTY) {
-                continue;
-            }
-            if (gapComment.startsOnEndLine(afterNode)) {
-                headerTrailing.add(rendered);
-            } else {
-                aboveBody.add(rendered);
-            }
-        }
-        List<Doc> indented = new ArrayList<>();
-        indented.add(Doc.HARD_LINE);
-        for (Doc aboveComment : aboveBody) {
-            indented.add(aboveComment);
-            indented.add(Doc.HARD_LINE);
-        }
-        indented.add(statementRenderer.format(body, LayoutContext.root()));
-        List<Doc> result = new ArrayList<>();
-        result.add(Doc.text(" "));
-        for (Doc inline : headerTrailing) {
-            result.add(inline);
-        }
-        result.add(Doc.indent(Doc.concat(indented)));
-        return Optional.of(Doc.concat(result));
-    }
-
-    /**
      * Breaks and indents a braceless {@code if}/{@code else}/{@code do} body that carries its leading {@code //} line
      * comment as its own trivia (the {@code @default} shape).
      *
-     * <p>This is the body-own counterpart of {@link #bracelessLoopBody(Node, Node, Statement)}, used where the enclosing
+     * <p>This is the body-own counterpart of {@link LoopStatementLayout#bracelessLoopBody(Node, Node, Statement)}, used where the enclosing
      * construct already recovers the perturbed attachments through another slot: the {@code if} close-paren trailing path
      * ({@link ControlConditions#closeParenTrailingLineComment}) catches a comment a collapse moves onto the condition,
      * and the {@code do-while} condition-leading path catches one an expand moves onto the condition. So those constructs
@@ -1374,297 +903,6 @@ final class StatementPrinter {
         }
         Doc leading = comments.leading(block);
         return Doc.concat(leading, Doc.text("{"), Doc.HARD_LINE, Doc.text("}"));
-    }
-
-    private Doc forEachStatement(ForEachStmt statement) {
-        if (statement.getBody().isEmptyStmt()) {
-            return Doc.text(
-                "for ("
-                    + compact.apply(statement.getVariable())
-                    + " : "
-                    + emptyBodyHeaderExpression(statement.getIterable(), statement.getBody())
-                    + ");"
-                    + trailingEmptyBodyBlockComment(statement)
-            );
-        }
-        Doc header = forEachHeader(statement);
-        Optional<Doc> commentedBracelessBody = bracelessLoopBody(
-            statement,
-            statement.getIterable(),
-            statement.getBody()
-        );
-        if (commentedBracelessBody.isPresent()) {
-            return Doc.concat(header, commentedBracelessBody.orElseThrow());
-        }
-        return Doc.concat(header, Doc.text(" "), nestedStatement(statement.getBody()));
-    }
-
-    /**
-     * Lets the iterable own method-call argument breaks when the enhanced-for header would otherwise overflow.
-     */
-    private Doc forEachHeader(ForEachStmt statement) {
-        String variable = forEachVariable(statement);
-        Expression iterable = statement.getIterable();
-        String header = "for (" + variable + " : " + compact.apply(iterable) + ")";
-        if (
-            // C10-c: measure the for-each header at the statement's true rendered block/type depth
-            // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
-            layoutWidth.nodeLine(statement, header + " {}") <= options.lineWidth()
-            || !(iterable instanceof MethodCallExpr methodCall)
-        ) {
-            return Doc.text(header);
-        }
-        return Doc.concat(
-            Doc.text("for (" + variable + " : "),
-            brokenMethodCallRenderer.apply(methodCall),
-            Doc.text(")")
-        );
-    }
-
-    private String forEachVariable(ForEachStmt statement) {
-        String raw = rawSource.raw(statement);
-        int open = raw.indexOf('(');
-        int colon = raw.indexOf(':', open);
-        if (open < 0 || colon < open) {
-            return compact.apply(statement.getVariable());
-        }
-        String variable = raw.substring(open + 1, colon);
-        return variable.contains("/*")
-            ? CommentedTokenText.tokenLine(CommentedTokenText.tokens(variable))
-            : compact.apply(statement.getVariable());
-    }
-
-    private String forHeader(ForStmt statement) {
-        String init = statement.getInitialization()
-                .stream()
-                .map(this::forHeaderExpression)
-                .reduce((left, right) -> left + ", " + right)
-                .orElse("");
-        String compare = statement.getCompare().map(this::forHeaderExpression).orElse("");
-        String update = compactJoin.apply(statement.getUpdate());
-        if (init.isEmpty() && compare.isEmpty() && update.isEmpty()) {
-            return "for (;;)";
-        }
-        return "for (" + init + "; " + compare + "; " + update + ")";
-    }
-
-    private Doc forStatement(ForStmt statement) {
-        if (statement.getBody().isEmptyStmt()) {
-            return loopWithEmptyBody(forHeader(statement), statement);
-        }
-        if (statement.getBody() instanceof DoStmt) {
-            return Doc.concat(Doc.text(forHeader(statement) + " "), statementRenderer.format(statement.getBody(), LayoutContext.root()));
-        }
-        Optional<Doc> commentedBracelessBody = forHeaderEndNode(statement)
-                .flatMap(afterNode -> bracelessLoopBody(statement, afterNode, statement.getBody()));
-        if (commentedBracelessBody.isPresent()) {
-            return Doc.concat(Doc.text(forHeader(statement)), commentedBracelessBody.orElseThrow());
-        }
-        return Doc.concat(Doc.text(forHeader(statement) + " "), nestedStatement(statement.getBody()));
-    }
-
-    /**
-     * Names the last node of a {@code for} header so the gap-comment recovery can bound "comments before the body" from
-     * the last header element it follows. The update, then the comparison, then the initialization run last to first; a
-     * fully-empty {@code for (;;)} header has no node, so the gap recovery is skipped and the body keeps its own-comment
-     * handling.
-     */
-    private Optional<Node> forHeaderEndNode(ForStmt statement) {
-        if (!statement.getUpdate().isEmpty()) {
-            return Optional.of(statement.getUpdate().get(statement.getUpdate().size() - 1));
-        }
-        if (statement.getCompare().isPresent()) {
-            return statement.getCompare().map(Node.class::cast);
-        }
-        if (!statement.getInitialization().isEmpty()) {
-            return Optional.of(statement.getInitialization().get(statement.getInitialization().size() - 1));
-        }
-        return Optional.empty();
-    }
-
-    private Doc whileStatement(WhileStmt statement) {
-        if (statement.getBody().isEmptyStmt()) {
-            return Doc.text(
-                "while ("
-                    + emptyBodyHeaderExpression(statement.getCondition(), statement.getBody())
-                    + ");"
-                    + trailingEmptyBodyBlockComment(statement)
-            );
-        }
-        Optional<Doc> commentedBody = commentedLoopBody(statement, statement.getBody());
-        if (commentedBody.isPresent()) {
-            return Doc.concat(
-                Doc.text("while "),
-                controlConditions.controlCondition(
-                    statement.getCondition(),
-                    "while (",
-                    ") {}",
-                    layoutWidth::blockStatement
-                ),
-                commentedBody.orElseThrow()
-            );
-        }
-        Doc whileHeader = Doc.concat(
-            Doc.text("while "),
-            controlConditions.controlCondition(
-                statement.getCondition(),
-                "while (",
-                ") {}",
-                layoutWidth::blockStatement
-            )
-        );
-        Optional<Doc> commentedBracelessBody = bracelessLoopBody(
-            statement,
-            statement.getCondition(),
-            statement.getBody()
-        );
-        if (commentedBracelessBody.isPresent()) {
-            return Doc.concat(whileHeader, commentedBracelessBody.orElseThrow());
-        }
-        return Doc.concat(whileHeader, Doc.text(" "), nestedStatement(statement.getBody()));
-    }
-
-    /**
-     * Keeps an inline block comment attached to a single-statement loop body.
-     *
-     * <p>When the body starts on the header line the comment remains inline; when it starts later, the comment and body
-     * move to an indented next line.
-     */
-    private Optional<Doc> commentedLoopBody(Node loop, Statement body) {
-        if (body.isBlockStmt()) {
-            return Optional.empty();
-        }
-        Doc comment = comments.ownComment(body, BlockComment.class::isInstance);
-        if (comment == Doc.EMPTY) {
-            return Optional.empty();
-        }
-        Doc commentedStatement = Doc.concat(comment, Doc.text(" "), statementRenderer.format(body, LayoutContext.root()));
-        if (CommentIndex.sameBeginLine(loop, body)) {
-            return Optional.of(Doc.concat(Doc.text(" "), commentedStatement));
-        }
-        return Optional.of(Doc.indent(Doc.concat(Doc.HARD_LINE, commentedStatement)));
-    }
-
-    private Doc doStatement(DoStmt statement) {
-        if (statement.getBody().isEmptyStmt()) {
-            String condition = compact.apply(statement.getCondition());
-            Doc bodyComment = emptyBodyOwnBlockComment(statement.getBody());
-            Doc conditionComment = comments.ownComment(statement.getCondition(), BlockComment.class::isInstance);
-            if (bodyComment != Doc.EMPTY || conditionComment != Doc.EMPTY) {
-                String comment = bodyComment != Doc.EMPTY ? commentText(bodyComment) : commentText(conditionComment);
-                return Doc.text("do; while (" + comment + " " + condition + ");");
-            }
-            return Doc.text("do; while (" + condition + ");");
-        }
-        return Doc.concat(Doc.text("do "), doBody(statement.getBody()), doWhileTail(statement));
-    }
-
-    private Doc doBody(Statement body) {
-        if (!body.isBlockStmt()) {
-            return nestedStatement(body);
-        }
-        Doc leadingBlockComment = comments.ownComment(body, BlockComment.class::isInstance);
-        if (leadingBlockComment == Doc.EMPTY) {
-            return nestedStatement(body);
-        }
-        return Doc.concat(leadingBlockComment, Doc.text(" "), blockRenderer.format(body.asBlockStmt(), LayoutContext.root()));
-    }
-
-    private Doc doWhileTail(DoStmt statement) {
-        Doc trailing = doWhileTrailingLineComment(statement);
-        Doc beforeWhileComment = doWhileBeforeWhileBlockComment(statement);
-        if (beforeWhileComment != Doc.EMPTY) {
-            return Doc.concat(
-                Doc.text(
-                    " "
-                        + commentText(beforeWhileComment)
-                        + " while ("
-                        + compactWithoutOwnComment.apply(statement.getCondition())
-                        + ");"
-                ),
-                trailing
-            );
-        }
-        return Doc.concat(
-            Doc.text(" while "),
-            controlConditions.controlCondition(
-                statement.getCondition(),
-                "while (",
-                ") {}",
-                layoutWidth::blockStatement
-            ),
-            Doc.text(";"),
-            trailing
-        );
-    }
-
-    /**
-     * Recovers the line comment that trails a {@code do ... while (cond);} statement after the closing {@code ;}.
-     *
-     * <p>At {@code @default} JavaParser attaches that comment to the {@link DoStmt}, so {@link StatementRuleEnvelope}
-     * claims and renders it through the shared statement trailing-comment slot. When the body is written across multiple
-     * source lines, JavaParser instead attaches the comment to the {@code while} condition expression, where the
-     * condition renderer (which prints the condition without its own comment) drops it. This query reclaims the comment
-     * from the condition's own trailing slot and re-emits it as a {@code lineSuffix} after the {@code ;}, matching how
-     * {@link #expressionStatementTrailingComment(ExpressionStmt)} and the {@code try} renderer place statement trailing
-     * comments. Claiming it here keeps the comment printed exactly once: when the envelope already owns the {@link DoStmt}
-     * comment the condition slot is empty, so this path adds nothing.
-     */
-    private Doc doWhileTrailingLineComment(DoStmt statement) {
-        Doc conditionTrailing = comments.trailingLineComment(statement.getCondition());
-        if (conditionTrailing == Doc.EMPTY) {
-            return Doc.EMPTY;
-        }
-        return Doc.lineSuffix(Doc.concat(Doc.text(" "), conditionTrailing));
-    }
-
-    /**
-     * Recovers the block comment that sits between a {@code do} body and its {@code while}
-     * ({@code } /* note *}{@code / while (...)}), independent of source shape.
-     *
-     * <p>At {@code @default} JavaParser attaches it as the condition's own comment, so the condition own path renders it.
-     * A whitespace perturbation that pushes the comment onto its own line re-buckets it as a {@link DoStmt} orphan; this
-     * query then recovers the {@code do} orphan block comments that begin before the condition. The rendering stays the
-     * same inline {@code note while (...)} shape used for the own-comment case.
-     */
-    private Doc doWhileBeforeWhileBlockComment(DoStmt statement) {
-        Optional<Comment> conditionComment = statement.getCondition().getComment().filter(
-            BlockComment.class::isInstance
-        );
-        if (
-            conditionComment.isPresent()
-            && conditionCommentStartsBeforeExpression(statement.getCondition(), conditionComment.orElseThrow())
-        ) {
-            return comments.comment(conditionComment.orElseThrow());
-        }
-        return Doc.concat(comments.blockCommentsBefore(List.of(statement), statement.getCondition()));
-    }
-
-    /**
-     * Prints a loop or if branch whose body is a semicolon.
-     *
-     * <p>Block comments attached to an empty body are the only visible content in that body, so they either move before
-     * the header or stay after the semicolon depending on how JavaParser exposes them for the original source.
-     */
-    private Doc loopWithEmptyBody(String header, Node statement) {
-        Doc bodyComment =
-            statement instanceof ForStmt forStmt ? emptyBodyOwnBlockComment(forStmt.getBody()) : Doc.EMPTY;
-        if (bodyComment == Doc.EMPTY) {
-            return Doc.text(header + ";" + trailingEmptyBodyBlockComment(statement));
-        }
-        return Doc.concat(
-            bodyComment,
-            Doc.HARD_LINE,
-            Doc.text(header + ";" + trailingEmptyBodyBlockComment(statement))
-        );
-    }
-
-    private String emptyBodyHeaderExpression(Expression expression, Statement body) {
-        Doc bodyComment = emptyBodyOwnBlockComment(body);
-        if (bodyComment == Doc.EMPTY) {
-            return compact.apply(expression);
-        }
-        return compact.apply(expression) + " " + commentText(bodyComment);
     }
 
     private Doc emptyBodyOwnBlockComment(Statement body) {
@@ -1731,47 +969,6 @@ final class StatementPrinter {
                 .filter(trivia -> !comments.isPrinted(trivia))
                 .map(comments::comment)
                 .orElse(Doc.EMPTY);
-    }
-
-    private String forHeaderExpression(Expression expression) {
-        if (expression instanceof BinaryExpr binaryExpr) {
-            return compact.apply(binaryExpr.getLeft())
-                + " "
-                + binaryExpr.getOperator().asString()
-                + " "
-                + compactWithOwnBlockComment.apply(binaryExpr.getRight());
-        }
-        if (
-            expression instanceof VariableDeclarationExpr variableDeclaration
-            && variableDeclaration.getVariables().size() == 1
-        ) {
-            VariableDeclarator variable = variableDeclaration.getVariables().get(0);
-            return forInitDeclarationPrefix(variableDeclaration)
-                + compactTypeLike.apply(variable.getType())
-                + " "
-                + variable.getNameAsString()
-                + variable.getInitializer().map(initializer -> " = " + compact.apply(initializer)).orElse("");
-        }
-        return compact.apply(expression);
-    }
-
-    /**
-     * Builds the flat annotation/modifier prefix for a single-declarator {@code for}-loop init declaration.
-     *
-     * <p>The for-header reconstructs the declaration as flat text (it never wraps), so the declaration-level annotations
-     * and modifiers that {@link #forHeaderExpression} would otherwise drop must be re-emitted inline here. Annotations
-     * use the shared inline annotation text and modifiers use the shared modifier-string policy so a {@code final}
-     * modifier or an annotation such as {@code @SuppressWarnings("unchecked")} on the init variable survives instead of
-     * being silently discarded.
-     */
-    private String forInitDeclarationPrefix(VariableDeclarationExpr declaration) {
-        String annotations = declaration.getAnnotations()
-                .stream()
-                .map(annotationFlatText)
-                .reduce((left, right) -> left + " " + right)
-                .map(text -> text + " ")
-                .orElse("");
-        return annotations + modifiers.apply(declaration);
     }
 
     @FunctionalInterface

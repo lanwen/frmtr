@@ -163,14 +163,13 @@ final class MethodCallChainPrinter {
             methodChainPlanner::rootIsObjectCreation,
             this::compactMethodCallChainRoot,
             this::compactMethodCallChainSegmentCanStayFlat,
-            (objectCreation, rootDoc, call, rootRendering, sourceMultilineChain, lineWidth, firstLineWidth, layout) ->
+            (objectCreation, rootDoc, call, rootRendering, lineWidth, firstLineWidth, layout) ->
                 objectRootSingleSegmentChain(
                     objectCreation,
                     rootDoc,
                     call,
                     MethodCallChainTail.EMPTY,
                     rootRendering,
-                    sourceMultilineChain,
                     lineWidth,
                     firstLineWidth,
                     layout
@@ -560,7 +559,6 @@ final class MethodCallChainPrinter {
             (!breakMode.isForced()
                 && !analysis.hasComments()
                 && !analysis.hasBlockLambdaArgument()
-                && !analysis.sourceMultilineChain()
                 // A chain carrying an inter-segment `//` line comment must not stay flat, so its fan-only
                 // comment-preserving render is used. See {@link #chainHasInterSegmentLineComment}.
                 && !analysis.hasInterSegmentLineComment()
@@ -596,7 +594,6 @@ final class MethodCallChainPrinter {
                 && !forcedSingleCallPrefixOverflows(breakMode, expression, lineWidth)
                 && !(breakMode.isForced() && root instanceof ObjectCreationExpr)
                 && !rootObjectCreationNeedsBreak
-                && !analysis.sourceMultilineChain()
                 && !analysis.rootHasComments()
                 && !analysis.singleCommentedSegment())
         ) {
@@ -822,8 +819,7 @@ final class MethodCallChainPrinter {
             return Optional.of(appendFinalSegmentSuffix(rootDoc, finalSegmentSuffix));
         }
         if (
-            !analysis.sourceMultilineChain()
-            && root instanceof MethodCallExpr methodRoot
+            root instanceof MethodCallExpr methodRoot
             && calls.size() == 1
             && root.getAllContainedComments().isEmpty()
             && !methodCallSegmentHasComment(calls.getFirst())
@@ -888,7 +884,6 @@ final class MethodCallChainPrinter {
                 calls.getFirst(),
                 finalSegmentSuffix,
                 chainPlan.rootRendering(),
-                analysis.sourceMultilineChain(),
                 lineWidth,
                 firstLineWidth,
                 layout
@@ -1198,7 +1193,6 @@ final class MethodCallChainPrinter {
         if (
             rootRendering != MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER
             || analysis.hasComments()
-            || analysis.sourceMultilineChain()
             || call.getArguments().isEmpty()
             || call.getArguments().stream().anyMatch(LambdaExpr.class::isInstance)
             || methodCallSegmentHasBlockLambdaArgument(call)
@@ -1259,7 +1253,6 @@ final class MethodCallChainPrinter {
         if (
             rootRendering != MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER
             || analysis.hasComments()
-            || analysis.sourceMultilineChain()
             // The object-creation-root argument list is width-driven, so a source-multiline constructor root is a
             // ranking candidate like any other; no source-shape bail here.
             || objectCreation.getAnonymousClassBody().isPresent()
@@ -1383,11 +1376,15 @@ final class MethodCallChainPrinter {
             List<MethodCallExpr> calls,
             MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis
     ) {
+        // First-segment attachment only ever engaged for a chain the author wrote source-multiline — the retired
+        // {@code sourceMultilineChain} signal (now constant-false) — so this gate can no longer attach. Its structural
+        // guards and the {@code sourceFirstLineIsOnlyChainRoot} source-first-line probe are preserved as a tracked G3
+        // source-shape retirement target (enumerated in {@link InlineSourceShapeException}); the gate always declines
+        // today, so both passes take the imperative chain path identically.
         if (
             chainPlan.rootRendering() != MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER
             || calls.size() < 2
             || analysis.hasComments()
-            || !analysis.sourceMultilineChain()
             || chainPlan.root() instanceof MethodCallExpr
             || chainPlan.root() instanceof ObjectCreationExpr
             || rootIsEnclosedFanningChain(chainPlan.root())
@@ -1395,14 +1392,7 @@ final class MethodCallChainPrinter {
         ) {
             return false;
         }
-        MethodCallExpr firstCall = calls.getFirst();
-        return (
-            !methodCallSegmentHasBlockLambdaArgument(firstCall)
-            // C10-b: measure the first segment's fit at its true rendered block/type depth ({@link LayoutWidth#nodeLine})
-            // instead of the fixed CURRENT baseline.
-            && (sourceShapePolicy.fitsOnOneLine(firstCall, text -> layoutWidth.nodeLine(firstCall, text))
-                || layoutWidth.nodeLine(firstCall, this.calls.methodCallPrefix(firstCall) + "(") <= options.lineWidth())
-        );
+        return false;
     }
 
     /**
@@ -2056,23 +2046,20 @@ final class MethodCallChainPrinter {
     }
 
     /**
-     * Exposes the planner's source-line decision to statement routing so field-root fluent chains that were already
-     * multiline are not compacted into an ordinary broken final call.
+     * Routes a chain carrying an inter-segment {@code //} line comment onto its caller's comment-aware chain path.
+     *
+     * <p>Once the {@code sourceMultilineChain} source-shape signal was retired (a chain fans by width / structural rule,
+     * never by the author's line breaks), this reduced to a pure comment-presence router: a chain with an inter-segment
+     * line comment is reported "source-multiline" here so the caller (e.g. {@code MethodCallPrinter}'s comment-aware
+     * branch) keeps it off the plain method-call render that would drop the comment — the MirrorMaker
+     * {@code encode(x) // note}⏎{@code .replaceAll(...)} shape. Keyed on comment presence, not line breaks (see
+     * {@link #chainHasInterSegmentLineComment}). This covers the leading/trailing/gap inter-segment {@code //} positions;
+     * an ORPHAN {@code //} floated between blank lines inside the chain (JavaParser parks it on an inner-selector
+     * MethodCallExpr, not as a segment comment) is NOT covered here and remains a known comment-placement gap — the
+     * {@code method-chain-member-access @ expanded} perturbation.
      */
     boolean methodCallChainIsSourceMultiline(MethodCallExpr expression) {
-        MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
-        return (
-            analysis.sourceMultilineChain()
-            // A chain carrying an inter-segment `//` line comment is reported source-multiline here so the caller stays
-            // on its comment-aware chain-routing (MethodCallPrinter's source-multiline branch) rather than the plain
-            // method-call render that would drop the comment (the MirrorMaker `encode(x) // note`⏎`.replaceAll(...)`
-            // shape). Keyed on comment presence, not the author's line breaks (see {@link #chainHasInterSegmentLineComment}).
-            // This covers the leading/trailing/gap inter-segment `//` positions; an ORPHAN `//` floated between blank lines
-            // inside the chain (JavaParser parks it on an inner-selector MethodCallExpr, not as a segment comment) is NOT
-            // covered here and remains a known comment-placement gap — the `method-chain-member-access @ expanded`
-            // perturbation.
-            || analysis.hasInterSegmentLineComment()
-        );
+        return methodCallChainAnalysis(expression).hasInterSegmentLineComment();
     }
 
     MethodCallChainSourcePlanner.InitializerChainShape methodCallChainInitializerShape(MethodCallExpr expression) {
@@ -2555,12 +2542,10 @@ final class MethodCallChainPrinter {
             Doc rootDoc,
             MethodCallExpr expression,
             MethodCallChainTail finalSegmentSuffix,
-            ToIntFunction<String> compactSegmentWidth,
-            boolean sourceMultilineChain
+            ToIntFunction<String> compactSegmentWidth
     ) {
         if (
             !expression.getAllContainedComments().isEmpty()
-            || (sourceMultilineChain && !finalSegmentSuffix.isEmpty())
             || methodCallSegmentHasBlockLambdaArgument(expression)
             || expression.getArguments().stream().anyMatch(LambdaExpr.class::isInstance)
         ) {
@@ -2588,7 +2573,6 @@ final class MethodCallChainPrinter {
             MethodCallExpr call,
             MethodCallChainTail finalSegmentSuffix,
             MethodCallChainSourcePlanner.ChainRootRendering rootRendering,
-            boolean sourceMultilineChain,
             ToIntFunction<String> lineWidth,
             ToIntFunction<String> firstLineWidth,
             LayoutContext layout
@@ -2597,9 +2581,9 @@ final class MethodCallChainPrinter {
         // selector's LEADING comment ({@code new X(...)}⏎{@code // note}⏎{@code .selector(...)}) must render on the
         // comment-preserving exploded path — the constructor broken open, the selector re-emitting its leading comment on
         // its own continuation line — regardless of the author's line breaks. The verdict keys purely on comment presence
-        // ({@link #methodCallSegmentHasLeadingLineComment}, a structural fact), NOT on the retired {@code sourceMultilineChain}
-        // read (now constant-false), so both passes fan identically and the shape is a one-pass fixpoint. Before this the
-        // dead {@code sourceMultilineChain} gate let a comment-on-its-own-line source fall through to the width-driven
+        // ({@link #methodCallSegmentHasLeadingLineComment}, a structural fact), never on the author's line breaks, so both
+        // passes fan identically and the shape is a one-pass fixpoint. Before the source-shape signal was retired a dead
+        // {@code sourceMultilineChain} gate let a comment-on-its-own-line source fall through to the width-driven
         // compact-glued shape below ({@code new X(...)// note}⏎{@code .selector(...)}), which then re-attached the comment
         // as the ROOT's trailing comment on the next pass and exploded — the attach⇄explode oscillation this closes. The
         // segment renderer claims the leading comment exactly once and {@code brokenObjectCreationRenderer} renders a
@@ -2607,12 +2591,6 @@ final class MethodCallChainPrinter {
         if (methodCallSegmentHasLeadingLineComment(call)) {
             return Doc.concat(
                 brokenObjectCreationRenderer.apply(objectCreation),
-                chainContinuation(methodCallChainSegment(call, Optional.empty(), finalSegmentSuffix))
-            );
-        }
-        if (sourceMultilineChain && !finalTrailingLineComments(call).isEmpty()) {
-            return Doc.concat(
-                rootDoc,
                 chainContinuation(methodCallChainSegment(call, Optional.empty(), finalSegmentSuffix))
             );
         }
@@ -2674,8 +2652,7 @@ final class MethodCallChainPrinter {
                 rootDoc,
                 call,
                 finalSegmentSuffix,
-                compactSegmentWidth,
-                sourceMultilineChain
+                compactSegmentWidth
             )
         );
         if (compactAttachedSegment.isPresent()) {

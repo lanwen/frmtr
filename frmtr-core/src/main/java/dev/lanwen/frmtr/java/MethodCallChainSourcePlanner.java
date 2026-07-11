@@ -90,14 +90,12 @@ final class MethodCallChainSourcePlanner {
         boolean hasBlockLambdaArgument,
         boolean rootHasBlockLambdaArgument,
         boolean rootHasComments,
-        boolean sourceMultilineChain,
         boolean singleCommentedSegment,
         int firstCommentedSegment,
         boolean firstCallHasArgumentGapComment,
         boolean laterCallsHaveArgumentGapComment,
         boolean hasTrailingLineComments,
-        boolean hasInterSegmentLineComment,
-        boolean expressionSpansMultipleSourceLines
+        boolean hasInterSegmentLineComment
     ) {
         MethodCallChainAnalysis {
             calls = List.copyOf(calls);
@@ -114,12 +112,10 @@ final class MethodCallChainSourcePlanner {
     record InitializerChainShape(
         boolean typeLikeRoot,
         boolean rootIsObjectCreation,
-        boolean sourceMultilineChain,
         boolean singleCall,
         boolean tailHasArguments,
         boolean rootObjectCreationArgumentsSpanMultipleLines,
         boolean rootObjectCreationArgumentsAreWidthDriven,
-        boolean expressionSpansMultipleSourceLines,
         boolean chainBreaksByRule
     ) {
         /**
@@ -131,9 +127,6 @@ final class MethodCallChainSourcePlanner {
          */
         boolean objectCreationRootFansSourceNeutrally() {
             return rootIsObjectCreation && rootObjectCreationArgumentsAreWidthDriven && chainBreaksByRule;
-        }
-        boolean shouldForceSourceMultilineInitializerChain() {
-            return expressionSpansMultipleSourceLines && (typeLikeRoot || rootObjectCreationArgumentsSpanMultipleLines);
         }
 
         boolean shouldForceWideInitializerChain() {
@@ -205,14 +198,12 @@ final class MethodCallChainSourcePlanner {
             hasBlockLambdaArgument,
             rootHasBlockLambdaArgument,
             rootHasComments,
-            sourceMultilineChain(root, calls),
             singleCommentedSegment,
             firstCommentedSegment,
             firstCallHasArgumentGapComment,
             laterCallsHaveArgumentGapComment,
             hasTrailingLineComments,
-            chainHasInterSegmentLineComment.test(root, calls),
-            false
+            chainHasInterSegmentLineComment.test(root, calls)
         );
     }
 
@@ -238,14 +229,8 @@ final class MethodCallChainSourcePlanner {
                 remainingCalls = new ArrayList<>(calls.subList(1, calls.size()));
                 rootRendering = promotedStaticFirstCallRendering(calls);
             } else if (analysis.firstCommentedSegment() > 0 && promotesFirstCall(root)) {
-                if (analysis.sourceMultilineChain()) {
-                    root = calls.getFirst();
-                    remainingCalls = new ArrayList<>(calls.subList(1, calls.size()));
-                    rootRendering = promotedStaticFirstCallRendering(calls);
-                } else {
-                    root = calls.get(analysis.firstCommentedSegment() - 1);
-                    remainingCalls = new ArrayList<>(calls.subList(analysis.firstCommentedSegment(), calls.size()));
-                }
+                root = calls.get(analysis.firstCommentedSegment() - 1);
+                remainingCalls = new ArrayList<>(calls.subList(analysis.firstCommentedSegment(), calls.size()));
             } else if (
                 analysis.firstCommentedSegment() == 0
                 && root instanceof FieldAccessExpr
@@ -296,8 +281,8 @@ final class MethodCallChainSourcePlanner {
         // Every non-anonymous, comment-free, non-try-resource object-creation root is width-driven, so
         // `rootObjectCreationArgumentsAreWidthDriven` covers four-plus-argument roots and the object-creation-root fan
         // converges by width alone. The record's `rootObjectCreationArgumentsSpanMultipleLines` field is passed as a
-        // constant false, so its `shouldForceSourceMultilineInitializerChain` / `canUseCompactObjectCreationInitializer`
-        // gates fall back to their width-driven / type-like arms.
+        // constant false, so its `canUseCompactObjectCreationInitializer` gate falls back to its width-driven / type-like
+        // arms.
         boolean rootObjectCreationArgumentsAreWidthDriven =
             analysis.root() instanceof ObjectCreationExpr widthDrivenRoot
             && objectCreationLayoutPolicy.constructorArgumentsAreWidthDriven(widthDrivenRoot);
@@ -307,12 +292,10 @@ final class MethodCallChainSourcePlanner {
         return new InitializerChainShape(
             hasTypeLikeChainRoot(analysis),
             analysis.root() instanceof ObjectCreationExpr,
-            analysis.sourceMultilineChain(),
             analysis.calls().size() == 1,
             !tail.getArguments().isEmpty(),
             false,
             rootObjectCreationArgumentsAreWidthDriven,
-            analysis.expressionSpansMultipleSourceLines(),
             chainBreaksByRule(analysis)
         );
     }
@@ -413,12 +396,6 @@ final class MethodCallChainSourcePlanner {
                 fieldAccess.getNameAsString()
             ) || fieldAccessRootName(fieldAccess).map(this::startsWithUppercase).orElse(false);
         }
-        return false;
-    }
-
-    // A chain is never "source-multiline": the fan is decided by width / structural BreakRules, not by where the author
-    // put a selector. This constant-false helper populates the MethodCallChainAnalysis.sourceMultilineChain record field.
-    private boolean sourceMultilineChain(Expression root, List<MethodCallExpr> calls) {
         return false;
     }
 

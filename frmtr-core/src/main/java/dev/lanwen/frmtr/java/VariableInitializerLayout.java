@@ -546,10 +546,10 @@ final class VariableInitializerLayout {
         String name = variableName(variable);
         // SPIKE (fan-root-true-column, #190 foundation). Checked FIRST — ahead of BOTH the source-shape preempt tier and
         // the (A) renderer-measured gate — because the oscillation it closes is exactly those source-shape-gated routes
-        // disagreeing across passes for a fan-carrying initializer. The source-shape tier's chain branches
-        // (shouldForceSourceMultilineInitializerChain, the object-creation source-multiline branches) fire on a
-        // source-multiline pass and produce a shape the (A) gate's flat-source pass does not, so a fan-threshold chain
-        // routed through them oscillates. Claiming the fan-carrying initializer here — with a Doc.bestFitting whose two
+        // disagreeing across passes for a fan-carrying initializer. The source-shape tier's chain branches (the
+        // object-creation source-multiline branches) fire on a source-multiline pass and produce a shape the (A) gate's
+        // flat-source pass does not, so a fan-threshold chain routed through them oscillates. Claiming the fan-carrying
+        // initializer here — with a Doc.bestFitting whose two
         // AST-derived arms (attach after `NAME = ` versus break after `=`) are ranked at the true column — makes the
         // break-after-`=` verdict a fixpoint by construction and pre-empts the source-shape routes for exactly these
         // chains. It self-gates to comment-free fan carriers (returns empty otherwise), so every comment-bearing or
@@ -772,24 +772,6 @@ final class VariableInitializerLayout {
                 );
                 if (objectCreation.isPresent()) {
                     return Optional.of(objectCreation.orElseThrow());
-                }
-            }
-            if (
-                initializer instanceof MethodCallExpr methodCall
-                && methodCallChainInitializerShape.apply(methodCall).shouldForceSourceMultilineInitializerChain()
-                && !singleCallConvergesOnArgumentBreak(
-                    methodCall,
-                    argumentBreakOpenerFits(variable, methodCall, declarationPrefix + variable.getNameAsString())
-                )
-            ) {
-                Optional<Doc> forcedChain = variableWithForcedMethodCallChain(
-                    variable,
-                    name,
-                    declarationPrefix + variable.getNameAsString(),
-                    methodCall
-                );
-                if (forcedChain.isPresent()) {
-                    return Optional.of(forcedChain.orElseThrow());
                 }
             }
             if (logicalComplementOfParenthesizedBinary(initializer) instanceof Expression inner) {
@@ -2027,8 +2009,7 @@ final class VariableInitializerLayout {
      *       engine ({@link #rankedSimpleRootSingleCallConvergence}, {@code Doc.bestFitting([argument-break@1, collapse@0])}).
      *       That ranked arm pre-empts this shape in {@link #variableInitializerBrokenOrFlat}, so here the predicate does not
      *       <em>choose</em> the layout for it; it serves as the AST+width eligibility signal the source-shape gates
-     *       ({@code shouldForceSourceMultilineInitializerChain} at the comment/source-shape tier,
-     *       {@code shouldForceWideInitializerChain} below the ranked arm, and the source-multiline guard inside
+     *       ({@code shouldForceWideInitializerChain} below the ranked arm, and the source-multiline guard inside
      *       {@link #variableWithBrokenMethodCallArguments}) read to <em>defer</em> a converging single call to that ranked
      *       arm rather than force a dot-split chain the re-format would then re-attach.</li>
      * </ul>

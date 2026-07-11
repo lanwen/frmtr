@@ -2,7 +2,6 @@ package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.LineComment;
-import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import dev.lanwen.frmtr.doc.Doc;
 
@@ -22,11 +21,11 @@ final class FieldAccessPrinter {
 
     private final CommentTracker comments;
 
-    private final JavaFormatRule<Expression> expression;
+    private final ExpressionRendering rendering;
 
-    FieldAccessPrinter(CommentTracker comments, JavaFormatRule<Expression> expression) {
+    FieldAccessPrinter(CommentTracker comments, ExpressionRendering rendering) {
         this.comments = comments;
-        this.expression = expression;
+        this.rendering = rendering;
     }
 
     /**
@@ -37,7 +36,7 @@ final class FieldAccessPrinter {
      * not inferred here from line width.
      */
     Doc fieldAccess(FieldAccessExpr expression) {
-        Doc scope = this.expression.format(expression.getScope(), LayoutContext.root());
+        Doc scope = rendering.render(expression.getScope());
         Doc nameComment = comments.ownComment(
             expression.getName(),
             comment -> comment instanceof LineComment

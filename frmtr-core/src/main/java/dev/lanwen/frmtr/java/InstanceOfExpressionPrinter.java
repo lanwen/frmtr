@@ -1,7 +1,6 @@
 package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.InstanceOfExpr;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
@@ -25,7 +24,7 @@ final class InstanceOfExpressionPrinter {
 
     private final FormatterOptions options;
 
-    private final JavaFormatRule<Expression> expression;
+    private final ExpressionRendering rendering;
 
     private final Function<Node, String> compact;
 
@@ -35,13 +34,13 @@ final class InstanceOfExpressionPrinter {
 
     InstanceOfExpressionPrinter(
             FormatterOptions options,
-            JavaFormatRule<Expression> expression,
+            ExpressionRendering rendering,
             Function<Node, String> compact,
             Function<Node, String> compactTypeLike,
             ToIntFunction<String> currentIndentedWidth
     ) {
         this.options = options;
-        this.expression = expression;
+        this.rendering = rendering;
         this.compact = compact;
         this.compactTypeLike = compactTypeLike;
         this.currentIndentedWidth = currentIndentedWidth;
@@ -60,7 +59,7 @@ final class InstanceOfExpressionPrinter {
         if (currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
             return Doc.text(flat);
         }
-        Doc left = this.expression.format(expression.getExpression(), LayoutContext.root());
+        Doc left = rendering.render(expression.getExpression());
         String right = expression.getPattern()
                 .map(compact)
                 .orElseGet(() -> compactTypeLike.apply(expression.getType()));

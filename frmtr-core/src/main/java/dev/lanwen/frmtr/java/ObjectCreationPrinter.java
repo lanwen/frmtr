@@ -38,7 +38,7 @@ final class ObjectCreationPrinter {
 
     private final CommentedExpressionListPrinter commentedExpressionLists;
 
-    private final JavaFormatRule<Expression> expressionRenderer;
+    private final ExpressionRendering rendering;
 
     private final BreakableArgumentExpressionPrinter breakableArguments;
 
@@ -61,7 +61,7 @@ final class ObjectCreationPrinter {
     ObjectCreationPrinter(
             JavaFormatContext context,
             TypePrinter types,
-            JavaFormatRule<Expression> expressionRenderer,
+            ExpressionRendering rendering,
             Function<Expression, Optional<Doc>> brokenArgumentRenderer,
             BiFunction<String, NodeList<Expression>, Optional<Doc>> huggableBlockLambdaArguments,
             JavaFormatRule<BodyDeclaration<?>> bodyRenderer,
@@ -75,10 +75,10 @@ final class ObjectCreationPrinter {
         this.comments = context.comments;
         this.layoutPolicy = context.objectCreationLayoutPolicy;
         this.types = types;
-        this.commentedExpressionLists = new CommentedExpressionListPrinter(context, node -> expressionRenderer.format(node, LayoutContext.root()));
-        this.expressionRenderer = expressionRenderer;
+        this.commentedExpressionLists = new CommentedExpressionListPrinter(context, node -> rendering.render(node));
+        this.rendering = rendering;
         this.breakableArguments = new BreakableArgumentExpressionPrinter(
-            node -> expressionRenderer.format(node, LayoutContext.root()),
+            node -> rendering.render(node),
             brokenArgumentRenderer,
             binaryFansChainOperand
         );
@@ -107,13 +107,13 @@ final class ObjectCreationPrinter {
      * Renders a non-anonymous, non-empty-argument constructor call as the SOURCE-NEUTRAL width-driven {@link Doc#group}.
      * The arguments render through the same {@code breakableArguments::argument} + {@code Doc.joinComma} group
      * {@link #objectCreation} produces for a source-single-line constructor ({@code forceBreak == false}), so this is
-     * byte-identical to {@code expressionRenderer.format(expression, root())} whenever the author wrote the arguments on
+     * byte-identical to {@code rendering.render(expression)} whenever the author wrote the arguments on
      * one line — but it also collapses a source-multiline argument list back to flat when it fits, instead of preserving
      * the author's break.
      *
      * <p>This exists for the canonical-fan cutover ({@link MethodCallChainPrinter}): a constructor-rooted fan-threshold
      * chain must render its root the same way on every pass so it converges. {@code MethodCallChainPrinter.chainFanOut}
-     * routes an object-creation root through this renderer rather than {@code expressionRenderer.format} (source-shape
+     * routes an object-creation root through this renderer rather than {@code rendering.render} (source-shape
      * sensitive: it preserves a four-plus-argument source-multiline list) or {@code brokenObjectCreation} (always
      * force-breaks), so the constructor arguments break purely by the renderer's width verdict at the root's live column.
      * The caller restricts this to comment-free, non-anonymous, non-empty-argument constructors; anonymous bodies, empty

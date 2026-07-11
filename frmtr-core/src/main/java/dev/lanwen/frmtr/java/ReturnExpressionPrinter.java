@@ -50,7 +50,7 @@ final class ReturnExpressionPrinter {
 
     private final SourceShapePolicy sourceShapePolicy;
 
-    private final Function<Expression, Doc> expression;
+    private final ExpressionRendering rendering;
 
     private final ExpressionTailRenderer expressionWithTail;
 
@@ -120,7 +120,7 @@ final class ReturnExpressionPrinter {
             FormatterOptions options,
             LayoutWidth layoutWidth,
             SourceShapePolicy sourceShapePolicy,
-            Function<Expression, Doc> expression,
+            ExpressionRendering rendering,
             ExpressionTailRenderer expressionWithTail,
             Function<LambdaExpr, Doc> brokenLambdaExpression,
             Function<Expression, String> compact,
@@ -152,7 +152,7 @@ final class ReturnExpressionPrinter {
         this.options = options;
         this.layoutWidth = layoutWidth;
         this.sourceShapePolicy = sourceShapePolicy;
-        this.expression = expression;
+        this.rendering = rendering;
         this.expressionWithTail = expressionWithTail;
         this.brokenLambdaExpression = brokenLambdaExpression;
         this.compact = compact;
@@ -184,7 +184,7 @@ final class ReturnExpressionPrinter {
             options,
             layoutWidth,
             sourceShapePolicy,
-            expression,
+            rendering::render,
             compact,
             binaryLines,
             brokenMethodCallWithClosingLine,
@@ -274,7 +274,7 @@ final class ReturnExpressionPrinter {
         // broken arm keeps the ranked/imperative broken-shape selection (forced chain, forced ternary, lambda break,
         // logical-complement break, parenthesized/binary continuation); the conditional group only moves the
         // flat-versus-broken verdict to the renderer.
-        Doc flatReturn = Doc.concat(Doc.text("return "), this.expression.apply(expression), Doc.text(";"));
+        Doc flatReturn = Doc.concat(Doc.text("return "), rendering.render(expression), Doc.text(";"));
         Doc brokenReturn = Doc.concat(Doc.text("return "), brokenReturnValue(expression, layout), Doc.text(";"));
         return Doc.conditionalGroup(List.of(flatReturn, brokenReturn));
     }
@@ -390,7 +390,7 @@ final class ReturnExpressionPrinter {
             return preempted.orElseThrow();
         }
         if (returnLineFits(expression, layout)) {
-            return this.expression.apply(expression);
+            return rendering.render(expression);
         }
         return brokenReturnValue(expression, layout);
     }
@@ -446,7 +446,7 @@ final class ReturnExpressionPrinter {
                 return forcedChain.orElseThrow();
             }
         }
-        return brokenReturnExpression(expression, layout).orElseGet(() -> this.expression.apply(expression));
+        return brokenReturnExpression(expression, layout).orElseGet(() -> rendering.render(expression));
     }
 
     private Optional<BinaryExpr> sourceMultilineEnclosedBinary(Expression expression) {
@@ -642,7 +642,7 @@ final class ReturnExpressionPrinter {
             return Optional.empty();
         }
         if (lambdaExpr.getExpressionBody().filter(MethodCallExpr.class::isInstance).isPresent()) {
-            return Optional.of(this.expression.apply(lambdaExpr));
+            return Optional.of(rendering.render(lambdaExpr));
         }
         return Optional.of(brokenLambdaExpression.apply(lambdaExpr));
     }

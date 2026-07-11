@@ -24,7 +24,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiFunction;
-import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -64,9 +63,7 @@ final class ConditionalExpressionPrinter {
 
     private final LayoutDecisionLog layoutDecisions;
 
-    private final Function<Expression, Doc> expressionRenderer;
-
-    private final Function<Expression, Doc> expressionWithoutOwnCommentRenderer;
+    private final ExpressionRendering rendering;
 
     private final BiFunction<Expression, Boolean, Doc> binaryExpressionLinesRenderer;
 
@@ -115,8 +112,7 @@ final class ConditionalExpressionPrinter {
 
     ConditionalExpressionPrinter(
             JavaFormatContext context,
-            Function<Expression, Doc> expressionRenderer,
-            Function<Expression, Doc> expressionWithoutOwnCommentRenderer,
+            ExpressionRendering rendering,
             BiFunction<Expression, Boolean, Doc> binaryExpressionLinesRenderer,
             BiFunction<Expression, Boolean, Doc> nestedBinaryExpressionLinesRenderer,
             Predicate<Expression> expressionHasParenthesizedNestedBinary
@@ -128,8 +124,7 @@ final class ConditionalExpressionPrinter {
         this.compactSource = context.compactSource;
         this.layoutWidth = context.layoutWidth;
         this.layoutDecisions = context.layoutDecisions;
-        this.expressionRenderer = expressionRenderer;
-        this.expressionWithoutOwnCommentRenderer = expressionWithoutOwnCommentRenderer;
+        this.rendering = rendering;
         this.binaryExpressionLinesRenderer = binaryExpressionLinesRenderer;
         this.nestedBinaryExpressionLinesRenderer = nestedBinaryExpressionLinesRenderer;
         this.expressionHasParenthesizedNestedBinary = expressionHasParenthesizedNestedBinary;
@@ -150,7 +145,7 @@ final class ConditionalExpressionPrinter {
         ) {
             return Optional.of(
                 Doc.concat(
-                    expressionRenderer.apply(assignExpr.getTarget()),
+                    rendering.render(assignExpr.getTarget()),
                     Doc.text(" " + assignExpr.getOperator().asString()),
                     Doc.indent(
                         Doc.concat(
@@ -172,7 +167,7 @@ final class ConditionalExpressionPrinter {
         if (layoutWidth.nodeLine(conditionalExpr, conditionLine) <= options.lineWidth()) {
             return Optional.of(
                 Doc.concat(
-                    expressionRenderer.apply(assignExpr.getTarget()),
+                    rendering.render(assignExpr.getTarget()),
                     Doc.text(" " + assignExpr.getOperator().asString() + " "),
                     conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED)
                 )
@@ -563,7 +558,7 @@ final class ConditionalExpressionPrinter {
 
     private Doc conditionalConditionWithTrailingComment(Expression condition, Doc trailingComment) {
         Doc trailing = trailingComment == Doc.EMPTY ? Doc.EMPTY : Doc.concat(Doc.text(" "), trailingComment);
-        return Doc.concat(expressionWithoutOwnCommentRenderer.apply(condition), trailing);
+        return Doc.concat(rendering.renderWithoutOwnComment(condition), trailing);
     }
 
     /**
@@ -658,11 +653,11 @@ final class ConditionalExpressionPrinter {
                 leadingComment,
                 Doc.HARD_LINE,
                 Doc.text(operatorToken + " "),
-                expressionWithoutOwnCommentRenderer.apply(branch),
+                rendering.renderWithoutOwnComment(branch),
                 trailing
             );
         }
-        return Doc.concat(Doc.text(operatorToken + " "), expressionWithoutOwnCommentRenderer.apply(branch), trailing);
+        return Doc.concat(Doc.text(operatorToken + " "), rendering.renderWithoutOwnComment(branch), trailing);
     }
 
     private boolean conditionalElseCommentIsStatementTrailing(ConditionalExpr expression, Comment comment) {
@@ -696,7 +691,7 @@ final class ConditionalExpressionPrinter {
     private Doc conditionalCondition(ConditionalExpr expression) {
         Expression condition = expression.getCondition();
         return switch (conditionalConditionLayout(expression, condition)) {
-            case EXPRESSION -> expressionRenderer.apply(condition);
+            case EXPRESSION -> rendering.render(condition);
             case ASSIGNMENT_CONTINUATION_BINARY -> enclosedBinaryCondition(condition, binaryExpressionLinesRenderer);
             case NESTED_BINARY -> enclosedBinaryCondition(condition, nestedBinaryExpressionLinesRenderer);
         };
@@ -776,7 +771,7 @@ final class ConditionalExpressionPrinter {
         if (branch instanceof ConditionalExpr conditionalExpr) {
             return conditionalExpression(conditionalExpr, ConditionalBreakMode.FORCED);
         }
-        return expressionRenderer.apply(branch);
+        return rendering.render(branch);
     }
 
     /**

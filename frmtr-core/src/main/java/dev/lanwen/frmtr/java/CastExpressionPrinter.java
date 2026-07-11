@@ -31,7 +31,7 @@ final class CastExpressionPrinter {
 
     private final FormatterOptions options;
 
-    private final JavaFormatRule<Expression> expression;
+    private final ExpressionRendering rendering;
 
     private final Function<Node, String> compactTypeLike;
 
@@ -45,7 +45,7 @@ final class CastExpressionPrinter {
 
     CastExpressionPrinter(
             FormatterOptions options,
-            JavaFormatRule<Expression> expression,
+            ExpressionRendering rendering,
             Function<Node, String> compactTypeLike,
             Function<Node, String> compact,
             Function<Type, Doc> typeBody,
@@ -53,7 +53,7 @@ final class CastExpressionPrinter {
             ToIntFunction<String> continuationStatementWidth
     ) {
         this.options = options;
-        this.expression = expression;
+        this.rendering = rendering;
         this.compactTypeLike = compactTypeLike;
         this.compact = compact;
         this.typeBody = typeBody;
@@ -71,7 +71,7 @@ final class CastExpressionPrinter {
         return Doc.concat(
             castType(expression.getType(), expression.getExpression()),
             Doc.text(" "),
-            this.expression.format(expression.getExpression(), LayoutContext.root())
+            rendering.render(expression.getExpression())
         );
     }
 

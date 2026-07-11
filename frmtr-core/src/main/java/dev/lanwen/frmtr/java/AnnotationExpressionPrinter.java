@@ -40,7 +40,7 @@ final class AnnotationExpressionPrinter {
 
     private final FormatterOptions options;
 
-    private final JavaFormatRule<Expression> expressionRenderer;
+    private final ExpressionRendering rendering;
 
     private final BiFunction<Expression, Boolean, Doc> nestedBinaryLines;
 
@@ -52,7 +52,7 @@ final class AnnotationExpressionPrinter {
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
             FormatterOptions options,
-            JavaFormatRule<Expression> expressionRenderer,
+            ExpressionRendering rendering,
             BiFunction<Expression, Boolean, Doc> nestedBinaryLines,
             Function<Node, String> compact,
             ToIntFunction<String> currentIndentedWidth
@@ -60,7 +60,7 @@ final class AnnotationExpressionPrinter {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
         this.options = options;
-        this.expressionRenderer = expressionRenderer;
+        this.rendering = rendering;
         this.nestedBinaryLines = nestedBinaryLines;
         this.compact = compact;
         this.currentIndentedWidth = currentIndentedWidth;
@@ -295,7 +295,7 @@ final class AnnotationExpressionPrinter {
         if (value instanceof BinaryExpr) {
             return nestedBinaryLines.apply(value, true);
         }
-        return expressionRenderer.format(value, LayoutContext.root());
+        return rendering.render(value);
     }
 
     private boolean annotationValueMustBreak(Expression value) {
@@ -365,7 +365,7 @@ final class AnnotationExpressionPrinter {
         ) {
             return nestedBinaryLines.apply(binaryExpr, true);
         }
-        return expressionRenderer.format(value, LayoutContext.root());
+        return rendering.render(value);
     }
 
     private boolean annotationArrayAnnotationLineOverflows(AnnotationExpr annotation) {
@@ -384,7 +384,7 @@ final class AnnotationExpressionPrinter {
                 annotationValue(singleMemberAnnotation.getMemberValue())
             );
         }
-        return expressionRenderer.format(annotation, LayoutContext.root());
+        return rendering.render(annotation);
     }
 
     private void addCommentDocs(List<Doc> lines, List<JavaCommentTrivia> sourceComments) {

@@ -104,10 +104,9 @@ final class ObjectCreationPrinter {
     }
 
     /**
-     * Renders a non-anonymous, non-empty-argument constructor call as the SOURCE-NEUTRAL width-driven {@link Doc#group},
-     * bypassing the {@link #sourceMultilineArguments} preservation branch. The arguments render through the same
-     * {@code breakableArguments::argument} + {@code Doc.joinComma} group {@link #objectCreation} produces for a
-     * source-single-line constructor ({@code forceBreak == false}, {@code sourceMultilineArguments} empty), so this is
+     * Renders a non-anonymous, non-empty-argument constructor call as the SOURCE-NEUTRAL width-driven {@link Doc#group}.
+     * The arguments render through the same {@code breakableArguments::argument} + {@code Doc.joinComma} group
+     * {@link #objectCreation} produces for a source-single-line constructor ({@code forceBreak == false}), so this is
      * byte-identical to {@code expressionRenderer.format(expression, root())} whenever the author wrote the arguments on
      * one line — but it also collapses a source-multiline argument list back to flat when it fits, instead of preserving
      * the author's break.
@@ -183,10 +182,6 @@ final class ObjectCreationPrinter {
                     .map(doc -> Doc.concat(doc, Doc.text(suffix)))
                     .orElseGet(() -> Doc.text(prefix + "()" + suffix));
         }
-        Optional<Doc> sourceMultilineArguments = sourceMultilineArguments(expression, prefix, suffix);
-        if (sourceMultilineArguments.isPresent()) {
-            return sourceMultilineArguments.orElseThrow();
-        }
         // A heavy argument list must break one-per-line, so a trailing block/expression lambda argument must NOT hug the
         // opener (that keeps the sibling arguments on the opener line); let it fall through to the exploded list below.
         boolean heavy = argumentHeaviness.isHeavy(expression.getArguments(), true);
@@ -233,28 +228,6 @@ final class ObjectCreationPrinter {
      */
     private Optional<Doc> huggableLambdaArgument(String prefix, NodeList<Expression> arguments) {
         return huggableBlockLambdaArguments.apply(prefix, arguments);
-    }
-
-    private Optional<Doc> sourceMultilineArguments(ObjectCreationExpr expression, String prefix, String suffix) {
-        if (!layoutPolicy.shouldPreserveSourceMultilineArguments(expression)) {
-            return Optional.empty();
-        }
-        return Optional.of(
-            Doc.concat(
-                Doc.text(prefix + "("),
-                Doc.indent(
-                    Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(
-                            Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                            sourceMultilineArgumentDocs(expression)
-                        )
-                    )
-                ),
-                Doc.HARD_LINE,
-                Doc.text(")" + suffix)
-            )
-        );
     }
 
     String objectCreationPrefix(ObjectCreationExpr expression) {
@@ -321,10 +294,6 @@ final class ObjectCreationPrinter {
         if (expression.getArguments().isEmpty()) {
             return Doc.text(prefix + "() ");
         }
-        Optional<Doc> sourceMultilineArguments = anonymousSourceMultilineArguments(expression, prefix);
-        if (sourceMultilineArguments.isPresent()) {
-            return sourceMultilineArguments.orElseThrow();
-        }
         Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(
             prefix,
             expression,
@@ -348,36 +317,10 @@ final class ObjectCreationPrinter {
         );
     }
 
-    private Optional<Doc> anonymousSourceMultilineArguments(ObjectCreationExpr expression, String prefix) {
-        if (!layoutPolicy.shouldPreserveAnonymousSourceMultilineArguments(expression)) {
-            return Optional.empty();
-        }
-        return Optional.of(
-            Doc.concat(
-                Doc.text(prefix + "("),
-                Doc.indent(
-                    Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(Doc.concat(Doc.text(","), Doc.HARD_LINE), sourceMultilineArgumentDocs(expression))
-                    )
-                ),
-                Doc.HARD_LINE,
-                Doc.text(") ")
-            )
-        );
-    }
-
     private List<Doc> expressionArgumentDocs(ObjectCreationExpr expression) {
         return expression.getArguments()
                 .stream()
                 .map(breakableArguments::argument)
-                .toList();
-    }
-
-    private List<Doc> sourceMultilineArgumentDocs(ObjectCreationExpr expression) {
-        return expression.getArguments()
-                .stream()
-                .map(breakableArguments::sourceMultilineArgument)
                 .toList();
     }
 

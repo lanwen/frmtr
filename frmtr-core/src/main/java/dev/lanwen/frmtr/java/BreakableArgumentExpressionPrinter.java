@@ -1,7 +1,5 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.ast.expr.BinaryExpr;
-import com.github.javaparser.ast.expr.EnclosedExpr;
 import com.github.javaparser.ast.expr.Expression;
 import dev.lanwen.frmtr.doc.Doc;
 import java.util.List;
@@ -83,9 +81,6 @@ final class BreakableArgumentExpressionPrinter {
      */
     Doc sourceMultilineArgument(Expression argument) {
         Doc flat = expressionRenderer.apply(argument);
-        if (binaryPlusContainsSourceMultilineMethodCallArgument(argument)) {
-            return flat;
-        }
         // Canonical-fan cutover seam U8: same convergence as {@link #argument(Expression)}, on the source-multiline
         // argument-list path (a method-call argument list whose arguments already span source lines, e.g.
         // {@code assertTrue("...", chain.equals(a) || chain.equals(b))} once its second argument wrapped). A binary/ternary
@@ -107,17 +102,5 @@ final class BreakableArgumentExpressionPrinter {
             return Optional.empty();
         }
         return brokenArgumentRenderer.apply(argument);
-    }
-
-    private boolean binaryPlusContainsSourceMultilineMethodCallArgument(Expression argument) {
-        if (argument instanceof BinaryExpr binaryExpr) {
-            return binaryExpr.getOperator() == BinaryExpr.Operator.PLUS
-                && (binaryPlusContainsSourceMultilineMethodCallArgument(binaryExpr.getLeft())
-                    || binaryPlusContainsSourceMultilineMethodCallArgument(binaryExpr.getRight()));
-        }
-        if (argument instanceof EnclosedExpr enclosedExpr) {
-            return binaryPlusContainsSourceMultilineMethodCallArgument(enclosedExpr.getInner());
-        }
-        return false;
     }
 }

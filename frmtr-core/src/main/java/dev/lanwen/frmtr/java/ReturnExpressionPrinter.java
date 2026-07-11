@@ -48,8 +48,6 @@ final class ReturnExpressionPrinter {
 
     private final LayoutWidth layoutWidth;
 
-    private final ObjectCreationLayoutPolicy objectCreationLayoutPolicy;
-
     private final SourceShapePolicy sourceShapePolicy;
 
     private final Function<Expression, Doc> expression;
@@ -121,7 +119,6 @@ final class ReturnExpressionPrinter {
     ReturnExpressionPrinter(
             FormatterOptions options,
             LayoutWidth layoutWidth,
-            ObjectCreationLayoutPolicy objectCreationLayoutPolicy,
             SourceShapePolicy sourceShapePolicy,
             Function<Expression, Doc> expression,
             ExpressionTailRenderer expressionWithTail,
@@ -154,7 +151,6 @@ final class ReturnExpressionPrinter {
     ) {
         this.options = options;
         this.layoutWidth = layoutWidth;
-        this.objectCreationLayoutPolicy = objectCreationLayoutPolicy;
         this.sourceShapePolicy = sourceShapePolicy;
         this.expression = expression;
         this.expressionWithTail = expressionWithTail;
@@ -198,10 +194,7 @@ final class ReturnExpressionPrinter {
 
     Doc returnStatement(Expression expression, LayoutContext layout) {
         if (expression instanceof ObjectCreationExpr objectCreation) {
-            if (
-                returnLineOverflows(objectCreation, layout)
-                || objectCreationLayoutPolicy.shouldPreserveReturnSourceMultilineArguments(objectCreation)
-            ) {
+            if (returnLineOverflows(objectCreation, layout)) {
                 return Doc.concat(Doc.text("return "), brokenObjectCreation.apply(objectCreation), Doc.text(";"));
             }
             return Doc.concat(Doc.text("return "), objectCreationWithSuffix.apply(objectCreation, ";"));
@@ -428,11 +421,6 @@ final class ReturnExpressionPrinter {
                 )
             );
         }
-        if (sourceMultilineObjectCreation(expression)) {
-            // LDM-4 (deferred): the source-multiline object creation is a source-preserved shape the object-creation
-            // printer does not yet expose as a ranked candidate, so it stays on the imperative oracle here.
-            return Optional.of(brokenObjectCreation.apply((ObjectCreationExpr) expression));
-        }
         return Optional.empty();
     }
 
@@ -476,11 +464,6 @@ final class ReturnExpressionPrinter {
             return Optional.of(binaryExpr);
         }
         return Optional.empty();
-    }
-
-    private boolean sourceMultilineObjectCreation(Expression expression) {
-        return expression instanceof ObjectCreationExpr objectCreationExpr
-            && objectCreationLayoutPolicy.shouldPreserveSourceMultilineArguments(objectCreationExpr);
     }
 
     private boolean returnLineFits(Expression expression, LayoutContext layout) {

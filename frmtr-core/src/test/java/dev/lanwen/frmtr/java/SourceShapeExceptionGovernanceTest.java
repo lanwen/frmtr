@@ -80,9 +80,9 @@ class SourceShapeExceptionGovernanceTest {
         // SourceShapePolicy has been retired and deleted, so the method-call/chain/object-creation/lambda hub reflows by
         // width. A non-zero value here again means a new "preserve the author's line breaks" read was added and must be
         // reviewed. Note: this pins only the CATALOGUED SourceShapePolicy reads; a residual tier of UNCATALOGUED inline
-        // getRange() line reads (e.g. lambdaBodyStartsAfterHeader, sourceFirstLineKeepsChainAfterRoot, ~8 begin.line<end.line
-        // reads) is still live in the printers and must be catalogued + retired for FULL source-independence (see
-        // ARCHITECTURE.md "residual follow-ups").
+        // getRange() line reads (e.g. sourceFirstLineKeepsChainAfterRoot, ~8 begin.line<end.line reads) is still live in the
+        // printers and must be catalogued + retired for FULL source-independence (see ARCHITECTURE.md "residual
+        // follow-ups"). The former constant-false lambdaBodyStartsAfterHeader inline stub in this tier has been swept.
         assertThat(retirementTargets)
             .as("fragile (RETIREMENT_TARGET) source-shape reads still to replace with structural rules")
             .isEqualTo(0L);

@@ -934,7 +934,7 @@ shape, not this whole-call collapse — and `singleCallConvergesOnArgumentBreak`
 for that object-creation case and for the source-multiline gates (`variableInitializerCommentAndSourceShapeTier`,
 `variableWithBrokenMethodCallArguments`) that defer converging single calls to this ranked arm; the force-wide gate below
 it now reaches only multi-segment type-like chains. The try-with-resources opener
-gates (`StatementPrinter.tryOpenerLineWidth`, feeding both the whole-section flat collapse and the single attached
+gates (`TryStatementLayout.tryOpenerLineWidth`, feeding both the whole-section flat collapse and the single attached
 method-call resource) measure the same way: the `try (…) {` opener renders at the statement's rendered block/type depth,
 so counting that nesting through `LayoutWidth.nodeLine` (floored by the `CURRENT` baseline) replaces the fixed one-unit
 budget that under-counted every non-top-level `try` and collapsed a resource list flat over width when nested inside a

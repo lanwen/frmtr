@@ -70,11 +70,10 @@ class MethodChainSegmentArgumentsSample {
     }
 
     boolean expressionLambdaRootFits(Optional<Plan> plan, Call root, Width lineBudget, Options options) {
-        return plan
-                .map(plan -> plan.firstLineFits(
-                        line -> compactRootLineWidth(root, line, lineBudget),
-                        options.lineWidth()
-                ))
+        return plan.map(plan -> plan.firstLineFits(
+                line -> compactRootLineWidth(root, line, lineBudget),
+                options.lineWidth()
+        ))
                 .orElse(true);
     }
 
@@ -90,8 +89,7 @@ class MethodChainSegmentArgumentsSample {
     }
 
     Doc trailingComment(RouteCall expression, Optional<RouteCall> nextCall) {
-        return nextCall
-                .map(next -> trailingLineCommentBeforeNextSegment(expression, Optional.of(next)))
+        return nextCall.map(next -> trailingLineCommentBeforeNextSegment(expression, Optional.of(next)))
                 .orElseGet(() -> finalTrailingLineComment(expression));
     }
 

@@ -224,9 +224,26 @@ final class ChainSelectorLambdaLayout {
             Doc.concat(
                 Doc.text(opener),
                 tail.orElseThrow(),
-                Doc.text(")")
+                nestedChainHugClosing(tail.orElseThrow())
             )
         );
+    }
+
+    /**
+     * Places the closing parenthesis of a NESTED comment-carrying lambda-chain hug (the inner
+     * {@code route.parcels().forEach(parcel -> …)} of a {@code manifest.routes().forEach(route -> …)} fan). When the hugged
+     * body already breaks across lines — a gap comment, a broken body call, or a deeper nested hug — the enclosing call's
+     * {@code )} dedents onto its own line so it aligns under the fanned selector rather than gluing at the body's inner
+     * indent ({@code merge(…}⏎{@code )}⏎{@code ))} instead of {@code merge(…}⏎{@code )))}), matching PR #279 review. The
+     * outermost {@link #huggedCommentCarryingExpressionLambdaSegment} closer then glues to this dedented line, so the whole
+     * run of enclosing closers lands together under the selector. A body that renders on a single line (nothing forced it
+     * to break) keeps the collapsed {@code …)} shape. The dedented closer re-parses to the same chain and comment
+     * attachment, so the layout stays idempotent.
+     */
+    private Doc nestedChainHugClosing(Doc tail) {
+        return DocRenderer.containsHardLine(tail)
+            ? Doc.concat(Doc.HARD_LINE, Doc.text(")"))
+            : Doc.text(")");
     }
 
     /**

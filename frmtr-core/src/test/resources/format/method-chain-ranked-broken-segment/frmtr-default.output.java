@@ -1,10 +1,8 @@
 class MethodChainRankedBrokenSegmentSample {
 
-    void rankedCompactBrokenSegment(RouteRegistry registry) {
-        ConnectionPlanner.between(primaryDataCenter, secondaryDataCenter).establishRoute(
-            activeSessionToken,
-            fallbackSessionToken
-        );
+    void rankedSingleSelectorFansByWidth(RouteRegistry registry) {
+        ConnectionPlanner.between(primaryDataCenter, secondaryDataCenter)
+                .establishRoute(activeSessionToken, fallbackSessionToken);
     }
 
     void commentBearingChainStaysOnLadder(RouteRegistry registry) {

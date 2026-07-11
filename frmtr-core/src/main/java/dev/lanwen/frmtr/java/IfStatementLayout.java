@@ -240,7 +240,7 @@ final class IfStatementLayout {
      * that block exactly once under the else body's leading slot and placing it indented under {@code else}, above the
      * body statement.
      *
-     * <p>This is the else-body counterpart of {@link StatementPrinter#bracelessLoopBody(Node, Node, Statement)}: a braceless else body
+     * <p>This is the else-body counterpart of {@link LoopStatementLayout#bracelessLoopBody(Node, Node, Statement)}: a braceless else body
      * normally collapses onto the {@code else} line ({@code else return 2;}), but a leading line comment cannot share
      * that line without commenting out the body, so the body breaks to an indented next line with the comment kept above
      * it. The leading block lives in the gap between the {@code else} keyword and the body, but JavaParser splits it: the

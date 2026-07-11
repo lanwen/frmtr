@@ -4,13 +4,11 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.Parameter;
-import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
 import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.AssignExpr;
-import com.github.javaparser.ast.expr.BinaryExpr;
 import com.github.javaparser.ast.expr.ConditionalExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.MethodCallExpr;
@@ -167,6 +165,8 @@ final class StatementPrinter {
 
     private final IfStatementLayout ifStatementLayout;
 
+    private final LoopStatementLayout loopStatementLayout;
+
     StatementPrinter(
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
@@ -287,6 +287,28 @@ final class StatementPrinter {
             this::trailingEmptyBodyBlockComment,
             this::trailingLineComment
         );
+        this.loopStatementLayout = new LoopStatementLayout(
+            comments,
+            commentPlacement,
+            rawSource,
+            options,
+            layoutWidth,
+            controlConditions,
+            statementRenderer,
+            blockRenderer,
+            brokenMethodCallRenderer,
+            compact,
+            compactWithoutOwnComment,
+            compactJoin,
+            compactTypeLike,
+            compactWithOwnBlockComment,
+            annotationFlatText,
+            modifiers,
+            this::nestedStatement,
+            this::commentText,
+            this::emptyBodyOwnBlockComment,
+            this::trailingEmptyBodyBlockComment
+        );
     }
 
     /**
@@ -323,8 +345,8 @@ final class StatementPrinter {
                 localRecordDeclaration.getRecordDeclaration()
             , LayoutContext.root());
             case IfStmt ifStmt -> ifStatementLayout.ifStatement(ifStmt);
-            case WhileStmt whileStmt -> whileStatement(whileStmt);
-            case DoStmt doStmt -> doStatement(doStmt);
+            case WhileStmt whileStmt -> loopStatementLayout.whileStatement(whileStmt);
+            case DoStmt doStmt -> loopStatementLayout.doStatement(doStmt);
             case TryStmt tryStmt -> tryStatementLayout.tryStatement(tryStmt);
             case SynchronizedStmt synchronizedStmt -> Doc.concat(
                 Doc.text("synchronized "),
@@ -337,8 +359,8 @@ final class StatementPrinter {
                 Doc.text(" "),
                 blockRenderer.format(synchronizedStmt.getBody(), LayoutContext.root())
             );
-            case ForStmt forStmt -> forStatement(forStmt);
-            case ForEachStmt forEachStmt -> forEachStatement(forEachStmt);
+            case ForStmt forStmt -> loopStatementLayout.forStatement(forStmt);
+            case ForEachStmt forEachStmt -> loopStatementLayout.forEachStatement(forEachStmt);
             case SwitchStmt switchStmt -> switchStatementRenderer.format(switchStmt, LayoutContext.root());
             default -> Doc.text(compact.apply(statement));
         };
@@ -813,10 +835,6 @@ final class StatementPrinter {
                 .findFirst();
     }
 
-    private boolean conditionCommentStartsBeforeExpression(Expression condition, Comment comment) {
-        return CommentIndex.startsBefore(comment, condition);
-    }
-
     /**
      * Chooses how a control-flow body attaches to its header.
      *
@@ -852,79 +870,10 @@ final class StatementPrinter {
     }
 
     /**
-     * Renders a braceless {@code while}/{@code for}/{@code for-each} body that carries a {@code //} line comment between
-     * the loop header and the body, claiming the comment exactly once and placing it the same way the {@code if}
-     * close-paren path places a condition comment.
-     *
-     * <p>A braceless loop body normally collapses onto the header line ({@code while (cond) call();}). A line comment in
-     * the header-to-body gap cannot share that line with the body statement: the {@code //} would comment out everything
-     * after it. The comment's intended position is read from where it sits in source: a comment that begins on the same
-     * line as the header end ({@code while (cond) // note}) is a header-trailing comment and stays inline on the header
-     * line, exactly as {@link ControlConditions#closeParenTrailingLineComment} keeps an {@code if (cond) // note} inline;
-     * a comment on its own line below the header ({@code while (cond)\n // note\n body}) leads the body and moves above
-     * the indented body statement. Either way the body breaks to an indented next line.
-     *
-     * <p>The comment lives in a single grammar slot — the header-to-body gap — but JavaParser attaches it to different
-     * nodes depending on source whitespace: at the {@code @default} shape an own-line comment is the body's own leading
-     * trivia (the {@link #statementRenderer} envelope prints it); a collapse re-buckets it onto the header expression
-     * named by {@code afterNode} as that node's trailing trivia, and an expand re-buckets it onto the {@code controlStmt}
-     * as an orphan. {@link JavaCommentPlacementPolicy#gapLineCommentsBefore(Node, Node, java.util.Collection)} recovers
-     * the comment from whichever bucket holds it while deliberately excluding the body's own comment, and every recovered
-     * comment is claimed once under the body's leading slot — the same slot {@link CommentTracker#gapLineCommentsBefore}
-     * would claim it in — so exactly one of the two paths (gap recovery here, or the body renderer) prints it. It is
-     * therefore neither dropped under perturbation nor duplicated at {@code @default}. Returns {@link Optional#empty()}
-     * when no leading line comment is present in any bucket, leaving the caller's existing same-line collapse intact.
-     */
-    private Optional<Doc> bracelessLoopBody(Node controlStmt, Node afterNode, Statement body) {
-        if (body.isBlockStmt()) {
-            return Optional.empty();
-        }
-        List<JavaCommentTrivia> gapComments = commentPlacement.gapLineCommentsBefore(
-            afterNode,
-            body,
-            List.of(controlStmt, afterNode)
-        );
-        boolean bodyOwnsLeadingLineComment = commentPlacement.leadingComment(body)
-                .filter(JavaCommentTrivia::isLine)
-                .filter(trivia -> !trivia.startsAfterEndOf(body))
-                .isPresent();
-        if (gapComments.isEmpty() && !bodyOwnsLeadingLineComment) {
-            return Optional.empty();
-        }
-        List<Doc> headerTrailing = new ArrayList<>();
-        List<Doc> aboveBody = new ArrayList<>();
-        for (JavaCommentTrivia gapComment : gapComments) {
-            Doc rendered = comments.comment(gapComment, body, OwnerSlot.LEADING);
-            if (rendered == Doc.EMPTY) {
-                continue;
-            }
-            if (gapComment.startsOnEndLine(afterNode)) {
-                headerTrailing.add(rendered);
-            } else {
-                aboveBody.add(rendered);
-            }
-        }
-        List<Doc> indented = new ArrayList<>();
-        indented.add(Doc.HARD_LINE);
-        for (Doc aboveComment : aboveBody) {
-            indented.add(aboveComment);
-            indented.add(Doc.HARD_LINE);
-        }
-        indented.add(statementRenderer.format(body, LayoutContext.root()));
-        List<Doc> result = new ArrayList<>();
-        result.add(Doc.text(" "));
-        for (Doc inline : headerTrailing) {
-            result.add(inline);
-        }
-        result.add(Doc.indent(Doc.concat(indented)));
-        return Optional.of(Doc.concat(result));
-    }
-
-    /**
      * Breaks and indents a braceless {@code if}/{@code else}/{@code do} body that carries its leading {@code //} line
      * comment as its own trivia (the {@code @default} shape).
      *
-     * <p>This is the body-own counterpart of {@link #bracelessLoopBody(Node, Node, Statement)}, used where the enclosing
+     * <p>This is the body-own counterpart of {@link LoopStatementLayout#bracelessLoopBody(Node, Node, Statement)}, used where the enclosing
      * construct already recovers the perturbed attachments through another slot: the {@code if} close-paren trailing path
      * ({@link ControlConditions#closeParenTrailingLineComment}) catches a comment a collapse moves onto the condition,
      * and the {@code do-while} condition-leading path catches one an expand moves onto the condition. So those constructs
@@ -954,297 +903,6 @@ final class StatementPrinter {
         }
         Doc leading = comments.leading(block);
         return Doc.concat(leading, Doc.text("{"), Doc.HARD_LINE, Doc.text("}"));
-    }
-
-    private Doc forEachStatement(ForEachStmt statement) {
-        if (statement.getBody().isEmptyStmt()) {
-            return Doc.text(
-                "for ("
-                    + compact.apply(statement.getVariable())
-                    + " : "
-                    + emptyBodyHeaderExpression(statement.getIterable(), statement.getBody())
-                    + ");"
-                    + trailingEmptyBodyBlockComment(statement)
-            );
-        }
-        Doc header = forEachHeader(statement);
-        Optional<Doc> commentedBracelessBody = bracelessLoopBody(
-            statement,
-            statement.getIterable(),
-            statement.getBody()
-        );
-        if (commentedBracelessBody.isPresent()) {
-            return Doc.concat(header, commentedBracelessBody.orElseThrow());
-        }
-        return Doc.concat(header, Doc.text(" "), nestedStatement(statement.getBody()));
-    }
-
-    /**
-     * Lets the iterable own method-call argument breaks when the enhanced-for header would otherwise overflow.
-     */
-    private Doc forEachHeader(ForEachStmt statement) {
-        String variable = forEachVariable(statement);
-        Expression iterable = statement.getIterable();
-        String header = "for (" + variable + " : " + compact.apply(iterable) + ")";
-        if (
-            // C10-c: measure the for-each header at the statement's true rendered block/type depth
-            // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
-            layoutWidth.nodeLine(statement, header + " {}") <= options.lineWidth()
-            || !(iterable instanceof MethodCallExpr methodCall)
-        ) {
-            return Doc.text(header);
-        }
-        return Doc.concat(
-            Doc.text("for (" + variable + " : "),
-            brokenMethodCallRenderer.apply(methodCall),
-            Doc.text(")")
-        );
-    }
-
-    private String forEachVariable(ForEachStmt statement) {
-        String raw = rawSource.raw(statement);
-        int open = raw.indexOf('(');
-        int colon = raw.indexOf(':', open);
-        if (open < 0 || colon < open) {
-            return compact.apply(statement.getVariable());
-        }
-        String variable = raw.substring(open + 1, colon);
-        return variable.contains("/*")
-            ? CommentedTokenText.tokenLine(CommentedTokenText.tokens(variable))
-            : compact.apply(statement.getVariable());
-    }
-
-    private String forHeader(ForStmt statement) {
-        String init = statement.getInitialization()
-                .stream()
-                .map(this::forHeaderExpression)
-                .reduce((left, right) -> left + ", " + right)
-                .orElse("");
-        String compare = statement.getCompare().map(this::forHeaderExpression).orElse("");
-        String update = compactJoin.apply(statement.getUpdate());
-        if (init.isEmpty() && compare.isEmpty() && update.isEmpty()) {
-            return "for (;;)";
-        }
-        return "for (" + init + "; " + compare + "; " + update + ")";
-    }
-
-    private Doc forStatement(ForStmt statement) {
-        if (statement.getBody().isEmptyStmt()) {
-            return loopWithEmptyBody(forHeader(statement), statement);
-        }
-        if (statement.getBody() instanceof DoStmt) {
-            return Doc.concat(Doc.text(forHeader(statement) + " "), statementRenderer.format(statement.getBody(), LayoutContext.root()));
-        }
-        Optional<Doc> commentedBracelessBody = forHeaderEndNode(statement)
-                .flatMap(afterNode -> bracelessLoopBody(statement, afterNode, statement.getBody()));
-        if (commentedBracelessBody.isPresent()) {
-            return Doc.concat(Doc.text(forHeader(statement)), commentedBracelessBody.orElseThrow());
-        }
-        return Doc.concat(Doc.text(forHeader(statement) + " "), nestedStatement(statement.getBody()));
-    }
-
-    /**
-     * Names the last node of a {@code for} header so the gap-comment recovery can bound "comments before the body" from
-     * the last header element it follows. The update, then the comparison, then the initialization run last to first; a
-     * fully-empty {@code for (;;)} header has no node, so the gap recovery is skipped and the body keeps its own-comment
-     * handling.
-     */
-    private Optional<Node> forHeaderEndNode(ForStmt statement) {
-        if (!statement.getUpdate().isEmpty()) {
-            return Optional.of(statement.getUpdate().get(statement.getUpdate().size() - 1));
-        }
-        if (statement.getCompare().isPresent()) {
-            return statement.getCompare().map(Node.class::cast);
-        }
-        if (!statement.getInitialization().isEmpty()) {
-            return Optional.of(statement.getInitialization().get(statement.getInitialization().size() - 1));
-        }
-        return Optional.empty();
-    }
-
-    private Doc whileStatement(WhileStmt statement) {
-        if (statement.getBody().isEmptyStmt()) {
-            return Doc.text(
-                "while ("
-                    + emptyBodyHeaderExpression(statement.getCondition(), statement.getBody())
-                    + ");"
-                    + trailingEmptyBodyBlockComment(statement)
-            );
-        }
-        Optional<Doc> commentedBody = commentedLoopBody(statement, statement.getBody());
-        if (commentedBody.isPresent()) {
-            return Doc.concat(
-                Doc.text("while "),
-                controlConditions.controlCondition(
-                    statement.getCondition(),
-                    "while (",
-                    ") {}",
-                    layoutWidth::blockStatement
-                ),
-                commentedBody.orElseThrow()
-            );
-        }
-        Doc whileHeader = Doc.concat(
-            Doc.text("while "),
-            controlConditions.controlCondition(
-                statement.getCondition(),
-                "while (",
-                ") {}",
-                layoutWidth::blockStatement
-            )
-        );
-        Optional<Doc> commentedBracelessBody = bracelessLoopBody(
-            statement,
-            statement.getCondition(),
-            statement.getBody()
-        );
-        if (commentedBracelessBody.isPresent()) {
-            return Doc.concat(whileHeader, commentedBracelessBody.orElseThrow());
-        }
-        return Doc.concat(whileHeader, Doc.text(" "), nestedStatement(statement.getBody()));
-    }
-
-    /**
-     * Keeps an inline block comment attached to a single-statement loop body.
-     *
-     * <p>When the body starts on the header line the comment remains inline; when it starts later, the comment and body
-     * move to an indented next line.
-     */
-    private Optional<Doc> commentedLoopBody(Node loop, Statement body) {
-        if (body.isBlockStmt()) {
-            return Optional.empty();
-        }
-        Doc comment = comments.ownComment(body, BlockComment.class::isInstance);
-        if (comment == Doc.EMPTY) {
-            return Optional.empty();
-        }
-        Doc commentedStatement = Doc.concat(comment, Doc.text(" "), statementRenderer.format(body, LayoutContext.root()));
-        if (CommentIndex.sameBeginLine(loop, body)) {
-            return Optional.of(Doc.concat(Doc.text(" "), commentedStatement));
-        }
-        return Optional.of(Doc.indent(Doc.concat(Doc.HARD_LINE, commentedStatement)));
-    }
-
-    private Doc doStatement(DoStmt statement) {
-        if (statement.getBody().isEmptyStmt()) {
-            String condition = compact.apply(statement.getCondition());
-            Doc bodyComment = emptyBodyOwnBlockComment(statement.getBody());
-            Doc conditionComment = comments.ownComment(statement.getCondition(), BlockComment.class::isInstance);
-            if (bodyComment != Doc.EMPTY || conditionComment != Doc.EMPTY) {
-                String comment = bodyComment != Doc.EMPTY ? commentText(bodyComment) : commentText(conditionComment);
-                return Doc.text("do; while (" + comment + " " + condition + ");");
-            }
-            return Doc.text("do; while (" + condition + ");");
-        }
-        return Doc.concat(Doc.text("do "), doBody(statement.getBody()), doWhileTail(statement));
-    }
-
-    private Doc doBody(Statement body) {
-        if (!body.isBlockStmt()) {
-            return nestedStatement(body);
-        }
-        Doc leadingBlockComment = comments.ownComment(body, BlockComment.class::isInstance);
-        if (leadingBlockComment == Doc.EMPTY) {
-            return nestedStatement(body);
-        }
-        return Doc.concat(leadingBlockComment, Doc.text(" "), blockRenderer.format(body.asBlockStmt(), LayoutContext.root()));
-    }
-
-    private Doc doWhileTail(DoStmt statement) {
-        Doc trailing = doWhileTrailingLineComment(statement);
-        Doc beforeWhileComment = doWhileBeforeWhileBlockComment(statement);
-        if (beforeWhileComment != Doc.EMPTY) {
-            return Doc.concat(
-                Doc.text(
-                    " "
-                        + commentText(beforeWhileComment)
-                        + " while ("
-                        + compactWithoutOwnComment.apply(statement.getCondition())
-                        + ");"
-                ),
-                trailing
-            );
-        }
-        return Doc.concat(
-            Doc.text(" while "),
-            controlConditions.controlCondition(
-                statement.getCondition(),
-                "while (",
-                ") {}",
-                layoutWidth::blockStatement
-            ),
-            Doc.text(";"),
-            trailing
-        );
-    }
-
-    /**
-     * Recovers the line comment that trails a {@code do ... while (cond);} statement after the closing {@code ;}.
-     *
-     * <p>At {@code @default} JavaParser attaches that comment to the {@link DoStmt}, so {@link StatementRuleEnvelope}
-     * claims and renders it through the shared statement trailing-comment slot. When the body is written across multiple
-     * source lines, JavaParser instead attaches the comment to the {@code while} condition expression, where the
-     * condition renderer (which prints the condition without its own comment) drops it. This query reclaims the comment
-     * from the condition's own trailing slot and re-emits it as a {@code lineSuffix} after the {@code ;}, matching how
-     * {@link #expressionStatementTrailingComment(ExpressionStmt)} and the {@code try} renderer place statement trailing
-     * comments. Claiming it here keeps the comment printed exactly once: when the envelope already owns the {@link DoStmt}
-     * comment the condition slot is empty, so this path adds nothing.
-     */
-    private Doc doWhileTrailingLineComment(DoStmt statement) {
-        Doc conditionTrailing = comments.trailingLineComment(statement.getCondition());
-        if (conditionTrailing == Doc.EMPTY) {
-            return Doc.EMPTY;
-        }
-        return Doc.lineSuffix(Doc.concat(Doc.text(" "), conditionTrailing));
-    }
-
-    /**
-     * Recovers the block comment that sits between a {@code do} body and its {@code while}
-     * ({@code } /* note *}{@code / while (...)}), independent of source shape.
-     *
-     * <p>At {@code @default} JavaParser attaches it as the condition's own comment, so the condition own path renders it.
-     * A whitespace perturbation that pushes the comment onto its own line re-buckets it as a {@link DoStmt} orphan; this
-     * query then recovers the {@code do} orphan block comments that begin before the condition. The rendering stays the
-     * same inline {@code note while (...)} shape used for the own-comment case.
-     */
-    private Doc doWhileBeforeWhileBlockComment(DoStmt statement) {
-        Optional<Comment> conditionComment = statement.getCondition().getComment().filter(
-            BlockComment.class::isInstance
-        );
-        if (
-            conditionComment.isPresent()
-            && conditionCommentStartsBeforeExpression(statement.getCondition(), conditionComment.orElseThrow())
-        ) {
-            return comments.comment(conditionComment.orElseThrow());
-        }
-        return Doc.concat(comments.blockCommentsBefore(List.of(statement), statement.getCondition()));
-    }
-
-    /**
-     * Prints a loop or if branch whose body is a semicolon.
-     *
-     * <p>Block comments attached to an empty body are the only visible content in that body, so they either move before
-     * the header or stay after the semicolon depending on how JavaParser exposes them for the original source.
-     */
-    private Doc loopWithEmptyBody(String header, Node statement) {
-        Doc bodyComment =
-            statement instanceof ForStmt forStmt ? emptyBodyOwnBlockComment(forStmt.getBody()) : Doc.EMPTY;
-        if (bodyComment == Doc.EMPTY) {
-            return Doc.text(header + ";" + trailingEmptyBodyBlockComment(statement));
-        }
-        return Doc.concat(
-            bodyComment,
-            Doc.HARD_LINE,
-            Doc.text(header + ";" + trailingEmptyBodyBlockComment(statement))
-        );
-    }
-
-    private String emptyBodyHeaderExpression(Expression expression, Statement body) {
-        Doc bodyComment = emptyBodyOwnBlockComment(body);
-        if (bodyComment == Doc.EMPTY) {
-            return compact.apply(expression);
-        }
-        return compact.apply(expression) + " " + commentText(bodyComment);
     }
 
     private Doc emptyBodyOwnBlockComment(Statement body) {
@@ -1311,47 +969,6 @@ final class StatementPrinter {
                 .filter(trivia -> !comments.isPrinted(trivia))
                 .map(comments::comment)
                 .orElse(Doc.EMPTY);
-    }
-
-    private String forHeaderExpression(Expression expression) {
-        if (expression instanceof BinaryExpr binaryExpr) {
-            return compact.apply(binaryExpr.getLeft())
-                + " "
-                + binaryExpr.getOperator().asString()
-                + " "
-                + compactWithOwnBlockComment.apply(binaryExpr.getRight());
-        }
-        if (
-            expression instanceof VariableDeclarationExpr variableDeclaration
-            && variableDeclaration.getVariables().size() == 1
-        ) {
-            VariableDeclarator variable = variableDeclaration.getVariables().get(0);
-            return forInitDeclarationPrefix(variableDeclaration)
-                + compactTypeLike.apply(variable.getType())
-                + " "
-                + variable.getNameAsString()
-                + variable.getInitializer().map(initializer -> " = " + compact.apply(initializer)).orElse("");
-        }
-        return compact.apply(expression);
-    }
-
-    /**
-     * Builds the flat annotation/modifier prefix for a single-declarator {@code for}-loop init declaration.
-     *
-     * <p>The for-header reconstructs the declaration as flat text (it never wraps), so the declaration-level annotations
-     * and modifiers that {@link #forHeaderExpression} would otherwise drop must be re-emitted inline here. Annotations
-     * use the shared inline annotation text and modifiers use the shared modifier-string policy so a {@code final}
-     * modifier or an annotation such as {@code @SuppressWarnings("unchecked")} on the init variable survives instead of
-     * being silently discarded.
-     */
-    private String forInitDeclarationPrefix(VariableDeclarationExpr declaration) {
-        String annotations = declaration.getAnnotations()
-                .stream()
-                .map(annotationFlatText)
-                .reduce((left, right) -> left + " " + right)
-                .map(text -> text + " ")
-                .orElse("");
-        return annotations + modifiers.apply(declaration);
     }
 
     @FunctionalInterface

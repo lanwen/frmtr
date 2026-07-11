@@ -20,58 +20,25 @@ package dev.lanwen.frmtr.java;
  * <p>{@link InlineSourceLineReadGuardTest} scans the non-excluded printer sources for both mechanisms and asserts the
  * live set is exactly the keys enumerated here — no uncatalogued read (a NEW inline read forces a reviewed enum value)
  * and no stale entry (a retired read forces its enum value's deletion, which is progress). Every value below is a
- * {@code RETIREMENT_TARGET}: a "preserve the author's line breaks" read the formatter overwrites, deferred on the
- * enclosing-column / {@code leftEdgePrefix} foundation (proposal {@code left-edge-prefix-foundation.md}) that also blocks
- * the last {@link SourceShapePolicy} retirements. They are tracked as the G3 retirement slice, not retired here.
+ * {@code RETIREMENT_TARGET}: a "preserve the author's line breaks" read the formatter overwrites.
+ *
+ * <p>The G3 slice retired five of the original seven inline reads by replacing each with a width-driven or pure-AST
+ * decision (dead-code removal, an always-dedented lambda close, a structural chain-scope guard, an inert admission
+ * clause, and a below-threshold "pack flat when it fits" rule). The two entries that remain are genuinely load-bearing:
+ * each preserves an author-intent line shape that no clean width/AST rule reproduces without regressing the corpus or a
+ * curated golden, so they stay deferred on the enclosing-column / {@code leftEdgePrefix} foundation (proposal
+ * {@code left-edge-prefix-foundation.md}) that also blocks the last {@link SourceShapePolicy} retirements.
  */
 enum InlineSourceShapeException {
-
-    /** "did the initializer start on a continuation line after the name?" ({@code initializer.begin.line > name.end.line}). */
-    INITIALIZER_STARTS_ON_CONTINUATION_LINE(
-        "VariableInitializerLayout#initializerStartsOnContinuationLine",
-        Mechanism.LINE_COMPARE,
-        "reads whether the author broke the initializer onto its own line to pick the assignment continuation shape",
-        "G3 (D3 flip follow-up) — retire when the leftEdgePrefix foundation lands"
-    ),
 
     /** "does the method-call scope end on the name line?" ({@code scope.end.line == name.begin.line}). */
     METHOD_CALL_SCOPE_ENDS_ON_NAME_LINE(
         "VariableInitializerLayout#methodCallScopeEndsOnNameLine",
         Mechanism.LINE_COMPARE,
         "reads whether the author kept the receiver and the call name on one source line",
-        "G3 (D3 flip follow-up) — retire when the leftEdgePrefix foundation lands"
-    ),
-
-    /** "does the call close stay on the lambda body line?" ({@code parent.end.line == body.end.line}). */
-    CALL_CLOSING_STAYS_ON_LAMBDA_BODY_LINE(
-        "ExpressionLambdaClosingLayout#callClosingStaysOnLambdaBodyLine",
-        Mechanism.LINE_COMPARE,
-        "reads whether the author closed the enclosing call on the lambda body's last source line",
-        "G3 (D3 flip follow-up) — retire when the leftEdgePrefix foundation lands"
-    ),
-
-    /** "is the first source line exactly the chain root?" ({@code rawWithoutOwnComment(...).lines().findFirst() == root}). */
-    CHAIN_ROOT_IS_SOLE_FIRST_SOURCE_LINE(
-        "MethodCallChainPrinter#sourceFirstLineIsOnlyChainRoot",
-        Mechanism.RAW_SOURCE_SHAPE,
-        "reads whether the author put the chain root alone on the first source line to gate attaching the first segment",
-        "G3 (D3 flip follow-up) — retire when the leftEdgePrefix foundation lands"
-    ),
-
-    /** "does the first source line keep a chain segment after the root?" (first source line startsWith root + more). */
-    FIRST_SOURCE_LINE_KEEPS_CHAIN_AFTER_ROOT(
-        "VariableInitializerLayout#sourceFirstLineKeepsChainAfterRoot",
-        Mechanism.RAW_SOURCE_SHAPE,
-        "reads whether the author kept a chain segment on the root's first source line to pick the initializer shape",
-        "G3 (D3 flip follow-up) — retire when the leftEdgePrefix foundation lands"
-    ),
-
-    /** The first source line of an expression-lambda body ({@code rawWithoutOwnComment(node).lines().findFirst()}). */
-    LAMBDA_BODY_FIRST_SOURCE_LINE(
-        "ExpressionLambdaArgumentLayout#bodyFirstSourceLine",
-        Mechanism.RAW_SOURCE_SHAPE,
-        "reads the lambda body's first authored source line to measure whether it can hug the opener",
-        "G3 (D3 flip follow-up) — retire when the leftEdgePrefix foundation lands"
+        "G3: LEFT — decides attach-vs-fan for a sub-threshold chain-scoped initializer; forcing the structural constant "
+        + "true (always attach) laterally moves the curated method-chain-block-lambda golden off its fanned shape (no "
+        + "clear improvement) and forcing false regresses three goldens; no clean width/AST partition. Defer on leftEdgePrefix."
     ),
 
     /** "were the lambda parameters written across multiple source lines?" ({@code parameterText(...).contains(newline)}). */
@@ -79,7 +46,9 @@ enum InlineSourceShapeException {
         "LambdaParameterHeaderLayout#hasSourceMultilineParameters",
         Mechanism.RAW_SOURCE_SHAPE,
         "reads whether the author spread the lambda parameter list across source lines to force the broken header",
-        "G3 (D3 flip follow-up) — retire when the leftEdgePrefix foundation lands"
+        "G3: LEFT — the block-lambda hug path has no param-header width-break, so this read keeps a wide block-lambda "
+        + "parameter header within width; retiring it produces a 122-column over-width header. A width-driven replacement "
+        + "must measure the header at the true rendered column, which is the deferred leftEdgePrefix foundation."
     );
 
     /** How the inline read consults source shape — the mechanism the guard scans for. */

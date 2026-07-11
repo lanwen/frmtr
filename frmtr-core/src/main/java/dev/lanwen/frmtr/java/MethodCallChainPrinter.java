@@ -1378,9 +1378,9 @@ final class MethodCallChainPrinter {
     ) {
         // First-segment attachment only ever engaged for a chain the author wrote source-multiline — the retired
         // {@code sourceMultilineChain} signal (now constant-false) — so this gate can no longer attach. Its structural
-        // guards and the {@code sourceFirstLineIsOnlyChainRoot} source-first-line probe are preserved as a tracked G3
-        // source-shape retirement target (enumerated in {@link InlineSourceShapeException}); the gate always declines
-        // today, so both passes take the imperative chain path identically.
+        // guards are inert (every path returns false); the last source read it carried, the
+        // {@code sourceFirstLineIsOnlyChainRoot} source-first-line probe, was retired in G3, so the gate is now a pure
+        // structural no-op and both passes take the imperative chain path identically.
         if (
             chainPlan.rootRendering() != MethodCallChainSourcePlanner.ChainRootRendering.EXPRESSION_RENDERER
             || calls.size() < 2
@@ -1388,7 +1388,6 @@ final class MethodCallChainPrinter {
             || chainPlan.root() instanceof MethodCallExpr
             || chainPlan.root() instanceof ObjectCreationExpr
             || rootIsEnclosedFanningChain(chainPlan.root())
-            || sourceFirstLineIsOnlyChainRoot(chainPlan.root(), expression)
         ) {
             return false;
         }
@@ -2888,24 +2887,6 @@ final class MethodCallChainPrinter {
             Doc.HARD_LINE,
             Doc.text(")" + finalSegmentSuffix)
         );
-    }
-
-    private boolean sourceFirstLineIsOnlyChainRoot(MethodCallExpr expression) {
-        List<MethodCallExpr> calls = new ArrayList<>();
-        Expression root = methodChainPlanner.methodCallChainRoot(expression, calls);
-        if (calls.size() < 2) {
-            return false;
-        }
-        return sourceFirstLineIsOnlyChainRoot(root, expression);
-    }
-
-    private boolean sourceFirstLineIsOnlyChainRoot(Expression root, MethodCallExpr expression) {
-        return rawSource.rawWithoutOwnComment(expression)
-                .strip()
-                .lines()
-                .findFirst()
-                .filter(line -> line.equals(compactSource.compact(root)))
-                .isPresent();
     }
 
     /**

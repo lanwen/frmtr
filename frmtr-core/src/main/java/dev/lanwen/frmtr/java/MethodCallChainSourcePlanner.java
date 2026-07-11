@@ -137,16 +137,17 @@ final class MethodCallChainSourcePlanner {
             return !typeLikeRoot;
         }
 
-        boolean canUseCompactObjectCreationInitializer(
-                boolean initializerStartsOnContinuationLine,
-                boolean chainSpansMultipleSourceLines,
-                boolean tailArgumentsSpanMultipleSourceLines
-        ) {
-            boolean sourceMultilineInitializer = chainSpansMultipleSourceLines || initializerStartsOnContinuationLine;
+        /**
+         * G3: the {@code initializerStartsOnContinuationLine} and {@code tailArgumentsSpanMultipleSourceLines}
+         * source-shape inputs were retired. The former is now treated as always true — a fitting single-selector
+         * object-creation-chain initializer packs flat rather than fanning by the author's line break, matching the
+         * below-threshold fan rule — which makes the source-multiline-initializer disjunction constant-true and collapses
+         * both the {@code tailHasArguments} and the {@code tailArgumentsSpanMultipleSourceLines} guards (the latter was
+         * already always passed {@code false}). The compact shape stays width-gated at the call site.
+         */
+        boolean canUseCompactObjectCreationInitializer(boolean chainSpansMultipleSourceLines) {
             return rootIsObjectCreation
                 && !(chainSpansMultipleSourceLines && !singleCall)
-                && !(!sourceMultilineInitializer && singleCall && tailHasArguments)
-                && !(!initializerStartsOnContinuationLine && tailArgumentsSpanMultipleSourceLines && singleCall)
                 && !rootObjectCreationArgumentsSpanMultipleLines;
         }
     }

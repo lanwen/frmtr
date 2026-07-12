@@ -56,6 +56,8 @@ final class ChainSelectorLambdaLayout {
 
     private final ExpressionLambdaArgumentLayout.ExpressionLambdaMethodCallBodyOpener expressionLambdaMethodCallBodyOpener;
 
+    private final ExpressionLambdaArgumentLayout.ExpressionLambdaObjectCreationBodyOpener expressionLambdaObjectCreationBodyOpener;
+
     private final ExpressionLambdaArgumentLayout.ExpressionLambdaLogicalBinaryBodyOpenerHug expressionLambdaLogicalBinaryBodyOpenerHug;
 
     private final Function<MethodCallExpr, String> methodCallSegmentPrefixText;
@@ -80,6 +82,7 @@ final class ChainSelectorLambdaLayout {
             Function<LambdaExpr, Optional<Doc>> huggedGapCommentedLambdaBody,
             ExpressionLambdaArgumentLayout.HuggableExpressionLambdaArguments huggableExpressionLambdaArguments,
             ExpressionLambdaArgumentLayout.ExpressionLambdaMethodCallBodyOpener expressionLambdaMethodCallBodyOpener,
+            ExpressionLambdaArgumentLayout.ExpressionLambdaObjectCreationBodyOpener expressionLambdaObjectCreationBodyOpener,
             ExpressionLambdaArgumentLayout.ExpressionLambdaLogicalBinaryBodyOpenerHug expressionLambdaLogicalBinaryBodyOpenerHug,
             Function<MethodCallExpr, String> methodCallSegmentPrefixText,
             Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation,
@@ -97,6 +100,7 @@ final class ChainSelectorLambdaLayout {
         this.huggedGapCommentedLambdaBody = huggedGapCommentedLambdaBody;
         this.huggableExpressionLambdaArguments = huggableExpressionLambdaArguments;
         this.expressionLambdaMethodCallBodyOpener = expressionLambdaMethodCallBodyOpener;
+        this.expressionLambdaObjectCreationBodyOpener = expressionLambdaObjectCreationBodyOpener;
         this.expressionLambdaLogicalBinaryBodyOpenerHug = expressionLambdaLogicalBinaryBodyOpenerHug;
         this.methodCallSegmentPrefixText = methodCallSegmentPrefixText;
         this.methodCallChainRootIsObjectCreation = methodCallChainRootIsObjectCreation;
@@ -659,6 +663,32 @@ final class ChainSelectorLambdaLayout {
                 return directOpener;
             }
         }
+        // Over-width BARE object-creation body ({@code .map(p -> new TopicPartition(a, b))} inside a deeply-fanned chain,
+        // kafka {@code NetworkClient}). The shared {@code huggableExpressionLambdaArguments} renderer WITHHOLDS this body:
+        // its {@code plan} flat-fit probe measures the flat body at the fixed continuation budget — blind to the selector's
+        // real deeply-nested fanned column — and reads it as fitting. Yielding here leaves the selector on
+        // {@link #brokenMethodCallSegment}, which drops the lambda flat and over-widths at the true column. Instead build
+        // the source-neutral constructor opener hug DIRECTLY — {@code p -> new TopicPartition(}⏎{@code a,}⏎{@code b}⏎
+        // {@code )} — through {@link #objectCreationLambdaBodyOpenerHug}, gated to a constructor whose arguments render flat
+        // safely (no argument that only fans itself — the deferred nested-root slice, e.g. a {@code new X().setA(...)}
+        // argument that must reach the chain printer's own fan). It carries a forced break, so it is a valid always-broken
+        // {@code conditionalGroup} fallback the enclosing group renders only when the flat selector overflows at the true
+        // live column — width-safe (never wider than flat) and a fixpoint (pure function of the AST). The object-creation
+        // sibling of the {@link MethodCallExpr}-body rescue above.
+        if (
+            body instanceof ObjectCreationExpr bodyCreation
+            && !bodyCreation.getArguments().isEmpty()
+            && bodyCreation.getAnonymousClassBody().isEmpty()
+            && bodyCreation.getArguments().stream().noneMatch(this::argumentOnlyFansItself)
+        ) {
+            LambdaExpr lambdaExpr = soleTrailingExpressionLambdaSelectorArgument(expression).orElseThrow();
+            Optional<Doc> directOpener = comments.speculatively(
+                () -> objectCreationLambdaBodyOpenerHug(prefix, lambdaExpr, bodyCreation, finalSegmentSuffix, compactSegmentWidth)
+            );
+            if (directOpener.filter(DocRenderer::containsHardLine).isPresent()) {
+                return directOpener;
+            }
+        }
         // The shared renderer withheld the body (or handed back a degenerate flat one-liner) and the direct opener did not
         // claim it either: yield so the caller keeps the {@link #brokenMethodCallSegment} shape, the same fallback the
         // sibling method-call branch and the pre-D3 seam reach for every body this hug does not own.
@@ -723,6 +753,32 @@ final class ChainSelectorLambdaLayout {
     ) {
         String parameters = lambdaParameters.apply(lambdaExpr);
         return expressionLambdaMethodCallBodyOpener.render(parameters, bodyCall, compactSegmentWidth)
+                .map(bodyOpener -> Doc.concat(
+                        Doc.text(prefix + "("),
+                        bodyOpener,
+                        Doc.text(")" + finalSegmentSuffix)
+                ));
+    }
+
+    /**
+     * Builds the opener hug for a fanned selector whose sole argument is a bare object-creation-body expression lambda:
+     * {@code .selector(params -> new Type(}⏎ each constructor argument on its own line ⏎{@code ))}. This is
+     * {@link ExpressionLambdaArgumentLayout#objectCreationBodyWithOpener} (the lambda header + constructor opener, arguments
+     * broken, constructor close) wrapped in the selector's {@code .selector(} … {@code )} — a pure function of the AST, so
+     * both passes render it identically. Returns empty when {@code objectCreationBodyWithOpener} withholds the body (empty
+     * argument list, anonymous-class body, or an opener line that overflows), letting the caller fall back to the
+     * source-neutral {@link #brokenMethodCallSegment} shape. The object-creation sibling of
+     * {@link #singleCallLambdaBodyOpenerHug}.
+     */
+    private Optional<Doc> objectCreationLambdaBodyOpenerHug(
+            String prefix,
+            LambdaExpr lambdaExpr,
+            ObjectCreationExpr bodyCreation,
+            MethodCallChainTail finalSegmentSuffix,
+            ToIntFunction<String> compactSegmentWidth
+    ) {
+        String parameters = lambdaParameters.apply(lambdaExpr);
+        return expressionLambdaObjectCreationBodyOpener.render(parameters, bodyCreation, compactSegmentWidth)
                 .map(bodyOpener -> Doc.concat(
                         Doc.text(prefix + "("),
                         bodyOpener,

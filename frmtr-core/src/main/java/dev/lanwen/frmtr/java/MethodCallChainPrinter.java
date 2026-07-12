@@ -90,6 +90,8 @@ final class MethodCallChainPrinter {
 
     private final ExpressionLambdaArgumentLayout.ExpressionLambdaMethodCallBodyOpener expressionLambdaMethodCallBodyOpener;
 
+    private final ExpressionLambdaArgumentLayout.ExpressionLambdaObjectCreationBodyOpener expressionLambdaObjectCreationBodyOpener;
+
     private final ExpressionLambdaArgumentLayout.ExpressionLambdaLogicalBinaryBodyOpenerHug expressionLambdaLogicalBinaryBodyOpenerHug;
 
     private final ChainSelectorLambdaLayout chainSelectorLambda;
@@ -113,6 +115,7 @@ final class MethodCallChainPrinter {
             Function<LambdaExpr, Optional<Doc>> huggedGapCommentedLambdaBody,
             Function<LambdaExpr, String> lambdaParameters,
             ExpressionLambdaArgumentLayout.ExpressionLambdaMethodCallBodyOpener expressionLambdaMethodCallBodyOpener,
+            ExpressionLambdaArgumentLayout.ExpressionLambdaObjectCreationBodyOpener expressionLambdaObjectCreationBodyOpener,
             ExpressionLambdaArgumentLayout.ExpressionLambdaLogicalBinaryBodyOpenerHug expressionLambdaLogicalBinaryBodyOpenerHug
     ) {
         this.comments = context.comments;
@@ -139,6 +142,7 @@ final class MethodCallChainPrinter {
         this.lambdaParameters = lambdaParameters;
         this.huggedGapCommentedLambdaBody = huggedGapCommentedLambdaBody;
         this.expressionLambdaMethodCallBodyOpener = expressionLambdaMethodCallBodyOpener;
+        this.expressionLambdaObjectCreationBodyOpener = expressionLambdaObjectCreationBodyOpener;
         this.expressionLambdaLogicalBinaryBodyOpenerHug = expressionLambdaLogicalBinaryBodyOpenerHug;
         this.chainWidthBreakExplain = new ChainWidthBreakExplain(
             context.compactSource,
@@ -186,6 +190,7 @@ final class MethodCallChainPrinter {
             huggedGapCommentedLambdaBody,
             huggableExpressionLambdaArguments,
             expressionLambdaMethodCallBodyOpener,
+            expressionLambdaObjectCreationBodyOpener,
             expressionLambdaLogicalBinaryBodyOpenerHug,
             this::methodCallSegmentPrefixText,
             this::methodCallChainRootIsObjectCreation,

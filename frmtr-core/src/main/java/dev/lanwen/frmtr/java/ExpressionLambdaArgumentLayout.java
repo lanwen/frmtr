@@ -178,6 +178,55 @@ final class ExpressionLambdaArgumentLayout {
     }
 
     /**
+     * Builds the opener hug for a bare object-creation lambda body: {@code params -> new Type(}⏎ each argument on its own
+     * line ⏎{@code )}. This is the object-creation counterpart of {@link #methodCallBodyWithOpener} — likewise a pure
+     * function of the AST, so both passes render it identically — letting a fanned chain selector whose sole argument is
+     * an expression lambda with a bare {@code new Type(args)} body ({@code .map(p -> new TopicPartition(topic, p.id()))})
+     * hug the constructor opener and fan its arguments instead of dropping the whole lambda flat onto one continuation
+     * line and over-widthing.
+     *
+     * <p>Returns empty for an argument-less constructor (no argument list to break), an anonymous-class body (its
+     * {@code { … }} has no place in this opener shape), or an opener line ({@code params -> new Type(}) that overflows the
+     * true column ({@code columnWidth}, widened with the fixed-budget probe as {@link #methodCallBodyWithOpener} does) —
+     * in which case the caller keeps the source-neutral broken-segment fallback. The constructor's argument list is
+     * rendered through the same {@code methodCallArgumentList} the packed object-creation shapes use, so a nested
+     * over-wide argument breaks its own list rather than pinning flat.
+     */
+    Optional<Doc> objectCreationBodyWithOpener(
+            String parameters,
+            ObjectCreationExpr objectCreation,
+            ToIntFunction<String> columnWidth
+    ) {
+        if (
+            objectCreation.getArguments().isEmpty()
+            || objectCreation.getAnonymousClassBody().isPresent()
+        ) {
+            return Optional.empty();
+        }
+        String opener = objectCreationPrefix(objectCreation) + "(";
+        String firstLine = parameters + " -> " + opener;
+        if (
+            Math.max(expressionFirstLineWidth(firstLine), columnWidth.applyAsInt(firstLine)) > options.lineWidth()
+            || brokenArgumentListLambdaBodyWidth(firstLine) > options.lineWidth()
+        ) {
+            return Optional.empty();
+        }
+        return Optional.of(
+            Doc.concat(
+                Doc.text(firstLine),
+                Doc.indent(
+                    Doc.concat(
+                        Doc.HARD_LINE,
+                        methodCallArgumentList.apply(objectCreation.getArguments(), Doc.HARD_LINE)
+                    )
+                ),
+                Doc.HARD_LINE,
+                Doc.text(")")
+            )
+        );
+    }
+
+    /**
      * Reports whether reconstructing the call opener from compact text would drop a line comment the body carries.
      *
      * <p>The opener line is built from {@code methodCallPrefix} — the call scope and selector compacted to a single line —
@@ -1584,6 +1633,16 @@ final class ExpressionLambdaArgumentLayout {
     @FunctionalInterface
     interface ExpressionLambdaMethodCallBodyOpener {
         Optional<Doc> render(String parameters, MethodCallExpr methodCall, ToIntFunction<String> columnWidth);
+    }
+
+    /**
+     * The cross-printer boundary for {@link #objectCreationBodyWithOpener}: the shape the chain printer holds so a fanned
+     * chain selector can hug a bare object-creation-body lambda opener ({@code params -> new Type(}⏎ args ⏎{@code )}) at
+     * the true segment column, the object-creation sibling of {@link ExpressionLambdaMethodCallBodyOpener}.
+     */
+    @FunctionalInterface
+    interface ExpressionLambdaObjectCreationBodyOpener {
+        Optional<Doc> render(String parameters, ObjectCreationExpr objectCreation, ToIntFunction<String> columnWidth);
     }
 
     /**

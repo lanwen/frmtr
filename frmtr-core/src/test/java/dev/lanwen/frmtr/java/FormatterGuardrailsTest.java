@@ -15,6 +15,7 @@ import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
+import dev.lanwen.frmtr.doc.DocRenderer;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -154,6 +155,145 @@ final class FormatterGuardrailsTest {
                     .hasMessageContaining("duplicate claim")
                     .hasMessageContaining("running total");
         });
+    }
+
+    @Test
+    void ownedCommentRendersFromRecordedOwnerWithoutClaimingUnderStrictClaims() {
+        // The pure-content rail renders a comment purely from the recorded owner and never touches the printed claim
+        // set, so an owner can re-render it in more than one eagerly-built ranked arm and always get the same non-empty
+        // Doc back — with no strict-claims duplicate-claim throw. The contrast at the end pins why this differs from the
+        // claim path: comment(...) DOES claim the same comment into printed, whereas ownedComment leaves printed empty.
+        withStrictClaims("true", () -> {
+            CommentTracker comments = commentTracker();
+            Node field = parse(
+                """
+                    class Ledger {
+                        int balance;
+                    }
+                    """
+            ).getType(0).getMember(0);
+            JavaCommentTrivia trivia = JavaCommentTrivia.from(new LineComment("running total"));
+
+            // Dry-run records (field, TRAILING) as the comment's owner, mirroring JavaPrinter#print.
+            comments.beginRecording();
+            comments.ownedComment(trivia, field, OwnerSlot.TRAILING);
+            comments.endRecordingAndReset(new LayoutDecisionLog(), new FormatterPragmas());
+
+            Doc firstArm = comments.ownedComment(trivia, field, OwnerSlot.TRAILING);
+            Doc secondArm = comments.ownedComment(trivia, field, OwnerSlot.TRAILING);
+
+            assertThat(firstArm).isNotEqualTo(Doc.EMPTY);
+            assertThat(secondArm).isEqualTo(firstArm);
+            assertThat(comments.isPrinted(trivia)).isFalse();
+
+            // Contrast: the claim-coupled render path claims the very same comment into printed.
+            comments.comment(trivia, field, OwnerSlot.TRAILING);
+            assertThat(comments.isPrinted(trivia)).isTrue();
+        });
+    }
+
+    @Test
+    void ownedCommentRendersEmptyForADifferentOwnerNodeOrSlot() {
+        // Emptiness on the pure rail is a pure function of the recorded owner: a comment recorded to one (node, slot)
+        // renders empty from any other node or any other slot, exactly like the ownsHere gate the existing claim paths
+        // filter on.
+        withStrictClaims("true", () -> {
+            CommentTracker comments = commentTracker();
+            List<Node> members = parse(
+                """
+                    class Ledger {
+                        int balance;
+                        int total;
+                    }
+                    """
+            ).getType(0).getMembers().stream().map(member -> (Node) member).toList();
+            Node owner = members.get(0);
+            Node other = members.get(1);
+            JavaCommentTrivia trivia = JavaCommentTrivia.from(new LineComment("running total"));
+
+            comments.beginRecording();
+            comments.ownedComment(trivia, owner, OwnerSlot.TRAILING);
+            comments.endRecordingAndReset(new LayoutDecisionLog(), new FormatterPragmas());
+
+            assertThat(comments.ownedComment(trivia, owner, OwnerSlot.TRAILING)).isNotEqualTo(Doc.EMPTY);
+            assertThat(comments.ownedComment(trivia, other, OwnerSlot.TRAILING)).isEqualTo(Doc.EMPTY);
+            assertThat(comments.ownedComment(trivia, owner, OwnerSlot.LEADING)).isEqualTo(Doc.EMPTY);
+        });
+    }
+
+    @Test
+    void trailingCommentDefersLineCommentAsWidthFreeLineSuffix() {
+        // A trailing // line comment renders as a Doc.lineSuffix: it defers past the current line and measures zero flat
+        // width (DocWidths maps LineSuffix -> 0), so the code it trails is laid out as if the comment were absent.
+        CompilationUnit unit = parse(
+            """
+                class Meter {
+                    int reading; // sampled hourly
+                }
+                """
+        );
+        Node field = unit.getType(0).getMember(0);
+        CommentTracker comments = startedCommentTracker(unit);
+
+        comments.beginRecording();
+        comments.trailingComment(field);
+        comments.endRecordingAndReset(new LayoutDecisionLog(), new FormatterPragmas());
+
+        Doc trailing = comments.trailingComment(field);
+
+        assertThat(trailing).isInstanceOf(Doc.LineSuffix.class);
+        assertThat(new DocRenderer(FormatterOptions.defaults()).render(trailing)).contains("// sampled hourly");
+    }
+
+    @Test
+    void trailingCommentRendersInlineBlockCommentAsText() {
+        // A same-line trailing block comment renders inline as its bare Doc.text content: a Doc.Text measures its own
+        // length flat (DocWidths), so the block counts toward width as the block comment's length — unlike the
+        // width-free line-suffix above. This is the block-vs-line width distinction a later cutover must preserve.
+        CompilationUnit unit = parse(
+            """
+                class Meter {
+                    int reading; /* sampled hourly */
+                }
+                """
+        );
+        Node field = unit.getType(0).getMember(0);
+        CommentTracker comments = startedCommentTracker(unit);
+
+        comments.beginRecording();
+        comments.trailingComment(field);
+        comments.endRecordingAndReset(new LayoutDecisionLog(), new FormatterPragmas());
+
+        Doc trailing = comments.trailingComment(field);
+
+        assertThat(trailing).isInstanceOfSatisfying(Doc.Text.class, text ->
+            assertThat(text.value()).isEqualTo("/* sampled hourly */")
+        );
+    }
+
+    @Test
+    void ownershipAccountedSetCoversOwnedCommentsThatWereNeverClaimed() {
+        // The dormant end-state accounting path counts a comment as accounted once the pre-pass recorded an owner for
+        // it, even though the pure rail never claimed it into printed. That is the accounting move the end-state makes:
+        // from "was it claimed" to "does it have a recorded owner". Nothing consumes this set yet, so the current
+        // printed-based drop guardrail (assertAllCommentsAccounted) is unaffected.
+        CommentTracker comments = commentTracker();
+        Node field = parse(
+            """
+                class Ledger {
+                    int balance;
+                }
+                """
+        ).getType(0).getMember(0);
+        JavaCommentTrivia trivia = JavaCommentTrivia.from(new LineComment("running total"));
+
+        comments.beginRecording();
+        comments.ownedComment(trivia, field, OwnerSlot.TRAILING);
+        comments.endRecordingAndReset(new LayoutDecisionLog(), new FormatterPragmas());
+        comments.ownedComment(trivia, field, OwnerSlot.TRAILING);
+
+        assertThat(comments.isPrinted(trivia)).isFalse();
+        assertThat(comments.ownershipAccountedComments()).contains(trivia.comment());
     }
 
     @Test
@@ -488,5 +628,11 @@ final class FormatterGuardrailsTest {
 
     private static CommentTracker commentTracker() {
         return new CommentTracker(new JavaCommentPlacementPolicy());
+    }
+
+    private static CommentTracker startedCommentTracker(CompilationUnit unit) {
+        JavaCommentPlacementPolicy policy = new JavaCommentPlacementPolicy();
+        policy.startRun(unit);
+        return new CommentTracker(policy);
     }
 }

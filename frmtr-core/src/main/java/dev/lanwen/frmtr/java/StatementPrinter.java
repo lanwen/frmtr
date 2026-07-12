@@ -810,11 +810,20 @@ final class StatementPrinter {
                 .orElse(Doc.EMPTY);
     }
 
+    /**
+     * Renders the {@code //} line comment that trails a local variable declaration's {@link VariableDeclarationExpr}
+     * after the closing {@code ;} (e.g. {@code int limit = 10; // cap}).
+     *
+     * <p>Routes through the layout-independent {@link CommentTracker#trailingComment(Node)} anchor, which binds the
+     * comment to the stable {@code (declaration, TRAILING)} slot, defers it as the identical width-free
+     * {@link Doc#lineSuffix(Doc)} after the {@code ;} (so the declaration lays out as if the comment were absent), and
+     * decides emptiness from the recorded owner rather than a build-time claim — so the comment survives whichever ranked
+     * layout the declaration renderer wins without being dropped or double-printed. The enclosing {@link ExpressionStmt}'s
+     * own trailing comment is a distinct {@code (statement, TRAILING)} slot rendered by
+     * {@link #expressionStatementTrailingComment(ExpressionStmt)}, so the two never contend for the same comment.
+     */
     private Doc variableDeclarationTrailingComment(VariableDeclarationExpr declaration) {
-        Doc declarationTrailing = comments.trailingLineComment(declaration);
-        return declarationTrailing == Doc.EMPTY
-            ? Doc.EMPTY
-            : Doc.lineSuffix(Doc.concat(Doc.text(" "), declarationTrailing));
+        return comments.trailingComment(declaration);
     }
 
     private int methodCallStatementWidth(MethodCallExpr methodCall, ToIntFunction<String> lineWidth) {

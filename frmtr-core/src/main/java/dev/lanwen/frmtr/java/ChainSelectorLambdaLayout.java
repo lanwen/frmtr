@@ -783,9 +783,11 @@ final class ChainSelectorLambdaLayout {
     }
 
     private boolean argumentOnlyFansItself(Expression argument) {
-        if (argument instanceof ObjectCreationExpr) {
-            return true;
-        }
+        // A BARE object creation ({@code new ValidationBatch(item)}) is NOT self-fanning: rendered on its own broken
+        // continuation line inside the opener it either fits flat or breaks its OWN argument list, both width-safe. Only
+        // an object-creation-ROOTED CHAIN ({@code new X().setA(...).setB(...)}) or a MULTI-SELECTOR method-call chain
+        // wants the chain printer's own one-selector-per-line fan and would mis-render pinned flat inside the opener's
+        // argument line — those stay excluded through the {@link MethodCallExpr} branch below.
         if (argument instanceof MethodCallExpr call) {
             return call.getScope().filter(MethodCallExpr.class::isInstance).isPresent()
                 || methodCallChainRootIsObjectCreation.test(call);

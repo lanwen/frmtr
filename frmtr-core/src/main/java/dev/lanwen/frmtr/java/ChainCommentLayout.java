@@ -308,14 +308,17 @@ final class ChainCommentLayout {
      * Keeps a final segment's same-line comment after the rendered call, even when the call arguments break.
      */
     Doc finalTrailingLineComment(MethodCallExpr expression) {
-        // The same final trailing line comment can be reached from neighboring chain renders (e.g. an outer segment's
-        // argument render and the chain's final-segment slot). Skip comments already printed by an earlier traversal path
-        // so this slot does not duplicate-claim them; output is unchanged because the first claimant placed the comment
-        // and a re-offer only ever rendered empty.
+        // This final segment's same-line trailing line comment is also offered by a neighboring chain render (an outer
+        // segment's argument render that reaches the same final call, say) under the comment's own anchorless
+        // (comment, INTERLEAVED) key. Offering it here under this segment's own (expression, INTERLEAVED) anchor lets
+        // comment ownership disambiguate: when the neighboring render owns it, this slot is not the recorded owner and
+        // comment(...) returns Doc.EMPTY (caught by the != Doc.EMPTY filter below); a comment no neighbor claimed is
+        // owned here and placed by this final-segment slot. Anchoring to the distinct (expression, INTERLEAVED) key
+        // rather than the comment's own node is what makes the ownership gate sufficient, so no build-order isPrinted
+        // skip is needed.
         List<Doc> sourceComments = finalTrailingLineComments(expression)
                 .stream()
-                .filter(trivia -> !comments.isPrinted(trivia))
-                .map(comments::comment)
+                .map(comment -> comments.comment(comment, expression, OwnerSlot.INTERLEAVED))
                 .filter(comment -> comment != Doc.EMPTY)
                 .toList();
         return sourceComments.isEmpty() ? Doc.EMPTY : Doc.join(Doc.text(" "), sourceComments);

@@ -300,11 +300,15 @@ final class ControlConditionPrinter {
         List<Doc> leadingComments = detachedConditionLineComments(expression)
                 .stream()
                 .filter(comment -> CommentIndex.beginLine(comment, Integer.MAX_VALUE) < contentLine)
-                // A detached condition line comment can also be offered by a neighboring condition render path; skip
-                // already-printed comments so this slot does not duplicate-claim them. Output is unchanged because the
-                // first claimant placed the comment and a re-offer only ever rendered empty.
-                .filter(comment -> !comments.isPrinted(JavaCommentTrivia.from(comment)))
-                .map(comments::comment)
+                // A detached condition line comment is also offered by a neighboring condition render path (a
+                // ControlConditionCommentLayout attached/trailing slot, say) under the comment's own anchorless
+                // (comment, INTERLEAVED) key. Offering it here under this condition's own (expression, INTERLEAVED)
+                // anchor lets comment ownership disambiguate: when the neighboring path owns it, this slot is not the
+                // recorded owner and comment(...) returns Doc.EMPTY (caught by the check below); a comment no neighbor
+                // claimed is owned here and placed by this slot. Anchoring to the distinct (expression, INTERLEAVED)
+                // key rather than the comment's own node is what makes the ownership gate sufficient, so no build-order
+                // isPrinted skip is needed.
+                .map(comment -> comments.comment(comment, expression, OwnerSlot.INTERLEAVED))
                 .filter(comment -> comment != Doc.EMPTY)
                 .toList();
         if (leadingComments.isEmpty()) {

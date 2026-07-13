@@ -1,6 +1,5 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
@@ -17,11 +16,8 @@ import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import dev.lanwen.frmtr.doc.DocRenderer;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.ToIntFunction;
@@ -95,6 +91,10 @@ final class MethodCallChainPrinter {
     private final ExpressionLambdaArgumentLayout.ExpressionLambdaLogicalBinaryBodyOpenerHug expressionLambdaLogicalBinaryBodyOpenerHug;
 
     private final ChainSelectorLambdaLayout chainSelectorLambda;
+
+    private final ChainSegmentWidthLayout segmentWidth;
+
+    private final ChainCommentLayout chainComments;
 
     private final ChainFanLayout chainFan;
 
@@ -199,6 +199,8 @@ final class MethodCallChainPrinter {
             this::fannedSelectorColumnWidth,
             this::brokenMethodCallSegment
         );
+        this.segmentWidth = new ChainSegmentWidthLayout(options, rawSource, methodChainPlanner::promotesFirstCall);
+        this.chainComments = new ChainCommentLayout(comments, commentPlacement, commentedExpressionLists);
         this.chainFan = new ChainFanLayout(
             context.options,
             context.compactSource,
@@ -208,13 +210,13 @@ final class MethodCallChainPrinter {
             this::methodCallChainAnalysis,
             this::chainBreaksByRule,
             methodChainPlanner::promotesFirstCall,
-            this::methodCallSegmentHasComment,
+            chainComments::methodCallSegmentHasComment,
             this::methodCallSegmentHasBlockLambdaArgument,
             this::methodCallSegmentHasExpressionLambdaArgument,
             this::methodCallChainHasFinalTrailingLineComment,
-            this::finalTrailingLineComments,
-            this::trailingLineCommentsBeforeNextSegment,
-            this::rootHasTrailingLineCommentBeforeFirstSegment,
+            chainComments::finalTrailingLineComments,
+            chainComments::trailingLineCommentsBeforeNextSegment,
+            chainComments::rootHasTrailingLineCommentBeforeFirstSegment,
             this::groupedPromotedMethodCall,
             calls::methodCallPrefix,
             calls::methodCallArgumentList,
@@ -565,7 +567,7 @@ final class MethodCallChainPrinter {
                 && !analysis.hasComments()
                 && !analysis.hasBlockLambdaArgument()
                 // A chain carrying an inter-segment `//` line comment must not stay flat, so its fan-only
-                // comment-preserving render is used. See {@link #chainHasInterSegmentLineComment}.
+                // comment-preserving render is used. See {@link ChainCommentLayout#chainHasInterSegmentLineComment}.
                 && !analysis.hasInterSegmentLineComment()
                 // A chain that reaches its link-count/root-kind threshold ({@code chainBreaksByRule}) MUST fan one
                 // selector per line even when the flat form fits, so it does not stay flat here; the break is routed to
@@ -615,7 +617,7 @@ final class MethodCallChainPrinter {
             chainBreaksByRule(analysis)
             && !analysis.hasComments()
             && !analysis.hasBlockLambdaArgument()
-            && calls.stream().noneMatch(this::methodCallSegmentHasComment)
+            && calls.stream().noneMatch(chainComments::methodCallSegmentHasComment)
         ) {
             chainWidthBreakExplain.record(expression, analysis, layout);
             return Optional.of(chainFanOut(root, calls, finalSegmentSuffix, layout));
@@ -635,7 +637,7 @@ final class MethodCallChainPrinter {
             chainIsWidthDrivenTwoSelectorFan(analysis)
             && !analysis.hasComments()
             && !analysis.hasBlockLambdaArgument()
-            && calls.stream().noneMatch(this::methodCallSegmentHasComment)
+            && calls.stream().noneMatch(chainComments::methodCallSegmentHasComment)
         ) {
             chainWidthBreakExplain.record(expression, analysis, layout);
             Doc fanOut = chainFanOut(root, calls, finalSegmentSuffix, layout);
@@ -679,7 +681,7 @@ final class MethodCallChainPrinter {
             }
             return Optional.of(bodyForcesMultiline ? Doc.bestFitting(arms) : Doc.conditionalGroup(arms));
         }
-        // A chain that must fan ONLY to preserve an inter-segment {@code //} line comment ({@link #chainHasInterSegmentLineComment})
+        // A chain that must fan ONLY to preserve an inter-segment {@code //} line comment ({@link ChainCommentLayout#chainHasInterSegmentLineComment})
         // would otherwise collapse in the source-shape fall-through below and DROP the comment (the
         // {@code encode(x) // note}⏎{@code .replaceAll(...)} MirrorMaker shape, and the leading-{@code //}-before-a-selector
         // dot-gap shape). Route those chains to the comment-preserving one-segment-per-line fan here — the root rendered
@@ -707,7 +709,7 @@ final class MethodCallChainPrinter {
             && calls.size() == 1
             && root.getAllContainedComments().isEmpty()
             && calls.getFirst().getAllContainedComments().isEmpty()
-            && !methodCallSegmentHasComment(calls.getFirst())
+            && !chainComments.methodCallSegmentHasComment(calls.getFirst())
             && !analysis.rootHasBlockLambdaArgument()
         ) {
             Expression probeRoot = root;
@@ -727,7 +729,7 @@ final class MethodCallChainPrinter {
         }
         if (calls.size() == 1 && root instanceof MethodCallExpr methodRoot) {
             Doc rootDoc = singleSegmentMethodRootDoc(methodRoot);
-            Doc rootTrailingComment = rootTrailingLineCommentBeforeFirstSegment(methodRoot, calls);
+            Doc rootTrailingComment = chainComments.rootTrailingLineCommentBeforeFirstSegment(methodRoot, calls);
             if (rootTrailingComment != Doc.EMPTY) {
                 rootDoc = Doc.concat(rootDoc, Doc.lineSuffix(Doc.concat(Doc.text(" "), rootTrailingComment)));
             }
@@ -736,7 +738,7 @@ final class MethodCallChainPrinter {
             // Attaching such a segment to the root close glued the comment onto the root's closing parenthesis
             // ({@code lookup(a)// c1}); a scope-rooted chain already avoids this because its segments go one-per-line, so
             // route the single-segment case the same way once the segment carries a leading comment.
-            if (methodCallSegmentHasLeadingLineComment(calls.getFirst())) {
+            if (chainComments.methodCallSegmentHasLeadingLineComment(calls.getFirst())) {
                 return Optional.of(
                     Doc.concat(
                         rootDoc,
@@ -751,7 +753,7 @@ final class MethodCallChainPrinter {
             // comment ({@code create()/* doc *}{@code / .seal()}). Route it through the breaking continuation instead, the
             // same escape the leading-line-comment case uses, so the selector's own segment prefix re-emits the comment
             // with its space on its own continuation line. Other single-segment method roots keep the attached-flat shape.
-            if (methodCallSegmentHasLeadingGapBlockComment(methodRoot, calls.getFirst())) {
+            if (chainComments.methodCallSegmentHasLeadingGapBlockComment(methodRoot, calls.getFirst())) {
                 return Optional.of(
                     Doc.concat(
                         rootDoc,
@@ -827,7 +829,7 @@ final class MethodCallChainPrinter {
             root instanceof MethodCallExpr methodRoot
             && calls.size() == 1
             && root.getAllContainedComments().isEmpty()
-            && !methodCallSegmentHasComment(calls.getFirst())
+            && !chainComments.methodCallSegmentHasComment(calls.getFirst())
             && methodCallSegmentHasBlockLambdaArgument(calls.getFirst())
             && blockLambdaSegmentFirstLine(compactSource.compact(methodRoot), calls.getFirst())
                     // C10-b: measure the block-lambda root first line at the root's true rendered block/type depth
@@ -837,7 +839,7 @@ final class MethodCallChainPrinter {
         ) {
             return Optional.empty();
         }
-        Doc rootTrailingComment = rootTrailingLineCommentBeforeFirstSegment(root, calls);
+        Doc rootTrailingComment = chainComments.rootTrailingLineCommentBeforeFirstSegment(root, calls);
         if (rootTrailingComment != Doc.EMPTY) {
             if (
                 root instanceof ObjectCreationExpr objectCreation
@@ -900,7 +902,7 @@ final class MethodCallChainPrinter {
             && !firstSegmentAttachedToRoot
             && methodRootCanKeepSingleSuffixAttached(methodRoot)
             && methodCallSegmentHasNoOwnContainedComments(calls.getFirst())
-            && !methodCallSegmentHasComment(calls.getFirst())
+            && !chainComments.methodCallSegmentHasComment(calls.getFirst())
         ) {
             if (
                 methodCallSegmentHasBlockLambdaArgument(calls.getFirst())
@@ -1031,7 +1033,7 @@ final class MethodCallChainPrinter {
             && !firstSegmentAttachedToRoot
             && !analysis.hasComments()
             && !analysis.hasBlockLambdaArgument()
-            && calls.stream().noneMatch(this::methodCallSegmentHasComment)
+            && calls.stream().noneMatch(chainComments::methodCallSegmentHasComment)
         ) {
             return Optional.of(chainFanOut(root, calls, finalSegmentSuffix, layout));
         }
@@ -1060,22 +1062,22 @@ final class MethodCallChainPrinter {
             return true;
         }
         if (
-            methodCallSegmentHasLineComments(methodRoot)
-            && !methodCallSegmentHasLeadingLineComment(methodRoot)
-            && !methodCallSegmentHasNameComment(methodRoot)
+            chainComments.methodCallSegmentHasLineComments(methodRoot)
+            && !chainComments.methodCallSegmentHasLeadingLineComment(methodRoot)
+            && !chainComments.methodCallSegmentHasNameComment(methodRoot)
         ) {
             return true;
         }
         return methodCallSegmentHasBlockLambdaArgument(methodRoot)
-            && !methodCallSegmentHasLeadingLineComment(methodRoot)
-            && !methodCallSegmentHasNameComment(methodRoot);
+            && !chainComments.methodCallSegmentHasLeadingLineComment(methodRoot)
+            && !chainComments.methodCallSegmentHasNameComment(methodRoot);
     }
 
     private boolean finalBlockLambdaSegmentCanStayCompact(
             MethodCallExpr expression,
             ToIntFunction<String> lineWidth
     ) {
-        if (!methodCallSegmentHasBlockLambdaArgument(expression) || methodCallSegmentHasComment(expression)) {
+        if (!methodCallSegmentHasBlockLambdaArgument(expression) || chainComments.methodCallSegmentHasComment(expression)) {
             return false;
         }
         String callPrefix = calls.methodCallPrefix(expression);
@@ -1114,7 +1116,7 @@ final class MethodCallChainPrinter {
             + typeArguments
             + call.getNameAsString()
             + "("
-            + methodCallSegmentArgumentsWidthText(call.getArguments())
+            + segmentWidth.methodCallSegmentArgumentsWidthText(call.getArguments())
             + ")"
             + finalSegmentSuffix;
         return lineWidth.applyAsInt(compactLine) > options.lineWidth();
@@ -1339,7 +1341,7 @@ final class MethodCallChainPrinter {
             || calls.size() != 1
             || !methodCallSegmentHasBlockLambdaArgument(methodRoot)
             || !methodRootCanKeepSingleSuffixAttached(methodRoot)
-            || methodCallSegmentHasComment(calls.getFirst())
+            || chainComments.methodCallSegmentHasComment(calls.getFirst())
         ) {
             return false;
         }
@@ -1361,8 +1363,8 @@ final class MethodCallChainPrinter {
         MethodCallExpr firstCall = calls.getFirst();
         if (
             !methodCallSegmentHasBlockLambdaArgument(firstCall)
-            || methodCallSegmentHasLeadingLineComment(firstCall)
-            || methodCallSegmentHasNameComment(firstCall)
+            || chainComments.methodCallSegmentHasLeadingLineComment(firstCall)
+            || chainComments.methodCallSegmentHasNameComment(firstCall)
         ) {
             return Optional.empty();
         }
@@ -1676,7 +1678,7 @@ final class MethodCallChainPrinter {
      * single simple selector argument), so it is a fixpoint regardless of any leading prefix; the enclosing width probe in
      * {@link #objectRootSingleSegmentChain} still decides flat-versus-fan. Restricted to {@link ObjectCreationExpr} roots;
      * "simple" mirrors {@link ControlConditionMethodCallLayout#hasComplexArgument}'s inverse via
-     * {@link #singleSimpleMethodCallSegmentArgument} ({@code NameExpr | FieldAccessExpr | ThisExpr | SuperExpr |
+     * {@link ChainSegmentWidthLayout#singleSimpleMethodCallSegmentArgument} ({@code NameExpr | FieldAccessExpr | ThisExpr | SuperExpr |
      * LiteralExpr}); a lambda, method-call, multi-argument, or already-multiline tail is not simple and still opens
      * exactly as before.
      */
@@ -1685,7 +1687,7 @@ final class MethodCallChainPrinter {
             MethodCallExpr call
     ) {
         return root instanceof ObjectCreationExpr
-            && singleSimpleMethodCallSegmentArgument(call);
+            && segmentWidth.singleSimpleMethodCallSegmentArgument(call);
     }
 
     private Optional<Doc> compactRootWithBrokenFinalSegment(Expression root, MethodCallExpr call) {
@@ -2046,7 +2048,7 @@ final class MethodCallChainPrinter {
     boolean methodCallChainHasFinalTrailingLineComment(MethodCallExpr expression) {
         MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis = methodCallChainAnalysis(expression);
         MethodCallExpr finalCall = analysis.calls().isEmpty() ? expression : analysis.calls().getLast();
-        return !finalTrailingLineComments(finalCall).isEmpty();
+        return !chainComments.finalTrailingLineComments(finalCall).isEmpty();
     }
 
     /**
@@ -2057,7 +2059,7 @@ final class MethodCallChainPrinter {
      * line comment is reported "source-multiline" here so the caller (e.g. {@code MethodCallPrinter}'s comment-aware
      * branch) keeps it off the plain method-call render that would drop the comment — the MirrorMaker
      * {@code encode(x) // note}⏎{@code .replaceAll(...)} shape. Keyed on comment presence, not line breaks (see
-     * {@link #chainHasInterSegmentLineComment}). This covers the leading/trailing/gap inter-segment {@code //} positions;
+     * {@link ChainCommentLayout#chainHasInterSegmentLineComment}). This covers the leading/trailing/gap inter-segment {@code //} positions;
      * an ORPHAN {@code //} floated between blank lines inside the chain (JavaParser parks it on an inner-selector
      * MethodCallExpr, not as a segment comment) is NOT covered here and remains a known comment-placement gap — the
      * {@code method-chain-member-access @ expanded} perturbation.
@@ -2073,13 +2075,13 @@ final class MethodCallChainPrinter {
     private MethodCallChainSourcePlanner.MethodCallChainAnalysis methodCallChainAnalysis(MethodCallExpr expression) {
         return methodChainPlanner.analyze(
             expression,
-            this::methodCallSegmentHasComment,
-            this::methodCallSegmentHasNameComment,
-            this::methodCallSegmentHasArgumentGapComment,
+            chainComments::methodCallSegmentHasComment,
+            chainComments::methodCallSegmentHasNameComment,
+            chainComments::methodCallSegmentHasArgumentGapComment,
             this::methodCallSegmentHasBlockLambdaArgument,
-            this::methodCallChainHasTrailingLineComments,
-            this::rootHasTrailingLineCommentBeforeFirstSegment,
-            this::chainHasInterSegmentLineComment
+            chainComments::methodCallChainHasTrailingLineComments,
+            chainComments::rootHasTrailingLineCommentBeforeFirstSegment,
+            chainComments::chainHasInterSegmentLineComment
         );
     }
 
@@ -2158,7 +2160,7 @@ final class MethodCallChainPrinter {
             !hasSingleExpressionLambdaArgument(methodRoot)
             || !methodRoot.getAllContainedComments().isEmpty()
             || !methodCallSegmentHasNoOwnContainedComments(call)
-            || methodCallSegmentHasComment(call)
+            || chainComments.methodCallSegmentHasComment(call)
             || methodCallSegmentHasBlockLambdaArgument(call)
         ) {
             return Optional.empty();
@@ -2189,111 +2191,6 @@ final class MethodCallChainPrinter {
             && lambdaExpr.getAllContainedComments().isEmpty();
     }
 
-    private boolean methodCallSegmentHasComment(MethodCallExpr expression) {
-        return methodCallSegmentHasNameComment(expression)
-            || methodCallSegmentHasLeadingLineComment(expression)
-            || methodCallSegmentHasArgumentGapComment(expression);
-    }
-
-    private boolean methodCallSegmentHasLeadingLineComment(MethodCallExpr expression) {
-        return !leadingLineCommentsBeforeSegment(expression).isEmpty();
-    }
-
-    private boolean methodCallSegmentHasArgumentGapComment(MethodCallExpr expression) {
-        return commentedExpressionLists.hasUnprintedLineComments(expression, expression.getArguments());
-    }
-
-    private boolean methodCallSegmentHasLineComments(MethodCallExpr expression) {
-        return commentedExpressionLists.hasLineComments(expression, expression.getArguments());
-    }
-
-    /**
-     * Reports whether the only selector of a method-call-rooted chain carries a block comment parked in the gap between
-     * the root and the selector, for example {@code create() /* doc *}{@code / .seal()}.
-     *
-     * <p>JavaParser attaches such a gap block comment to the selector's name (see {@code methodCallSegmentPrefix}), so the
-     * stay-flat gate's contained-comment scan on the root misses it and the chain reaches the single-segment branch. This
-     * predicate lets that branch break the segment onto its own continuation line, where the segment prefix re-emits the
-     * comment with its source space, instead of gluing it flat and dropping the space. It deliberately accepts only a
-     * block (or Javadoc) comment that starts after the root ends and before the selector name so an ordinary leading
-     * comment already handled elsewhere, or a comment that belongs to the root, is not re-claimed here.
-     */
-    private boolean methodCallSegmentHasLeadingGapBlockComment(Expression root, MethodCallExpr segment) {
-        return segment.getName()
-                .getComment()
-                .filter(comment -> comment instanceof BlockComment || comment instanceof JavadocComment)
-                .filter(comment -> CommentIndex.startsBefore(comment, segment.getName()))
-                .filter(comment -> root.getRange()
-                            .flatMap(rootRange -> comment.getRange()
-                                        .map(commentRange -> commentRange.begin.isAfter(rootRange.end))
-                            )
-                            .orElse(false)
-                )
-                .isPresent();
-    }
-
-    private boolean methodCallSegmentHasNameComment(MethodCallExpr expression) {
-        return expression.getName()
-                .getComment()
-                .filter(comment -> CommentIndex.startsBefore(comment, expression.getName()))
-                .isPresent();
-    }
-
-    private boolean methodCallChainHasTrailingLineComments(List<MethodCallExpr> calls) {
-        for (int index = 0; index + 1 < calls.size(); index++) {
-            if (!trailingLineCommentsBeforeNextSegment(calls.get(index), calls.get(index + 1)).isEmpty()) {
-                return true;
-            }
-        }
-        return !calls.isEmpty() && !finalTrailingLineComments(calls.getLast()).isEmpty();
-    }
-
-    /**
-     * Reports whether a chain carries an inter-segment {@code //} <em>line</em> comment — the comment class whose only
-     * safe render keeps the chain fanned one selector per line. Callers use this to route such a chain off the stay-flat
-     * path and onto the comment-preserving fan, so the comment is not dropped.
-     *
-     * <p>It covers the three inter-segment positions a {@code //} comment can occupy:
-     * <ul>
-     *   <li><b>root → first selector</b> — a line comment the author parked after the root and before the first selector,
-     *       whether owned by the root as its trailing comment / root-to-first-selector-gap
-     *       ({@link #rootHasTrailingLineCommentBeforeFirstSegment}) or attached as the first selector's leading comment
-     *       ({@link #leadingLineCommentsBeforeSegment});</li>
-     *   <li><b>dot-gap</b> — a line comment leading a later selector on its own continuation line, e.g. {@code .a()}⏎
-     *       {@code // note}⏎{@code .b()} ({@link #leadingLineCommentsBeforeSegment} on each call);</li>
-     *   <li><b>between selectors</b> — a trailing line comment in the gap after one selector and before the next, e.g.
-     *       {@code .a() // note}⏎{@code .b()} ({@link #trailingLineCommentsBeforeNextSegment}).</li>
-     * </ul>
-     *
-     * <p><strong>Line comments only.</strong> A {@code //} comment runs to end-of-line, so it forces the next selector
-     * onto a later line and the chain cannot stay flat. Block comments ({@code create() /* doc *}{@code / .seal()}) are
-     * deliberately excluded because they can sit inline without a line break — the chain can stay flat — so folding them
-     * in would fan a chain that need not fan. This predicate consults only the same line-comment candidate sets the
-     * imperative comment-preserving render consumes; it claims no comment, so placement stays owned by the render.
-     */
-    private boolean chainHasInterSegmentLineComment(Expression root, List<MethodCallExpr> calls) {
-        if (calls.isEmpty()) {
-            return false;
-        }
-        // root -> first selector: root-owned trailing / gap line comment, or the first selector's own leading comment.
-        if (rootHasTrailingLineCommentBeforeFirstSegment(root, calls)
-            || methodCallSegmentHasLeadingLineComment(calls.getFirst())) {
-            return true;
-        }
-        for (int index = 0; index < calls.size(); index++) {
-            // dot-gap: a line comment leading a later selector on its own continuation line.
-            if (index > 0 && methodCallSegmentHasLeadingLineComment(calls.get(index))) {
-                return true;
-            }
-            // between selectors: a trailing line comment after this selector and before the next.
-            if (index + 1 < calls.size()
-                && !trailingLineCommentsBeforeNextSegment(calls.get(index), calls.get(index + 1)).isEmpty()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private boolean methodCallSegmentHasBlockLambdaArgument(MethodCallExpr expression) {
         return expression.getArguments()
                 .stream()
@@ -2314,7 +2211,7 @@ final class MethodCallChainPrinter {
             || !(root instanceof MethodCallExpr methodRoot)
             || !methodCallSegmentHasExpressionLambdaArgument(methodRoot)
             || !methodCallSegmentHasNoOwnContainedComments(calls.getFirst())
-            || methodCallSegmentHasComment(calls.getFirst())
+            || chainComments.methodCallSegmentHasComment(calls.getFirst())
         ) {
             return false;
         }
@@ -2585,14 +2482,14 @@ final class MethodCallChainPrinter {
         // selector's LEADING comment ({@code new X(...)}⏎{@code // note}⏎{@code .selector(...)}) must render on the
         // comment-preserving exploded path — the constructor broken open, the selector re-emitting its leading comment on
         // its own continuation line — regardless of the author's line breaks. The verdict keys purely on comment presence
-        // ({@link #methodCallSegmentHasLeadingLineComment}, a structural fact), never on the author's line breaks, so both
+        // ({@link ChainCommentLayout#methodCallSegmentHasLeadingLineComment}, a structural fact), never on the author's line breaks, so both
         // passes fan identically and the shape is a one-pass fixpoint. Before the source-shape signal was retired a dead
         // {@code sourceMultilineChain} gate let a comment-on-its-own-line source fall through to the width-driven
         // compact-glued shape below ({@code new X(...)// note}⏎{@code .selector(...)}), which then re-attached the comment
         // as the ROOT's trailing comment on the next pass and exploded — the attach⇄explode oscillation this closes. The
         // segment renderer claims the leading comment exactly once and {@code brokenObjectCreationRenderer} renders a
         // comment-free constructor, so no comment is double-claimed or dropped (guarded by CommentPresenceDiagnosticTest).
-        if (methodCallSegmentHasLeadingLineComment(call)) {
+        if (chainComments.methodCallSegmentHasLeadingLineComment(call)) {
             return Doc.concat(
                 brokenObjectCreationRenderer.apply(objectCreation),
                 chainContinuation(methodCallChainSegment(call, Optional.empty(), finalSegmentSuffix))
@@ -2625,7 +2522,7 @@ final class MethodCallChainPrinter {
             // same {@code new ProfileRequest(...)}⏎{@code .submit(10)} shape, not the arg-opened
             // {@code .submit(}⏎{@code 10}⏎{@code )}. The choice is a pure function of the AST (single simple argument) and
             // the width probe above, so it is a fixpoint regardless of the leading prefix.
-            if (singleSimpleMethodCallSegmentArgument(call)) {
+            if (segmentWidth.singleSimpleMethodCallSegmentArgument(call)) {
                 return Doc.concat(
                     rootDoc,
                     objectRootContinuation(methodCallChainSegment(call, Optional.empty(), finalSegmentSuffix))
@@ -2785,10 +2682,10 @@ final class MethodCallChainPrinter {
         }
         String compactSegment = prefix
             + "("
-            + methodCallSegmentArgumentsWidthText(expression.getArguments())
+            + segmentWidth.methodCallSegmentArgumentsWidthText(expression.getArguments())
             + ")"
             + finalSegmentSuffix;
-        if (methodCallSegmentArgumentsShouldBreak(
+        if (segmentWidth.methodCallSegmentArgumentsShouldBreak(
                 expression,
                 reserveStatementTerminator,
                 compactSegment,
@@ -2813,65 +2710,6 @@ final class MethodCallChainPrinter {
                 )
             )
         );
-    }
-
-    private boolean methodCallSegmentArgumentsShouldBreak(
-            MethodCallExpr expression,
-            boolean reserveStatementTerminator,
-            String compactSegment,
-            ToIntFunction<String> compactSegmentWidth,
-            boolean segmentOnOwnLine
-    ) {
-        if (
-            reserveStatementTerminator
-            && !singleSimpleMethodCallSegmentArgument(expression)
-            && finalSegmentRenderedWidth(expression, compactSegment, compactSegmentWidth, segmentOnOwnLine)
-                > options.lineWidth()
-        ) {
-            return true;
-        }
-        return overwideTypeLikeScopeSegment(expression)
-            && compactSegmentWidth.applyAsInt(compactSegment) > options.lineWidth();
-    }
-
-    /**
-     * Measures where the final chain segment's compact form will actually land.
-     *
-     * <p>A segment that the chain places on its own continuation line is measured purely at that continuation
-     * indent ({@code compactSegmentWidth}), because nothing precedes it on the line. The source-column estimate in
-     * {@link #methodCallSegmentWidth} only describes a segment kept beside a preceding token on the same line, so
-     * applying it to a one-per-line segment overstates the width by the segment's stale source indentation. That
-     * over-measurement is what made an already-flat-fitting trailing call (such as {@code .collect(Collectors.toSet())})
-     * break apart on the first pass and then collapse on the second, so a standalone segment must ignore the source
-     * column to converge in one pass.
-     */
-    private int finalSegmentRenderedWidth(
-            MethodCallExpr expression,
-            String compactSegment,
-            ToIntFunction<String> compactSegmentWidth,
-            boolean segmentOnOwnLine
-    ) {
-        if (segmentOnOwnLine) {
-            return compactSegmentWidth.applyAsInt(compactSegment);
-        }
-        return methodCallSegmentWidth(expression, compactSegment, compactSegmentWidth);
-    }
-
-    private boolean singleSimpleMethodCallSegmentArgument(MethodCallExpr expression) {
-        if (expression.getArguments().size() != 1) {
-            return false;
-        }
-        Expression argument = expression.getArgument(0);
-        return argument.isNameExpr()
-            || argument.isFieldAccessExpr()
-            || argument.isThisExpr()
-            || argument.isSuperExpr()
-            || argument.isLiteralExpr();
-    }
-
-    private boolean overwideTypeLikeScopeSegment(MethodCallExpr expression) {
-        return expression.getArguments().size() > 1
-            && expression.getScope().filter(methodChainPlanner::promotesFirstCall).isPresent();
     }
 
     private Doc brokenMethodCallSegment(
@@ -2907,44 +2745,8 @@ final class MethodCallChainPrinter {
         return Optional.empty();
     }
 
-    private String methodCallSegmentArgumentsWidthText(NodeList<Expression> arguments) {
-        return arguments.stream()
-                .map(argument -> rawSource.normalizeWhitespace(rawSource.rawWithoutOwnComment(argument)))
-                .reduce((left, right) -> left + ", " + right)
-                .orElse("");
-    }
-
-    /**
-     * Estimates a chain segment's width when it is kept beside a preceding token on the same line.
-     *
-     * <p>C10 (#217): deliberately left source-relative. The reconstruction — the name token's source column minus its
-     * offset within the segment — recovers where the whole segment starts <em>beside its preceding token</em> (see
-     * {@link #finalSegmentRenderedWidth}), a source-shaped position that depends on what shares the line, not on the
-     * segment's own block/type nesting depth. {@link LayoutWidth#nodeIndentWidth} measures only that nesting depth and
-     * so cannot express the beside-a-token column, which is why the one-per-line caller already routes around this via
-     * {@code segmentOnOwnLine}. The source column remains the faithful estimate for the beside-a-token case; a correct
-     * rendered-column migration would need the same leading-offset machinery the root gates await (#190).
-     */
-    private int methodCallSegmentWidth(
-            MethodCallExpr expression,
-            String segment,
-            ToIntFunction<String> fallbackWidth
-    ) {
-        return expression.getName()
-                .getRange()
-                .map(range -> {
-                    int nameOffset = segment.indexOf(expression.getNameAsString());
-                    if (nameOffset < 0) {
-                        return fallbackWidth.applyAsInt(segment);
-                    }
-                    int leadingColumns = Math.max(0, range.begin.column - 1 - nameOffset);
-                    return leadingColumns + segment.length();
-                })
-                .orElseGet(() -> fallbackWidth.applyAsInt(segment));
-    }
-
     private Doc methodCallSegmentPrefix(MethodCallExpr expression) {
-        List<JavaCommentTrivia> leadingComments = leadingLineCommentsBeforeSegment(expression);
+        List<JavaCommentTrivia> leadingComments = chainComments.leadingLineCommentsBeforeSegment(expression);
         Doc leading = Doc.concat(
             leadingComments
                     .stream()
@@ -2958,7 +2760,7 @@ final class MethodCallChainPrinter {
         // expanded shape) so a single source-position query owns the slot for every whitespace shape, then fall through
         // to the selector's own comment (the canonical/collapsed shape). Both are claimed under the same anchor by
         // identity, so whichever shape applies, the comment renders exactly once.
-        Doc interspersedOrphans = interspersedOrphanCommentsBeforeSelector(expression);
+        Doc interspersedOrphans = chainComments.interspersedOrphanCommentsBeforeSelector(expression);
         // JavaParser attaches a line comment that sits between the scope and the selector to the selector name as its own
         // comment, so the same comment can also be offered by a neighboring slot: the leading-line slot above (same prefix
         // call) or the previous segment's between-segments trailing slot. The name comment is offered here under its own
@@ -2989,71 +2791,6 @@ final class MethodCallChainPrinter {
                 .map(ignored -> Doc.concat(nameComment, Doc.text(" ")))
                 .orElseGet(() -> Doc.concat(nameComment, Doc.HARD_LINE));
         return Doc.concat(leading, interspersedOrphans, namePrefix);
-    }
-
-    /**
-     * Recovers a block or Javadoc comment that sits between this segment's scope and its selector but that JavaParser
-     * parked as an orphan of the call rather than as the selector's own trivia.
-     *
-     * <p>This is the orphan-bucket sibling of the selector's own-comment slot in {@link #methodCallSegmentPrefix}. At the
-     * canonical and collapsed shapes JavaParser attaches a {@code .define(A) /** doc *}{@code / .define(B)} comment to the
-     * {@code B} selector, so the own-comment slot renders it; an expanded whitespace shape re-buckets the identical
-     * comment onto the enclosing call's orphan pool even though the AST is otherwise unchanged, so the own slot does not
-     * hold it and it would be dropped without this recovery. Selecting by source position from the orphan pool — strictly after the scope ends and
-     * strictly before the selector begins — keeps the comment owned by this between-links slot whatever the layout.
-     *
-     * <p>The orphan pool is read directly from the node ({@link Node#getOrphanComments()}) rather than through the
-     * comment-placement map, because the assignment/initializer renderers hand the chain printer a {@link Node#clone()
-     * clone} of the chain expression (see {@code ExpressionRuleEnvelope.expressionWithoutOwnComment}). A clone carries its
-     * orphan comments forward, but the identity-keyed placement map only knows the original parse node, so the map answers
-     * empty for the clone; the node's own orphan list is the one association that survives the clone. Line comments are
-     * deliberately excluded: they are already recovered by {@link #leadingLineCommentsBeforeSegment} and the
-     * between-segments trailing slot. Each comment is offered under {@link OwnerSlot#ORPHAN} and claimed once, so the
-     * canonical/collapsed shape — where the comment is the selector's own trivia and not in the orphan pool — is left
-     * byte-identical.
-     */
-    private Doc interspersedOrphanCommentsBeforeSelector(MethodCallExpr expression) {
-        Optional<Expression> scope = expression.getScope();
-        if (scope.isEmpty() || expression.getOrphanComments().isEmpty()) {
-            return Doc.EMPTY;
-        }
-        // Empty-argument selectors ({@code .util()}, {@code .build()}) are recovered here too. They route their inside-
-        // the-parens orphans through {@code MethodCallPrinter.emptyMethodCallArguments}, but that owner now excludes the
-        // between-links orphan (the one this slot selects: strictly after the scope ends and before the selector begins),
-        // so the two slots partition the call's orphan pool by source position and each orphan is claimed exactly once.
-        // Without this recovery the between-links comment before an empty-argument selector is dropped whenever the call
-        // reaches the printer as a clone (the assignment/initializer value path), because the clone's orphans survive on
-        // the node but not in the placement map the empty-argument owner reads.
-        Expression scoped = scope.orElseThrow();
-        return Doc.concat(
-            expression.getOrphanComments()
-                    .stream()
-                    .map(JavaCommentTrivia::from)
-                    .filter(trivia -> trivia.isBlock() || trivia.isJavadoc())
-                    .filter(trivia -> trivia.liesBetween(scoped, expression.getName()))
-                    .sorted((left, right) ->
-                        CommentIndex.sourceOrderComparator().compare(left.comment(), right.comment()))
-                    .map(trivia -> comments.comment(trivia, expression, OwnerSlot.ORPHAN))
-                    .filter(comment -> comment != Doc.EMPTY)
-                    .map(comment -> Doc.concat(comment, Doc.HARD_LINE))
-                    .toList()
-        );
-    }
-
-    private List<JavaCommentTrivia> leadingLineCommentsBeforeSegment(MethodCallExpr expression) {
-        Optional<Expression> scope = expression.getScope();
-        if (scope.isEmpty()) {
-            return List.of();
-        }
-        int scopeEndLine = CommentIndex.endLine(scope.orElseThrow(), Integer.MIN_VALUE);
-        int nameBeginLine = CommentIndex.beginLine(expression.getName(), Integer.MAX_VALUE);
-        return commentPlacement.containedComments(expression)
-                .stream()
-                .filter(JavaCommentTrivia::isLine)
-                .filter(comment -> comment.beginLine(Integer.MIN_VALUE) > scopeEndLine)
-                .filter(comment -> comment.beginLine(Integer.MAX_VALUE) < nameBeginLine)
-                .sorted((left, right) -> CommentIndex.sourceOrderComparator().compare(left.comment(), right.comment()))
-                .toList();
     }
 
     private List<Doc> methodCallChainSegments(List<MethodCallExpr> calls, MethodCallChainTail finalSegmentSuffix) {
@@ -3112,8 +2849,8 @@ final class MethodCallChainPrinter {
             segmentOnOwnLine
         );
         Doc trailingComment = nextCall
-                .map(next -> trailingLineCommentBeforeNextSegment(expression, Optional.of(next)))
-                .orElseGet(() -> finalTrailingLineComment(expression));
+                .map(next -> chainComments.trailingLineCommentBeforeNextSegment(expression, Optional.of(next)))
+                .orElseGet(() -> chainComments.finalTrailingLineComment(expression));
         if (trailingComment == Doc.EMPTY) {
             return segment;
         }
@@ -3122,120 +2859,6 @@ final class MethodCallChainPrinter {
 
     private Doc appendFinalSegmentSuffix(Doc doc, MethodCallChainTail finalSegmentSuffix) {
         return finalSegmentSuffix.appendTo(doc);
-    }
-
-    private Doc trailingLineCommentBeforeNextSegment(Node expression, Optional<MethodCallExpr> nextCall) {
-        if (nextCall.isEmpty()) {
-            return Doc.EMPTY;
-        }
-        MethodCallExpr next = nextCall.orElseThrow();
-        // A comment that sits on the same physical line as this segment's close can also be the same-line final-trailing
-        // comment of an inner chain nested in this segment's lambda argument (the collapsed {@code .orElseThrow(...)) //
-        // note .orElseGet(...)} shape, where the inner chain's last call and this outer link share a line). That inner
-        // render runs first and already claimed it, so skip already-printed comments here to keep a single claim; output is
-        // unchanged because a re-offer of a printed comment only ever rendered empty.
-        List<Doc> sourceComments = trailingLineCommentsBeforeNextSegment(expression, next)
-                .stream()
-                .filter(trivia -> !comments.isPrinted(trivia))
-                .map(comments::comment)
-                .filter(comment -> comment != Doc.EMPTY)
-                .toList();
-        return sourceComments.isEmpty() ? Doc.EMPTY : Doc.join(Doc.text(" "), sourceComments);
-    }
-
-    private Doc rootTrailingLineCommentBeforeFirstSegment(Expression root, List<MethodCallExpr> calls) {
-        if (calls.isEmpty()) {
-            return Doc.EMPTY;
-        }
-        return trailingLineCommentBeforeNextSegment(root, Optional.of(calls.getFirst()));
-    }
-
-    /**
-     * Reports whether the chain root carries a trailing / root-to-first-selector-gap line comment that the imperative
-     * chain renderer would re-emit through {@link #rootTrailingLineCommentBeforeFirstSegment}, for example
-     * {@code new Zone(api, auth, "name") // restart note}⏎{@code .withProperty(...)}.
-     *
-     * <p><strong>Why the fan's other comment gates miss it.</strong> JavaParser attaches such a comment as the root
-     * expression's <em>own</em> comment (the {@code ObjectCreationExpr} / root {@code MethodCallExpr} it trails), not as a
-     * child or contained comment. {@link MethodCallChainAnalysis#rootHasComments()} is built from
-     * {@link SourceShapePolicy#hasContainedComments(Node)} — which lists a node's orphans and its children's comments but
-     * <em>not</em> the node's own comment — plus {@code rootToFirstSelectorGapHasBlockComment}, which matches only block
-     * {@code /* *}{@code /} markers. The per-selector comment scans key on the selectors' own trivia, and the
-     * trailing-line-comment scan only inspects the gaps <em>between</em> and <em>after</em> selectors. So a line comment
-     * owned by the root in the gap before the first selector is invisible to every existing comment gate, the chain reads
-     * comment-free, and the source-neutral fan ({@code chainFanOut}) re-renders the root through ordinary expression
-     * dispatch — which does not carry the root's own comment — silently dropping it.
-     *
-     * <p>Detecting it here off the same {@link #trailingLineCommentsBeforeNextSegment} candidate set the renderer consumes
-     * keeps the withhold verdict and the render in lockstep: any comment this predicate sees is one the imperative path
-     * will actually place, so folding it into {@code hasComments} routes the chain off the fan and onto that
-     * comment-preserving path without over- or under-withholding. This reads the candidate set only; it does not claim or
-     * mark any comment printed, so the real render still owns placement.
-     */
-    private boolean rootHasTrailingLineCommentBeforeFirstSegment(Expression root, List<MethodCallExpr> calls) {
-        if (calls.isEmpty()) {
-            return false;
-        }
-        return !trailingLineCommentsBeforeNextSegment(root, calls.getFirst()).isEmpty();
-    }
-
-    private List<JavaCommentTrivia> trailingLineCommentsBeforeNextSegment(Node previous, MethodCallExpr next) {
-        List<JavaCommentTrivia> candidates = new ArrayList<>();
-        commentPlacement.trailingLineComment(previous).ifPresent(candidates::add);
-        candidates.addAll(commentPlacement.containedComments(previous));
-        candidates.addAll(lineCommentCandidatesBeforeNextSegment(next));
-        // The three candidate sources overlap, so the same comment node can be offered more than once. Dedupe on
-        // JavaParser comment identity rather than the record's value equality: structurally equal but distinct comment
-        // nodes (e.g. two chain links carrying the same `// text`, or several empty `//` continuation markers) must each
-        // survive, while a genuine reference-equal repeat from the overlapping sources is still collapsed.
-        Set<Comment> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-        return candidates
-                .stream()
-                .filter(comment -> seen.add(comment.comment()))
-                .filter(comment -> comment.startsAfterNodeOnSameLine(previous))
-                .filter(comment -> comment.startsBeforeBeginLine(next.getName()))
-                .toList();
-    }
-
-    private List<JavaCommentTrivia> lineCommentCandidatesBeforeNextSegment(MethodCallExpr next) {
-        if (!next.getArguments().isEmpty()) {
-            return commentPlacement.lineCommentsBeforeFirst(next, next.getArguments().get(0));
-        }
-        return commentPlacement.containedComments(next)
-                .stream()
-                .filter(JavaCommentTrivia::isLine)
-                .toList();
-    }
-
-    /**
-     * Keeps a final segment's same-line comment after the rendered call, even when the call arguments break.
-     */
-    private Doc finalTrailingLineComment(MethodCallExpr expression) {
-        // The same final trailing line comment can be reached from neighboring chain renders (e.g. an outer segment's
-        // argument render and the chain's final-segment slot). Skip comments already printed by an earlier traversal path
-        // so this slot does not duplicate-claim them; output is unchanged because the first claimant placed the comment
-        // and a re-offer only ever rendered empty.
-        List<Doc> sourceComments = finalTrailingLineComments(expression)
-                .stream()
-                .filter(trivia -> !comments.isPrinted(trivia))
-                .map(comments::comment)
-                .filter(comment -> comment != Doc.EMPTY)
-                .toList();
-        return sourceComments.isEmpty() ? Doc.EMPTY : Doc.join(Doc.text(" "), sourceComments);
-    }
-
-    private List<JavaCommentTrivia> finalTrailingLineComments(MethodCallExpr expression) {
-        List<JavaCommentTrivia> sourceComments = new ArrayList<>();
-        commentPlacement.trailingLineComment(expression).ifPresent(sourceComments::add);
-        commentPlacement.containedComments(expression)
-                .stream()
-                .filter(JavaCommentTrivia::isLine)
-                .filter(comment -> comment.startsAfterNodeOnSameLine(expression))
-                .filter(
-                    comment -> sourceComments.stream().noneMatch(existing -> existing.comment() == comment.comment())
-                )
-                .forEach(sourceComments::add);
-        return sourceComments;
     }
 
     private Doc fieldAccessMethodCallSegment(FieldAccessExpr fieldAccess, MethodCallExpr methodCall) {

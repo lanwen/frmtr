@@ -68,12 +68,9 @@ final class FieldDeclarationPrinter {
 
     FieldDeclarationPrinter(
             JavaFormatContext context,
-            FormatterOptions options,
-            LayoutWidth layoutWidth,
             Function<NodeWithAnnotations<?>, Doc> declarationAnnotations,
             Function<NodeWithModifiers<?>, String> modifiers,
             Function<NodeWithAnnotations<?>, String> inlineAnnotations,
-            Function<Node, String> compactTypeLike,
             Function<Type, Doc> typeBody,
             Predicate<Type> typeCanBreak,
             Function<Expression, Doc> expression,
@@ -116,12 +113,12 @@ final class FieldDeclarationPrinter {
             BiPredicate<LambdaExpr, String> lambdaParametersShouldBreak,
             Function<LambdaExpr, Doc> lambdaExpression
     ) {
-        this.options = options;
-        this.layoutWidth = layoutWidth;
+        this.options = context.options;
+        this.layoutWidth = context.layoutWidth;
         this.declarationAnnotations = declarationAnnotations;
         this.modifiers = modifiers;
         this.inlineAnnotations = inlineAnnotations;
-        this.compactTypeLike = compactTypeLike;
+        this.compactTypeLike = context.compactSource::compactTypeLike;
         this.typeBody = typeBody;
         this.typeCanBreak = typeCanBreak;
         this.initializers = new VariableInitializerLayout(

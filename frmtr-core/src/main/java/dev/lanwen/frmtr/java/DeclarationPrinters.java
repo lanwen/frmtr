@@ -125,12 +125,9 @@ final class DeclarationPrinters {
         );
         this.fields = new FieldDeclarationPrinter(
             context,
-            options,
-            context.layoutWidth,
             declarationPrefixes::declarationAnnotations,
             declarationPrefixes::modifiers,
             declarationPrefixes::inlineAnnotations,
-            compactSource::compactTypeLike,
             types::typeBody,
             types::typeCanBreak,
             expressions::expression,

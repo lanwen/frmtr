@@ -164,12 +164,15 @@ final class AssignmentExpressionPrinter {
                 rendering.render(expression.getTarget()),
                 Doc.text(" " + expression.getOperator().asString() + " "),
                 expressionWithTail.render(methodCall, ExpressionTail.SEMICOLON, blockStatementWidth),
-                // When the assigned value is a method chain, the chain render above already claims and emits its own
-                // final trailing line comment. Re-offering that same comment here only ever rendered empty, so skip it
-                // when already printed to avoid a duplicate claim; output is unchanged because the chain render placed it.
+                // The assigned value's own final trailing line comment is owned and emitted inside the method-chain
+                // render above. Offering it here under this assignment's own INTERLEAVED anchor lets comment ownership
+                // disambiguate: when the chain render owns it, this slot is not the recorded owner and comment(...)
+                // returns Doc.EMPTY (caught by the != Doc.EMPTY filter below); a comment the chain render left untouched
+                // (the comment-free compact path) is owned here and placed by this slot. Anchoring to the distinct
+                // (expression, INTERLEAVED) key rather than the comment's own node is what makes the ownership gate
+                // sufficient, so no build-order isPrinted skip is needed.
                 statementCommentLayout.assignmentValueTailLineComment(expression, methodCall)
-                        .filter(trivia -> !comments.isPrinted(trivia))
-                        .map(comments::comment)
+                        .map(comment -> comments.comment(comment, expression, OwnerSlot.INTERLEAVED))
                         .filter(comment -> comment != Doc.EMPTY)
                         .map(comment -> Doc.concat(Doc.text(" "), comment))
                         .orElse(Doc.EMPTY)

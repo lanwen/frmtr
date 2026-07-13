@@ -688,13 +688,23 @@ final class CommentTracker {
     }
 
     /**
-     * Fails in debug mode when JavaParser exposed a comment that was neither printed nor deliberately raw-preserved.
+     * Fails in debug mode when JavaParser exposed a comment that was neither owned by the render pass nor deliberately
+     * raw-preserved.
      *
      * <p>This is a development-only finalization check for one compilation-unit print. Normal formatter runs leave the
      * legacy best-effort behavior unchanged because {@link FormatterGuardrails#enabled()} controls whether any assertion
      * is evaluated.
+     *
+     * <p>Accounting is keyed on {@link #ownershipAccountedComments()} (the dry-run's recorded owners plus the
+     * raw-rendered set) rather than the build-time {@link #printed} set. The two sets are equivalent while every render
+     * family still mutates {@link #printed} through {@link #claim} — a comment that gets a recorded owner in the dry-run
+     * is exactly the one its owner claims into {@link #printed} in the real pass — so this switch is output- and
+     * guardrail-neutral today. It is the prerequisite for the claim-neutral cutover: once a render family moves onto the
+     * pure {@link #ownedComment} rail it no longer touches {@link #printed}, and only ownership-based accounting still
+     * sees those comments as rendered. The authoritative data-loss witness stays the output-level
+     * {@code CommentPresenceDiagnosticTest} lexer multiset, which is independent of this accounting basis.
      */
     void assertAllCommentsAccounted(CompilationUnit unit) {
-        FormatterGuardrails.assertAllCommentsAccounted(unit, printed, rawRendered);
+        FormatterGuardrails.assertAllCommentsAccounted(unit, ownershipAccountedComments(), rawRendered);
     }
 }

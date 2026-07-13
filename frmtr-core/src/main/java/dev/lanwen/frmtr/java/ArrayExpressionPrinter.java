@@ -389,16 +389,22 @@ final class ArrayExpressionPrinter {
             List<JavaCommentTrivia> trailingLineComments
     ) {
         Doc valueDoc = arrayInitializerValueExpression(value, next, forceNestedArrayRows, suffix);
+        Node container = value.getParentNode().orElseThrow();
         List<Doc> trailingCommentLines = new ArrayList<>();
-        for (JavaCommentTrivia comment : trailingLineComments) {
-            // The element value's own trailing line comment is owned and emitted inside the value render above (a
-            // method-call chain's final trailing comment, say). Offering it here under this element's own INTERLEAVED
-            // anchor lets comment ownership disambiguate: when the value render owns it, this slot is not the recorded
-            // owner and renders empty (caught by the Doc.EMPTY check below); a comment the value render left untouched
-            // (the comment-free compact path) is owned here and placed by this element slot. Anchoring to the distinct
-            // (value, INTERLEAVED) key rather than the comment's own node is what makes the ownership gate sufficient, so
-            // no build-order isPrinted skip is needed.
-            Doc commentDoc = comments.comment(comment, value, OwnerSlot.INTERLEAVED);
+        for (JavaCommentTrivia comment : dedupByCommentIdentity(trailingLineComments)) {
+            // A gap comment sits between this array's elements, so it is offered under the array initializer's own
+            // INTERLEAVED anchor — the slot that names "a comment interleaved between an anchor's children" (here the
+            // elements). Anchoring to the container rather than to the element value lets comment ownership disambiguate
+            // the two competing offers without a build-order isPrinted skip: when the element value is a method-call chain
+            // rendered above, its own trailing line comment is claimed inside that render under the (finalCall,
+            // INTERLEAVED) slot; that is a different key from (container, INTERLEAVED), so ownsHere blocks this slot and
+            // comment(...) returns Doc.EMPTY. A comment the value render left untouched (the comment-free compact path)
+            // is owned by this container slot and placed here. The element value itself is deliberately NOT the anchor:
+            // for a single-expression element the value is frequently the same node the chain printer's
+            // finalTrailingLineComment anchors on, so (value, INTERLEAVED) would collide with that owner and double-render
+            // through the idempotent-by-owner re-claim branch. Gaps are de-duplicated by comment identity so the same
+            // comment is never offered twice under this shared container key.
+            Doc commentDoc = comments.comment(comment, container, OwnerSlot.INTERLEAVED);
             if (commentDoc == Doc.EMPTY) {
                 continue;
             }
@@ -436,6 +442,28 @@ final class ArrayExpressionPrinter {
 
     private boolean valueContainsComment(Expression value, JavaCommentTrivia comment) {
         return value.getAllContainedComments().stream().anyMatch(contained -> contained == comment.comment());
+    }
+
+    /**
+     * Drops repeats of the same JavaParser comment within one element gap, keeping the first occurrence in source order.
+     *
+     * <p>The line-comment gap queries read {@link JavaCommentPlacementPolicy#containedComments(Node)}, which can list the
+     * same comment more than once when a whitespace perturbation lets it be reached through two containment paths. Because
+     * a gap is now offered under one shared {@code (container, INTERLEAVED)} owner, a duplicate would render twice through
+     * the idempotent-by-owner re-claim branch instead of losing a claim race; de-duplicating by comment identity before
+     * any offer keeps each comment offered exactly once. Distinct comment nodes carrying the same text are compared by
+     * identity and both kept.
+     */
+    private static List<JavaCommentTrivia> dedupByCommentIdentity(List<JavaCommentTrivia> gap) {
+        java.util.Set<com.github.javaparser.ast.comments.Comment> seen =
+            java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        List<JavaCommentTrivia> deduped = new ArrayList<>();
+        for (JavaCommentTrivia trivia : gap) {
+            if (seen.add(trivia.comment())) {
+                deduped.add(trivia);
+            }
+        }
+        return deduped;
     }
 
     /**

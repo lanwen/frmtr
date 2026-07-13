@@ -225,6 +225,11 @@ final class VariableInitializerLayout {
 
     private final Function<LambdaExpr, Doc> lambdaExpression;
 
+    // Extracted arm-emitter cluster: the object-creation broken-shape sub-ladder (type-argument break, constructor-argument
+    // break, commented-creation opener-hug, per-argument operand break) reached through a single entry once a flat
+    // {@code new Type(...)} initializer overflows. See {@link InitializerObjectCreationLayout}.
+    private final InitializerObjectCreationLayout objectCreationLayout;
+
     VariableInitializerLayout(
             JavaFormatContext context,
             Function<Expression, Doc> expression,
@@ -317,6 +322,20 @@ final class VariableInitializerLayout {
         this.lambdaParameters = lambdaParameters;
         this.lambdaParametersShouldBreak = lambdaParametersShouldBreak;
         this.lambdaExpression = lambdaExpression;
+        this.objectCreationLayout = new InitializerObjectCreationLayout(
+            this.options,
+            this.layoutWidth,
+            this.compact,
+            this.expression,
+            this.binaryFansChainOperand,
+            this.binaryExpressionHasLineComments,
+            this.binaryExpressionLinesWithComments,
+            this.binaryExpressionLines,
+            this.objectCreationPrefix,
+            this.typeNameWithoutArguments,
+            this.brokenClassOrInterfaceType,
+            this::openerLineWidth
+        );
     }
 
     Doc variableWithStatementTerminator(VariableDeclarator variable, String declarationPrefix) {
@@ -798,7 +817,7 @@ final class VariableInitializerLayout {
                 }
             }
             if (initializer instanceof ObjectCreationExpr objectCreationExpr) {
-                Optional<Doc> objectCreation = variableWithBrokenObjectCreation(
+                Optional<Doc> objectCreation = objectCreationLayout.variableWithBrokenObjectCreation(
                     variable,
                     name,
                     declarationPrefix + variable.getNameAsString(),
@@ -1723,171 +1742,6 @@ final class VariableInitializerLayout {
             && objectCreation.getTypeArguments().isEmpty()
             && objectCreation.getArguments().isEmpty()
             && objectCreation.getAnonymousClassBody().isEmpty();
-    }
-
-    /**
-     * Branches object creation between broken type arguments and broken constructor arguments, leaving anonymous-class
-     * and commented creations to the shared object-creation formatter.
-     */
-    private Optional<Doc> variableWithBrokenObjectCreation(
-            VariableDeclarator variable,
-            String name,
-            String flatName,
-            ObjectCreationExpr objectCreation
-    ) {
-        if (objectCreation.getAnonymousClassBody().isPresent()) {
-            return Optional.empty();
-        }
-        if (!objectCreation.getAllContainedComments().isEmpty()) {
-            return variableWithCommentedObjectCreation(variable, name, flatName, objectCreation);
-        }
-        Optional<Doc> typeArguments = variableWithBrokenObjectCreationTypeArguments(
-            variable,
-            name,
-            flatName,
-            objectCreation
-        );
-        if (typeArguments.isPresent()) {
-            return typeArguments;
-        }
-        return variableWithBrokenObjectCreationArguments(variable, name, flatName, objectCreation);
-    }
-
-    /**
-     * Keeps {@code name = new Type(} together for commented constructor calls when that first line still fits, while
-     * leaving the nested comment placement to the normal object-creation renderer.
-     */
-    private Optional<Doc> variableWithCommentedObjectCreation(
-            VariableDeclarator variable,
-            String name,
-            String flatName,
-            ObjectCreationExpr objectCreation
-    ) {
-        if (
-            objectCreation.getArguments().isEmpty()
-            || objectCreation.getComment().filter(BlockComment.class::isInstance).isPresent()
-            || objectCreation.getType().getComment().filter(BlockComment.class::isInstance).isPresent()
-        ) {
-            return Optional.empty();
-        }
-        String prefix = objectCreationPrefix.apply(objectCreation);
-        if (openerLineWidth(variable, flatName + " = " + prefix + "(") > options.lineWidth()) {
-            return Optional.empty();
-        }
-        return Optional.of(Doc.concat(Doc.text(name + " = "), expression.apply(objectCreation)));
-    }
-
-    /**
-     * Breaks constructor arguments when the assignment and constructor prefix still fit, so only the argument list moves
-     * to hard lines.
-     */
-    private Optional<Doc> variableWithBrokenObjectCreationArguments(
-            VariableDeclarator variable,
-            String name,
-            String flatName,
-            ObjectCreationExpr objectCreation
-    ) {
-        if (objectCreation.getArguments().isEmpty()) {
-            return Optional.empty();
-        }
-        String prefix = objectCreationPrefix.apply(objectCreation);
-        if (openerLineWidth(variable, flatName + " = " + prefix + "(") > options.lineWidth()) {
-            return Optional.empty();
-        }
-        if (smallConstructorCanStayFlat(variable, flatName, objectCreation)) {
-            return Optional.of(Doc.concat(Doc.text(name + " = "), expression.apply(objectCreation)));
-        }
-        return Optional.of(
-            Doc.concat(
-                Doc.text(name + " = " + prefix + "("),
-                Doc.indent(
-                    Doc.concat(
-                        Doc.HARD_LINE,
-                        Doc.join(
-                            Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                            objectCreation.getArguments()
-                                    .stream()
-                                    .map(this::brokenObjectCreationArgument)
-                                    .toList()
-                        )
-                    )
-                ),
-                Doc.HARD_LINE,
-                Doc.text(")")
-            )
-        );
-    }
-
-    private Doc brokenObjectCreationArgument(Expression argument) {
-        // Canonical-fan cutover seam (End-state A), the binary/logical/string-concat OPERAND carrier at the broken
-        // object-creation argument position (the "G bucket"). When this constructor argument is a binary/ternary whose
-        // dispatched flat rendering ({@code expression.apply}) already fans a fluent chain operand by the End-state A rule
-        // ({@code new StatusData(summary.percentiles().get(0).value() * step + min, …)}), commit that flat shape and do not
-        // take the operand-per-line break below. The flat shape renders the chain fanned with the operator kept on its line
-        // and is a pure function of the AST (the chain fans by the width-independent link-count rule on every pass), so
-        // committing it is the fixpoint; the width-gated {@code binaryExpressionLines} break below would instead lay the
-        // operator on its own line. Chains the rule does not fan and comment / lambda chains are withheld by
-        // {@code binaryFansChainOperand}, so those arguments take the width-driven break below.
-        if (argument instanceof BinaryExpr binaryExpr && binaryFansChainOperand.test(binaryExpr)) {
-            return expression.apply(argument);
-        }
-        if (
-            argument instanceof BinaryExpr binaryExpr
-            && layoutWidth.continuationStatement(compact.apply(binaryExpr)) > options.lineWidth()
-        ) {
-            if (binaryExpressionHasLineComments.test(binaryExpr)) {
-                return binaryExpressionLinesWithComments.apply(binaryExpr);
-            }
-            return binaryExpressionLines.apply(binaryExpr, true);
-        }
-        return expression.apply(argument);
-    }
-
-    private boolean smallConstructorCanStayFlat(
-            VariableDeclarator variable,
-            String flatName,
-            ObjectCreationExpr objectCreation
-    ) {
-        return objectCreation.getArguments().size() <= 3
-            && openerLineWidth(variable, flatName + " = " + compact.apply(objectCreation) + ";")
-                <= options.lineWidth();
-    }
-
-    /**
-     * Breaks constructor type arguments for {@code new SomeVeryLongType<...>()} only when there are no constructor
-     * arguments or scopes that need a different object-creation layout.
-     */
-    private Optional<Doc> variableWithBrokenObjectCreationTypeArguments(
-            VariableDeclarator variable,
-            String name,
-            String flatName,
-            ObjectCreationExpr objectCreation
-    ) {
-        if (
-            !objectCreation.getArguments().isEmpty()
-            || objectCreation.getScope().isPresent()
-            || objectCreation.getTypeArguments().isPresent()
-            || !objectCreation.getType().isClassOrInterfaceType()
-        ) {
-            return Optional.empty();
-        }
-        ClassOrInterfaceType type = objectCreation.getType().asClassOrInterfaceType();
-        if (
-            !hasNonEmptyTypeArguments(type)
-            || openerLineWidth(
-                variable,
-                flatName + " = new " + typeNameWithoutArguments.apply(type) + "<"
-            ) > options.lineWidth()
-        ) {
-            return Optional.empty();
-        }
-        return Optional.of(
-            Doc.concat(
-                Doc.text(name + " = new "),
-                brokenClassOrInterfaceType.apply(type),
-                Doc.text("()")
-            )
-        );
     }
 
     /**
@@ -2929,10 +2783,6 @@ final class VariableInitializerLayout {
             || (type instanceof ClassOrInterfaceType classOrInterfaceType
                 && classOrInterfaceType.getTypeArguments().isPresent())
         );
-    }
-
-    private boolean hasNonEmptyTypeArguments(ClassOrInterfaceType type) {
-        return type.getTypeArguments().map(arguments -> !arguments.isEmpty()).orElse(false);
     }
 
     /**

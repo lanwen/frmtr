@@ -49,10 +49,6 @@ final class LambdaExpressionPrinter {
 
     private final SourceText sourceText;
 
-    private final ObjectCreationLayoutPolicy objectCreationLayoutPolicy;
-
-    private final ArgumentHeaviness argumentHeaviness = new ArgumentHeaviness();
-
     private final FormatterOptions options;
 
     private final LayoutWidth layoutWidth;
@@ -66,8 +62,6 @@ final class LambdaExpressionPrinter {
     private final JavaFormatRule<Statement> statementRenderer;
 
     private final JavaFormatRule<BlockStmt> blockRenderer;
-
-    private final JavaFormatRule<BlockStmt> methodChainLambdaBlockRenderer;
 
     private final BiFunction<Expression, Boolean, Doc> binaryExpressionNestedLinesRenderer;
 
@@ -92,6 +86,8 @@ final class LambdaExpressionPrinter {
     private final ExpressionLambdaArgumentLayout expressionLambdaArguments;
 
     private final LambdaParameterHeaderLayout lambdaParameterHeaders;
+
+    private final BlockLambdaArgumentLayout blockLambdaArguments;
 
     LambdaExpressionPrinter(
             CommentTracker comments,
@@ -126,7 +122,6 @@ final class LambdaExpressionPrinter {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
         this.sourceText = sourceText;
-        this.objectCreationLayoutPolicy = objectCreationLayoutPolicy;
         this.options = options;
         this.layoutWidth = layoutWidth;
         this.expressionRenderer = expressionRenderer;
@@ -134,7 +129,6 @@ final class LambdaExpressionPrinter {
         this.brokenObjectCreationRenderer = brokenObjectCreationRenderer;
         this.statementRenderer = statementRenderer;
         this.blockRenderer = blockRenderer;
-        this.methodChainLambdaBlockRenderer = methodChainLambdaBlockRenderer;
         this.binaryExpressionNestedLinesRenderer = binaryExpressionNestedLinesRenderer;
         this.compact = compact;
         this.compactWithoutOwnComment = compactWithoutOwnComment;
@@ -172,6 +166,19 @@ final class LambdaExpressionPrinter {
             this::lambdaParametersShouldBreak,
             blockStatementWidth,
             layoutWidth
+        );
+        this.blockLambdaArguments = new BlockLambdaArgumentLayout(
+            lambdaParameterHeaders,
+            options,
+            objectCreationLayoutPolicy,
+            blockRenderer,
+            methodChainLambdaBlockRenderer,
+            this::lambdaExpression,
+            this::hugWouldDropComment,
+            compact,
+            compactJoin,
+            currentIndentedWidth,
+            blockStatementWidth
         );
     }
 
@@ -662,137 +669,36 @@ final class LambdaExpressionPrinter {
     }
 
     /**
-     * Hugs a single block-body lambda argument when it is at the start or end of the argument list.
+     * Hugs a single block-body lambda argument onto the call opener when it sits at the start or end of the argument list.
      *
-     * <p>Those edge positions let the call keep the ordinary argument prefix or suffix without hiding another argument
-     * after the lambda body. A block lambda in the middle would make the remaining arguments read like part of the
-     * lambda block, so the normal call formatter handles that case.
+     * <p>Delegates to {@link BlockLambdaArgumentLayout}; see that helper for the eligibility and rendering rules.
      */
     Optional<Doc> huggableBlockLambdaArguments(String prefix, NodeList<Expression> arguments) {
-        return huggableBlockLambdaArguments(
-            prefix,
-            arguments,
-            blockStatementWidth,
-            this::lambdaExpression,
-            blockRenderer
-        );
+        return blockLambdaArguments.huggableBlockLambdaArguments(prefix, arguments);
     }
 
     Optional<Doc> huggableMethodChainBlockLambdaArguments(String prefix, NodeList<Expression> arguments) {
-        return huggableBlockLambdaArguments(
-            prefix,
-            arguments,
-            blockStatementWidth,
-            this::methodChainLambdaExpression,
-            methodChainLambdaBlockRenderer
-        );
+        return blockLambdaArguments.huggableMethodChainBlockLambdaArguments(prefix, arguments);
     }
 
     /**
      * Hugs a block-lambda argument after the caller supplies the width check for the first rendered line.
      *
-     * <p>Statement, method-call, and object-creation contexts use normal block-statement width. Field declarations include
-     * the declaration prefix before the call, so they provide their own width probe while sharing the same eligibility and
-     * rendering rules.
+     * <p>Delegates to {@link BlockLambdaArgumentLayout}.
      */
     Optional<Doc> huggableBlockLambdaArguments(
             String prefix,
             NodeList<Expression> arguments,
             ToIntFunction<String> firstLineWidth
     ) {
-        return huggableBlockLambdaArguments(prefix, arguments, firstLineWidth, this::lambdaExpression, blockRenderer);
-    }
-
-    private Optional<Doc> huggableBlockLambdaArguments(
-            String prefix,
-            NodeList<Expression> arguments,
-            ToIntFunction<String> firstLineWidth,
-            Function<LambdaExpr, Doc> lambdaRenderer,
-            JavaFormatRule<BlockStmt> lambdaBlockRenderer
-    ) {
-        Optional<HuggableBlockLambdaArgument> huggable = huggableBlockLambdaArgument(prefix, arguments);
-        if (huggable.isEmpty()) {
-            return Optional.empty();
-        }
-        HuggableBlockLambdaArgument argument = huggable.orElseThrow();
-        Optional<Doc> sourceMultilineParameters =
-            SourceMultilineLambdaCallLayout.blockLambdaArgumentWithSourceMultilineParameters(
-                prefix,
-                arguments,
-                argument.lambdaIndex(),
-                argument.lambdaExpr(),
-                argument.leadingArguments(),
-                compactJoin,
-                lambdaParameterHeaders,
-                lambdaBlockRenderer
-            );
-        if (sourceMultilineParameters.isPresent()) {
-            return sourceMultilineParameters;
-        }
-        if (firstLineWidth.applyAsInt(argument.firstLine()) > options.lineWidth()) {
-            return Optional.empty();
-        }
-        String trailingArguments = compactJoin.apply(arguments.subList(argument.lambdaIndex() + 1, arguments.size()));
-        return Optional.of(
-            Doc.concat(
-                Doc.text(prefix + "(" + (argument.leadingArguments().isEmpty() ? "" : argument.leadingArguments() + ", ")),
-                lambdaRenderer.apply(argument.lambdaExpr()),
-                Doc.text((trailingArguments.isEmpty() ? "" : ", " + trailingArguments) + ")")
-            )
-        );
-    }
-
-    private Doc methodChainLambdaExpression(LambdaExpr expression) {
-        String parameters = lambdaParameters(expression);
-        if (expression.getBody().isBlockStmt()) {
-            return Doc.concat(
-                lambdaParameterHeaders.forHeader(expression, parameters),
-                Doc.text(" -> "),
-                methodChainLambdaBlockRenderer.format(expression.getBody().asBlockStmt(), LayoutContext.root())
-            );
-        }
-        return lambdaExpression(expression);
+        return blockLambdaArguments.huggableBlockLambdaArguments(prefix, arguments, firstLineWidth);
     }
 
     /**
      * Returns the exact first line used by the huggable block-lambda argument layout before width is considered.
      */
     Optional<String> huggableBlockLambdaFirstLine(String prefix, NodeList<Expression> arguments) {
-        return huggableBlockLambdaArgument(prefix, arguments).map(HuggableBlockLambdaArgument::firstLine);
-    }
-
-    /**
-     * Applies the shared block-lambda argument eligibility rules for both rendering and external first-line probing.
-     */
-    private Optional<HuggableBlockLambdaArgument> huggableBlockLambdaArgument(
-            String prefix,
-            NodeList<Expression> arguments
-    ) {
-        int lambdaIndex = SourceMultilineLambdaCallLayout.blockLambdaArgumentIndex(arguments);
-        if (lambdaIndex < 0 || (lambdaIndex > 0 && lambdaIndex < arguments.size() - 1)) {
-            return Optional.empty();
-        }
-        if (SourceMultilineLambdaCallLayout.hasOtherLambdaArgument(arguments, lambdaIndex)) {
-            return Optional.empty();
-        }
-        if (nonLambdaArgumentHasConstructorChainRootNeedingBreak(arguments, lambdaIndex)) {
-            return Optional.empty();
-        }
-        LambdaExpr lambdaExpr = (LambdaExpr) arguments.get(lambdaIndex);
-        if (hugWouldDropComment(lambdaExpr)) {
-            return Optional.empty();
-        }
-        String parameters = lambdaParameters(lambdaExpr);
-        if (lambdaParametersShouldBreak(lambdaExpr, parameters)) {
-            return Optional.empty();
-        }
-        String leadingArguments = compactJoin.apply(arguments.subList(0, lambdaIndex));
-        String firstLine = prefix
-            + "("
-            + (leadingArguments.isEmpty() ? "" : leadingArguments + ", ")
-            + parameters
-            + " -> {";
-        return Optional.of(new HuggableBlockLambdaArgument(lambdaIndex, lambdaExpr, leadingArguments, firstLine));
+        return blockLambdaArguments.huggableBlockLambdaFirstLine(prefix, arguments);
     }
 
     /**
@@ -852,65 +758,6 @@ final class LambdaExpressionPrinter {
                 .isPresent();
         return orphanComment || selectorComment;
     }
-
-    private boolean nonLambdaArgumentHasConstructorChainRootNeedingBreak(
-            NodeList<Expression> arguments,
-            int lambdaIndex
-    ) {
-        for (int index = 0; index < arguments.size(); index++) {
-            if (index != lambdaIndex && expressionHasConstructorChainRootNeedingBreak(arguments.get(index))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean expressionHasConstructorChainRootNeedingBreak(Expression expression) {
-        return expression.findAll(MethodCallExpr.class)
-                .stream()
-                .anyMatch(this::methodCallRootConstructorNeedsBreak);
-    }
-
-    private boolean methodCallRootConstructorNeedsBreak(MethodCallExpr expression) {
-        List<MethodCallExpr> calls = new ArrayList<>();
-        Expression root = methodCallChainRoot(expression, calls);
-        if (calls.isEmpty() || !(root instanceof ObjectCreationExpr objectCreation)) {
-            return false;
-        }
-        // A "heavy" root constructor breaks its argument list even when it fits the width (see ArgumentHeaviness), so a
-        // trailing lambda must not hug it flat onto the opener; suppress the hug so the enclosing call explodes its
-        // arguments and the constructor root breaks on its own line (PR #279 comment #1 cascade).
-        if (argumentHeaviness.isHeavy(objectCreation.getArguments(), true)) {
-            return true;
-        }
-        int compactRootWidth = currentIndentedWidth.applyAsInt(compact.apply(objectCreation));
-        boolean compactRootCanStay = objectCreationLayoutPolicy.canKeepCompactChainRoot(
-            objectCreation,
-            compactRootWidth,
-            options.lineWidth()
-        );
-        return !compactRootCanStay;
-    }
-
-    private Expression methodCallChainRoot(MethodCallExpr expression, List<MethodCallExpr> calls) {
-        if (expression.getScope().orElse(null) instanceof MethodCallExpr methodCallExpr) {
-            Expression root = methodCallChainRoot(methodCallExpr, calls);
-            calls.add(expression);
-            return root;
-        }
-        if (expression.getScope().isEmpty()) {
-            return expression;
-        }
-        calls.add(expression);
-        return expression.getScope().orElseThrow();
-    }
-
-    private record HuggableBlockLambdaArgument(
-        int lambdaIndex,
-        LambdaExpr lambdaExpr,
-        String leadingArguments,
-        String firstLine
-    ) {}
 
     /**
      * Rebuilds a single expression-lambda argument when comments sit around the lambda boundary.

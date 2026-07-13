@@ -236,7 +236,7 @@ final class TryStatementLayout {
         }
         return Doc.concat(
             Doc.text(" ("),
-            tryResourceOpenerCommentsDoc(openerComments),
+            tryResourceOpenerCommentsDoc(statement, openerComments),
             Doc.indent(
                 Doc.concat(
                     Doc.HARD_LINE,
@@ -440,14 +440,18 @@ final class TryStatementLayout {
                 .toList();
     }
 
-    private Doc tryResourceOpenerCommentsDoc(List<JavaCommentTrivia> openerComments) {
+    private Doc tryResourceOpenerCommentsDoc(TryStmt statement, List<JavaCommentTrivia> openerComments) {
         return Doc.concat(
             openerComments.stream()
-                    // A try-resource opener comment can also be reached from a neighboring resource render; skip
-                    // already-printed comments so this slot does not duplicate-claim them. Output is unchanged because the
-                    // first claimant placed the comment and a re-offer only ever rendered empty.
-                    .filter(trivia -> !comments.isPrinted(trivia))
-                    .map(comments::comment)
+                    // A try-resource opener line comment is also offered by the neighboring first-resource render (its
+                    // adjacent-leading / leading slot) under the comment's own anchorless (comment, INTERLEAVED) key.
+                    // Offering it here under the enclosing try statement's own (statement, INTERLEAVED) anchor lets
+                    // comment ownership disambiguate: when the resource render owns it, this slot is not the recorded
+                    // owner and comment(...) returns Doc.EMPTY (caught by the != Doc.EMPTY filter below); an opener
+                    // comment no resource render claimed is owned here and placed by this slot. Anchoring to the distinct
+                    // (statement, INTERLEAVED) key rather than the comment's own node is what makes the ownership gate
+                    // sufficient, so no build-order isPrinted skip is needed.
+                    .map(comment -> comments.comment(comment, statement, OwnerSlot.INTERLEAVED))
                     .filter(doc -> doc != Doc.EMPTY)
                     .map(doc -> Doc.concat(Doc.text(" "), doc))
                     .toList()

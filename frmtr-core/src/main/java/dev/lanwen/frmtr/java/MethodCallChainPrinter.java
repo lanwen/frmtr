@@ -98,6 +98,8 @@ final class MethodCallChainPrinter {
 
     private final ChainFanLayout chainFan;
 
+    private final ChainSegmentPaddingLayout chainSegmentPadding;
+
     MethodCallChainPrinter(
             JavaFormatContext context,
             MethodCallPrinter calls,
@@ -226,6 +228,7 @@ final class MethodCallChainPrinter {
             this::rootLineWidth,
             this::compactSingleLineRoot
         );
+        this.chainSegmentPadding = new ChainSegmentPaddingLayout();
     }
 
     Optional<Doc> methodCallChain(MethodCallExpr expression) {
@@ -1925,103 +1928,12 @@ final class MethodCallChainPrinter {
                     Doc.HARD_LINE,
                     Doc.join(
                         Doc.HARD_LINE,
-                        segments.stream().map(segment -> linePadded(segment, padding)).toList()
+                        segments.stream().map(segment -> chainSegmentPadding.linePadded(segment, padding)).toList()
                     )
                 )
             );
         }
         return chainContinuation(Doc.join(Doc.HARD_LINE, segments));
-    }
-
-    private Doc linePadded(Doc doc, String padding) {
-        if (padding.isEmpty()) {
-            return doc;
-        }
-        return linePadded(doc, padding, true).doc();
-    }
-
-    private PaddedDoc linePadded(Doc doc, String padding, boolean lineStart) {
-        return switch (doc) {
-            case Doc.Text ignored -> new PaddedDoc(lineStart ? Doc.concat(Doc.text(padding), doc) : doc, false);
-            case Doc.Concat concat -> {
-                List<Doc> children = new ArrayList<>();
-                boolean nextLineStart = lineStart;
-                for (Doc child : concat.docs()) {
-                    PaddedDoc padded = linePadded(child, padding, nextLineStart);
-                    children.add(padded.doc());
-                    nextLineStart = padded.lineStart();
-                }
-                yield new PaddedDoc(Doc.concat(children), nextLineStart);
-            }
-            // A fill threads continuation padding through its parts exactly like a concat, preserving the alternating
-            // content/separator structure so its own greedy packing still applies after re-padding.
-            case Doc.Fill fill -> {
-                List<Doc> parts = new ArrayList<>();
-                boolean nextLineStart = lineStart;
-                for (Doc part : fill.parts()) {
-                    PaddedDoc padded = linePadded(part, padding, nextLineStart);
-                    parts.add(padded.doc());
-                    nextLineStart = padded.lineStart();
-                }
-                yield new PaddedDoc(Doc.fill(parts), nextLineStart);
-            }
-            // A conditional group's alternatives are mutually exclusive layouts; only one renders, so each is padded from
-            // the same incoming line-start rather than threaded in sequence. Like IfBreak, the choice is deferred to the
-            // renderer, so the result conservatively reports lineStart=false for the token that follows the group.
-            case Doc.ConditionalGroup conditionalGroup -> {
-                List<Doc> alternatives = new ArrayList<>();
-                for (Doc alternative : conditionalGroup.alternatives()) {
-                    alternatives.add(linePadded(alternative, padding, lineStart).doc());
-                }
-                yield new PaddedDoc(Doc.conditionalGroup(alternatives), false);
-            }
-            // A best-fitting node's alternatives are mutually exclusive layouts too; only the rank-winner renders, so
-            // each is padded from the same incoming line-start rather than threaded in sequence, and the token that
-            // follows conservatively reports lineStart=false because which alternative rendered is a renderer decision.
-            case Doc.BestFitting bestFitting -> {
-                List<Doc> alternatives = new ArrayList<>();
-                for (Doc alternative : bestFitting.alternatives()) {
-                    alternatives.add(linePadded(alternative, padding, lineStart).doc());
-                }
-                yield new PaddedDoc(Doc.bestFitting(alternatives), false);
-            }
-            case Doc.Line ignored -> new PaddedDoc(
-                Doc.concat(Doc.LINE, Doc.ifBreak(Doc.text(padding), Doc.EMPTY)),
-                false
-            );
-            case Doc.SoftLine ignored -> new PaddedDoc(
-                Doc.concat(Doc.SOFT_LINE, Doc.breakOnly(Doc.text(padding))),
-                false
-            );
-            case Doc.HardLine ignored -> new PaddedDoc(Doc.concat(Doc.HARD_LINE, Doc.text(padding)), false);
-            case Doc.Indent indented -> {
-                PaddedDoc padded = linePadded(indented.doc(), padding, lineStart);
-                yield new PaddedDoc(Doc.indent(padded.doc()), padded.lineStart());
-            }
-            case Doc.Group group -> {
-                PaddedDoc padded = linePadded(group.doc(), padding, lineStart);
-                // Preserve any group identity through re-padding so a dependent IfBreak still resolves this group.
-                yield new PaddedDoc(Doc.group(padded.doc(), group.groupId()), padded.lineStart());
-            }
-            case Doc.IfBreak conditional -> new PaddedDoc(
-                Doc.ifBreak(
-                    linePadded(conditional.breakDoc(), padding, lineStart).doc(),
-                    linePadded(conditional.flatDoc(), padding, lineStart).doc(),
-                    conditional.groupId()
-                ),
-                false
-            );
-            case Doc.Label label -> {
-                PaddedDoc padded = linePadded(label.doc(), padding, lineStart);
-                yield new PaddedDoc(Doc.label(label.label(), padded.doc()), padded.lineStart());
-            }
-            // A line suffix renders nothing at its position and flushes at the line break, so it neither consumes the
-            // line-start padding slot nor needs continuation padding inside its deferred content.
-            case Doc.LineSuffix lineSuffix -> new PaddedDoc(lineSuffix, lineStart);
-            // A break-parent marker renders nothing and only influences the enclosing group's fit, so it passes
-            // through untouched and leaves the line-start padding slot for the next visible token.
-            case Doc.BreakParent ignored -> new PaddedDoc(doc, lineStart);
-        };
     }
 
     private Optional<String> compactSingleLineRoot(Expression root) {
@@ -2030,8 +1942,6 @@ final class MethodCallChainPrinter {
         }
         return Optional.of(compactSource.compact(root));
     }
-
-    private record PaddedDoc(Doc doc, boolean lineStart) {}
 
     private Doc softChainContinuation(Doc doc) {
         return Doc.indent(Doc.indent(Doc.concat(Doc.SOFT_LINE, doc)));

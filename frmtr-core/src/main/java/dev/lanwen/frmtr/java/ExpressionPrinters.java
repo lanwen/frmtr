@@ -603,6 +603,21 @@ final class ExpressionPrinters {
         return methodCalls.initializerChain(expression, firstLineWidth, layout);
     }
 
+    // Output-seam slice #3: the expression statement's method-call-chain shape entry (statement analogue of the return
+    // chain's composite entry). Delegates to MethodCallPrinter.statementChain so StatementPrinter threads a single
+    // statement chain callback rather than the chain shape-callbacks (source-multiline statement call, forced call with
+    // terminator, and the has-final-trailing-comment / has-comments / is-source-multiline / root-is-object-creation /
+    // root-is-field-access predicates) the cascade used to compose.
+    Optional<Doc> statementChain(
+            MethodCallExpr expression,
+            ExpressionStmt statement,
+            ExpressionTail tail,
+            ToIntFunction<String> lineWidth,
+            ToIntFunction<MethodCallExpr> statementWidth
+    ) {
+        return methodCalls.statementChain(expression, statement, tail, lineWidth, statementWidth);
+    }
+
     Optional<Doc> packedMethodCallChain(
             MethodCallExpr expression,
             ToIntFunction<String> firstLineWidth

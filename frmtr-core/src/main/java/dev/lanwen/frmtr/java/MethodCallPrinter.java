@@ -876,6 +876,59 @@ final class MethodCallPrinter {
     }
 
     /**
+     * Renders an expression statement's method-call-chain shape by running the statement-flavored chain-shape cascade the
+     * {@link StatementPrinter} used to own inline (printer-contract-inversion, output-seam slice #3, the statement
+     * analogue of {@link #returnChain}). Moving the cascade here collapses the chain shape-callbacks the statement
+     * printer used to thread through the composer to this one entry: every shape decision below is now an internal
+     * {@code this.} call rather than a cross-printer callback (final-trailing-comment forced call, source-multiline
+     * statement call, and the width-driven forced call with its comment/object-creation/field-access break gate).
+     *
+     * <p>The cascade is statement-flavored only through its parameters — everything else is the ordinary chain-shape
+     * machinery this printer already owns. {@code tail} is the statement terminator ({@code ExpressionTail.SEMICOLON});
+     * it is threaded into the forced-call shapes and appended after the source-multiline shape exactly where the former
+     * cascade baked the {@code ;} in. {@code lineWidth} is the caller's statement first-line width closure (already
+     * threaded to the forced-call shapes). {@code statementWidth} is the caller's raw-source-based whole-statement width
+     * measure ({@code StatementPrinter#methodCallStatementWidth}, {@code normalizeWhitespace(rawWithoutOwnComment) + ";"});
+     * it stays with the caller because the raw-source read lives there, and only its measured width crosses the seam so
+     * the width gate ({@code > options.lineWidth()}) reads byte-for-byte as before.
+     *
+     * <p>Returns {@link Optional#empty()} when no chain shape is selected (the statement fits within the line width and is
+     * not final-trailing-comment or source-multiline shaped); the caller then falls through to its general
+     * expression-with-tail rendering. The trailing statement comment stays with the caller, concatenated after this entry,
+     * so this entry owns only the chain shape. The branch order, conditions, and Docs are preserved byte-for-byte from the
+     * statement printer's former cascade — including the {@code chainBreak} gate whose two arms already emitted the same
+     * forced-call shape.
+     */
+    Optional<Doc> statementChain(
+            MethodCallExpr methodCall,
+            ExpressionStmt statement,
+            ExpressionTail tail,
+            ToIntFunction<String> lineWidth,
+            ToIntFunction<MethodCallExpr> statementWidth
+    ) {
+        if (methodCallChainHasFinalTrailingLineComment(methodCall)) {
+            return Optional.of(forcedMethodCallWithTail(methodCall, tail, lineWidth));
+        }
+        if (!methodCallChainIsSourceMultiline(methodCall)) {
+            Optional<Doc> sourceMultilineCall = sourceMultilineMethodCallStatement(methodCall, statement);
+            if (sourceMultilineCall.isPresent()) {
+                return Optional.of(Doc.concat(sourceMultilineCall.orElseThrow(), tail.doc()));
+            }
+        }
+        if (statementWidth.applyAsInt(methodCall) > options.lineWidth()) {
+            boolean chainBreak = methodCallChainHasComments(methodCall)
+                || methodCallChainIsSourceMultiline(methodCall)
+                || methodCallChainRootIsObjectCreation(methodCall)
+                || !methodCallChainRootIsFieldAccess(methodCall);
+            if (chainBreak) {
+                return Optional.of(forcedMethodCallWithTail(methodCall, tail, lineWidth));
+            }
+            return Optional.of(forcedMethodCallWithTail(methodCall, tail, lineWidth));
+        }
+        return Optional.empty();
+    }
+
+    /**
      * Renders a {@code return}'s forced method-call-chain value by running the return-flavored chain-shape cascade the
      * {@link ReturnExpressionPrinter} used to own inline (printer-contract-inversion, output-seam slice #1). Moving the
      * cascade here collapses the nine chain shape-callbacks the return printer used to thread through the composer to

@@ -432,20 +432,19 @@ final class LoopStatementLayout {
      * Recovers the line comment that trails a {@code do ... while (cond);} statement after the closing {@code ;}.
      *
      * <p>At {@code @default} JavaParser attaches that comment to the {@link DoStmt}, so {@link StatementRuleEnvelope}
-     * claims and renders it through the shared statement trailing-comment slot. When the body is written across multiple
-     * source lines, JavaParser instead attaches the comment to the {@code while} condition expression, where the
-     * condition renderer (which prints the condition without its own comment) drops it. This query reclaims the comment
-     * from the condition's own trailing slot and re-emits it as a {@code lineSuffix} after the {@code ;}, matching how
-     * {@link StatementPrinter#expressionStatementTrailingComment(ExpressionStmt)} and the {@code try} renderer place statement trailing
-     * comments. Claiming it here keeps the comment printed exactly once: when the envelope already owns the {@link DoStmt}
-     * comment the condition slot is empty, so this path adds nothing.
+     * claims and renders it through the shared statement trailing-comment slot and the {@code while} condition carries no
+     * own trailing comment. When the body is written across multiple source lines, JavaParser instead attaches the comment
+     * to the {@code while} condition expression, where the condition renderer (which prints the condition without its own
+     * comment) would otherwise drop it. This reclaims the comment from the condition's own trailing slot through the
+     * layout-independent {@link CommentTracker#trailingComment(Node)} anchor, which defers it as a {@code lineSuffix} after
+     * the {@code ;} (matching how {@link StatementPrinter#expressionStatementTrailingComment(ExpressionStmt)} and the
+     * {@code try} renderer place statement trailing comments). The anchor binds the comment to the stable
+     * {@code (condition, TRAILING)} slot and decides emptiness from the recorded owner rather than a build-time claim, so
+     * the comment survives whichever ranked layout wins without being dropped or double-printed; in the single-line-body
+     * shape the condition slot is unowned and this path is empty, so it adds nothing.
      */
     private Doc doWhileTrailingLineComment(DoStmt statement) {
-        Doc conditionTrailing = comments.trailingLineComment(statement.getCondition());
-        if (conditionTrailing == Doc.EMPTY) {
-            return Doc.EMPTY;
-        }
-        return Doc.lineSuffix(Doc.concat(Doc.text(" "), conditionTrailing));
+        return comments.trailingComment(statement.getCondition());
     }
 
     /**

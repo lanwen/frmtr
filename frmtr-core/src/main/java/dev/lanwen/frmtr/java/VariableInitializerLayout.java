@@ -80,6 +80,41 @@ final class VariableInitializerLayout {
         Optional<Doc> apply(MethodCallExpr expression, String suffix, LayoutContext layout);
     }
 
+    /**
+     * The initializer's explicit layout classification (LDM B5/B6): one constant per arm of the width-driven
+     * broken-or-flat cascade in {@link #variableInitializerBrokenOrFlat}. {@link #classifyBrokenOrFlat} selects the arm
+     * from AST shape and rendered width alone -- reproducing the exact ordered conditions of the former imperative ladder
+     * -- and {@link #renderBrokenOrFlat} dispatches each arm to the unchanged shape emitters.
+     *
+     * <p>{@link #METHOD_CALL_BROKEN} and {@link #LAMBDA} still delegate to an ordered {@code Optional<Doc>} sub-cascade
+     * (canonical fan, packed / compact object-creation chain, forced chain, broken arguments; expression- vs block-lambda),
+     * because each sub-arm's selection depends on the previous emitter returning empty -- a fall-through that cannot be
+     * reproduced as a pure classification without re-probing (and re-claiming) comments. Splitting those finer arms into
+     * their own constants is a later stage.
+     */
+    enum InitializerLayoutArm {
+        /** Whole initializer stays flat on the {@code =} line (also the fallback when a broken arm declines). */
+        FLAT,
+        /** Over-width method call that already owns an internal break: forced chain, else flat. */
+        METHOD_CALL_OWN_BREAK_CHAIN,
+        /** Over-width method call with no own break: the ordered broken-chain sub-cascade, else generic break. */
+        METHOD_CALL_BROKEN,
+        /** Over-width {@code (Type) call}: cast type kept flat on the {@code =} line, the call broken. */
+        CAST_METHOD_CALL_BREAK,
+        /** Over-width cast whose generic/intersection type must break across the {@code =} line. */
+        CAST_TYPE_BREAK,
+        /** Over-width ternary, broken by {@link #conditionalInitializer}. */
+        CONDITIONAL,
+        /** Over-width lambda: expression-body, block-body, or broken-parameter shape, else generic break. */
+        LAMBDA,
+        /** Over-width string literal, broken onto its own continuation line under {@code =}. */
+        STRING_LITERAL_BREAK,
+        /** Over-width array initializer: keeps {@code = } on the assignment line, elements one per line. */
+        ARRAY_INITIALIZER_BREAK,
+        /** Over-width value with no construct-specific shape: break after {@code =}, value indented. */
+        GENERIC_BROKEN,
+    }
+
     private final CommentTracker comments;
 
     private final JavaCommentPlacementPolicy commentPlacement;
@@ -1084,311 +1119,379 @@ final class VariableInitializerLayout {
             boolean forceBroken
     ) {
         boolean overWidth = forceBroken || layoutWidth.variableInitializer(variable, flat) > options.lineWidth();
+        return renderBrokenOrFlat(
+            classifyBrokenOrFlat(initializer, overWidth, declarationPrefix + variable.getNameAsString()),
+            variable,
+            initializer,
+            name,
+            declarationPrefix
+        );
+    }
+
+    /**
+     * Selects the {@link InitializerLayoutArm} for the width-driven broken-or-flat cascade from AST shape and rendered
+     * width alone, reproducing the former imperative ladder's exact order and conditions. Every predicate here is pure
+     * (AST inspection plus width probes), so the classification is a fixpoint: the same input always maps to the same arm.
+     * The within-arm {@code Optional} fall-throughs of {@link InitializerLayoutArm#METHOD_CALL_OWN_BREAK_CHAIN},
+     * {@link InitializerLayoutArm#METHOD_CALL_BROKEN}, and {@link InitializerLayoutArm#LAMBDA} are resolved by
+     * {@link #renderBrokenOrFlat}, not here.
+     */
+    private InitializerLayoutArm classifyBrokenOrFlat(Expression initializer, boolean overWidth, String flatName) {
+        if (!overWidth) {
+            return InitializerLayoutArm.FLAT;
+        }
+        return switch (initializer) {
+            case MethodCallExpr methodCall when initializerHasOwnBreak(methodCall) ->
+                InitializerLayoutArm.METHOD_CALL_OWN_BREAK_CHAIN;
+            case MethodCallExpr methodCall -> InitializerLayoutArm.METHOD_CALL_BROKEN;
+            case CastExpr cast when cast.getExpression() instanceof MethodCallExpr && !initializerHasOwnBreak(cast) ->
+                InitializerLayoutArm.CAST_METHOD_CALL_BREAK;
+            case CastExpr cast when castTypeNeedsBreak(flatName, cast.getType()) && !initializerHasOwnBreak(cast) ->
+                InitializerLayoutArm.CAST_TYPE_BREAK;
+            case ConditionalExpr conditional when !initializerHasOwnBreak(conditional) ->
+                InitializerLayoutArm.CONDITIONAL;
+            case LambdaExpr lambda when !initializerHasOwnBreak(lambda) -> InitializerLayoutArm.LAMBDA;
+            case StringLiteralExpr string -> InitializerLayoutArm.STRING_LITERAL_BREAK;
+            case ArrayInitializerExpr array -> InitializerLayoutArm.ARRAY_INITIALIZER_BREAK;
+            // A text block is excluded from the generic break (the former {@code !TextBlockLiteralExpr} guard), so
+            // it stays flat rather than falling into GENERIC_BROKEN like other non-string non-own-break values.
+            case TextBlockLiteralExpr textBlock -> InitializerLayoutArm.FLAT;
+            default -> initializerHasOwnBreak(initializer)
+                ? InitializerLayoutArm.FLAT
+                : InitializerLayoutArm.GENERIC_BROKEN;
+        };
+    }
+
+    /**
+     * Dispatches a classified {@link InitializerLayoutArm} to the unchanged shape emitters, returning the identical
+     * {@link Doc} the former imperative cascade produced. The three cascade arms preserve their ordered
+     * {@code Optional<Doc>} fall-through: {@link InitializerLayoutArm#METHOD_CALL_OWN_BREAK_CHAIN} falls back to the flat
+     * shape, while {@link InitializerLayoutArm#METHOD_CALL_BROKEN} and {@link InitializerLayoutArm#LAMBDA} fall back to the
+     * generic break -- exactly the targets the fall-through reached in the old ladder.
+     */
+    private Doc renderBrokenOrFlat(
+            InitializerLayoutArm arm,
+            VariableDeclarator variable,
+            Expression initializer,
+            String name,
+            String declarationPrefix
+    ) {
+        switch (arm) {
+            case FLAT:
+                return Doc.concat(Doc.text(name + " = "), expression.apply(initializer));
+            case METHOD_CALL_OWN_BREAK_CHAIN:
+                return variableWithForcedMethodCallChain(
+                        variable,
+                        name,
+                        declarationPrefix + variable.getNameAsString(),
+                        (MethodCallExpr) initializer
+                    )
+                    .orElseGet(() -> Doc.concat(Doc.text(name + " = "), expression.apply(initializer)));
+            case METHOD_CALL_BROKEN:
+                return methodCallBrokenInitializer(variable, name, declarationPrefix, (MethodCallExpr) initializer);
+            case CAST_METHOD_CALL_BREAK: {
+                CastExpr castExpr = (CastExpr) initializer;
+                return Doc.concat(
+                    Doc.text(name + " = "),
+                    castType.apply(castExpr.getType()),
+                    Doc.text(" "),
+                    brokenMethodCall.apply((MethodCallExpr) castExpr.getExpression())
+                );
+            }
+            case CAST_TYPE_BREAK:
+                return variableWithCastTypeBreak(
+                    name,
+                    declarationPrefix + variable.getNameAsString(),
+                    (CastExpr) initializer
+                );
+            case CONDITIONAL:
+                return conditionalInitializer(
+                    name,
+                    declarationPrefix + variable.getNameAsString(),
+                    (ConditionalExpr) initializer
+                );
+            case LAMBDA:
+                return lambdaBrokenInitializer(variable, name, declarationPrefix, (LambdaExpr) initializer);
+            case STRING_LITERAL_BREAK:
+                return Doc.concat(
+                    Doc.text(name + " ="),
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, expression.apply(initializer)))
+                );
+            case ARRAY_INITIALIZER_BREAK:
+                return Doc.concat(
+                    Doc.text(name + " = "),
+                    arrayInitializer.apply((ArrayInitializerExpr) initializer, true)
+                );
+            case GENERIC_BROKEN:
+                return genericBrokenInitializer(variable, initializer, name);
+            default:
+                throw new IllegalStateException("Unhandled initializer layout arm: " + arm);
+        }
+    }
+
+    /**
+     * The {@link InitializerLayoutArm#METHOD_CALL_BROKEN} arm: the ordered broken-method-call sub-cascade for an
+     * over-width, no-own-break method-call initializer, moved verbatim from the former imperative ladder. Each shape is
+     * probed in order and the first non-empty one wins; when every probe declines, the call falls back to the generic
+     * break -- the exact Block 9 target the old fall-through reached.
+     */
+    private Doc methodCallBrokenInitializer(
+            VariableDeclarator variable,
+            String name,
+            String declarationPrefix,
+            MethodCallExpr methodCall
+    ) {
+        // C10 (B) — #191. The single-selector, simple-attachable-root fan-out-versus-argument-break convergence
+        // (NAME = Collections.newSetFromMap(...)) runs through Doc.bestFitting([argumentBreak@1, collapse@0]), which is
+        // idempotent for two reasons: (1) the collapse arm is built source-neutrally (whole call flat on
+        // the continuation line, a pure AST function present on every input, so both passes rank the same two
+        // candidates — no source-multiline-versus-flat oscillation); and (2) opener-attachment is expressed by the
+        // per-alternative priority (convergence-redesign Mechanism 2, slice 1), placed after the fit gate and before
+        // line count, so the opener-attached argument-break is preferred whenever it fits even though the collapse uses
+        // fewer lines, and the collapse wins only when the opener overflows the fit gate. Comment-bearing single calls
+        // stay on the imperative cascade below (the ranked node is emitted only when the call is comment-free), so no
+        // comment is double-claimed. Object-creation-rooted single calls (the #48 case) keep their existing imperative
+        // branches below — their collapse is a broken-constructor/dot-split shape, not this whole-call collapse, so they
+        // are out of this arm's scope (as is the single-simple-arg tail dot-split, #221 Case B / slice 4).
+        Optional<Doc> rankedConvergence = rankedSimpleRootSingleCallConvergence(
+            variable,
+            name,
+            declarationPrefix + variable.getNameAsString(),
+            methodCall
+        );
+        if (rankedConvergence.isPresent()) {
+            return rankedConvergence.orElseThrow();
+        }
+        // Canonical-fan cutover seam (End-state A): a multi-link fluent chain that reaches its link-count/root-kind
+        // threshold fans one selector per line, and it must do so through the SAME source-neutral fan on every pass.
+        // Placed here, ahead of the source-shape-sensitive object-creation, source-multiline, and attachable-scope
+        // branches below, so a fan-threshold plain-receiver / type-like chain is claimed by the fan before those
+        // branches can pick a source-dependent shape. That source-dependence is exactly the oscillation this seam
+        // closes: a flat-source `NAME = a.b().c().find(x)` reaches methodCallHasAttachableScope (the outer selector's
+        // scope ends on the name line) and renders the argument-break `find(⏎ x ⏎)`, while its already-fanned re-format
+        // fails that same source-line test, falls through to variableWithForcedMethodCallChain, and renders the +8 fan
+        // — so the two passes disagree forever. Routing through variableWithForcedMethodCallChain (which threads the
+        // `NAME = ` leftEdgePrefix and reaches MethodCallChainPrinter.chainFanOut, a pure function of the AST) makes
+        // both passes rebuild the identical fan. This extends the #191 pattern (rankedSimpleRootSingleCallConvergence,
+        // above): #191 withheld the source-sensitive conditionalGroup arms for a SINGLE-call initializer and emitted one
+        // deterministic ranked shape; this withholds them for the MULTI-LINK fan-threshold case and emits the one
+        // deterministic fan shape. Object-creation-rooted chains are intentionally excluded — their dedicated
+        // packed / compact / broken-constructor branches below (and the #48 / #221 Case B convergence) own their shape,
+        // and chainFanOut renders an object-creation root differently than those branches; widening the fan to them is
+        // a later cutover seam. Comment- and block-lambda-bearing chains stay on the imperative cascade (re-rendering a
+        // comment-bearing root through the fan would double-claim its comments — the same guard the landed rankers use).
+        Optional<Doc> canonicalFan = variableInitializerCanonicalFan(
+            variable,
+            name,
+            declarationPrefix + variable.getNameAsString(),
+            methodCall
+        );
+        if (canonicalFan.isPresent()) {
+            return canonicalFan.orElseThrow();
+        }
         if (
-            overWidth
-            && initializer instanceof MethodCallExpr methodCall
-            && initializerHasOwnBreak(initializer)
+            initializerSingleSimpleArgTailDotSplits(
+                variable,
+                methodCall,
+                declarationPrefix + variable.getNameAsString()
+            )
         ) {
-            Optional<Doc> forcedChain = variableWithForcedMethodCallChain(
+            // #221 Case B / slice 4. An over-width object-creation-rooted single call whose selector's argument list is
+            // exactly one simple argument (a name, field access, this/super, or literal) and whose opener still fits on
+            // the assignment line ({@code NAME = new X(...).selector(} within budget) would otherwise reach the
+            // object-creation argument-break branch below, which keeps the whole opener on the assignment line and breaks
+            // that single argument onto its own line ({@code new X(...).selector(}⏎{@code arg}⏎{@code )}) — opening one
+            // simple argument across three lines when {@code .selector(arg)} routinely fits on its own dotted
+            // continuation line. Route it through the
+            // initializer's existing chain-continuation (+8) fan-out ({@link #variableWithPackedMethodCallChain}) instead —
+            // the same path a long-constructor single-selector tail already takes when its opener overflows (the
+            // {@code buildLongConstructorStrategy}/{@code buildShortConstructorStrategy} goldens). That path keeps the
+            // constructor root on the assignment line and fans the lone selector compact onto its own continuation line at
+            // the chain-continuation indent, so Case 1 is byte-for-byte consistent with its opener-overflow siblings rather
+            // than taking the argument-open shape or the shallower {@code objectRootSingleSegmentChain} indent. Emitting it
+            // here — before the source-shape-sensitive {@code variableWithCompactObjectCreationChain} collapse below — keys
+            // the shape on AST + the opener's fit at the rendered column only, so it wins on every pass and is idempotent:
+            // {@code packedMethodCallChain} is a pure width function of the AST, so a re-format of the already-split source
+            // re-derives the same packed fan-out rather than collapsing the (now-fitting) whole chain onto the
+            // continuation line.
+            Optional<Doc> dotSplitTail = variableWithPackedMethodCallChain(
                 variable,
                 name,
                 declarationPrefix + variable.getNameAsString(),
                 methodCall
             );
-            if (forcedChain.isPresent()) {
-                return forcedChain.orElseThrow();
+            if (dotSplitTail.isPresent()) {
+                return dotSplitTail.orElseThrow();
             }
         }
         if (
-            overWidth
-            && initializer instanceof MethodCallExpr methodCall
-            && !initializerHasOwnBreak(initializer)
+            methodCallChainRootIsObjectCreation.test(methodCall)
+            && methodCallChainInitializerShape.apply(methodCall).singleCall()
         ) {
-            // C10 (B) — #191. The single-selector, simple-attachable-root fan-out-versus-argument-break convergence
-            // (NAME = Collections.newSetFromMap(...)) runs through Doc.bestFitting([argumentBreak@1, collapse@0]), which is
-            // idempotent for two reasons: (1) the collapse arm is built source-neutrally (whole call flat on
-            // the continuation line, a pure AST function present on every input, so both passes rank the same two
-            // candidates — no source-multiline-versus-flat oscillation); and (2) opener-attachment is expressed by the
-            // per-alternative priority (convergence-redesign Mechanism 2, slice 1), placed after the fit gate and before
-            // line count, so the opener-attached argument-break is preferred whenever it fits even though the collapse uses
-            // fewer lines, and the collapse wins only when the opener overflows the fit gate. Comment-bearing single calls
-            // stay on the imperative cascade below (the ranked node is emitted only when the call is comment-free), so no
-            // comment is double-claimed. Object-creation-rooted single calls (the #48 case) keep their existing imperative
-            // branches below — their collapse is a broken-constructor/dot-split shape, not this whole-call collapse, so they
-            // are out of this arm's scope (as is the single-simple-arg tail dot-split, #221 Case B / slice 4).
-            Optional<Doc> rankedConvergence = rankedSimpleRootSingleCallConvergence(
-                variable,
-                name,
-                declarationPrefix + variable.getNameAsString(),
-                methodCall
-            );
-            if (rankedConvergence.isPresent()) {
-                return rankedConvergence.orElseThrow();
-            }
-            // Canonical-fan cutover seam (End-state A): a multi-link fluent chain that reaches its link-count/root-kind
-            // threshold fans one selector per line, and it must do so through the SAME source-neutral fan on every pass.
-            // Placed here, ahead of the source-shape-sensitive object-creation, source-multiline, and attachable-scope
-            // branches below, so a fan-threshold plain-receiver / type-like chain is claimed by the fan before those
-            // branches can pick a source-dependent shape. That source-dependence is exactly the oscillation this seam
-            // closes: a flat-source `NAME = a.b().c().find(x)` reaches methodCallHasAttachableScope (the outer selector's
-            // scope ends on the name line) and renders the argument-break `find(⏎ x ⏎)`, while its already-fanned re-format
-            // fails that same source-line test, falls through to variableWithForcedMethodCallChain, and renders the +8 fan
-            // — so the two passes disagree forever. Routing through variableWithForcedMethodCallChain (which threads the
-            // `NAME = ` leftEdgePrefix and reaches MethodCallChainPrinter.chainFanOut, a pure function of the AST) makes
-            // both passes rebuild the identical fan. This extends the #191 pattern (rankedSimpleRootSingleCallConvergence,
-            // above): #191 withheld the source-sensitive conditionalGroup arms for a SINGLE-call initializer and emitted one
-            // deterministic ranked shape; this withholds them for the MULTI-LINK fan-threshold case and emits the one
-            // deterministic fan shape. Object-creation-rooted chains are intentionally excluded — their dedicated
-            // packed / compact / broken-constructor branches below (and the #48 / #221 Case B convergence) own their shape,
-            // and chainFanOut renders an object-creation root differently than those branches; widening the fan to them is
-            // a later cutover seam. Comment- and block-lambda-bearing chains stay on the imperative cascade (re-rendering a
-            // comment-bearing root through the fan would double-claim its comments — the same guard the landed rankers use).
-            Optional<Doc> canonicalFan = variableInitializerCanonicalFan(
-                variable,
-                name,
-                declarationPrefix + variable.getNameAsString(),
-                methodCall
-            );
-            if (canonicalFan.isPresent()) {
-                return canonicalFan.orElseThrow();
-            }
-            if (
-                initializerSingleSimpleArgTailDotSplits(
-                    variable,
-                    methodCall,
-                    declarationPrefix + variable.getNameAsString()
-                )
-            ) {
-                // #221 Case B / slice 4. An over-width object-creation-rooted single call whose selector's argument list is
-                // exactly one simple argument (a name, field access, this/super, or literal) and whose opener still fits on
-                // the assignment line ({@code NAME = new X(...).selector(} within budget) would otherwise reach the
-                // object-creation argument-break branch below, which keeps the whole opener on the assignment line and breaks
-                // that single argument onto its own line ({@code new X(...).selector(}⏎{@code arg}⏎{@code )}) — opening one
-                // simple argument across three lines when {@code .selector(arg)} routinely fits on its own dotted
-                // continuation line. Route it through the
-                // initializer's existing chain-continuation (+8) fan-out ({@link #variableWithPackedMethodCallChain}) instead —
-                // the same path a long-constructor single-selector tail already takes when its opener overflows (the
-                // {@code buildLongConstructorStrategy}/{@code buildShortConstructorStrategy} goldens). That path keeps the
-                // constructor root on the assignment line and fans the lone selector compact onto its own continuation line at
-                // the chain-continuation indent, so Case 1 is byte-for-byte consistent with its opener-overflow siblings rather
-                // than taking the argument-open shape or the shallower {@code objectRootSingleSegmentChain} indent. Emitting it
-                // here — before the source-shape-sensitive {@code variableWithCompactObjectCreationChain} collapse below — keys
-                // the shape on AST + the opener's fit at the rendered column only, so it wins on every pass and is idempotent:
-                // {@code packedMethodCallChain} is a pure width function of the AST, so a re-format of the already-split source
-                // re-derives the same packed fan-out rather than collapsing the (now-fitting) whole chain onto the
-                // continuation line.
-                Optional<Doc> dotSplitTail = variableWithPackedMethodCallChain(
-                    variable,
-                    name,
-                    declarationPrefix + variable.getNameAsString(),
-                    methodCall
-                );
-                if (dotSplitTail.isPresent()) {
-                    return dotSplitTail.orElseThrow();
-                }
-            }
-            if (
-                methodCallChainRootIsObjectCreation.test(methodCall)
-                && methodCallChainInitializerShape.apply(methodCall).singleCall()
-            ) {
-                // Only single-segment object-creation roots (new X(args).onlyCall(...)) keep the call on the
-                // assignment line and break its argument list. Multi-segment constructor chains fall through to the
-                // one-per-line chain below so the root sits alone and every .call() gets its own line, instead of
-                // greedy-packing the root plus the leading calls onto the assignment line. The single-simple-argument
-                // tail is handled above by the dot-split (#221 Case B), so only multi-argument and lambda tails (and
-                // single-simple-arg tails whose opener overflows, which the dot-split gate declines) reach this
-                // argument-break branch.
-                Optional<Doc> directObjectCreationCall = variableWithBrokenMethodCallArguments(
-                    variable,
-                    name,
-                    declarationPrefix + variable.getNameAsString(),
-                    methodCall,
-                    false
-                );
-                if (directObjectCreationCall.isPresent()) {
-                    return directObjectCreationCall.orElseThrow();
-                }
-            }
-            Optional<Doc> packedObjectCreationChain = variableWithPackedMethodCallChain(
-                variable,
-                name,
-                declarationPrefix + variable.getNameAsString(),
-                methodCall
-            );
-            if (packedObjectCreationChain.isPresent()) {
-                return packedObjectCreationChain.orElseThrow();
-            }
-            Optional<Doc> compactObjectCreationChain = variableWithCompactObjectCreationChain(
-                variable,
-                name,
-                methodCall
-            );
-            if (compactObjectCreationChain.isPresent()) {
-                return compactObjectCreationChain.orElseThrow();
-            }
-            MethodCallChainSourcePlanner.InitializerChainShape initializerChainShape =
-                methodCallChainInitializerShape.apply(methodCall);
-            // The single-selector simple-attachable-root fan-out-versus-argument-break convergence (#191) is resolved
-            // above by rankedSimpleRootSingleCallConvergence, so this force-wide gate now only reaches MULTI-SEGMENT
-            // type-like chains (NAME = a.b.C.first(...).second(...)), whose one-per-line forced chain the ranked
-            // single-call arm does not build. singleCallConvergesOnArgumentBreak still guards the object-creation single
-            // call (the #48 case, whose collapse is a broken-constructor shape rendered by its own branches, not this
-            // whole-call collapse); for that shape the predicate keeps the deterministic argument-break decision. It keys
-            // purely on AST shape + measured width, never source line breaks, so this remaining path stays idempotent.
-            if (
-                initializerChainShape.shouldForceWideInitializerChain()
-                && !singleCallConvergesOnArgumentBreak(
-                    methodCall,
-                    argumentBreakOpenerFits(variable, methodCall, declarationPrefix + variable.getNameAsString())
-                )
-            ) {
-                Optional<Doc> forcedChain = variableWithForcedMethodCallChain(
-                    variable,
-                    name,
-                    declarationPrefix + variable.getNameAsString(),
-                    methodCall
-                );
-                if (forcedChain.isPresent()) {
-                    return forcedChain.orElseThrow();
-                }
-            }
-            if (methodCallHasAttachableScope(methodCall)) {
-                Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
-                    variable,
-                    name,
-                    declarationPrefix + variable.getNameAsString(),
-                    methodCall,
-                    true
-                );
-                if (directCall.isPresent()) {
-                    return directCall.orElseThrow();
-                }
-            }
-            Optional<Doc> sourceMultilineBlockLambdaCall = variableWithSourceMultilineBlockLambdaInitializer(
-                variable,
-                name,
-                declarationPrefix + variable.getNameAsString(),
-                methodCall
-            );
-            if (sourceMultilineBlockLambdaCall.isPresent()) {
-                return sourceMultilineBlockLambdaCall.orElseThrow();
-            }
-            Optional<Doc> forcedChain = variableWithForcedMethodCallChain(
-                variable,
-                name,
-                declarationPrefix + variable.getNameAsString(),
-                methodCall
-            );
-            if (forcedChain.isPresent()) {
-                return forcedChain.orElseThrow();
-            }
-            Optional<Doc> mixedChain = mixedFieldMethodCallChain.apply(methodCall);
-            if (mixedChain.isPresent()) {
-                return variableWithMethodCallChain(
-                    variable,
-                    name,
-                    declarationPrefix + variable.getNameAsString(),
-                    methodCall,
-                    mixedFieldMethodCallFirstLine(methodCall),
-                    mixedChain.orElseThrow()
-                );
-            }
-            Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
+            // Only single-segment object-creation roots (new X(args).onlyCall(...)) keep the call on the
+            // assignment line and break its argument list. Multi-segment constructor chains fall through to the
+            // one-per-line chain below so the root sits alone and every .call() gets its own line, instead of
+            // greedy-packing the root plus the leading calls onto the assignment line. The single-simple-argument
+            // tail is handled above by the dot-split (#221 Case B), so only multi-argument and lambda tails (and
+            // single-simple-arg tails whose opener overflows, which the dot-split gate declines) reach this
+            // argument-break branch.
+            Optional<Doc> directObjectCreationCall = variableWithBrokenMethodCallArguments(
                 variable,
                 name,
                 declarationPrefix + variable.getNameAsString(),
                 methodCall,
                 false
             );
+            if (directObjectCreationCall.isPresent()) {
+                return directObjectCreationCall.orElseThrow();
+            }
+        }
+        Optional<Doc> packedObjectCreationChain = variableWithPackedMethodCallChain(
+            variable,
+            name,
+            declarationPrefix + variable.getNameAsString(),
+            methodCall
+        );
+        if (packedObjectCreationChain.isPresent()) {
+            return packedObjectCreationChain.orElseThrow();
+        }
+        Optional<Doc> compactObjectCreationChain = variableWithCompactObjectCreationChain(
+            variable,
+            name,
+            methodCall
+        );
+        if (compactObjectCreationChain.isPresent()) {
+            return compactObjectCreationChain.orElseThrow();
+        }
+        MethodCallChainSourcePlanner.InitializerChainShape initializerChainShape =
+            methodCallChainInitializerShape.apply(methodCall);
+        // The single-selector simple-attachable-root fan-out-versus-argument-break convergence (#191) is resolved
+        // above by rankedSimpleRootSingleCallConvergence, so this force-wide gate now only reaches MULTI-SEGMENT
+        // type-like chains (NAME = a.b.C.first(...).second(...)), whose one-per-line forced chain the ranked
+        // single-call arm does not build. singleCallConvergesOnArgumentBreak still guards the object-creation single
+        // call (the #48 case, whose collapse is a broken-constructor shape rendered by its own branches, not this
+        // whole-call collapse); for that shape the predicate keeps the deterministic argument-break decision. It keys
+        // purely on AST shape + measured width, never source line breaks, so this remaining path stays idempotent.
+        if (
+            initializerChainShape.shouldForceWideInitializerChain()
+            && !singleCallConvergesOnArgumentBreak(
+                methodCall,
+                argumentBreakOpenerFits(variable, methodCall, declarationPrefix + variable.getNameAsString())
+            )
+        ) {
+            Optional<Doc> forcedChain = variableWithForcedMethodCallChain(
+                variable,
+                name,
+                declarationPrefix + variable.getNameAsString(),
+                methodCall
+            );
+            if (forcedChain.isPresent()) {
+                return forcedChain.orElseThrow();
+            }
+        }
+        if (methodCallHasAttachableScope(methodCall)) {
+            Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
+                variable,
+                name,
+                declarationPrefix + variable.getNameAsString(),
+                methodCall,
+                true
+            );
             if (directCall.isPresent()) {
                 return directCall.orElseThrow();
             }
         }
-        if (
-            overWidth
-            && initializer instanceof CastExpr castExpr
-            && castExpr.getExpression() instanceof MethodCallExpr methodCall
-            && !initializerHasOwnBreak(initializer)
-        ) {
-            return Doc.concat(
-                Doc.text(name + " = "),
-                castType.apply(castExpr.getType()),
-                Doc.text(" "),
-                brokenMethodCall.apply(methodCall)
-            );
+        Optional<Doc> sourceMultilineBlockLambdaCall = variableWithSourceMultilineBlockLambdaInitializer(
+            variable,
+            name,
+            declarationPrefix + variable.getNameAsString(),
+            methodCall
+        );
+        if (sourceMultilineBlockLambdaCall.isPresent()) {
+            return sourceMultilineBlockLambdaCall.orElseThrow();
         }
-        if (
-            overWidth
-            && initializer instanceof CastExpr castExpr
-            && castTypeNeedsBreak(declarationPrefix + variable.getNameAsString(), castExpr.getType())
-            && !initializerHasOwnBreak(initializer)
-        ) {
-            return variableWithCastTypeBreak(name, declarationPrefix + variable.getNameAsString(), castExpr);
+        Optional<Doc> forcedChain = variableWithForcedMethodCallChain(
+            variable,
+            name,
+            declarationPrefix + variable.getNameAsString(),
+            methodCall
+        );
+        if (forcedChain.isPresent()) {
+            return forcedChain.orElseThrow();
         }
-        if (
-            overWidth
-            && initializer instanceof ConditionalExpr conditionalExpr
-            && !initializerHasOwnBreak(initializer)
-        ) {
-            return conditionalInitializer(name, declarationPrefix + variable.getNameAsString(), conditionalExpr);
-        }
-        if (
-            overWidth
-            && initializer instanceof LambdaExpr lambdaExpr
-            && !initializerHasOwnBreak(initializer)
-        ) {
-            Optional<Doc> expressionLambdaInitializer = variableWithExpressionLambdaInitializer(
+        Optional<Doc> mixedChain = mixedFieldMethodCallChain.apply(methodCall);
+        if (mixedChain.isPresent()) {
+            return variableWithMethodCallChain(
                 variable,
                 name,
                 declarationPrefix + variable.getNameAsString(),
-                lambdaExpr
-            );
-            if (expressionLambdaInitializer.isPresent()) {
-                return expressionLambdaInitializer.orElseThrow();
-            }
-            Optional<Doc> blockLambdaInitializer = variableWithBlockLambdaInitializer(
-                name,
-                declarationPrefix + variable.getNameAsString(),
-                lambdaExpr
-            );
-            if (blockLambdaInitializer.isPresent()) {
-                return blockLambdaInitializer.orElseThrow();
-            }
-            Optional<Doc> lambdaInitializer = variableWithBrokenLambdaParameters(
-                name,
-                declarationPrefix + variable.getNameAsString(),
-                lambdaExpr
-            );
-            if (lambdaInitializer.isPresent()) {
-                return lambdaInitializer.orElseThrow();
-            }
-        }
-        if (
-            overWidth
-            && initializer instanceof StringLiteralExpr
-        ) {
-            return Doc.concat(
-                Doc.text(name + " ="),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, expression.apply(initializer)))
+                methodCall,
+                mixedFieldMethodCallFirstLine(methodCall),
+                mixedChain.orElseThrow()
             );
         }
-        if (overWidth && initializer instanceof ArrayInitializerExpr arrayInitializerExpr) {
-            // Reprint-by-default: an overflowing array initializer always keeps `= {` on the assignment line and breaks
-            // its elements one per line, regardless of whether the author wrote the braces on one source line or many.
-            return Doc.concat(Doc.text(name + " = "), arrayInitializer.apply(arrayInitializerExpr, true));
+        Optional<Doc> directCall = variableWithBrokenMethodCallArguments(
+            variable,
+            name,
+            declarationPrefix + variable.getNameAsString(),
+            methodCall,
+            false
+        );
+        if (directCall.isPresent()) {
+            return directCall.orElseThrow();
         }
-        if (
-            overWidth
-            && !(initializer instanceof StringLiteralExpr)
-            && !(initializer instanceof TextBlockLiteralExpr)
-            && !initializerHasOwnBreak(initializer)
-        ) {
-            return Doc.concat(
-                Doc.text(name + " ="),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, brokenInitializer(variable, initializer)))
-            );
+        return genericBrokenInitializer(variable, methodCall, name);
+    }
+
+    /**
+     * The {@link InitializerLayoutArm#LAMBDA} arm: the ordered broken-lambda sub-cascade (expression body, block body,
+     * broken parameters) for an over-width, no-own-break lambda initializer, moved verbatim from the former imperative
+     * ladder. When every probe declines, the lambda falls back to the generic break -- the exact Block 9 target the old
+     * fall-through reached.
+     */
+    private Doc lambdaBrokenInitializer(
+            VariableDeclarator variable,
+            String name,
+            String declarationPrefix,
+            LambdaExpr lambdaExpr
+    ) {
+        Optional<Doc> expressionLambdaInitializer = variableWithExpressionLambdaInitializer(
+            variable,
+            name,
+            declarationPrefix + variable.getNameAsString(),
+            lambdaExpr
+        );
+        if (expressionLambdaInitializer.isPresent()) {
+            return expressionLambdaInitializer.orElseThrow();
         }
-        return Doc.concat(Doc.text(name + " = "), expression.apply(initializer));
+        Optional<Doc> blockLambdaInitializer = variableWithBlockLambdaInitializer(
+            name,
+            declarationPrefix + variable.getNameAsString(),
+            lambdaExpr
+        );
+        if (blockLambdaInitializer.isPresent()) {
+            return blockLambdaInitializer.orElseThrow();
+        }
+        Optional<Doc> lambdaInitializer = variableWithBrokenLambdaParameters(
+            name,
+            declarationPrefix + variable.getNameAsString(),
+            lambdaExpr
+        );
+        if (lambdaInitializer.isPresent()) {
+            return lambdaInitializer.orElseThrow();
+        }
+        return genericBrokenInitializer(variable, lambdaExpr, name);
+    }
+
+    /**
+     * The {@link InitializerLayoutArm#GENERIC_BROKEN} arm (and the fall-through target of the method-call and lambda
+     * sub-cascades): break after {@code =} and render the value indented on its own continuation line.
+     */
+    private Doc genericBrokenInitializer(VariableDeclarator variable, Expression initializer, String name) {
+        return Doc.concat(
+            Doc.text(name + " ="),
+            Doc.indent(Doc.concat(Doc.HARD_LINE, brokenInitializer(variable, initializer)))
+        );
     }
 
     private boolean conditionalInitializerLineOverflows(
@@ -2875,32 +2978,29 @@ final class VariableInitializerLayout {
      * a second outer break around the same expression.
      */
     private boolean initializerHasOwnBreak(Expression initializer) {
-        if (initializer instanceof ArrayCreationExpr arrayCreationExpr) {
-            return arrayCreationHasOwnBreak(arrayCreationExpr);
-        }
-        if (initializer instanceof ArrayAccessExpr) {
+        return switch (initializer) {
+            case ArrayCreationExpr arrayCreation -> arrayCreationHasOwnBreak(arrayCreation);
+            case ArrayAccessExpr ignored -> true;
+            case ObjectCreationExpr objectCreation -> objectCreation.getAnonymousClassBody().isPresent();
+            case SwitchExpr ignored -> true;
+            case MethodCallExpr methodCall -> methodCallScopeHasOwnBreak(methodCall);
+            default -> false;
+        };
+    }
+
+    /**
+     * A method call owns its break when its receiver does: an array-access receiver always breaks, and an
+     * array-creation receiver breaks when {@link #arrayCreationHasOwnBreak} reports it does.
+     */
+    private boolean methodCallScopeHasOwnBreak(MethodCallExpr methodCall) {
+        if (methodCall.getScope().filter(ArrayAccessExpr.class::isInstance).isPresent()) {
             return true;
         }
-        if (
-            initializer instanceof ObjectCreationExpr objectCreationExpr
-            && objectCreationExpr.getAnonymousClassBody().isPresent()
-        ) {
-            return true;
-        }
-        if (initializer instanceof SwitchExpr) {
-            return true;
-        }
-        if (initializer instanceof MethodCallExpr methodCallExpr) {
-            if (methodCallExpr.getScope().filter(ArrayAccessExpr.class::isInstance).isPresent()) {
-                return true;
-            }
-            return methodCallExpr.getScope()
-                    .filter(ArrayCreationExpr.class::isInstance)
-                    .map(ArrayCreationExpr.class::cast)
-                    .map(this::arrayCreationHasOwnBreak)
-                    .orElse(false);
-        }
-        return false;
+        return methodCall.getScope()
+                .filter(ArrayCreationExpr.class::isInstance)
+                .map(ArrayCreationExpr.class::cast)
+                .map(this::arrayCreationHasOwnBreak)
+                .orElse(false);
     }
 
     /**

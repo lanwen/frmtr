@@ -41,9 +41,7 @@ final class AssignmentExpressionPrinter {
 
     private final JavaCommentPlacementPolicy commentPlacement;
 
-    private final Function<Expression, Doc> expression;
-
-    private final Function<Expression, Doc> expressionWithoutOwnComment;
+    private final ExpressionRendering rendering;
 
     private final ExpressionTailRenderer expressionWithTail;
 
@@ -75,8 +73,7 @@ final class AssignmentExpressionPrinter {
             FormatterOptions options,
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
-            Function<Expression, Doc> expression,
-            Function<Expression, Doc> expressionWithoutOwnComment,
+            ExpressionRendering rendering,
             ExpressionTailRenderer expressionWithTail,
             Function<Node, String> compact,
             ToIntFunction<String> blockStatementWidth,
@@ -93,8 +90,7 @@ final class AssignmentExpressionPrinter {
         this.options = options;
         this.comments = comments;
         this.commentPlacement = commentPlacement;
-        this.expression = expression;
-        this.expressionWithoutOwnComment = expressionWithoutOwnComment;
+        this.rendering = rendering;
         this.expressionWithTail = expressionWithTail;
         this.compact = compact;
         this.conditionalProjection = new ConditionalExpressionLineProjection(compact::apply);
@@ -164,7 +160,7 @@ final class AssignmentExpressionPrinter {
             && methodCallNeedsStatementTerminatorTail(expression, methodCall)
         ) {
             return Doc.concat(
-                this.expression.apply(expression.getTarget()),
+                rendering.render(expression.getTarget()),
                 Doc.text(" " + expression.getOperator().asString() + " "),
                 expressionWithTail.render(methodCall, ExpressionTail.SEMICOLON, blockStatementWidth),
                 // When the assigned value is a method chain, the chain render above already claims and emits its own
@@ -354,7 +350,7 @@ final class AssignmentExpressionPrinter {
         Optional<Doc> suffixedEnclosedValue =
             suffixedEnclosedExpression.apply(expression.getValue(), LayoutContext.root().withLeadingBreak(true));
         return suffixedEnclosedValue.map(value -> Doc.concat(
-                this.expression.apply(expression.getTarget()),
+                rendering.render(expression.getTarget()),
                 Doc.text(" " + expression.getOperator().asString() + " "),
                 value
         ));
@@ -375,15 +371,15 @@ final class AssignmentExpressionPrinter {
         if (shouldKeepCastDivisionContinuationFlat.test(binaryExpression)) {
             return Optional.of(
                 Doc.concat(
-                    this.expression.apply(expression.getTarget()),
+                    rendering.render(expression.getTarget()),
                     Doc.text(" " + expression.getOperator().asString()),
-                    Doc.indent(Doc.concat(Doc.HARD_LINE, this.expression.apply(binaryExpression)))
+                    Doc.indent(Doc.concat(Doc.HARD_LINE, rendering.render(binaryExpression)))
                 )
             );
         }
         return Optional.of(
             Doc.concat(
-                this.expression.apply(expression.getTarget()),
+                rendering.render(expression.getTarget()),
                 Doc.text(" " + expression.getOperator().asString()),
                 Doc.indent(Doc.concat(Doc.HARD_LINE, binaryExpressionLines.apply(expression.getValue(), true)))
             )
@@ -409,7 +405,7 @@ final class AssignmentExpressionPrinter {
      * comment placement.
      */
     private Doc assignmentWithLineCommentedBinaryValue(AssignExpr expression, BinaryExpr binaryValue) {
-        Doc target = this.expression.apply(expression.getTarget());
+        Doc target = rendering.render(expression.getTarget());
         String operator = expression.getOperator().asString();
         Doc lines = binaryExpressionLinesWithComments.apply(binaryValue);
         if (lineCommentedBinaryCanKeepFirstOperandWithOperator(expression, binaryValue)) {
@@ -454,7 +450,7 @@ final class AssignmentExpressionPrinter {
         }
         return Optional.of(
             Doc.concat(
-                this.expression.apply(expression.getTarget()),
+                rendering.render(expression.getTarget()),
                 Doc.text(" " + expression.getOperator().asString() + " "),
                 brokenObjectCreation.apply(objectCreationExpression)
             )
@@ -500,9 +496,9 @@ final class AssignmentExpressionPrinter {
         }
         return Optional.of(
             Doc.concat(
-                this.expression.apply(expression.getTarget()),
+                rendering.render(expression.getTarget()),
                 Doc.text(" " + expression.getOperator().asString()),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, this.expression.apply(nestedAssignment)))
+                Doc.indent(Doc.concat(Doc.HARD_LINE, rendering.render(nestedAssignment)))
             )
         );
     }
@@ -511,15 +507,15 @@ final class AssignmentExpressionPrinter {
         Optional<String> gapBlockComment = gapBlockComment(expression);
         if (gapBlockComment.isPresent()) {
             return Doc.concat(
-                this.expression.apply(expression.getTarget()),
+                rendering.render(expression.getTarget()),
                 Doc.text(" " + expression.getOperator().asString() + " " + gapBlockComment.orElseThrow() + " "),
-                expressionWithoutOwnComment.apply(expression.getValue())
+                rendering.renderWithoutOwnComment(expression.getValue())
             );
         }
         return Doc.concat(
-            this.expression.apply(expression.getTarget()),
+            rendering.render(expression.getTarget()),
             Doc.text(" " + expression.getOperator().asString() + " "),
-            this.expression.apply(expression.getValue())
+            rendering.render(expression.getValue())
         );
     }
 
@@ -534,7 +530,7 @@ final class AssignmentExpressionPrinter {
      */
     private Doc assignmentWithGapLineComments(AssignExpr expression, List<Doc> gapComments) {
         return Doc.concat(
-            this.expression.apply(expression.getTarget()),
+            rendering.render(expression.getTarget()),
             Doc.text(" " + expression.getOperator().asString() + " "),
             Doc.join(Doc.HARD_LINE, gapComments),
             Doc.indent(Doc.concat(Doc.HARD_LINE, gapCommentValue(expression)))
@@ -557,7 +553,7 @@ final class AssignmentExpressionPrinter {
         ) {
             return binaryExpressionLines.apply(value, true);
         }
-        return this.expression.apply(value);
+        return rendering.render(value);
     }
 
     /**

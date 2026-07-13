@@ -47,7 +47,7 @@ final class BinaryExpressionPrinter {
 
     private final FormatterOptions options;
 
-    private final JavaFormatRule<Expression> expressionRenderer;
+    private final ExpressionRendering rendering;
 
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
 
@@ -71,7 +71,7 @@ final class BinaryExpressionPrinter {
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
             FormatterOptions options,
-            JavaFormatRule<Expression> expressionRenderer,
+            ExpressionRendering rendering,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
             BiFunction<MethodCallExpr, String, Doc> brokenMethodCallWithClosingLineRenderer,
             Function<MethodCallExpr, Optional<Doc>> forcedMethodCallChainRenderer,
@@ -85,7 +85,7 @@ final class BinaryExpressionPrinter {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
         this.options = options;
-        this.expressionRenderer = expressionRenderer;
+        this.rendering = rendering;
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
         this.brokenMethodCallWithClosingLineRenderer = brokenMethodCallWithClosingLineRenderer;
         this.forcedMethodCallChainRenderer = forcedMethodCallChainRenderer;
@@ -126,7 +126,7 @@ final class BinaryExpressionPrinter {
      */
     private Doc lines(Expression expression, boolean forceBreak, boolean nestedContinuation) {
         if (!(expression instanceof BinaryExpr binaryExpr)) {
-            return expressionRenderer.format(expression, LayoutContext.root());
+            return rendering.render(expression);
         }
         if (!forceBreak && parenthesizedInnerWidth(compact.apply(binaryExpr)) <= options.lineWidth()) {
             return binaryExpression(binaryExpr);
@@ -143,9 +143,9 @@ final class BinaryExpressionPrinter {
             && parenthesizedInnerWidth(compact.apply(instanceOfExpr)) > options.lineWidth()
         ) {
             return Doc.concat(
-                expressionRenderer.format(instanceOfExpr, LayoutContext.root()),
+                rendering.render(instanceOfExpr),
                 Doc.text(" && "),
-                expressionRenderer.format(operands.getLast(), LayoutContext.root())
+                rendering.render(operands.getLast())
             );
         }
         BinaryExpressionLine firstLine = binaryExpressionLine(binaryExpr.getOperator(), 0, operands.size());
@@ -164,7 +164,7 @@ final class BinaryExpressionPrinter {
             return Doc.concat(
                 brokenMethodCallRenderer.apply(methodCall),
                 Doc.text(" " + binaryExpr.getOperator().asString() + " "),
-                expressionRenderer.format(operands.getLast(), LayoutContext.root())
+                rendering.render(operands.getLast())
             );
         }
         List<Doc> lines = new ArrayList<>();
@@ -198,7 +198,7 @@ final class BinaryExpressionPrinter {
      *
      * <p>A negated method call ({@code !call(args)}) operand explodes its argument list under the same width-driven
      * {@link #methodCallOperandShouldBreak} gate as a bare {@code call(args)} operand — the {@code !} prefix rides the
-     * broken call's opening line. Without this arm a negated call falls through to the flat {@link #expressionRenderer}
+     * broken call's opening line. Without this arm a negated call falls through to the flat {@link #rendering}
      * rendering and can overflow the operand line; the bare-call arm below never sees it because the operand is a
      * {@link UnaryExpr}, not a {@link MethodCallExpr}.
      */
@@ -218,7 +218,7 @@ final class BinaryExpressionPrinter {
             ) {
                 return Doc.concat(Doc.text("("), nestedLines(binaryOperand, true), Doc.text(")"));
             }
-            return Doc.concat(Doc.text("("), expressionRenderer.format(binaryOperand, LayoutContext.root()), Doc.text(")"));
+            return Doc.concat(Doc.text("("), rendering.render(binaryOperand), Doc.text(")"));
         }
         if (
             operand instanceof EnclosedExpr enclosedOperand
@@ -244,7 +244,7 @@ final class BinaryExpressionPrinter {
             operand instanceof BinaryExpr binaryOperand
             && shouldParenthesizeNestedBinary(binaryLine.operator(), binaryOperand.getOperator())
         ) {
-            return Doc.concat(Doc.text("("), expressionRenderer.format(binaryOperand, LayoutContext.root()), Doc.text(")"));
+            return Doc.concat(Doc.text("("), rendering.render(binaryOperand), Doc.text(")"));
         }
         if (
             operand instanceof UnaryExpr unaryOperand
@@ -265,11 +265,11 @@ final class BinaryExpressionPrinter {
                 return Doc.text(flat);
             }
             if (!binaryLine.hasLeadingOperator()) {
-                return expressionRenderer.format(operand, LayoutContext.root());
+                return rendering.render(operand);
             }
             return brokenMethodCallChainOperand(methodCall);
         }
-        return expressionRenderer.format(operand, LayoutContext.root());
+        return rendering.render(operand);
     }
 
     /**
@@ -873,7 +873,7 @@ final class BinaryExpressionPrinter {
             .orElseGet(
                 () ->
                     operand.getAllContainedComments().stream().anyMatch(LineComment.class::isInstance)
-                        ? expressionRenderer.format(operand, LayoutContext.root())
+                        ? rendering.render(operand)
                         : Doc.text(compactWithoutOwnComment.apply(operand))
             );
     }
@@ -885,7 +885,7 @@ final class BinaryExpressionPrinter {
      *
      * <p>{@link #linesWithComments(BinaryExpr)} flattens only the enclosing same-operator chain, so a nested chain that
      * uses the <em>other</em> logical operator arrives here as one opaque operand. Routing it through
-     * {@link #expressionRenderer} (or compact text) would render it flat on a single line: any {@code //} comment that
+     * {@link #rendering} (or compact text) would render it flat on a single line: any {@code //} comment that
      * sits between the inner operands would be dropped, and a wide sub-chain would overflow
      * {@link FormatterOptions#lineWidth()} and force a non-idempotent second-pass re-wrap. We therefore parenthesize it
      * (the readability boundary the comment-free {@link #binaryExpressionLineOperand} path already adds for
@@ -959,7 +959,7 @@ final class BinaryExpressionPrinter {
                     Doc.HARD_LINE,
                     java.util.stream.Stream.concat(
                         commentDocs(leading).stream(),
-                        java.util.stream.Stream.of(expressionRenderer.format(enclosedOperand.getInner(), LayoutContext.root()))
+                        java.util.stream.Stream.of(rendering.render(enclosedOperand.getInner()))
                     ).toList()
                 )
             )),
@@ -1091,9 +1091,9 @@ final class BinaryExpressionPrinter {
             && (shouldParenthesizeLeftBinary(expression.getOperator(), leftBinary.getOperator())
                 || shouldParenthesizeNestedBinary(expression.getOperator(), leftBinary.getOperator()))
         ) {
-            return Doc.concat(Doc.text("("), expressionRenderer.format(leftBinary, LayoutContext.root()), Doc.text(")"));
+            return Doc.concat(Doc.text("("), rendering.render(leftBinary), Doc.text(")"));
         }
-        return expressionRenderer.format(expression.getLeft(), LayoutContext.root());
+        return rendering.render(expression.getLeft());
     }
 
     private Doc binaryRightOperand(BinaryExpr expression) {
@@ -1101,9 +1101,9 @@ final class BinaryExpressionPrinter {
             expression.getRight() instanceof BinaryExpr rightBinary
             && shouldParenthesizeNestedBinary(expression.getOperator(), rightBinary.getOperator())
         ) {
-            return Doc.concat(Doc.text("("), expressionRenderer.format(rightBinary, LayoutContext.root()), Doc.text(")"));
+            return Doc.concat(Doc.text("("), rendering.render(rightBinary), Doc.text(")"));
         }
-        return expressionRenderer.format(expression.getRight(), LayoutContext.root());
+        return rendering.render(expression.getRight());
     }
 
     /**

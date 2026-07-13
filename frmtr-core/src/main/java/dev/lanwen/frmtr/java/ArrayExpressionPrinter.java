@@ -43,7 +43,7 @@ final class ArrayExpressionPrinter {
 
     private final FormatterOptions options;
 
-    private final JavaFormatRule<Expression> expressionRenderer;
+    private final ExpressionRendering rendering;
 
     private final BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix;
 
@@ -61,7 +61,7 @@ final class ArrayExpressionPrinter {
             CommentTracker comments,
             JavaCommentPlacementPolicy commentPlacement,
             FormatterOptions options,
-            JavaFormatRule<Expression> expressionRenderer,
+            ExpressionRendering rendering,
             BiFunction<EnclosedExpr, Boolean, Doc> brokenEnclosedForSuffix,
             BiFunction<MethodCallExpr, ExpressionTail, Doc> methodCallWithTail,
             BiFunction<ObjectCreationExpr, String, Doc> objectCreationWithSuffix,
@@ -72,7 +72,7 @@ final class ArrayExpressionPrinter {
         this.comments = comments;
         this.commentPlacement = commentPlacement;
         this.options = options;
-        this.expressionRenderer = expressionRenderer;
+        this.rendering = rendering;
         this.brokenEnclosedForSuffix = brokenEnclosedForSuffix;
         this.methodCallWithTail = methodCallWithTail;
         this.objectCreationWithSuffix = objectCreationWithSuffix;
@@ -84,9 +84,9 @@ final class ArrayExpressionPrinter {
     Doc arrayAccess(ArrayAccessExpr expression) {
         return Doc.group(
             Doc.concat(
-                expressionRenderer.format(expression.getName(), LayoutContext.root()),
+                rendering.render(expression.getName()),
                 Doc.text("["),
-                Doc.indent(Doc.concat(Doc.SOFT_LINE, expressionRenderer.format(expression.getIndex(), LayoutContext.root()))),
+                Doc.indent(Doc.concat(Doc.SOFT_LINE, rendering.render(expression.getIndex()))),
                 Doc.SOFT_LINE,
                 Doc.text("]")
             )
@@ -105,7 +105,7 @@ final class ArrayExpressionPrinter {
         return Doc.concat(
             brokenEnclosedForSuffix.apply(enclosed, true),
             Doc.text("["),
-            expressionRenderer.format(expression.getIndex(), LayoutContext.root()),
+            rendering.render(expression.getIndex()),
             Doc.text("]")
         );
     }
@@ -369,7 +369,7 @@ final class ArrayExpressionPrinter {
             parts.add(objectCreationWithSuffix.apply(objectCreation, suffix));
             suffixAppended = true;
         } else {
-            parts.add(expressionRenderer.format(value, LayoutContext.root()));
+            parts.add(rendering.render(value));
         }
         if (trailingComment != Doc.EMPTY) {
             parts.add(Doc.text(" "));

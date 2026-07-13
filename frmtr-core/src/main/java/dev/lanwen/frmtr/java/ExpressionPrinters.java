@@ -42,6 +42,8 @@ final class ExpressionPrinters {
 
     private final JavaFormatContext context;
 
+    private final ExpressionRendering rendering;
+
     private final BinaryExpressionPrinter binaries;
 
     private final AnnotationExpressionPrinter annotationExpressions;
@@ -96,11 +98,15 @@ final class ExpressionPrinters {
         JavaCommentPlacementPolicy commentPlacementPolicy = context.commentPlacementPolicy;
         RawSource rawSource = context.rawSource;
         CompactSourceText compactSource = context.compactSource;
+        // One shared facade for the generic child-expression render entries: every leaf printer below that used to take
+        // its own layout-discarding {@code (e, layout) -> expression(e)} rule (or {@code this::expression} /
+        // {@code this::expressionWithoutOwnComment} callback) now receives this single collaborator instead.
+        this.rendering = new ExpressionRendering(this::expression, this::expressionWithoutOwnComment);
         this.binaries = new BinaryExpressionPrinter(
             comments,
             commentPlacementPolicy,
             options,
-            (expression, layout) -> expression(expression),
+            rendering,
             this::brokenMethodCall,
             this::brokenMethodCallWithClosingLine,
             this::forcedMethodCallChain,
@@ -121,7 +127,7 @@ final class ExpressionPrinters {
             comments,
             commentPlacementPolicy,
             options,
-            (expression, layout) -> expression(expression),
+            rendering,
             binaries::nestedLines,
             compactSource::compact,
             context.layoutWidth::currentIndented
@@ -129,8 +135,7 @@ final class ExpressionPrinters {
         compactSource.useAnnotationFlatText(annotationExpressions::annotationFlatText);
         this.conditionals = new ConditionalExpressionPrinter(
             context,
-            this::expression,
-            this::expressionWithoutOwnComment,
+            rendering,
             binaries::lines,
             binaries::nestedLines,
             binaries::expressionHasParenthesizedNestedBinary
@@ -167,7 +172,7 @@ final class ExpressionPrinters {
         );
         this.casts = new CastExpressionPrinter(
             options,
-            (expression, layout) -> expression(expression),
+            rendering,
             compactSource::compactTypeLike,
             compactSource::compact,
             types::typeBody,
@@ -177,7 +182,7 @@ final class ExpressionPrinters {
         this.classExpressions = new ClassExpressionPrinter(compactSource::compactTypeLike);
         this.enclosedExpressions = new EnclosedExpressionPrinter(
             options,
-            this::expression,
+            rendering,
             binaries::lines,
             binaries::hasLineComments,
             binaries::linesWithComments,
@@ -195,7 +200,7 @@ final class ExpressionPrinters {
         this.objectCreations = new ObjectCreationPrinter(
             context,
             types,
-            (expression, layout) -> expression(expression),
+            rendering,
             this::brokenArgument,
             lambdas::huggableBlockLambdaArguments,
             bodyRenderer,
@@ -211,12 +216,12 @@ final class ExpressionPrinters {
         this.textBlocks = new TextBlockPrinter(context.rawSource);
         this.instanceOfExpressions = new InstanceOfExpressionPrinter(
             options,
-            (expression, layout) -> expression(expression),
+            rendering,
             compactSource::compact,
             compactSource::compactTypeLike,
             context.layoutWidth::currentIndented
         );
-        this.fieldAccesses = new FieldAccessPrinter(comments, (expression, layout) -> expression(expression));
+        this.fieldAccesses = new FieldAccessPrinter(comments, rendering);
         this.methodReferences = new MethodReferencePrinter(
             options,
             compactSource::compact,
@@ -251,7 +256,7 @@ final class ExpressionPrinters {
             comments,
             commentPlacementPolicy,
             options,
-            (expression, layout) -> expression(expression),
+            rendering,
             enclosedExpressions::brokenEnclosedForSuffix,
             (methodCall, tail) -> expressionWithTail(methodCall, tail),
             objectCreations::objectCreationWithSuffix,
@@ -264,8 +269,7 @@ final class ExpressionPrinters {
             options,
             comments,
             commentPlacementPolicy,
-            this::expression,
-            this::expressionWithoutOwnComment,
+            rendering,
             this::expressionWithTail,
             compactSource::compact,
             context.layoutWidth::blockStatement,
@@ -306,7 +310,7 @@ final class ExpressionPrinters {
             options,
             context.layoutWidth,
             context.sourceShapePolicy,
-            this::expression,
+            rendering,
             this::expressionWithTail,
             lambdas::brokenExpressionLambda,
             compactSource::compact,

@@ -32,7 +32,7 @@ final class EnclosedExpressionPrinter {
 
     private final FormatterOptions options;
 
-    private final Function<Expression, Doc> expression;
+    private final ExpressionRendering rendering;
 
     private final BiFunction<Expression, Boolean, Doc> binaryLines;
 
@@ -54,7 +54,7 @@ final class EnclosedExpressionPrinter {
 
     EnclosedExpressionPrinter(
             FormatterOptions options,
-            Function<Expression, Doc> expression,
+            ExpressionRendering rendering,
             BiFunction<Expression, Boolean, Doc> binaryLines,
             Predicate<BinaryExpr> binaryExpressionHasLineComments,
             Function<BinaryExpr, Doc> binaryLinesWithComments,
@@ -66,7 +66,7 @@ final class EnclosedExpressionPrinter {
             BiFunction<ConditionalExpr, Boolean, Doc> conditionalExpression
     ) {
         this.options = options;
-        this.expression = expression;
+        this.rendering = rendering;
         this.binaryLines = binaryLines;
         this.binaryExpressionHasLineComments = binaryExpressionHasLineComments;
         this.binaryLinesWithComments = binaryLinesWithComments;
@@ -91,11 +91,11 @@ final class EnclosedExpressionPrinter {
     Doc enclosedExpression(EnclosedExpr expression) {
         if (expression.getInner() instanceof CastExpr) {
             if (nestedCastDepth.applyAsInt(expression.getInner()) <= 2) {
-                return Doc.concat(Doc.text("("), this.expression.apply(expression.getInner()), Doc.text(")"));
+                return Doc.concat(Doc.text("("), rendering.render(expression.getInner()), Doc.text(")"));
             }
             return Doc.concat(
                 Doc.text("("),
-                Doc.indent(Doc.concat(Doc.HARD_LINE, this.expression.apply(expression.getInner()))),
+                Doc.indent(Doc.concat(Doc.HARD_LINE, rendering.render(expression.getInner()))),
                 Doc.HARD_LINE,
                 Doc.text(")")
             );
@@ -119,7 +119,7 @@ final class EnclosedExpressionPrinter {
         if (currentIndentedWidth.applyAsInt(compact.apply(expression)) <= options.lineWidth()) {
             return Doc.text(compact.apply(expression));
         }
-        return Doc.concat(Doc.text("("), this.expression.apply(expression.getInner()), Doc.text(")"));
+        return Doc.concat(Doc.text("("), rendering.render(expression.getInner()), Doc.text(")"));
     }
 
     /**
@@ -188,15 +188,15 @@ final class EnclosedExpressionPrinter {
     private Doc parenthesizedConditionalTrailingBreak(ConditionalExpr expression) {
         return Doc.concat(
             Doc.text("("),
-            this.expression.apply(expression.getCondition()),
+            rendering.render(expression.getCondition()),
             Doc.indent(
                 Doc.concat(
                     Doc.HARD_LINE,
                     Doc.text("? "),
-                    this.expression.apply(expression.getThenExpr()),
+                    rendering.render(expression.getThenExpr()),
                     Doc.HARD_LINE,
                     Doc.text(": "),
-                    this.expression.apply(expression.getElseExpr())
+                    rendering.render(expression.getElseExpr())
                 )
             ),
             Doc.HARD_LINE,

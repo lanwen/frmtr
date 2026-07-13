@@ -8,7 +8,6 @@ import com.github.javaparser.ast.body.BodyDeclaration;
 import com.github.javaparser.ast.body.EnumConstantDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.expr.Expression;
-import com.github.javaparser.ast.expr.LambdaExpr;
 import com.github.javaparser.ast.nodeTypes.NodeWithAnnotations;
 import com.github.javaparser.ast.nodeTypes.NodeWithModifiers;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
@@ -28,10 +27,11 @@ import java.util.function.ToIntFunction;
  * Prints enum declarations after the surrounding body-dispatch decision has already selected the enum branch.
  *
  * <p>This helper owns the enum-specific declaration tree: header wrapping, entry sequencing, source blank lines between
- * entries, explicit semicolon recovery, body orphan-comment placement, and enum constant argument layout. It
- * intentionally leaves member declaration rendering, expression formatting, and type-clause formatting with {@link
- * JavaPrinter}; callers provide those decisions as callbacks so enum bodies can keep the same sequencing as other
- * member blocks.
+ * entries, explicit semicolon recovery, and body orphan-comment placement. Per-constant rendering — annotations,
+ * arguments, an explicit class body, and the leading / trailing comment slots — is delegated to {@link
+ * EnumConstantLayout}. It intentionally leaves member declaration rendering, expression formatting, and type-clause
+ * formatting with {@link JavaPrinter}; callers provide those decisions as callbacks so enum bodies can keep the same
+ * sequencing as other member blocks.
  *
  * <p>Representative fixture pairs live at
  * {@code frmtr-core/src/test/resources/format/enum-declaration-layout/input.java} and
@@ -74,15 +74,9 @@ final class EnumDeclarationPrinter {
 
     private final Function<NodeList<ClassOrInterfaceType>, String> flatImplementsTypes;
 
-    private final Function<List<? extends Node>, String> compactJoin;
-
-    private final Function<Expression, Doc> expression;
-
-    private final ToIntFunction<String> currentIndentedWidth;
-
-    private final BiFunction<NodeList<BodyDeclaration<?>>, Node, Doc> memberBlockRenderer;
-
     private final Function<BodyDeclaration<?>, Doc> memberRenderer;
+
+    private final EnumConstantLayout enumConstantLayout;
 
     /**
      * Names the previous recovered enum-body item so raw gaps and formatted constants do not duplicate separators.
@@ -129,11 +123,17 @@ final class EnumDeclarationPrinter {
         this.brokenImplementsTypes = brokenImplementsTypes;
         this.inlineImplementsTypes = inlineImplementsTypes;
         this.flatImplementsTypes = flatImplementsTypes;
-        this.compactJoin = compactJoin;
-        this.expression = expression;
-        this.currentIndentedWidth = currentIndentedWidth;
-        this.memberBlockRenderer = memberBlockRenderer;
         this.memberRenderer = memberRenderer;
+        this.enumConstantLayout = new EnumConstantLayout(
+            this.enumConstantComments,
+            this.sourceText,
+            this.options,
+            annotations,
+            compactJoin,
+            expression,
+            currentIndentedWidth,
+            memberBlockRenderer
+        );
     }
 
     /**
@@ -264,7 +264,7 @@ final class EnumDeclarationPrinter {
             Doc leading = i == 0
                 ? enumConstantComments.firstConstantLeading(declaration, entry)
                 : enumConstantComments.leading(entry);
-            entryDocs.add(enumConstant(leading, entry, tails.get(i)));
+            entryDocs.add(enumConstantLayout.enumConstant(leading, entry, tails.get(i)));
         }
         return new EnumEntryList(enumEntryList(declaration, entryDocs), false);
     }
@@ -326,7 +326,7 @@ final class EnumDeclarationPrinter {
                         previousEntry
                     );
                     docs.add(
-                        enumConstant(
+                        enumConstantLayout.enumConstant(
                             declaration,
                             currentEntry,
                             nextValidEnumConstant(plan, i).orElse(null)
@@ -754,134 +754,6 @@ final class EnumDeclarationPrinter {
                 .filter(index -> index >= 0)
                 .orElse(raw.length());
         return open >= 0 && raw.substring(open + 1, firstMember).contains(";");
-    }
-
-    /**
-     * Prints one enum constant, including leading comments, arguments, and comments attached to the constant's tail.
-     */
-    private Doc enumConstant(
-            EnumDeclaration owner,
-            EnumConstantDeclaration declaration,
-            EnumConstantDeclaration next
-    ) {
-        return enumConstant(declaration, enumConstantComments.tail(owner, declaration, next));
-    }
-
-    private Doc enumConstant(EnumConstantDeclaration declaration, EnumConstantComments.Tail tail) {
-        return enumConstant(enumConstantComments.leading(declaration), declaration, tail);
-    }
-
-    private Doc enumConstant(Doc leading, EnumConstantDeclaration declaration, EnumConstantComments.Tail tail) {
-        return Doc.concat(
-            leading,
-            enumConstantAnnotations(declaration),
-            Doc.text(declaration.getNameAsString()),
-            enumConstantArguments(declaration),
-            enumConstantClassBody(declaration),
-            tail.suffix()
-        );
-    }
-
-    private Doc enumConstantClassBody(EnumConstantDeclaration declaration) {
-        if (!hasExplicitEnumConstantClassBody(declaration)) {
-            return Doc.EMPTY;
-        }
-        return Doc.concat(Doc.text(" "), memberBlockRenderer.apply(declaration.getClassBody(), declaration));
-    }
-
-    private boolean hasExplicitEnumConstantClassBody(EnumConstantDeclaration declaration) {
-        SourceRegion nameRegion = declaration.getName()
-                .getRange()
-                .map(sourceText::region)
-                .orElseThrow(() -> new IllegalArgumentException("enum constant name is missing a source range"));
-        return declaration
-                .getTokenRange()
-                .map(tokenRange -> {
-                    boolean afterName = false;
-                    int parenDepth = 0;
-                    for (JavaToken token : tokenRange) {
-                        if (!afterName) {
-                            afterName = tokenMatchesRegion(token, nameRegion);
-                            continue;
-                        }
-                        if (token.getKind() == GeneratedJavaParserConstants.LPAREN) {
-                            parenDepth++;
-                            continue;
-                        }
-                        if (token.getKind() == GeneratedJavaParserConstants.RPAREN && parenDepth > 0) {
-                            parenDepth--;
-                            continue;
-                        }
-                        if (token.getKind() == GeneratedJavaParserConstants.LBRACE && parenDepth == 0) {
-                            return true;
-                        }
-                    }
-                    return false;
-                })
-                .orElse(false);
-    }
-
-    private boolean tokenMatchesRegion(JavaToken token, SourceRegion expected) {
-        return token.getRange()
-                .map(sourceText::region)
-                .map(region -> region.beginOffset() == expected.beginOffset()
-                    && region.endOffset() == expected.endOffset())
-                .orElse(false);
-    }
-
-    private Doc enumConstantAnnotations(EnumConstantDeclaration declaration) {
-        if (declaration.getAnnotations().isEmpty()) {
-            return Doc.EMPTY;
-        }
-        return Doc.concat(annotations.apply(declaration), Doc.EMPTY);
-    }
-
-    /**
-     * Prints enum constant arguments compactly unless a lambda argument needs normal expression docs.
-     *
-     * <p>Lambda arguments can contain bodies that need formatter-owned breaking decisions, so the helper uses the
-     * expression callback for those cases and falls back to one-argument-per-line only when the rendered constant no
-     * longer fits.
-     */
-    private Doc enumConstantArguments(EnumConstantDeclaration declaration) {
-        if (declaration.getArguments().isEmpty()) {
-            return Doc.EMPTY;
-        }
-        if (declaration.getArguments().stream().noneMatch(this::enumConstantArgumentNeedsDoc)) {
-            return Doc.text("(" + compactJoin.apply(declaration.getArguments()) + ")");
-        }
-        String flat = declaration.getNameAsString() + "(" + compactJoin.apply(declaration.getArguments()) + ")";
-        if (currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
-            return Doc.concat(
-                Doc.text("("),
-                Doc.join(Doc.text(", "), declaration.getArguments().stream().map(expression).toList()),
-                Doc.text(")")
-            );
-        }
-        return Doc.concat(
-            Doc.text("("),
-            Doc.indent(
-                Doc.concat(
-                    Doc.HARD_LINE,
-                    Doc.join(
-                        Doc.concat(Doc.text(","), Doc.HARD_LINE),
-                        declaration.getArguments()
-                                .stream()
-                                .map(expression)
-                                .toList()
-                    )
-                )
-            ),
-            Doc.HARD_LINE,
-            Doc.text(")")
-        );
-    }
-
-    /**
-     * Detects enum constant arguments that need expression docs instead of compact raw text.
-     */
-    private boolean enumConstantArgumentNeedsDoc(Expression expression) {
-        return expression instanceof LambdaExpr || expression.findFirst(LambdaExpr.class).isPresent();
     }
 
     static boolean hasRecoverableEnumConstantListProblem(EnumDeclaration declaration) {

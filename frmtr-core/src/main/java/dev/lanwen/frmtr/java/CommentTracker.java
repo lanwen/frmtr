@@ -214,6 +214,20 @@ final class CommentTracker {
         return owner == null || owner.equals(new OwnerKey(node, slot));
     }
 
+    /**
+     * Reports whether {@code trivia} has a recorded owner and that owner is exactly this {@code (node, slot)}.
+     *
+     * <p>Deliberately stricter than {@link #ownsHere}: {@code ownsHere} also returns {@code true} for an
+     * <em>unmigrated</em> comment (one the dry-run never recorded an owner for) so first-claim-wins still lets any slot
+     * offer it, whereas this predicate is {@code false} for an unmigrated comment. {@link #claim} needs the distinction:
+     * an already-claimed re-offer is benign only when it comes from the <em>recorded</em> owner, while an unmigrated
+     * duplicate claim must still be caught by the strict-claims guardrail rather than silently rendered twice.
+     */
+    private boolean isRecordedOwner(JavaCommentTrivia trivia, Node node, OwnerSlot slot) {
+        OwnerKey owner = ownership.get(trivia.comment());
+        return owner != null && owner.equals(new OwnerKey(node, slot));
+    }
+
     Doc leading(Node node) {
         return commentPlacement.leadingComment(node)
                 .filter(t -> ownsHere(t, node, OwnerSlot.LEADING))
@@ -510,17 +524,32 @@ final class CommentTracker {
     /**
      * Records or consumes one comment claim, depending on whether this tracker is in the record-only dry-run pass.
      *
-     * <p>In the real pass this is the unchanged {@link FormatterGuardrails#claimComment} call against {@link #printed};
-     * {@code node} and {@code slot} are ignored there. In the record pass it does not touch {@link #printed}: the first
-     * offer of a comment records {@code (node, slot)} as its owner in {@link #ownership} and returns {@code true}; every
-     * later offer of the same comment finds it already recorded and returns {@code false}. The {@code ownership} map
-     * thus plays the same once-only role {@code printed} plays in the real pass, so candidate ladders see the identical
-     * (first offer wins, later offers lose) boolean sequence in both passes and the recorded first claimant matches the
-     * real one.
+     * <p>In the real pass a comment is normally claimed exactly once, through the
+     * {@link FormatterGuardrails#claimComment} call against {@link #printed}. The one exception is an
+     * <em>idempotent-by-owner re-claim</em>: when the comment is already in {@link #printed} and this {@code (node, slot)}
+     * is its recorded owner ({@link #isRecordedOwner}), the re-claim is benign and returns {@code true} so the owner
+     * renders the comment text again, instead of skipping it or failing the strict-claims guardrail. This is the seam a
+     * later slice needs — building a comment-bearing subtree in more than one eagerly-evaluated ranked arm re-offers the
+     * comment from the <em>same</em> owner, and the renderer then keeps whichever arm it picks. Every other already-claimed
+     * offer (a comment with no recorded owner, or one offered by a different {@code (node, slot)}) is still routed through
+     * {@link FormatterGuardrails#claimComment}, which returns {@code false} or throws under strict-claims exactly as
+     * before. The branch is keyed on {@link #isRecordedOwner} and not the broader {@link #ownsHere} on purpose:
+     * {@code ownsHere} also admits an unmigrated comment (no recorded owner), and those must keep first-claim-wins so a
+     * genuine duplicate claim is still caught. Today no ranked arm carries comments, so its owner offers each comment
+     * only once in the real pass and this branch is never taken — it is dead until a later slice removes that gate.
+     *
+     * <p>In the record pass it does not touch {@link #printed}: the first offer of a comment records {@code (node, slot)}
+     * as its owner in {@link #ownership} and returns {@code true}; every later offer of the same comment finds it already
+     * recorded and returns {@code false}. The {@code ownership} map thus plays the same once-only role {@code printed}
+     * plays in the real pass, so candidate ladders see the identical (first offer wins, later offers lose) boolean
+     * sequence in both passes and the recorded first claimant matches the real one.
      */
     private boolean claim(JavaCommentTrivia trivia, Node node, OwnerSlot slot) {
         if (recording) {
             return ownership.putIfAbsent(trivia.comment(), new OwnerKey(node, slot)) == null;
+        }
+        if (isPrinted(trivia) && isRecordedOwner(trivia, node, slot)) {
+            return true;
         }
         return FormatterGuardrails.claimComment(trivia, printed);
     }

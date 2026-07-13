@@ -10,6 +10,7 @@ import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.Providers;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.ImportDeclaration;
+import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.comments.Comment;
 import com.github.javaparser.ast.comments.LineComment;
 import dev.lanwen.frmtr.FormatterOptions;
@@ -96,6 +97,62 @@ final class FormatterGuardrailsTest {
                     .hasMessageContaining("LineComment")
                     .hasMessageContaining("...")
                     .hasMessageNotContaining("tail-marker");
+        });
+    }
+
+    @Test
+    void recordedOwnerReclaimRendersInEveryRealPassArmUnderStrictClaims() {
+        // Enabler for comment-bearing ranked candidate sets: when a later slice builds a comment-bearing subtree in more
+        // than one eagerly evaluated arm, each arm re-offers the comment from its single recorded owner. That owner
+        // re-claim must render the comment in every arm (the renderer keeps whichever it picks) instead of skipping the
+        // later arms or tripping the strict-claims fail-fast. Without this the second arm would throw here.
+        withStrictClaims("true", () -> {
+            CommentTracker comments = commentTracker();
+            Node field = parse(
+                """
+                    class Ledger {
+                        int balance;
+                    }
+                    """
+            ).getType(0).getMember(0);
+            JavaCommentTrivia trivia = JavaCommentTrivia.from(new LineComment("running total"));
+
+            // Dry-run records (field, TRAILING) as the comment's owner, mirroring JavaPrinter#print.
+            comments.beginRecording();
+            comments.comment(trivia, field, OwnerSlot.TRAILING);
+            comments.endRecordingAndReset(new LayoutDecisionLog(), new FormatterPragmas());
+
+            Doc firstArm = comments.comment(trivia, field, OwnerSlot.TRAILING);
+            Doc secondArm = comments.comment(trivia, field, OwnerSlot.TRAILING);
+
+            assertThat(firstArm).isNotEqualTo(Doc.EMPTY);
+            assertThat(secondArm).isEqualTo(firstArm);
+        });
+    }
+
+    @Test
+    void reclaimWithoutRecordedOwnerStillFailsFastUnderStrictClaims() {
+        // The benign re-claim above is gated on a *recorded* owner, not on the broader ownsHere (which also admits an
+        // unmigrated comment the dry-run never recorded). With no recording pass, the same (node, slot) offering a comment
+        // twice is a genuine duplicate claim and must still trip the guardrail. This is the only difference from the test
+        // above, so it pins the recorded-owner distinction: loosening the predicate back to ownsHere would break it.
+        withStrictClaims("true", () -> {
+            CommentTracker comments = commentTracker();
+            Node field = parse(
+                """
+                    class Ledger {
+                        int balance;
+                    }
+                    """
+            ).getType(0).getMember(0);
+            JavaCommentTrivia trivia = JavaCommentTrivia.from(new LineComment("running total"));
+
+            comments.comment(trivia, field, OwnerSlot.TRAILING);
+
+            assertThatThrownBy(() -> comments.comment(trivia, field, OwnerSlot.TRAILING))
+                    .isInstanceOf(AssertionError.class)
+                    .hasMessageContaining("duplicate claim")
+                    .hasMessageContaining("running total");
         });
     }
 

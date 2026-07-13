@@ -391,14 +391,14 @@ final class ArrayExpressionPrinter {
         Doc valueDoc = arrayInitializerValueExpression(value, next, forceNestedArrayRows, suffix);
         List<Doc> trailingCommentLines = new ArrayList<>();
         for (JavaCommentTrivia comment : trailingLineComments) {
-            // When the element value is a method call (or other comment-bearing subtree), its own trailing line comment is
-            // already claimed and emitted inside the value render above. Re-offering it here only ever rendered empty, so
-            // skip already-printed comments to avoid a duplicate claim; output is unchanged because the value render
-            // placed it. Comments the value render left untouched are still placed by this element slot.
-            if (comments.isPrinted(comment)) {
-                continue;
-            }
-            Doc commentDoc = comments.comment(comment);
+            // The element value's own trailing line comment is owned and emitted inside the value render above (a
+            // method-call chain's final trailing comment, say). Offering it here under this element's own INTERLEAVED
+            // anchor lets comment ownership disambiguate: when the value render owns it, this slot is not the recorded
+            // owner and renders empty (caught by the Doc.EMPTY check below); a comment the value render left untouched
+            // (the comment-free compact path) is owned here and placed by this element slot. Anchoring to the distinct
+            // (value, INTERLEAVED) key rather than the comment's own node is what makes the ownership gate sufficient, so
+            // no build-order isPrinted skip is needed.
+            Doc commentDoc = comments.comment(comment, value, OwnerSlot.INTERLEAVED);
             if (commentDoc == Doc.EMPTY) {
                 continue;
             }

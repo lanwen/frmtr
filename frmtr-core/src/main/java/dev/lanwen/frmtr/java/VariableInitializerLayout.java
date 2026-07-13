@@ -1160,26 +1160,19 @@ final class VariableInitializerLayout {
         ) {
             return InitializerLayoutArm.CAST_TYPE_BREAK;
         }
-        if (initializer instanceof ConditionalExpr && !initializerHasOwnBreak(initializer)) {
-            return InitializerLayoutArm.CONDITIONAL;
-        }
-        if (initializer instanceof LambdaExpr && !initializerHasOwnBreak(initializer)) {
-            return InitializerLayoutArm.LAMBDA;
-        }
-        if (initializer instanceof StringLiteralExpr) {
-            return InitializerLayoutArm.STRING_LITERAL_BREAK;
-        }
-        if (initializer instanceof ArrayInitializerExpr) {
-            return InitializerLayoutArm.ARRAY_INITIALIZER_BREAK;
-        }
-        if (
-            !(initializer instanceof StringLiteralExpr)
-            && !(initializer instanceof TextBlockLiteralExpr)
-            && !initializerHasOwnBreak(initializer)
-        ) {
-            return InitializerLayoutArm.GENERIC_BROKEN;
-        }
-        return InitializerLayoutArm.FLAT;
+        return switch (initializer) {
+            case ConditionalExpr conditional when !initializerHasOwnBreak(conditional) ->
+                InitializerLayoutArm.CONDITIONAL;
+            case LambdaExpr lambda when !initializerHasOwnBreak(lambda) -> InitializerLayoutArm.LAMBDA;
+            case StringLiteralExpr string -> InitializerLayoutArm.STRING_LITERAL_BREAK;
+            case ArrayInitializerExpr array -> InitializerLayoutArm.ARRAY_INITIALIZER_BREAK;
+            // A text block is excluded from the generic break (the former {@code !TextBlockLiteralExpr} guard), so
+            // it stays flat rather than falling into GENERIC_BROKEN like other non-string non-own-break values.
+            case TextBlockLiteralExpr textBlock -> InitializerLayoutArm.FLAT;
+            default -> initializerHasOwnBreak(initializer)
+                ? InitializerLayoutArm.FLAT
+                : InitializerLayoutArm.GENERIC_BROKEN;
+        };
     }
 
     /**

@@ -2,7 +2,6 @@ package dev.lanwen.frmtr.java;
 
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.BlockComment;
 import com.github.javaparser.ast.comments.Comment;
@@ -23,7 +22,6 @@ import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.SwitchExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
 import com.github.javaparser.ast.expr.UnaryExpr;
-import com.github.javaparser.ast.stmt.ExpressionStmt;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.IntersectionType;
 import com.github.javaparser.ast.type.Type;
@@ -230,6 +228,11 @@ final class VariableInitializerLayout {
     // {@code new Type(...)} initializer overflows. See {@link InitializerObjectCreationLayout}.
     private final InitializerObjectCreationLayout objectCreationLayout;
 
+    // Extracted comment-recovery cluster: the declarator/initializer trailing and pre-semicolon line-comment recovery
+    // consumed by {@link #variableWithStatementTerminator} to re-place comments around the statement terminator. See
+    // {@link InitializerTrailingCommentLayout}.
+    private final InitializerTrailingCommentLayout trailingCommentLayout;
+
     VariableInitializerLayout(
             JavaFormatContext context,
             Function<Expression, Doc> expression,
@@ -336,14 +339,19 @@ final class VariableInitializerLayout {
             this.brokenClassOrInterfaceType,
             this::openerLineWidth
         );
+        this.trailingCommentLayout = new InitializerTrailingCommentLayout(
+            this.comments,
+            this.commentPlacement,
+            this.rawSource
+        );
     }
 
     Doc variableWithStatementTerminator(VariableDeclarator variable, String declarationPrefix) {
         if (
             variable.getInitializer().orElse(null) instanceof MethodCallExpr methodCall
-            && methodCallNeedsStatementTerminatorTail(variable, methodCall)
+            && trailingCommentLayout.methodCallNeedsStatementTerminatorTail(variable, methodCall)
         ) {
-            Doc variableInitializerTailComment = initializerTailLineComment(variable, methodCall)
+            Doc variableInitializerTailComment = trailingCommentLayout.initializerTailLineComment(variable, methodCall)
                     .map(comments::comment)
                     .orElse(Doc.EMPTY);
             Doc declaration = variableWithMethodCallChain(
@@ -389,8 +397,8 @@ final class VariableInitializerLayout {
                 methodCallWithSemicolon.apply(methodCall)
             );
         }
-        Doc trailingLineComment = trailingDeclaratorLineComment(variable);
-        Doc preSemicolonInitializerComment = preSemicolonInitializerComment(variable);
+        Doc trailingLineComment = trailingCommentLayout.trailingDeclaratorLineComment(variable);
+        Doc preSemicolonInitializerComment = trailingCommentLayout.preSemicolonInitializerComment(variable);
         // When the terminating `;` stays on the declaration line (no pre-`;` comment forcing it down), thread it into the
         // initializer so the (A) conditional group measures the flat form's fit *with* its `;` at the true column — the
         // same one column the old `compact + ";"` gate counted. When a pre-`;` comment drops the `;` onto its own line the
@@ -416,150 +424,8 @@ final class VariableInitializerLayout {
         );
     }
 
-    /**
-     * Recovers the {@code //} line comment that trails the declarator and renders after the closing {@code ;}, falling
-     * back to the initializer's own trailing line comment when the declarator slot is empty.
-     *
-     * <p>When a declarator's initializer collapses from a multi-line source shape onto one line, JavaParser parks a
-     * {@code } // note} comment that began after the initializer's last token (and after the {@code ;}) as the
-     * <em>initializer's</em> own trailing line comment rather than the declarator's. The declarator's own trailing slot
-     * ({@link CommentTracker#trailingLineComment(Node)} on the variable) is then empty, so that comment is dropped even
-     * though it genuinely trails the whole declaration. This fallback claims the initializer's own post-end trailing line
-     * comment in exactly that case, keying purely on source-order ownership rather than the collapsed-versus-multiline
-     * shape. At shapes where the declarator slot already holds the comment, the fallback is never consulted; at shapes
-     * where the comment is the field declaration's own trailing comment it is claimed earlier by the body envelope and
-     * this offer renders {@link Doc#EMPTY}, so unperturbed output is unchanged.
-     */
-    private Doc trailingDeclaratorLineComment(VariableDeclarator variable) {
-        Doc declaratorTrailing = comments.trailingLineComment(variable);
-        if (declaratorTrailing != Doc.EMPTY) {
-            return declaratorTrailing;
-        }
-        return variable.getInitializer()
-                .map(comments::trailingLineComment)
-                .orElse(Doc.EMPTY);
-    }
-
-    /**
-     * Recovers the {@code //} line comments that trail this declarator's initializer after its last operand and before the
-     * closing {@code ;}, emitting them on their own continuation lines so the {@code ;} can drop onto its own line below.
-     *
-     * <p>For a multi-line String concatenation initializer JavaParser parks such a comment as an orphan of the enclosing
-     * {@link FieldDeclaration}/{@link ExpressionStmt} rather than as the initializer's contained trivia or the declarator's
-     * own trailing trivia, so neither the binary-line recovery nor the post-{@code ;} trailing slot prints it (see
-     * {@link CommentTracker#trailingInitializerCommentsBeforeSemicolon(Node, Node)}). The recovered comments are indented to
-     * the operand-continuation column the START/between-operand lines already use so the END comment aligns with the
-     * {@code +} lines; the caller drops the {@code ;} onto its own base-indent line below via {@link Doc#HARD_LINE}, because a
-     * {@code //} line would otherwise swallow a trailing {@code ;} into the comment. When there is no such comment the result
-     * is {@link Doc#EMPTY} (the same singleton the empty-recovery branch returns), leaving the terminator byte-identical to
-     * the no-recovery {@code concat(declaration, ";", trailing)}.
-     */
-    private Doc preSemicolonInitializerComment(VariableDeclarator variable) {
-        Expression initializer = variable.getInitializer().orElse(null);
-        if (initializer == null) {
-            return Doc.EMPTY;
-        }
-        Node owner = semicolonOwner(variable).orElse(null);
-        if (owner == null) {
-            return Doc.EMPTY;
-        }
-        List<Doc> recovered = comments.trailingInitializerCommentsBeforeSemicolon(owner, initializer);
-        if (recovered.isEmpty()) {
-            return Doc.EMPTY;
-        }
-        return Doc.indent(Doc.concat(Doc.HARD_LINE, Doc.join(Doc.HARD_LINE, recovered)));
-    }
-
-    private boolean methodCallNeedsStatementTerminatorTail(VariableDeclarator variable, MethodCallExpr methodCall) {
-        return methodCallHasPreSemicolonTailLineComment(
-            variable,
-            methodCall
-        ) || initializerTailLineComment(variable, methodCall).isPresent();
-    }
-
-    private boolean methodCallHasPreSemicolonTailLineComment(
-            VariableDeclarator variable,
-            MethodCallExpr methodCall
-    ) {
-        return methodCallFinalTrailingLineComments(methodCall)
-                .stream()
-                .anyMatch(comment -> commentStartsBeforeDeclarationSemicolon(comment, variable));
-    }
-
     private List<JavaCommentTrivia> methodCallFinalTrailingLineComments(MethodCallExpr expression) {
-        List<JavaCommentTrivia> sourceComments = new ArrayList<>();
-        commentPlacement.trailingLineComment(expression).ifPresent(sourceComments::add);
-        commentPlacement.containedComments(expression)
-                .stream()
-                .filter(JavaCommentTrivia::isLine)
-                .filter(comment -> comment.startsAfterNodeOnSameLine(expression))
-                .filter(
-                    comment -> sourceComments.stream().noneMatch(existing -> existing.comment() == comment.comment())
-                )
-                .forEach(sourceComments::add);
-        return sourceComments;
-    }
-
-    private Optional<JavaCommentTrivia> initializerTailLineComment(
-            VariableDeclarator variable,
-            Expression initializer
-    ) {
-        return initializerTailLineCommentCandidates(variable)
-                .stream()
-                .filter(comment -> comment.startsAfterNodeOnSameLine(initializer))
-                .filter(comment -> commentStartsBeforeDeclarationSemicolon(comment, variable))
-                .findFirst();
-    }
-
-    private List<JavaCommentTrivia> initializerTailLineCommentCandidates(VariableDeclarator variable) {
-        List<JavaCommentTrivia> candidates = new ArrayList<>();
-        commentPlacement.trailingLineComment(variable).ifPresent(candidates::add);
-        commentPlacement.containedComments(variable)
-                .stream()
-                .filter(JavaCommentTrivia::isLine)
-                .filter(comment -> candidates.stream().noneMatch(existing -> existing.comment() == comment.comment()))
-                .forEach(candidates::add);
-        return candidates;
-    }
-
-    private boolean commentStartsBeforeDeclarationSemicolon(
-            JavaCommentTrivia comment,
-            VariableDeclarator variable
-    ) {
-        return semicolonOwner(variable)
-                .map(owner -> commentStartsBeforeFinalSemicolonInRawOwner(comment, owner))
-                .orElse(false);
-    }
-
-    private boolean commentStartsBeforeFinalSemicolonInRawOwner(JavaCommentTrivia comment, Node owner) {
-        String rawOwner = rawSource.raw(owner);
-        int commentIndex = commentIndex(rawOwner, comment);
-        int semicolonIndex = rawOwner.lastIndexOf(';');
-        return commentIndex >= 0 && semicolonIndex >= 0 && commentIndex < semicolonIndex;
-    }
-
-    private int commentIndex(String rawOwner, JavaCommentTrivia comment) {
-        List<String> spellings = List.of(
-            comment.comment().toString(),
-            "//" + comment.comment().getContent(),
-            "// " + comment.comment().getContent()
-        );
-        return spellings.stream()
-                .mapToInt(rawOwner::indexOf)
-                .filter(index -> index >= 0)
-                .findFirst()
-                .orElse(-1);
-    }
-
-    private Optional<Node> semicolonOwner(VariableDeclarator variable) {
-        Node current = variable;
-        while (current.getParentNode().isPresent()) {
-            current = current.getParentNode().orElseThrow();
-            if (current instanceof FieldDeclaration || current instanceof ExpressionStmt) {
-                return Optional.of(current);
-            }
-        }
-        return Optional.empty();
+        return trailingCommentLayout.methodCallFinalTrailingLineComments(expression);
     }
 
     private Doc trailingLineComment(Doc comment) {

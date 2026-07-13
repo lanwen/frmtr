@@ -262,6 +262,50 @@ final class CommentTracker {
     }
 
     /**
+     * Renders {@code node}'s trailing comment(s) — its own {@code //} line comment and any same-line trailing block
+     * comment — anchored to the single stable {@code (node, }{@link OwnerSlot#TRAILING}{@code )} slot and routed through
+     * the claim-neutral {@link #ownedComment} rail.
+     *
+     * <p>This is the layout-independent trailing-comment anchor. Because both kinds resolve to one fixed
+     * {@code (node, TRAILING)} slot rendered through the pure rail, a later cutover can emit this same Doc in every
+     * ranked layout arm (each alternative of a {@link Doc#bestFitting}/{@link Doc#conditionalGroup}) without any arm
+     * dropping or duplicating the comment: emptiness is decided by the recorded owner, not by which arm claims first.
+     *
+     * <p>The two kinds keep their existing, deliberately different width behavior so a later cutover does not shift
+     * measured layout widths. A {@code //} line comment is deferred as a {@link Doc#lineSuffix} — it flushes at the next
+     * line break and measures zero flat width, so the code it trails is laid out as if the comment were absent and can
+     * never be pushed over the line width by it. An inline block comment renders as its bare {@link Doc#text} content —
+     * it sits on the line and counts toward width, matching the {@code CommentPlacement} block seam. The separating
+     * space rides inside the width-free line-suffix; the block's inter-token spacing stays a caller concern, as today.
+     *
+     * <p>Callers still decide where in the surrounding layout this Doc is concatenated. Currently unused: no call site
+     * emits it yet.
+     */
+    Doc trailingComment(Node node) {
+        List<Doc> parts = new ArrayList<>();
+        commentPlacement.trailingLineComment(node)
+                .map(trivia -> trailingLineCommentSuffix(trivia, node))
+                .filter(doc -> doc != Doc.EMPTY)
+                .ifPresent(parts::add);
+        commentPlacement.unattachedTrailingBlockComment(node)
+                .map(trivia -> ownedComment(trivia, node, OwnerSlot.TRAILING))
+                .filter(doc -> doc != Doc.EMPTY)
+                .ifPresent(parts::add);
+        return Doc.concat(parts);
+    }
+
+    /**
+     * Defers an owned trailing {@code //} line comment past the current line as a width-free {@link Doc#lineSuffix},
+     * carrying its separating space inside the suffix, or returns {@link Doc#EMPTY} when this slot does not own it.
+     */
+    private Doc trailingLineCommentSuffix(JavaCommentTrivia trivia, Node node) {
+        Doc rendered = ownedComment(trivia, node, OwnerSlot.TRAILING);
+        return rendered == Doc.EMPTY
+            ? Doc.EMPTY
+            : Doc.lineSuffix(Doc.concat(Doc.text(" "), rendered));
+    }
+
+    /**
      * Claims and renders the line comments that trail {@code body} but were parked as an orphan of {@code owner}.
      *
      * <p>This is the orphan-bucket counterpart of {@link #trailingLineComment(Node)}: the try-clause handoff uses it to
@@ -522,6 +566,36 @@ final class CommentTracker {
     }
 
     /**
+     * Renders {@code trivia} as pure content when {@code (node, slot)} owns it, never mutating the real-pass
+     * {@link #printed} claim state — the claim-neutral render entry point (design a, "comments as pure content").
+     *
+     * <p>Emptiness becomes a pure function of the recorded ownership rather than of a build-time claim side effect:
+     * this returns {@link JavaFormatter#commentDoc(JavaCommentTrivia)} exactly when {@link #ownsHere} admits this slot
+     * and {@link Doc#EMPTY} otherwise, so a non-owner slot renders nothing just as it does through {@link #comment}.
+     * What differs from {@link #comment}/{@link #claim} is the side effect. In the record-only dry-run it still records
+     * the first claimant into {@link #ownership} (via {@code putIfAbsent}, exactly like {@link #claim}) so the
+     * ownership pre-pass is populated identically; in the real pass it mutates <em>nothing</em> — it never adds to
+     * {@link #printed} and never routes through {@link FormatterGuardrails#claimComment}. An owner may therefore render
+     * the same comment through this rail any number of times in one real pass (once per eagerly-built ranked arm, say)
+     * and always get the same non-empty Doc back, with no strict-claims duplicate-claim throw — unlike {@link #comment},
+     * whose second offer from the same owner claims into {@link #printed} and returns {@link Doc#EMPTY}.
+     *
+     * <p>Callers still decide which {@code (node, slot)} anchors a comment and how the returned Doc is laid out (inline
+     * versus deferred, spacing, ordering). Currently unused: this is the rail a later slice migrates the existing
+     * {@code .filter(ownsHere).filter(claim)} render paths onto, once comment emptiness no longer depends on build-time
+     * {@link #printed} mutation.
+     */
+    Doc ownedComment(JavaCommentTrivia trivia, Node node, OwnerSlot slot) {
+        if (!ownsHere(trivia, node, slot)) {
+            return Doc.EMPTY;
+        }
+        if (recording) {
+            ownership.putIfAbsent(trivia.comment(), new OwnerKey(node, slot));
+        }
+        return JavaFormatter.commentDoc(trivia);
+    }
+
+    /**
      * Records or consumes one comment claim, depending on whether this tracker is in the record-only dry-run pass.
      *
      * <p>In the real pass a comment is normally claimed exactly once, through the
@@ -588,6 +662,29 @@ final class CommentTracker {
      */
     void accountRawWithoutOwnComment(Node node) {
         FormatterGuardrails.accountRawCommentsWithoutOwnComment(node, rawRendered);
+    }
+
+    /**
+     * Computes the comment set the drop guardrail will use in the end-state, once build-time {@link #printed} mutation
+     * is gone: a comment is accounted when the ownership pre-pass recorded a render slot for it ({@link #ownership}) or
+     * it reached output through raw-preserved source ({@link #rawRendered}).
+     *
+     * <p>This is the ownership-based sibling of the {@code printed}-based set {@link #assertAllCommentsAccounted} feeds
+     * to {@link FormatterGuardrails#assertAllCommentsAccounted}. Today "accounted" means "was claimed into
+     * {@link #printed} during the render"; the pure-content rail {@link #ownedComment} deliberately never touches
+     * {@code printed}, so the end-state moves the accounting question from "was it claimed" to "does it have a recorded
+     * owner". This method makes that alternative set computable and testable now, but nothing consumes it yet —
+     * {@link #assertAllCommentsAccounted} still uses {@code printed} — so strict-claims and drop-detection behavior are
+     * unchanged. It is the dormant accounting path a later slice switches on when the pure rail owns emptiness.
+     *
+     * <p>Returns a fresh identity set (comments are compared by identity here, like every other comment set), so
+     * mutating the result does not affect the tracker.
+     */
+    Set<Comment> ownershipAccountedComments() {
+        Set<Comment> accounted = Collections.newSetFromMap(new IdentityHashMap<>());
+        accounted.addAll(ownership.keySet());
+        accounted.addAll(rawRendered);
+        return accounted;
     }
 
     /**

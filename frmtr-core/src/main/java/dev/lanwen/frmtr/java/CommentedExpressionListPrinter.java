@@ -48,7 +48,7 @@ final class CommentedExpressionListPrinter {
             return Optional.empty();
         }
         List<List<JavaCommentTrivia>> commentGaps = argumentCommentGaps(container, arguments);
-        if (!hasUnprintedComments(commentGaps)) {
+        if (!hasUnprintedComments(container, commentGaps)) {
             return Optional.empty();
         }
 
@@ -154,7 +154,7 @@ final class CommentedExpressionListPrinter {
      * Reports whether a parenthesized expression list has unclaimed line comments in one of its argument gaps.
      */
     boolean hasUnprintedLineComments(Node container, NodeList<Expression> arguments) {
-        return !arguments.isEmpty() && hasUnprintedComments(argumentCommentGaps(container, arguments));
+        return !arguments.isEmpty() && hasUnprintedComments(container, argumentCommentGaps(container, arguments));
     }
 
     /**
@@ -370,8 +370,22 @@ final class CommentedExpressionListPrinter {
         return first;
     }
 
-    private boolean hasUnprintedComments(List<List<JavaCommentTrivia>> commentGaps) {
-        return commentGaps.stream().flatMap(List::stream).anyMatch(comment -> !comments.isPrinted(comment));
+    private boolean hasUnprintedComments(Node container, List<List<JavaCommentTrivia>> commentGaps) {
+        for (int index = 0; index < commentGaps.size(); index++) {
+            for (JavaCommentTrivia comment : commentGaps.get(index)) {
+                // Mirror parenthesized's per-gap render anchor: gap 0 is emitted by addCommentDocs under the comment's own
+                // anchorless (comment, INTERLEAVED) key, every later gap under (container, INTERLEAVED). A gap comment is
+                // "unplaced here" — the reason to choose the broken layout — when this list's own slot still owns it, i.e.
+                // ownsHere admits it under that anchor (unmigrated, or recorded to this exact slot). A comment the dry-run
+                // recorded to another slot (an argument's inner render claiming its own trailing comment, say) is placed by
+                // that slot instead, so it does not force this broken layout.
+                Node anchor = index == 0 ? comment.comment() : container;
+                if (comments.ownsHere(comment, anchor, OwnerSlot.INTERLEAVED)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private void addCommentDocs(List<Doc> lines, List<JavaCommentTrivia> sourceComments) {

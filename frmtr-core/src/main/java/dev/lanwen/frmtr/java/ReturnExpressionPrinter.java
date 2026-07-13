@@ -58,27 +58,12 @@ final class ReturnExpressionPrinter {
 
     private final Function<Expression, String> compact;
 
-    private final Function<MethodCallExpr, Optional<Doc>> sourceMultilineExpressionLambda;
-
-    private final Function<MethodCallExpr, Optional<Doc>> sourceMultilineMethodCall;
-
-    // LDM-2f (#190): these three chain callbacks reach {@code MethodCallChainPrinter.compactRootLineWidth}, so each takes
-    // a {@link LayoutContext} the return caller fills with {@code withLeftEdgePrefix("return ")}. That lets the gate
-    // attribute the {@code return } prefix at the rendered column instead of inferring it from the value's source column.
-    private final ChainWithLayout<ToIntFunction<String>> compactRootWithBrokenFinalChainSegment;
-
-    // Canonical-fan cutover seam (End-state A): emits the source-neutral one-selector-per-line {@code chainFanOut} for a
-    // fan-threshold, comment/lambda-free return chain, independent of the value's source shape. The width shape here is the
-    // final-segment suffix ({@code ";"} for a return terminator carried into the fan). The return caller threads
-    // {@code withLeftEdgePrefix("return ")} so a promoted factory root measures its opener at the rendered column, exactly
-    // like the imperative forced-chain callbacks below.
-    private final ChainWithLayout<String> canonicalFanChain;
-
-    private final ChainWithLayout<ToIntFunction<String>> forcedMethodCallChain;
-
-    private final ChainWithLayout<ToIntFunction<String>> forcedMethodCallChainWithFirstLine;
-
-    private final Function<MethodCallExpr, Doc> brokenMethodCall;
+    // Return-chain shape cascade delegator (printer-contract-inversion, output-seam slice #1): the return printer no
+    // longer threads the ~nine chain shape-callbacks the cascade used to compose. It hands the one composite entry
+    // {@link MethodCallPrinter#returnChain} the two return-flavored inputs — the first-line width shape (the second
+    // parameter, a {@code returnLineWidth}-based first-line measure) and the {@code withLeftEdgePrefix("return ")}
+    // chainLayout (the third parameter) — and the chain printer owns the shape selection internally.
+    private final ChainWithLayout<ToIntFunction<String>> returnChain;
 
     private final BiFunction<MethodCallExpr, String, Doc> brokenMethodCallWithClosingLine;
 
@@ -124,13 +109,7 @@ final class ReturnExpressionPrinter {
             ExpressionTailRenderer expressionWithTail,
             Function<LambdaExpr, Doc> brokenLambdaExpression,
             Function<Expression, String> compact,
-            Function<MethodCallExpr, Optional<Doc>> sourceMultilineExpressionLambda,
-            Function<MethodCallExpr, Optional<Doc>> sourceMultilineMethodCall,
-            ChainWithLayout<ToIntFunction<String>> compactRootWithBrokenFinalChainSegment,
-            ChainWithLayout<String> canonicalFanChain,
-            ChainWithLayout<ToIntFunction<String>> forcedMethodCallChain,
-            ChainWithLayout<ToIntFunction<String>> forcedMethodCallChainWithFirstLine,
-            Function<MethodCallExpr, Doc> brokenMethodCall,
+            ChainWithLayout<ToIntFunction<String>> returnChain,
             BiFunction<MethodCallExpr, String, Doc> brokenMethodCallWithClosingLine,
             Function<MethodCallExpr, String> methodCallPrefix,
             Predicate<MethodCallExpr> methodCallChainIsSourceMultiline,
@@ -156,13 +135,7 @@ final class ReturnExpressionPrinter {
         this.expressionWithTail = expressionWithTail;
         this.brokenLambdaExpression = brokenLambdaExpression;
         this.compact = compact;
-        this.sourceMultilineExpressionLambda = sourceMultilineExpressionLambda;
-        this.sourceMultilineMethodCall = sourceMultilineMethodCall;
-        this.compactRootWithBrokenFinalChainSegment = compactRootWithBrokenFinalChainSegment;
-        this.canonicalFanChain = canonicalFanChain;
-        this.forcedMethodCallChain = forcedMethodCallChain;
-        this.forcedMethodCallChainWithFirstLine = forcedMethodCallChainWithFirstLine;
-        this.brokenMethodCall = brokenMethodCall;
+        this.returnChain = returnChain;
         this.brokenMethodCallWithClosingLine = brokenMethodCallWithClosingLine;
         this.methodCallPrefix = methodCallPrefix;
         this.methodCallChainIsSourceMultiline = methodCallChainIsSourceMultiline;
@@ -533,101 +506,25 @@ final class ReturnExpressionPrinter {
         return returnWithParenthesizedValueBreak(expression, layout);
     }
 
+    /**
+     * Runs the return value's forced method-call-chain shape cascade, now owned by {@link MethodCallPrinter#returnChain}.
+     *
+     * <p>This wrapper supplies only the two return-flavored inputs and delegates the shape selection. LDM-2f (#190): the
+     * {@code return} keyword shares the value's first line, so the {@code withLeftEdgePrefix("return ")} on
+     * {@code chainLayout} lets the prefix-aware chain width gates
+     * ({@code MethodCallChainPrinter.compactRootLineWidth}) drop their source-column floor and measure the compact chain
+     * root at {@code nodeIndentWidth + "return " + text} at the rendered column, so the fit decision is identical on
+     * every pass (idempotent). The {@code firstLineWidth} closure measures each first-line-fit candidate at that same
+     * post-{@code "return "} column through {@link #returnLineWidth}. The chain printer builds the residual
+     * fixed-baseline probes ({@link LayoutWidth#blockStatement}) internally.
+     */
     private Optional<Doc> returnWithForcedMethodCallChain(Expression expression, LayoutContext layout) {
         if (!(expression instanceof MethodCallExpr methodCall)) {
             return Optional.empty();
         }
-        // The return keyword's rendered column is threaded through chainLayout's leftEdgePrefix below, so the prefix-aware
-        // chain gates (MethodCallChainPrinter.compactRootLineWidth) measure at the true column and the residual
-        // fixed-baseline probes only need the ordinary two-unit block baseline ({@link LayoutWidth#blockStatement}).
-        ToIntFunction<String> lineWidth = layoutWidth::blockStatement;
-        // LDM-2f (#190): the return keyword shares the value's first line, so hand the chain gates that fixed prefix. The
-        // gate that reads it (MethodCallChainPrinter.compactRootLineWidth) drops its source-column floor and measures the
-        // compact chain root at nodeIndentWidth + "return " + text; every branch that can reach that gate threads the same
-        // prefix so the fit decision is identical on every pass (idempotent).
         LayoutContext chainLayout = layout.withLeftEdgePrefix("return ");
-        // Canonical-fan cutover seam (End-state A): a fan-threshold, comment/lambda-free return chain fans one selector per
-        // line, and it must do so through the SAME source-neutral fan on every pass — otherwise a source-multiline-argument
-        // pass folds the first selector onto the value (`return data.configResources()...`) via the imperative
-        // {@code canAttachFirstSegmentToSimpleRoot} branch, and the fanned re-format (single-line arguments now) splits it
-        // (`return data`⏎`.configResources()...`), flipping split<->attach forever. {@code chainFanOut} is a pure function of
-        // the AST, so both passes rebuild the identical fan. This precedes the source-multiline branches below, which are
-        // exactly the source-shape-sensitive routes that produce the flip; the fan carries the empty final-segment suffix
-        // (the return terminator `;` is appended by {@link #returnStatement} outside the value) and the `return ` left-edge
-        // prefix so a promoted factory root measures its opener at the rendered column. Expression-lambda-bodied return
-        // chains are withheld inside {@code canonicalFanChain} (deferred lambda-arrow seam), so they fall through to the
-        // source-multiline-lambda handling below unchanged.
-        Optional<Doc> canonicalFan = canonicalFanChain.apply(methodCall, "", chainLayout);
-        if (canonicalFan.isPresent()) {
-            return canonicalFan;
-        }
-        Optional<Doc> expressionLambda = sourceMultilineExpressionLambda.apply(methodCall);
-        if (expressionLambda.isPresent()) {
-            return expressionLambda;
-        }
-        if (!methodCallChainIsSourceMultiline.test(methodCall)) {
-            Optional<Doc> sourceMultilineCall = sourceMultilineMethodCall.apply(methodCall);
-            if (sourceMultilineCall.isPresent()) {
-                return sourceMultilineCall;
-            }
-        }
-        if (methodCallChainIsSourceMultiline.test(methodCall)) {
-            return forcedMethodCallChainWithFirstLine
-                    .apply(methodCall, text -> returnLineWidth(methodCall, "return " + text, layout), chainLayout)
-                    .or(() -> forcedMethodCallChain.apply(methodCall, lineWidth, chainLayout));
-        }
-        if (methodCall.getScope().filter(ObjectCreationExpr.class::isInstance).isPresent()) {
-            // LDM-3g (#210): a source-compact object-creation-rooted single-segment chain routes through the chain
-            // printer's ranked Doc.bestFitting (MethodCallChainPrinter.rankedObjectRootSingleSegmentChain), reached via the
-            // forced-chain callee below; it lets the renderer rank compact-with-broken-segment versus one-per-line fan-out
-            // at the real column instead of the first-line probe committing to a shape. The probe is still threaded so the
-            // deeper/source-multiline object-root shapes the ranker defers on keep their imperative selection.
-            return forcedMethodCallChainWithFirstLine
-                    .apply(methodCall, text -> returnLineWidth(methodCall, "return " + text, layout), chainLayout)
-                    .or(() -> forcedMethodCallChain.apply(methodCall, lineWidth, chainLayout));
-        }
-        // chain-unify U2 (#190): route the general width-driven return chain's compact-versus-fan verdict through the
-        // ranked engine. The chain has two legal broken shapes here — the compact-root-with-broken-final-segment (CRBFS,
-        // the compact root plus selector on one line with only the final argument list broken) and the one-per-line
-        // fan-out (each selector on its own dotted continuation line, the named arm U1 consolidated). Rather than the
-        // imperative "CRBFS first if it fits, else fan" the return caller used before, emit a single Doc.bestFitting so the
-        // renderer owns the verdict at the real column (post-"return "), the same way the single-segment/object-root
-        // rankers already do inside MethodCallChainPrinter.
-        //
-        // The CRBFS arm carries priority 1 and the fan arm priority 0 (Mechanism 2, Doc.bestFitting(List, int[])): among
-        // the arms that FIT, the higher-priority CRBFS is kept regardless of line count. That reproduces the imperative
-        // pre-empt byte-identically — the pre-empt returned CRBFS whenever compactRootWithBrokenFinalChainSegment could
-        // build it (its opener fits), i.e. exactly the cases where the CRBFS arm now fits and its priority keeps it. The
-        // only place the two differ is when the compact shape overflows at the rendered column (e.g. a chain co-located
-        // after an unbroken `if (...) ... else return `, whose deep first line no shape can rescue): the old pre-empt still
-        // committed to the over-width CRBFS, whereas priority never rescues an overflowing arm, so bestFitting falls to the
-        // fan-out, which uses fewer lines for the same unavoidable overflow — a strict improvement, and idempotent (the
-        // renderer re-ranks the same two AST-built candidates every pass). Only comment-free chains build both arms eagerly
-        // (the arms render the chain twice and would otherwise double-claim a comment, tripping the strict-claims guardrail
-        // — the same gate the landed rankers apply); a comment-bearing chain keeps the imperative cascade, which renders
-        // the chosen shape once. chainLayout carries the "return " left-edge prefix into both arms so each candidate is
-        // measured at the true rendered column.
-        Optional<Doc> compactBrokenSegment =
-            compactRootWithBrokenFinalChainSegment.apply(methodCall, lineWidth, chainLayout);
-        if (methodCall.getAllContainedComments().isEmpty() && compactBrokenSegment.isPresent()) {
-            Optional<Doc> fanOut = forcedMethodCallChainWithFirstLine
-                    .apply(methodCall, text -> returnLineWidth(methodCall, "return " + text, layout), chainLayout)
-                    .or(() -> forcedMethodCallChain.apply(methodCall, lineWidth, chainLayout));
-            if (fanOut.isPresent()) {
-                return Optional.of(Doc.bestFitting(
-                    List.of(compactBrokenSegment.orElseThrow(), fanOut.orElseThrow()),
-                    new int[] {1, 0}
-                ));
-            }
-        }
-        return compactBrokenSegment
-                .or(() -> forcedMethodCallChainWithFirstLine.apply(
-                        methodCall,
-                        text -> returnLineWidth(methodCall, "return " + text, layout),
-                        chainLayout
-                ))
-                .or(() -> forcedMethodCallChain.apply(methodCall, lineWidth, chainLayout))
-                .or(() -> Optional.of(brokenMethodCall.apply(methodCall)));
+        ToIntFunction<String> firstLineWidth = text -> returnLineWidth(methodCall, "return " + text, layout);
+        return returnChain.apply(methodCall, firstLineWidth, chainLayout);
     }
 
     private Optional<Doc> returnWithForcedConditionalBreak(Expression expression) {

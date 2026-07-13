@@ -45,7 +45,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.function.ToIntFunction;
 
 /**
@@ -127,23 +126,16 @@ final class StatementPrinter {
 
     private final HuggableArgumentsRenderer huggableBlockLambdaArguments;
 
-    private final BiFunction<MethodCallExpr, ExpressionStmt, Optional<Doc>> sourceMultilineMethodCallStatementRenderer;
-
-    private final BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> forcedMethodCallChainRenderer;
-
-    private final BiFunction<MethodCallExpr, ToIntFunction<String>, Doc> forcedMethodCallWithSemicolonRenderer;
+    // Output-seam slice #3: the expression statement's method-call-chain shape cascade, owned by
+    // {@link MethodCallPrinter#statementChain} (statement analogue of {@link ReturnExpressionPrinter}'s
+    // {@code returnChain}). The statement printer no longer threads the chain shape-callbacks the cascade used to compose
+    // (source-multiline statement call, forced call with terminator, and the final-trailing-comment / has-comments /
+    // is-source-multiline / root-is-object-creation / root-is-field-access predicates). It hands the one composite entry
+    // the statement-flavored inputs — the {@code ;} terminator, the first-line width closure, and the raw-source
+    // whole-statement width measure ({@link #methodCallStatementWidth}) — and the chain printer owns the shape selection.
+    private final StatementChainRenderer statementChain;
 
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
-
-    private final Predicate<MethodCallExpr> methodCallChainHasComments;
-
-    private final Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment;
-
-    private final Predicate<MethodCallExpr> methodCallChainIsSourceMultiline;
-
-    private final Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation;
-
-    private final Predicate<MethodCallExpr> methodCallChainRootIsFieldAccess;
 
     private final Function<Expression, Doc> ifConditionRenderer;
 
@@ -195,15 +187,8 @@ final class StatementPrinter {
             Function<NodeWithModifiers<?>, String> modifiers,
             Function<AnnotationExpr, String> annotationFlatText,
             HuggableArgumentsRenderer huggableBlockLambdaArguments,
-            BiFunction<MethodCallExpr, ExpressionStmt, Optional<Doc>> sourceMultilineMethodCallStatementRenderer,
-            BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> forcedMethodCallChainRenderer,
-            BiFunction<MethodCallExpr, ToIntFunction<String>, Doc> forcedMethodCallWithSemicolonRenderer,
+            StatementChainRenderer statementChain,
             Function<MethodCallExpr, Doc> brokenMethodCallRenderer,
-            Predicate<MethodCallExpr> methodCallChainHasComments,
-            Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment,
-            Predicate<MethodCallExpr> methodCallChainIsSourceMultiline,
-            Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation,
-            Predicate<MethodCallExpr> methodCallChainRootIsFieldAccess,
             Function<Expression, Doc> ifConditionRenderer,
             ControlConditionPrinter controlConditions,
             Function<Expression, String> compactWithOwnBlockComment,
@@ -239,15 +224,8 @@ final class StatementPrinter {
         this.modifiers = modifiers;
         this.annotationFlatText = annotationFlatText;
         this.huggableBlockLambdaArguments = huggableBlockLambdaArguments;
-        this.sourceMultilineMethodCallStatementRenderer = sourceMultilineMethodCallStatementRenderer;
-        this.forcedMethodCallChainRenderer = forcedMethodCallChainRenderer;
-        this.forcedMethodCallWithSemicolonRenderer = forcedMethodCallWithSemicolonRenderer;
+        this.statementChain = statementChain;
         this.brokenMethodCallRenderer = brokenMethodCallRenderer;
-        this.methodCallChainHasComments = methodCallChainHasComments;
-        this.methodCallChainHasFinalTrailingLineComment = methodCallChainHasFinalTrailingLineComment;
-        this.methodCallChainIsSourceMultiline = methodCallChainIsSourceMultiline;
-        this.methodCallChainRootIsObjectCreation = methodCallChainRootIsObjectCreation;
-        this.methodCallChainRootIsFieldAccess = methodCallChainRootIsFieldAccess;
         this.ifConditionRenderer = ifConditionRenderer;
         this.controlConditions = controlConditions;
         this.compactWithOwnBlockComment = compactWithOwnBlockComment;
@@ -765,30 +743,21 @@ final class StatementPrinter {
             );
         }
         if (expression instanceof MethodCallExpr methodCall) {
-            if (methodCallChainHasFinalTrailingLineComment.test(methodCall)) {
-                return Doc.concat(forcedMethodCallWithSemicolonRenderer.apply(methodCall, lineWidth), trailing);
-            }
-            if (!methodCallChainIsSourceMultiline.test(methodCall)) {
-                Optional<Doc> sourceMultilineCall = sourceMultilineMethodCallStatementRenderer.apply(
-                    methodCall,
-                    statement
-                );
-                if (sourceMultilineCall.isPresent()) {
-                    return Doc.concat(sourceMultilineCall.orElseThrow(), ExpressionTail.SEMICOLON.doc(), trailing);
-                }
-            }
-            if (methodCallStatementWidth(methodCall, lineWidth) > options.lineWidth()) {
-                boolean chainBreak = methodCallChainHasComments.test(methodCall)
-                    || methodCallChainIsSourceMultiline.test(methodCall)
-                    || methodCallChainRootIsObjectCreation.test(methodCall)
-                    || !methodCallChainRootIsFieldAccess.test(methodCall);
-                if (chainBreak) {
-                    return Doc.concat(forcedMethodCallWithSemicolonRenderer.apply(methodCall, lineWidth), trailing);
-                }
-                return Doc.concat(
-                    forcedMethodCallWithSemicolonRenderer.apply(methodCall, lineWidth),
-                    trailing
-                );
+            // Output-seam slice #3: the chain shape-selection cascade now lives in MethodCallPrinter.statementChain. The
+            // statement-specific bits stay here — the ExpressionTail.SEMICOLON terminator, the first-line width closure,
+            // and the raw-source whole-statement width measure (methodCallStatementWidth) — and the trailing statement
+            // comment is concatenated after the chosen chain shape. An empty result means no chain shape was selected
+            // (fits within the line width, not final-trailing-comment or source-multiline shaped), so fall through to the
+            // general expression-with-tail rendering below.
+            Optional<Doc> chain = statementChain.render(
+                methodCall,
+                statement,
+                ExpressionTail.SEMICOLON,
+                lineWidth,
+                call -> methodCallStatementWidth(call, lineWidth)
+            );
+            if (chain.isPresent()) {
+                return Doc.concat(chain.orElseThrow(), trailing);
             }
         }
         if (expression instanceof AssignExpr assignExpr) {
@@ -983,5 +952,24 @@ final class StatementPrinter {
     @FunctionalInterface
     interface HuggableArgumentsRenderer {
         Optional<Doc> render(String prefix, NodeList<Expression> arguments);
+    }
+
+    /**
+     * The single composite entry for an expression statement's method-call-chain shape (output-seam slice #3), collapsing
+     * the chain shape-callbacks the statement cascade used to thread. Implemented by
+     * {@link MethodCallPrinter#statementChain} (via {@link ExpressionPrinters#statementChain}); the caller supplies only
+     * the statement-flavored inputs — the {@code tail} terminator, the {@code lineWidth} first-line width closure, and the
+     * {@code statementWidth} raw-source whole-statement width measure — and receives the chosen chain shape, or
+     * {@link Optional#empty()} when no chain shape applies and the caller should render the general expression form.
+     */
+    @FunctionalInterface
+    interface StatementChainRenderer {
+        Optional<Doc> render(
+            MethodCallExpr methodCall,
+            ExpressionStmt statement,
+            ExpressionTail tail,
+            ToIntFunction<String> lineWidth,
+            ToIntFunction<MethodCallExpr> statementWidth
+        );
     }
 }

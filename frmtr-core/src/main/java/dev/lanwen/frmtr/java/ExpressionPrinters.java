@@ -314,13 +314,7 @@ final class ExpressionPrinters {
             this::expressionWithTail,
             lambdas::brokenExpressionLambda,
             compactSource::compact,
-            methodCalls::sourceMultilineExpressionLambda,
-            methodCalls::sourceMultilineArguments,
-            methodCalls::compactRootWithBrokenFinalChainSegment,
-            methodCalls::canonicalFanChain,
-            methodCalls::forcedMethodCallChainAtBaseline,
-            methodCalls::forcedMethodCallChain,
-            methodCalls::brokenMethodCall,
+            methodCalls::returnChain,
             methodCalls::brokenMethodCallWithClosingLine,
             methodCalls::methodCallPrefix,
             methodCalls::methodCallChainIsSourceMultiline,
@@ -596,6 +590,32 @@ final class ExpressionPrinters {
             LayoutContext layout
     ) {
         return methodCalls.forcedMethodCallChain(expression, firstLineWidth, layout);
+    }
+
+    // Output-seam slice #2: the variable initializer's forced method-call-chain entry (initializer analogue of the
+    // return chain's composite entry). Delegates to MethodCallPrinter.initializerChain so VariableInitializerLayout
+    // threads a single initializer chain callback rather than the raw layout-carrying forced-chain overload above.
+    Optional<Doc> initializerChain(
+            MethodCallExpr expression,
+            ToIntFunction<String> firstLineWidth,
+            LayoutContext layout
+    ) {
+        return methodCalls.initializerChain(expression, firstLineWidth, layout);
+    }
+
+    // Output-seam slice #3: the expression statement's method-call-chain shape entry (statement analogue of the return
+    // chain's composite entry). Delegates to MethodCallPrinter.statementChain so StatementPrinter threads a single
+    // statement chain callback rather than the chain shape-callbacks (source-multiline statement call, forced call with
+    // terminator, and the has-final-trailing-comment / has-comments / is-source-multiline / root-is-object-creation /
+    // root-is-field-access predicates) the cascade used to compose.
+    Optional<Doc> statementChain(
+            MethodCallExpr expression,
+            ExpressionStmt statement,
+            ExpressionTail tail,
+            ToIntFunction<String> lineWidth,
+            ToIntFunction<MethodCallExpr> statementWidth
+    ) {
+        return methodCalls.statementChain(expression, statement, tail, lineWidth, statementWidth);
     }
 
     Optional<Doc> packedMethodCallChain(

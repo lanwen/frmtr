@@ -128,63 +128,27 @@ final class ExpressionDispatcher {
      * entries, or switch block layout.
      */
     Doc expressionContent(Expression expression, LayoutContext layout) {
-        if (expression instanceof AssignExpr assignExpr) {
-            return assignments.format(assignExpr, layout);
-        }
-        if (expression instanceof ArrayAccessExpr arrayAccessExpr) {
-            return arrayAccesses.format(arrayAccessExpr, layout);
-        }
-        if (expression instanceof ArrayCreationExpr arrayCreationExpr) {
-            return arrayCreations.format(arrayCreationExpr, layout);
-        }
-        if (expression instanceof ArrayInitializerExpr arrayInitializerExpr) {
-            return arrayInitializers.format(arrayInitializerExpr, layout);
-        }
-        if (expression instanceof AnnotationExpr annotationExpr) {
-            return annotationExpressions.format(annotationExpr, layout);
-        }
-        if (expression instanceof BinaryExpr binaryExpr) {
-            return binaries.format(binaryExpr, layout);
-        }
-        if (expression instanceof CastExpr castExpr) {
-            return casts.format(castExpr, layout);
-        }
-        if (expression instanceof ClassExpr classExpr) {
-            return classExpressions.format(classExpr, layout);
-        }
-        if (expression instanceof ConditionalExpr conditionalExpr) {
-            return conditionals.format(conditionalExpr, layout);
-        }
-        if (expression instanceof EnclosedExpr enclosedExpr) {
-            return enclosedExpressions.format(enclosedExpr, layout);
-        }
-        if (expression instanceof FieldAccessExpr fieldAccessExpr) {
-            return fieldAccesses.format(fieldAccessExpr, layout);
-        }
-        if (expression instanceof InstanceOfExpr instanceOfExpr) {
-            return instanceOfExpressions.format(instanceOfExpr, layout);
-        }
-        if (expression instanceof LambdaExpr lambdaExpr) {
-            return lambdas.format(lambdaExpr, layout);
-        }
-        if (expression instanceof MethodCallExpr methodCallExpr) {
-            return methodCalls.format(methodCallExpr, layout);
-        }
-        if (expression instanceof MethodReferenceExpr methodReferenceExpr) {
-            return methodReferences.format(methodReferenceExpr, layout);
-        }
-        if (expression instanceof ObjectCreationExpr objectCreationExpr) {
-            return objectCreations.format(objectCreationExpr, layout);
-        }
-        if (expression instanceof SwitchExpr switchExpr) {
-            return switches.format(switchExpr, layout);
-        }
-        if (expression instanceof TextBlockLiteralExpr textBlockLiteralExpr) {
-            return textBlocks.format(textBlockLiteralExpr, layout);
-        }
-        if (expression instanceof UnaryExpr unaryExpr) {
-            return unaries.format(unaryExpr, layout);
-        }
-        return Doc.text(compactSource.compact(expression));
+        return switch (expression) {
+            case AssignExpr assignExpr -> assignments.format(assignExpr, layout);
+            case ArrayAccessExpr arrayAccessExpr -> arrayAccesses.format(arrayAccessExpr, layout);
+            case ArrayCreationExpr arrayCreationExpr -> arrayCreations.format(arrayCreationExpr, layout);
+            case ArrayInitializerExpr arrayInitializerExpr -> arrayInitializers.format(arrayInitializerExpr, layout);
+            case AnnotationExpr annotationExpr -> annotationExpressions.format(annotationExpr, layout);
+            case BinaryExpr binaryExpr -> binaries.format(binaryExpr, layout);
+            case CastExpr castExpr -> casts.format(castExpr, layout);
+            case ClassExpr classExpr -> classExpressions.format(classExpr, layout);
+            case ConditionalExpr conditionalExpr -> conditionals.format(conditionalExpr, layout);
+            case EnclosedExpr enclosedExpr -> enclosedExpressions.format(enclosedExpr, layout);
+            case FieldAccessExpr fieldAccessExpr -> fieldAccesses.format(fieldAccessExpr, layout);
+            case InstanceOfExpr instanceOfExpr -> instanceOfExpressions.format(instanceOfExpr, layout);
+            case LambdaExpr lambdaExpr -> lambdas.format(lambdaExpr, layout);
+            case MethodCallExpr methodCallExpr -> methodCalls.format(methodCallExpr, layout);
+            case MethodReferenceExpr methodReferenceExpr -> methodReferences.format(methodReferenceExpr, layout);
+            case ObjectCreationExpr objectCreationExpr -> objectCreations.format(objectCreationExpr, layout);
+            case SwitchExpr switchExpr -> switches.format(switchExpr, layout);
+            case TextBlockLiteralExpr textBlockLiteralExpr -> textBlocks.format(textBlockLiteralExpr, layout);
+            case UnaryExpr unaryExpr -> unaries.format(unaryExpr, layout);
+            default -> Doc.text(compactSource.compact(expression));
+        };
     }
 }

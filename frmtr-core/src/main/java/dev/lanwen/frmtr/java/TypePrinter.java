@@ -293,16 +293,15 @@ final class TypePrinter {
      * annotation has no body to break, so it stays compact in either mode.
      */
     private Doc groupableTypeAnnotation(AnnotationExpr annotation) {
-        if (annotation instanceof NormalAnnotationExpr normalAnnotation && !normalAnnotation.getPairs().isEmpty()) {
-            return Doc.ifBreak(brokenNormalAnnotation(normalAnnotation), Doc.text(compactTypeLike.apply(annotation)));
-        }
-        if (annotation instanceof SingleMemberAnnotationExpr singleMemberAnnotation) {
-            return Doc.ifBreak(
+        return switch (annotation) {
+            case NormalAnnotationExpr normalAnnotation when !normalAnnotation.getPairs().isEmpty() ->
+                Doc.ifBreak(brokenNormalAnnotation(normalAnnotation), Doc.text(compactTypeLike.apply(annotation)));
+            case SingleMemberAnnotationExpr singleMemberAnnotation -> Doc.ifBreak(
                 brokenSingleMemberAnnotation(singleMemberAnnotation),
                 Doc.text(compactTypeLike.apply(annotation))
             );
-        }
-        return Doc.text(compactTypeLike.apply(annotation));
+            default -> Doc.text(compactTypeLike.apply(annotation));
+        };
     }
 
     private static boolean annotationHasBreakableBody(AnnotationExpr annotation) {

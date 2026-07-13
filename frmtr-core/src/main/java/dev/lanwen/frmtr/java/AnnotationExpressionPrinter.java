@@ -80,14 +80,11 @@ final class AnnotationExpressionPrinter {
      * append the comma <em>after</em> the comment, producing the non-compiling {@code @Elem(...) // note,}.
      */
     Doc annotation(AnnotationExpr annotation) {
-        Doc formatted;
-        if (annotation instanceof NormalAnnotationExpr normalAnnotation) {
-            formatted = normalAnnotation(normalAnnotation);
-        } else if (annotation instanceof SingleMemberAnnotationExpr singleMemberAnnotation) {
-            formatted = singleMemberAnnotation(singleMemberAnnotation);
-        } else {
-            formatted = Doc.text("@" + compact.apply(annotation.getName()));
-        }
+        Doc formatted = switch (annotation) {
+            case NormalAnnotationExpr normalAnnotation -> normalAnnotation(normalAnnotation);
+            case SingleMemberAnnotationExpr singleMemberAnnotation -> singleMemberAnnotation(singleMemberAnnotation);
+            default -> Doc.text("@" + compact.apply(annotation.getName()));
+        };
         if (isAnnotationArrayElement(annotation)) {
             return formatted;
         }
@@ -123,16 +120,14 @@ final class AnnotationExpressionPrinter {
         if (!annotationOverflowsAtColumn(annotation, layout)) {
             return annotation(annotation);
         }
-        if (annotation instanceof NormalAnnotationExpr normalAnnotation) {
-            return brokenNormalAnnotation(normalAnnotation);
-        }
-        if (annotation instanceof SingleMemberAnnotationExpr singleMemberAnnotation) {
-            return brokenSingleMemberAnnotation(
+        return switch (annotation) {
+            case NormalAnnotationExpr normalAnnotation -> brokenNormalAnnotation(normalAnnotation);
+            case SingleMemberAnnotationExpr singleMemberAnnotation -> brokenSingleMemberAnnotation(
                 "@" + compact.apply(singleMemberAnnotation.getName()),
                 annotationValue(singleMemberAnnotation.getMemberValue())
             );
-        }
-        return annotation(annotation);
+            default -> annotation(annotation);
+        };
     }
 
     /**
@@ -257,21 +252,19 @@ final class AnnotationExpressionPrinter {
      * annotation-specific compact path so string literal tokens are not normalized by the broader compact fallback.
      */
     String annotationFlatText(AnnotationExpr annotation) {
-        if (annotation instanceof NormalAnnotationExpr normalAnnotation) {
-            return "@"
+        return switch (annotation) {
+            case NormalAnnotationExpr normalAnnotation -> "@"
                 + compact.apply(normalAnnotation.getName())
                 + "("
                 + compactJoinAnnotationPairs(normalAnnotation.getPairs())
                 + ")";
-        }
-        if (annotation instanceof SingleMemberAnnotationExpr singleMemberAnnotation) {
-            return "@"
+            case SingleMemberAnnotationExpr singleMemberAnnotation -> "@"
                 + compact.apply(singleMemberAnnotation.getName())
                 + "("
                 + compactAnnotationValue(singleMemberAnnotation.getMemberValue())
                 + ")";
-        }
-        return "@" + compact.apply(annotation.getName());
+            default -> "@" + compact.apply(annotation.getName());
+        };
     }
 
     /**
@@ -282,20 +275,20 @@ final class AnnotationExpressionPrinter {
      * with the rest of the formatter.
      */
     private Doc annotationValue(Expression value) {
-        if (value instanceof ArrayInitializerExpr arrayInitializerExpr) {
-            if (annotationValueHasLineComments(arrayInitializerExpr)) {
-                return annotationArrayInitializer(arrayInitializerExpr);
+        return switch (value) {
+            case ArrayInitializerExpr arrayInitializerExpr -> {
+                if (annotationValueHasLineComments(arrayInitializerExpr)) {
+                    yield annotationArrayInitializer(arrayInitializerExpr);
+                }
+                String flat = compactAnnotationArrayInitializer(arrayInitializerExpr);
+                if (currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
+                    yield Doc.text(flat);
+                }
+                yield annotationArrayInitializer(arrayInitializerExpr);
             }
-            String flat = compactAnnotationArrayInitializer(arrayInitializerExpr);
-            if (currentIndentedWidth.applyAsInt(flat) <= options.lineWidth()) {
-                return Doc.text(flat);
-            }
-            return annotationArrayInitializer(arrayInitializerExpr);
-        }
-        if (value instanceof BinaryExpr) {
-            return nestedBinaryLines.apply(value, true);
-        }
-        return rendering.render(value);
+            case BinaryExpr binaryExpr -> nestedBinaryLines.apply(value, true);
+            default -> rendering.render(value);
+        };
     }
 
     private boolean annotationValueMustBreak(Expression value) {
@@ -356,16 +349,14 @@ final class AnnotationExpressionPrinter {
     }
 
     private Doc annotationArrayValueLine(Expression value) {
-        if (value instanceof AnnotationExpr annotation && annotationArrayAnnotationLineOverflows(annotation)) {
-            return brokenAnnotationArrayValue(annotation);
-        }
-        if (
-            value instanceof BinaryExpr binaryExpr
-            && currentIndentedWidth.applyAsInt(compactAnnotationValue(value)) > options.lineWidth()
-        ) {
-            return nestedBinaryLines.apply(binaryExpr, true);
-        }
-        return rendering.render(value);
+        return switch (value) {
+            case AnnotationExpr annotation when annotationArrayAnnotationLineOverflows(annotation) ->
+                brokenAnnotationArrayValue(annotation);
+            case BinaryExpr binaryExpr
+                when currentIndentedWidth.applyAsInt(compactAnnotationValue(value)) > options.lineWidth() ->
+                nestedBinaryLines.apply(binaryExpr, true);
+            default -> rendering.render(value);
+        };
     }
 
     private boolean annotationArrayAnnotationLineOverflows(AnnotationExpr annotation) {
@@ -375,16 +366,14 @@ final class AnnotationExpressionPrinter {
     }
 
     private Doc brokenAnnotationArrayValue(AnnotationExpr annotation) {
-        if (annotation instanceof NormalAnnotationExpr normalAnnotation) {
-            return brokenNormalAnnotation(normalAnnotation);
-        }
-        if (annotation instanceof SingleMemberAnnotationExpr singleMemberAnnotation) {
-            return brokenSingleMemberAnnotation(
+        return switch (annotation) {
+            case NormalAnnotationExpr normalAnnotation -> brokenNormalAnnotation(normalAnnotation);
+            case SingleMemberAnnotationExpr singleMemberAnnotation -> brokenSingleMemberAnnotation(
                 "@" + compact.apply(singleMemberAnnotation.getName()),
                 annotationValue(singleMemberAnnotation.getMemberValue())
             );
-        }
-        return rendering.render(annotation);
+            default -> rendering.render(annotation);
+        };
     }
 
     private void addCommentDocs(List<Doc> lines, List<JavaCommentTrivia> sourceComments) {
@@ -409,16 +398,15 @@ final class AnnotationExpressionPrinter {
      * compact source text.
      */
     private String compactAnnotationValue(Expression value) {
-        if (value instanceof StringLiteralExpr || value instanceof TextBlockLiteralExpr) {
-            return value.getTokenRange().map(Object::toString).orElseGet(value::toString);
-        }
-        if (value instanceof ArrayInitializerExpr arrayInitializerExpr) {
-            return compactAnnotationArrayInitializer(arrayInitializerExpr);
-        }
-        if (value instanceof AnnotationExpr annotationExpr) {
-            return annotationFlatText(annotationExpr);
-        }
-        return compact.apply(value);
+        return switch (value) {
+            case StringLiteralExpr stringLiteral ->
+                value.getTokenRange().map(Object::toString).orElseGet(value::toString);
+            case TextBlockLiteralExpr textBlockLiteral ->
+                value.getTokenRange().map(Object::toString).orElseGet(value::toString);
+            case ArrayInitializerExpr arrayInitializerExpr -> compactAnnotationArrayInitializer(arrayInitializerExpr);
+            case AnnotationExpr annotationExpr -> annotationFlatText(annotationExpr);
+            default -> compact.apply(value);
+        };
     }
 
     private String compactAnnotationArrayInitializer(ArrayInitializerExpr expression) {

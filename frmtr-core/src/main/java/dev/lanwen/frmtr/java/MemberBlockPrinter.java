@@ -1,7 +1,5 @@
 package dev.lanwen.frmtr.java;
 
-import com.github.javaparser.GeneratedJavaParserConstants;
-import com.github.javaparser.JavaToken;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.AnnotationDeclaration;
@@ -53,6 +51,8 @@ final class MemberBlockPrinter {
 
     private final Predicate<BodyDeclaration<?>> hasPragma;
 
+    private final MemberBlockBraceLayout brace;
+
     MemberBlockPrinter(
             JavaFormatContext context,
             Predicate<BodyDeclaration<?>> hasDeclarationAnnotations,
@@ -68,6 +68,7 @@ final class MemberBlockPrinter {
         this.recoverParseProblems = context.recoverParseProblems;
         this.hasDeclarationAnnotations = hasDeclarationAnnotations;
         this.hasPragma = hasPragma;
+        this.brace = new MemberBlockBraceLayout(comments, sourceText, commentPlacement);
     }
 
     /**
@@ -82,7 +83,7 @@ final class MemberBlockPrinter {
             Node owner,
             Function<BodyDeclaration<?>, Doc> memberRenderer
     ) {
-        Doc openingBraceTrailingComment = openingBraceTrailingLineComment(owner);
+        Doc openingBraceTrailingComment = brace.openingBraceTrailingLineComment(owner);
         Optional<RecoveredListPlanner.Plan<BodyDeclaration<?>>> recoveryPlan = recoveryPlan(owner, members);
         if (recoveryPlan.isPresent() && hasRawGap(recoveryPlan.orElseThrow())) {
             return recoveredMemberBlock(
@@ -135,19 +136,6 @@ final class MemberBlockPrinter {
             Doc.HARD_LINE,
             Doc.text("}")
         );
-    }
-
-    /**
-     * Recovers a line comment written after the opening brace of a member block.
-     *
-     * <p>This raw-source path handles the layout case where the comment belongs to the brace line rather than to a
-     * declaration. Comments after the first newline continue through normal orphan-comment sequencing.
-     */
-    private Doc openingBraceTrailingLineComment(Node node) {
-        return openingBraceTrailingLineCommentTrivia(node)
-                .map(comments::comment)
-                .filter(doc -> doc != Doc.EMPTY)
-                .orElse(Doc.EMPTY);
     }
 
     /**
@@ -306,7 +294,7 @@ final class MemberBlockPrinter {
             Doc openingBraceTrailingComment,
             Function<BodyDeclaration<?>, Doc> memberRenderer
     ) {
-        Optional<SourceRegion> openingBraceTrailingCommentRegion = openingBraceTrailingLineCommentRegion(owner);
+        Optional<SourceRegion> openingBraceTrailingCommentRegion = brace.openingBraceTrailingLineCommentRegion(owner);
         List<RecoveredRawGapPrinter.RawGapRegion> rawGapRegions = rawGaps.rawGapRegions(
             plan,
             region -> withoutOpeningBraceTrailingComment(
@@ -518,130 +506,16 @@ final class MemberBlockPrinter {
                 .toList();
     }
 
-    private Optional<SourceRegion> openingBraceTrailingLineCommentRegion(Node owner) {
-        return openingBraceTrailingLineCommentTrivia(owner)
-                .flatMap(comment -> comment.comment().getRange())
-                .map(sourceText::region);
-    }
-
-    private Optional<JavaCommentTrivia> openingBraceTrailingLineCommentTrivia(Node owner) {
-        SourceRegion interior;
-        try {
-            interior = memberBlockInteriorRegion(owner);
-        } catch (IllegalArgumentException exception) {
-            return Optional.empty();
-        }
-        String raw = sourceText.slice(interior);
-        int lineEnd = firstLineEnd(raw);
-        int lineEndOffset = lineEnd < 0 ? interior.endOffset() : interior.beginOffset() + lineEnd;
-        // A comment only trails the opening brace when nothing else in the block precedes it. When whitespace is
-        // collapsed the opening brace and the first member can share a physical line, so the first line break is no
-        // longer a reliable boundary: a member's own trailing comment (e.g. an enum constant's `// note`) would sit on
-        // the same line as the brace and be mistaken for a brace comment, stealing it from the member that owns it.
-        // Cap the boundary at the first member's source start so only comments written before any member qualify.
-        int firstLineEndOffset = Math.min(lineEndOffset, firstMemberBeginOffset(owner, interior).orElse(lineEndOffset));
-        return commentPlacement.containedComments(owner)
-                .stream()
-                .filter(JavaCommentTrivia::isLine)
-                .filter(comment -> comment.comment()
-                            .getRange()
-                            .map(sourceText::region)
-                            .filter(region -> RecoveredRawGapPrinter.contains(interior, region))
-                            .filter(region -> region.beginLine() == interior.beginLine())
-                            .filter(region -> region.beginOffset() < firstLineEndOffset)
-                            .isPresent()
-                )
-                .findFirst();
-    }
-
-    /**
-     * Finds the source begin offset of the first content child written inside {@code owner}'s brace-delimited body.
-     *
-     * <p>Used to bound the opening-brace trailing-comment scan: a comment can only trail the opening brace if it is
-     * written before any member or enum constant. Only child nodes that begin inside {@code interior} (after the opening
-     * brace) count — the owner's own name, type parameters, and {@code extends}/{@code implements} clauses sit before the
-     * brace and must not pull the boundary back ahead of a legitimate brace-line comment. Comments are skipped because
-     * they are exactly what the scan is trying to classify; only non-comment members mark where body content starts.
-     */
-    private Optional<Integer> firstMemberBeginOffset(Node owner, SourceRegion interior) {
-        return owner.getChildNodes()
-                .stream()
-                .filter(child -> !(child instanceof com.github.javaparser.ast.comments.Comment))
-                .flatMap(child -> child.getRange().stream())
-                .map(range -> sourceText.region(range).beginOffset())
-                .filter(offset -> offset >= interior.beginOffset())
-                .min(Integer::compareTo);
-    }
-
     private SourceRegion requireMemberBlockInteriorRegion(Node owner) {
         try {
-            return memberBlockInteriorRegion(owner);
+            return brace.memberBlockInteriorRegion(owner);
         } catch (IllegalArgumentException exception) {
             throw memberDeclarationListRecoveryFailure(exception.getMessage(), exception);
         }
     }
 
-    private SourceRegion memberBlockInteriorRegion(Node owner) {
-        List<JavaToken> tokens = owner.getTokenRange()
-                .map(tokenRange -> {
-                    List<JavaToken> collected = new ArrayList<>();
-                    tokenRange.forEach(collected::add);
-                    return collected;
-                })
-                .orElseThrow(() -> new IllegalArgumentException("member block owner is missing a token range"));
-        JavaToken closingBrace = null;
-        JavaToken openingBrace = null;
-        int depth = 0;
-        for (int i = tokens.size() - 1; i >= 0; i--) {
-            JavaToken token = tokens.get(i);
-            if (token.getKind() == GeneratedJavaParserConstants.RBRACE) {
-                if (closingBrace == null) {
-                    closingBrace = token;
-                }
-                depth++;
-                continue;
-            }
-            if (token.getKind() == GeneratedJavaParserConstants.LBRACE && closingBrace != null) {
-                depth--;
-                if (depth == 0) {
-                    openingBrace = token;
-                    break;
-                }
-            }
-        }
-        if (openingBrace == null || closingBrace == null) {
-            throw new IllegalArgumentException("member block source range must contain matching braces");
-        }
-        SourceRegion openingRegion = tokenRegion(openingBrace, "opening brace");
-        SourceRegion closingRegion = tokenRegion(closingBrace, "closing brace");
-        if (closingRegion.beginOffset() < openingRegion.endOffset()) {
-            throw new IllegalArgumentException("member block braces are not ordered");
-        }
-        return sourceText.region(openingRegion.endOffset(), closingRegion.beginOffset());
-    }
-
-    private SourceRegion tokenRegion(JavaToken token, String description) {
-        return token.getRange()
-                .map(sourceText::region)
-                .orElseThrow(
-                    () -> new IllegalArgumentException("member block " + description + " is missing a source range")
-                );
-    }
-
     private static boolean hasRawGap(RecoveredListPlanner.Plan<BodyDeclaration<?>> plan) {
         return plan.entries().stream().anyMatch(RecoveredListPlanner.RawGap.class::isInstance);
-    }
-
-    private static int firstLineEnd(String raw) {
-        int lf = raw.indexOf('\n');
-        int cr = raw.indexOf('\r');
-        if (lf < 0) {
-            return cr;
-        }
-        if (cr < 0) {
-            return lf;
-        }
-        return Math.min(lf, cr);
     }
 
     private static FormatterException memberDeclarationListRecoveryFailure(String reason) {

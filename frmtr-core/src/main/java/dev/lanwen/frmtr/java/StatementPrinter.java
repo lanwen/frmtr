@@ -263,7 +263,7 @@ final class StatementPrinter {
             this::commentText,
             this::emptyBodyOwnBlockComment,
             this::trailingEmptyBodyBlockComment,
-            this::trailingLineComment
+            this::enclosedTrailingLineComment
         );
         this.loopStatementLayout = new LoopStatementLayout(
             comments,
@@ -894,21 +894,47 @@ final class StatementPrinter {
         return "";
     }
 
+    /**
+     * A statement's own content-render trailing line comment: its own attached trailing comment (under the distinct
+     * {@code (node, CONTENT_TRAILING)} slot) or, failing that, an unattached trailing comment recovered from a parent
+     * bucket (under {@code (node, UNATTACHED_TRAILING)}).
+     *
+     * <p>This is the content path an expression statement uses for its own trailing comment. It stays distinct from the
+     * outer envelope's {@code (node, TRAILING)} offer and from an enclosing construct's
+     * {@link #enclosedTrailingLineComment(Node)} offer, so when an {@code if} branch body is an expression statement and
+     * all three fire for the one node, the dry-run's first offerer owns the comment and the other two render empty by
+     * ownership — no build-order {@code isPrinted} read is needed. For a plain expression statement the envelope offers
+     * first, so this content attached-own offer renders empty and the envelope keeps the comment; this path still owns the
+     * unattached recovery, which the envelope never offers.
+     */
     private Doc trailingLineComment(Node node) {
-        // An attached trailing line comment is claimed and rendered once by StatementRuleEnvelope.statement, which runs
-        // before this content renderer. When that node's trailing comment is already printed, re-offering it here would be
-        // a duplicate claim that only ever rendered empty. Skip the attached re-offer in that case and fall through to the
-        // unattached recovery below, which is this path's own responsibility (the envelope never offers unattached
-        // trailing comments). Output is unchanged: the attached comment is the envelope's, the unattached one is recovered
-        // here exactly as before.
-        boolean attachedAlreadyPrinted = commentPlacement.trailingLineComment(node)
-                .map(comments::isPrinted)
-                .orElse(false);
-        Doc own = attachedAlreadyPrinted ? Doc.EMPTY : comments.trailingLineComment(node);
+        Doc own = comments.contentTrailingLineComment(node);
         if (own != Doc.EMPTY) {
             return own;
         }
-        return unattachedTrailingLineComment(node);
+        return unattachedTrailingLineComment(node, OwnerSlot.UNATTACHED_TRAILING);
+    }
+
+    /**
+     * The trailing line comment of a statement whose placement an <em>enclosing</em> construct owns — the callback the
+     * {@link IfStatementLayout} uses to render a then/else body's trailing comment in the spot only the {@code if} layout
+     * controls (the then-body's comment on its own line before {@code else}).
+     *
+     * <p>Anchored to the distinct {@code (node, ENCLOSED_TRAILING)} slot for both the attached-own comment and the
+     * parent-bucket recovery. Because the enclosing {@code if} layout offers this before the nested body is rendered, the
+     * dry-run records {@code ENCLOSED_TRAILING} as the owner, and the nested statement's own envelope
+     * ({@code (node, TRAILING)}) and its own content offer ({@link #trailingLineComment(Node)}'s {@code CONTENT_TRAILING}
+     * and {@code UNATTACHED_TRAILING} slots) all render empty by ownership. One slot covers both the attached and the
+     * recovered comment because a node has at most one of them, so the nested statement's own unattached recovery yields
+     * to this slot too. This reproduces today's first-claim-wins winner (the enclosing layout renders the comment once,
+     * the nested renders skip it) without a build-order {@code isPrinted} read.
+     */
+    private Doc enclosedTrailingLineComment(Node node) {
+        Doc own = comments.enclosedTrailingLineComment(node);
+        if (own != Doc.EMPTY) {
+            return own;
+        }
+        return unattachedTrailingLineComment(node, OwnerSlot.ENCLOSED_TRAILING);
     }
 
     /**
@@ -938,14 +964,21 @@ final class StatementPrinter {
         return trailing.startsWith("/*") ? " " + trailing : "";
     }
 
-    private Doc unattachedTrailingLineComment(Node node) {
-        // The same unattached trailing line comment can be reached from more than one anchor node (the placement policy
-        // walks parents to recover it), so a sibling or enclosing statement may already have claimed and rendered it.
-        // Re-offering an already-printed comment only ever rendered empty, so skip it to avoid a duplicate claim; output
-        // is unchanged because the first claimant placed it.
+    /**
+     * Recovers a trailing line comment that JavaParser parked on a parent bucket rather than on the node it visually
+     * trails, anchoring it to {@code node} under the given {@code slot}.
+     *
+     * <p>The same parent-parked comment can be reached from more than one recovering node (the placement policy walks
+     * parents), and from more than one slot on the <em>same</em> node — the statement's own content path recovers it under
+     * {@link OwnerSlot#UNATTACHED_TRAILING}, while an enclosing {@code if} layout recovers it under
+     * {@link OwnerSlot#ENCLOSED_TRAILING}. The {@code slot} parameter keeps those distinct so the dry-run's first
+     * recovering offer owns the comment and the rest, keying a different {@code (node, slot)}, render empty — reproducing
+     * the old first-claim-wins recovery without a build-order {@code isPrinted} read.
+     */
+    private Doc unattachedTrailingLineComment(Node node, OwnerSlot slot) {
         return commentPlacement.unattachedTrailingLineComment(node)
-                .filter(trivia -> !comments.isPrinted(trivia))
-                .map(comments::comment)
+                .map(trivia -> comments.comment(trivia, node, slot))
+                .filter(doc -> doc != Doc.EMPTY)
                 .orElse(Doc.EMPTY);
     }
 

@@ -2978,32 +2978,29 @@ final class VariableInitializerLayout {
      * a second outer break around the same expression.
      */
     private boolean initializerHasOwnBreak(Expression initializer) {
-        if (initializer instanceof ArrayCreationExpr arrayCreationExpr) {
-            return arrayCreationHasOwnBreak(arrayCreationExpr);
-        }
-        if (initializer instanceof ArrayAccessExpr) {
+        return switch (initializer) {
+            case ArrayCreationExpr arrayCreation -> arrayCreationHasOwnBreak(arrayCreation);
+            case ArrayAccessExpr ignored -> true;
+            case ObjectCreationExpr objectCreation -> objectCreation.getAnonymousClassBody().isPresent();
+            case SwitchExpr ignored -> true;
+            case MethodCallExpr methodCall -> methodCallScopeHasOwnBreak(methodCall);
+            default -> false;
+        };
+    }
+
+    /**
+     * A method call owns its break when its receiver does: an array-access receiver always breaks, and an
+     * array-creation receiver breaks when {@link #arrayCreationHasOwnBreak} reports it does.
+     */
+    private boolean methodCallScopeHasOwnBreak(MethodCallExpr methodCall) {
+        if (methodCall.getScope().filter(ArrayAccessExpr.class::isInstance).isPresent()) {
             return true;
         }
-        if (
-            initializer instanceof ObjectCreationExpr objectCreationExpr
-            && objectCreationExpr.getAnonymousClassBody().isPresent()
-        ) {
-            return true;
-        }
-        if (initializer instanceof SwitchExpr) {
-            return true;
-        }
-        if (initializer instanceof MethodCallExpr methodCallExpr) {
-            if (methodCallExpr.getScope().filter(ArrayAccessExpr.class::isInstance).isPresent()) {
-                return true;
-            }
-            return methodCallExpr.getScope()
-                    .filter(ArrayCreationExpr.class::isInstance)
-                    .map(ArrayCreationExpr.class::cast)
-                    .map(this::arrayCreationHasOwnBreak)
-                    .orElse(false);
-        }
-        return false;
+        return methodCall.getScope()
+                .filter(ArrayCreationExpr.class::isInstance)
+                .map(ArrayCreationExpr.class::cast)
+                .map(this::arrayCreationHasOwnBreak)
+                .orElse(false);
     }
 
     /**

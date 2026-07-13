@@ -16,8 +16,11 @@ import com.github.javaparser.ast.comments.LineComment;
 import dev.lanwen.frmtr.FormatterOptions;
 import dev.lanwen.frmtr.doc.Doc;
 import dev.lanwen.frmtr.doc.DocRenderer;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.api.parallel.Resources;
@@ -27,24 +30,28 @@ final class FormatterGuardrailsTest {
 
     @Test
     void duplicateCommentClaimsKeepExistingSkipBehaviorByDefault() {
+        // The strict-claims machinery (FormatterGuardrails.claimComment) is now tested directly: the comment(...) render
+        // family is claim-neutral (it delegates to the ownedComment rail and no longer routes through claimComment), so
+        // this guardrail is exercised at its own layer. Without strict-claims a duplicate claim skips benignly.
         withStrictClaims(null, () -> {
-            CommentTracker comments = commentTracker();
-            LineComment comment = new LineComment("value");
+            Set<Comment> claimed = newClaimSet();
+            JavaCommentTrivia trivia = JavaCommentTrivia.from(new LineComment("value"));
 
-            assertThat(comments.comment(comment)).isNotEqualTo(Doc.EMPTY);
-            assertThatCode(() -> assertThat(comments.comment(comment)).isEqualTo(Doc.EMPTY)).doesNotThrowAnyException();
+            assertThat(FormatterGuardrails.claimComment(trivia, claimed)).isTrue();
+            assertThatCode(() -> assertThat(FormatterGuardrails.claimComment(trivia, claimed)).isFalse())
+                    .doesNotThrowAnyException();
         });
     }
 
     @Test
     void duplicateCommentClaimsFailFastWhenStrictClaimsAreEnabled() {
         withStrictClaims("true", () -> {
-            CommentTracker comments = commentTracker();
-            LineComment comment = new LineComment("value");
+            Set<Comment> claimed = newClaimSet();
+            JavaCommentTrivia trivia = JavaCommentTrivia.from(new LineComment("value"));
 
-            comments.comment(comment);
+            FormatterGuardrails.claimComment(trivia, claimed);
 
-            assertThatThrownBy(() -> comments.comment(comment))
+            assertThatThrownBy(() -> FormatterGuardrails.claimComment(trivia, claimed))
                     .isInstanceOf(AssertionError.class)
                     .hasMessageContaining("duplicate claim")
                     .hasMessageContaining("LineComment")
@@ -55,14 +62,15 @@ final class FormatterGuardrailsTest {
     @Test
     void duplicateCommentClaimsKeepSkipBehaviorWhenOnlyDropDetectionIsEnabled() {
         // Comment-drop detection (ENABLED_PROPERTY) is on in CI, but the strict "claimed at most once" invariant is not:
-        // a duplicate claim must keep its benign skip behavior, since the claim/render-coupled design legitimately offers
-        // the same comment from more than one printer path.
+        // a duplicate claim on the retained claimComment machinery must keep its benign skip behavior when only drop
+        // detection is enabled.
         withGuardrails("true", () -> withStrictClaims(null, () -> {
-            CommentTracker comments = commentTracker();
-            LineComment comment = new LineComment("value");
+            Set<Comment> claimed = newClaimSet();
+            JavaCommentTrivia trivia = JavaCommentTrivia.from(new LineComment("value"));
 
-            assertThat(comments.comment(comment)).isNotEqualTo(Doc.EMPTY);
-            assertThatCode(() -> assertThat(comments.comment(comment)).isEqualTo(Doc.EMPTY)).doesNotThrowAnyException();
+            assertThat(FormatterGuardrails.claimComment(trivia, claimed)).isTrue();
+            assertThatCode(() -> assertThat(FormatterGuardrails.claimComment(trivia, claimed)).isFalse())
+                    .doesNotThrowAnyException();
         }));
     }
 
@@ -87,12 +95,12 @@ final class FormatterGuardrailsTest {
     @Test
     void duplicateCommentClaimMessageCapsCommentText() {
         withStrictClaims("true", () -> {
-            CommentTracker comments = commentTracker();
-            LineComment comment = new LineComment("a".repeat(120) + "tail-marker");
+            Set<Comment> claimed = newClaimSet();
+            JavaCommentTrivia trivia = JavaCommentTrivia.from(new LineComment("a".repeat(120) + "tail-marker"));
 
-            comments.comment(comment);
+            FormatterGuardrails.claimComment(trivia, claimed);
 
-            assertThatThrownBy(() -> comments.comment(comment))
+            assertThatThrownBy(() -> FormatterGuardrails.claimComment(trivia, claimed))
                     .isInstanceOf(AssertionError.class)
                     .hasMessageContaining("duplicate claim")
                     .hasMessageContaining("LineComment")
@@ -102,11 +110,11 @@ final class FormatterGuardrailsTest {
     }
 
     @Test
-    void recordedOwnerReclaimRendersInEveryRealPassArmUnderStrictClaims() {
-        // Enabler for comment-bearing ranked candidate sets: when a later slice builds a comment-bearing subtree in more
-        // than one eagerly evaluated arm, each arm re-offers the comment from its single recorded owner. That owner
-        // re-claim must render the comment in every arm (the renderer keeps whichever it picks) instead of skipping the
-        // later arms or tripping the strict-claims fail-fast. Without this the second arm would throw here.
+    void recordedOwnerRendersInEveryRealPassArmUnderStrictClaims() {
+        // Comment-bearing ranked candidate sets: when a printer builds a comment-bearing subtree in more than one
+        // eagerly evaluated arm, each arm re-offers the comment from its single recorded owner. The claim-neutral
+        // comment(...) rail renders the comment in every arm (the renderer keeps whichever it picks) instead of skipping
+        // the later arms, and never touches the strict-claims fail-fast because it does not claim.
         withStrictClaims("true", () -> {
             CommentTracker comments = commentTracker();
             Node field = parse(
@@ -128,15 +136,18 @@ final class FormatterGuardrailsTest {
 
             assertThat(firstArm).isNotEqualTo(Doc.EMPTY);
             assertThat(secondArm).isEqualTo(firstArm);
+            assertThat(comments.isPrinted(trivia)).isFalse();
         });
     }
 
     @Test
-    void reclaimWithoutRecordedOwnerStillFailsFastUnderStrictClaims() {
-        // The benign re-claim above is gated on a *recorded* owner, not on the broader ownsHere (which also admits an
-        // unmigrated comment the dry-run never recorded). With no recording pass, the same (node, slot) offering a comment
-        // twice is a genuine duplicate claim and must still trip the guardrail. This is the only difference from the test
-        // above, so it pins the recorded-owner distinction: loosening the predicate back to ownsHere would break it.
+    void commentRenderFamilyIsClaimNeutralAndNeverTripsStrictClaims() {
+        // The comment(...) render family is the last one migrated onto the claim-neutral ownedComment rail: it no longer
+        // routes through the strict-claims claimComment machinery. Offering the same (node, slot) twice — even with no
+        // recording pass and strict-claims enabled — therefore renders the comment both times without claiming it into
+        // printed and without tripping the duplicate-claim fail-fast (which the migrated families rely on so an owner can
+        // re-render a comment across ranked arms). The strict-claims guardrail itself is exercised directly on
+        // FormatterGuardrails.claimComment in the duplicate-claim tests above.
         withStrictClaims("true", () -> {
             CommentTracker comments = commentTracker();
             Node field = parse(
@@ -148,12 +159,12 @@ final class FormatterGuardrailsTest {
             ).getType(0).getMember(0);
             JavaCommentTrivia trivia = JavaCommentTrivia.from(new LineComment("running total"));
 
-            comments.comment(trivia, field, OwnerSlot.TRAILING);
+            Doc first = comments.comment(trivia, field, OwnerSlot.TRAILING);
+            Doc second = comments.comment(trivia, field, OwnerSlot.TRAILING);
 
-            assertThatThrownBy(() -> comments.comment(trivia, field, OwnerSlot.TRAILING))
-                    .isInstanceOf(AssertionError.class)
-                    .hasMessageContaining("duplicate claim")
-                    .hasMessageContaining("running total");
+            assertThat(first).isNotEqualTo(Doc.EMPTY);
+            assertThat(second).isEqualTo(first);
+            assertThat(comments.isPrinted(trivia)).isFalse();
         });
     }
 
@@ -161,8 +172,9 @@ final class FormatterGuardrailsTest {
     void ownedCommentRendersFromRecordedOwnerWithoutClaimingUnderStrictClaims() {
         // The pure-content rail renders a comment purely from the recorded owner and never touches the printed claim
         // set, so an owner can re-render it in more than one eagerly-built ranked arm and always get the same non-empty
-        // Doc back — with no strict-claims duplicate-claim throw. The contrast at the end pins why this differs from the
-        // claim path: comment(...) DOES claim the same comment into printed, whereas ownedComment leaves printed empty.
+        // Doc back — with no strict-claims duplicate-claim throw. The comment(...) render family now delegates to this
+        // same rail, so it shares this claim-neutral behavior (pinned by
+        // commentRenderFamilyIsClaimNeutralAndNeverTripsStrictClaims).
         withStrictClaims("true", () -> {
             CommentTracker comments = commentTracker();
             Node field = parse(
@@ -185,10 +197,6 @@ final class FormatterGuardrailsTest {
             assertThat(firstArm).isNotEqualTo(Doc.EMPTY);
             assertThat(secondArm).isEqualTo(firstArm);
             assertThat(comments.isPrinted(trivia)).isFalse();
-
-            // Contrast: the claim-coupled render path claims the very same comment into printed.
-            comments.comment(trivia, field, OwnerSlot.TRAILING);
-            assertThat(comments.isPrinted(trivia)).isTrue();
         });
     }
 
@@ -624,6 +632,10 @@ final class FormatterGuardrailsTest {
         return parser.parse(ParseStart.COMPILATION_UNIT, Providers.provider(source))
                 .getResult()
                 .orElseThrow();
+    }
+
+    private static Set<Comment> newClaimSet() {
+        return Collections.newSetFromMap(new IdentityHashMap<>());
     }
 
     private static CommentTracker commentTracker() {

@@ -945,12 +945,13 @@ final class StatementPrinter {
      */
     private String trailingEmptyBodyBlockComment(Node node) {
         // unattachedTrailingBlockComment parent-walks to recover a block comment after an empty-body semicolon, so the
-        // same comment can be reached from more than one anchor (e.g. the loop statement and its empty body). Skip an
-        // already-printed comment so the second anchor does not duplicate-claim it; output is unchanged because the first
-        // anchor placed it and the second only ever rendered empty.
+        // same comment can be reached from more than one anchor (e.g. the loop statement and its empty body). Offer it
+        // under this recovering node's own distinct (node, UNATTACHED_TRAILING_BLOCK) owner so comment ownership
+        // disambiguates the anchors: the dry-run's first recovering anchor owns it and any other anchor, keying a
+        // different (node, slot), renders Doc.EMPTY (caught by the check below) and falls to the raw fallback —
+        // reproducing the old first-claim-wins recovery without a build-order isPrinted skip.
         Doc unattached = commentPlacement.unattachedTrailingBlockComment(node)
-                .filter(trivia -> !comments.isPrinted(trivia))
-                .map(comments::comment)
+                .map(trivia -> comments.comment(trivia, node, OwnerSlot.UNATTACHED_TRAILING_BLOCK))
                 .orElse(Doc.EMPTY);
         if (unattached != Doc.EMPTY) {
             return " " + commentText(unattached);

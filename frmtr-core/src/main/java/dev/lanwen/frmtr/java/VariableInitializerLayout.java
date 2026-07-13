@@ -126,15 +126,20 @@ final class VariableInitializerLayout {
 
     private final Function<MethodCallExpr, Optional<Doc>> mixedFieldMethodCallChain;
 
-    private final ForcedChainWithLayout forcedMethodCallChain;
+    // Output-seam slice #2: the initializer's single forced method-call-chain shape entry, owned by
+    // {@link MethodCallPrinter#initializerChain} (initializer analogue of {@link ReturnExpressionPrinter}'s
+    // {@code returnChain}). The initializer's chain-shape SELECTION stays here — it interleaves each shape with
+    // break-after-{@code =} and {@code NAME = } prefix gating — but the forced-chain shape itself is delegated through this
+    // one entry from all three forced-chain positions (direct chain, expression-lambda body, broken-after-{@code =}
+    // fallback). The caller threads the {@code NAME = } left-edge prefix (or {@link LayoutContext#root()}) and the
+    // first-line width probe, exactly as the former raw forced-chain callback did.
+    private final ForcedChainWithLayout initializerChain;
 
     private final CanonicalFanChain canonicalFanChain;
 
     private final BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> packedMethodCallChain;
 
     private final Function<MethodCallExpr, Doc> methodCallWithSemicolon;
-
-    private final Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment;
 
     private final Function<MethodCallExpr, Optional<Expression>> mixedFieldMethodCallRoot;
 
@@ -199,11 +204,10 @@ final class VariableInitializerLayout {
             Function<MethodCallExpr, Doc> methodCall,
             Function<MethodCallExpr, Doc> brokenMethodCall,
             Function<MethodCallExpr, Optional<Doc>> mixedFieldMethodCallChain,
-            ForcedChainWithLayout forcedMethodCallChain,
+            ForcedChainWithLayout initializerChain,
             CanonicalFanChain canonicalFanChain,
             BiFunction<MethodCallExpr, ToIntFunction<String>, Optional<Doc>> packedMethodCallChain,
             Function<MethodCallExpr, Doc> methodCallWithSemicolon,
-            Predicate<MethodCallExpr> methodCallChainHasFinalTrailingLineComment,
             Function<MethodCallExpr, Optional<Expression>> mixedFieldMethodCallRoot,
             Function<MethodCallExpr, String> methodCallChainFirstLine,
             Predicate<MethodCallExpr> methodCallChainRootIsObjectCreation,
@@ -251,11 +255,10 @@ final class VariableInitializerLayout {
         this.methodCall = methodCall;
         this.brokenMethodCall = brokenMethodCall;
         this.mixedFieldMethodCallChain = mixedFieldMethodCallChain;
-        this.forcedMethodCallChain = forcedMethodCallChain;
+        this.initializerChain = initializerChain;
         this.canonicalFanChain = canonicalFanChain;
         this.packedMethodCallChain = packedMethodCallChain;
         this.methodCallWithSemicolon = methodCallWithSemicolon;
-        this.methodCallChainHasFinalTrailingLineComment = methodCallChainHasFinalTrailingLineComment;
         this.mixedFieldMethodCallRoot = mixedFieldMethodCallRoot;
         this.methodCallChainFirstLine = methodCallChainFirstLine;
         this.methodCallChainRootIsObjectCreation = methodCallChainRootIsObjectCreation;
@@ -2625,7 +2628,7 @@ final class VariableInitializerLayout {
         // here would newly activate the object-creation dot-split for lambda-body chains too, which is out of the
         // initializer-chain slice's scope (LDM-2f #190, mirroring #236 keeping return scoped to the direct return chain).
         // Pass root(); the firstLineWidth probe still folds the lambda prefix in, so this stays byte-identical.
-        Doc body = forcedMethodCallChain
+        Doc body = initializerChain
                 .apply(
                     methodCall,
                     firstLineWidth(variable, flatName + " = " + lambdaPrefix + " "),
@@ -2670,7 +2673,7 @@ final class VariableInitializerLayout {
         // shape under singleCallConvergesOnArgumentBreak, a deliberate idempotence-preserving convergence choice. Rerouting
         // it to the dot-split fan-out is non-idempotent for initializers (unlike return, the initializer layout space has a
         // break-after-= collapse the fan-out oscillates with), so it is left as-is and deferred.
-        return forcedMethodCallChain.apply(
+        return initializerChain.apply(
             methodCall,
             firstLineWidth(variable, flatName + " = "),
             LayoutContext.root().withLeftEdgePrefix(flatName + " = ")
@@ -2837,7 +2840,7 @@ final class VariableInitializerLayout {
             // This fallback renders the chain on its own continuation line under a broken NAME = (the caller wraps it in
             // NAME =\n<indented>), so the chain owns its first column with no same-line prefix. Pass root() (empty prefix):
             // there is no NAME = to attribute at the rendered column here, so the leftEdgePrefix arm must stay off.
-            return forcedMethodCallChain
+            return initializerChain
                     .apply(methodCall, text -> layoutWidth.variableInitializer(variable, text), LayoutContext.root())
                     .orElseGet(() -> expression.apply(initializer));
         }

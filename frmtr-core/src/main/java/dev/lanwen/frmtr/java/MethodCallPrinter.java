@@ -850,6 +850,32 @@ final class MethodCallPrinter {
     }
 
     /**
+     * Renders a variable initializer's forced method-call-chain value — the initializer analogue of {@link #returnChain}
+     * (printer-contract-inversion, output-seam slice #2). This owns the forced-chain shape (the one chain shape the
+     * initializer delegates unconditionally, from all three of its forced-chain positions: the direct
+     * {@code NAME = chain}, the {@code NAME = params -> chain} lambda body, and the broken-after-{@code =} continuation
+     * fallback), so that shape call becomes an internal {@code this.} call here rather than a cross-printer callback.
+     *
+     * <p>Unlike {@link ReturnExpressionPrinter}, the initializer does NOT run a liftable multi-shape cascade: its
+     * chain-shape SELECTION (which of forced / packed / canonical-fan / compact-object-creation / broken-argument shape to
+     * emit) is interleaved with initializer-specific break-after-{@code =} and {@code NAME = } prefix gating at every site,
+     * so that selection stays in {@link VariableInitializerLayout}. Only the forced-chain shape is owned here.
+     * {@code chainLayout} carries the {@code NAME = } left-edge prefix built by the caller with
+     * {@link LayoutContext#withLeftEdgePrefix(String)} (or {@link LayoutContext#root()} for the break-after-{@code =} and
+     * lambda-body positions that must not attribute it), so the prefix-aware chain width gates
+     * ({@code MethodCallChainPrinter.compactRootLineWidth}) measure at the true rendered column; {@code firstLineWidth} is
+     * the caller's {@link LayoutWidth#variableInitializer}-based first-line measure. Delegates to the layout-carrying
+     * forced-chain machinery this printer already owns, so it is byte-identical to the former direct callback.
+     */
+    Optional<Doc> initializerChain(
+            MethodCallExpr methodCall,
+            ToIntFunction<String> firstLineWidth,
+            LayoutContext chainLayout
+    ) {
+        return forcedMethodCallChain(methodCall, firstLineWidth, chainLayout);
+    }
+
+    /**
      * Renders a {@code return}'s forced method-call-chain value by running the return-flavored chain-shape cascade the
      * {@link ReturnExpressionPrinter} used to own inline (printer-contract-inversion, output-seam slice #1). Moving the
      * cascade here collapses the nine chain shape-callbacks the return printer used to thread through the composer to

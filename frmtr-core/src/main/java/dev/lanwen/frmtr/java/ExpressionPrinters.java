@@ -592,6 +592,17 @@ final class ExpressionPrinters {
         return methodCalls.forcedMethodCallChain(expression, firstLineWidth, layout);
     }
 
+    // Output-seam slice #2: the variable initializer's forced method-call-chain entry (initializer analogue of the
+    // return chain's composite entry). Delegates to MethodCallPrinter.initializerChain so VariableInitializerLayout
+    // threads a single initializer chain callback rather than the raw layout-carrying forced-chain overload above.
+    Optional<Doc> initializerChain(
+            MethodCallExpr expression,
+            ToIntFunction<String> firstLineWidth,
+            LayoutContext layout
+    ) {
+        return methodCalls.initializerChain(expression, firstLineWidth, layout);
+    }
+
     Optional<Doc> packedMethodCallChain(
             MethodCallExpr expression,
             ToIntFunction<String> firstLineWidth

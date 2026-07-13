@@ -121,12 +121,11 @@ final class ArgumentHeaviness {
         if (node instanceof LambdaExpr) {
             return 0;
         }
-        int weight = 0;
-        if (node instanceof MethodCallExpr call) {
-            weight += 1 + call.getArguments().size();
-        } else if (node instanceof ObjectCreationExpr creation) {
-            weight += 1 + creation.getArguments().size();
-        }
+        int weight = switch (node) {
+            case MethodCallExpr call -> 1 + call.getArguments().size();
+            case ObjectCreationExpr creation -> 1 + creation.getArguments().size();
+            default -> 0;
+        };
         for (Node child : structuralChildren(node)) {
             weight += nestedWeight(child);
         }

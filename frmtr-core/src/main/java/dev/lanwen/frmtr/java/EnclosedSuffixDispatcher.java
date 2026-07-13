@@ -40,12 +40,11 @@ final class EnclosedSuffixDispatcher {
      */
     Optional<Doc> suffixedEnclosedExpression(Expression expression, LayoutContext layout) {
         boolean leadingBreak = layout.leadingBreak();
-        if (expression instanceof MethodCallExpr methodCallExpr) {
-            return methodCalls.suffixedEnclosedMethodCall(methodCallExpr, leadingBreak);
-        }
-        if (expression instanceof MethodReferenceExpr methodReferenceExpr) {
-            return methodReferences.suffixedEnclosedMethodReference(methodReferenceExpr, leadingBreak);
-        }
-        return Optional.empty();
+        return switch (expression) {
+            case MethodCallExpr methodCallExpr -> methodCalls.suffixedEnclosedMethodCall(methodCallExpr, leadingBreak);
+            case MethodReferenceExpr methodReferenceExpr ->
+                methodReferences.suffixedEnclosedMethodReference(methodReferenceExpr, leadingBreak);
+            default -> Optional.empty();
+        };
     }
 }

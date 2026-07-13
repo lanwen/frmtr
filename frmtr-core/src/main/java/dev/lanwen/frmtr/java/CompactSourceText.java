@@ -15,6 +15,7 @@ import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.InstanceOfExpr;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
+import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.expr.StringLiteralExpr;
 import com.github.javaparser.ast.expr.TextBlockLiteralExpr;
@@ -74,83 +75,63 @@ final class CompactSourceText {
         if (!isFullyParsed(node)) {
             return compactTokenText(node);
         }
-        if (
-            node instanceof StringLiteralExpr
-            || node instanceof CharLiteralExpr
-            || node instanceof TextBlockLiteralExpr
-        ) {
-            return rawSource.raw(node);
-        }
-        if (node instanceof ClassExpr classExpr) {
-            return compactTypeLike(classExpr.getType()) + ".class";
-        }
-        if (node instanceof FieldAccessExpr fieldAccessExpr) {
-            return compact(fieldAccessExpr.getScope()) + "." + fieldAccessExpr.getNameAsString();
-        }
-        if (node instanceof EnclosedExpr enclosedExpr && containsRawLiteral(enclosedExpr)) {
-            return "(" + compact(enclosedExpr.getInner()) + ")";
-        }
-        if (node instanceof BinaryExpr binaryExpr && containsRawLiteral(binaryExpr)) {
-            return compact(binaryExpr.getLeft())
-                + " "
-                + binaryExpr.getOperator().asString()
-                + " "
-                + compact(binaryExpr.getRight());
-        }
-        if (node instanceof ConditionalExpr conditionalExpr && containsRawLiteral(conditionalExpr)) {
-            return compact(conditionalExpr.getCondition())
-                + " ? "
-                + compact(conditionalExpr.getThenExpr())
-                + " : "
-                + compact(conditionalExpr.getElseExpr());
-        }
-        if (node instanceof UnaryExpr unaryExpr && containsRawLiteral(unaryExpr)) {
-            String operator = unaryExpr.getOperator().asString();
-            return unaryExpr.getOperator().isPrefix()
-                ? operator + compact(unaryExpr.getExpression())
-                : compact(unaryExpr.getExpression()) + operator;
-        }
-        if (node instanceof ArrayAccessExpr arrayAccessExpr && containsRawLiteral(arrayAccessExpr)) {
-            return compact(arrayAccessExpr.getName()) + "[" + compact(arrayAccessExpr.getIndex()) + "]";
-        }
-        if (node instanceof CastExpr castExpr && containsRawLiteral(castExpr)) {
-            return "(" + compactTypeLike(castExpr.getType()) + ") " + compact(castExpr.getExpression());
-        }
-        if (node instanceof InstanceOfExpr instanceOfExpr && containsRawLiteral(instanceOfExpr)) {
-            String right = instanceOfExpr.getPattern()
-                    .map(this::compact)
-                    .orElseGet(() -> compactTypeLike(instanceOfExpr.getType()));
-            return compact(instanceOfExpr.getExpression()) + " instanceof " + right;
-        }
-        // Containment gate kept as a direct JavaParser scan, not SourceShapePolicy/JavaCommentPlacementPolicy's
-        // run index: compact() is reached with comment-stripped clones via compactWithoutOwnComment, and the run
-        // index reports an unknown clone as comment-free, which would flip this reconstruction gate and change
-        // output. The shared run-indexed containment gate (SourceShapePolicy.hasContainedComments) is the coordination
-        // point for original run nodes; clone-reached gates stay local here.
-        if (node instanceof AssignExpr assignExpr && assignExpr.getAllContainedComments().isEmpty()) {
-            return compact(assignExpr.getTarget())
-                + " "
-                + assignExpr.getOperator().asString()
-                + " "
-                + compact(assignExpr.getValue());
-        }
-        if (node instanceof MethodCallExpr methodCallExpr && methodCallExpr.getAllContainedComments().isEmpty()) {
-            return compactMethodCall(methodCallExpr);
-        }
-        if (
-            node instanceof ObjectCreationExpr objectCreationExpr
-            && objectCreationExpr.getAnonymousClassBody().isEmpty()
-            && objectCreationExpr.getAllContainedComments().isEmpty()
-        ) {
-            return compactObjectCreation(objectCreationExpr);
-        }
-        if (
-            node instanceof MethodReferenceExpr methodReferenceExpr
-            && methodReferenceExpr.getAllContainedComments().isEmpty()
-        ) {
-            return compactMethodReference(methodReferenceExpr);
-        }
-        return compactTokenText(node);
+        return switch (node) {
+            case StringLiteralExpr stringLiteral -> rawSource.raw(node);
+            case CharLiteralExpr charLiteral -> rawSource.raw(node);
+            case TextBlockLiteralExpr textBlockLiteral -> rawSource.raw(node);
+            case ClassExpr classExpr -> compactTypeLike(classExpr.getType()) + ".class";
+            case FieldAccessExpr fieldAccessExpr ->
+                compact(fieldAccessExpr.getScope()) + "." + fieldAccessExpr.getNameAsString();
+            case EnclosedExpr enclosedExpr when containsRawLiteral(enclosedExpr) ->
+                "(" + compact(enclosedExpr.getInner()) + ")";
+            case BinaryExpr binaryExpr when containsRawLiteral(binaryExpr) ->
+                compact(binaryExpr.getLeft())
+                    + " "
+                    + binaryExpr.getOperator().asString()
+                    + " "
+                    + compact(binaryExpr.getRight());
+            case ConditionalExpr conditionalExpr when containsRawLiteral(conditionalExpr) ->
+                compact(conditionalExpr.getCondition())
+                    + " ? "
+                    + compact(conditionalExpr.getThenExpr())
+                    + " : "
+                    + compact(conditionalExpr.getElseExpr());
+            case UnaryExpr unaryExpr when containsRawLiteral(unaryExpr) -> {
+                String operator = unaryExpr.getOperator().asString();
+                yield unaryExpr.getOperator().isPrefix()
+                    ? operator + compact(unaryExpr.getExpression())
+                    : compact(unaryExpr.getExpression()) + operator;
+            }
+            case ArrayAccessExpr arrayAccessExpr when containsRawLiteral(arrayAccessExpr) ->
+                compact(arrayAccessExpr.getName()) + "[" + compact(arrayAccessExpr.getIndex()) + "]";
+            case CastExpr castExpr when containsRawLiteral(castExpr) ->
+                "(" + compactTypeLike(castExpr.getType()) + ") " + compact(castExpr.getExpression());
+            case InstanceOfExpr instanceOfExpr when containsRawLiteral(instanceOfExpr) -> {
+                String right = instanceOfExpr.getPattern()
+                        .map(this::compact)
+                        .orElseGet(() -> compactTypeLike(instanceOfExpr.getType()));
+                yield compact(instanceOfExpr.getExpression()) + " instanceof " + right;
+            }
+            // Containment gate kept as a direct JavaParser scan, not SourceShapePolicy/JavaCommentPlacementPolicy's
+            // run index: compact() is reached with comment-stripped clones via compactWithoutOwnComment, and the run
+            // index reports an unknown clone as comment-free, which would flip this reconstruction gate and change
+            // output. The shared run-indexed containment gate (SourceShapePolicy.hasContainedComments) is the coordination
+            // point for original run nodes; clone-reached gates stay local here.
+            case AssignExpr assignExpr when assignExpr.getAllContainedComments().isEmpty() ->
+                compact(assignExpr.getTarget())
+                    + " "
+                    + assignExpr.getOperator().asString()
+                    + " "
+                    + compact(assignExpr.getValue());
+            case MethodCallExpr methodCallExpr when methodCallExpr.getAllContainedComments().isEmpty() ->
+                compactMethodCall(methodCallExpr);
+            case ObjectCreationExpr objectCreationExpr when objectCreationExpr.getAnonymousClassBody().isEmpty()
+                && objectCreationExpr.getAllContainedComments().isEmpty() ->
+                compactObjectCreation(objectCreationExpr);
+            case MethodReferenceExpr methodReferenceExpr when methodReferenceExpr.getAllContainedComments().isEmpty() ->
+                compactMethodReference(methodReferenceExpr);
+            default -> compactTokenText(node);
+        };
     }
 
     private boolean containsRawLiteral(Node node) {
@@ -304,44 +285,42 @@ final class CompactSourceText {
      * explicit for callers that already printed the comments elsewhere.
      */
     String commentFree(Expression expression) {
-        if (expression.isNameExpr()) {
-            return expression.asNameExpr().getNameAsString();
-        }
-        if (expression instanceof FieldAccessExpr fieldAccess) {
-            return commentFree(fieldAccess.getScope()) + "." + fieldAccess.getNameAsString();
-        }
         // Containment gates below stay direct JavaParser scans rather than the run-indexed
         // SourceShapePolicy.hasContainedComments: commentFree strips comments and can be reached with clones, and the
         // run index reports unknown clones as comment-free, which would change which reconstruction branch is taken.
-        if (expression instanceof MethodCallExpr methodCall && methodCall.getAllContainedComments().isEmpty()) {
-            String scope = methodCall.getScope()
-                    .map(this::commentFree)
-                    .map(text -> text + ".")
-                    .orElse("");
-            String typeArguments = methodCall.getTypeArguments()
-                    .map(arguments -> "<" + compactJoinTypeLike(arguments) + ">")
-                    .orElse("");
-            String arguments = methodCall.getArguments()
-                    .stream()
-                    .map(this::commentFree)
-                    .reduce((left, right) -> left + ", " + right)
-                    .orElse("");
-            return scope + typeArguments + methodCall.getNameAsString() + "(" + arguments + ")";
-        }
-        if (
-            expression instanceof MethodReferenceExpr methodReference
-            && methodReference.getAllContainedComments().isEmpty()
-        ) {
-            String typeArguments = methodReference.getTypeArguments()
-                    .map(arguments -> "<" + compactJoinTypeLike(arguments) + ">")
-                    .orElse("");
-            return commentFree(methodReference.getScope()) + "::" + typeArguments + methodReference.getIdentifier();
-        }
-        Expression clone = expression.clone();
-        clone.removeComment();
-        List.copyOf(clone.getOrphanComments()).forEach(clone::removeOrphanComment);
-        List.copyOf(clone.getAllContainedComments()).forEach(Node::remove);
-        return clone.toString();
+        return switch (expression) {
+            case NameExpr nameExpr -> nameExpr.getNameAsString();
+            case FieldAccessExpr fieldAccess ->
+                commentFree(fieldAccess.getScope()) + "." + fieldAccess.getNameAsString();
+            case MethodCallExpr methodCall when methodCall.getAllContainedComments().isEmpty() -> {
+                String scope = methodCall.getScope()
+                        .map(this::commentFree)
+                        .map(text -> text + ".")
+                        .orElse("");
+                String typeArguments = methodCall.getTypeArguments()
+                        .map(arguments -> "<" + compactJoinTypeLike(arguments) + ">")
+                        .orElse("");
+                String arguments = methodCall.getArguments()
+                        .stream()
+                        .map(this::commentFree)
+                        .reduce((left, right) -> left + ", " + right)
+                        .orElse("");
+                yield scope + typeArguments + methodCall.getNameAsString() + "(" + arguments + ")";
+            }
+            case MethodReferenceExpr methodReference when methodReference.getAllContainedComments().isEmpty() -> {
+                String typeArguments = methodReference.getTypeArguments()
+                        .map(arguments -> "<" + compactJoinTypeLike(arguments) + ">")
+                        .orElse("");
+                yield commentFree(methodReference.getScope()) + "::" + typeArguments + methodReference.getIdentifier();
+            }
+            default -> {
+                Expression clone = expression.clone();
+                clone.removeComment();
+                List.copyOf(clone.getOrphanComments()).forEach(clone::removeOrphanComment);
+                List.copyOf(clone.getAllContainedComments()).forEach(Node::remove);
+                yield clone.toString();
+            }
+        };
     }
 
     /**

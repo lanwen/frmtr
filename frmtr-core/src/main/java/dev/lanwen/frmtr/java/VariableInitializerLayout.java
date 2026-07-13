@@ -1140,27 +1140,14 @@ final class VariableInitializerLayout {
         if (!overWidth) {
             return InitializerLayoutArm.FLAT;
         }
-        if (initializer instanceof MethodCallExpr && initializerHasOwnBreak(initializer)) {
-            return InitializerLayoutArm.METHOD_CALL_OWN_BREAK_CHAIN;
-        }
-        if (initializer instanceof MethodCallExpr && !initializerHasOwnBreak(initializer)) {
-            return InitializerLayoutArm.METHOD_CALL_BROKEN;
-        }
-        if (
-            initializer instanceof CastExpr castExpr
-            && castExpr.getExpression() instanceof MethodCallExpr
-            && !initializerHasOwnBreak(initializer)
-        ) {
-            return InitializerLayoutArm.CAST_METHOD_CALL_BREAK;
-        }
-        if (
-            initializer instanceof CastExpr castExpr
-            && castTypeNeedsBreak(flatName, castExpr.getType())
-            && !initializerHasOwnBreak(initializer)
-        ) {
-            return InitializerLayoutArm.CAST_TYPE_BREAK;
-        }
         return switch (initializer) {
+            case MethodCallExpr methodCall when initializerHasOwnBreak(methodCall) ->
+                InitializerLayoutArm.METHOD_CALL_OWN_BREAK_CHAIN;
+            case MethodCallExpr methodCall -> InitializerLayoutArm.METHOD_CALL_BROKEN;
+            case CastExpr cast when cast.getExpression() instanceof MethodCallExpr && !initializerHasOwnBreak(cast) ->
+                InitializerLayoutArm.CAST_METHOD_CALL_BREAK;
+            case CastExpr cast when castTypeNeedsBreak(flatName, cast.getType()) && !initializerHasOwnBreak(cast) ->
+                InitializerLayoutArm.CAST_TYPE_BREAK;
             case ConditionalExpr conditional when !initializerHasOwnBreak(conditional) ->
                 InitializerLayoutArm.CONDITIONAL;
             case LambdaExpr lambda when !initializerHasOwnBreak(lambda) -> InitializerLayoutArm.LAMBDA;

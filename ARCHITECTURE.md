@@ -451,14 +451,17 @@ rendered line count at the real output column. Two invariants keep the emission 
 runs before ranking** — the ranker fires only for the width-driven, source-neutral case (root rendered through ordinary
 expression dispatch, chain and root arguments not split across source lines, a final segment with breakable non-lambda
 arguments); a promoted/builder/broken-object-creation root or a deliberately-multiline chain is a source-preserved shape
-selected by the gates above and is never a width-ranked alternative, so ranking cannot override it. Second, the emission
-is gated on the chain being **comment-free** (`!MethodCallChainAnalysis.hasComments()`): a comment-bearing chain stays on
-the imperative `speculatively` ladder whose first-builder-wins rollback owns the comment claim, because building both
-`bestFitting` alternatives eagerly would double-claim comments and trip the strict-claims guardrail. Because the ranking
-agrees with the retained probe at the real column, the fixture corpus is byte-identical. Milestone LDM-3g (#210) adds the
+selected by the gates above and is never a width-ranked alternative, so ranking cannot override it. Second, both ranked
+arms render the root and selector through the same shared renderers the imperative deferral uses, so a comment an admitted
+chain carries is preserved identically whichever arm the renderer keeps (guarded by `CommentPresenceDiagnosticTest`); the
+`!MethodCallChainAnalysis.hasComments()` bail these rankers once carried — added when a discarded eager candidate could
+double-claim comments — became redundant once every comment moved onto the claim-neutral rail and was lifted (comment-claim
+enabler, Phase D), so a comment-bearing single-segment chain now ranks like any other. Because the ranking agrees with the
+retained probe at the real column, the fixture corpus is byte-identical. Milestone LDM-3g (#210) adds the
 object-creation-rooted sibling `MethodCallChainPrinter.rankedObjectRootSingleSegmentChain`, which ranks the same two
 broken shapes for a source-compact constructor root (`new Type(args).selector(...)`) under the identical
-source-shape + `!hasComments` gates and reuses the same `compactRootWithBrokenFinalSegment` for the compact alternative
+source-shape gates (its `!hasComments` bail lifted alongside the method-root ranker's) and reuses the same
+`compactRootWithBrokenFinalSegment` for the compact alternative
 (it already builds that shape for object-creation roots). It is reached in the forced-chain single-segment branch, so
 `ReturnExpressionPrinter` drops the object-creation-rooted-chain pre-empt from `preemptedReturnValue`: an
 object-creation-rooted return chain now falls through to the return's flat-versus-broken `conditionalGroup`, whose broken
@@ -486,11 +489,14 @@ so the later slices' rankers can list it as a named arm. The delegation fires on
 still the plain `expressionRenderer.format(root, root())` doc `chainFanOut` rebuilds — a comment-free
 `EXPRESSION_RENDERER` root that did not fall to the broken-multi-argument shape (`expressionRenderedChainRoot`); a
 promoted / grouped / broken-object-creation root, a first-segment-attached root, or a root-trailing-comment-wrapped root
-produces a different `rootDoc` and keeps the inline construction. The comment-free gate is load-bearing (the fall-through
-re-renders the root a second time inside `chainFanOut`, discarding the `rootDoc` it built earlier, and re-rendering a
-comment-bearing root would re-claim its already-printed comments); it is the same comment-free guard the single-segment
-rankers apply to their `chainFanOut` arm. Because the delegated shape is byte-identical to the discarded inline shape, the
-corpus stays byte-identical (U1 is a pure consolidation, not a decision change). Chain-path-unification slice U2 (#190)
+produces a different `rootDoc` and keeps the inline construction. The comment gate admits a comment-free chain, or one
+whose only comment is a last-selector trailing line comment (`chainCommentsAreOnlyTrailingLine`) — the shape `chainFanOut`
+preserves because `methodCallChainSegments` re-emits that trailing slot (comment-claim enabler, Phase D). Every other
+comment family keeps the inline construction: the fall-through re-renders the root a second time inside `chainFanOut`
+(discarding the `rootDoc` it built earlier), and re-rendering a root / segment / between-selector comment there would drop
+or destabilize it. This mirrors the trailing-comment relaxation `chainFansByCanonicalRuleAdmittingTrailingComment` already
+applies at the caller-level `canonicalFanChain` route. Because the delegated shape is byte-identical to the discarded
+inline shape, the corpus stays byte-identical (U1 is a pure consolidation, not a decision change). Chain-path-unification slice U2 (#190)
 then routes the **return chain's general width-driven broken arm** through the same engine:
 `ReturnExpressionPrinter.returnWithForcedMethodCallChain` used to hand-pick the compact-root-with-broken-final-segment
 (CRBFS) shape first (its `compactRootWithBrokenFinalChainSegment` pre-empt) before falling to the forced one-per-line
@@ -597,7 +603,12 @@ AST structure (never width or source shape) so they stay fixpoints:
   fall-through's fan-from-first shape — never fires). Extending below the canonical threshold stays a fixpoint because both
   remaining gates are structural: the attach-safe selector renders as atomic text that cannot re-break, and the fan/no-fan
   decision itself is a width probe on the invariant flat compact form that attaching cannot change (apache/kafka and
-  apache/camel idempotence unchanged). A call/factory/constructor root keeps the fan-from-first shape.
+  apache/camel idempotence unchanged). A call/factory/constructor root keeps the fan-from-first shape. A two-selector chain
+  whose only comment is a last-selector trailing line comment (`chainCommentsAreOnlyTrailingLine`) now also reaches this
+  attach: the relaxed width-driven two-selector fan gate routes it through `chainFanOut` instead of the imperative
+  root-alone fan it fell to while the fan withheld comment-bearing chains, so its comment-free attach-safe first selector
+  stays on the receiver line exactly like the comment-free sibling (fixture
+  `two-selector-trailing-comment-receiver-attach`, comment-claim enabler Phase D).
 - **Single expression-lambda argument hugs its call opener.** A fanned chain selector whose sole argument is an expression
   lambda keeps the lambda opener glued to the selector rather than breaking the selector parenthesis onto its own line,
   restoring the `huggableExpressionLambdaArguments` hug the one-per-line fan over-broke. Review round 2 broadened this from

@@ -383,7 +383,7 @@ final class ChainFanLayout {
      * flip does not select divergent layouts (the camel {@code ShardIteratorHandler} / {@code CsvDataFormat} /
      * {@code DefaultSupervisingRouteController} / {@code ExportBaseCommand} cases).
      */
-    private boolean chainCommentsAreOnlyTrailingLine(MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis) {
+    boolean chainCommentsAreOnlyTrailingLine(MethodCallChainSourcePlanner.MethodCallChainAnalysis analysis) {
         List<MethodCallExpr> calls = analysis.calls();
         return analysis.hasTrailingLineComments()
             && !analysis.rootHasComments()

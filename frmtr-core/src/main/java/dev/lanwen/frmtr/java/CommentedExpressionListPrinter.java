@@ -62,15 +62,22 @@ final class CommentedExpressionListPrinter {
             List<Doc> inlineTrailingComments = new ArrayList<>();
             List<Doc> trailingCommentLines = new ArrayList<>();
             for (JavaCommentTrivia comment : trailingComments) {
-                // When the argument is rendered through the full expression renderer (argumentLine), a method-call
-                // argument's own trailing line comment is already claimed and emitted inside that render as the chain's
-                // final trailing comment. Re-offering it here only ever lost that first-claim race and rendered empty, so
-                // skip comments already printed by the argument render to avoid a duplicate claim. Comments the argument
-                // render left untouched (the comment-free compact path) are still offered and placed here.
-                if (comments.isPrinted(comment)) {
-                    continue;
-                }
-                Doc commentDoc = comments.comment(comment);
+                // A gap comment sits between this container's arguments, so it is offered under the container's own
+                // INTERLEAVED anchor — the slot that names "a comment interleaved between an anchor's children" (here the
+                // arguments). Anchoring to the container rather than to the argument or the comment's own node lets comment
+                // ownership disambiguate the two competing offers without a build-order isPrinted skip:
+                //   - When the argument is rendered through the full expression renderer (argumentLine above), the
+                //     argument's own trailing line comment is claimed and emitted inside that render (a method-call chain's
+                //     final trailing comment, under the (finalCall, INTERLEAVED) slot). That slot is a different key from
+                //     (container, INTERLEAVED), so ownsHere blocks this slot and comment(...) returns Doc.EMPTY here.
+                //   - A comment the argument render left untouched (the comment-free compact path, or a plain gap comment)
+                //     is owned by this container slot and placed here.
+                // The argument node itself is deliberately NOT used as the anchor: the argument of a single-argument call
+                // is frequently the same node the chain printer's finalTrailingLineComment anchors on, so (argument,
+                // INTERLEAVED) would collide with that owner and double-render through the idempotent-by-owner re-claim
+                // branch. The gaps are de-duplicated by comment identity in argumentCommentGaps, so the same comment is
+                // never offered twice under this shared container key.
+                Doc commentDoc = comments.comment(comment, container, OwnerSlot.INTERLEAVED);
                 if (commentDoc == Doc.EMPTY) {
                     continue;
                 }
@@ -179,7 +186,32 @@ final class CommentedExpressionListPrinter {
             }
         }
         addArgumentBlockComments(container, arguments, gaps);
+        gaps.replaceAll(CommentedExpressionListPrinter::dedupByCommentIdentity);
         return gaps;
+    }
+
+    /**
+     * Drops repeats of the same JavaParser comment within one gap, keeping the first occurrence in source order.
+     *
+     * <p>The line-comment gap queries read {@link JavaCommentPlacementPolicy#containedComments(Node)}, which can list the
+     * same comment more than once when a whitespace perturbation lets it be reached through two containment paths (observed
+     * on a collapsed argument list, where a call's after-last-argument line comment appears twice in the trailing gap).
+     * The former render loop absorbed this with a build-order {@code !comments.isPrinted(comment)} skip; now that the gap is
+     * offered under one shared {@code (container, INTERLEAVED)} owner, a duplicate would render twice through the
+     * idempotent-by-owner re-claim branch instead of losing a claim race. De-duplicating by comment identity before any
+     * offer keeps each comment offered exactly once, so the shared-owner gate stays sufficient without the printed-set
+     * dependency. Distinct comment nodes carrying the same text are compared by identity and both kept.
+     */
+    private static List<JavaCommentTrivia> dedupByCommentIdentity(List<JavaCommentTrivia> gap) {
+        java.util.Set<Comment> seen =
+            java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        List<JavaCommentTrivia> deduped = new ArrayList<>();
+        for (JavaCommentTrivia trivia : gap) {
+            if (seen.add(trivia.comment())) {
+                deduped.add(trivia);
+            }
+        }
+        return deduped;
     }
 
     /**

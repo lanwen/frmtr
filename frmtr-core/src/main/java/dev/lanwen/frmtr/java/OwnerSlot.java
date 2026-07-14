@@ -81,6 +81,22 @@ enum OwnerSlot {
      */
     UNATTACHED_TRAILING,
 
+    /**
+     * The block-comment sibling of {@link #UNATTACHED_TRAILING}: an inline {@code /* ... *}{@code /} block comment
+     * recovered from an enclosing node's bucket because JavaParser parked it there (its placement-policy parent walk)
+     * rather than on the node it visually trails — the {@code for (…) ; /* note *}{@code /} after an empty-body
+     * semicolon.
+     *
+     * <p>The same parent-parked block comment can be reached from more than one recovering node (the loop/if statement
+     * and its empty body both parent-walk to it), so it is anchored to the <em>recovering</em> node under this distinct
+     * slot: the dry-run's first recovering node owns it and every other recovering node, keying a different
+     * {@link OwnerKey}, renders {@link dev.lanwen.frmtr.doc.Doc#EMPTY}. That reproduces the old first-claim-wins recovery
+     * without reading {@link CommentTracker#isPrinted}. Kept distinct from {@link #UNATTACHED_TRAILING} (a recovered
+     * {@code //} line comment) so the line and block recoveries never collapse to one {@link OwnerKey}. Populated by the
+     * dry-run; consulted by {@code ownsHere}.
+     */
+    UNATTACHED_TRAILING_BLOCK,
+
     /** A comment that leads its anchor node. Populated by the dry-run; consulted by {@code ownsHere}. */
     LEADING,
 

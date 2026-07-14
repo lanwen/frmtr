@@ -567,18 +567,25 @@ final class CommentTracker {
     }
 
     /**
-     * Claims and renders {@code comment} as a comment the interleaver merged between an anchor's children by source
-     * position.
+     * Renders {@code comment} as a comment the interleaver merged between an anchor's children by source position,
+     * routed through the claim-neutral {@link #ownedComment} rail.
      *
      * <p>This overload exists so the source-order interleaver and the printers that hand a comment directly to the
      * tracker can name the anchor node and {@link OwnerSlot} that offers the comment, which is what the record-only
      * dry-run needs to record the first claimant. {@code anchor} is the node whose layout encloses the comment (the
      * interleaved owner, or the printer's own node); {@code slot} is the role under which it is offered.
+     *
+     * <p>This is the last comment render family to move off the build-time {@link #printed} claim: it now delegates to
+     * {@link #ownedComment}, so emptiness is a pure function of the recorded owner and no {@code comment(...)} render
+     * mutates {@link #printed}. That makes the whole {@code comment(...)} family claim-neutral, so an owner may emit the
+     * same comment Doc in more than one eagerly-built ranked layout arm (a {@link Doc#conditionalGroup} /
+     * {@link Doc#bestFitting} alternative) without dropping or duplicating it: the renderer emits only the arm it picks,
+     * and every non-owner {@code (node, slot)} offer renders {@link Doc#EMPTY}. Co-offering paths that must not share an
+     * owner therefore disambiguate by giving each a distinct {@code (node, slot)}, exactly as the other migrated
+     * families do, rather than by reading a build-order {@link #isPrinted} side effect.
      */
     Doc comment(JavaCommentTrivia trivia, Node anchor, OwnerSlot slot) {
-        return ownsHere(trivia, anchor, slot) && claim(trivia, anchor, slot)
-            ? JavaFormatter.commentDoc(trivia)
-            : Doc.EMPTY;
+        return ownedComment(trivia, anchor, slot);
     }
 
     Doc comment(Comment comment, Node anchor, OwnerSlot slot) {
@@ -586,8 +593,8 @@ final class CommentTracker {
     }
 
     /**
-     * Claims and renders {@code comment} when no anchor node is available to name; defaults to recording the offering
-     * node as the comment itself under {@link OwnerSlot#INTERLEAVED}.
+     * Renders {@code comment} through the claim-neutral rail when no anchor node is available to name; defaults to
+     * recording the offering node as the comment itself under {@link OwnerSlot#INTERLEAVED}.
      *
      * <p>Kept for the direct {@code comment(...)} call sites that do not (yet) thread an enclosing owner. The recorded
      * anchor here is the comment node itself, so the dry-run records {@code (comment, INTERLEAVED)} and the real pass

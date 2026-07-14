@@ -972,12 +972,13 @@ final class BinaryExpressionPrinter {
     }
 
     private List<Doc> commentDocs(List<JavaCommentTrivia> sourceComments) {
-        // Operand comments can be reached from more than one binary render (a flat measurement render and the committed
-        // broken render share the same operand subtree). Skip comments already printed by an earlier traversal path so
-        // this render does not duplicate-claim them; output is unchanged because the first claimant placed the comment and
-        // a re-offer only ever rendered empty.
+        // Operand comments can be reached from more than one eagerly-built binary render: the flat comment-aware arm and
+        // the broken comment-aware arm of a return/assignment/condition candidate set both offer the same operand
+        // subtree. Now that comments.comment(...) is claim-neutral, both arms render the owned comment (each keyed to the
+        // comment's own (comment, INTERLEAVED) owner) and the renderer emits only the alternative it picks, so the
+        // comment appears exactly once with no build-order isPrinted skip needed. The != Doc.EMPTY filter still drops the
+        // slots that are not the recorded owner.
         return sourceComments.stream()
-                .filter(trivia -> !comments.isPrinted(trivia))
                 .map(comments::comment)
                 .filter(doc -> doc != Doc.EMPTY)
                 .toList();

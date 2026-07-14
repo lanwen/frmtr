@@ -1,6 +1,8 @@
+> **Status: Implemented.** The D0–D4 plan landed on `main`: D0 harness (#268), D1/D2 substrate + residue gates (#269–#276), the D3 atomic flip (#279), D4 governance retirement (#290/#291/#293). The source-shape hub reads are gone and the `SourceShapeException` ratchet is terminal. Archived 2026-07-14; retained as a provenance record.
+
 # Hub Canonicalization: A Non-Reverting Atomic Rewrite Plan
 
-Status: 🔵 Proposed — execution plan. Consumes [layout-decision-model.md](layout-decision-model.md)
+Status: ✅ Implemented — execution plan carried out (see banner). Consumes [layout-decision-model.md](../layout-decision-model.md)
 (the ranking/measurement mechanism) and [reprint-by-default-break-rules.md](reprint-by-default-break-rules.md)
 (the read-retirement governance). This doc owns *how to actually land* the method-call / chain /
 object-creation / lambda **hub** canonicalization without the reverts that four incremental attempts hit.

@@ -1,8 +1,10 @@
+> **Status: Implemented.** The chain layout was unified onto the ranked engine: U1 multi-segment fan (#247), U2 return chain (#250), U3 `leftEdgePrefix` activation (#252), U7 lambda-body fan (realized in the #279/#284 cutover), U9 `LayoutWidth` retirement (#287/#288). The source-shape-gated caller paths this audit planned to migrate one-by-one were instead retired wholesale by the hub atomic flip (#279). Archived 2026-07-14; retained as a provenance record. (Part 1's Z-path map predates that flip and is historical.)
+
 # Chain-Path Unification: routing every fluent-chain layout through the ranked engine
 
-Status: 🔵 Proposed — read-only audit + sequenced plan. Depends on the landed convergence-redesign foundation
+Status: ✅ Implemented — U-slices landed / superseded by the hub flip (see banner). Depends on the landed convergence-redesign foundation
 ([convergence-redesign.md](convergence-redesign.md) slices 1–3) and the layout-decision model
-([layout-decision-model.md](layout-decision-model.md) LDM-1/-2f/-3). This doc does **not** re-propose those mechanisms;
+([layout-decision-model.md](../layout-decision-model.md) LDM-1/-2f/-3). This doc does **not** re-propose those mechanisms;
 it inventories every code path that decides or renders a method-call **chain**'s layout, classifies each by whether it
 routes through the unified ranked engine (`Doc.bestFitting` + `MethodCallChainPrinter.chainFanOut`) or has its own
 imperative logic, and sequences the migration so a general fluent-chain policy can be expressed idempotently.

@@ -1,7 +1,9 @@
+> **Status: Implemented.** All six slices landed on `main`: the priority-vector `BestFitting` (#239), the source-neutral `chainFanOut` builder (#240), the initializer ranked arm / #191 (#241), the #221 dot-split + lambda-body fan (#242/#243), and the `LayoutWidth` retirement (#287/#288). The open opener-attachment product decision was resolved (keep opener-attached). Archived 2026-07-14; retained as a provenance record.
+
 # Convergence Redesign: source-neutral fan-out + opener-attachment ranking
 
-Status: 🔵 Proposed — focused mechanism proposal. Depends on the ranked-layout foundation
-([layout-decision-model.md](layout-decision-model.md) milestones LDM-1 → LDM-3, all landed) and extends it. This doc is
+Status: ✅ Implemented — both mechanisms and all slices landed (see banner). Depends on the ranked-layout foundation
+([layout-decision-model.md](../layout-decision-model.md) milestones LDM-1 → LDM-3, all landed) and extends it. This doc is
 narrow: it defines the **two missing pieces** that keep the fan-out-vs-argument-break (and dot-split-vs-open-arg) chain
 decisions from being made by the ranked engine idempotently, and sequences the items they unblock
 (#191, #221, #220, #190).
@@ -354,21 +356,14 @@ Slices 1–2 are pure foundation (byte-identical, parallelizable). Slice 3 is th
   stage) has since landed and the `speculatively` method this described has been retired, but converting each
   remaining comment-bearing call site to build both `bestFitting` arms is still a separate, per-site follow-up.
 
-**Needs a product decision, not just a mechanism:**
-
-- **Do we keep opener-attachment, or adopt the collapse?** The entire priority mechanism exists to *preserve* the
-  current opener-attached golden (`seenProviders` stays argument-break). If the maintainer instead decides the collapse
-  shape (`NAME =` ⏎ `ROOT.method(whole);`, fewer lines) is the preferred house style, then Mechanism 2 is unnecessary:
-  a plain fewest-lines `bestFitting([collapse, argumentBreak])` suffices and slice 1 is dropped. This is the "deliberate
-  golden move to the collapse" alternative the code note names (`VariableInitializerLayout.java:888`). The mechanism is
-  built for the *preserve* choice; the *adopt* choice is cheaper but changes visible output across the corpus. **This is
-  the single biggest open question and should be answered before slice 3.**
+**Product decision — resolved.** The maintainer (2026-07-03) chose to **keep opener-attachment**, so Mechanism 2
+(priority ranking) shipped as designed; the fewer-lines "collapse" alternative was not adopted.
 
 ---
 
 ## Prior art
 
-Same references as [layout-decision-model.md](layout-decision-model.md)'s prior-art table; the two mechanisms map to:
+Same references as [layout-decision-model.md](../layout-decision-model.md)'s prior-art table; the two mechanisms map to:
 
 | Project | Relevance to this proposal |
 | --- | --- |
@@ -381,7 +376,7 @@ Same references as [layout-decision-model.md](layout-decision-model.md)'s prior-
 
 | This doc | Existing | Relationship |
 | --- | --- | --- |
-| Mechanism 2 (priority key) | [layout-decision-model.md](layout-decision-model.md) B8/D16 | Extends the landed `bestFitting` engine with the one key (`fits → priority → lines`) that the initializer arm needs and the fewest-lines-only metric lacks. Not a re-proposal of the engine. |
+| Mechanism 2 (priority key) | [layout-decision-model.md](../layout-decision-model.md) B8/D16 | Extends the landed `bestFitting` engine with the one key (`fits → priority → lines`) that the initializer arm needs and the fewest-lines-only metric lacks. Not a re-proposal of the engine. |
 | Mechanism 1 (`chainFanOut`) | LDM-3 (#191), #221 | The source-neutral builder the #191 code note (`VariableInitializerLayout.java:867-874`) named as a prerequisite; generalizes the #236/#190 return-chain compact-tail (`refuseOpeningSingleSimpleReturnChainTail`) to all chains. |
 | Slice 6 (`LayoutWidth` retirement) | #220, #190, LDM-2 (C10) | Provides the missing last-consumer removal the C10 tail (#220) is blocked on: the initializer/chain arms are the surviving `LayoutWidth.LineBudget` readers. |
 | Out-of-scope (enum, B9) | LDM-4, LDM-5 | This proposal is the LDM-3-completing slice; the enum classifier (LDM-4) and resolved-state conditions (LDM-5) remain separate. |

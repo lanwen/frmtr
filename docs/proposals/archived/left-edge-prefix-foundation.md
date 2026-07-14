@@ -1,9 +1,11 @@
+> **Status: Implemented.** The post-#279 true-column foundation landed on `main`: F1/F2 segment-column keystone (#276/#284), F3 floor-drop (#285), F5 comment-placement (#286), F7 `widthBudget`/`LineBudget` retirement (#287/#288), F8 satellites (#282). `LineBudget` grep = 0; both `KNOWN_NON_IDEMPOTENT` allowlists are empty. Archived 2026-07-14; retained as a provenance record. (The orthogonal comment × width residual — 2 tracked `KNOWN_DROPS` — is carried by the [printer-contract-inversion](../printer-contract-inversion.md) Phase-D comment work.)
+
 # leftEdgePrefix Foundation: Completing True-Column Measurement Post-Flip
 
-Status: 🔵 Proposed — execution plan; decisions ratified 2026-07-10 (§3). **Consumes** [chain-path-unification.md](chain-path-unification.md)
+Status: ✅ Implemented — the F1–F8 slices landed (see banner); decisions ratified 2026-07-10 (§3). **Consumes** [chain-path-unification.md](chain-path-unification.md)
 (the U1–U9 ranked-engine migration, the still-load-bearing floors inventory, and the A/B product decision),
 [hub-canonicalization-atomic-rewrite.md](hub-canonicalization-atomic-rewrite.md) (the D0–D4 flip that shipped
-as **#279**), [layout-decision-model.md](layout-decision-model.md) (C10 true-column / LDM-2f), and
+as **#279**), [layout-decision-model.md](../layout-decision-model.md) (C10 true-column / LDM-2f), and
 [convergence-redesign.md](convergence-redesign.md) (idempotence-by-construction).
 
 This doc owns the **post-#279 delta only**: what the atomic flip deliberately left unfinished, the handful of
@@ -130,15 +132,8 @@ in-harness corpus-check idempotence column, which under-reports) — idempotence
 **not splittable**. F3/F4/F5/F8 parallelize across agents (disjoint files, byte-identical-first). F6 waits on the D2
 ratification. This is a much friendlier fan-out than the flip — no single point of no-return.
 
-## 5. Status — decisions ratified, ready to delegate
+## 5. Status — all slices landed
 
-All five decisions are resolved (§3): **D2** shipped-hybrid, **D3** build the type-renderer width model (override —
-full retirement, not governance), **D4** never-fan comment-bearing chains, **D5** 1-pass idempotence required. D1 was
-never open (house design).
-
-Nothing further is blocked on the maintainer. Sequencing: **F1** (segment column in the `)))` hug path) is the safe
-first slice and can be delegated immediately; **F2** (full #190) follows as a single strong agent; **F3/F4/F5/F8** fan
-out in parallel (disjoint files, byte-identical-first except the reviewed tails). **F6** (width-driven arms →
-`bestFitting`) lands under the ratified D2 hybrid — width-only for the residual, existing structural triggers
-preserved. Every slice gates on the §4 corpus invariants, branches off the flip (`b2bc7e34`), and lands after #279
-merges.
+All five decisions were resolved (§3) and every slice F1–F8 subsequently landed on `main` (F1/F2 #276/#284,
+F3 #285, F5 #286, F7 #287/#288, F8 #282). The delegation sequencing below is retained only as a record of how the
+work was staged.

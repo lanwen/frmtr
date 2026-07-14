@@ -4,6 +4,11 @@ Status: Partially implemented — runner-level bounded parallelism, CLI progress
 Gradle incremental/cache behavior landed; any Gradle-native progress/logging follow-up remains
 proposed.
 
+> **Remaining actionable work:** only the optional **Gradle-native progress/logging** follow-up (surface per-file
+> progress through Gradle's logging/progress APIs, if the plugin needs the visibility the CLI already has). A persistent
+> CLI results cache stays out of scope (deliberate non-goal). Everything below is the design record of the shipped
+> runner parallelism, CLI progress side-channel, and Gradle `@CacheableTask` / `InputChanges` behavior.
+
 ## Summary
 
 `frmtr` originally formatted files one at a time. The first implementation slice replaced the shared

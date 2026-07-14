@@ -1,9 +1,9 @@
 # Printer-Contract Inversion: Ranked Candidate Sets to Dissolve the Callback Mesh
 
-Status: 🔵 Proposed — execution synthesis. **Consumes and sequences** three existing proposals rather than
+Status: 🟢 In progress — the enabler and pilot landed; per-construct generalization (Stage 3) remains. **Consumes and sequences** three existing proposals rather than
 competing with them: [layout-decision-model.md](layout-decision-model.md) (the "Context as data" seam analysis and
-the ranked-broken-layout mechanism, LDM-1/LDM-3), [reprint-by-default-break-rules.md](reprint-by-default-break-rules.md)
-(the named `BreakRule` authoring model, Stage 1), and [chain-path-unification.md](chain-path-unification.md) (routing
+the ranked-broken-layout mechanism, LDM-1/LDM-3), [reprint-by-default-break-rules.md](archived/reprint-by-default-break-rules.md)
+(the named `BreakRule` authoring model, Stage 1), and [chain-path-unification.md](archived/chain-path-unification.md) (routing
 every chain host through one ranked engine). It is the plan that connects them into a single throughline and drives it
 to the outcome the maintainer asked for: **small constructors, decomposable printers, and a first-class "default shape,
 then diverge with full context" capability.**
@@ -138,22 +138,21 @@ Once a node type returns a ranked set:
 Printers become independently unit-testable: feed a node + a stub `LayoutContext`, assert the candidate `Doc`s — no
 composer to stand up.
 
-## The one remaining enabler
+## Already landed
 
-The output seam is blocked on comment-bearing subtrees by a single mechanism, and it is the critical path:
+- **Step 0 — nested-render collapse (#301).** The `(expression, layout) -> expression(expression)` capability threaded
+  into ~25 classes was bundled into one injected dispatcher facade, deflating the widest constructors byte-identically.
+- **The enabler — claim-free candidate rendering (Phases A–D, #324–#336).** Comment ownership now runs through a
+  claim-neutral `ownedComment` rail (a record-only pre-pass + `ownsHere` filter); every family was migrated
+  (#331/#333/#334), `CommentTracker.speculatively` was retired (#335), and `strict-claims` is a CI gate
+  (`strict-claims=true` in `frmtr-core/build.gradle.kts`). Eagerly-built candidate arms are now claim-neutral, so
+  ranked conversion of comment-bearing nodes is unblocked.
+- **Chain pilot (partial, #336).** Comment-bearing method-call chains now rank via `bestFitting`.
 
-> `bestFitting`/`conditionalGroup` build **all** their arms eagerly, and building a `Doc` **claims** the comments in it
-> (identity-based, first-builder-wins). So a ranked node whose arms both contain a comment double-claims it, and only
-> one arm reaches output — the two passes diverge. Today this is why both big gates run a comment/source-shape *preempt
-> tier* first and only hand the renderer the "residual, comment-free" verdict, and why there are **57 `speculatively`
-> scopes**.
+The gating enabler that once blocked the whole program (comment double-claim on eager multi-arm building) is therefore
+resolved. What remains is the mechanical generalization below.
 
-The fix is **claim-free candidate rendering**: comment ownership is already decided in a record-only pre-pass
-(`CommentTracker.beginRecording` → `ownsHere`); finish moving *all* families there so the real render — and therefore
-every eagerly-built candidate arm — is claim-neutral and idempotent. This is the same work
-`reprint-by-default`/B2 track as `strict-claims`; this proposal reframes it as **the gating enabler for the whole
-modularity program, not a comment-correctness side-quest.** Gate on `CommentPresenceDiagnosticTest` (the `--verify`/AST
-net is blind to comment drops).
+## Remaining work — Stage 3: per-construct generalization
 
 **Update (enabler landed).** Every comment family now renders through the claim-neutral `CommentTracker.ownedComment`
 rail, `CommentTracker.speculatively` has been retired as redundant, and `strict-claims` is enabled by default in
@@ -164,24 +163,17 @@ see [chain-path-unification.md](chain-path-unification.md) for the chain-specifi
 
 ## Migration plan
 
-Staged, byte-identical-first, corpus-gated (the proven recipe), each slice a separate PR for one-by-one merge on top of
-`feat/f2-bare-object-creation-body`.
+- Turn each mega-printer's `Optional<Doc>` shape dispatch into a per-construct `BreakRuleRegistry` whose
+  `format(node, ctx)` returns `bestFitting([...])`, so its cross-printer shape callbacks disappear from consumers'
+  constructors and the imperative width ladder collapses into "emit the candidates."
+- Targets, in order of leverage: `VariableInitializerLayout` (context→enum, LDM-4 / B5/B6), assignment RHS, ternary,
+  binary operands, lambda body. Each becomes a registry + small fixtured rules; each consumer sheds its callbacks.
+- Gate every slice on `CommentPresenceDiagnosticTest` (the `--verify`/AST net is blind to comment drops), plus the
+  idempotence + AST-equivalence corpus net.
 
-0. **Nested-render collapse (byte-identical, no enabler needed).** Replace the ~9× `(expression, layout) ->
-   expression(expression)` lambdas and the expression-render capability threaded into ~25 classes with one injected
-   dispatcher entry. Immediately deflates the widest constructors and proves the deflation is behavior-neutral. *(Step 0
-   — the prototype.)*
-1. **Claim-free candidate rendering (the enabler).** Finish comment-ownership consolidation so eager multi-arm building
-   is claim-neutral; enable `strict-claims`. Output-neutral; unblocks ranked conversion on comment-bearing nodes.
-2. **Chain/`MethodCallExpr` output seam (pilot).** `format(call, ctx)` returns `bestFitting([...])`; collapse the ~16
-   chain shape-callbacks and the ladder into the generalized `ChainFanLayout` registries; consumers drop the callbacks.
-   This is `chain-path-unification`'s destination, now reachable because the enablers landed.
-3. **Per-construct generalization.** Repeat for `VariableInitializerLayout` (context→enum, LDM B5/B6), assignment RHS,
-   ternary, binary operands, lambda body. Each mega-printer becomes a registry + small fixtured rules; each consumer
-   sheds its callbacks. One corpus-gated PR per construct.
-
-Stage 0 is safe now. Stages 2–3 sequence behind Stage 1 for comment-bearing constructs (comment-free ones can go
-earlier).
+This is the same work [layout-decision-model.md](layout-decision-model.md) tracks as LDM-4 (context→enum). The
+success metrics below (`::`-ref counts trending down, one `BreakRuleRegistry` per multi-shape construct, mega-printers
+shrinking) are the acceptance bar for this remaining stage.
 
 ## Risks and non-goals
 
@@ -216,7 +208,7 @@ earlier).
 | This proposal | Existing | Relationship |
 | --- | --- | --- |
 | The contract flip = generalize LDM's output seam | [layout-decision-model.md](layout-decision-model.md) LDM-1/LDM-3 | Executes "Context as data" + ranked-broken-layout as one program; consumes, does not re-derive. |
-| Per-construct `BreakRuleRegistry` default+diverge | [reprint-by-default-break-rules.md](reprint-by-default-break-rules.md) | Generalizes Stage 1 from chains to every construct; the registry is the authoring surface. |
-| Chain pilot (Stage 2) | [chain-path-unification.md](chain-path-unification.md) | Its destination, reachable now that true-column/`widthBudget` retirement landed. |
-| Ranking primitive + priority key | [convergence-redesign.md](convergence-redesign.md) | Consumes `bestFitting(list, int[])`; does not change it. |
+| Per-construct `BreakRuleRegistry` default+diverge | [reprint-by-default-break-rules.md](archived/reprint-by-default-break-rules.md) | Generalizes Stage 1 from chains to every construct; the registry is the authoring surface. |
+| Chain pilot (Stage 2) | [chain-path-unification.md](archived/chain-path-unification.md) | Its destination, reachable now that true-column/`widthBudget` retirement landed. |
+| Ranking primitive + priority key | [convergence-redesign.md](archived/convergence-redesign.md) | Consumes `bestFitting(list, int[])`; does not change it. |
 | Claim-free candidate rendering | B2 `strict-claims` / [comment-handling-findings.md](comment-handling-findings.md) | Reframes it as the gating enabler for modularity, not only comment correctness. |

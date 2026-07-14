@@ -1,3 +1,5 @@
+> **Status: Implemented.** Landed on `main`: `--write --verify` (and `--check --verify`) → `Frmtr.formatVerified` → `JavaFormatter.assertOutputEquivalentOrThrow`, dispatched via `FormatterRunner.writeVerified`. Archived 2026-07-14; retained as a provenance record. The executor steps below are historical; see [Outcome](#outcome).
+
 # Opt-In `--verify` Safety Valve: Refuse to Overwrite Non-Equivalent Output
 
 **Status:** Implemented (roadmap S8) — opt-in `--write --verify` CLI flag backed by `Frmtr.formatVerified` → `JavaFormatter.formatVerified` (decision seam `assertOutputEquivalentOrThrow`); see [Outcome](#outcome) · Category: correctness / UX · Effort: M · Risk: MED (new public API + CLI behavior)

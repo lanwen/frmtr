@@ -1,7 +1,7 @@
 # A Layout Decision Model: Context-Dependent, Idempotent Block Formatting
 
-Status: 🔵 Proposed — cross-cutting synthesis / decision model. This is **not** a re-proposal of
-[B1](source-shape-policy-consolidation.md), [B2](doc-ir-combinators.md), or
+Status: 🟢 Partially implemented — the foundation (LDM-1/-2/-3) landed and the doc's central gap is closed; LDM-4 remains. This is **not** a re-proposal of
+[B1](archived/source-shape-policy-consolidation.md), [B2](archived/doc-ir-combinators.md), or
 [B3](semantic-preservation-safety-net.md) (all landed). It sits *above* them: it states the layout
 decision model as a concise rule set and identifies the one architectural gap B2 documented as
 **"not achievable"** — ranking multiple *broken* layouts by context, idempotently — and the mechanism
@@ -12,9 +12,11 @@ port of any of them.
 The **authoring layer above this decision model** — how complex break rules are *declared* as named,
 composable structural rules, and the reprint-by-default governance that retires source-shape reads onto
 them — is proposed separately in
-[reprint-by-default-break-rules.md](reprint-by-default-break-rules.md). This doc owns the *ranking
+[reprint-by-default-break-rules.md](archived/reprint-by-default-break-rules.md). This doc owns the *ranking
 mechanism* (how to choose among broken layouts); that one owns *how rules are expressed* and consumes
 this mechanism.
+
+> **Already landed / remaining work.** The foundation shipped: **LDM-1** context-as-data (`LayoutContext` + `JavaFormatRule.format(node, ctx)`, #195), **LDM-2** measurement parity at the rendered column (#202 and the C10 work), and **LDM-3** the ranked-broken-layout engine (`Doc.bestFitting`, #212/#214). That means **the "one architectural gap" this doc was written around — ranking multiple *broken* layouts by context (rule B8) — is now closed**, and the tie-break/bound discipline (D16) landed with it. What remains actionable is **LDM-4** (context→enum classifiers, starting with `VariableInitializerLayout`) — the same work [printer-contract-inversion.md](printer-contract-inversion.md) tracks as its Stage 3 per-construct generalization. **LDM-5** (resolved-state conditions replacing chain source reads) is largely moot: those source reads were retired outright by the reprint-by-default hub flip (see `archived/reprint-by-default-break-rules.md`), not replaced with resolved-state conditions. The rule set below is retained as the conceptual reference the milestones were derived from; treat the [have]/[partial]/[gap] tags as of the doc's authoring, superseded by this note.
 
 ## Why this doc exists
 
@@ -25,9 +27,9 @@ frmtr is **not** missing a document IR. Per the roadmap and focused proposals it
 
 - An algebraic `Doc` IR + width-based `DocRenderer` ([README](README.md) "Where frmtr stands today").
 - The four combinators printers used to fake — `LineSuffix`, `BreakParent`, `Fill`, `ConditionalGroup`
-  — plus `Group`/`IfBreak` identity, all landed ([doc-ir-combinators.md](doc-ir-combinators.md) Outcomes).
+  — plus `Group`/`IfBreak` identity, all landed ([doc-ir-combinators.md](archived/doc-ir-combinators.md) Outcomes).
 - One consolidated `SourceShapePolicy` for every "respect the source shape here?" decision
-  ([source-shape-policy-consolidation.md](source-shape-policy-consolidation.md)).
+  ([source-shape-policy-consolidation.md](archived/source-shape-policy-consolidation.md)).
 - An AST-equivalence verify mode + an idempotence property test over a perturbed corpus
   ([semantic-preservation-safety-net.md](semantic-preservation-safety-net.md), Layers 1–2).
 
@@ -37,7 +39,7 @@ rather than restate the roadmap.
 
 ## The one architectural gap (what B2 could not collapse)
 
-[doc-ir-combinators.md](doc-ir-combinators.md) Outcomes states it exactly. Collapsing
+[doc-ir-combinators.md](archived/doc-ir-combinators.md) Outcomes states it exactly. Collapsing
 `MethodCallChainPrinter`'s `Optional<Doc>` dispatch (and the `LayoutWidth` probes feeding it) onto
 `ConditionalGroup` is neither byte-identical nor expressible:
 
@@ -72,7 +74,7 @@ one canonical shape.
 
 frmtr has made the **opposite, deliberate product choice**: preserve author intent — deliberately
 multiline calls/constructors/ternaries/lambdas, deliberate blank lines
-([source-shape-policy-consolidation.md](source-shape-policy-consolidation.md) "What stays
+([source-shape-policy-consolidation.md](archived/source-shape-policy-consolidation.md) "What stays
 source-aware on purpose"). Its safety net therefore asserts **idempotence and AST-equivalence but
 deliberately *not* convergence** ([semantic-preservation-safety-net.md](semantic-preservation-safety-net.md)).
 
@@ -117,7 +119,7 @@ Four tiers. Each rule describes the mechanism and frmtr's current status:
   body, a contained line comment, or a multi-line lambda forces its containers open. **[partial]** —
   frmtr has `BreakParent`, but with one consumer; propagation is single-pass/un-targeted (a
   `BreakParent` inside an already-flat-decided sibling won't retroactively break an ancestor —
-  documented limitation in [doc-ir-combinators.md](doc-ir-combinators.md) Risks). A build-time upward
+  documented limitation in [doc-ir-combinators.md](archived/doc-ir-combinators.md) Risks). A build-time upward
   propagation pass would make forced-break propagation deterministic.
 - **A3 — Consistent vs. inconsistent breaking is a declared knob per construct.** "One item per line
   if it breaks" (a consistent `group`) vs. "pack as many per line as fit" (`Fill`). **[partial]** —
@@ -329,13 +331,13 @@ gating — without giving up frmtr's deliberate author-intent preservation.
 
 | This doc's rule / slice | Existing proposal | Relationship |
 | --- | --- | --- |
-| A1–A3, C12 (IR vocabulary) | [doc-ir-combinators.md](doc-ir-combinators.md) (B2) | **Landed.** This doc builds on the primitives; does not re-propose them. |
-| B8/D16 (rank broken layouts) | [doc-ir-combinators.md](doc-ir-combinators.md) Outcomes | **The gap B2 documented as "not achievable" with `ConditionalGroup`.** This doc supplies the ranked-broken-layout mechanism that resolves it. |
-| C10 (measure at output column) | [doc-ir-combinators.md](doc-ir-combinators.md) (byte-identity finding); [linear-time-doc-renderer.md](linear-time-doc-renderer.md) (M2) | The source-column-vs-output-column split is B2's byte-identity blocker; M2's bounded `fits` is the renderer surface any ranking engine must stay linear within. |
-| B7 (id-keyed conditionals) | [doc-ir-combinators.md](doc-ir-combinators.md) | `IfBreak`+`groupId` and `LineSuffix` landed; extend to continuation-indent / ternary placement. |
-| D13–D15 (idempotence ≠ convergence) | [semantic-preservation-safety-net.md](semantic-preservation-safety-net.md) (B3); [source-shape-policy-consolidation.md](source-shape-policy-consolidation.md) (B1) | B1 consolidated the reads; B3 asserts idempotence (not convergence). This doc adds the **per-signal fixpoint** invariant as the discipline that keeps preservation idempotent. |
+| A1–A3, C12 (IR vocabulary) | [doc-ir-combinators.md](archived/doc-ir-combinators.md) (B2) | **Landed.** This doc builds on the primitives; does not re-propose them. |
+| B8/D16 (rank broken layouts) | [doc-ir-combinators.md](archived/doc-ir-combinators.md) Outcomes | **The gap B2 documented as "not achievable" with `ConditionalGroup`.** This doc supplies the ranked-broken-layout mechanism that resolves it. |
+| C10 (measure at output column) | [doc-ir-combinators.md](archived/doc-ir-combinators.md) (byte-identity finding); [linear-time-doc-renderer.md](archived/linear-time-doc-renderer.md) (M2) | The source-column-vs-output-column split is B2's byte-identity blocker; M2's bounded `fits` is the renderer surface any ranking engine must stay linear within. |
+| B7 (id-keyed conditionals) | [doc-ir-combinators.md](archived/doc-ir-combinators.md) | `IfBreak`+`groupId` and `LineSuffix` landed; extend to continuation-indent / ternary placement. |
+| D13–D15 (idempotence ≠ convergence) | [semantic-preservation-safety-net.md](semantic-preservation-safety-net.md) (B3); [source-shape-policy-consolidation.md](archived/source-shape-policy-consolidation.md) (B1) | B1 consolidated the reads; B3 asserts idempotence (not convergence). This doc adds the **per-signal fixpoint** invariant as the discipline that keeps preservation idempotent. |
 | B5/B6 (context→enum) | — | New. Closest existing surface is `VariableInitializerLayout`; no proposal frames it as an explicit layout enum yet. |
-| B9 (resolved-state conditions) | [source-shape-policy-consolidation.md](source-shape-policy-consolidation.md) | The principled replacement for the chain planner's `selectorBrokeAfter`/`sourceMultilineChain` source reads. |
+| B9 (resolved-state conditions) | [source-shape-policy-consolidation.md](archived/source-shape-policy-consolidation.md) | The principled replacement for the chain planner's `selectorBrokeAfter`/`sourceMultilineChain` source reads. |
 | formatter-owned context object | [formatter-owned-syntax-view.md](formatter-owned-syntax-view.md) | A `LayoutContext` carrying rendered column + enclosing-construct kind (replacing callback-implicit context) is a natural facet of that held proposal. |
 
 ## Prior art — existing formatters (reference)

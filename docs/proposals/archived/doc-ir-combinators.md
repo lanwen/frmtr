@@ -1,3 +1,5 @@
+> **Status: Implemented.** Landed on `main`: the four IR primitives (`LineSuffix`, `BreakParent`, `Fill`, `ConditionalGroup`) plus group identity in `Doc`, with renderer/width/debug/explain support. Archived 2026-07-14; retained as a provenance record. See [Outcomes](#outcomes) for what shipped and what was declined (the chain-collapse goal).
+
 # Enrich the Doc IR with the combinators printers are faking today
 
 Status: Implemented — see [Outcomes](#outcomes)
@@ -318,34 +320,13 @@ current call sites compile unchanged.
 **Debug renderer.** `ConditionalGroup` prints each alternative under an `alt N:` header (mirroring `IfBreak`'s
 `break:`/`flat:`, lines 48-54); `Group`/`IfBreak` append `(#groupId)` when set.
 
-## Migration strategy
+## Migration strategy (executed)
 
-Additive primitive, then one printer family, then measure — never a big-bang rewrite. This mirrors the staged rollout
-in `comment-containment-index.md`.
-
-1. **Land S5 first** (fold `fits`/`flatWidth` into one switch) — ✅ **done** (`6e4f600a`): `DocRenderer` now has a
-   single `measureFlat(doc, mode)` switch, so each new primitive below adds exactly one case instead of two. The
-   roadmap (README S5) flagged that "a new IR variant must edit both" — every primitive here would otherwise add a
-   case to *both* `fits` and
-   `flatWidth` (lines 85-107). Folding them halves the per-primitive renderer edit and removes a divergence class of
-   bugs before we multiply the variant count.
-2. **Introduce one primitive behind its factory** with renderer + debug-renderer cases and focused
-   `DocRendererTest`/`DocDebugRendererTest` coverage, *without* migrating any printer. Existing fixtures must pass
-   unchanged (the primitive is unused).
-3. **Migrate one printer family** to the primitive:
-   - `LineSuffix` first, in `EnumDeclarationPrinter`. Replace `enumConstantTrailingComment` placement +
-     `enumConstantHasTrailingComment` + the `", "`/comma-ownership coupling (lines 515-634, and the
-     `rawOwnsTrailingComma` flag) with: emit `Doc.text(",")` separators unconditionally and attach
-     `Doc.lineSuffix(commentDoc)` to the constant. Run the enum fixtures and the comment fixtures listed in
-     `comment-containment-index.md` (Test Plan, e.g. `field-trailing-comments`, `member-comment-spacing`).
-   - Then `StatementPrinter`, `CommentedExpressionListPrinter`, `RecordDeclarationPrinter`, `MethodCallChainPrinter`,
-     `ControlConditionPrinter`.
-4. **Measure after each family** (see Success metrics): special-case lines removed, fixtures unchanged, AST-equivalence
-   (B3 layer 1) green. Only then migrate the next family or introduce the next primitive (`BreakParent` → array/throws
-   propagation; `Fill` → arrays/arguments/throws/enum-constant packing; `ConditionalGroup` →
-   `MethodCallPrinter`/`LambdaExpressionPrinter` `Optional<Doc>` chains and the `LayoutWidth` probes that feed them).
-5. **Keep `LayoutWidth` until its last consumer migrates.** It is load-bearing for ~23 printers; remove the probe only
-   when a primitive provably subsumes that decision.
+_Historical._ The staged rollout ran as planned: S5 landed first (`6e4f600a`); each primitive shipped behind its
+factory with renderer/debug/width/explain coverage; `LineSuffix` was adopted across the trailing-comment families
+(enum, record, control-condition, statement, expression-list, chain). See [Outcomes](#outcomes) for the end state,
+including the migrations that were declined (`ConditionalGroup` chain-collapse, enum `Fill` packing) and the fact
+that `LayoutWidth` was ultimately retired by the later hub true-column work, not by this item.
 
 ## Worked example: `lineSuffix` on an enum trailing comment
 

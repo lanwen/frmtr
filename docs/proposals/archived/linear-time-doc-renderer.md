@@ -1,3 +1,5 @@
+> **Status: Implemented.** Landed on `main`: the S5 `fits`/`flatWidth` unification (`6e4f600a`), the bounded + memoized `DocWidths` measurement, and the M2a overhead reduction (`c5ca3644`). Archived 2026-07-14; retained as a provenance record.
+
 # Linear-time renderer via width memoization and bounded `fits`
 
 Status: Implemented — its S5 sub-step (the `fits`/`flatWidth` unification, section (a)) has **landed
@@ -336,24 +338,9 @@ AST-equivalence check are the concrete guards.
 
 ## Micro-benchmark plan (ties to M1)
 
-This optimization should be *measured*, not assumed. It is the first concrete consumer of the M1
-benchmark discipline.
-
-1. **Render-only JMH microbenchmark** (M1 deliverable): build representative `Doc` trees in
-   `@Setup` (so parsing is excluded) and benchmark `DocRenderer.render(...)` alone. Include:
-   - a deeply right-nested group chain (the O(n²) worst case) at several depths (e.g. 2⁴…2¹⁰) to
-     exhibit the asymptotic curve and confirm it flattens after the change;
-   - a wide flat `Concat` (many small siblings) to confirm the cache overhead is not a regression on
-     shallow trees;
-   - a realistic medium method/class `Doc` from the actual Java pipeline.
-2. **Full-pipeline JMH benchmark** (parse + render) on the same inputs, to quantify the renderer's
-   share of total time — this is the honest "does it matter" check (see impact note).
-3. **Macro run over the B3 corpus** with timing, plus the golden-output diff to prove behavior
-   preservation.
-4. **CI regression gate** (M1) so the worst-case curve cannot silently re-regress.
-
-Report before/after with multiple warm runs (or `hyperfine`/JMH steady-state), since JVM warmup and GC
-dominate small samples — the same measurement caution noted in the CLI-discovery proposal.
+_Historical — the forward-looking JMH/macro benchmark plan is now owned by the still-open M1 item
+([performance-followups-from-jfr.md](../performance-followups-from-jfr.md)); the M2a measurement note
+records that paired macro timing did not show a reliable whole-CLI speedup._
 
 ## Risks
 
@@ -407,7 +394,7 @@ The implementation makes that shared walker cheaper on normal documents by repla
 complete widths before bounded descent.
 
 Follow-up measurement is now captured in
-[`performance-followups-from-jfr.md`](performance-followups-from-jfr.md): paired macro timing did not
+[`performance-followups-from-jfr.md`](../performance-followups-from-jfr.md): paired macro timing did not
 show a reliable whole-CLI speedup from M2a, while denser allocation sampling confirmed that the
 targeted `DocWidths$Budget` / `DocWidths$MeasureResult` allocation signal disappeared. Future
 renderer work should be evidence-driven: only add overflow-bound caching if repeated bounded overflow

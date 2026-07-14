@@ -1,7 +1,11 @@
+> **Status: Implemented.** Landed on `main`: the ~42-case comment-drop backlog is drained (fixes across `CompilationUnitPrinter`, `SwitchPrinter`, `CommentedExpressionListPrinter`, and the shape-dependent ownership recoveries), each pinned by a fixture. Archived 2026-07-14; retained as a provenance record. (Two later, unrelated D3-flip perturbation drops are tracked separately in `CommentPresenceDiagnosticTest.KNOWN_DROPS`.)
+
 # Fix Comment Data Loss
 
-**Status:** Implemented / complete (roadmap S9) — all comment-drop cases fixed; `CommentPresenceDiagnosticTest.KNOWN_DROPS` is empty and the S7 lexer net is green over the corpus + all perturbations; see [Outcome](#outcome) · Category: correctness / data-loss · Effort: L (iterative) · Risk: MED
-**Planned at:** commit `9a89f7eb`, 2026-06-20 · **Depends on:** [comment-accounting-in-ci.md](comment-accounting-in-ci.md) (S7 — the output-level lexer net + the exclusion list that is this backlog) · **Evidence:** [comment-handling-findings.md](comment-handling-findings.md)
+**Status:** Implemented / complete (roadmap S9) — the ~42-case backlog is drained and every fix is fixture-pinned; the S7 lexer net is green over the corpus + all perturbations; see [Outcome](#outcome) · Category: correctness / data-loss · Effort: L (iterative) · Risk: MED
+
+> **Update 2026-07-14:** `CommentPresenceDiagnosticTest.KNOWN_DROPS` is no longer empty on `main` — it now parks **two** later, unrelated D3-flip perturbation drops (`method-chain-member-access @ expanded`, `source-multiline-object-chain-initializer @ collapsed`), byte-identical to pre-flip behavior and tracked under the printer-contract-inversion Phase-D comment × width work. They are a different lineage from S9's original backlog, which remains fully drained.
+**Planned at:** commit `9a89f7eb`, 2026-06-20 · **Depends on:** [comment-accounting-in-ci.md](comment-accounting-in-ci.md) (S7 — the output-level lexer net + the exclusion list that is this backlog) · **Evidence:** [comment-handling-findings.md](../comment-handling-findings.md)
 
 > **Executor instructions**: Iterative backlog — fix **one cluster at a time**, each its own commit/branch, re-running
 > the full suite between clusters. The authoritative remaining work-list is the **exclusion list in the S7 lexer net**
@@ -89,7 +93,7 @@ Commit per cluster (imperative subject); end each body with: `Co-Authored-By: Cl
 - These fixes are the test-pinned down payment for **B1** (source-shape consolidation): when several resolve to the same
   "ownership keyed on source adjacency" cause, fold the remainder into the B1 `SourceShapePolicy`. The AST-invisible
   orphan drops also motivate **B2** (deterministic, attachment-independent comment ownership). See
-  [comment-handling-findings.md](comment-handling-findings.md).
+  [comment-handling-findings.md](../comment-handling-findings.md).
 - Keep the lexer net (S7) on throughout — it is the safety net proving each fix works and catching new drops while you
   edit placement logic.
 

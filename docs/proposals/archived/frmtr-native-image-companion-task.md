@@ -1,3 +1,5 @@
+> **Status: Implemented.** Landed as the `frmtr-native-image-support` module (`JavaParserReflectionFeature`), wired into `frmtr-cli` native build/test only and recorded in `docs/adr/0001-use-native-image-companion-module-for-javaparser-reflection.md`. Archived 2026-07-14; retained as a provenance record.
+
 # Implement GraalVM native-image companion module for JavaParser reflection
 
 ## Background

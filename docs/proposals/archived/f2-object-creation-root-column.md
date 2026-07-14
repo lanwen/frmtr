@@ -1,3 +1,5 @@
+> **Status: Implemented.** Landed on `main`: the #190 keystone (#284) plus the object-creation opener hugs (#298 argument, #299 bare body). The deferred adjacent families are now covered by the `objectCreationBodyWithOpener` helper and the `lambda-body-*-object-creation-*` fixtures. Archived 2026-07-14; retained as a provenance record.
+
 # F2 / #190 — object-creation-rooted chain bodies hug their opener at the true rendered column
 
 ## Problem
@@ -93,11 +95,10 @@ chain still wants the chain printer's own one-selector-per-line fan and stays ex
   - AST-equivalence (`--verify`): **0 failures**.
   - idempotence: **0 NEW non-idempotent** files (pre-existing oscillators unchanged).
 
-## Deferred follow-ups (adjacent families, rare, need new plumbing)
+## Deferred follow-ups — since landed
 
-- **Bare object-creation body** (`​.map(p -> new TopicPartition(a, b))`, `Nc` repro): withheld by
-  `plan`'s shallow-column probe with no direct-opener rescue for a *bare* `ObjectCreationExpr` body.
-  Needs an `objectCreationBodyWithOpener` helper mirroring `methodCallBodyWithOpener`.
-- **Opener-overflows-needs-fan** (`​.map(t -> new OffsetFetchRequestTopic().setName(...)....)`): the
-  chain head itself over-widths on the arrow line, so the correct shape is the object-creation-root
-  *fan* (root on the arrow line, each selector fanned below), not the opener hug.
+Both adjacent families named at the time have since shipped: the **bare object-creation body**
+(`.map(p -> new TopicPartition(a, b))`) is handled by the `objectCreationBodyWithOpener` helper
+(mirroring `methodCallBodyWithOpener`), and the **opener-overflows-needs-fan** object-creation-root
+fan is covered by the `lambda-body-foreach-object-creation-overflow` /
+`lambda-body-object-creation-chain-single-selector-overflow` fixtures.

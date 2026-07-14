@@ -1,11 +1,34 @@
 # Chain-Path Unification: routing every fluent-chain layout through the ranked engine
 
-Status: 🔵 Proposed — read-only audit + sequenced plan. Depends on the landed convergence-redesign foundation
-([convergence-redesign.md](convergence-redesign.md) slices 1–3) and the layout-decision model
-([layout-decision-model.md](layout-decision-model.md) LDM-1/-2f/-3). This doc does **not** re-propose those mechanisms;
-it inventories every code path that decides or renders a method-call **chain**'s layout, classifies each by whether it
-routes through the unified ranked engine (`Doc.bestFitting` + `MethodCallChainPrinter.chainFanOut`) or has its own
-imperative logic, and sequences the migration so a general fluent-chain policy can be expressed idempotently.
+Status: 🟢 Largely implemented — the sequenced plan below is mostly landed; the A/B product decision is **resolved to
+End-state A**. This doc does **not** re-propose the convergence-redesign
+([convergence-redesign.md](convergence-redesign.md) slices 1–3) or layout-decision-model
+([layout-decision-model.md](layout-decision-model.md) LDM-1/-2f/-3) mechanisms; it inventories every code path that
+decides or renders a method-call **chain**'s layout, classifies each by whether it routes through the unified ranked
+engine (`Doc.bestFitting` + `MethodCallChainPrinter.chainFanOut`) or has its own imperative logic, and sequences the
+migration so a general fluent-chain policy can be expressed idempotently.
+
+> **Implementation status (2026-07-14).** Most of the plan has landed on `main`; the audit body and line numbers below
+> are preserved as the original read-only survey (line refs are against the old HEAD `9ec908f7`). Landed: **U1** (`#247`),
+> **U2** (`#250`), **U3** (`#252` + floor-drop `#285`), the **A/B product decision → End-state A** via the canonical-fan
+> rollout (`#256`, wired chain-wide through the new `ChainFanLayout` BreakRule registry `#259`), **U8** subsumed
+> (`BinaryExpressionPrinter` routes chain operands through `canonicalFanChainRenderer`), the `#220` throws/parameter gates
+> (`#231`), the **U9** `widthBudget` field-retire (`#287`), and the **C10** `LayoutWidth.LineBudget` enum retire (`#288`).
+> **U5 — effectively satisfied (2026-07-14, evidence-checked).** The doc framed U5 as "activate `leftEdgePrefix` for the
+> if/control + ternary + assignment-RHS callers." On inspection all three already measure their chain layout at the true
+> rendered column: the **assignment-RHS** path (`MethodCallPrinter.assignmentWithBrokenMethodCallArguments`) threads a
+> `target op ` leftEdgePrefix + `nodeIndentWidth`-based width and `canonicalFanChain(…, withLeftEdgePrefix(…))`, mirroring
+> the initializer's `NAME = ` threading; the **control-condition** and **ternary** break decisions were verified
+> column-correct by a worst-case depth probe (an identical 2-link condition/ternary sized to fit at a shallow column but
+> overflow at a deep one stays flat when shallow and breaks when deep — a fixed-baseline bug would leave the deep one flat
+> and over-width), and the probe is one-pass idempotent + reindent-stable. There is **no demonstrable U5 defect** (the
+> `IdempotencePropertyTest` reindent-perturbation net is green with an empty allowlist), so no further leftEdgePrefix
+> plumbing is warranted; U5 is closed as satisfied. Evidence scope: code inspection + targeted depth probes + the existing
+> perturbation corpus (not an exhaustive per-caller audit).
+>
+> **Remaining residual (both deferred, not U5):** the two `CommentPresenceDiagnosticTest.KNOWN_DROPS` "comment × width"
+> drops; and the full retirement of `LayoutWidth.java` itself (the class still hosts the legitimate rendered-column
+> helpers `nodeLine` / `currentIndented` / `blockStatement`, ~29 consumers).
 
 Scope note: a *chain* here is a `MethodCallExpr` whose scope is itself a call / object-creation / field-access-of-call —
 the `root.a().b()` fluent shape. All line numbers are against HEAD `9ec908f7` on branch
@@ -29,11 +52,13 @@ the `root.a().b()` fluent shape. All line numbers are against HEAD `9ec908f7` on
   source columns** for the callers that still pass `LayoutContext.root()` (statement, if, assignment RHS, argument,
   binary, ternary). `leftEdgePrefix` — the rendered-column correction — is activated for **only two** callers so far:
   the `return` chain and the variable-initializer chain (`ARCHITECTURE.md:538`, `:572`).
-- The unification is therefore **not** "add the engine" (done) but "**migrate the remaining shapes and callers onto it,
-  behind the leftEdgePrefix/rendered-column work, byte-identical-first**." The single biggest gate is a **product
-  decision** the convergence-redesign already flagged: *fan fluent chains even when they fit* (End-state A, link-count
-  convergence, large rebaseline) vs *fan only when over-width* (End-state B, current, width-driven). Most slices are
-  policy-neutral; two are policy-dependent.
+- The unification was **not** "add the engine" (done) but "**migrate the remaining shapes and callers onto it, behind the
+  leftEdgePrefix/rendered-column work, byte-identical-first**" — and that migration has now **largely landed** (see the
+  status note above). The single biggest gate was a **product decision** the convergence-redesign flagged: *fan fluent
+  chains even when they fit* (End-state A, link-count convergence, large rebaseline) vs *fan only when over-width*
+  (End-state B, current, width-driven). **That decision is resolved: End-state A shipped in `#256`** (canonical fan for
+  multi-link chains). The residual is U5 (leftEdgePrefix for the remaining callers) plus the two comment × width drops;
+  see Part 4.
 
 ---
 
@@ -157,15 +182,15 @@ convergence slice-3 (initializer ranked arm)  [landed]  ── X for pos 3 singl
 LDM-2f return leftEdgePrefix                  [landed]  ── X-capable for pos 4
 LDM-2f initializer leftEdgePrefix             [landed]
 
-        ┌─ U1  multi-segment Branch P → chainFanOut (byte-identical)   [depends: slice-2]
-        ├─ U2  return conditionalGroup broken arm fully via bestFitting[depends: U1, pos-4 prefix]
-        ├─ U3  activate leftEdgePrefix for statement/argument callers  [depends: sibling-gate reads]
-        │        └─ U4  statement + argument chains → bestFitting       [depends: U1, U3]
-        ├─ U5  if/control + ternary + assignment RHS leftEdgePrefix    [depends: U3 pattern]
-        │        └─ U6  those callers → bestFitting                     [depends: U1, U5]  ← policy-dependent
-        ├─ U7  lambda-body #221A fan expressed as bestFitting          [depends: U1]        ← policy-dependent
-        ├─ U8  binary operand delegate → bestFitting                   [depends: U1, U4]
-        └─ U9  retire LayoutWidth.LineBudget + widthBudget selector    [depends: U3,U5 done]
+        ┌─ U1  multi-segment Branch P → chainFanOut (byte-identical)   [✅ #247]
+        ├─ U2  return conditionalGroup broken arm fully via bestFitting[✅ #250]
+        ├─ U3  activate leftEdgePrefix for statement/argument callers  [✅ #252 + floor-drop #285]
+        │        └─ U4  statement + argument chains → bestFitting       [✅ subsumed by End-state A #256]
+        ├─ U5  if/control + ternary + assignment RHS leftEdgePrefix    [✅ satisfied — already column-correct]
+        │        └─ U6  those callers → bestFitting                     [✅ subsumed by End-state A #256]
+        ├─ U7  lambda-body #221A fan expressed as bestFitting          [✅ #243 + #256]
+        ├─ U8  binary operand delegate → canonical fan (bestFitting)   [✅ subsumed by #256]
+        └─ U9  retire LayoutWidth.LineBudget + widthBudget selector    [✅ #287 field + #288 enum; class retire open]
 ```
 
 The critical enabler is **U1** (make `chainFanOut` the actual multi-segment fan-out arm) and **U3** (activate
@@ -361,24 +386,33 @@ Delete them.
 
 ### Slice ordering summary
 
-| Slice | Byte-identical? | Policy | Closes / enables | Corpus gate |
+| Slice | Byte-identical? | Policy | Closes / enables | Status |
 | --- | --- | --- | --- | --- |
-| U1 | yes | neutral | enables U2/U4/U6/U7/U8 | empty diff |
-| U2 | reviewed (exp. identical) | neutral | return multi-segment ranking | per-golden |
-| U3 | reviewed (exp. identical) | neutral | enables U4 | `source-multiline-method-root-chain-initializer` |
-| U4 | reviewed | neutral (width-driven) | statement + argument ranked; **A/B canary** | per-golden |
-| U5 | reviewed (exp. identical) | neutral | enables U6 | if/ternary source-multiline preservation |
-| U6 | reviewed | **A/B-dependent** | if/ternary/assignment ranked | needs A/B first |
-| U7 | reviewed | **A/B-dependent** | lambda-body #221A ranked | `lambda-body-chain-dotted-fan` |
-| U8 | reviewed | neutral (gate unchanged) | binary operand ranked | **#119 oscillation fixture** |
-| U9 | yes | neutral | retire LayoutWidth (#220) | empty diff |
+| U1 | yes | neutral | enables U2/U4/U6/U7/U8 | ✅ `#247` |
+| U2 | reviewed (exp. identical) | neutral | return multi-segment ranking | ✅ `#250` |
+| U3 | reviewed (exp. identical) | neutral | enables U4 | ✅ `#252` + floor-drop `#285` |
+| U4 | reviewed | neutral (width-driven) | statement + argument ranked; **A/B canary** | ✅ subsumed by End-state A `#256` |
+| U5 | reviewed (exp. identical) | neutral | enables U6 | ✅ satisfied — assignment already threads prefix; if/ternary verified column-correct |
+| U6 | reviewed | **A/B-dependent** | if/ternary/assignment ranked | ✅ subsumed by End-state A `#256` |
+| U7 | reviewed | **A/B-dependent** | lambda-body #221A ranked | ✅ `#243` + `#256` |
+| U8 | reviewed | neutral (gate unchanged) | binary operand ranked | ✅ subsumed by `#256` |
+| U9 | yes | neutral | retire LayoutWidth (#220) | ✅ `#287` field + `#288` enum; class retire open |
 
-Foundation (already landed) → **U1** (feed the builder) → **U3/U5** (rendered-column activation) → **U2/U4/U8**
-(policy-neutral migrations) → **U6/U7** (policy-dependent, after the A/B call) → **U9** (cleanup).
+Sequencing followed the plan: Foundation → **U1** (feed the builder) → **U3** (rendered-column activation) →
+**U2/U8** (policy-neutral migrations) → **A/B call → End-state A** → **U4/U6/U7** (landed under A via the `#256`
+canonical-fan rollout) → **U9** field/enum retire. **U5 is satisfied** — the assignment-RHS caller already threads its
+prefix and the if/ternary decisions are already column-correct (evidence-checked; see the status note). **Residual (not
+U5):** the full `LayoutWidth.java` class retire, and the two comment × width `KNOWN_DROPS`.
 
 ---
 
 ## Part 4 — The A/B product decision
+
+> **RESOLVED → End-state A (2026-07-14).** The decision below is settled: `#256` shipped the canonical fan for multi-link
+> method chains — a fan-threshold, comment/lambda-free chain fans one selector per line **regardless of width**, wired
+> chain-wide (statement, return, initializer, argument, binary operand, lambda body) through the `ChainFanLayout`
+> BreakRule registry (`#259`). The policy-dependent slices (U4/U6/U7) landed under A; the policy-neutral spine (U1/U2/U3)
+> landed byte-identical-first as planned. The text below is the original open framing, kept for provenance.
 
 The convergence-redesign already isolated this (`convergence-redesign.md` "Needs a product decision"). Restated for the
 chain unification:

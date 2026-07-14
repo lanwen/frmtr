@@ -181,26 +181,29 @@ is why an earlier change silently dropped enum separators undetected. Add three 
 ---
 
 ### B4. Reprint by default: structural break rules + a closed source-shape exception set
-**Status:** 🔵 Proposed — successor to B1, sibling to the layout decision model. Flip the default from
-preserve-the-author's-shape to reprint-from-scratch: keep source-shape reads only as a closed,
-justified, ratchet-guarded `SourceShapeException` set; retire the `wasMultiline` family behind named
-structural `BreakRule`s (a pure-AST predicate + a source-neutral layout ranked at the true output
-column — the canonical fan #256 is the landed precedent); and attribute every break via `--explain`.
-Scopes out AST-changing rewrites; keeps the data-driven config surface reachable via a closed
-combinator vocabulary. · _focused proposal:_ [reprint-by-default-break-rules.md](reprint-by-default-break-rules.md)
+**Status:** 🟢 Largely landed — the atomic hub flip and the chain-unification tail shipped. Flipped the default from
+preserve-the-author's-shape to reprint-from-scratch: source-shape reads are now a closed, ratchet-guarded set; the
+`wasMultiline` family retired behind named structural `BreakRule`s (a pure-AST predicate + a source-neutral layout ranked
+at the true output column — the **canonical fan `#256`** is the shipped exemplar, hosted in the `ChainFanLayout` registry
+`#259`); every break is attributable via `--explain`. Scopes out AST-changing rewrites; keeps the data-driven config
+surface reachable via a closed combinator vocabulary. · _focused proposal:_ [reprint-by-default-break-rules.md](reprint-by-default-break-rules.md)
 · _execution plan for the hub:_ [hub-canonicalization-atomic-rewrite.md](hub-canonicalization-atomic-rewrite.md)
 · _D3 atomic-flip map (per-read consumer/replacement guide):_ [hub-canonicalization-d3-flip-map.md](hub-canonicalization-d3-flip-map.md)
-· _post-flip true-column foundation (the residual `leftEdgePrefix` work; decisions ratified):_ [left-edge-prefix-foundation.md](left-edge-prefix-foundation.md)
+· _chain-path migration status (U1–U9, A/B resolved to A):_ [chain-path-unification.md](chain-path-unification.md)
+· _post-flip true-column foundation (the residual `leftEdgePrefix` work):_ [left-edge-prefix-foundation.md](left-edge-prefix-foundation.md)
 
-The satellite constructs (params, throws, control-condition, ternary, enclosed-binary-operand,
-try-resource) landed as small verified commits. The method-call / chain / object-creation / lambda
-**hub** cannot — four corpus-proven attempts showed every partial retirement either oscillates (a
-width-driven level under a source-gated level) or over-widths (an approximate-column probe). The hub is a
-single **atomic** conversion to pure-AST + true-column, and
-[hub-canonicalization-atomic-rewrite.md](hub-canonicalization-atomic-rewrite.md) is the non-reverting
-plan for it: build the renderer-measured measurement substrate and structural residue gates
-byte-identically first, then flip the source-read gates all at once, validated against golden-independent
-corpus invariants (idempotence, AST-equivalence, comment parity, over-width) rather than goldens.
+The satellite constructs (params, throws, control-condition, ternary, enclosed-binary-operand, try-resource) landed as
+small verified commits. The method-call / chain / object-creation / lambda **hub** — where four earlier partial
+retirements each oscillated (a width-driven level under a source-gated level) or over-widthed (an approximate-column
+probe) — was flipped as a single **atomic** conversion to pure-AST + true-column in `#279`, following the non-reverting
+plan in [hub-canonicalization-atomic-rewrite.md](hub-canonicalization-atomic-rewrite.md): the renderer-measured
+substrate and structural residue gates were built byte-identically first, then the source-read gates flipped all at once,
+validated against golden-independent corpus invariants (idempotence, AST-equivalence, comment parity, over-width). The
+chain-path migration then routed every fluent-chain shape through the ranked engine (U1 `#247`, U2 `#250`, U3
+`#252`/`#285`, End-state A `#256`, U8 subsumed, U9 field/enum retire `#287`/`#288`). U5 (leftEdgePrefix for the
+if/ternary/assignment callers) is **satisfied** — assignment-RHS already threads its prefix and the if/ternary decisions
+are already column-correct (evidence-checked). **Residual:** the full `LayoutWidth.java` class retire, and the two
+`CommentPresenceDiagnosticTest.KNOWN_DROPS` comment × width drops.
 
 ---
 

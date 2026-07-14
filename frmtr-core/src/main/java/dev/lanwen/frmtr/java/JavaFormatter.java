@@ -134,13 +134,11 @@ public final class JavaFormatter {
     /**
      * Throws a non-internal {@link FormatterException} when {@code formatted} is not AST-equivalent to {@code inputUnit}.
      *
-     * <p>This is the verify safety valve's decision seam, kept package-private so the refusal logic and its non-internal
-     * failure type can be unit-tested directly without round-tripping the whole formatter (the real formatter does not
-     * produce non-equivalent output on its own). The re-parse reuses {@code this.parser}, i.e. the exact same
-     * {@link ParserConfiguration} used for the input. The equivalence contract — which differences are trivia and which
-     * are genuine — lives entirely in {@link AstEquivalence#describeDifference}, reused here as-is; this method only
-     * routes a mismatch into a {@link FormatterException} whose {@link FormatterException#internal()} is {@code false}
-     * so it surfaces as a clean refusal rather than an internal bug.
+     * <p>The verify safety valve's decision seam, kept package-private so the refusal logic can be unit-tested without
+     * round-tripping the whole formatter. The equivalence contract — which differences are trivia and which are genuine
+     * — lives entirely in {@link AstEquivalence#describeDifference}; this method only routes a mismatch into a
+     * {@link FormatterException} whose {@link FormatterException#internal()} is {@code false}, so it surfaces as a clean
+     * refusal rather than an internal bug.
      */
     void assertOutputEquivalentOrThrow(CompilationUnit inputUnit, String formatted) {
         JavaParseResult outputResult = parse(formatted);
@@ -157,13 +155,12 @@ public final class JavaFormatter {
     }
 
     /**
-     * Re-parses the formatted output and asserts it represents the same program as the input (roadmap B3, layer 1).
+     * Re-parses the formatted output and asserts it represents the same program as the input.
      *
      * <p>Gated entirely by {@link FormatterGuardrails#verifyEnabled()}, so a normal run does no extra work and output
-     * stays byte-identical regardless of the toggle. Verification is skipped for recovered (partially-parsed) inputs:
-     * the formatter only round-trips a best-effort tree there, so AST-equivalence is ill-defined and would false-fail.
-     * The re-parse reuses {@code this.parser}, i.e. the exact same {@link ParserConfiguration} (stored tokens,
-     * attributed comments, language level) used for the input, so the two trees are produced under identical settings.
+     * stays byte-identical regardless of the toggle. Skipped for recovered (partially-parsed) inputs, where the
+     * best-effort tree makes AST-equivalence ill-defined. The re-parse reuses {@code this.parser} — the exact
+     * {@link ParserConfiguration} used for the input — so both trees are produced under identical settings.
      */
     private void verifyAstEquivalent(JavaParseResult inputResult, String formatted) {
         if (!FormatterGuardrails.verifyEnabled() || inputResult.hasParseProblems()) {
@@ -670,14 +667,11 @@ public final class JavaFormatter {
      * Renders a JEP 467 {@code ///} Markdown documentation comment as a stack of {@code ///} lines at the call site's
      * structural indent, mirroring how a {@code //} line-comment block is rendered.
      *
-     * <p>JavaParser exposes a contiguous run of {@code ///} lines as a single multi-line {@link MarkdownComment} whose
-     * {@code toString()} carries each continuation line's <em>original source indentation</em> baked into the text. The
-     * generic Javadoc renderer ({@link #lineDoc(String)} over that text) would emit that baked-in leading whitespace and
-     * then the caller's {@link Doc#indent} would add the structural indent on top, so every format pass adds one more
-     * indent level and the comment never converges (the {@code ////}-prefix idempotence bug). Stripping each line's
-     * leading whitespace before the {@code ///} marker — exactly what a {@code //} block already does, since each line
-     * comment renders at its structural indent — makes the rendering a fixed point. Whitespace <em>after</em> the
-     * {@code ///} marker is preserved so Markdown content indentation (code blocks, nested lists) is not flattened.
+     * <p>JavaParser bakes each continuation line's original source indentation into the {@link MarkdownComment} text;
+     * emitting that verbatim and then adding the caller's {@link Doc#indent} on top would add an indent level every pass
+     * so the comment never converges. Stripping each line's leading whitespace before the {@code ///} marker (as a
+     * {@code //} block does) makes the rendering a fixed point; whitespace <em>after</em> the marker is preserved so
+     * Markdown content indentation (code blocks, nested lists) is not flattened.
      */
     private static Doc markdownCommentDoc(MarkdownComment comment) {
         String raw = comment.getTokenRange().map(Object::toString).orElseGet(comment::toString).stripTrailing();
@@ -691,18 +685,15 @@ public final class JavaFormatter {
      * Reports whether a multi-line Javadoc comment is a decorative {@code /*****} {@code ... *****&#47;} banner divider
      * rather than prose Javadoc.
      *
-     * <p>JavaParser classifies any {@code /*}-comment whose opener carries three or more leading stars (e.g.
-     * {@code /*****}) as Javadoc, so banner dividers reach the Javadoc branch alongside real documentation. The
-     * canonical Javadoc renderer ({@code JavadocComment.toString()}) reflows {@code *} rows to align them as prose
-     * continuation lines, which mutates a banner's asterisk-art (a {@code *****} row becomes {@code * ***}). That
-     * byte-level mutation is invisible to AST-equivalence checks but registers as a dropped comment under the
-     * lexer-multiset comment-presence net, so banners must be preserved verbatim instead of reflowed.
+     * <p>JavaParser classifies any opener with three or more leading stars as Javadoc, and the canonical Javadoc
+     * renderer reflows {@code *} rows as prose continuation lines, mutating a banner's asterisk-art (a {@code *****} row
+     * becomes {@code * ***}). That mutation is invisible to AST-equivalence but reads as a dropped comment under the
+     * lexer-multiset comment-presence net, so banners must be preserved verbatim.
      *
-     * <p>Detection is intentionally narrow so normal Javadoc is never treated as a banner: a comment qualifies only
-     * when its opener line is {@code /*} followed by three or more stars and nothing else (e.g. {@code /*****}), or its
-     * closer line is a pure run of three or more stars before {@code *&#47;} (e.g. {@code *****&#47;}). Normal Javadoc
-     * opens with exactly two stars ({@code /**}) and closes with a single-star {@code  *&#47;}, so neither condition can
-     * fire on it. The caller owns the verbatim-preserve decision; this predicate only identifies the asterisk-art shape.
+     * <p>Detection is intentionally narrow: a comment qualifies only when its opener is {@code /*} plus three or more
+     * stars and nothing else ({@code /*****}), or its closer is a pure run of three or more stars before {@code *&#47;}
+     * ({@code *****&#47;}). Normal Javadoc ({@code /**} … {@code  *&#47;}) matches neither. The caller owns the
+     * verbatim-preserve decision; this predicate only identifies the shape.
      */
     private static boolean isBannerComment(String raw) {
         List<String> lines = raw.stripTrailing().lines().toList();

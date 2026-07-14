@@ -17,14 +17,12 @@ final class RawSource {
 
     private static final Pattern ASSIGN_EQUALS = Pattern.compile("(?<![-+*/%^&|=!<>])\\s*=\\s*(?![=])");
 
-    // Drops the single space that whitespace-collapsing leaves immediately inside a delimiter pair when the author broke
-    // the bracketed content across lines: {@code foo(\n    arg\n)} collapses to {@code foo( arg )} but the canonical
-    // compact form is {@code foo(arg)}. Without this normalization a method call's compact width depended on whether a
-    // previous format pass had broken its argument list, so a near-boundary width gate could flip between {@code (arg)}
-    // (no interior spaces) and {@code ( arg )} (two interior spaces) on alternating passes and never converge. Anchoring
-    // on the opener/closer character keeps it a pure interior-spacing fix that never touches operator spacing (so cramped
-    // operands like {@code 42/42} are preserved) and never runs on literal content (string, character, and text-block
-    // spans are emitted verbatim and never reach this collapsed non-literal buffer).
+    // Drops the space whitespace-collapsing leaves just inside a delimiter pair when the author broke the content across
+    // lines: {@code foo(\n    arg\n)} collapses to {@code foo( arg )}, but the canonical compact form is {@code foo(arg)}.
+    // Without this, a call's compact width depended on whether a prior pass had broken its args, so a near-boundary gate
+    // could flip between {@code (arg)} and {@code ( arg )} and never converge. Anchoring on the opener/closer keeps it a
+    // pure interior-spacing fix that never touches operator spacing ({@code 42/42} preserved) and never runs on literal
+    // content (string/character/text-block spans are emitted verbatim and never reach this non-literal buffer).
     private static final Pattern SPACE_AFTER_OPENER = Pattern.compile("([(\\[]) ");
 
     private static final Pattern SPACE_BEFORE_CLOSER = Pattern.compile(" ([)\\]])");
@@ -71,22 +69,16 @@ final class RawSource {
      * Collapses source text into a compact single-line form for syntax decisions that need source-equivalent text rather
      * than fully formatted docs.
      *
-     * <p>Whitespace collapsing and the assignment-{@code =} spacing rule are both applied only to the text
-     * <em>between</em> string, character, and text-block literals; each literal span is copied through verbatim. A raw
-     * regex over the whole text cannot tell an assignment {@code =} from an {@code =} byte that happens to live inside
-     * {@code "useSSL="} or {@code '='}, and rewriting the latter to {@code " = "} would silently change the literal's
-     * value. The same hazard applies to whitespace itself: a run of spaces or a tab inside {@code "            "} or
-     * {@code "\t"} is part of the literal's value, so collapsing it to a single space (as a whole-text {@code \s+}
-     * replacement would) is silent data corruption. Literal boundaries are tracked by a small hand scanner rather than a
-     * regex because a text block ({@code """..."""}) cannot be matched reliably with the same alternation that recognizes
-     * plain strings.
+     * <p>Whitespace collapsing and the assignment-{@code =} spacing rule are applied only <em>between</em> string,
+     * character, and text-block literals; each literal span is copied verbatim. Rewriting an {@code =} inside
+     * {@code "useSSL="} or collapsing whitespace inside {@code "            "}/{@code "\t"} would silently change the
+     * literal's value — data corruption. Literal boundaries are tracked by a hand scanner, not a regex, because a text
+     * block ({@code """..."""}) cannot be matched reliably alongside plain strings.
      *
-     * <p>The {@code =} spacing regex also guards against the trailing {@code =} of a compound-assignment operator
-     * ({@code ^=}, {@code |=}, {@code &=}, {@code +=}, {@code -=}, {@code *=}, {@code /=}, {@code %=}, {@code <<=},
-     * {@code >>=}, {@code >>>=}) as well as the equality/relational operators ({@code ==}, {@code !=}, {@code <=},
-     * {@code >=}). Splitting a compound operator into {@code "^ ="} produces source that JavaParser tolerates but
-     * {@code javac} rejects, so the negative lookbehind excludes every operator character that can precede a single
-     * {@code =}.
+     * <p>The {@code =} spacing regex also excludes the trailing {@code =} of a compound-assignment operator ({@code ^=},
+     * {@code +=}, {@code <<=}, …) and the equality/relational operators ({@code ==}, {@code !=}, {@code <=}, {@code >=}):
+     * splitting a compound operator into {@code "^ ="} produces source {@code javac} rejects, so the negative lookbehind
+     * excludes every operator character that can precede a single {@code =}.
      */
     String normalizeWhitespace(String text) {
         String stripped = text.strip();
@@ -101,12 +93,11 @@ final class RawSource {
      * emitting string, character, and text-block literal spans verbatim so whitespace or an {@code =} inside a literal is
      * never rewritten.
      *
-     * <p>A {@code //} line comment is also copied verbatim and is always followed by a newline rather than collapsed into
-     * the surrounding whitespace run. A line comment runs to end-of-line in Java source, so collapsing the newline that
-     * terminates it would pull the next token (an element comma, a closing brace, the next operand) onto the comment line
-     * where {@code //} swallows it, producing non-compiling text. Keeping the terminating newline preserves that
-     * invariant: callers that width-gate this text see a multi-line (over-width) result and fall back to a structured
-     * layout, and any caller that emits the text directly still produces source where the trailing token survives.
+     * <p>A {@code //} line comment is copied verbatim and always followed by a newline: since a line comment runs to
+     * end-of-line, collapsing that newline would pull the next token onto the comment line where {@code //} swallows it,
+     * producing non-compiling text. Keeping the newline means width-gating callers see a multi-line (over-width) result
+     * and fall back to a structured layout, and any direct emitter still produces source where the trailing token
+     * survives.
      */
     private String normalizeOutsideLiterals(String text) {
         StringBuilder result = new StringBuilder(text.length());

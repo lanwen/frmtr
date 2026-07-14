@@ -19,8 +19,8 @@ import java.util.Set;
  * platform reports that atomic moves are unsupported. That keeps the common path crash-safe while still formatting files
  * on file systems that cannot provide {@link StandardCopyOption#ATOMIC_MOVE}.
  *
- * <p>Symlinked inputs are resolved with {@link Path#toRealPath()} so the link target is rewritten, matching the old
- * write-through-symlink behavior. The helper leaves formatter status mapping and per-file orchestration to callers.
+ * <p>Symlinked inputs are resolved with {@link Path#toRealPath()} so the link target is rewritten. The helper leaves
+ * formatter status mapping and per-file orchestration to callers.
  */
 final class BestEffortAtomicFileWriter {
 

@@ -134,13 +134,10 @@ public final class DocExplainRenderer {
                         for (int i = 1; i + 1 < parts.size(); i += 2) {
                             Doc separator = parts.get(i);
                             Doc nextContent = parts.get(i + 1);
-                            // Decide each separator through the shared DocWidths.separatorFitsFlat helper that
-                            // DocRenderer.renderFill also calls, so the column cursor advances identically: the mode is
-                            // decided from the column reached after the preceding content, then the next content renders
-                            // flat. Record the arithmetic behind that choice — the column reached after the preceding
-                            // content, the flat width of concat(separator, nextContent) the helper measures, and the
-                            // columns left — before the separator advances the cursor, so a recorded BREAK reflects the
-                            // budget the renderer actually weighed.
+                            // Decide each separator through the shared DocWidths.separatorFitsFlat helper DocRenderer
+                            // also calls, so the cursor advances identically. Record the arithmetic (column reached, flat
+                            // width of concat(separator, nextContent), columns left) before the separator advances the
+                            // cursor, so a recorded BREAK reflects the budget the renderer actually weighed.
                             int available = lineWidth - column;
                             int separatorFlatWidth = widths.flatWidth(Doc.concat(separator, nextContent));
                             boolean fitsFlat = widths.separatorFitsFlat(separator, nextContent, available);

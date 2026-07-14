@@ -62,21 +62,14 @@ final class CommentedExpressionListPrinter {
             List<Doc> inlineTrailingComments = new ArrayList<>();
             List<Doc> trailingCommentLines = new ArrayList<>();
             for (JavaCommentTrivia comment : trailingComments) {
-                // A gap comment sits between this container's arguments, so it is offered under the container's own
-                // INTERLEAVED anchor — the slot that names "a comment interleaved between an anchor's children" (here the
-                // arguments). Anchoring to the container rather than to the argument or the comment's own node lets comment
-                // ownership disambiguate the two competing offers without a build-order isPrinted skip:
-                //   - When the argument is rendered through the full expression renderer (argumentLine above), the
-                //     argument's own trailing line comment is claimed and emitted inside that render (a method-call chain's
-                //     final trailing comment, under the (finalCall, INTERLEAVED) slot). That slot is a different key from
-                //     (container, INTERLEAVED), so ownsHere blocks this slot and comment(...) returns Doc.EMPTY here.
-                //   - A comment the argument render left untouched (the comment-free compact path, or a plain gap comment)
-                //     is owned by this container slot and placed here.
-                // The argument node itself is deliberately NOT used as the anchor: the argument of a single-argument call
-                // is frequently the same node the chain printer's finalTrailingLineComment anchors on, so (argument,
-                // INTERLEAVED) would collide with that owner and double-render through the idempotent-by-owner re-claim
-                // branch. The gaps are de-duplicated by comment identity in argumentCommentGaps, so the same comment is
-                // never offered twice under this shared container key.
+                // A gap comment between this container's arguments is offered under the container's own INTERLEAVED
+                // anchor, so ownership disambiguates the two competing offers without a build-order isPrinted skip:
+                //   - the argument's own trailing comment (e.g. a chain's final comment under (finalCall, INTERLEAVED))
+                //     is a different key, so ownsHere blocks this slot and comment(...) returns Doc.EMPTY here;
+                //   - a comment the argument render left untouched is owned by this container slot and placed here.
+                // The argument node is deliberately NOT the anchor: a single-argument call's argument is often the node
+                // the chain printer's finalTrailingLineComment anchors on, so (argument, INTERLEAVED) would collide and
+                // double-render. argumentCommentGaps de-dups by identity, so the same comment is never offered twice here.
                 Doc commentDoc = comments.comment(comment, container, OwnerSlot.INTERLEAVED);
                 if (commentDoc == Doc.EMPTY) {
                     continue;
@@ -249,14 +242,11 @@ final class CommentedExpressionListPrinter {
     /**
      * Drops repeats of the same JavaParser comment within one gap, keeping the first occurrence in source order.
      *
-     * <p>The line-comment gap queries read {@link JavaCommentPlacementPolicy#containedComments(Node)}, which can list the
-     * same comment more than once when a whitespace perturbation lets it be reached through two containment paths (observed
-     * on a collapsed argument list, where a call's after-last-argument line comment appears twice in the trailing gap).
-     * The former render loop absorbed this with a build-order {@code !comments.isPrinted(comment)} skip; now that the gap is
-     * offered under one shared {@code (container, INTERLEAVED)} owner, a duplicate would render twice through the
-     * idempotent-by-owner re-claim branch instead of losing a claim race. De-duplicating by comment identity before any
-     * offer keeps each comment offered exactly once, so the shared-owner gate stays sufficient without the printed-set
-     * dependency. Distinct comment nodes carrying the same text are compared by identity and both kept.
+     * <p>{@link JavaCommentPlacementPolicy#containedComments(Node)} can list the same comment twice when a whitespace
+     * perturbation reaches it through two containment paths (a collapsed argument list, where a call's after-last-argument
+     * comment appears twice in the trailing gap). Since the gap is offered under one shared {@code (container, INTERLEAVED)}
+     * owner, an undeduplicated duplicate renders twice; de-duplicating by identity offers each once. Distinct nodes with
+     * the same text are both kept.
      */
     private static List<JavaCommentTrivia> dedupByCommentIdentity(List<JavaCommentTrivia> gap) {
         java.util.Set<Comment> seen =
@@ -271,29 +261,20 @@ final class CommentedExpressionListPrinter {
     }
 
     /**
-     * Adds the block comments that sit in the argument-list gaps, which the line-comment gap queries never gather.
+     * Adds the block comments that sit in the argument-list gaps, which the line-only gap queries never gather.
      *
-     * <p>JavaParser parks a {@code /* … *}{@code /} block in an argument list on several buckets depending on the
-     * surrounding node shape: a block trailing an argument (e.g. {@code update((byte) input /* >> 0 *}{@code /)}) lands as
-     * the call's contained / orphan trivia, while a block that leads the following argument (e.g.
-     * {@code confirm(true, /* note *}{@code / ledger)}) is attached to that argument as its own leading comment. Either
-     * way the policy's recursive {@link JavaCommentPlacementPolicy#containedComments(Node)} view of the call already holds
-     * every such block. The line-comment gap queries
-     * ({@code lineCommentsBeforeFirst}/{@code lineCommentsBetween}/{@code trailingArgumentComments}) only look at line
-     * comments, so none of these blocks is ever offered and {@link #parenthesized} drops them by falling through to the
-     * compact comment-free render. This recovers them and assigns each to the gap it belongs to.
+     * <p>JavaParser parks an argument-list {@code /* … *}{@code /} block on different buckets by shape — trailing an
+     * argument ({@code update((byte) input /* >> 0 *}{@code /)}) it is the call's contained/orphan trivia, leading the
+     * next argument ({@code confirm(true, /* note *}{@code / ledger)}) it is that argument's own comment — but the call's
+     * recursive {@link JavaCommentPlacementPolicy#containedComments(Node)} view holds every such block. The line-comment
+     * gap queries skip them, so {@link #parenthesized} drops them; this recovers each into the gap it belongs to.
      *
-     * <p>Placement is decided purely by source order (see {@link CommentIndex#liesBetween(Comment, Node, Node)} and
-     * {@link CommentIndex#startsAfterEndOf(Node, Comment)}), not by source line, so a block keeps its gap whether the
-     * author wrote {@code arg /* note *}{@code /} on one line or a whitespace shape pushed the block onto its own line —
-     * the same shape-independence the line-comment gap queries rely on. A block that begins inside an argument's own range
-     * (rather than trailing it) is left to that argument's renderer, and a block trailing the whole completed call (past
-     * the closing {@code )}) is left to the enclosing syntax. Each block is placed in exactly one gap and deduped by
-     * JavaParser comment identity against the line comments already gathered, so a block JavaParser also exposed as the
-     * next argument's own leading trivia still renders once. The render loop in {@link #parenthesized} then chooses
-     * inline-versus-own-line placement from the same predicates it already applies to line comments, and
-     * {@link CommentTracker#comment(JavaCommentTrivia)} renders an already-claimed block as {@link Doc#EMPTY}, so a block
-     * some other path renders at {@code @default} is left untouched here.
+     * <p>Placement is by source order (see {@link CommentIndex#liesBetween(Comment, Node, Node)},
+     * {@link CommentIndex#startsAfterEndOf(Node, Comment)}), so a block keeps its gap however whitespace lays it out. A
+     * block inside an argument's own range is left to that argument's renderer, and one past the closing {@code )} to the
+     * enclosing syntax. Each block is placed in one gap and deduped by identity against the line comments already
+     * gathered; {@link CommentTracker#comment(JavaCommentTrivia)} renders an already-claimed block as {@link Doc#EMPTY},
+     * so a block another path renders at {@code @default} is left untouched.
      */
     private void addArgumentBlockComments(
             Node container,
@@ -320,14 +301,12 @@ final class CommentedExpressionListPrinter {
     }
 
     /**
-     * Reports whether a comment begins strictly inside {@code argument}'s own token range, i.e. after the argument's first
-     * token and before its last token.
+     * Reports whether a comment begins strictly inside {@code argument}'s own token range (after its first token, before
+     * its last).
      *
-     * <p>A comment that begins before the argument is leading it, and a comment that begins after the argument ends is
-     * trailing it; both belong to an argument gap. Only a comment genuinely nested inside an argument's expression (e.g.
-     * {@code foo(bar(/* x *}{@code / baz))}) is the argument renderer's to print, so this is the source-order test that
-     * keeps such nested trivia out of the gap recovery — unlike a line-range test, it does not mistake a same-line
-     * leading-own block of the argument for nested content.
+     * <p>A comment before or after the argument belongs to a gap; only one genuinely nested inside the expression (e.g.
+     * {@code foo(bar(/* x *}{@code / baz))}) is the argument renderer's. The source-order test keeps such nested trivia
+     * out of gap recovery without mistaking a same-line leading-own block for nested content.
      */
     private boolean startsInside(Expression argument, JavaCommentTrivia comment) {
         return !comment.startsBefore(argument)
@@ -429,12 +408,10 @@ final class CommentedExpressionListPrinter {
     private boolean hasUnprintedComments(Node container, List<List<JavaCommentTrivia>> commentGaps) {
         for (int index = 0; index < commentGaps.size(); index++) {
             for (JavaCommentTrivia comment : commentGaps.get(index)) {
-                // Mirror parenthesized's per-gap render anchor: gap 0 is emitted by addCommentDocs under the comment's own
-                // anchorless (comment, INTERLEAVED) key, every later gap under (container, INTERLEAVED). A gap comment is
-                // "unplaced here" — the reason to choose the broken layout — when this list's own slot still owns it, i.e.
-                // ownsHere admits it under that anchor (unmigrated, or recorded to this exact slot). A comment the dry-run
-                // recorded to another slot (an argument's inner render claiming its own trailing comment, say) is placed by
-                // that slot instead, so it does not force this broken layout.
+                // Mirror parenthesized's per-gap render anchor: gap 0 uses the comment's own (comment, INTERLEAVED) key,
+                // later gaps (container, INTERLEAVED). A gap comment is "unplaced here" — the reason to choose the broken
+                // layout — when this list's slot still owns it (ownsHere admits it: unmigrated or recorded to this slot).
+                // A comment the dry-run recorded to another slot is placed there instead and does not force this layout.
                 Node anchor = index == 0 ? comment.comment() : container;
                 if (comments.ownsHere(comment, anchor, OwnerSlot.INTERLEAVED)) {
                     return true;

@@ -428,7 +428,7 @@ final class ExpressionLambdaArgumentLayout {
                 )
             );
         }
-        // Canonical-fan cutover seam (End-state A), the lambda-body position (U7). A method-call chain that IS a lambda
+        // The lambda-body-position canonical fan. A method-call chain that IS a lambda
         // body and reaches the structural fan threshold ({@code lambdaBodyChainFansByCanonicalRule}) fans one selector per
         // line — root on the {@code ->} line, each {@code .call(...)} on its own continuation line — the same
         // source-neutral shape every other chain position already cuts over to, even when the flat body would fit. This
@@ -541,7 +541,7 @@ final class ExpressionLambdaArgumentLayout {
     /**
      * Builds the shared expression-lambda argument plan used by call and chain printers for width decisions.
      *
-     * <p>D1g (#190) threads {@code layout} so the true continuation column ({@link LayoutContext#leftEdgePrefix()}) is
+     * <p>D1g threads {@code layout} so the true continuation column ({@link LayoutContext#leftEdgePrefix()}) is
      * available to this lambda-hug admission gate for the eventual reflow-by-width flip. It is NOT yet consulted: the
      * entry gate below still decides admit-vs-withhold with the fixed-budget {@link #expressionFirstLineWidth} and
      * {@code nodeIndentWidth}-based {@link #expressionLineWidth} probes exactly as before, so threading it is
@@ -1401,7 +1401,7 @@ final class ExpressionLambdaArgumentLayout {
      * The cross-printer boundary for {@link #plan}: the shape the call and chain printers hold so they can build a
      * {@link Plan} at the true continuation column.
      *
-     * <p>D1g (#190) widened this from the earlier {@code BiFunction<String, NodeList<Expression>, Optional<Plan>>} to
+     * <p>D1g widened this from the earlier {@code BiFunction<String, NodeList<Expression>, Optional<Plan>>} to
      * carry the caller's {@link LayoutContext}. The context is threaded-but-not-consulted today (byte-identical); it
      * exists so the lambda-hug admission gate can measure at the same rendered column its callers already use for their
      * Plan-consuming first-line predicates once C10 activates.

@@ -248,11 +248,10 @@ final class EnumDeclarationPrinter {
     /**
      * Builds the formatter-owned enum entry list.
      *
-     * <p>Each constant's trailing comment is attached as a {@link Doc#lineSuffix(Doc)} (see {@link
-     * EnumConstantComments.Tail#suffix()}), so it renders nothing inline and flushes at the following line break. The
-     * separator between constants — and the list terminator after the last constant, added by {@link #enumBlock} — is
-     * therefore always emitted unconditionally and prints before the deferred comment, which removes the comma/comment
-     * coupling and the need to hoist the last constant's comment past the terminator.
+     * <p>Each constant defers its trailing comment to a {@link Doc#lineSuffix(Doc)} (see {@link
+     * EnumConstantComments.Tail#suffix()}) that flushes at the next break, so the inter-constant separator and the list
+     * terminator (added by {@link #enumBlock}) always print unconditionally before the comment — removing the
+     * comma/comment coupling and the need to hoist the last constant's comment past the terminator.
      */
     private EnumEntryList formattedEnumEntryList(EnumDeclaration declaration) {
         List<EnumConstantDeclaration> entries = declaration.getEntries();
@@ -619,13 +618,10 @@ final class EnumDeclarationPrinter {
     /**
      * Returns orphan comments that belong to the body section rather than to the trailing side of an enum constant.
      *
-     * <p>An empty enum body ({@code enum E { // comment }} with no constants and no members) is recovered by source
-     * position instead, because the comment is a body orphan only at the expanded shape. When a whitespace perturbation
-     * collapses the body onto the header line, JavaParser re-attaches the comment to the enum's name rather than leaving
-     * it a declaration orphan, so {@code getOrphanComments()} no longer exposes it and the orphan-based path drops it. The
-     * comment is still a <em>contained</em> comment of the enum, so {@link #emptyBodyComments(EnumDeclaration)} keeps the
-     * same ownership by selecting, in source order, the contained comments (line and block alike) that begin inside the
-     * empty body.
+     * <p>An empty enum body ({@code enum E { // comment }}) is recovered by source position instead: a whitespace collapse
+     * onto the header line re-attaches the comment to the enum's name, so {@code getOrphanComments()} drops it, but it is
+     * still a <em>contained</em> comment. {@link #emptyBodyComments(EnumDeclaration)} keeps that ownership by selecting,
+     * in source order, the contained comments beginning inside the empty body.
      */
     private List<Doc> enumBodyComments(EnumDeclaration declaration) {
         if (declaration.getEntries().isEmpty() && declaration.getMembers().isEmpty()) {
@@ -639,13 +635,11 @@ final class EnumDeclarationPrinter {
     /**
      * Recovers the comments inside an empty enum body, independent of source shape.
      *
-     * <p>The body interior of an empty enum holds no constants and no members, so every contained comment that begins
-     * after the body's opening brace is a body comment — line and block comments alike, matching the orphan-based path's
-     * {@link CommentTracker#orphanCommentStatements} which applies no comment-kind filter. Selecting by the opening-brace
-     * source position (rather than by JavaParser's orphan association, which the collapse perturbation moves onto the enum
-     * name) keeps the same comment owned by the body however whitespace lays the declaration out. This is a strict
-     * superset of the orphan-based path at the {@code @default} shape: an own-line body comment is both a declaration
-     * orphan and a contained comment that begins after the opening brace, so both selections return the same comment.
+     * <p>An empty enum body holds no constants or members, so every contained comment after the opening brace (line and
+     * block alike, matching the orphan path's unfiltered {@link CommentTracker#orphanCommentStatements}) is a body
+     * comment. Selecting by opening-brace position rather than orphan association keeps the comment owned by the body
+     * however whitespace lays it out — a strict superset of the orphan path at {@code @default}, where an own-line body
+     * comment is both a declaration orphan and a contained comment after the brace.
      */
     private List<Doc> emptyBodyComments(EnumDeclaration declaration) {
         OptionalInt openingBraceOffset = enumBodyOpeningBraceOffset(declaration);

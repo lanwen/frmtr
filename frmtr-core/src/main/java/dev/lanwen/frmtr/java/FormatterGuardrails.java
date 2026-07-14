@@ -32,35 +32,18 @@ final class FormatterGuardrails {
      * {@link #ENABLED_PROPERTY} because it gates a different failure mode (a duplicate claim, not a dropped comment). It
      * is enabled as a CI gate (see {@code frmtr-core/build.gradle.kts}).
      *
-     * <p>{@code CommentTracker} couples claim and render — every render path is
-     * {@code commentPlacement.X(node).filter(this::claim)…} — so first-claim-wins both de-dupes and renders. Comment
-     * ownership between adjacent constructs is inherently ambiguous, so several printer paths legitimately <em>offer</em>
-     * the same comment; before B2 the losing claim returned {@code false} and skipped its redundant render, so the comment
-     * still reached output once but a "fail fast on the second claim" assertion flagged the benign re-claim.
+     * <p>Comment ownership between adjacent constructs is inherently ambiguous, so several printer paths legitimately
+     * <em>offer</em> the same comment, and eager {@code Optional<Doc>} candidate ladders render a comment-bearing subtree
+     * just to probe its layout fit before discarding the losing arm. A naive claim-and-render coupling would flag those
+     * benign re-offers as duplicate claims.
      *
-     * <p>Roadmap <strong>B1</strong> (source-shape consolidation and shape-independent comment ownership) made the
-     * <em>drop</em> invariant hold for {@code CommentPresenceDiagnosticTest} (its {@code KNOWN_DROPS} list is empty). The
-     * stricter "claimed at most once" invariant historically failed: the eager {@code Optional<Doc>} candidate ladders in
-     * {@code MethodCallPrinter}, {@code MethodCallChainPrinter}, {@code VariableInitializerLayout}, and the segment
-     * renderers rendered a comment-bearing subtree to probe its layout fit, the probe claimed the comment, and the losing
-     * candidate was then discarded — leaving the comment claimed once for a render that never reached output and once for
-     * the chosen layout.
-     *
-     * <p><strong>B2 ownership consolidation (landed).</strong> Stage 2a/2bc migrated every comment family to explicit
-     * ownership populated by a record-only dry-run pre-pass ({@link CommentTracker#beginRecording} /
-     * {@link CommentTracker#endRecordingAndReset}): the dry-run runs the same print traversal once with claims recorded
-     * but not committed, capturing each comment's first claimant as its owning {@code (node, slot)}, and
-     * {@link CommentTracker#ownsHere} gates each render on that recording. Stage 3 then decoupled the discarded-probe
-     * claims with a re-entrant speculative rollback scope; that scope was in turn retired (Phase C) once every comment
-     * family moved onto the claim-neutral ownership rail ({@link CommentTracker#ownedComment}), which resolves a
-     * comment's emptiness from its recorded owner and mutates no {@code printed}/{@code rawRendered} claim state — so a
-     * discarded probe commits no claim to roll back and an owner may re-offer the same comment across eagerly-built
-     * ranked arms without dropping or duplicating it; the handful of reused-Doc
-     * neighbor offers (a chain segment's name comment vs. its leading/trailing comment, an if/else between-clause block
-     * comment vs. the else-leading slot, an argument's inline trailing comment vs. its enclosing list, etc.) are gated by
-     * a distinct ownership slot or skipped when already printed. The result is output-neutral and the invariant now holds
-     * across the whole suite (golden fixtures, comment-presence diagnostics, and the whitespace-perturbed idempotence
-     * property test), so Stage 4 turned this property on by default in the build as a CI gate.
+     * <p>The invariant now holds because every comment family renders on the claim-neutral ownership rail
+     * ({@link CommentTracker#ownedComment}): a record-only dry-run pre-pass ({@link CommentTracker#beginRecording} /
+     * {@link CommentTracker#endRecordingAndReset}) captures each comment's first claimant as its owning
+     * {@code (node, slot)}, and each render resolves emptiness from that recorded owner while mutating no claim state — so
+     * a discarded probe commits nothing and an owner may re-offer the same comment across ranked arms without dropping or
+     * duplicating it. The result is output-neutral and holds across the whole suite (goldens, comment-presence
+     * diagnostics, and the whitespace-perturbed idempotence property test).
      *
      * <p>Note: this property only governs the duplicate-claim fail-fast. {@link #assertAllCommentsAccounted} (the
      * comment-<em>drop</em> guardrail) is still gated on {@link #ENABLED_PROPERTY}, which is <em>not</em> enabled in the
@@ -71,8 +54,8 @@ final class FormatterGuardrails {
     static final String STRICT_CLAIMS_PROPERTY = "dev.lanwen.frmtr.debug.guardrails.strict-claims";
 
     /**
-     * Toggles the AST-equivalence verify mode (roadmap B3, layer 1). Separate from {@link #ENABLED_PROPERTY} because
-     * verification re-parses the formatted output and so has real cost; it must stay off in the shipped hot path.
+     * Toggles the AST-equivalence verify mode. Separate from {@link #ENABLED_PROPERTY} because verification re-parses the
+     * formatted output and so has real cost; it must stay off in the shipped hot path.
      */
     static final String VERIFY_PROPERTY = "dev.lanwen.frmtr.debug.verify";
 
@@ -83,14 +66,13 @@ final class FormatterGuardrails {
     /**
      * Records that a comment has been claimed for rendering and rejects duplicate claims under the strict-claims toggle.
      *
-     * <p>Normal formatter runs keep the existing best-effort behavior: a duplicate claim simply returns {@code false} so
-     * callers can skip rendering a second copy. The {@code printed} set is populated by {@link JavaCommentTrivia#claim}
-     * whether or not the throw fires, so comment-drop detection keeps working with the fail-fast off.
+     * <p>Normal formatter runs keep the best-effort behavior: a duplicate claim returns {@code false} so callers skip
+     * rendering a second copy. The {@code printed} set is populated by {@link JavaCommentTrivia#claim} whether or not the
+     * throw fires, so comment-drop detection keeps working with the fail-fast off.
      *
-     * <p>The fail-fast is gated on {@value #STRICT_CLAIMS_PROPERTY}, <em>not</em> {@value #ENABLED_PROPERTY}: as
-     * documented on {@link #STRICT_CLAIMS_PROPERTY}, the "claimed at most once" invariant now holds after the roadmap B2
-     * ownership consolidation and is enabled as a CI gate in {@code frmtr-core/build.gradle.kts}. Comment-drop detection
-     * ({@link #assertAllCommentsAccounted}) and the transform-identity check are gated separately on
+     * <p>The fail-fast is gated on {@value #STRICT_CLAIMS_PROPERTY}, <em>not</em> {@value #ENABLED_PROPERTY}: the
+     * "claimed at most once" invariant now holds (see {@link #STRICT_CLAIMS_PROPERTY}) and is a CI gate. Comment-drop
+     * detection ({@link #assertAllCommentsAccounted}) and the transform-identity check are gated separately on
      * {@value #ENABLED_PROPERTY}.
      */
     static boolean claimComment(JavaCommentTrivia trivia, Set<Comment> claimedComments) {

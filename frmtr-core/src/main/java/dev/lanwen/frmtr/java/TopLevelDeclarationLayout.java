@@ -96,11 +96,10 @@ final class TopLevelDeclarationLayout {
      * Joins top-level type declarations while restoring file orphan comments that source placed <em>between</em> two
      * types, such as a {@code // Bug Fix: #123} note sitting between two classes.
      *
-     * <p>Comments before the first type and after the last type are already emitted by {@code print} (around the
-     * package/import block and as the file footer). A comment between two top-level types is a compilation-unit orphan
-     * that neither of those handles, so without this interleave it is dropped — most visibly when whitespace is expanded
-     * so the comment no longer shares a line with either type. The interleaver places it in source order between the
-     * surrounding type docs; claim-coupling keeps the before-first / after-last passes from re-emitting it.
+     * <p>Comments before the first type and after the last are already emitted by {@code print} (around the package/import
+     * block and as the footer); a between-types orphan is handled by neither, so without this interleave it is dropped
+     * (most visibly when whitespace expands it off both types' lines). The interleaver places it in source order between
+     * the surrounding type docs, and claim-coupling keeps the before-first/after-last passes from re-emitting it.
      */
     private Optional<Doc> interleavedTopLevelDeclarations(CompilationUnit unit, List<BodyDeclaration<?>> declarations) {
         List<JavaCommentTrivia> betweenTypeComments = betweenTypeOrphanComments(unit, declarations);
@@ -152,8 +151,8 @@ final class TopLevelDeclarationLayout {
      * excluded because {@code print} already emits them.
      */
     private List<JavaCommentTrivia> betweenTypeOrphanComments(CompilationUnit unit, List<BodyDeclaration<?>> types) {
-        int firstTypeLine = firstTypeLine(unit);
-        int lastTypeLine = lastTypeLine(unit);
+        int firstTypeLine = CompilationUnitPrinter.firstTypeLine(unit);
+        int lastTypeLine = CompilationUnitPrinter.lastTypeLine(unit);
         return commentPlacement.orphanComments(unit)
                 .stream()
                 .filter(comment -> comment.beginLine(Integer.MAX_VALUE) > firstTypeLine
@@ -356,22 +355,5 @@ final class TopLevelDeclarationLayout {
          * The previous entry was a raw source island whose final line break was replaced by formatter-owned output.
          */
         RAW_GAP_WITH_TRAILING_BREAK,
-    }
-
-    private int firstTypeLine(CompilationUnit unit) {
-        return unit.getTypes()
-                .stream()
-                .mapToInt(type -> CommentIndex.beginLine(type, Integer.MAX_VALUE))
-                .min()
-                .orElse(Integer.MAX_VALUE);
-    }
-
-    private int lastTypeLine(CompilationUnit unit) {
-        int lastSourceBackedLine = unit.getTypes()
-                .stream()
-                .mapToInt(type -> CommentIndex.endLine(type, Integer.MIN_VALUE))
-                .max()
-                .orElse(Integer.MIN_VALUE);
-        return lastSourceBackedLine == Integer.MIN_VALUE ? Integer.MAX_VALUE : lastSourceBackedLine;
     }
 }

@@ -151,7 +151,7 @@ final class ConditionalExpressionPrinter {
             + " "
             + compactSource.compact(conditionalExpr.getCondition())
             + ";";
-        // C10-c: measure the {@code target op condition;} line at the conditional's true rendered block/type depth
+        // Measure the {@code target op condition;} line at the conditional's true rendered block/type depth
         // ({@link LayoutWidth#nodeLine}) instead of the fixed BLOCK baseline.
         if (layoutWidth.nodeLine(conditionalExpr, conditionLine) <= options.lineWidth()) {
             return Optional.of(
@@ -199,32 +199,26 @@ final class ConditionalExpressionPrinter {
         if (commented.isPresent()) {
             return commented.orElseThrow();
         }
-        // A caller-forced context prints the broken ternary shape unconditionally: that is a caller decision, not a width
-        // decision, so it never consults the renderer's column. This is the imperative path: the broken shape is built
-        // directly as HardLines, so the renderer only ever sees a forced break and cannot narrate the width arithmetic.
-        // When the caller forced this conditional apart *because* its flat form overflowed (an assignment/initializer
-        // whose one-line ternary was too wide), record that width decision so --explain can attribute the wrap to width.
-        // Recording runs after the broken shape is chosen and never influences the produced Doc, so output stays
-        // byte-identical. A conditional the author happened to write across multiple source lines is NOT forced here —
-        // it reflows through the width-driven auto path below like any other, per reprint-by-default canonicalization.
+        // A caller-forced context prints the broken ternary unconditionally — a caller decision, not a width one, built
+        // imperatively as HardLines so the renderer only sees a forced break. When the caller forced it apart *because*
+        // its flat form overflowed, record that width decision so --explain can attribute the wrap to width; recording
+        // runs after the shape is chosen and never changes the Doc. A conditional the author wrote across source lines is
+        // NOT forced here — it reflows through the width-driven auto path below.
         //
-        // A conditional that carries a line comment the flat arm cannot represent is forced broken as well: this is a
-        // comment-safety gate (COMMENT_PRESENCE_GATE), not a source-shape read.
-        // {@link ConditionalCommentLayout#commentedConditionalExpression}
-        // above already handles comments that sit around this ternary's own {@code ?}/{@code :} operators; the remaining
-        // line comments live inside a branch sub-expression (e.g. a binary branch's between-operand {@code //} comment),
-        // which the flat {@code compact} arm would swallow to end-of-line. The broken shape renders each branch through
-        // the ordinary expression renderer, which places those inner comments correctly.
+        // A conditional carrying a line comment the flat arm cannot represent is forced broken too (a comment-safety
+        // gate, COMMENT_PRESENCE_GATE, not a source-shape read): commentedConditionalExpression above handles comments
+        // around this ternary's own {@code ?}/{@code :}, but a line comment inside a branch sub-expression (e.g. a binary
+        // branch's between-operand {@code //}) would be swallowed by the flat {@code compact} arm, so the broken shape
+        // renders each branch through the ordinary renderer to place them correctly.
         if (breakMode.isForced() || conditionalComments.conditionalContainsLineComment(expression)) {
             recordTernaryWidthBreak(expression);
             return brokenConditionalExpression(expression);
         }
-        // Auto path: defer the flat-versus-broken width decision to the renderer, which measures the flat arm at the
-        // true running column via Doc.conditionalGroup. The earlier gate probed a reconstructed indented width, which
-        // disagreed with the column write reaches (the #137/#155 width-at-wrong-column family); a disagreement could
-        // print a genuinely over-width ternary flat and let a later pass break it. Measuring at the real column removes
-        // that reconstruction, and DocExplainRenderer already reports the group decision at available = lineWidth -
-        // column, so no separate width-break recorder is needed.
+        // Auto path: defer the flat-versus-broken decision to the renderer, which measures the flat arm at the true
+        // running column via Doc.conditionalGroup. The earlier gate probed a reconstructed indented width that disagreed
+        // with the real column (the #137/#155 width-at-wrong-column family), so it could print an over-width ternary flat
+        // and let a later pass break it. Measuring at the real column removes that; DocExplainRenderer reports the group
+        // decision at available = lineWidth - column, so no separate width-break recorder is needed.
         return Doc.conditionalGroup(
             List.of(flatConditionalExpression(expression), brokenConditionalExpression(expression))
         );
@@ -254,18 +248,16 @@ final class ConditionalExpressionPrinter {
      * conditional whose single-line form overflowed the line budget, so explain can attribute the wrap to width rather
      * than to an opaque forced break.
      *
-     * <p>This fires only for genuine width breaks: a conditional forced apart for nesting or a source-multiline shape
-     * while its flat form would still fit is not a width decision and is left unrecorded, so it stays reported as a
-     * rule-driven break. The auto path does not call this — it defers the flat-versus-broken choice to
-     * {@link Doc#conditionalGroup}, whose {@code ConditionalGroupDecision} self-explains the same width arithmetic; a
-     * recorder there would double-report the {@code java.expression:ConditionalExpr} label. Recording runs after the
-     * broken shape is chosen and appends only to the observational {@link LayoutDecisionLog}, so it never changes which
-     * {@link Doc} is built or the rendered output.
+     * <p>Fires only for genuine width breaks: a conditional forced apart while its flat form would still fit is left
+     * unrecorded. The auto path does not call this — it defers to {@link Doc#conditionalGroup}, whose
+     * {@code ConditionalGroupDecision} self-explains the same arithmetic, so a recorder there would double-report the
+     * {@code java.expression:ConditionalExpr} label. Recording appends only to the observational
+     * {@link LayoutDecisionLog}, so it never changes the {@link Doc} or the output.
      */
     private void recordTernaryWidthBreak(ConditionalExpr expression) {
         String flat = compactSource.compact(expression);
-        // C10-c: narrate the flat ternary width at its true rendered block/type depth ({@link LayoutWidth#nodeLine})
-        // instead of the fixed CURRENT baseline. This is observational (feeds --explain only) and never changes the Doc.
+        // Narrate the flat ternary width at its true rendered block/type depth ({@link LayoutWidth#nodeLine}) instead of
+        // the fixed CURRENT baseline. This is observational (feeds --explain only) and never changes the Doc.
         int flatWidth = layoutWidth.nodeLine(expression, flat);
         if (flatWidth <= options.lineWidth()) {
             return;

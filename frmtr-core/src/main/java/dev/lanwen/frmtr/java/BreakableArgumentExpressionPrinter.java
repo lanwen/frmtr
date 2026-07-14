@@ -40,7 +40,7 @@ final class BreakableArgumentExpressionPrinter {
      * Offers an expression argument its expression-specific broken form as a renderer-measured alternative to the flat
      * rendering.
      *
-     * <p>C10-d (#191 settled): the flat/broken choice is a {@link Doc#conditionalGroup(List)} ranked by the renderer at
+     * <p>The flat/broken choice is a {@link Doc#conditionalGroup(List)} ranked by the renderer at
      * the argument's true output column, not a precomputed {@link LayoutWidth} continuation-budget probe. Because both
      * arms are pure functions of the AST, the choice is a fixpoint (the pre-flip {@code CONTINUATION}-probe-to-group
      * conversion oscillated because the surrounding hub still read source shape; post-flip it does not), and the renderer
@@ -50,8 +50,8 @@ final class BreakableArgumentExpressionPrinter {
      */
     Doc argument(Expression argument) {
         Doc flat = expressionRenderer.apply(argument);
-        // Canonical-fan cutover seam U8: when this argument is a binary/ternary whose dispatched {@code flat} rendering
-        // already fans a fluent chain operand by the End-state A structural rule, commit that {@code flat} shape and do
+        // When this argument is a binary/ternary whose dispatched {@code flat} rendering
+        // already fans a fluent chain operand by the structural fan rule, commit that {@code flat} shape and do
         // not offer the operand-per-line {@code broken} alternative. Below, {@code flat} fans the operand (via the
         // dispatched source-neutral {@code chainFanOut}) while the {@code broken} alternative keeps it flat with the
         // operator on its own line, so the two arms are different byte shapes and offering both would oscillate between
@@ -81,10 +81,10 @@ final class BreakableArgumentExpressionPrinter {
      */
     Doc sourceMultilineArgument(Expression argument) {
         Doc flat = expressionRenderer.apply(argument);
-        // Canonical-fan cutover seam U8: same convergence as {@link #argument(Expression)}, on the source-multiline
+        // Same convergence as {@link #argument(Expression)}, on the source-multiline
         // argument-list path (a method-call argument list whose arguments already span source lines, e.g.
         // {@code assertTrue("...", chain.equals(a) || chain.equals(b))} once its second argument wrapped). A binary/ternary
-        // argument whose {@code flat} rendering fans a chain operand by the End-state A rule must commit {@code flat} — the
+        // argument whose {@code flat} rendering fans a chain operand by the structural fan rule must commit {@code flat} — the
         // source-neutral fan — else it flips to the operand-per-line {@code broken} shape. Non-fan / comment / lambda
         // chains are excluded by {@code binaryFansChainOperand} and keep the {@code broken} arm.
         if (binaryFansChainOperand.test(argument)) {

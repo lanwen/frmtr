@@ -206,14 +206,10 @@ final class TryStatementLayout {
         List<JavaCommentTrivia> openerComments = tryResourceOpenerComments(statement);
         List<JavaCommentTrivia> trailingResourceComments = tryResourceTrailingComments(statement);
         String flat = "try (" + flatResources + ")";
-        // The flat-collapse decision must be width-driven, not source-shape-driven, or the section never converges.
-        //
-        // A single resource whose own initializer call was broken across lines makes the section "span multiple lines",
-        // but that is incidental to the initializer's argument layout, not a deliberate one-resource-per-line shape the
-        // author asked us to keep. Honoring spansMultipleLines for a single resource lets each pass re-observe the prior
-        // pass's break and refuse the flat form forever, so the section flip-flops between the opener-break and the
-        // attached-argument-break (see issue #98). For two or more resources, spansMultipleLines does capture a
-        // deliberate one-per-line layout, so it still gates the collapse there.
+        // The flat-collapse decision must be width-driven, not source-shape-driven, or the section never converges. For a
+        // single resource, a broken initializer call is incidental (not a deliberate one-per-line shape), so honoring
+        // spansMultipleLines there would flip-flop the section between opener-break and attached-argument-break every
+        // pass (issue #98); with two or more resources it does capture a deliberate one-per-line layout and still gates.
         boolean preserveAuthorMultiline = statement.getResources().size() > 1 && resourceShape.spansMultipleLines();
         if (
             !preserveAuthorMultiline
@@ -253,17 +249,12 @@ final class TryStatementLayout {
     /**
      * Measures a try-with-resources opener line at the column where it actually renders.
      *
-     * <p>The resource-section fit gates ask whether the flat opener (either {@code try (…) {}} for the whole-section
-     * collapse or {@code try (Type name = scope.call(} for the single attached method-call resource) fits on one line.
-     * That opener renders at the {@code try} statement's own indentation, which is the enclosing block/type nesting
-     * depth: two units for a {@code try} directly inside a method body and one unit deeper for every
-     * further block ({@code if}, loop, nested {@code try}, …) around it. Measuring against the fixed
-     * {@link LayoutWidth#currentIndented} baseline (one unit) under-counted that indentation for every non-top-level
-     * {@code try}, so a resource list that overflowed its real column was collapsed flat anyway and rendered past the
-     * width limit (#219). Counting the node's rendered nesting through {@link LayoutWidth#nodeLine} reproduces the true
-     * column regardless of source layout, mirroring the return/ternary/unary rendered-column corrections in LDM-2 and the
-     * {@code } catch (…)} multi-catch gate in this printer. The {@code currentIndentedWidth} term is kept as a floor so a
-     * {@code try} nested directly under a member (no enclosing block) is still measured against at least one unit.
+     * <p>The fit gates ask whether the flat opener ({@code try (…) {}} for the whole-section collapse, or
+     * {@code try (Type name = scope.call(} for a single attached method-call resource) fits on one line. The fixed
+     * {@link LayoutWidth#currentIndented} baseline under-counted the {@code try}'s real block/type nesting, collapsing
+     * resource lists that overflowed their true column past the width limit (#219); {@link LayoutWidth#nodeLine}
+     * reproduces the rendered column regardless of source layout. {@code currentIndentedWidth} is kept as a floor so a
+     * {@code try} directly under a member (no enclosing block) still measures against at least one unit.
      */
     private int tryOpenerLineWidth(TryStmt statement, String openerLine) {
         return Math.max(
@@ -275,17 +266,12 @@ final class TryStatementLayout {
     /**
      * Builds the one-line text for a resource used when the whole resource section collapses flat.
      *
-     * <p>The generic {@code compact} path reconstructs initializer expressions (method calls, object creations, …) with
-     * normalized spacing, but a {@link VariableDeclarationExpr} itself falls through to token-text normalization, which
-     * only collapses whitespace runs. When the author had broken the initializer's arguments across lines, that left
-     * single interior spaces after {@code (}, before {@code )}, and around commas (for example
-     * {@code new Resource( a, b )}) in the collapsed form. This helper rebuilds a comment-free declaration from its
-     * modifiers, type, and per-variable {@code name = compact(init)} pieces so the collapsed resource matches the spacing
-     * the formatter would have produced for a source-flat declaration, keeping the collapse idempotent and clean.
-     *
-     * <p>Resources carrying contained comments, or anything that is not a plain variable declaration, stay on the generic
-     * {@code compact} path: those either never reach the flat collapse (comments keep the section broken) or are already
-     * normalized by {@code compact}.
+     * <p>A {@link VariableDeclarationExpr} falls through {@code compact} to token-text normalization, which only
+     * collapses whitespace runs — leaving stray interior spaces ({@code new Resource( a, b )}) when the author broke the
+     * initializer's arguments across lines. Rebuilding the declaration from its modifiers, type, and per-variable
+     * {@code name = compact(init)} pieces matches the formatter's source-flat spacing, keeping the collapse idempotent.
+     * Resources with contained comments or non-declarations stay on {@code compact} (they either keep the section broken
+     * or are already normalized).
      */
     private String flatResourceText(Expression resource) {
         if (
@@ -419,15 +405,11 @@ final class TryStatementLayout {
      * Recovers the opener comment that trails the resource list's {@code (} (e.g. {@code try ( // resource scope {}),
      * independent of source shape.
      *
-     * <p>Ownership is source-order, not line-based: the opener is a line comment that begins before the first resource.
-     * {@link JavaCommentPlacementPolicy#lineCommentsBeforeFirst(Node, Node)} already bounds the candidates to the region
-     * after the {@code try (} opening and at or before the first resource's line, so any candidate that begins before the
-     * first resource in source order sits in the {@code (}-to-first-resource gap — that is the opener. The previous
-     * line-equality filter ({@code startsOnBeginLine(statement)}) required the comment to share the {@code try (} line,
-     * which a whitespace perturbation defeats by pushing the opener onto its own line below the {@code (} even though the
-     * AST is unchanged. The source-order test is a strict superset at the {@code @default} shape: an opener inline on the
-     * {@code try (} line begins on the statement's begin line and before the first resource, so both tests agree; the
-     * source-order test additionally keeps the same owner when expansion moves the opener off the {@code (} line.
+     * <p>Ownership is source-order, not line-based: the opener is a line comment beginning before the first resource
+     * within the {@code (}-to-first-resource gap {@link JavaCommentPlacementPolicy#lineCommentsBeforeFirst(Node, Node)}
+     * already bounds. A line-equality filter would drop the opener when a perturbation pushes it onto its own line below
+     * the {@code (}; the source-order test is a strict superset at {@code @default} (an inline opener agrees) and keeps
+     * the same owner when the opener moves off the {@code (} line.
      */
     private List<JavaCommentTrivia> tryResourceOpenerComments(TryStmt statement) {
         if (statement.getResources().isEmpty()) {
@@ -443,14 +425,10 @@ final class TryStatementLayout {
     private Doc tryResourceOpenerCommentsDoc(TryStmt statement, List<JavaCommentTrivia> openerComments) {
         return Doc.concat(
             openerComments.stream()
-                    // A try-resource opener line comment is also offered by the neighboring first-resource render (its
-                    // adjacent-leading / leading slot) under the comment's own anchorless (comment, INTERLEAVED) key.
-                    // Offering it here under the enclosing try statement's own (statement, INTERLEAVED) anchor lets
-                    // comment ownership disambiguate: when the resource render owns it, this slot is not the recorded
-                    // owner and comment(...) returns Doc.EMPTY (caught by the != Doc.EMPTY filter below); an opener
-                    // comment no resource render claimed is owned here and placed by this slot. Anchoring to the distinct
-                    // (statement, INTERLEAVED) key rather than the comment's own node is what makes the ownership gate
-                    // sufficient, so no build-order isPrinted skip is needed.
+                    // The opener line comment is also offered by the neighboring first-resource render. Anchoring this
+                    // slot to the distinct (statement, INTERLEAVED) key lets ownership disambiguate: if the resource
+                    // render owns it, comment(...) returns Doc.EMPTY here (dropped by the filter below); an opener no
+                    // resource claimed is owned and placed here — no build-order isPrinted skip needed.
                     .map(comment -> comments.comment(comment, statement, OwnerSlot.INTERLEAVED))
                     .filter(doc -> doc != Doc.EMPTY)
                     .map(doc -> Doc.concat(Doc.text(" "), doc))
@@ -482,13 +460,11 @@ final class TryStatementLayout {
     /**
      * Reports whether any resource carries a line comment that lives inside the {@code try ( ... )} section.
      *
-     * <p>A line comment on the line directly above {@code try (} is the try statement's own leading comment: JavaParser
-     * attaches it to the {@link TryStmt} and the enclosing block already renders it before {@code try}. It only looks
-     * "adjacent" to the first resource because the resource sits on the next source line. Counting it here forced the
-     * resource section to stay broken even when the flat {@code try (...) {} } form fit the width, which (together with the
-     * single-resource {@code spansMultipleLines} gate) made the section never converge across passes (issue #98).
-     * Filtering to comments that begin at or after the {@code try} keyword keeps genuine in-section comments — openers,
-     * inter-resource notes, and comments on a non-first resource — while ignoring the statement's own leading comment.
+     * <p>A line comment directly above {@code try (} is the statement's own leading comment (attached to the
+     * {@link TryStmt}, rendered before {@code try} by the enclosing block) that only looks adjacent to the first
+     * resource. Counting it forced the section to stay broken even when the flat form fit, so it never converged
+     * (issue #98). Filtering to comments at or after the {@code try} keyword keeps genuine in-section comments (openers,
+     * inter-resource notes, non-first-resource comments) while ignoring the own leading comment.
      */
     private boolean tryResourcesHaveLeadingComments(TryStmt statement) {
         return statement.getResources()
@@ -515,15 +491,12 @@ final class TryStatementLayout {
     /**
      * Recovers the line comment trailing a completed try/catch/finally clause body, independent of source shape.
      *
-     * <p>The handoff prefers {@code body}'s own trailing line comment ({@link CommentTracker#trailingLineComment(Node)}).
-     * When the comment lands on the brace line that path recovers it. When a whitespace perturbation pushes the comment
-     * onto the line below the brace, JavaParser re-buckets it as an orphan of the enclosing {@code try}, so the orphan
-     * recovery ({@link CommentTracker#trailingLineCommentBlockAfter(Node, Node, Optional)}) keeps the same ownership by
-     * selecting the {@code try} orphans that source-order between this body's end and the next clause's begin.
-     *
-     * <p>The recovered slice can be a multi-line {@code //} block written between two {@code catch} clauses, so it is
-     * rendered as a {@link Doc#HARD_LINE}-separated block: handing it into the following clause body as a single fused
-     * line corrupts the comment (issue #128). A single recovered line renders identically either way.
+     * <p>Prefers {@code body}'s own trailing comment ({@link CommentTracker#trailingLineComment(Node)}); under a
+     * perturbation that re-buckets it onto the {@code try} orphans, the orphan recovery
+     * ({@link CommentTracker#trailingLineCommentBlockAfter(Node, Node, Optional)}) keeps the same ownership via the
+     * {@code try} orphans source-ordered between this body's end and the next clause. A recovered multi-line {@code //}
+     * block between two {@code catch} clauses renders {@link Doc#HARD_LINE}-separated, since fusing it into the next
+     * clause body as one line corrupts the comment (issue #128).
      */
     private Doc clauseTrailingComment(TryStmt statement, Node body, Optional<? extends Node> next) {
         Doc own = comments.trailingLineComment(body);
@@ -538,11 +511,9 @@ final class TryStatementLayout {
      * following clause's own leading line comment ({@code ownLeading}) into the single {@code leadingInside} doc that
      * opens that clause's block body.
      *
-     * <p>Both halves can be present at once: a multi-line {@code //} block written between two {@code catch} clauses is
-     * split by JavaParser into {@code try} orphans (recovered into {@code previousTrailing}) and a final line attached to
-     * the next clause (recovered into {@code ownLeading}). Concatenating them directly would fuse the orphan block's last
-     * line onto the clause's own line, so a {@link Doc#HARD_LINE} separates the two halves when both are non-empty
-     * (issue #128). When only one half is present the result is that half unchanged.
+     * <p>Both halves can be present when a {@code //} block between two {@code catch} clauses is split by JavaParser into
+     * {@code try} orphans and a final line on the next clause; a {@link Doc#HARD_LINE} separates them so the orphan
+     * block's last line does not fuse onto the clause's own line (issue #128). One half alone passes through unchanged.
      */
     private Doc clauseLeadingComment(Doc previousTrailing, Doc ownLeading) {
         if (previousTrailing == Doc.EMPTY) {
@@ -569,11 +540,10 @@ final class TryStatementLayout {
      * Recovers the block comment that sits before the {@code finally} block ({@code } /* note *}{@code / finally {}),
      * independent of source shape.
      *
-     * <p>At {@code @default} JavaParser attaches it as the finally {@link BlockStmt}'s own comment, so
-     * {@link #ownBlockCommentBeforeNode(Node)} renders it and the orphan fallback never runs. A whitespace perturbation
-     * that pushes the comment onto its own line re-buckets it as a {@link TryStmt} orphan; the own path then loses it, so
-     * we recover the {@code try} orphan block comments that begin before the finally block. Earlier-clause comments
-     * (a {@code catch} prefix) are already claimed by the time the finally prefix renders, so they cannot leak in here.
+     * <p>At {@code @default} it is the finally {@link BlockStmt}'s own comment ({@link #ownBlockCommentBeforeNode(Node)});
+     * under a perturbation that re-buckets it as a {@link TryStmt} orphan, recover the {@code try} orphan block comments
+     * before the finally block. Earlier-clause comments (a {@code catch} prefix) are already claimed by then, so they
+     * cannot leak in.
      */
     private Doc finallyPrefixBlockComment(TryStmt statement, BlockStmt finallyBlock) {
         Doc own = ownBlockCommentBeforeNode(finallyBlock);

@@ -245,14 +245,12 @@ final class ControlConditionPrinter {
      * Measures the flat {@code if (...) {}} line at the indentation it will actually render at, not at the source
      * column of the condition.
      *
-     * <p>The earlier estimate derived the line width from {@code range.begin.column}, but JavaParser counts a leading
-     * {@code \t} as a single column. A tab-indented over-width condition therefore under-measured, looked like it fit on
-     * pass one, and was emitted flat with the formatter's space indentation — at which point it genuinely overflowed and
-     * pass two broke it, so {@code format(format(x)) != format(x)}. Counting the enclosing block/type nesting through
-     * {@link LayoutWidth#nodeLine} reproduces the rendered indentation deterministically regardless of how the source
-     * was indented, so the fit/break decision is the same on every pass. The {@code currentIndentedWidth} floor is kept
-     * so a condition nested directly under a member (no enclosing block) is still measured against at least one
-     * indentation unit.
+     * <p>Deriving the width from {@code range.begin.column} under-measured a tab-indented over-width condition (JavaParser
+     * counts a leading {@code \t} as one column), so it was emitted flat, then genuinely overflowed and broke on pass two
+     * — {@code format(format(x)) != format(x)}. Counting the enclosing block/type nesting through
+     * {@link LayoutWidth#nodeLine} reproduces the rendered indentation regardless of source, so the fit/break decision is
+     * stable across passes. The {@code currentIndentedWidth} floor keeps a condition directly under a member (no enclosing
+     * block) measured against at least one unit.
      */
     private int ifConditionLineWidth(Expression expression, String line) {
         return Math.max(
@@ -300,14 +298,10 @@ final class ControlConditionPrinter {
         List<Doc> leadingComments = detachedConditionLineComments(expression)
                 .stream()
                 .filter(comment -> CommentIndex.beginLine(comment, Integer.MAX_VALUE) < contentLine)
-                // A detached condition line comment is also offered by a neighboring condition render path (a
-                // ControlConditionCommentLayout attached/trailing slot, say) under the comment's own anchorless
-                // (comment, INTERLEAVED) key. Offering it here under this condition's own (expression, INTERLEAVED)
-                // anchor lets comment ownership disambiguate: when the neighboring path owns it, this slot is not the
-                // recorded owner and comment(...) returns Doc.EMPTY (caught by the check below); a comment no neighbor
-                // claimed is owned here and placed by this slot. Anchoring to the distinct (expression, INTERLEAVED)
-                // key rather than the comment's own node is what makes the ownership gate sufficient, so no build-order
-                // isPrinted skip is needed.
+                // A detached condition line comment is also offered by a neighboring condition render path. Anchoring
+                // this slot to the distinct (expression, INTERLEAVED) key lets ownership disambiguate: if a neighbor owns
+                // it, comment(...) returns Doc.EMPTY here (caught below); a comment no neighbor claimed is owned and
+                // placed here — no build-order isPrinted skip needed.
                 .map(comment -> comments.comment(comment, expression, OwnerSlot.INTERLEAVED))
                 .filter(comment -> comment != Doc.EMPTY)
                 .toList();
@@ -369,15 +363,12 @@ final class ControlConditionPrinter {
     /**
      * Recovers the condition's leading line comments that a whitespace perturbation re-bucketed onto the enclosing
      * control statement as orphans, so {@link #detachedConditionLineComments(Expression)} sees them alongside the
-     * condition's own contained trivia. At the {@code @default} shape a simple (non-logical) condition's control
-     * statement holds no such orphan, so this widens the input set by nothing and the broken-condition render gate stays
-     * byte-identical.
+     * condition's own trivia. At {@code @default} a simple (non-logical) condition's statement holds no such orphan, so
+     * this adds nothing and the render gate stays byte-identical.
      *
-     * <p>Logical {@code &&}/{@code ||} conditions are intentionally excluded: their operand-leading comments are rendered
-     * by the operand-by-operand path ({@code brokenExpressionLines}), and a
-     * multi-line logical condition's first operand-leading comment is already a control-statement orphan at the
-     * {@code @default} shape. Feeding it into the line-based leading-comment render gate would hijack the logical layout
-     * and drop the per-operand comments, so the logical case keeps its existing handling.
+     * <p>Logical {@code &&}/{@code ||} conditions are excluded: their operand-leading comments render via the
+     * operand-by-operand path ({@code brokenExpressionLines}), so feeding a logical condition's first operand-leading
+     * comment into this line-based gate would hijack the logical layout and drop the per-operand comments.
      */
     private List<Comment> recoveredLeadingConditionComments(Expression condition) {
         if (sourceMultilineLogicalConditionExpression(condition)) {

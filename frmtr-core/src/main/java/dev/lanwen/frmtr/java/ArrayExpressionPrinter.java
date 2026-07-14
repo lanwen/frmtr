@@ -140,15 +140,13 @@ final class ArrayExpressionPrinter {
     /**
      * Reports whether an array initializer fans one element per line purely because of how many elements it holds.
      *
-     * <p>This is a <em>structural</em> rule, not a width-driven one: an initializer with three or more elements always
-     * breaks one-element-per-line even when the compact {@code {a, b, c}} form would fit the line. A one- or two-element
-     * list stays compact (and still breaks by width when it overflows). The convention mirrors the one-per-line shape the
-     * formatter already forces for constructor-root and nested-array-row lists: past two elements the vertical shape reads
-     * better and stays stable under edits — adding or removing an element touches exactly one line instead of reflowing
-     * the whole row. Both the bare {@code = {...}} initializer gate ({@link #arrayInitializer(ArrayInitializerExpr,
-     * boolean)}) and the {@code new T[] {...}} creation compact gate ({@link #arrayCreation(ArrayCreationExpr)}) consult
-     * this, so an eligible initializer fans regardless of which syntax introduced it. Annotation member arrays are not
-     * routed through this printer and keep their own width-driven shape.
+     * <p>A <em>structural</em> rule, not width-driven: three or more elements always break one-per-line even when the
+     * compact {@code {a, b, c}} form would fit; one or two stay compact (still breaking by width on overflow). Past two
+     * elements the vertical shape reads better and stays stable under edits (add/remove touches one line, not the whole
+     * row), mirroring the constructor-root and nested-array-row lists. Both the {@code = {...}} initializer gate
+     * ({@link #arrayInitializer(ArrayInitializerExpr, boolean)}) and the {@code new T[] {...}} creation gate
+     * ({@link #arrayCreation(ArrayCreationExpr)}) consult this. Annotation member arrays keep their own width-driven
+     * shape.
      */
     private boolean arrayInitializerFansOnePerLine(ArrayInitializerExpr initializer) {
         return initializer.getValues().size() >= 3;
@@ -265,13 +263,12 @@ final class ArrayExpressionPrinter {
     /**
      * Reports whether an array creation type must break its generic type arguments before its array-level suffixes.
      *
-     * <p>This is a <em>width-driven last resort</em>, not a structural rule. A generic array element type is eligible for
-     * the broken {@code new Type<...>[]} shape only when it is a class/interface type with type arguments and at least one
-     * array level. Eligibility alone is not enough: the fork fires only when the compact prefix
-     * ({@code new Type<...>[]}, plus a trailing open initializer brace when one follows) overflows the line at
-     * {@code widthAtContinuation}. For everything that fits, the type stays compact and the surrounding clean ladder
-     * breaks at the braces or {@code =} instead of shattering short generics. The width function is supplied by the caller
-     * because the relevant continuation indent differs between a standalone expression and a field/local initializer.
+     * <p>A <em>width-driven last resort</em>, not structural: eligible only for a class/interface element type with type
+     * arguments and at least one array level, and it fires only when the compact prefix ({@code new Type<...>[]}, plus a
+     * trailing open brace when an initializer follows) overflows at {@code widthAtContinuation}. Otherwise the type stays
+     * compact and the surrounding ladder breaks at the braces or {@code =} rather than shattering short generics. The
+     * caller supplies the width function because the continuation indent differs between a standalone expression and a
+     * field/local initializer.
      */
     boolean arrayCreationTypeBreaks(ArrayCreationExpr expression, ToIntFunction<String> widthAtContinuation) {
         if (
@@ -392,18 +389,13 @@ final class ArrayExpressionPrinter {
         Node container = value.getParentNode().orElseThrow();
         List<Doc> trailingCommentLines = new ArrayList<>();
         for (JavaCommentTrivia comment : dedupByCommentIdentity(trailingLineComments)) {
-            // A gap comment sits between this array's elements, so it is offered under the array initializer's own
-            // INTERLEAVED anchor — the slot that names "a comment interleaved between an anchor's children" (here the
-            // elements). Anchoring to the container rather than to the element value lets comment ownership disambiguate
-            // the two competing offers without a build-order isPrinted skip: when the element value is a method-call chain
-            // rendered above, its own trailing line comment is claimed inside that render under the (finalCall,
-            // INTERLEAVED) slot; that is a different key from (container, INTERLEAVED), so ownsHere blocks this slot and
-            // comment(...) returns Doc.EMPTY. A comment the value render left untouched (the comment-free compact path)
-            // is owned by this container slot and placed here. The element value itself is deliberately NOT the anchor:
-            // for a single-expression element the value is frequently the same node the chain printer's
-            // finalTrailingLineComment anchors on, so (value, INTERLEAVED) would collide with that owner and double-render
-            // through the idempotent-by-owner re-claim branch. Gaps are de-duplicated by comment identity so the same
-            // comment is never offered twice under this shared container key.
+            // A gap comment between elements is offered under the array initializer's own (container, INTERLEAVED) anchor.
+            // Anchoring to the container, not the element value, lets ownership disambiguate the competing offers without
+            // a build-order isPrinted skip: a method-call-chain element claims its own trailing comment under (finalCall,
+            // INTERLEAVED), a different key, so ownsHere blocks this slot and comment(...) returns Doc.EMPTY; a comment
+            // the value render left untouched is owned and placed here. (value, INTERLEAVED) is deliberately avoided —
+            // for a single-expression element it often collides with the chain printer's finalTrailingLineComment owner
+            // and double-renders. Gaps are de-duplicated by identity so the same comment is never offered twice here.
             Doc commentDoc = comments.comment(comment, container, OwnerSlot.INTERLEAVED);
             if (commentDoc == Doc.EMPTY) {
                 continue;
@@ -447,12 +439,11 @@ final class ArrayExpressionPrinter {
     /**
      * Drops repeats of the same JavaParser comment within one element gap, keeping the first occurrence in source order.
      *
-     * <p>The line-comment gap queries read {@link JavaCommentPlacementPolicy#containedComments(Node)}, which can list the
-     * same comment more than once when a whitespace perturbation lets it be reached through two containment paths. Because
-     * a gap is now offered under one shared {@code (container, INTERLEAVED)} owner, a duplicate would render twice through
-     * the idempotent-by-owner re-claim branch instead of losing a claim race; de-duplicating by comment identity before
-     * any offer keeps each comment offered exactly once. Distinct comment nodes carrying the same text are compared by
-     * identity and both kept.
+     * <p>The gap queries read {@link JavaCommentPlacementPolicy#containedComments(Node)}, which can list the same comment
+     * twice when a perturbation makes it reachable through two containment paths. Since a gap is offered under one shared
+     * {@code (container, INTERLEAVED)} owner, a duplicate would render twice through the idempotent-by-owner re-claim
+     * branch, so de-duplicating by identity keeps each comment offered exactly once. Distinct nodes with the same text
+     * are compared by identity and both kept.
      */
     private static List<JavaCommentTrivia> dedupByCommentIdentity(List<JavaCommentTrivia> gap) {
         java.util.Set<com.github.javaparser.ast.comments.Comment> seen =

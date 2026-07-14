@@ -32,10 +32,10 @@ import java.util.stream.Collectors;
 /**
  * Decides whether two {@link CompilationUnit}s represent the same Java program modulo formatting trivia.
  *
- * <p>This helper owns the formatter's notion of "semantic equivalence" for the AST-equivalence verify mode (roadmap B3,
- * layer 1). It exists so the runtime verify hook in {@link JavaFormatter} and the unit tests can share one sound,
- * well-justified comparison instead of each re-deriving which differences are trivia. The verifier re-parses the
- * formatter's <em>output</em> and asks this helper whether it still means the same thing as the <em>input</em>.
+ * <p>This helper owns the formatter's notion of "semantic equivalence" for the AST-equivalence verify mode. It exists so
+ * the runtime verify hook in {@link JavaFormatter} and the unit tests can share one sound, well-justified comparison
+ * instead of each re-deriving which differences are trivia. The verifier re-parses the formatter's <em>output</em> and
+ * asks this helper whether it still means the same thing as the <em>input</em>.
  *
  * <p><strong>What counts as trivia (ignored):</strong>
  *

@@ -182,9 +182,9 @@ final class InitializerObjectCreationLayout {
     }
 
     private Doc brokenObjectCreationArgument(Expression argument) {
-        // Canonical-fan cutover seam (End-state A), the binary/logical/string-concat OPERAND carrier at the broken
+        // The binary/logical/string-concat OPERAND carrier at the broken
         // object-creation argument position (the "G bucket"). When this constructor argument is a binary/ternary whose
-        // dispatched flat rendering ({@code expression.apply}) already fans a fluent chain operand by the End-state A rule
+        // dispatched flat rendering ({@code expression.apply}) already fans a fluent chain operand by the canonical-fan rule
         // ({@code new StatusData(summary.percentiles().get(0).value() * step + min, …)}), commit that flat shape and do not
         // take the operand-per-line break below. The flat shape renders the chain fanned with the operator kept on its line
         // and is a pure function of the AST (the chain fans by the width-independent link-count rule on every pass), so

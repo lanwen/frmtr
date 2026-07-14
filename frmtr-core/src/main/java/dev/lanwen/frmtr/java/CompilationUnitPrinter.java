@@ -19,7 +19,7 @@ import java.util.Optional;
  *
  * <p>This helper owns only whole-file ordering: source-leading package comments, file-boundary orphan comments before
  * the package, a first type's detached leading documentation (a Javadoc JavaParser left unattached because a blank line
- * separated it from the type, kept above the type rather than floated to the package boundary; see #78), the package
+ * separated it from the type, kept above the type rather than floated to the package boundary), the package
  * line, an already-ordered import section, optional module declarations, the top-level declaration block, and trailing
  * orphan comments. It intentionally delegates package declaration text to {@link PackageDeclarationPrinter}, import
  * sorting to {@link ImportSortTransform}, individual imports to {@link ImportDeclarationPrinter}, module declaration
@@ -105,10 +105,8 @@ final class CompilationUnitPrinter {
             parts.add(Doc.HARD_LINE);
         }
         int firstTypeLine = firstTypeLine(unit);
-        // Orphan comments before the first type split at the structural prologue (package/imports/module): those at or
-        // above it stay file-boundary content, those below it document the first type (#78). With no structural prologue
-        // there is nothing to float above, so the boundary collapses to the first-type line, the type-leading region is
-        // empty, and the file-boundary slot keeps every before-type orphan exactly as it did before.
+        // Split orphan comments at the package/imports/module boundary: at/above -> file-boundary content, below ->
+        // first-type docs. No prologue => boundary collapses to the first-type line (behavior unchanged).
         int structuralBoundaryLine = structuralBoundaryLine(unit);
         int typeLeadingBoundaryLine = structuralBoundaryLine == Integer.MIN_VALUE
             ? firstTypeLine
@@ -183,17 +181,12 @@ final class CompilationUnitPrinter {
     }
 
     /**
-     * Emits the orphan comments that belong to the file boundary — those before the first type that begin at or above the
-     * {@code typeLeadingBoundaryLine} (the last line of the package/imports/module prologue) — as the pre-{@code package}
-     * block.
+     * Emits the file-boundary orphan comments — those before the first type that begin at or above
+     * {@code typeLeadingBoundaryLine} (the last prologue line) — as the pre-{@code package} block.
      *
-     * <p>An orphan comment that begins <em>below</em> the whole structural prologue but before the first type is the first
-     * type's detached leading documentation, not a file header: it is excluded here and emitted by
-     * {@link #detachedFirstTypeLeadingComments} so it stays attached to the type it documents (#78). The structural
-     * boundary is used rather than the first-type line because a comment between the package and the imports, or between
-     * two imports, is still file-boundary content; only a comment under the whole structural prologue and immediately
-     * before the first type is type documentation. When there is no structural prologue the caller collapses the boundary
-     * to the first-type line, so {@code beginLine < firstTypeLine} already implies {@code beginLine <= boundary} and this
+     * <p>A comment between the package and imports, or between two imports, is still file-boundary content; only one
+     * below the whole prologue and before the first type is that type's detached documentation, excluded here and left to
+     * {@link #detachedFirstTypeLeadingComments}. With no prologue the boundary collapses to the first-type line, so this
      * slot keeps every before-type orphan.
      */
     private Doc orphanCommentsBeforeFirstType(
@@ -209,21 +202,15 @@ final class CompilationUnitPrinter {
     }
 
     /**
-     * Emits the orphan comments that document the first top-level type but that JavaParser left detached because a blank
-     * line separated the comment from the type, so the comment was never attached as the type's own leading trivia (#78).
+     * Emits the orphan comments that document the first top-level type but that JavaParser left detached (a blank line
+     * separated them from the type, so they never attached as its own leading trivia).
      *
-     * <p>Without this slot those comments fall into {@link #orphanCommentsBeforeFirstType} and are floated above the
-     * {@code package} statement, detaching a type's Javadoc from the type and producing non-idempotent blank-line
-     * accounting at the license/package boundary. Selecting orphans that begin strictly below {@code typeLeadingBoundaryLine}
-     * (the last line of the package/imports/module prologue) and before the first type keeps file headers and package docs
-     * at the boundary while returning the type's documentation to the type. The caller emits this immediately before the
-     * first type with a single hard line, mirroring an attached leading comment so a re-parse re-attaches it to the type
-     * and the output is idempotent.
-     *
-     * <p>When there is no structural prologue the caller collapses the boundary to the first-type line, which makes
-     * {@code beginLine > boundary && beginLine < firstTypeLine} unsatisfiable, so this slot stays empty and a leading
-     * comment above the first type renders through the file-boundary slot as before — there is no {@code package} for it to
-     * detach from in that shape.
+     * <p>Selecting orphans that begin strictly below {@code typeLeadingBoundaryLine} (the last prologue line) and before
+     * the first type returns the type's documentation to the type while keeping file headers and package docs at the
+     * boundary; without it they float above {@code package}, detaching the Javadoc and breaking blank-line idempotence.
+     * The caller emits it just before the first type with one hard line, mirroring an attached leading comment so a
+     * re-parse re-attaches it and the output is idempotent. With no prologue the boundary collapses to the first-type
+     * line, the predicate is unsatisfiable, and such a comment renders through the file-boundary slot instead.
      */
     private Doc detachedFirstTypeLeadingComments(
             CompilationUnit unit,
@@ -240,7 +227,7 @@ final class CompilationUnitPrinter {
     /**
      * Returns the last source line occupied by the structural prologue — the package declaration, imports, and module
      * declaration — or {@link Integer#MIN_VALUE} when none of them is present. Comments that begin on a later line than
-     * this boundary and before the first type document that type rather than the file (#78).
+     * this boundary and before the first type document that type rather than the file.
      */
     private int structuralBoundaryLine(CompilationUnit unit) {
         int boundary = Integer.MIN_VALUE;
@@ -276,7 +263,12 @@ final class CompilationUnitPrinter {
         return plan.entries().stream().anyMatch(RecoveredListPlanner.RawGap.class::isInstance);
     }
 
-    private int firstTypeLine(CompilationUnit unit) {
+    /**
+     * Returns the first source line spanned by the unit's top-level types, or {@link Integer#MAX_VALUE} when there is no
+     * source-backed type. Shared with {@link TopLevelDeclarationLayout} so the header/footer split and the between-type
+     * orphan-comment window read the same boundary.
+     */
+    static int firstTypeLine(CompilationUnit unit) {
         return unit.getTypes()
                 .stream()
                 .mapToInt(type -> CommentIndex.beginLine(type, Integer.MAX_VALUE))
@@ -284,7 +276,12 @@ final class CompilationUnitPrinter {
                 .orElse(Integer.MAX_VALUE);
     }
 
-    private int lastTypeLine(CompilationUnit unit) {
+    /**
+     * Returns the last source line spanned by the unit's top-level types, or {@link Integer#MAX_VALUE} when there is no
+     * source-backed type (so a range-less unit never clips trailing content). Shared with
+     * {@link TopLevelDeclarationLayout}.
+     */
+    static int lastTypeLine(CompilationUnit unit) {
         int lastSourceBackedLine = unit.getTypes()
                 .stream()
                 .mapToInt(type -> CommentIndex.endLine(type, Integer.MIN_VALUE))
@@ -294,12 +291,10 @@ final class CompilationUnitPrinter {
     }
 
     /**
-     * Emits the file footer comments that begin on a line strictly below the final top-level type.
+     * Emits the file footer comments that begin on a line strictly below the final top-level type, each on its own line.
      *
-     * <p>These footer orphans were always emitted here, each on its own line after the closing {@code }}. A {@code //}
-     * comment written on the <em>same</em> line as the last type's closing {@code }} is handled separately by
-     * {@link #inlineTrailingTypeFooterComment} so it stays inline on the brace line it trailed in source rather than being
-     * pushed to its own line.
+     * <p>A {@code //} comment on the <em>same</em> line as the last type's closing {@code }} is instead handled by
+     * {@link #inlineTrailingTypeFooterComment} so it stays inline on that brace line.
      */
     private Doc trailingOrphanComments(CompilationUnit unit) {
         int lastTypeLine = lastTypeLine(unit);
@@ -313,12 +308,10 @@ final class CompilationUnitPrinter {
      * Emits, as a {@link Doc#lineSuffix(Doc)}, a {@code //} comment that trails the final top-level type's closing brace on
      * the same source line — e.g. {@code }}{@code // RouteChannel}.
      *
-     * <p>Such a comment belongs to no declaration slot: it begins on the last type's end line, so the strict after-line
-     * footer query excludes it, and no following sibling exists to claim it as leading trivia, so without recovery it is
-     * dropped (#97). It conceptually belongs to the closing-brace line, so it is attached after the top-level declarations
-     * as a line suffix and stays inline on the {@code }} line. On re-parse the comment again trails the closing brace on
-     * the same line and re-renders here, so the result is idempotent. Only line comments qualify; the column guard in
-     * {@link CommentIndex#startsAfterNodeOnSameLine} keeps a comment that opens before the closing brace out of this slot.
+     * <p>Such a comment belongs to no declaration slot (it begins on the last type's end line, and no following sibling
+     * can claim it as leading trivia), so without recovery it is dropped. Attaching it as a line suffix keeps it inline on
+     * the {@code }} line, and a re-parse re-renders it here, so the result is idempotent. Only line comments qualify; the
+     * column guard in {@link CommentIndex#startsAfterNodeOnSameLine} excludes a comment that opens before the brace.
      */
     private Doc inlineTrailingTypeFooterComment(CompilationUnit unit) {
         Optional<BodyDeclaration<?>> lastType = lastSourceBackedType(unit);
@@ -351,10 +344,10 @@ final class CompilationUnitPrinter {
     /**
      * Builds the import section from already-ordered import chunks.
      *
-     * <p>The section-level blank lines between static/ordinary import groups and between source-separated import chunks
-     * belong here because they depend on neighboring imports being present. Sort-only chunks for leading-commented
-     * imports do not automatically add blank lines. The transform stage has already sorted imports into formatter order
-     * inside safe chunks, and rendering each individual import line remains with {@link ImportDeclarationPrinter}.
+     * <p>Section-level blank lines (between static/ordinary groups and between source-separated chunks) belong here
+     * because they depend on neighboring imports; sort-only chunks for leading-commented imports add none. Imports are
+     * already sorted into formatter order inside safe chunks, and each import line renders via
+     * {@link ImportDeclarationPrinter}.
      */
     private Optional<Doc> imports(
             CompilationUnit unit,
@@ -384,9 +377,9 @@ final class CompilationUnitPrinter {
     /**
      * Emits a recovered import declaration sequence without applying formatter-owned import grouping.
      *
-     * <p>Parse-problem compilation units skip transforms, so this path keeps parsed import siblings in source order and
-     * lets raw gaps own malformed source and its spacing. Import-specific sibling regions include detached leading
-     * comments so a raw gap cannot accidentally claim the next valid import's chunk header.
+     * <p>Parse-problem units skip transforms, so this keeps parsed imports in source order and lets raw gaps own
+     * malformed source and its spacing. Sibling regions include detached leading comments so a raw gap cannot claim the
+     * next valid import's chunk header.
      */
     private Doc recoveredImports(
             CompilationUnit unit,

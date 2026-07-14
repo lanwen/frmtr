@@ -134,13 +134,12 @@ final class SwitchCaseLabelLayout {
      * Renders a {@code case} label list that carries inline block comments ({@code case REMOTE /* remote *}{@code /,
      * HYBRID}) from its raw commented token text, preserving the comments structured rendering would otherwise strip.
      *
-     * <p>At the {@code @default} shape a single-line entry with such a comment is preserved verbatim by
-     * {@link SwitchPrinter#rawSingleLineSwitchEntry}; once a whitespace perturbation spreads the entry across lines, that raw path no
-     * longer fires and the comma-separated label list is rebuilt token by token, dropping the comments because
-     * {@link #switchLabelText} renders only the label expression. This path keeps the comments by rebuilding the label
-     * region with {@link CommentedTokenText#tokenLine}, which reproduces the source spacing of inline label comments, and
-     * accounts those comments as raw-rendered so the print-once guardrails still see them. Labels without block comments
-     * never enter this path, so ordinary case labels are unaffected.
+     * <p>At {@code @default} a single-line entry with such a comment is preserved verbatim by
+     * {@link SwitchPrinter#rawSingleLineSwitchEntry}; once a perturbation spreads the entry across lines that path stops
+     * firing and the label list is rebuilt token by token, dropping the comments ({@link #switchLabelText} renders only
+     * the label expression). This rebuilds the label region with {@link CommentedTokenText#tokenLine} (reproducing inline
+     * label comment spacing) and accounts them as raw-rendered so the print-once guardrails still see them. Labels
+     * without block comments never enter this path.
      */
     private Optional<Doc> commentPreservingCaseLabel(SwitchEntry entry) {
         Node boundary = entry.getStatements().isEmpty() ? entry : entry.getStatements().get(0);
@@ -175,11 +174,10 @@ final class SwitchCaseLabelLayout {
      * Reports whether a label block comment begins inside the rebuilt label region (the raw token text before the
      * arrow/colon), so accounting it matches what {@code labelText} actually renders.
      *
-     * <p>{@link JavaCommentPlacementPolicy#blockCommentsBefore} bounds its result by the body node, so it can include a
-     * comment parked in the arrow-to-body gap ({@code case X -> /* mid *}{@code / body}) that {@code labelText} never
-     * reproduces. Mapping the comment's absolute source offset to the same coordinate space as {@code boundaryIndex}
-     * (a character index into {@link RawSource#raw(Node)}, i.e. relative to the entry's stripped token range) and
-     * keeping only comments before the boundary makes the accounted set equal the rendered set by construction.
+     * <p>{@link JavaCommentPlacementPolicy#blockCommentsBefore} bounds by the body node, so it can include a comment in
+     * the arrow-to-body gap ({@code case X -> /* mid *}{@code / body}) that {@code labelText} never reproduces. Mapping
+     * the comment's offset into the same coordinate space as {@code boundaryIndex} (relative to the entry's stripped
+     * token range) and keeping only comments before the boundary makes the accounted set equal the rendered set.
      */
     private boolean beginsWithinLabelRegion(SwitchEntry entry, JavaCommentTrivia comment, int boundaryIndex) {
         return entry.getRange()

@@ -69,15 +69,13 @@ final class AnnotationExpressionPrinter {
     /**
      * Chooses the annotation-expression branch while preserving comments attached to the annotation node itself.
      *
-     * <p>Normal annotations and single-member annotations have different width and breaking rules, while marker
-     * annotations are only the compact name. A trailing line comment belongs after the complete annotation text, so it is
-     * attached after the branch-specific doc has been built.
+     * <p>Normal and single-member annotations have different width/breaking rules; marker annotations are only the name.
+     * A trailing line comment is attached after the branch-specific doc is built.
      *
-     * <p>A trailing line comment is intentionally <em>not</em> attached here when the annotation is an element of an
-     * annotation array. The array-element slot ({@link #annotationArrayValueLine(Expression, List)}) owns the order of
-     * the element separator and its trailing comment: it must emit {@code @Elem(...), // note} so the comma is not
-     * swallowed by the {@code //} comment. Letting this method bake the comment inline first would leave the slot to
-     * append the comma <em>after</em> the comment, producing the non-compiling {@code @Elem(...) // note,}.
+     * <p>It is <em>not</em> attached here for an annotation-array element: that slot
+     * ({@link #annotationArrayValueLine(Expression, List)}) owns the separator/comment order and must emit
+     * {@code @Elem(...), // note}, so baking the comment in first would produce the non-compiling
+     * {@code @Elem(...) // note,}.
      */
     Doc annotation(AnnotationExpr annotation) {
         Doc formatted = switch (annotation) {
@@ -108,13 +106,10 @@ final class AnnotationExpressionPrinter {
      * Renders a parameter or record-component annotation, breaking it structured when it cannot stay flat at its true
      * rendered column.
      *
-     * <p>The break decision is width-driven at the annotation's real
-     * column, threaded by the caller through {@code layout}: {@link LayoutContext#leftEdgePrefix()} carries the text that
-     * already occupies the annotation's first line ahead of it (the annotation-column indent plus any earlier prefix
-     * parts) and {@link LayoutContext#trailingContent()} carries the {@code " Type name"} the caller emits immediately
-     * after the annotation on the same line. When the flat annotation plus that same-line context overflows, the
-     * annotation renders structured so its {@code )} can carry the trailing type/name onto a relieved line; otherwise it
-     * stays flat and every other branch decides by its own width as usual.
+     * <p>The break is width-driven at the real column: {@link LayoutContext#leftEdgePrefix()} carries the annotation's
+     * first-line text ahead of it and {@link LayoutContext#trailingContent()} the {@code " Type name"} the caller emits
+     * after it. When the flat annotation plus that context overflows, it renders structured so its {@code )} carries the
+     * type/name onto a relieved line; otherwise it stays flat.
      */
     Doc annotationPreservingSourceBreaks(AnnotationExpr annotation, LayoutContext layout) {
         if (!annotationOverflowsAtColumn(annotation, layout)) {
@@ -190,7 +185,7 @@ final class AnnotationExpressionPrinter {
     /**
      * Renders {@code @Name(value)} while keeping array-value overflow decisions scoped to the enclosing annotation.
      *
-     * <p>Array values that are too wide by themselves keep the legacy {@code @Name({ ... })} broken-array shape. When
+     * <p>Array values that are too wide by themselves keep the {@code @Name({ ... })} broken-array shape. When
      * the array value still fits alone but {@code @Name(...)} does not, the value moves to an indented continuation so
      * the annotation prefix and suffix cannot make the final line overflow. Binary values use the same indented slot
      * because their operator lines otherwise collide visually with the annotation prefix.

@@ -126,13 +126,13 @@ final class StatementPrinter {
 
     private final HuggableArgumentsRenderer huggableBlockLambdaArguments;
 
-    // Output-seam slice #3: the expression statement's method-call-chain shape cascade, owned by
-    // {@link MethodCallPrinter#statementChain} (statement analogue of {@link ReturnExpressionPrinter}'s
-    // {@code returnChain}). The statement printer no longer threads the chain shape-callbacks the cascade used to compose
-    // (source-multiline statement call, forced call with terminator, and the final-trailing-comment / has-comments /
-    // is-source-multiline / root-is-object-creation / root-is-field-access predicates). It hands the one composite entry
-    // the statement-flavored inputs — the {@code ;} terminator, the first-line width closure, and the raw-source
-    // whole-statement width measure ({@link #methodCallStatementWidth}) — and the chain printer owns the shape selection.
+    // The expression statement's method-call-chain shape cascade, owned by {@link MethodCallPrinter#statementChain}
+    // (statement analogue of {@link ReturnExpressionPrinter}'s {@code returnChain}). The statement printer no longer
+    // threads the chain shape-callbacks the cascade used to compose (source-multiline statement call, forced call with
+    // terminator, and the final-trailing-comment / has-comments / is-source-multiline / root-is-object-creation /
+    // root-is-field-access predicates). It hands the one composite entry the statement-flavored inputs — the {@code ;}
+    // terminator, the first-line width closure, and the raw-source whole-statement width measure
+    // ({@link #methodCallStatementWidth}) — and the chain printer owns the shape selection.
     private final StatementChainRenderer statementChain;
 
     private final Function<MethodCallExpr, Doc> brokenMethodCallRenderer;
@@ -398,8 +398,7 @@ final class StatementPrinter {
     private Doc returnStatement(ReturnStmt statement) {
         // Build the positional context for the returned value: it sits in RETURN_VALUE position and owns its own first
         // column after the "return " keyword. The return width helpers measure at that rendered column (nodeLine +
-        // leftEdgePrefix "return "), so no line-budget selector is threaded onto the context (the transitional
-        // widthBudget field is retired, U9 / #190).
+        // leftEdgePrefix "return "), so no line-budget selector is threaded onto the context.
         LayoutContext layout = new LayoutContext(EnclosingConstruct.RETURN_VALUE, "", "", false);
         return statement.getExpression()
                 .map(expression -> returnStatementRenderer.apply(expression, layout))
@@ -424,28 +423,23 @@ final class StatementPrinter {
     /**
      * Recovers a line comment that trails {@code throw new X(...);} on the statement's end line.
      *
-     * <p>When the constructor argument list re-wraps one-argument-per-line (because the call exceeds the line width, or
-     * because the source was already multi-line), {@link CommentedExpressionListPrinter} renders the broken list but
-     * deliberately leaves a comment that sits after the completed call to the enclosing syntax — its last-argument gap
-     * keeps {@code call(arg) // note} comments out so chain and statement printers own them. For an
-     * {@code ExpressionStmt} that owner is {@link #expressionStatementTrailingComment(ExpressionStmt)}; the analogous
-     * {@code MethodCallExpr} statement form recovers the same comment through
-     * {@code MethodCallPrinter#finalTrailingLineComments}. A {@code throw new X(...)} had no such recovery, so the
-     * trailing {@code //} comment vanished once the list broke.
+     * <p>When the constructor argument list breaks one-per-line, {@link CommentedExpressionListPrinter} leaves a comment
+     * sitting after the completed call to the enclosing syntax (as it does for {@code ExpressionStmt} via
+     * {@link #expressionStatementTrailingComment(ExpressionStmt)} and for a {@code MethodCallExpr} statement via
+     * {@code MethodCallPrinter#finalTrailingLineComments}). A {@code throw new X(...)} had no such recovery, so the
+     * comment vanished once the list broke.
      *
-     * <p>The comment is offered under the throw statement's {@link OwnerSlot#TRAILING} slot and rendered inline as a
-     * {@code lineSuffix} after the {@code ;}, claimed once. JavaParser parks it on a different node depending on the
-     * source shape, so this gathers both shapes the {@link StatementRuleEnvelope}'s own
-     * {@link CommentTracker#trailingLineComment(Node)} (which sees only the {@code ThrowStmt}'s own trivia) misses:
+     * <p>Offered under the throw statement's {@link OwnerSlot#TRAILING} slot and rendered inline as a {@code lineSuffix}
+     * after the {@code ;}, claimed once. JavaParser parks it differently by source shape, so this gathers both shapes the
+     * envelope's {@link CommentTracker#trailingLineComment(Node)} (which sees only the {@code ThrowStmt}'s own trivia)
+     * misses:
      *
      * <ul>
-     *   <li>the original wide {@code throw new X(arg,} / {@code arg); // note} pre-wrap source attaches the comment to
-     *       the last constructor argument's interior node, so it surfaces as a contained line comment of the object
-     *       creation that begins after the whole creation on its end line; and</li>
-     *   <li>after this fix breaks the list, the re-emitted {@code ); // note} closing line re-parses with the comment
-     *       parked as a free orphan of the enclosing block on the statement's end line. Recovering that orphan here too
-     *       (claimed before the block interleaver would place it on its own line) keeps the inline form stable across a
-     *       re-format instead of drifting the comment below {@code );}.</li>
+     *   <li>pre-wrap, the wide {@code throw new X(arg,} / {@code arg); // note} source attaches the comment to the last
+     *       argument, so it surfaces as a contained line comment of the object creation on its end line; and</li>
+     *   <li>after the list breaks, the re-emitted {@code ); // note} closing line re-parses with the comment as a free
+     *       orphan of the enclosing block on the statement's end line. Recovering that orphan too (before the block
+     *       interleaver would place it on its own line) keeps the inline form stable across re-format.</li>
      * </ul>
      */
     private Doc throwObjectCreationTrailingComment(ThrowStmt statement, ObjectCreationExpr objectCreation) {
@@ -502,10 +496,9 @@ final class StatementPrinter {
 
     private void consumeLabeledBodyLeadingLineComment(Statement statement) {
         // Suppress only a genuinely-LEADING own line comment on the labeled body so the raw-slice leading path does not
-        // double-print it. A line comment that starts after the body ends is the body's own TRAILING comment, not a
-        // leading one (under a whitespace collapse a following statement's before-label line comment re-buckets onto the
-        // previous sibling's body as exactly such a trailing comment); claiming it here would drop it, since the body
-        // renderer reads it back via trailingLineComment. The startsAfterEndOf guard leaves the trailing comment unclaimed.
+        // double-print it. A comment starting after the body ends is the body's own TRAILING comment (under a collapse a
+        // following statement's before-label comment re-buckets there); claiming it here would drop it, since the body
+        // renderer reads it back via trailingLineComment. The startsAfterEndOf guard leaves it unclaimed.
         comments.ownComment(
             statement,
             comment -> comment instanceof LineComment && !CommentIndex.startsAfterEndOf(statement, comment)
@@ -515,27 +508,22 @@ final class StatementPrinter {
     /**
      * {@code @collapsed}-only orphan-recovery fallback for a labeled statement's leading comments.
      *
-     * <p>The two existing paths cover {@code @default}: {@link StatementRuleEnvelope} renders the {@link LabeledStmt}'s
-     * own/adjacent leading comments, and {@link #labeledStatementLeadingComments(LabeledStmt)} reproduces — verbatim from
-     * the raw source slice between the {@code :} and the nested statement — the leading comment lines (preserving author
-     * blank-line groups the AST cannot reconstruct). Under a whitespace collapse those leading comments re-bucket onto the
-     * {@code LabeledStmt} orphan pool, the label {@code SimpleName}'s own comment, and the nested
-     * {@link com.github.javaparser.ast.stmt.ForEachStmt ForEachStmt}'s own/orphan comments, and the now single-line raw
-     * slice no longer exposes them as comment-only lines, so they drop.
+     * <p>{@code @default} is covered by {@link StatementRuleEnvelope} (the {@link LabeledStmt}'s own/adjacent leading
+     * comments) and {@link #labeledStatementLeadingComments(LabeledStmt)} (the raw slice between {@code :} and the nested
+     * statement, preserving author blank-line groups). Under a collapse those comments re-bucket onto the
+     * {@code LabeledStmt} orphans, the label's own comment, and the nested statement's comments, and the now single-line
+     * raw slice no longer exposes them, so they drop.
      *
-     * <p>This fallback contributes only the comments the other two paths miss. It selects, source-order between the label
-     * and the body, the comments JavaParser parked on those buckets and then applies two dedupe seams:
+     * <p>This fallback contributes only what those miss — the source-order comments between label and body on those
+     * buckets — with two dedupe seams:
      *
      * <ol>
      *   <li><strong>string guard against the raw slice.</strong> The raw-slice path returns {@code List<String>} and never
-     *       claims through {@link CommentTracker}, so it cannot be deduped by comment identity. Any candidate whose
-     *       normalized text the raw slice already produced for this statement is excluded, comparing with the same
-     *       normalization the comment-presence net uses. At {@code @default} the raw slice produces every leading comment,
-     *       so this guard removes all candidates and the leading block is unchanged — {@code @default} stays
-     *       byte-identical by construction.
-     *   <li><strong>identity claim.</strong> Each surviving candidate is claimed by {@link CommentTracker#comment}, which
-     *       renders an already-claimed comment (e.g. one the envelope path printed as the {@code LabeledStmt}'s own
-     *       leading comment) as empty, so the envelope-path overlap is not double-printed.
+     *       claims, so it cannot be deduped by identity; any candidate whose normalized text the raw slice already
+     *       produced is excluded (same normalization the comment-presence net uses). At {@code @default} the raw slice
+     *       produces every leading comment, so this removes all candidates — {@code @default} stays byte-identical.
+     *   <li><strong>identity claim.</strong> Each survivor is claimed by {@link CommentTracker#comment}, which renders an
+     *       already-claimed comment (e.g. one the envelope printed) as empty, so the overlap is not double-printed.
      * </ol>
      */
     private List<Doc> recoveredLabeledLeadingComments(LabeledStmt statement, List<String> rawSliceComments) {
@@ -611,11 +599,10 @@ final class StatementPrinter {
                     + compact.apply(forEachStmt.getIterable())
                     + ") {}"
             );
-            // This fast path renders an empty labeled for-loop body directly instead of routing through the statement
-            // envelope, so it must still emit the ForEachStmt's own trailing line comment (e.g. `loop: for (...) {} //
-            // note`) that the bypassed envelope would otherwise render. trailingLineComment claims the comment once, so
-            // it is not double-printed when the idempotence pass re-attaches it to the rebuilt LabeledStmt and renders
-            // it through the envelope. With no such comment this returns the byte-identical `for (...) {}` text.
+            // This fast path renders an empty labeled for-loop body directly, bypassing the statement envelope, so it
+            // must still emit the ForEachStmt's own trailing line comment (`loop: for (...) {} // note`). Claimed once,
+            // so it is not double-printed when the idempotence pass re-attaches it to the rebuilt LabeledStmt. With no
+            // such comment this returns the byte-identical `for (...) {}` text.
             Doc trailing = comments.trailingLineComment(forEachStmt);
             return trailing == Doc.EMPTY ? emptyFor : Doc.concat(emptyFor, Doc.text(" "), trailing);
         }
@@ -697,7 +684,7 @@ final class StatementPrinter {
             return Doc.text(prefix + "()");
         }
         // super(...)/this(...) are constructor invocations, so they opt into the wide-argument-count rule the same way
-        // object creation does (PR #279 comment #1). A heavy list must break one-per-line, so skip the lambda hug.
+        // object creation does. A heavy list must break one-per-line, so skip the lambda hug.
         boolean heavy = argumentHeaviness.isHeavy(statement.getArguments(), true);
         if (!heavy) {
             Optional<Doc> huggableLambda = huggableBlockLambdaArguments.render(prefix, statement.getArguments());
@@ -705,11 +692,10 @@ final class StatementPrinter {
                 return huggableLambda.orElseThrow();
             }
         }
-        // super(...)/this(...) reach the plain argument list directly, so they otherwise miss the comment-aware
-        // breaking that method-call and object-creation printers get from CommentedExpressionListPrinter. Without it an
-        // interior argument's trailing line comment is dropped once the list breaks, because the compact join the plain
-        // path falls back to renders arguments comment-free. Offer the same broken layout first so each argument keeps
-        // its trailing comment, claimed once.
+        // super(...)/this(...) reach the plain argument list directly, so they miss the comment-aware breaking
+        // method-call and object-creation printers get from CommentedExpressionListPrinter — without it an interior
+        // argument's trailing line comment is dropped once the list breaks. Offer the same broken layout first so each
+        // argument keeps its trailing comment, claimed once.
         Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(prefix, statement, statement.getArguments());
         if (commentedArguments.isPresent()) {
             return commentedArguments.orElseThrow();
@@ -741,12 +727,12 @@ final class StatementPrinter {
             );
         }
         if (expression instanceof MethodCallExpr methodCall) {
-            // Output-seam slice #3: the chain shape-selection cascade now lives in MethodCallPrinter.statementChain. The
-            // statement-specific bits stay here — the ExpressionTail.SEMICOLON terminator, the first-line width closure,
-            // and the raw-source whole-statement width measure (methodCallStatementWidth) — and the trailing statement
-            // comment is concatenated after the chosen chain shape. An empty result means no chain shape was selected
-            // (fits within the line width, not final-trailing-comment or source-multiline shaped), so fall through to the
-            // general expression-with-tail rendering below.
+            // The chain shape-selection cascade lives in MethodCallPrinter.statementChain. The statement-specific bits
+            // stay here — the ExpressionTail.SEMICOLON terminator, the first-line width closure, and the raw-source
+            // whole-statement width measure (methodCallStatementWidth) — and the trailing statement comment is
+            // concatenated after the chosen chain shape. An empty result means no chain shape was selected (fits within
+            // the line width, not final-trailing-comment or source-multiline shaped), so fall through to the general
+            // expression-with-tail rendering below.
             Optional<Doc> chain = statementChain.render(
                 methodCall,
                 statement,
@@ -781,13 +767,12 @@ final class StatementPrinter {
      * Renders the {@code //} line comment that trails a local variable declaration's {@link VariableDeclarationExpr}
      * after the closing {@code ;} (e.g. {@code int limit = 10; // cap}).
      *
-     * <p>Routes through the layout-independent {@link CommentTracker#trailingComment(Node)} anchor, which binds the
-     * comment to the stable {@code (declaration, TRAILING)} slot, defers it as the identical width-free
-     * {@link Doc#lineSuffix(Doc)} after the {@code ;} (so the declaration lays out as if the comment were absent), and
-     * decides emptiness from the recorded owner rather than a build-time claim — so the comment survives whichever ranked
-     * layout the declaration renderer wins without being dropped or double-printed. The enclosing {@link ExpressionStmt}'s
-     * own trailing comment is a distinct {@code (statement, TRAILING)} slot rendered by
-     * {@link #expressionStatementTrailingComment(ExpressionStmt)}, so the two never contend for the same comment.
+     * <p>Routes through the layout-independent {@link CommentTracker#trailingComment(Node)} anchor: bound to the stable
+     * {@code (declaration, TRAILING)} slot and deferred as a width-free {@link Doc#lineSuffix(Doc)} after the {@code ;}
+     * (so the declaration lays out as if the comment were absent), so it survives whichever ranked layout wins without
+     * being dropped or double-printed. The enclosing {@link ExpressionStmt}'s own trailing comment is a distinct
+     * {@code (statement, TRAILING)} slot ({@link #expressionStatementTrailingComment(ExpressionStmt)}), so the two never
+     * contend.
      */
     private Doc variableDeclarationTrailingComment(VariableDeclarationExpr declaration) {
         return comments.trailingComment(declaration);
@@ -849,14 +834,11 @@ final class StatementPrinter {
      * Breaks and indents a braceless {@code if}/{@code else}/{@code do} body that carries its leading {@code //} line
      * comment as its own trivia (the {@code @default} shape).
      *
-     * <p>This is the body-own counterpart of {@link LoopStatementLayout#bracelessLoopBody(Node, Node, Statement)}, used where the enclosing
-     * construct already recovers the perturbed attachments through another slot: the {@code if} close-paren trailing path
-     * ({@link ControlConditions#closeParenTrailingLineComment}) catches a comment a collapse moves onto the condition,
-     * and the {@code do-while} condition-leading path catches one an expand moves onto the condition. So those constructs
-     * only need the body-own slot handled here. The whole body — comment and statement — is rendered through
-     * {@link #statementRenderer}, whose envelope emits the body's leading comment exactly once before the statement;
-     * wrapping that in {@link Doc#indent} puts both at the body indent. Returns {@link Optional#empty()} when the body has
-     * no leading line comment, leaving the caller's existing same-line collapse intact.
+     * <p>The body-own counterpart of {@link LoopStatementLayout#bracelessLoopBody(Node, Node, Statement)}, used where the
+     * enclosing construct already recovers the perturbed attachments elsewhere (the {@code if} close-paren trailing path
+     * and the {@code do-while} condition-leading path), so only the body-own slot is handled here. The whole body renders
+     * through {@link #statementRenderer}, whose envelope emits the leading comment once; {@link Doc#indent} puts both at
+     * the body indent. Empty when the body has no leading line comment, leaving the same-line collapse intact.
      */
     private Optional<Doc> leadingLineCommentBody(Statement statement) {
         if (statement.isBlockStmt()) {
@@ -897,13 +879,11 @@ final class StatementPrinter {
      * {@code (node, CONTENT_TRAILING)} slot) or, failing that, an unattached trailing comment recovered from a parent
      * bucket (under {@code (node, UNATTACHED_TRAILING)}).
      *
-     * <p>This is the content path an expression statement uses for its own trailing comment. It stays distinct from the
-     * outer envelope's {@code (node, TRAILING)} offer and from an enclosing construct's
-     * {@link #enclosedTrailingLineComment(Node)} offer, so when an {@code if} branch body is an expression statement and
-     * all three fire for the one node, the dry-run's first offerer owns the comment and the other two render empty by
-     * ownership — no build-order {@code isPrinted} read is needed. For a plain expression statement the envelope offers
-     * first, so this content attached-own offer renders empty and the envelope keeps the comment; this path still owns the
-     * unattached recovery, which the envelope never offers.
+     * <p>The content path an expression statement uses, kept distinct from the outer envelope's {@code (node, TRAILING)}
+     * offer and an enclosing construct's {@link #enclosedTrailingLineComment(Node)} offer: when all three fire for one
+     * node, the dry-run's first offerer owns the comment and the rest render empty by ownership (no build-order
+     * {@code isPrinted} read). For a plain expression statement the envelope offers first, so this attached-own offer
+     * renders empty; this path still owns the unattached recovery the envelope never offers.
      */
     private Doc trailingLineComment(Node node) {
         Doc own = comments.contentTrailingLineComment(node);
@@ -918,14 +898,10 @@ final class StatementPrinter {
      * {@link IfStatementLayout} uses to render a then/else body's trailing comment in the spot only the {@code if} layout
      * controls (the then-body's comment on its own line before {@code else}).
      *
-     * <p>Anchored to the distinct {@code (node, ENCLOSED_TRAILING)} slot for both the attached-own comment and the
-     * parent-bucket recovery. Because the enclosing {@code if} layout offers this before the nested body is rendered, the
-     * dry-run records {@code ENCLOSED_TRAILING} as the owner, and the nested statement's own envelope
-     * ({@code (node, TRAILING)}) and its own content offer ({@link #trailingLineComment(Node)}'s {@code CONTENT_TRAILING}
-     * and {@code UNATTACHED_TRAILING} slots) all render empty by ownership. One slot covers both the attached and the
-     * recovered comment because a node has at most one of them, so the nested statement's own unattached recovery yields
-     * to this slot too. This reproduces today's first-claim-wins winner (the enclosing layout renders the comment once,
-     * the nested renders skip it) without a build-order {@code isPrinted} read.
+     * <p>Anchored to the distinct {@code (node, ENCLOSED_TRAILING)} slot (both attached-own and parent-bucket recovery).
+     * The enclosing {@code if} layout offers this before the nested body renders, so the dry-run records it as owner and
+     * the nested statement's own envelope and content offers render empty by ownership. One slot covers both comments
+     * (a node has at most one), reproducing the first-claim-wins winner without a build-order {@code isPrinted} read.
      */
     private Doc enclosedTrailingLineComment(Node node) {
         Doc own = comments.enclosedTrailingLineComment(node);
@@ -943,11 +919,10 @@ final class StatementPrinter {
      */
     private String trailingEmptyBodyBlockComment(Node node) {
         // unattachedTrailingBlockComment parent-walks to recover a block comment after an empty-body semicolon, so the
-        // same comment can be reached from more than one anchor (e.g. the loop statement and its empty body). Offer it
-        // under this recovering node's own distinct (node, UNATTACHED_TRAILING_BLOCK) owner so comment ownership
-        // disambiguates the anchors: the dry-run's first recovering anchor owns it and any other anchor, keying a
-        // different (node, slot), renders Doc.EMPTY (caught by the check below) and falls to the raw fallback —
-        // reproducing the old first-claim-wins recovery without a build-order isPrinted skip.
+        // same comment can be reached from more than one anchor (e.g. the loop statement and its empty body). Anchoring
+        // to this node's own (node, UNATTACHED_TRAILING_BLOCK) owner disambiguates: the dry-run's first recovering anchor
+        // owns it and any other renders Doc.EMPTY (caught below) and falls to the raw fallback — first-claim-wins with no
+        // build-order isPrinted skip.
         Doc unattached = commentPlacement.unattachedTrailingBlockComment(node)
                 .map(trivia -> comments.comment(trivia, node, OwnerSlot.UNATTACHED_TRAILING_BLOCK))
                 .orElse(Doc.EMPTY);
@@ -967,12 +942,10 @@ final class StatementPrinter {
      * Recovers a trailing line comment that JavaParser parked on a parent bucket rather than on the node it visually
      * trails, anchoring it to {@code node} under the given {@code slot}.
      *
-     * <p>The same parent-parked comment can be reached from more than one recovering node (the placement policy walks
-     * parents), and from more than one slot on the <em>same</em> node — the statement's own content path recovers it under
-     * {@link OwnerSlot#UNATTACHED_TRAILING}, while an enclosing {@code if} layout recovers it under
-     * {@link OwnerSlot#ENCLOSED_TRAILING}. The {@code slot} parameter keeps those distinct so the dry-run's first
-     * recovering offer owns the comment and the rest, keying a different {@code (node, slot)}, render empty — reproducing
-     * the old first-claim-wins recovery without a build-order {@code isPrinted} read.
+     * <p>The same parent-parked comment can be reached from more than one recovering node and from more than one slot on
+     * the same node (the content path uses {@link OwnerSlot#UNATTACHED_TRAILING}, an enclosing {@code if} layout uses
+     * {@link OwnerSlot#ENCLOSED_TRAILING}). The {@code slot} parameter keeps those distinct so the first recovering offer
+     * owns the comment and the rest render empty — first-claim-wins with no build-order {@code isPrinted} read.
      */
     private Doc unattachedTrailingLineComment(Node node, OwnerSlot slot) {
         return commentPlacement.unattachedTrailingLineComment(node)
@@ -987,12 +960,12 @@ final class StatementPrinter {
     }
 
     /**
-     * The single composite entry for an expression statement's method-call-chain shape (output-seam slice #3), collapsing
-     * the chain shape-callbacks the statement cascade used to thread. Implemented by
-     * {@link MethodCallPrinter#statementChain} (via {@link ExpressionPrinters#statementChain}); the caller supplies only
-     * the statement-flavored inputs — the {@code tail} terminator, the {@code lineWidth} first-line width closure, and the
-     * {@code statementWidth} raw-source whole-statement width measure — and receives the chosen chain shape, or
-     * {@link Optional#empty()} when no chain shape applies and the caller should render the general expression form.
+     * The single composite entry for an expression statement's method-call-chain shape, collapsing the chain
+     * shape-callbacks the statement cascade used to thread. Implemented by {@link MethodCallPrinter#statementChain} (via
+     * {@link ExpressionPrinters#statementChain}); the caller supplies only the statement-flavored inputs — the
+     * {@code tail} terminator, the {@code lineWidth} first-line width closure, and the {@code statementWidth} raw-source
+     * whole-statement width measure — and receives the chosen chain shape, or {@link Optional#empty()} when no chain shape
+     * applies and the caller should render the general expression form.
      */
     @FunctionalInterface
     interface StatementChainRenderer {

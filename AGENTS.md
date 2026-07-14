@@ -30,7 +30,17 @@
   `<!-- frmtr-changelog-details:end -->` in the PR body; read "Changelog Detail Markers" in
   `docs/release-automation.md` for how to write good ones.
 
+## Comments
+
+- Keep comments aggressively compact — **2-3 lines at most**, for both new and changed methods (and classes).
+- Give a quick *hint* at what the code does and why — enough to jump into context fast — not a technical walkthrough,
+  and never a restatement of what the code already says.
+- If a method needs more than that to be understood, or the comment reads cryptic, treat it as a signal that the method
+  or class is too complex: prefer improving the code (clearer names, smaller units) over writing a longer comment.
+
 ## Formatter helper comments
 
-- When extracting formatter helper modules, add Javadocs in the same style as `RawSource`, `CommentedTokenText`, and `FormatterPragmas`: explain what concern the helper owns, why the boundary exists, and what decisions it intentionally leaves to the caller.
+The specific case of the rule above for extracted helpers:
+
+- When extracting formatter helper modules, add Javadocs in the same style as `RawSource`, `CommentedTokenText`, and `FormatterPragmas`: hint at what concern the helper owns, why the boundary exists, and what it leaves to the caller — still within the 2-3 line limit.
 - Add method-level Javadocs when a helper method preserves source-formatting nuance that is not obvious from the method name.

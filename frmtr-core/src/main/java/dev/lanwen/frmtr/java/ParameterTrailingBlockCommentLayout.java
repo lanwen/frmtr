@@ -15,24 +15,20 @@ import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * Recovers the block comment that trails the last ordinary parameter of a callable — the {@code /* note *}{@code /} that
- * sits after the final parameter and before the parameter list's closing {@code ")"}.
+ * Recovers the block comment that trails the last ordinary parameter of a callable — the {@code /* note *}{@code /}
+ * after the final parameter and before the parameter list's closing {@code ")"}.
  *
- * <p>This helper owns the "does a block comment belong to the last parameter, and what is its rendered text?" question
- * for {@link CallableSignaturePrinter}. JavaParser frequently leaves such a comment unattached at callable scope rather
- * than on the {@link Parameter} node, so the helper locates the parameter list's closing paren from the callable's token
- * range ({@link #closeParenForParameterList}) and accepts only comments whose source position falls in the window after
- * the last parameter ends and before that {@code ")"} ({@link #precedesCloseParen}). Selecting by source order rather than
- * by same-line keeps the comment owned by the parameter even when a collapsed or expanded whitespace layout slides it
- * off the parameter's line, while bounding strictly at {@code ")"} (never the method body) keeps the recovery from reaching
- * past the parameter list and stealing a following member's leading comment (PR #20's narrowing).
+ * <p>JavaParser frequently leaves such a comment unattached at callable scope rather than on the {@link Parameter}, so
+ * this locates the closing paren from the callable's token range ({@link #closeParenForParameterList}) and accepts only
+ * comments in the window after the last parameter ends and before that {@code ")"} ({@link #precedesCloseParen}).
+ * Selecting by source order (not same-line) keeps the comment owned by the parameter under a collapsed/expanded layout,
+ * while bounding strictly at {@code ")"} (never the body) keeps the recovery from stealing a following member's leading
+ * comment (PR #20's narrowing).
  *
- * <p>The boundary exists so the parameter renderer can ask one authority for the trailing-comment text
- * ({@link #parameterTrailingBlockCommentText}) instead of carrying the close-paren token scan and the source-order
- * window checks inline. The helper claims the recovered comment through the injected {@link CommentTracker} and turns
- * comments into text through the injected renderers (the {@code commentText} producer and the
- * unattached-trailing-block-comment producer); it leaves every other parameter, type, and prefix layout decision — and
- * where the returned text is spliced into a parameter's rendered doc — to the caller.
+ * <p>The boundary lets the parameter renderer ask one authority for the trailing-comment text
+ * ({@link #parameterTrailingBlockCommentText}) instead of carrying the close-paren token scan and window checks inline.
+ * It claims through the injected {@link CommentTracker} and renders text through the injected producers; it leaves every
+ * other parameter/type/prefix layout decision, and where the text is spliced in, to the caller.
  */
 final class ParameterTrailingBlockCommentLayout {
 
@@ -53,11 +49,10 @@ final class ParameterTrailingBlockCommentLayout {
     }
 
     String parameterTrailingBlockCommentText(Parameter parameter) {
-        // A trailing block comment is the last parameter's only when it sits inside the parameter list, i.e. before the
-        // closing ")". A collapsed layout can slide the next member's leading block comment up onto the last parameter's
-        // line, where the same-line recovery would otherwise reach across ")" (and even the method body) and claim a
-        // comment that belongs to the following member. Requiring the comment to precede ")" keeps that comment with its
-        // real owner. At the default layout the comment is on its own line, so the recovery already matches nothing.
+        // A trailing block comment is the last parameter's only when it precedes the closing ")". A collapsed layout can
+        // slide the next member's leading block up onto the last parameter's line, where a same-line recovery would reach
+        // across ")" and claim it; requiring it to precede ")" keeps it with its real owner. At default it is on its own
+        // line and matches nothing.
         if (!trailingBlockCommentPrecedesCloseParen(parameter)) {
             return "";
         }
@@ -76,18 +71,11 @@ final class ParameterTrailingBlockCommentLayout {
      * parameter's end and the parameter list's closing {@code ")"}, which is the only span from which it can genuinely
      * belong to the last parameter.
      *
-     * <p>Selection is by source order, not by same-line: the comment must begin after the parameter ends and before the
-     * close paren. A same-line {@code param /* note *​/)} block comment satisfies both bounds, and so does an expanded
-     * layout that pushes the comment onto its own line while keeping it before {@code ")"} — the body block's own
-     * comment that {@code expand} slides off the last parameter's line. Bounding strictly at {@code ")"} (never the body
-     * brace) preserves PR #20's narrowing: under {@code collapse} a following member's leading block comment can slide
-     * up onto the last parameter's line, but it begins after {@code ")"}, so it is rejected and stays with its real
-     * owner.
-     *
-     * <p>The closing paren is the first {@code RPAREN} in the callable's token range that begins at or after the last
-     * parameter ends; any {@code ")"} from an annotation or type on the parameter itself ends before the parameter does,
-     * so it is skipped. When the callable, the parameter, or the close paren has no source range, the gate stays closed
-     * and the recovery is suppressed rather than guessed.
+     * <p>By source order, not same-line: a {@code param /* note *​/)} comment and an expanded layout that keeps it before
+     * {@code ")"} both qualify, while bounding strictly at {@code ")"} (never the body) preserves PR #20's narrowing —
+     * a following member's leading block a collapse slides onto the parameter's line begins after {@code ")"} and is
+     * rejected. The closing paren is the first {@code RPAREN} at or after the parameter ends (a {@code ")"} from the
+     * parameter's own annotation/type ends earlier and is skipped); a missing source range keeps the gate closed.
      */
     private boolean trailingBlockCommentPrecedesCloseParen(Parameter parameter) {
         Optional<Range> closeParenRange = closeParenForParameterList(parameter);
@@ -157,11 +145,9 @@ final class ParameterTrailingBlockCommentLayout {
     /**
      * Finds block comments that JavaParser leaves inside the callable rather than attaching to the last parameter node.
      *
-     * <p>Selection is the same source-order window the gate ({@link #trailingBlockCommentPrecedesCloseParen}) uses: the
-     * comment must begin after the last parameter ends and before the parameter list's closing {@code ")"}. Bounding by
-     * source order rather than same-line keeps the comment owned by the parameter even when an expanded layout pushes it
-     * onto its own line (the body block's own comment that {@code expand} slides off the parameter's line), while the
-     * {@code ")"} upper bound keeps the recovery from reaching past the parameter list into a following member.
+     * <p>Same source-order window as the gate ({@link #trailingBlockCommentPrecedesCloseParen}): after the last parameter
+     * ends and before the closing {@code ")"}. Source order (not same-line) keeps the comment owned by the parameter
+     * under an expanded layout, and the {@code ")"} bound keeps the recovery out of a following member.
      */
     Doc parameterTrailingBlockComment(Parameter parameter) {
         Optional<Range> closeParenRange = closeParenForParameterList(parameter);

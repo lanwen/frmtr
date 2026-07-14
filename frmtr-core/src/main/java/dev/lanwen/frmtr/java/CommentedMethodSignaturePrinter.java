@@ -77,12 +77,11 @@ final class CommentedMethodSignaturePrinter {
         int linesToDrop = Math.min(lines.size(), lastLeadingAnnotationLine - declarationBeginLine + 1);
         int firstSignatureLine = linesToDrop;
         int sourceLine = declarationBeginLine + firstSignatureLine;
-        // Skip the comment-only and blank trivia lines that sit between the annotations and the method name. They are
-        // leading comments the structured path renders (annotationMethodGapComments), not signature content. Blank lines
-        // must be skipped too: when source whitespace is collapsed, blank lines can appear between stacked leading
-        // comments, and stopping at the first one would leave a leading `//` in the "signature", wrongly routing the
-        // method through the raw fallback — which re-indents the preserved blank lines deeper on every pass and never
-        // converges.
+        // Skip the comment-only and blank trivia lines between the annotations and the method name: they are leading
+        // comments the structured path renders (annotationMethodGapComments), not signature content. Blank lines must be
+        // skipped too — a collapsed source can put blanks between stacked leading comments, and stopping at the first
+        // would leave a leading `//` in the "signature", wrongly routing the method through the raw fallback (which
+        // re-indents preserved blank lines deeper on every pass and never converges).
         while (
             firstSignatureLine < lines.size()
             && sourceLine < nameBeginLine
@@ -137,17 +136,15 @@ final class CommentedMethodSignaturePrinter {
             return method;
         }
         String body = method.substring(bodyStart + 1, bodyEnd);
-        // The text between the parameter-list `)` and the real body `{` is the gap comment(s) that JavaParser keeps in
-        // the token stream but does not expose structurally. Now that the body brace is found comment-aware, this region
-        // is no longer the swallowed body; carry any comment token here in a dedicated gap-comment channel, separate from
-        // the parameter-trailing suffix comments, so it renders on its own line between the signature and `{` (preserving
-        // the source shape) rather than being pulled up onto the signature line.
+        // The text between the parameter-list `)` and the body `{` is the gap comment(s) JavaParser keeps in the token
+        // stream but does not expose structurally. Carry any comment here in a dedicated gap-comment channel (separate
+        // from the parameter-trailing suffix comments) so it renders on its own line between the signature and `{`,
+        // preserving the source shape, rather than being pulled onto the signature line.
         String gap = signature.substring(close + 1);
         List<String> gapComments = signatureGapComments(gap);
-        // The same `)`-to-`{` gap that may carry comments also carries the `throws` clause. The comments are routed to
-        // their own gap-comment channel above; the remaining non-comment tokens (`throws Ex1, Ex2`) are signature content
-        // that must stay attached to the parameter-list `)`, or the method loses its checked-exception declaration and the
-        // output no longer compiles (issue #142).
+        // The same `)`-to-`{` gap also carries the `throws` clause. Comments go to the gap-comment channel above; the
+        // remaining non-comment tokens (`throws Ex1, Ex2`) are signature content that must stay attached to the `)`, or
+        // the method loses its checked-exception declaration and no longer compiles (issue #142).
         String throwsClause = signatureThrowsClause(gap);
         String prefix = CommentedTokenText.tokenLine(CommentedTokenText.tokens(signature.substring(0, open)));
         String parameters = signature.substring(open + 1, close);
@@ -165,11 +162,10 @@ final class CommentedMethodSignaturePrinter {
                 body
             );
         }
-        // JavaParser can lose a single inline block comment before empty parentheses as header trivia, so keep it
-        // attached to the method prefix instead of treating it like a parameter comment line. This only applies when the
-        // parentheses are otherwise empty: the line must be the block comment and nothing else. A leading block comment
-        // followed by a real parameter (e.g. `( /* alpha */ String name )`) is a commented parameter, not an empty list,
-        // and must keep its parentheses around the parameter rather than being hoisted to the prefix.
+        // JavaParser can lose a single inline block comment before empty parentheses as header trivia, so keep it on the
+        // method prefix rather than as a parameter line — but only when the parentheses are otherwise empty (the line is
+        // the block comment and nothing else). A block comment followed by a real parameter (`( /* alpha */ String name )`)
+        // is a commented parameter and keeps its parentheses.
         if (
             parameterLines.size() == 1
             && isBlockCommentOnlyLine(parameterLines.getFirst())
@@ -273,17 +269,14 @@ final class CommentedMethodSignaturePrinter {
      * Assembles a commented method's signature, gap comments, parameter suffix comments, and body into the rendered
      * lines.
      *
-     * <p>Two distinct comment channels feed in. {@code suffixComments} are the parameter-trailing/leading {@code //}
-     * comments that JavaParser keeps attached to the parameter list; the first of them renders on the signature line
-     * (the source shape for {@code foo(int x) // note}). {@code gapComments} are the {@code //} comments written alone
-     * between the parameter-list {@code )} and the body {@code {}; preserving the issue #23 source shape, each renders on
-     * its own line below the signature, with the {@code {} dropped onto the next line. The opening brace must never share
-     * a line with a {@code //} gap comment or it would comment the brace out.
+     * <p>Two comment channels feed in: {@code suffixComments} (parameter-trailing/leading {@code //} comments; the first
+     * renders on the signature line, the {@code foo(int x) // note} shape) and {@code gapComments} (comments written
+     * alone between {@code )} and {@code {}, each on its own line below the signature with the {@code {} dropped to the
+     * next line — the issue #23 shape, since a brace sharing a {@code //} line would be commented out).
      *
-     * <p>When {@code gapComments} is empty the rendering is exactly the historical behavior so every pre-existing golden
-     * stays byte-identical. A gap comment and an {@code inlineOpeningComment} are assumed not to co-occur (they originate
-     * from mutually exclusive source regions); if both are somehow present the gap comment wins its own line and the
-     * inline opening comment is dropped, since a brace-line {@code //} comment cannot be rendered safely.
+     * <p>With no {@code gapComments} the rendering is byte-identical to the historical behavior. A gap comment and an
+     * {@code inlineOpeningComment} come from mutually exclusive regions; if both appear the gap comment wins its own line
+     * and the inline opening comment is dropped (a brace-line {@code //} cannot render safely).
      */
     private String formatMethodWithBody(
             String signature,
@@ -458,13 +451,10 @@ final class CommentedMethodSignaturePrinter {
      * Finds the first {@code &#123;} that opens the method body, skipping any {@code &#123;} that appears inside a line or
      * block comment in the raw method text.
      *
-     * <p>The signature-comment fallback runs on raw source where a {@code //} or {@code /* *}{@code /} comment can sit
-     * between the parameter-list {@code )} and the body {@code &#123;}, and that comment text may itself contain braces
-     * (for example {@code // marks &#123; the bit &#125;}). A plain {@code indexOf('&#123;')} would point at the comment's
-     * brace and de-comment the rest of the comment into the body, producing non-compiling output (issue #23). This scan
-     * is alignment-independent: it works on the possibly re-sliced signature string rather than mapping AST ranges, which
-     * are unreliable here. When no comment precedes the body brace it returns exactly the same offset as
-     * {@code indexOf('&#123;')}, so the normal case is byte-identical.
+     * <p>A {@code //} or {@code /* *}{@code /} comment between the parameter-list {@code )} and the body {@code &#123;} may
+     * contain braces ({@code // marks &#123; the bit &#125;}); a plain {@code indexOf('&#123;')} would point at the
+     * comment's brace and de-comment the rest into the body (non-compiling, issue #23). With no comment before the brace
+     * it returns the same offset as {@code indexOf('&#123;')}, so the normal case is byte-identical.
      */
     private int bodyOpeningBrace(String text) {
         int cursor = 0;
@@ -523,11 +513,9 @@ final class CommentedMethodSignaturePrinter {
     /**
      * Finds the last {@code )} that is not inside a line or block comment.
      *
-     * <p>When a {@code //} or {@code /* *}{@code /} gap comment sits between the parameter list and the body it can carry
-     * its own {@code )} (for example {@code // table[code] |= (1 &lt;&lt; 3)}). A plain {@code lastIndexOf(')')} would then
-     * point at the comment's {@code )}, treating the comment text as the signature tail and de-commenting it. This scan
-     * skips comment spans, so it lands on the real parameter-list close paren; with no comment present it returns exactly
-     * the same offset as {@code lastIndexOf(')')}.
+     * <p>A gap comment between the parameter list and body can carry its own {@code )} ({@code // table[code] |= (1 &lt;&lt; 3)}),
+     * which a plain {@code lastIndexOf(')')} would mistake for the signature tail. Skipping comment spans lands on the real
+     * close paren; with no comment present it returns the same offset as {@code lastIndexOf(')')}.
      */
     private int lastCloseParenOutsideComment(String text) {
         int cursor = 0;
@@ -549,10 +537,9 @@ final class CommentedMethodSignaturePrinter {
     /**
      * Extracts the comment token(s) that sit between the parameter-list {@code )} and the body {@code &#123;}.
      *
-     * <p>Once {@link #bodyOpeningBrace(String)} points at the real body brace, this region is the gap comment JavaParser
-     * keeps in the token stream but does not expose structurally. Returning it lets the caller carry it in the dedicated
-     * gap-comment channel so it renders verbatim on its own line between the signature and {@code &#123;}, preserving the
-     * source shape. Non-comment text here (there should be none for a well-formed signature) is ignored.
+     * <p>This region is the gap comment JavaParser keeps in the token stream but does not expose structurally; the caller
+     * carries it in the dedicated gap-comment channel so it renders verbatim on its own line, preserving the source
+     * shape. Non-comment text here (none for a well-formed signature) is ignored.
      */
     private List<String> signatureGapComments(String gap) {
         return nonBlankLines(gap).stream().filter(this::isCommentOnlyLine).toList();
@@ -562,12 +549,10 @@ final class CommentedMethodSignaturePrinter {
      * Extracts the {@code throws Ex1, Ex2} clause that sits between the parameter-list {@code )} and the body
      * {@code &#123;}, dropping any comment tokens that share the gap.
      *
-     * <p>The comment tokens in this gap are routed to {@link #signatureGapComments(String)} for their own line; the
-     * remaining tokens are the {@code throws} clause, which is real signature content. Dropping it (the prior behavior)
-     * removed the method's checked-exception declaration and produced non-compiling output (issue #142). The tokens are
-     * rebuilt through {@link CommentedTokenText#tokenLine(List)} so an over-wide or oddly spaced source {@code throws}
-     * clause is normalized to {@code throws A, B}; an empty result means the method declares no checked exceptions and the
-     * caller leaves the signature untouched.
+     * <p>Comments go to {@link #signatureGapComments(String)}; the remaining tokens are the {@code throws} clause, real
+     * signature content whose loss removed the checked-exception declaration and produced non-compiling output (issue
+     * #142). They are rebuilt through {@link CommentedTokenText#tokenLine(List)} (normalizing to {@code throws A, B}); an
+     * empty result means no checked exceptions and the caller leaves the signature untouched.
      */
     private String signatureThrowsClause(String gap) {
         List<String> tokens = CommentedTokenText.tokens(gap).stream()

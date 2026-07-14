@@ -103,26 +103,21 @@ final class IfStatementLayout {
             return ifWithEmptyThenStatement(statement);
         }
         List<Doc> docs = new ArrayList<>();
-        // A line comment on the then branch's `}` line that is followed by `else`/`else if` belongs to the else-leading
-        // gap block, not to a separate then-trailing slot: a collapse can re-attach such a gap line as the then block's
-        // own trailing comment, and claiming it here would let elseChainSeparator's then-trailing branch render it alone
-        // and drop the rest of the block. When the then is a block and an else follows, let the gap block (computed in
-        // the else branch below) own every gap line; only claim the standalone then-trailing slot otherwise.
+        // When a block then is followed by a real else, let the else-leading gap block (computed in the else branch
+        // below) own every gap line; claim the standalone then-trailing slot only otherwise. A collapse can re-attach a
+        // gap line as the then block's own trailing comment, and claiming it here would render it alone and drop the
+        // rest of the block.
         boolean elseLeadingGapOwnsThenTrailing = statement.getThenStmt().isBlockStmt()
             && statement.getElseStmt().filter(elseStatement -> !elseStatement.isEmptyStmt()).isPresent();
         Doc thenTrailingLineComment = elseLeadingGapOwnsThenTrailing
             ? Doc.EMPTY
             : trailingLineComment.apply(statement.getThenStmt());
-        // Claim the else-leading gap block before rendering the then branch so the dry-run records the whole block as the
-        // gap's own (in Doc-construction order, which is what the record-only pre-pass follows), even though it renders
-        // after the then branch's `}`. Otherwise a gap line that a collapse re-attached as the then block's own trailing
-        // comment would be claimed by the block printer first and render on the `}` line, splitting the block.
-        // A braceless (non-`else if`) else body owns its own leading `//` block through the braceless-body handler
-        // (the same family the then/while/for bodies use), so its leading comments are placed indented under `else`,
-        // not hoisted above the `else` keyword. The separator gap slot below is then bounded to the genuine
-        // then-`}`-to-`else` gap (comments that start before the `else` keyword), and the body block is claimed here so
-        // the two slots never double-own a line. The `else` keyword position is the boundary between the two slots: a
-        // comment before it is a separator comment, one after it leads the body.
+        // Claim the else-leading gap block in Doc-construction order (before the then branch, though it renders after the
+        // then `}`) so the record-only pre-pass owns the whole block here; otherwise the block printer claims a
+        // collapse-reattached gap line on the `}` line and splits the block. The `else` keyword position is the boundary
+        // between the two slots: a comment before it is a separator (this gap slot), one after it leads a braceless else
+        // body — those render indented under `else` via the braceless-body handler, and claiming the body block here
+        // keeps the two slots from double-owning a line.
         Optional<Statement> bracelessElse = statement.getElseStmt()
                 .filter(elseStatement -> !elseStatement.isEmptyStmt())
                 .filter(elseStatement -> !elseStatement.isIfStmt())
@@ -132,12 +127,11 @@ final class IfStatementLayout {
                 .filter(elseStatement -> !elseStatement.isEmptyStmt())
                 .map(elseStatement -> elseLeadingLineComment(statement, elseStatement, elseKeyword))
                 .orElse(Doc.EMPTY);
-        // Render the braceless else body here, in Doc-construction order, before the then branch and the separator, so
-        // the dry-run records its leading `//` block under the else body's leading slot first: a collapse that
-        // re-buckets a body-leading line onto the if orphan pool then cannot let the separator slot reclaim it and split
-        // the block off the body it leads. This is the sole renderer for a braceless else body, so a separator comment
-        // that a collapse re-attaches as the body's own leading trivia does not trip the generic leading-comment body
-        // break in nestedStatement (it stays in the separator slot, the body collapses onto the `else` line).
+        // Build the braceless else body in Doc-construction order (before the then branch and separator) so the pre-pass
+        // records its leading `//` block under the body's leading slot first — the separator slot then cannot reclaim a
+        // collapse-rebucketed body-leading line and split it off the body. As the sole renderer for a braceless else
+        // body, it also keeps a reattached separator comment from tripping nestedStatement's generic leading-comment
+        // body break.
         Optional<Doc> bracelessElseBody = bracelessElse
                 .map(elseStatement -> bracelessElseBody(statement, elseStatement, elseKeyword));
         Doc conditionTrailingLineComment = controlConditions.closeParenTrailingLineComment(statement.getCondition());
@@ -158,12 +152,10 @@ final class IfStatementLayout {
                         docs.add(emptyElseStatement(statement, elseStatement));
                         return;
                     }
-                    // A block comment between the then-block close and else is recovered by blockCommentBetweenThenAndElse
-                    // above and takes priority in elseChainSeparator; for `} /* c */ else {` that same comment is also a
-                    // same-line block comment before the else statement. Only offer the else-leading block comment when
-                    // the between-then-and-else slot did not already claim it, so the comment is claimed once. Output is
-                    // unchanged because elseChainSeparator returns on the between slot before it ever reads the else
-                    // leading block comment.
+                    // For `} /* c */ else {` the between-then-and-else block comment is also a same-line block comment
+                    // before the else. Offer the else-leading slot only when the between slot did not claim it, so the
+                    // comment is claimed once (elseChainSeparator returns on the between slot first, so output is
+                    // unchanged).
                     Doc elseLeadingBlockComment = betweenThenAndElseBlockComment == Doc.EMPTY
                         ? sameLineBlockCommentBeforeNode.apply(elseStatement)
                         : Doc.EMPTY;
@@ -180,9 +172,9 @@ final class IfStatementLayout {
                         )
                     );
                     if (bracelessElseBody.isPresent()) {
-                        // A braceless (non-`else if`) else body is rendered entirely by bracelessElseBody (computed
-                        // above): it breaks and indents the body when an after-`else` leading `//` block is present and
-                        // otherwise collapses the body onto the `else` line, claiming the leading block exactly once.
+                        // bracelessElseBody (computed above) renders the whole braceless else body: it breaks and
+                        // indents when an after-`else` leading `//` block is present, else collapses onto the `else`
+                        // line, claiming the leading block exactly once.
                         docs.add(bracelessElseBody.orElseThrow());
                     } else {
                         docs.add(
@@ -207,23 +199,18 @@ final class IfStatementLayout {
      * Recovers the {@code //} comment block that leads the {@code else} keyword ({@code } // note\nelse}), independent of
      * source shape, as a single together-rendered cluster.
      *
-     * <p>A multi-line block written between the then branch's {@code }} and {@code else}/{@code else if} is not held by a
-     * single node: JavaParser keeps the trailing lines as the enclosing {@code if}'s orphan trivia while the line
-     * directly above the {@code else}/{@code else if} node becomes that node's own leading trivia. Reading only one of
-     * those two slots (own first, orphan fallback) split the block — one line rendered above {@code else}, the rest
-     * folded into the nested {@code else if}'s leading cluster, which mangled {@code else if} into {@code else //\n if}
-     * and rotated the lines every pass because re-parsing re-split the block onto different nodes. We instead claim the
-     * whole gap block in one slot (see
-     * {@link JavaCommentPlacementPolicy#gapLeadingLineCommentBlock(Node, Node, java.util.Collection)}) so it renders once,
-     * together, above {@code else}, and the nested {@code else if} can no longer reclaim a leading line. At
-     * {@code @default} the block is a single contiguous run, so this renders the same lines in the same order.
+     * <p>A block between the then {@code }} and {@code else}/{@code else if} is split across nodes (trailing lines as the
+     * {@code if}'s orphans, the line above {@code else} as that node's own trivia); reading either slot alone split the
+     * block and rotated the lines every pass (re-parsing re-split them differently), mangling {@code else if} into
+     * {@code else //\n if}. Claiming the whole gap block in one slot
+     * ({@link JavaCommentPlacementPolicy#gapLeadingLineCommentBlock(Node, Node, java.util.Collection)}) renders it once,
+     * together, above {@code else} (#115). At {@code @default} the block is one contiguous run, rendered in the same
+     * order.
      *
-     * <p>{@code elseKeywordUpperBound}, when present, restricts this slot to the genuine separator gap — comments that
-     * start before the {@code else} keyword ({@code } // note\nelse}). It is supplied only for a braceless (non-{@code
-     * else if}) else body, whose own leading {@code //} block lives <em>after</em> the {@code else} keyword and is owned
-     * by {@link #bracelessElseBody(IfStmt, Statement, java.util.Optional)} instead. For an {@code else if} or a block
-     * else the bound is absent and this keeps recovering the whole gap block as before, so the #115 rotation fix and the
-     * block-else separator placement are unchanged.
+     * <p>{@code elseKeywordUpperBound}, when present, restricts this slot to the separator gap (comments before the
+     * {@code else} keyword). It is supplied only for a braceless else body, whose own leading {@code //} block lives
+     * <em>after</em> {@code else} and is owned by {@link #bracelessElseBody(IfStmt, Statement, java.util.Optional)};
+     * absent for an {@code else if} or block else, where the whole gap block is recovered as before.
      */
     private Doc elseLeadingLineComment(IfStmt statement, Statement elseStatement, Optional<Position> elseKeywordUpperBound) {
         return comments.gapLeadingLineCommentBlock(
@@ -240,23 +227,18 @@ final class IfStatementLayout {
      * that block exactly once under the else body's leading slot and placing it indented under {@code else}, above the
      * body statement.
      *
-     * <p>This is the else-body counterpart of {@link LoopStatementLayout#bracelessLoopBody(Node, Node, Statement)}: a braceless else body
-     * normally collapses onto the {@code else} line ({@code else return 2;}), but a leading line comment cannot share
-     * that line without commenting out the body, so the body breaks to an indented next line with the comment kept above
-     * it. The leading block lives in the gap between the {@code else} keyword and the body, but JavaParser splits it: the
-     * line directly above the body is the body's own leading trivia (rendered by {@link #statementRenderer}); earlier
-     * lines re-bucket onto the enclosing {@code if}'s orphan pool or the then branch under whitespace perturbation. We
-     * recover the re-bucketed lines from those buckets through {@link JavaCommentPlacementPolicy#gapLineCommentsBefore},
-     * bounded to comments that start <em>after</em> the {@code else} keyword so a genuine then-{@code }}-to-{@code else}
-     * separator comment (owned by {@link #elseLeadingLineComment}) is never pulled into the body. Each recovered line is
-     * claimed once under the body's leading slot — the same slot the body renderer would claim its own line in — so the
-     * whole block is neither dropped under perturbation nor double-printed at {@code @default}.
+     * <p>The else-body counterpart of {@link LoopStatementLayout#bracelessLoopBody(Node, Node, Statement)}: the body
+     * normally collapses onto the {@code else} line ({@code else return 2;}), but a leading line comment there would
+     * comment out the body, so the body breaks to an indented line below it. JavaParser splits the leading block (line
+     * above the body is its own trivia; earlier lines re-bucket onto the {@code if} orphans or then branch under
+     * perturbation), so the re-bucketed lines are recovered via
+     * {@link JavaCommentPlacementPolicy#gapLineCommentsBefore}, bounded to <em>after</em> the {@code else} keyword so a
+     * genuine separator comment (owned by {@link #elseLeadingLineComment}) is not pulled in. Claiming each line once
+     * leaves the block neither dropped under perturbation nor double-printed at {@code @default}.
      *
-     * <p>This is the sole renderer for a braceless else body. When no after-{@code else} leading line comment is present
-     * it returns the body collapsed onto the {@code else} line, exactly as {@link StatementPrinter#nestedStatement(Statement)} would, so
-     * a separator comment that a collapse re-attaches as the body's own leading trivia (it belongs to
-     * {@link #elseLeadingLineComment}, not the body) does not trip the generic leading-comment body break in
-     * {@link StatementPrinter#nestedStatement(Statement)} on a later pass.
+     * <p>Sole renderer for a braceless else body: with no after-{@code else} leading comment it collapses onto the
+     * {@code else} line like {@link StatementPrinter#nestedStatement(Statement)}, so a reattached separator comment does
+     * not trip that method's generic leading-comment body break on a later pass.
      */
     private Doc bracelessElseBody(IfStmt statement, Statement elseStatement, Optional<Position> elseKeyword) {
         List<JavaCommentTrivia> aboveBodyComments = commentPlacement
@@ -296,11 +278,10 @@ final class IfStatementLayout {
      * Locates the source position of the {@code else} keyword that follows the then branch, scanning the {@code if}
      * statement's token range for the {@code ELSE} token whose position is after the then branch ends.
      *
-     * <p>The {@code else} keyword has no AST node of its own, so callers that must classify a comment as a separator
-     * (before {@code else}) or an else-body leading comment (after {@code else}) read its token position directly, the
-     * same way {@link ConditionalExpressionPrinter} reads the {@code ?}/{@code :} token positions. Returns
-     * {@link Optional#empty()} when the token range is unavailable, in which case callers fall back to treating the whole
-     * gap as the separator (the pre-existing behavior).
+     * <p>The {@code else} keyword has no AST node, so callers classifying a comment as a separator (before {@code else})
+     * or an else-body leading comment (after {@code else}) read its token position directly, like
+     * {@link ConditionalExpressionPrinter} does for {@code ?}/{@code :}. Empty when the token range is unavailable;
+     * callers then treat the whole gap as the separator.
      */
     private Optional<Position> elseKeywordPosition(IfStmt statement) {
         Optional<Position> thenEnd = statement.getThenStmt().getRange().map(range -> range.end);
@@ -322,12 +303,10 @@ final class IfStatementLayout {
      * Recovers the line comment that trails the {@code else} body ({@code } else {} // note}), independent of source
      * shape.
      *
-     * <p>This mirrors the try-clause {@code clauseTrailingComment} recovery in {@link TryStatementLayout}. At
-     * {@code @default} the comment sits on the else body's end line, so {@link CommentTracker#trailingLineComment(Node)}
-     * (via {@link StatementPrinter#trailingLineComment(Node)}) owns it. When a collapse perturbation places it on the shared else
-     * {@code }} position so {@code startsAfterEndOf(elseStatement)} fails, JavaParser re-buckets it onto the
-     * {@link IfStmt} orphan pool; we then recover the {@code if} orphan line comment that source-orders after the else
-     * body ends (open to the statement's end, since the else is the last clause).
+     * <p>Mirrors {@link TryStatementLayout}'s clause-trailing recovery: at {@code @default} the body's own trailing
+     * comment ({@link CommentTracker#trailingLineComment(Node)}) owns it; under a collapse that re-buckets it onto the
+     * {@link IfStmt} orphans, recover the {@code if} orphan line comment source-ordered after the else body (the else is
+     * the last clause).
      */
     private Doc elseTrailingLineComment(IfStmt statement, Statement elseStatement) {
         Doc own = trailingLineComment.apply(elseStatement);
@@ -377,20 +356,16 @@ final class IfStatementLayout {
      * Recovers the block comment that sits between the then branch's {@code }} and the {@code else} keyword
      * ({@code } /* note *}{@code / else}), independent of source shape.
      *
-     * <p>The own path keeps the original column arithmetic: at {@code @default} JavaParser attaches the comment to the
-     * else node as its own trivia, and the comment shares the then-end line immediately after {@code }} (within two
-     * columns) and lies before the {@code else} node on that line. That column window is what distinguishes a
-     * {@code } /* note *}{@code / else} comment from an {@code else /* note *}{@code / {} comment — both are the else
-     * node's own block comment on the same line, but only the former sits immediately after {@code }}. Keeping that
-     * window means {@code @default} renders byte-identically and the {@code else}-leading comment still falls through to
+     * <p>The own path uses a column window — the comment shares the then-end line immediately after {@code }} (within two
+     * columns) and before {@code else} — which distinguishes {@code } /* note *}{@code / else} from an
+     * {@code else /* note *}{@code / {} comment (both the else node's own block comment on that line). This keeps
+     * {@code @default} byte-identical and lets the {@code else}-leading comment fall through to
      * {@link #ifStatement(IfStmt)}'s {@code elseLeadingBlockComment} slot.
      *
-     * <p>A whitespace perturbation that pushes the {@code } /* note *}{@code / else} comment onto its own line below the
-     * {@code }} re-buckets it as a {@link IfStmt} orphan even though the AST is otherwise identical, so the own path's
-     * line/column predicates lose it. The orphan fallback then recovers the {@code if} orphan block comment that
-     * source-orders strictly between the then branch end and the else node begin. The fallback only sees orphans, so an
-     * {@code else}-leading comment (which stays the else node's own trivia under perturbation) is never claimed here and
-     * still renders through the {@code elseLeadingBlockComment} slot.
+     * <p>A perturbation pushing the comment onto its own line re-buckets it as an {@link IfStmt} orphan, which the column
+     * predicates lose; the orphan fallback recovers the {@code if} orphan block comment source-ordered strictly between
+     * the then end and the else begin. It sees only orphans, so an {@code else}-leading comment (still the else node's
+     * own trivia) is never claimed here.
      */
     private Doc blockCommentBetweenThenAndElse(IfStmt statement) {
         if (statement.getElseStmt().isEmpty()) {
@@ -471,11 +446,9 @@ final class IfStatementLayout {
     ) {
         if (conditionTrailingLineComment != Doc.EMPTY && !statement.getThenStmt().isBlockStmt()) {
             // The condition trailing comment is rendered on the `if` line by ifStatement; this slot only emits the
-            // separator. A braceless then whose first leading line comment bubbled up as the condition trailing comment
-            // does not silence the then-trailing and else-leading slots: the remaining then-leading lines can surface as
-            // the then statement's own trailing comment, and the else body's leading `//` block has already been claimed
-            // by the elseLeadingLineComment gap slot. Returning the bare separator would leave both already-claimed
-            // clusters unrendered and silently drop them, so emit whichever of them is present before `else`.
+            // separator. But when a braceless then's first leading comment bubbled up as that condition trailing comment,
+            // the then-trailing and already-claimed else-leading clusters still exist — returning the bare separator
+            // would silently drop them, so emit whichever is present before `else`.
             return separatorWithThenTrailingAndElseLeading(thenTrailingLineComment, elseLeadingLineComment);
         }
         if (thenTrailingLineComment != Doc.EMPTY) {
@@ -500,12 +473,10 @@ final class IfStatementLayout {
      * Builds the {@code else} separator for the condition-trailing-comment branch, carrying through both the then
      * statement's own trailing line comment and the else body's already-claimed leading {@code //} block.
      *
-     * <p>The two slots are distinct comment clusters that both survive elsewhere when no condition trailing comment is
-     * present (the then-trailing and elseLeadingLineComment branches below render them in turn). Once a braceless then's
-     * leading comment has bubbled onto the {@code if} line as the condition trailing comment, this branch is the only one
-     * reached, so it must render whichever of the two remaining clusters exist rather than dropping a cluster the dry-run
-     * already recorded as owned here. Each present cluster gets its own line above {@code else}, in source order
-     * (then-trailing first, else-leading second), matching the layout the no-condition-comment branches produce.
+     * <p>These two clusters render via other branches when no condition trailing comment is present; once a braceless
+     * then's leading comment has bubbled onto the {@code if} line, this is the only branch reached, so it must render
+     * whichever cluster exists rather than drop one the pre-pass already recorded as owned here. Each gets its own line
+     * above {@code else} in source order (then-trailing, then else-leading).
      */
     private Doc separatorWithThenTrailingAndElseLeading(Doc thenTrailingLineComment, Doc elseLeadingLineComment) {
         List<Doc> docs = new ArrayList<>();

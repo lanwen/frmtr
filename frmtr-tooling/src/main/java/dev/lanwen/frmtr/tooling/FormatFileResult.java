@@ -31,10 +31,9 @@ public record FormatFileResult(
     }
 
     /**
-     * Back-compatible constructor for the four classic components plus failure. Delegates with an empty over-width
-     * findings list, so every pre-existing call site — including {@code FormatterRunner}'s write/non-verify paths,
-     * {@code Main}'s print path, and the gradle plugin (which never constructs this record) — keeps compiling and
-     * behaving exactly as before. Over-width findings are populated only by the {@code --check --verify} scan.
+     * Constructs a result with no over-width findings, delegating with an empty findings list. Over-width findings
+     * are populated only by the {@code --check --verify} scan; all other paths (write, non-verify check, print) use
+     * this form.
      */
     public FormatFileResult(Path file, Path displayPath, FormatFileStatus status, String diffText, Exception failure) {
         this(file, displayPath, status, diffText, failure, List.of());

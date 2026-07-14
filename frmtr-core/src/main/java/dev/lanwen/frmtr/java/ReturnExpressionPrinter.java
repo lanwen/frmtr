@@ -218,7 +218,7 @@ final class ReturnExpressionPrinter {
             // renderer-measured gate.
             return Doc.concat(Doc.text("return "), returnExpression(expression, layout), Doc.text(";"));
         }
-        // SPIKE (fan-root-true-column, #190). A binary return whose operand is a fan-threshold chain
+        // A binary return whose operand is a fan-threshold chain
         // ({@code return promotesFirstCall(analysis.root()) || analysis.calls().stream()….anyMatch(ref);}) commits a
         // source-neutral operand-per-line shape rather than falling to the flat-versus-broken conditionalGroup below, whose
         // flat arm carries the fanned operand's hard break and can never be chosen. Both the operand-per-line skeleton and
@@ -226,7 +226,7 @@ final class ReturnExpressionPrinter {
         // reaches it on BOTH passes and is a fixpoint. Comment-bearing binaries are handled above (they never reach here);
         // non-fan binaries fall through to the conditionalGroup byte-for-byte.
         if (expression instanceof BinaryExpr operandFanBinary && binaryFansChainOperand.test(operandFanBinary)) {
-            // Binary / logical / string-concat operand break (gjf/prettier-java, comment #1). Render one operand per line —
+            // Binary / logical / string-concat operand break (gjf/prettier-java). Render one operand per line —
             // each operator-led operand on its own line, its chain fanning below when the operand overflows — through the
             // source-neutral {@code binaryLines(…, forceBreak=true)}. This is the same operand-per-line convention the
             // {@code if}/{@code while} control-condition path already applies to a logical whose LAST operand is a fanning
@@ -465,7 +465,7 @@ final class ReturnExpressionPrinter {
      * openers in #161). The {@link LayoutWidth#currentIndented} floor is kept so a {@code return} nested directly under a
      * member (no enclosing block) is still measured against at least one indentation unit.
      *
-     * <p>The transitional fixed-baseline floor ({@code max(baseline, renderedColumn)}) is retired (U2, #190): a
+     * <p>The transitional fixed-baseline floor ({@code max(baseline, renderedColumn)}) is retired: a
      * {@code return} always renders at least two block/type levels deep, so the rendered-column term already dominates the
      * two-unit block baseline, and the only deeper baseline (a return nested in a block-lambda body under a broken chain,
      * about five units) is not load-bearing here — the return value's own renderer (object creation, binary, chain)
@@ -510,7 +510,7 @@ final class ReturnExpressionPrinter {
     /**
      * Runs the return value's forced method-call-chain shape cascade, now owned by {@link MethodCallPrinter#returnChain}.
      *
-     * <p>This wrapper supplies only the two return-flavored inputs and delegates the shape selection. LDM-2f (#190): the
+     * <p>This wrapper supplies only the two return-flavored inputs and delegates the shape selection. The
      * {@code return} keyword shares the value's first line, so the {@code withLeftEdgePrefix("return ")} on
      * {@code chainLayout} lets the prefix-aware chain width gates
      * ({@code MethodCallChainPrinter.compactRootLineWidth}) drop their source-column floor and measure the compact chain

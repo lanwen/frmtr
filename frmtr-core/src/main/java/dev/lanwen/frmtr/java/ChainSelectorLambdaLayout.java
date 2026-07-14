@@ -358,7 +358,7 @@ final class ChainSelectorLambdaLayout {
     }
 
     /**
-     * Canonical-fan cutover seam (End-state A): renders a chain selector whose sole trailing argument is an expression
+     * Renders a chain selector whose sole trailing argument is an expression
      * lambda ({@code .map(entry -> body)}) as a SOURCE-NEUTRAL {@link Doc#conditionalGroup} of two pure-AST arms, so the
      * {@code DocRenderer} picks flat-vs-hug at the true live column. Returns empty
      * (the segment falls through to the generic argument-group path) when the selector is not this clean single-trailing-
@@ -372,7 +372,7 @@ final class ChainSelectorLambdaLayout {
      *   <li><b>Flat</b> ({@code .name(params -> compactBody)}): the whole selector on one line, the lambda body compacted.
      *       Chosen whenever it fits at the render column.</li>
      *   <li><b>Hug/broken</b>: the always-valid fallback (it carries forced breaks and so never "fits flat"). For a
-     *       method-call body it is the shared expression-lambda hug/fan (the U7 canonical fan, the over-width
+     *       method-call body it is the shared expression-lambda hug/fan (the canonical fan, the over-width
      *       {@code overflowingHuggedBareRootChainBody} hug, the {@code methodCallBodyWithOpener} opener hug); for any other
      *       body it is {@link #brokenMethodCallSegment} — the selector's own argument list breaks — matching the
      *       single-segment {@code compactRootWithBrokenFinalSegment} tail so the two paths converge on identical bytes.</li>
@@ -414,7 +414,7 @@ final class ChainSelectorLambdaLayout {
         // A METHOD-CALL lambda body whose chain root is NOT an object creation ({@code entry -> meshCatalog.prepare(…)},
         // {@code outcome -> journalWriter.atInfo()….log(…)}) is the chain / fluent-builder / opener family this cutover
         // targets: it renders through the shared expression-lambda hug/fan renderer ({@code huggableExpressionLambdaArguments}
-        // = ExpressionLambdaArgumentLayout#huggableMethodCallArguments), reproducing every established shape (the U7
+        // = ExpressionLambdaArgumentLayout#huggableMethodCallArguments), reproducing every established shape (the
         // canonical fan, the over-width
         // {@code overflowingHuggedBareRootChainBody} hug, the {@code methodCallBodyWithOpener} opener hug, the packed body).
         // If that shared renderer withholds this body (returns empty — a nested-lambda body, a body its {@code plan} gate
@@ -462,7 +462,7 @@ final class ChainSelectorLambdaLayout {
             // over-wide selector flat (the {@code ReplicaVerificationTool} class of oscillation).
             // When the hug carries no forced break (the degenerate flat case, redundant with {@code flatBody}) AND the lambda
             // body is a single call the broken segment can safely re-render, delegate to
-            // {@link #singleCallBodyOpenerHugOrBrokenSegment}: review round 2 (comment #3) builds the source-neutral opener
+            // {@link #singleCallBodyOpenerHugOrBrokenSegment}: builds the source-neutral opener
             // hug ({@code .forEach((tp, partitionData) -> replicaBuffer.addFetchedData(}⏎…⏎{@code ))}) directly for such a
             // fanned selector, and falls back to {@link #brokenMethodCallSegment} — the same source-neutral broken shape the
             // collapsed-source pass reaches — when the opener hug is unavailable, so both passes converge and the fallback
@@ -516,14 +516,14 @@ final class ChainSelectorLambdaLayout {
                     );
             }
         } else {
-            // Single expression-lambda argument hugs its call opener (gjf/prettier-java, comments #2/#3/#5/#6). Any NON-
+            // Single expression-lambda argument hugs its call opener (gjf/prettier-java). Any NON-
             // method-call body — an OBJECT CREATION ({@code (left, right) -> new ImageCounter(…)}), an OBJECT-CREATION-ROOTED
             // chain ({@code listener -> new VotersEndpoint().setName(…).setHost(…)}), a TERNARY
-            // ({@code ex -> index + 1 < managers.size() ? authenticate(…) : Mono.error(ex)}, review comment #2), or a LOGICAL
+            // ({@code ex -> index + 1 < managers.size() ? authenticate(…) : Mono.error(ex)}), or a LOGICAL
             // BINARY ({@code initializer -> initializer instanceof A || initializer instanceof B || …}) — keeps the lambda
             // opener glued to the selector rather than breaking the selector's own parenthesis onto a fresh line:
             // {@code .onErrorResume(ex -> index + 1 < managers.size()}⏎{@code ? authenticate(…)}⏎{@code : Mono.error(ex)}⏎{@code )}.
-            // {@link #expressionBodyOpenerHug} broadens the round-1 object-creation-only hug to every body the shared
+            // {@link #expressionBodyOpenerHug} hugs every body the shared
             // {@code huggableExpressionLambdaArguments} renderer hugs with a forced break, restoring the opener hug the
             // one-per-line fan over-broke.
             //
@@ -557,17 +557,17 @@ final class ChainSelectorLambdaLayout {
     }
 
     /**
-     * Single expression-lambda argument hugs its call opener (gjf/prettier-java, comments #2/#5/#6): builds the
+     * Single expression-lambda argument hugs its call opener (gjf/prettier-java): builds the
      * opener-hugged broken layout for a FANNED chain selector whose sole argument is an expression lambda whose body is a
      * SOURCE-NEUTRAL hug shape — an OBJECT CREATION ({@code .reduce((left, right) -> new ImageCounter(}⏎…), an
      * OBJECT-CREATION-ROOTED chain ({@code .map(listener -> new VotersEndpoint().setName(…).setHost(}⏎…), a TERNARY
-     * ({@code .onErrorResume(ex -> cond}⏎{@code ? then}⏎{@code : else}⏎{@code )}, review comment #2), or a LOGICAL BINARY
-     * ({@code .map(region -> region.beginOffset() == expected.beginOffset()}⏎{@code && region.endOffset() == …}⏎{@code )},
-     * review round 3) — keeping {@code .selector(params -> body…} on the selector line rather than breaking the selector
+     * ({@code .onErrorResume(ex -> cond}⏎{@code ? then}⏎{@code : else}⏎{@code )}), or a LOGICAL BINARY
+     * ({@code .map(region -> region.beginOffset() == expected.beginOffset()}⏎{@code && region.endOffset() == …}⏎{@code )})
+     * — keeping {@code .selector(params -> body…} on the selector line rather than breaking the selector
      * parenthesis onto its own line.
      *
-     * <p>Review round 2 broadened this from the round-1 object-creation-only hug to also cover TERNARY bodies, whose shared
-     * hug ({@code packedConditionalBody}) is a pure width function of the AST. Review round 3 adds LOGICAL ({@code &&}/{@code ||})
+     * <p>This covers TERNARY bodies, whose shared
+     * hug ({@code packedConditionalBody}) is a pure width function of the AST, and LOGICAL ({@code &&}/{@code ||})
      * BINARY bodies through the DIRECT source-neutral {@code expressionLambdaLogicalBinaryBodyOpenerHug} — NOT the shared
      * {@code huggableExpressionLambdaArguments} renderer, and NOT the {@code binaryMethodCallBodyWithOpener} path. The direct
      * helper renders the operands with a pure
@@ -596,13 +596,13 @@ final class ChainSelectorLambdaLayout {
             MethodCallChainTail finalSegmentSuffix,
             ToIntFunction<String> compactSegmentWidth
     ) {
-        // A LOGICAL BINARY body ({@code region -> region.beginOffset() == expected.beginOffset() && …}, review round 3) hugs
+        // A LOGICAL BINARY body ({@code region -> region.beginOffset() == expected.beginOffset() && …}) hugs
         // its opener with the first operand on the selector line, each following {@code &&}/{@code ||} operand one per line
         // below, and the enclosing {@code )} dedented to the selector column. It is built through the DIRECT source-neutral
         // {@code expressionLambdaLogicalBinaryBodyOpenerHug}, NOT the shared {@code huggableExpressionLambdaArguments}
         // renderer the object-creation/ternary bodies use: that shared path carries a {@code plan} source-multiline entry
-        // gate and a source-shaped close placement that flip this shape across passes — the reason review round 2 dropped
-        // the binary hug and left binary bodies on the {@link #brokenMethodCallSegment} shape (see the helper's Javadoc).
+        // gate and a source-shaped close placement that flip this shape across passes — the reason binary bodies are
+        // built directly rather than left on the {@link #brokenMethodCallSegment} shape (see the helper's Javadoc).
         // Relational-with-wide-method-call bodies ({@code x -> x.f(a) == ALLOWED}, kafka {@code AuthHelper}) are not logical
         // binaries, so the helper leaves them unclaimed and they keep the broken-segment shape and stay idempotent.
         Optional<Doc> binaryHug = expressionLambdaLogicalBinaryBodyOpenerHug.render(
@@ -684,19 +684,19 @@ final class ChainSelectorLambdaLayout {
     }
 
     /**
-     * Single expression-lambda argument hugs its call opener (gjf/prettier-java, comment #3): builds the opener-hugged broken
+     * Single expression-lambda argument hugs its call opener (gjf/prettier-java): builds the opener-hugged broken
      * layout for a FANNED chain selector whose sole argument is an expression lambda whose body is a SINGLE method call
      * ({@code .forEach((tp, partitionData) -> replicaBuffer.addFetchedData(}⏎{@code tp,}⏎…⏎{@code ))}), when the shared
      * renderer handed back the DEGENERATE FLAT one-liner (no forced break) for it because the source lambda body started on
      * the selector line ({@code compactBodyWithClosingLine} measured it at a shallow budget, blind to the selector's real
      * continuation column). The flat one-liner is not a valid {@code conditionalGroup} fallback (it renders the over-wide
-     * selector flat — the {@code ReplicaVerificationTool} oscillation the round-1 seam guarded with
+     * selector flat — the {@code ReplicaVerificationTool} oscillation guarded by
      * {@link #brokenMethodCallSegment}); this instead builds the opener hug DIRECTLY and SOURCE-NEUTRALLY through
      * {@link ExpressionLambdaArgumentLayout#methodCallBodyWithOpener}, so both passes render the identical hugged shape
      * regardless of whether the source lambda body was on the selector line.
      *
      * <p>Scoped to a FANNED selector ({@code segmentOnOwnLine}, stable continuation column) as the {@code else}-branch hug is.
-     * Falls back to {@link #brokenMethodCallSegment} — the round-1 shape, exactly the single-segment
+     * Falls back to {@link #brokenMethodCallSegment} — exactly the single-segment
      * {@code compactRootWithBrokenFinalSegment} tail — when it is not a fanned selector or the opener hug is unavailable
      * ({@code methodCallBodyWithOpener} withholds an empty-argument, source-multiline-scope, or comment-dropping body), so the
      * two paths still converge for every body this direct hug does not claim.

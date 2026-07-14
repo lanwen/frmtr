@@ -281,9 +281,7 @@ final class MethodCallPrinter {
         if (expression.getScope().filter(this::shouldPrintScopeAsDoc).isPresent()) {
             Expression scope = expression.getScope().orElseThrow();
             if (scope instanceof TextBlockLiteralExpr) {
-                Optional<Doc> stableTextBlockCall = comments.speculatively(
-                    () -> textBlockScopedArgumentList(scope, expression)
-                );
+                Optional<Doc> stableTextBlockCall = textBlockScopedArgumentList(scope, expression);
                 if (stableTextBlockCall.isPresent()) {
                     return stableTextBlockCall.orElseThrow();
                 }
@@ -298,14 +296,12 @@ final class MethodCallPrinter {
                 call
             );
         }
-        Optional<Doc> sourceMultilineExpressionLambda = comments.speculatively(
-            () -> sourceMultilineExpressionLambda(expression, layout)
-        );
+        Optional<Doc> sourceMultilineExpressionLambda = sourceMultilineExpressionLambda(expression, layout);
         if (sourceMultilineExpressionLambda.isPresent()) {
             return sourceMultilineExpressionLambda.orElseThrow();
         }
         if (!breakMode.isForced()) {
-            Optional<Doc> chain = comments.speculatively(() -> methodCallChain(expression, layout));
+            Optional<Doc> chain = methodCallChain(expression, layout);
             if (chain.isPresent()) {
                 return chain.orElseThrow();
             }
@@ -325,22 +321,22 @@ final class MethodCallPrinter {
             // the AST, so both passes rebuild the identical fan (idempotence Δ0). {@code chainFansByCanonicalRule} already
             // excludes comment-bearing and block-lambda chains, so this only routes the clean fan-threshold chains a
             // FORCED render must break anyway.
-            Optional<Doc> chain = comments.speculatively(() -> methodCallChain(expression, breakMode, "", layout));
+            Optional<Doc> chain = methodCallChain(expression, breakMode, "", layout);
             if (chain.isPresent()) {
                 return chain.orElseThrow();
             }
         }
-        Optional<Doc> sourceMultilineArguments = comments.speculatively(() -> sourceMultilineArguments(expression));
+        Optional<Doc> sourceMultilineArguments = sourceMultilineArguments(expression);
         if (sourceMultilineArguments.isPresent()) {
             return sourceMultilineArguments.orElseThrow();
         }
-        Optional<Doc> suffixedEnclosed = comments.speculatively(() -> suffixedEnclosedMethodCall(expression, false));
+        Optional<Doc> suffixedEnclosed = suffixedEnclosedMethodCall(expression, false);
         if (suffixedEnclosed.isPresent()) {
             return suffixedEnclosed.orElseThrow();
         }
         String prefix = methodCallPrefix(expression);
         if (expression.getArguments().isEmpty()) {
-            Optional<Doc> commentedArguments = comments.speculatively(() -> emptyMethodCallArguments(prefix, expression));
+            Optional<Doc> commentedArguments = emptyMethodCallArguments(prefix, expression);
             if (commentedArguments.isPresent()) {
                 return commentedArguments.orElseThrow();
             }
@@ -354,46 +350,34 @@ final class MethodCallPrinter {
         // heavy call still preserves an argument comment through its own comment-aware layout.
         boolean heavy = argumentHeaviness.isHeavy(expression.getArguments(), false);
         if (!heavy) {
-            Optional<Doc> huggableLambda = comments.speculatively(
-                () -> huggableBlockLambdaArguments.apply(prefix, expression.getArguments())
-            );
+            Optional<Doc> huggableLambda = huggableBlockLambdaArguments.apply(prefix, expression.getArguments());
             if (huggableLambda.isPresent()) {
                 return huggableLambda.orElseThrow();
             }
         }
-        Optional<Doc> commentedExpressionLambda = comments.speculatively(
-            () -> commentedExpressionLambdaArgument.apply(prefix, expression)
-        );
+        Optional<Doc> commentedExpressionLambda = commentedExpressionLambdaArgument.apply(prefix, expression);
         if (commentedExpressionLambda.isPresent()) {
             return commentedExpressionLambda.orElseThrow();
         }
         if (!heavy) {
-            Optional<Doc> huggableExpressionLambda = comments.speculatively(
-                () -> huggableExpressionLambdaArguments.render(
-                    prefix,
-                    expression.getArguments(),
-                    expressionLambdaColumnWidthFallback()
-                )
+            Optional<Doc> huggableExpressionLambda = huggableExpressionLambdaArguments.render(
+                prefix,
+                expression.getArguments(),
+                expressionLambdaColumnWidthFallback()
             );
             if (huggableExpressionLambda.isPresent()) {
                 return huggableExpressionLambda.orElseThrow();
             }
         }
-        Optional<Doc> brokenExpressionLambdaArguments = comments.speculatively(
-            () -> brokenExpressionLambdaArgumentsForOverflow(prefix, expression, layout)
-        );
+        Optional<Doc> brokenExpressionLambdaArguments = brokenExpressionLambdaArgumentsForOverflow(prefix, expression, layout);
         if (brokenExpressionLambdaArguments.isPresent()) {
             return brokenExpressionLambdaArguments.orElseThrow();
         }
-        Optional<Doc> singleTextBlockArgument = comments.speculatively(
-            () -> singleTextBlockArgument(prefix, expression)
-        );
+        Optional<Doc> singleTextBlockArgument = singleTextBlockArgument(prefix, expression);
         if (singleTextBlockArgument.isPresent()) {
             return singleTextBlockArgument.orElseThrow();
         }
-        Optional<Doc> singleObjectCreationArgument = comments.speculatively(
-            () -> singleObjectCreationArgument(prefix, expression)
-        );
+        Optional<Doc> singleObjectCreationArgument = singleObjectCreationArgument(prefix, expression);
         if (singleObjectCreationArgument.isPresent()) {
             return singleObjectCreationArgument.orElseThrow();
         }
@@ -410,27 +394,19 @@ final class MethodCallPrinter {
         // fixpoint by construction, the same {@code bestFitting}-over-one-{@code chainFanOut} technique the initializer
         // break-after-{@code =} and lambda-body arrow seams use. Self-gates to fan-threshold comment/lambda-free single
         // chain arguments; every other single-call argument still reaches the hug / generic paths below.
-        Optional<Doc> singleFanChainArgument = comments.speculatively(
-            () -> singleFanChainArgumentBestFitting(prefix, expression)
-        );
+        Optional<Doc> singleFanChainArgument = singleFanChainArgumentBestFitting(prefix, expression);
         if (singleFanChainArgument.isPresent()) {
             return singleFanChainArgument.orElseThrow();
         }
-        Optional<Doc> singleMethodCallArgument = comments.speculatively(
-            () -> singleMethodCallArgument(prefix, expression)
-        );
+        Optional<Doc> singleMethodCallArgument = singleMethodCallArgument(prefix, expression);
         if (singleMethodCallArgument.isPresent()) {
             return singleMethodCallArgument.orElseThrow();
         }
-        Optional<Doc> singleBinaryArgument = comments.speculatively(
-            () -> singleBinaryArgument(prefix, expression.getArguments(), breakMode)
-        );
+        Optional<Doc> singleBinaryArgument = singleBinaryArgument(prefix, expression.getArguments(), breakMode);
         if (singleBinaryArgument.isPresent()) {
             return singleBinaryArgument.orElseThrow();
         }
-        Optional<Doc> commentedArguments = comments.speculatively(
-            () -> commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments())
-        );
+        Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(prefix, expression, expression.getArguments());
         if (commentedArguments.isPresent()) {
             return commentedArguments.orElseThrow();
         }
@@ -512,9 +488,7 @@ final class MethodCallPrinter {
             && (layout.enclosing() == EnclosingConstruct.STATEMENT
                 || methodChains.chainFansByCanonicalRuleWithTrailingLineComment(expression))
         ) {
-            Optional<Doc> canonicalFan = comments.speculatively(
-                () -> methodChains.canonicalFanChain(expression, tail.text(), layout)
-            );
+            Optional<Doc> canonicalFan = methodChains.canonicalFanChain(expression, tail.text(), layout);
             if (canonicalFan.isPresent()) {
                 return canonicalFan.orElseThrow();
             }
@@ -522,16 +496,12 @@ final class MethodCallPrinter {
         if (tail.isEmpty()) {
             return methodCall(expression, breakMode, layout);
         }
-        Optional<Doc> chain = comments.speculatively(
-            () -> methodCallChain(expression, breakMode, tail.text(), lineWidth, firstLineWidth, layout)
-        );
+        Optional<Doc> chain = methodCallChain(expression, breakMode, tail.text(), lineWidth, firstLineWidth, layout);
         if (chain.isPresent()) {
             return chain.orElseThrow();
         }
         if (finalTrailingLineComments(expression).isEmpty()) {
-            Optional<Doc> unsuffixedChain = comments.speculatively(
-                () -> methodCallChain(expression, breakMode, "", lineWidth, firstLineWidth, layout)
-            );
+            Optional<Doc> unsuffixedChain = methodCallChain(expression, breakMode, "", lineWidth, firstLineWidth, layout);
             if (unsuffixedChain.isPresent()) {
                 return tail.appendTo(unsuffixedChain.orElseThrow());
             }
@@ -1649,9 +1619,7 @@ final class MethodCallPrinter {
                 "",
                 false
             );
-            Optional<Doc> canonicalFan = comments.speculatively(
-                () -> methodChains.canonicalFanChain(methodCall, suffix, canonicalFanLayout)
-            );
+            Optional<Doc> canonicalFan = methodChains.canonicalFanChain(methodCall, suffix, canonicalFanLayout);
             if (canonicalFan.isPresent()) {
                 return canonicalFan.orElseThrow();
             }
@@ -1697,15 +1665,13 @@ final class MethodCallPrinter {
                 "",
                 false
             );
-            Optional<Doc> chain = comments.speculatively(
-                () -> methodCallChain(
-                    methodCall,
-                    MethodCallBreakMode.AUTO,
-                    suffix,
-                    layoutWidth::continuationStatement,
-                    layoutWidth::continuationStatement,
-                    argumentLayout
-                )
+            Optional<Doc> chain = methodCallChain(
+                methodCall,
+                MethodCallBreakMode.AUTO,
+                suffix,
+                layoutWidth::continuationStatement,
+                layoutWidth::continuationStatement,
+                argumentLayout
             );
             if (chain.isPresent()) {
                 return chain.orElseThrow();

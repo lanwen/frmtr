@@ -710,9 +710,7 @@ final class StatementPrinter {
         // interior argument's trailing line comment is dropped once the list breaks, because the compact join the plain
         // path falls back to renders arguments comment-free. Offer the same broken layout first so each argument keeps
         // its trailing comment, claimed once.
-        Optional<Doc> commentedArguments = comments.speculatively(
-            () -> commentedExpressionLists.parenthesized(prefix, statement, statement.getArguments())
-        );
+        Optional<Doc> commentedArguments = commentedExpressionLists.parenthesized(prefix, statement, statement.getArguments());
         if (commentedArguments.isPresent()) {
             return commentedArguments.orElseThrow();
         }

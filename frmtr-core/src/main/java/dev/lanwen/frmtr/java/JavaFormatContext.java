@@ -61,9 +61,7 @@ final class JavaFormatContext {
         this.commentPlacementPolicy = new JavaCommentPlacementPolicy();
         this.formatterPragmas = new FormatterPragmas();
         this.layoutDecisions = new LayoutDecisionLog();
-        // The tracker's speculative scope rolls back the same per-render side channels endRecordingAndReset resets, so
-        // it needs the log and pragma state up front; both are independent of the tracker and built before it.
-        this.comments = new CommentTracker(commentPlacementPolicy, layoutDecisions, formatterPragmas);
+        this.comments = new CommentTracker(commentPlacementPolicy);
         this.rawSource = new RawSource(options);
         this.compactSource = new CompactSourceText(rawSource);
         this.sourceShapePolicy =

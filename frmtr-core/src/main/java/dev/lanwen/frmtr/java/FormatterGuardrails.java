@@ -51,10 +51,11 @@ final class FormatterGuardrails {
      * {@link CommentTracker#endRecordingAndReset}): the dry-run runs the same print traversal once with claims recorded
      * but not committed, capturing each comment's first claimant as its owning {@code (node, slot)}, and
      * {@link CommentTracker#ownsHere} gates each render on that recording. Stage 3 then decoupled the discarded-probe
-     * claims: a re-entrant {@link CommentTracker#speculatively speculative scope} snapshots the per-render claim state
-     * (rolling back the dry-run {@code ownership} map while recording and the {@code printed}/{@code rawRendered} sets
-     * otherwise, plus the width-decision log and pragma range state) and restores it whenever a probe's
-     * {@code Optional<Doc>} comes back empty, so a discarded probe contributes no claims; the handful of reused-Doc
+     * claims with a re-entrant speculative rollback scope; that scope was in turn retired (Phase C) once every comment
+     * family moved onto the claim-neutral ownership rail ({@link CommentTracker#ownedComment}), which resolves a
+     * comment's emptiness from its recorded owner and mutates no {@code printed}/{@code rawRendered} claim state — so a
+     * discarded probe commits no claim to roll back and an owner may re-offer the same comment across eagerly-built
+     * ranked arms without dropping or duplicating it; the handful of reused-Doc
      * neighbor offers (a chain segment's name comment vs. its leading/trailing comment, an if/else between-clause block
      * comment vs. the else-leading slot, an argument's inline trailing comment vs. its enclosing list, etc.) are gated by
      * a distinct ownership slot or skipped when already printed. The result is output-neutral and the invariant now holds

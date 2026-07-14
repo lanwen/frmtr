@@ -29,9 +29,9 @@ import java.util.function.ToIntFunction;
  * call's lambda argument. The boundary exists so the segment renderer keeps its grammar and comment-claim traversal
  * while these lambda-arrow shapes live in one place instead of as extra branches inside it.
  *
- * <p>Callers still own chain root/segment collection, the segment renderer itself, and — critically — the comment-claim
- * ordering: the enclosing {@code comments.speculatively(...)} wrappers stay at the segment renderer's call sites so this
- * helper only ever renders under a claim the caller opened. The broken-segment fallback shape, the compact-segment-flat
+ * <p>Callers still own chain root/segment collection, the segment renderer itself, and — critically — the comment
+ * ordering: the enclosing segment-renderer call sites own where each comment is offered, so this helper renders a
+ * comment only through the ownership slot the caller established for it. The broken-segment fallback shape, the compact-segment-flat
  * predicate, the fanned-selector column probe, the final-segment-suffix appender, the segment prefix text, and the
  * object-creation-root test all stay with the caller and are injected as handles; this helper decides only flat-vs-hug
  * and how a comment-carrying lambda body is laid out once those collaborators have answered.
@@ -449,12 +449,10 @@ final class ChainSelectorLambdaLayout {
                 segmentOnOwnLine && !bodyIsSingleCallSafeForBrokenSegment(bodyChain)
                     ? fannedSelectorColumnWidth.apply(expression, compactSegmentWidth)
                     : compactSegmentWidth;
-            Optional<Doc> hug = comments.speculatively(
-                () -> huggableExpressionLambdaArguments.render(
-                    prefix,
-                    expression.getArguments(),
-                    hugColumnWidth
-                )
+            Optional<Doc> hug = huggableExpressionLambdaArguments.render(
+                prefix,
+                expression.getArguments(),
+                hugColumnWidth
             );
             // The hug is only a valid conditionalGroup FALLBACK when it is a genuinely broken layout. The shared
             // huggableExpressionLambdaArguments renderer can hand back a FLAT one-liner for a short single-call body: its
@@ -498,9 +496,7 @@ final class ChainSelectorLambdaLayout {
                 ) {
                     return Optional.empty();
                 }
-                Optional<Doc> directOpener = comments.speculatively(
-                    () -> singleCallLambdaBodyOpenerHug(prefix, lambdaExpr, bodyChain, finalSegmentSuffix, compactSegmentWidth)
-                );
+                Optional<Doc> directOpener = singleCallLambdaBodyOpenerHug(prefix, lambdaExpr, bodyChain, finalSegmentSuffix, compactSegmentWidth);
                 if (directOpener.isEmpty()) {
                     return Optional.empty();
                 }
@@ -609,12 +605,10 @@ final class ChainSelectorLambdaLayout {
         // the binary hug and left binary bodies on the {@link #brokenMethodCallSegment} shape (see the helper's Javadoc).
         // Relational-with-wide-method-call bodies ({@code x -> x.f(a) == ALLOWED}, kafka {@code AuthHelper}) are not logical
         // binaries, so the helper leaves them unclaimed and they keep the broken-segment shape and stay idempotent.
-        Optional<Doc> binaryHug = comments.speculatively(
-            () -> expressionLambdaLogicalBinaryBodyOpenerHug.render(
-                prefix,
-                expression,
-                compactSegmentWidth
-            )
+        Optional<Doc> binaryHug = expressionLambdaLogicalBinaryBodyOpenerHug.render(
+            prefix,
+            expression,
+            compactSegmentWidth
         );
         if (binaryHug.isPresent()) {
             return binaryHug.filter(DocRenderer::containsHardLine)
@@ -626,12 +620,10 @@ final class ChainSelectorLambdaLayout {
         if (!sourceNeutralHugBody) {
             return Optional.empty();
         }
-        Optional<Doc> hug = comments.speculatively(
-            () -> huggableExpressionLambdaArguments.render(
-                prefix,
-                expression.getArguments(),
-                compactSegmentWidth
-            )
+        Optional<Doc> hug = huggableExpressionLambdaArguments.render(
+            prefix,
+            expression.getArguments(),
+            compactSegmentWidth
         );
         if (hug.filter(DocRenderer::containsHardLine).isPresent()) {
             return hug.map(hugDoc -> Doc.concat(hugDoc, finalSegmentSuffix.doc()));
@@ -656,9 +648,7 @@ final class ChainSelectorLambdaLayout {
             && bodyOpenerHugArgumentsRenderFlatSafely(bodyChain)
         ) {
             LambdaExpr lambdaExpr = soleTrailingExpressionLambdaSelectorArgument(expression).orElseThrow();
-            Optional<Doc> directOpener = comments.speculatively(
-                () -> singleCallLambdaBodyOpenerHug(prefix, lambdaExpr, bodyChain, finalSegmentSuffix, compactSegmentWidth)
-            );
+            Optional<Doc> directOpener = singleCallLambdaBodyOpenerHug(prefix, lambdaExpr, bodyChain, finalSegmentSuffix, compactSegmentWidth);
             if (directOpener.filter(DocRenderer::containsHardLine).isPresent()) {
                 return directOpener;
             }
@@ -682,9 +672,7 @@ final class ChainSelectorLambdaLayout {
             && bodyCreation.getArguments().stream().noneMatch(this::argumentOnlyFansItself)
         ) {
             LambdaExpr lambdaExpr = soleTrailingExpressionLambdaSelectorArgument(expression).orElseThrow();
-            Optional<Doc> directOpener = comments.speculatively(
-                () -> objectCreationLambdaBodyOpenerHug(prefix, lambdaExpr, bodyCreation, finalSegmentSuffix, compactSegmentWidth)
-            );
+            Optional<Doc> directOpener = objectCreationLambdaBodyOpenerHug(prefix, lambdaExpr, bodyCreation, finalSegmentSuffix, compactSegmentWidth);
             if (directOpener.filter(DocRenderer::containsHardLine).isPresent()) {
                 return directOpener;
             }
@@ -725,9 +713,7 @@ final class ChainSelectorLambdaLayout {
         // Reached only when the shared renderer handed back the DEGENERATE FLAT one-liner (no forced break) for this
         // single-call body, so re-fetching it would find the same flat shape; build the opener hug directly instead.
         if (segmentOnOwnLine) {
-            Optional<Doc> directOpener = comments.speculatively(
-                () -> singleCallLambdaBodyOpenerHug(prefix, lambdaExpr, bodyCall, finalSegmentSuffix, compactSegmentWidth)
-            );
+            Optional<Doc> directOpener = singleCallLambdaBodyOpenerHug(prefix, lambdaExpr, bodyCall, finalSegmentSuffix, compactSegmentWidth);
             if (directOpener.isPresent()) {
                 return directOpener.orElseThrow();
             }

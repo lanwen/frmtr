@@ -28,26 +28,6 @@ final class FormatterPragmas {
     }
 
     /**
-     * Captures the current enabled/disabled range state so a speculative probe can be rolled back.
-     *
-     * <p>The speculative scope in {@link CommentTracker#speculatively} runs a candidate render that may cross an
-     * {@code @formatter:off}/{@code on} boundary and so flip this flag as a side effect. When that candidate is
-     * discarded the flag must be returned to its pre-probe value, otherwise the next rung would start from a formatter
-     * state the chosen layout never produced. This mirrors what {@link #reset} does between the dry-run and the real
-     * pass, but restores to an arbitrary captured value rather than always to enabled.
-     */
-    boolean snapshot() {
-        return formattingDisabled;
-    }
-
-    /**
-     * Restores the enabled/disabled range state captured by {@link #snapshot()}.
-     */
-    void restore(boolean formattingDisabled) {
-        this.formattingDisabled = formattingDisabled;
-    }
-
-    /**
      * Returns the print action for a body declaration after applying any pragma carried by that declaration.
      *
      * <p>Single-node ignore pragmas raw-pass only the declaration that carries them, while range pragmas update

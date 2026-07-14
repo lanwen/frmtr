@@ -60,32 +60,8 @@ final class CommentTracker {
 
     private final JavaCommentPlacementPolicy commentPlacement;
 
-    /**
-     * The width-decision log and pragma range state are the two per-render side channels (besides the claim sets) that
-     * a print traversal mutates. {@link #speculatively} must roll them back together with the claim state when a
-     * discarded probe is abandoned, so the tracker holds them to snapshot/restore in lockstep — the same channels
-     * {@link #endRecordingAndReset} resets between the dry-run and the real pass.
-     */
-    private final LayoutDecisionLog layoutDecisions;
-
-    private final FormatterPragmas formatterPragmas;
-
-    CommentTracker(
-            JavaCommentPlacementPolicy commentPlacement,
-            LayoutDecisionLog layoutDecisions,
-            FormatterPragmas formatterPragmas
-    ) {
-        this.commentPlacement = commentPlacement;
-        this.layoutDecisions = layoutDecisions;
-        this.formatterPragmas = formatterPragmas;
-    }
-
-    /**
-     * Builds a tracker that owns its own width-decision log and pragma state, for callers (mainly unit tests) that only
-     * exercise the claim/account paths and never run the speculative scope or the dry-run reset against a shared context.
-     */
     CommentTracker(JavaCommentPlacementPolicy commentPlacement) {
-        this(commentPlacement, new LayoutDecisionLog(), new FormatterPragmas());
+        this.commentPlacement = commentPlacement;
     }
 
     /**
@@ -135,69 +111,6 @@ final class CommentTracker {
         rawRendered.clear();
         layoutDecisions.reset();
         formatterPragmas.reset();
-    }
-
-    /**
-     * Runs {@code probe} inside a re-entrant speculative scope and rolls back every per-render side effect it made if its
-     * result is empty.
-     *
-     * <p>This is the decoupling primitive for the candidate-ladder probe pattern. Several printers eagerly build an
-     * {@code Optional<Doc>} for a layout candidate to measure its fit; building it claims any comments inside the
-     * candidate. The chosen candidate keeps its claims, but a <em>discarded</em> candidate has already committed its
-     * claims, so the next ladder rung re-claims the same comments — which the strict-claims guardrail (correctly) rejects
-     * as a duplicate. Wrapping a rung in this scope makes a discarded probe claim-free: on an empty result every claim it
-     * made is undone, so the eventual winner is the only path that claims each comment.
-     *
-     * <p><strong>Dry-run symmetry — the design's sharpest edge.</strong> A print traversal mutates different state in
-     * the two passes {@link JavaPrinter#print} runs. While {@link #recording}, {@link #claim} records owners into
-     * {@link #ownership}; otherwise it consumes the {@link #printed} (and, via {@code accountRaw*}, {@link #rawRendered})
-     * identity sets. The scope must roll back whichever set the <em>active</em> pass mutates: if it rolled back only
-     * {@link #printed} during the dry-run, a discarded probe would leave its losing {@code (node, slot)} recorded as the
-     * comment's owner, {@link #ownsHere} would then block the real winner, and the comment would silently drop. Rolling
-     * back {@link #ownership} during recording instead lets the dry-run record the <em>winner</em> as owner, keeping the
-     * gating byte-neutral. The {@link LayoutDecisionLog} and {@link FormatterPragmas} range state are rolled back in both
-     * passes — the same per-render channels {@link #endRecordingAndReset} resets — so a discarded probe leaves neither a
-     * phantom {@code --explain} wrap nor a stray open {@code @formatter:off} range.
-     *
-     * <p>Snapshots are element copies of the live maps/sets, so the fields stay {@code final} and nesting composes: a
-     * nested scope snapshots the partially-mutated state of its enclosing scope and restores exactly to it, which is what
-     * lets the chain/initializer/lambda ladders nest probes within probes. A present result keeps everything — the
-     * winning render's claims, wraps, and pragma state all stand.
-     */
-    <T> Optional<T> speculatively(java.util.function.Supplier<Optional<T>> probe) {
-        Map<Comment, OwnerKey> ownershipSnapshot = recording ? new IdentityHashMap<>(ownership) : null;
-        Set<Comment> printedSnapshot = recording ? null : copyIdentitySet(printed);
-        Set<Comment> rawRenderedSnapshot = recording ? null : copyIdentitySet(rawRendered);
-        int layoutDecisionsSnapshot = layoutDecisions.size();
-        boolean pragmasSnapshot = formatterPragmas.snapshot();
-        Optional<T> result = probe.get();
-        if (result.isEmpty()) {
-            if (recording) {
-                restoreIdentityMap(ownership, ownershipSnapshot);
-            } else {
-                restoreIdentitySet(printed, printedSnapshot);
-                restoreIdentitySet(rawRendered, rawRenderedSnapshot);
-            }
-            layoutDecisions.truncateTo(layoutDecisionsSnapshot);
-            formatterPragmas.restore(pragmasSnapshot);
-        }
-        return result;
-    }
-
-    private static Set<Comment> copyIdentitySet(Set<Comment> source) {
-        Set<Comment> copy = Collections.newSetFromMap(new IdentityHashMap<>());
-        copy.addAll(source);
-        return copy;
-    }
-
-    private static void restoreIdentitySet(Set<Comment> target, Set<Comment> snapshot) {
-        target.clear();
-        target.addAll(snapshot);
-    }
-
-    private static void restoreIdentityMap(Map<Comment, OwnerKey> target, Map<Comment, OwnerKey> snapshot) {
-        target.clear();
-        target.putAll(snapshot);
     }
 
     /**

@@ -45,8 +45,8 @@ enum OwnerSlot {
      * (envelope wraps before the content renders), the content renderer for an {@code if}/{@code else} then/else body
      * (the enclosing {@code if} layout renders the nested body's trailing comment, in its chosen spot, before the nested
      * statement's own envelope runs) — and the other path, holding the other slot, is not the owner and renders
-     * {@link dev.lanwen.frmtr.doc.Doc#EMPTY}. That reproduces the old first-claim-wins winner without either path reading
-     * {@link CommentTracker#isPrinted}. Populated by the dry-run; consulted by {@code ownsHere}.
+     * {@link dev.lanwen.frmtr.doc.Doc#EMPTY}. That reproduces the old first-claim-wins winner without either path
+     * reading a build-time claim side effect. Populated by the dry-run; consulted by {@code ownsHere}.
      */
     CONTENT_TRAILING,
 
@@ -74,7 +74,7 @@ enum OwnerSlot {
      * <p>The same parent-parked comment can be reached from more than one recovering node, so it is anchored to the
      * <em>recovering</em> node under this distinct slot: the dry-run's first recovering node owns it and later recovering
      * nodes, keying a different {@link OwnerKey}, render {@link dev.lanwen.frmtr.doc.Doc#EMPTY}. That reproduces the old
-     * first-claim-wins recovery without reading {@link CommentTracker#isPrinted}. Kept distinct from {@link #TRAILING}
+     * first-claim-wins recovery without reading a build-time claim side effect. Kept distinct from {@link #TRAILING}
      * and {@link #CONTENT_TRAILING} because a node's own attached trailing comment and a comment it merely recovers from
      * a parent bucket are different comments that must be able to co-exist on the same recovering node. Populated by the
      * dry-run; consulted by {@code ownsHere}.
@@ -91,7 +91,7 @@ enum OwnerSlot {
      * and its empty body both parent-walk to it), so it is anchored to the <em>recovering</em> node under this distinct
      * slot: the dry-run's first recovering node owns it and every other recovering node, keying a different
      * {@link OwnerKey}, renders {@link dev.lanwen.frmtr.doc.Doc#EMPTY}. That reproduces the old first-claim-wins recovery
-     * without reading {@link CommentTracker#isPrinted}. Kept distinct from {@link #UNATTACHED_TRAILING} (a recovered
+     * without reading a build-time claim side effect. Kept distinct from {@link #UNATTACHED_TRAILING} (a recovered
      * {@code //} line comment) so the line and block recoveries never collapse to one {@link OwnerKey}. Populated by the
      * dry-run; consulted by {@code ownsHere}.
      */

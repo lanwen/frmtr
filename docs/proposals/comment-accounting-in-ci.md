@@ -82,6 +82,9 @@ former is unreliable, the latter deferred to B1/B2 — see [comment-handling-fin
   of raw-text-embedded comments (multi-catch union alternatives, for-loop variable comments, switch labels, labeled
   statements, unnamed-variable patterns) reaches output as raw token text without being raw-accounted; CI-enabling it is a
   separate follow-up. The `CommentPresenceDiagnosticTest` lexer net remains the durable no-drop gate.
+- **Update (Phase C landed):** `CommentTracker.speculatively` itself has since been retired as redundant once every
+  comment family became claim-neutral (`CommentTracker.ownedComment`); `CommentTracker` no longer couples claim and
+  render the way Part 1 above described.
 
 ## Outcome
 

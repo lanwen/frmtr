@@ -292,7 +292,8 @@ predicates fold into the rule; the shape callbacks collapse to a single `JavaFor
 - An **immutable value, passed as a parameter — never a field, never mutated.** Descent derives copies
   (`ctx.inInitializerRhs(prefix)`, `ctx.asArgument()`, `ctx.indented()`). This immutability is also what
   retires `CommentTracker.speculatively()` candidate-rollback: trying a layout is calling the rule with a
-  derived `ctx` and discarding the result — no shared mutation to undo.
+  derived `ctx` and discarding the result — no shared mutation to undo. (`speculatively()` has since been
+  retired, as redundant once every comment family became claim-neutral via `CommentTracker.ownedComment`.)
 - **Positional facts only — ~4–6 fields, bounded by design:** enclosing-construct kind (enum),
   continuation/indent intent, the left-edge prefix contribution, a "trailing same-line content follows"
   flag (the `throws … {` opener problem). Nothing else.

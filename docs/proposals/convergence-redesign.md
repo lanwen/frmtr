@@ -262,10 +262,11 @@ mechanism** rather than by the imperative gate.
 **Comment safety.** The third historical blocker (`VariableInitializerLayout.java:884`) — both arms render the call, so
 eager construction double-claims comments — is handled exactly as the landed rankers handle it (`ARCHITECTURE.md:442-445`):
 the `bestFitting` emission is **gated on the initializer being comment-free**; comment-bearing initializers stay on the
-imperative `speculatively` ladder whose first-builder-wins rollback owns the claim. This is not a new invariant; it is
-the same gate `rankedSingleSegmentChain` (`:1133`) already enforces. The `chainFanOut` builder's "renders each call
-exactly once" contract keeps a single-arm build claim-safe; the two-arm `bestFitting` is only emitted when there are no
-comments to claim.
+imperative ladder (the `speculatively` method this described has since been retired as redundant once every comment
+family became claim-neutral — see the comment-ownership pre-pass). This is not a new invariant; it is the same gate
+`rankedSingleSegmentChain` (`:1133`) already enforces. The `chainFanOut` builder's "renders each call exactly once"
+contract keeps a single-arm build claim-safe; the two-arm `bestFitting` is only emitted when there are no comments to
+claim.
 
 ---
 
@@ -349,8 +350,9 @@ Slices 1–2 are pure foundation (byte-identical, parallelizable). Slice 3 is th
   *one arm* through `bestFitting`; it does not turn the whole `Optional<Doc>` ladder into a layout enum.
 - Resolved-state conditions for the remaining `selectorBrokeAfter`/`sourceMultilineChain` reads (rule B9, LDM-5). Those
   are the dprint-style branch-on-realized-column work, deliberately kept separate from opener-attachment.
-- Comment-bearing chains/initializers stay on the imperative `speculatively` ladder — by design, indefinitely, until the
-  comment-ownership pre-pass (B2 stage) lets both arms be built without double-claiming.
+- Comment-bearing chains/initializers stay on the imperative ladder — by design. The comment-ownership pre-pass (B2
+  stage) has since landed and the `speculatively` method this described has been retired, but converting each
+  remaining comment-bearing call site to build both `bestFitting` arms is still a separate, per-site follow-up.
 
 **Needs a product decision, not just a mechanism:**
 

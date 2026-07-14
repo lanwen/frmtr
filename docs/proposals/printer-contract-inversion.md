@@ -25,7 +25,9 @@ time, imperatively, inside the printer** — and that single fact metastasizes i
 - **Imperative width cascades.** The shape is picked by pre-measuring flat width with a probe and walking an
   `Optional<Doc>` "build a candidate → measure → keep or fall to the next" ladder.
 - **Comment-rollback complexity.** A discarded candidate must un-claim the comments it claimed while being built
-  (`CommentTracker.speculatively`).
+  (`CommentTracker.speculatively`). *(Update: this specific pain point is resolved — `speculatively` has since been
+  retired and every comment family now renders through the claim-neutral `CommentTracker.ownedComment` rail, so a
+  discarded candidate commits no claim to roll back. See "The one remaining enabler" below.)*
 
 Flip the contract: **a printer/rule emits a renderer-ranked *set* of candidate shapes (`Doc.bestFitting` /
 `conditionalGroup`); `DocRenderer` picks by fit at the true output column.** The moment `format(node, ctx)` does this
@@ -127,8 +129,9 @@ Once a node type returns a ranked set:
 - The **nested-render capability** — the generic `(expression, layout) -> expression(expression)` lambda, today a
   constructor parameter of ~25 classes and instantiated 9× in `ExpressionPrinters` alone — collapses to **one** injected
   dispatcher entry. (This is Step 0 below; it is independent of the ranked work and lands first.)
-- The **`Optional<Doc>` ladder + `LayoutWidth` probe + `speculatively` rollback** for that node collapse into "emit the
-  candidates."
+- The **`Optional<Doc>` ladder + `LayoutWidth` probe** for that node collapse into "emit the candidates." (The
+  `speculatively` rollback itself has already collapsed repo-wide, independent of per-construct conversion — see "The
+  one remaining enabler" below.)
 - The **13 forward-reference `this::` bridges** that work around construction-order circular deps in `ExpressionPrinters`
   disappear, because a registry is pulled at format time, not wired as a blank-final field.
 
@@ -151,6 +154,13 @@ every eagerly-built candidate arm — is claim-neutral and idempotent. This is t
 `reprint-by-default`/B2 track as `strict-claims`; this proposal reframes it as **the gating enabler for the whole
 modularity program, not a comment-correctness side-quest.** Gate on `CommentPresenceDiagnosticTest` (the `--verify`/AST
 net is blind to comment drops).
+
+**Update (enabler landed).** Every comment family now renders through the claim-neutral `CommentTracker.ownedComment`
+rail, `CommentTracker.speculatively` has been retired as redundant, and `strict-claims` is enabled by default in
+`frmtr-core/build.gradle.kts`. The infrastructure this section called for now exists and is corpus-verified
+byte-identical. What remains open is Migration plan Stages 2–3 below: converting the actual chain/construct call sites
+to build both `bestFitting` arms for comment-bearing values instead of routing them through the imperative ladder —
+see [chain-path-unification.md](chain-path-unification.md) for the chain-specific residual.
 
 ## Migration plan
 
@@ -191,8 +201,9 @@ earlier).
 
 - `ExpressionPrinters`/`DeclarationPrinters`/`StatementPrinters` `::`-ref count trends sharply down; no construct's
   constructor carries another construct's *shape* callback.
-- The imperative:renderer-resolved ratio inverts for converted constructs; `speculatively` scopes trend to 0 as
-  claim-free rendering lands.
+- The imperative:renderer-resolved ratio inverts for converted constructs. (`speculatively` scopes are already at 0 —
+  claim-free rendering landed repo-wide; the still-open metric is the imperative:renderer-resolved ratio itself for
+  each not-yet-converted construct.)
 - `BreakRuleRegistry` count grows from 2 (chains only) to one per multi-shape construct; each rule has ≥1 golden
   fixture named for the decision it guards.
 - The mega-printers measurably shrink into registries + small rule bodies.

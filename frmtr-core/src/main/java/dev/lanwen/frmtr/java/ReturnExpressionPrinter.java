@@ -210,11 +210,12 @@ final class ReturnExpressionPrinter {
             return Doc.concat(Doc.text("return "), preempted.orElseThrow(), Doc.text(";"));
         }
         if (expression.getComment().isPresent() || !expression.getAllContainedComments().isEmpty()) {
-            // A comment-bearing value cannot use the conditional group: both arms build the value, and rendering a value
-            // claims its comments (identity-based, first-builder-wins), so the comment would be owned by whichever arm is
-            // built first while the renderer independently picks an arm by width. When those disagree the comment is
-            // dropped and the two passes diverge. The imperative oracle renders the value exactly once, so comment-bearing
-            // returns stay on it (byte-identical to before); only comment-free returns move to the renderer-measured gate.
+            // A comment-bearing value cannot use the conditional group: both arms would build the value, and rendering a
+            // value renders through the single-owner comment rail, so the comment is owned by whichever (node, slot) the
+            // dry-run recorded first while the renderer independently picks an arm by width. When those disagree the
+            // comment is dropped and the two passes diverge. The imperative oracle renders the value exactly once, so
+            // comment-bearing returns stay on it (byte-identical to before); only comment-free returns move to the
+            // renderer-measured gate.
             return Doc.concat(Doc.text("return "), returnExpression(expression, layout), Doc.text(";"));
         }
         // SPIKE (fan-root-true-column, #190). A binary return whose operand is a fan-threshold chain

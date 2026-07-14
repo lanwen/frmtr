@@ -30,15 +30,13 @@ import java.util.function.Predicate;
  */
 final class CommentTracker {
 
-    private final Set<Comment> printed = Collections.newSetFromMap(new IdentityHashMap<>());
-
     private final Set<Comment> rawRendered = Collections.newSetFromMap(new IdentityHashMap<>());
 
     /**
      * The single slot each comment is allowed to render in, recorded once by the record-only dry-run pre-pass (see
-     * {@link #beginRecording()} / {@link #endRecordingAndReset()}) before the real render claims a comment.
+     * {@link #beginRecording()} / {@link #endRecordingAndReset()}) before the real render offers a comment.
      *
-     * <p>Keyed by JavaParser comment identity ({@link IdentityHashMap}), like {@link #printed}: two structurally equal
+     * <p>Keyed by JavaParser comment identity ({@link IdentityHashMap}), like {@link #rawRendered}: two structurally equal
      * comment nodes must stay distinct owners. A comment absent from this map is <em>unmigrated</em> — no first-claimant
      * was recorded for it, so {@link #ownsHere} lets every slot offer it and today's first-claim-wins behavior is
      * preserved. Stage 2a records the first claimant for <em>every</em> family during the dry-run; Stage 2bc then gates
@@ -51,10 +49,10 @@ final class CommentTracker {
     /**
      * Whether this tracker is in the record-only dry-run pass.
      *
-     * <p>In record mode {@link #claim(JavaCommentTrivia, Node, OwnerSlot)} does not consume the real {@link #printed}
-     * set; instead it records the first {@code (node, slot)} that offers each comment into {@link #ownership} and
-     * returns the claim outcome from the {@code ownership} map itself, so candidate ladders see the identical
-     * (first offer wins, later offers lose) boolean sequence they see in the real pass. See {@link #beginRecording()}.
+     * <p>In record mode {@link #ownedComment(JavaCommentTrivia, Node, OwnerSlot)} mutates no real-pass state; instead
+     * it records the first {@code (node, slot)} that offers each comment into {@link #ownership}, so candidate
+     * ladders see the identical (first offer wins, later offers no-op) sequence in both passes. See
+     * {@link #beginRecording()}.
      */
     private boolean recording = false;
 
@@ -70,8 +68,8 @@ final class CommentTracker {
      * <p>Run once per format from {@link JavaPrinter#print(CompilationUnit)}, after the comment placement policy's run
      * has been started (so {@link JavaCommentPlacementPolicy} can answer queries) and before the real declaration
      * render. The dry-run runs the <em>same</em> print traversal as the real pass, but with {@link #recording} set:
-     * every {@link #claim(JavaCommentTrivia, Node, OwnerSlot)} records the offering {@code (node, slot)} for a comment
-     * the first time it is offered and skips the real {@link #printed} accounting, so the scratch document it produces
+     * every {@link #ownedComment(JavaCommentTrivia, Node, OwnerSlot)} offer records the offering {@code (node, slot)}
+     * for a comment the first time it is offered and mutates no real-pass state, so the scratch document it produces
      * is discarded without affecting comment state. The first claimant in print-traversal order is the emergent owner a
      * pure source-order rule provably diverges from on the contested families, so reproducing it via the real traversal
      * is what keeps a later filter byte-neutral.
@@ -92,8 +90,8 @@ final class CommentTracker {
      * accumulates <em>during</em> the print traversal must be reset so the real pass behaves exactly as a single render
      * would:
      * <ul>
-     *   <li>the {@link #printed} and {@link #rawRendered} identity sets (so the real pass re-claims and re-accounts
-     *       every comment itself);</li>
+     *   <li>the {@link #rawRendered} identity set (so the real pass re-accounts every raw-preserved comment
+     *       itself);</li>
      *   <li>the {@link LayoutDecisionLog} (so {@code --explain} width arithmetic is not double-filled by the scratch
      *       pass);</li>
      *   <li>the {@link FormatterPragmas} enabled/disabled range state (so an {@code @formatter:off} range the dry-run
@@ -107,7 +105,6 @@ final class CommentTracker {
      */
     void endRecordingAndReset(LayoutDecisionLog layoutDecisions, FormatterPragmas formatterPragmas) {
         recording = false;
-        printed.clear();
         rawRendered.clear();
         layoutDecisions.reset();
         formatterPragmas.reset();
@@ -125,20 +122,6 @@ final class CommentTracker {
     boolean ownsHere(JavaCommentTrivia trivia, Node node, OwnerSlot slot) {
         OwnerKey owner = ownership.get(trivia.comment());
         return owner == null || owner.equals(new OwnerKey(node, slot));
-    }
-
-    /**
-     * Reports whether {@code trivia} has a recorded owner and that owner is exactly this {@code (node, slot)}.
-     *
-     * <p>Deliberately stricter than {@link #ownsHere}: {@code ownsHere} also returns {@code true} for an
-     * <em>unmigrated</em> comment (one the dry-run never recorded an owner for) so first-claim-wins still lets any slot
-     * offer it, whereas this predicate is {@code false} for an unmigrated comment. {@link #claim} needs the distinction:
-     * an already-claimed re-offer is benign only when it comes from the <em>recorded</em> owner, while an unmigrated
-     * duplicate claim must still be caught by the strict-claims guardrail rather than silently rendered twice.
-     */
-    private boolean isRecordedOwner(JavaCommentTrivia trivia, Node node, OwnerSlot slot) {
-        OwnerKey owner = ownership.get(trivia.comment());
-        return owner != null && owner.equals(new OwnerKey(node, slot));
     }
 
     Doc leading(Node node) {
@@ -169,11 +152,12 @@ final class CommentTracker {
      * and routed through the claim-neutral {@link #ownedComment} rail.
      *
      * <p>Emptiness is decided by the ownership pre-pass, not by a build-time claim: this returns the comment's Doc when
-     * {@code (node, TRAILING)} is the recorded owner and {@link Doc#EMPTY} otherwise, and it never mutates {@link #printed}
-     * in the real pass. That is what lets a co-offering content path ({@link #contentTrailingLineComment}) or an enclosing
-     * construct disambiguate by ownership instead of reading {@link #isPrinted}: whichever path the dry-run recorded as the
-     * first offerer owns the comment, and every other slot renders empty. Because it is claim-neutral, an owner may emit
-     * this same Doc in more than one eagerly-built ranked layout arm without dropping or duplicating the comment.
+     * {@code (node, TRAILING)} is the recorded owner and {@link Doc#EMPTY} otherwise, and it never mutates any per-render
+     * claim state. That is what lets a co-offering content path ({@link #contentTrailingLineComment}) or an enclosing
+     * construct disambiguate by ownership instead of reading a build-order claim side effect: whichever path the
+     * dry-run recorded as the first offerer owns the comment, and every other slot renders empty. Because it is
+     * claim-neutral, an owner may emit this same Doc in more than one eagerly-built ranked layout arm without dropping
+     * or duplicating the comment.
      */
     Doc trailingLineComment(Node node) {
         return commentPlacement.trailingLineComment(node)
@@ -191,8 +175,8 @@ final class CommentTracker {
      * trailing comment before the {@code else} keyword offers here first (before the nested statement's own envelope
      * offers under {@link OwnerSlot#TRAILING}), so the dry-run records this slot as the owner and the envelope offer
      * renders empty. For a plain expression statement the envelope offers first, so this content offer renders empty and
-     * the envelope keeps the comment — reproducing today's first-claim-wins winner in both shapes without an
-     * {@link #isPrinted} read.
+     * the envelope keeps the comment — reproducing today's first-claim-wins winner in both shapes without reading any
+     * build-order claim side effect.
      */
     Doc contentTrailingLineComment(Node node) {
         return commentPlacement.trailingLineComment(node)
@@ -211,7 +195,7 @@ final class CommentTracker {
      * offers here first (before the nested body is rendered), so the dry-run records this slot as the owner and both the
      * nested statement's own envelope ({@link OwnerSlot#TRAILING}) and its own content offer
      * ({@link OwnerSlot#CONTENT_TRAILING}) render empty by ownership — reproducing today's first-claim-wins winner (the
-     * enclosing layout) without an {@link #isPrinted} read.
+     * enclosing layout) without reading any build-order claim side effect.
      */
     Doc enclosedTrailingLineComment(Node node) {
         return commentPlacement.trailingLineComment(node)
@@ -372,9 +356,9 @@ final class CommentTracker {
      * <p>The bound exists for the {@code else} keyword: a braceless else body's own leading {@code //} block sits after
      * the keyword and is owned by the braceless-body handler, while only the genuine then-{@code }}-to-{@code else}
      * separator comment (before the keyword) belongs to this slot. With the bound absent this behaves exactly like the
-     * unbounded overload, so {@code else if} and block-else placement is unchanged. Bounding here, before {@link #claim},
-     * is what keeps the body block claimable by its own slot — an out-of-bound comment is never claimed under
-     * {@code anchor}.
+     * unbounded overload, so {@code else if} and block-else placement is unchanged. Bounding here, before
+     * {@link #ownedComment}, is what keeps the body block eligible under its own slot — an out-of-bound comment is
+     * never offered under {@code anchor}.
      */
     Doc gapLeadingLineCommentBlock(
             Node anchor,
@@ -488,14 +472,14 @@ final class CommentTracker {
      * dry-run needs to record the first claimant. {@code anchor} is the node whose layout encloses the comment (the
      * interleaved owner, or the printer's own node); {@code slot} is the role under which it is offered.
      *
-     * <p>This is the last comment render family to move off the build-time {@link #printed} claim: it now delegates to
+     * <p>This was the last comment render family to move off the build-time claim state: it delegates to
      * {@link #ownedComment}, so emptiness is a pure function of the recorded owner and no {@code comment(...)} render
-     * mutates {@link #printed}. That makes the whole {@code comment(...)} family claim-neutral, so an owner may emit the
+     * mutates any claim state. That makes the whole {@code comment(...)} family claim-neutral, so an owner may emit the
      * same comment Doc in more than one eagerly-built ranked layout arm (a {@link Doc#conditionalGroup} /
      * {@link Doc#bestFitting} alternative) without dropping or duplicating it: the renderer emits only the arm it picks,
      * and every non-owner {@code (node, slot)} offer renders {@link Doc#EMPTY}. Co-offering paths that must not share an
      * owner therefore disambiguate by giving each a distinct {@code (node, slot)}, exactly as the other migrated
-     * families do, rather than by reading a build-order {@link #isPrinted} side effect.
+     * families do, rather than by reading a build-order claim side effect.
      */
     Doc comment(JavaCommentTrivia trivia, Node anchor, OwnerSlot slot) {
         return ownedComment(trivia, anchor, slot);
@@ -524,24 +508,23 @@ final class CommentTracker {
     }
 
     /**
-     * Renders {@code trivia} as pure content when {@code (node, slot)} owns it, never mutating the real-pass
-     * {@link #printed} claim state — the claim-neutral render entry point (design a, "comments as pure content").
+     * Renders {@code trivia} as pure content when {@code (node, slot)} owns it — the claim-neutral render entry point
+     * (design a, "comments as pure content") that every comment-render family now shares.
      *
-     * <p>Emptiness becomes a pure function of the recorded ownership rather than of a build-time claim side effect:
-     * this returns {@link JavaFormatter#commentDoc(JavaCommentTrivia)} exactly when {@link #ownsHere} admits this slot
-     * and {@link Doc#EMPTY} otherwise, so a non-owner slot renders nothing just as it does through {@link #comment}.
-     * What differs from {@link #comment}/{@link #claim} is the side effect. In the record-only dry-run it still records
-     * the first claimant into {@link #ownership} (via {@code putIfAbsent}, exactly like {@link #claim}) so the
-     * ownership pre-pass is populated identically; in the real pass it mutates <em>nothing</em> — it never adds to
-     * {@link #printed} and never routes through {@link FormatterGuardrails#claimComment}. An owner may therefore render
-     * the same comment through this rail any number of times in one real pass (once per eagerly-built ranked arm, say)
-     * and always get the same non-empty Doc back, with no strict-claims duplicate-claim throw — unlike {@link #comment},
-     * whose second offer from the same owner claims into {@link #printed} and returns {@link Doc#EMPTY}.
+     * <p>Emptiness is a pure function of the recorded ownership: this returns
+     * {@link JavaFormatter#commentDoc(JavaCommentTrivia)} exactly when {@link #ownsHere} admits this slot and
+     * {@link Doc#EMPTY} otherwise, so a non-owner slot renders nothing. In the record-only dry-run this also records
+     * the first claimant into {@link #ownership} (via {@code putIfAbsent}), which is how the ownership pre-pass gets
+     * populated; in the real pass it mutates <em>nothing</em> — there is no per-render claim state left to touch. An
+     * owner may therefore render the same comment through this rail any number of times in one real pass (once per
+     * eagerly-built ranked arm, say) and always get the same non-empty Doc back, with no duplicate-claim throw.
+     *
+     * <p>{@link #comment} is a thin overload of this same rail; every other comment-render family — leading, trailing,
+     * orphan, gap-recovery — is built on it too, so this is the single method that decides whether any comment renders
+     * at all.
      *
      * <p>Callers still decide which {@code (node, slot)} anchors a comment and how the returned Doc is laid out (inline
-     * versus deferred, spacing, ordering). Currently unused: this is the rail a later slice migrates the existing
-     * {@code .filter(ownsHere).filter(claim)} render paths onto, once comment emptiness no longer depends on build-time
-     * {@link #printed} mutation.
+     * versus deferred, spacing, ordering).
      */
     Doc ownedComment(JavaCommentTrivia trivia, Node node, OwnerSlot slot) {
         if (!ownsHere(trivia, node, slot)) {
@@ -551,43 +534,6 @@ final class CommentTracker {
             ownership.putIfAbsent(trivia.comment(), new OwnerKey(node, slot));
         }
         return JavaFormatter.commentDoc(trivia);
-    }
-
-    /**
-     * Records or consumes one comment claim, depending on whether this tracker is in the record-only dry-run pass.
-     *
-     * <p>In the real pass a comment is normally claimed exactly once, through the
-     * {@link FormatterGuardrails#claimComment} call against {@link #printed}. The one exception is an
-     * <em>idempotent-by-owner re-claim</em>: when the comment is already in {@link #printed} and this {@code (node, slot)}
-     * is its recorded owner ({@link #isRecordedOwner}), the re-claim is benign and returns {@code true} so the owner
-     * renders the comment text again, instead of skipping it or failing the strict-claims guardrail. This is the seam a
-     * later slice needs — building a comment-bearing subtree in more than one eagerly-evaluated ranked arm re-offers the
-     * comment from the <em>same</em> owner, and the renderer then keeps whichever arm it picks. Every other already-claimed
-     * offer (a comment with no recorded owner, or one offered by a different {@code (node, slot)}) is still routed through
-     * {@link FormatterGuardrails#claimComment}, which returns {@code false} or throws under strict-claims exactly as
-     * before. The branch is keyed on {@link #isRecordedOwner} and not the broader {@link #ownsHere} on purpose:
-     * {@code ownsHere} also admits an unmigrated comment (no recorded owner), and those must keep first-claim-wins so a
-     * genuine duplicate claim is still caught. Today no ranked arm carries comments, so its owner offers each comment
-     * only once in the real pass and this branch is never taken — it is dead until a later slice removes that gate.
-     *
-     * <p>In the record pass it does not touch {@link #printed}: the first offer of a comment records {@code (node, slot)}
-     * as its owner in {@link #ownership} and returns {@code true}; every later offer of the same comment finds it already
-     * recorded and returns {@code false}. The {@code ownership} map thus plays the same once-only role {@code printed}
-     * plays in the real pass, so candidate ladders see the identical (first offer wins, later offers lose) boolean
-     * sequence in both passes and the recorded first claimant matches the real one.
-     */
-    private boolean claim(JavaCommentTrivia trivia, Node node, OwnerSlot slot) {
-        if (recording) {
-            return ownership.putIfAbsent(trivia.comment(), new OwnerKey(node, slot)) == null;
-        }
-        if (isPrinted(trivia) && isRecordedOwner(trivia, node, slot)) {
-            return true;
-        }
-        return FormatterGuardrails.claimComment(trivia, printed);
-    }
-
-    boolean isPrinted(JavaCommentTrivia trivia) {
-        return trivia.isClaimedBy(printed);
     }
 
     /**
@@ -623,17 +569,13 @@ final class CommentTracker {
     }
 
     /**
-     * Computes the comment set the drop guardrail will use in the end-state, once build-time {@link #printed} mutation
-     * is gone: a comment is accounted when the ownership pre-pass recorded a render slot for it ({@link #ownership}) or
-     * it reached output through raw-preserved source ({@link #rawRendered}).
+     * Computes the comment set the drop guardrail uses: a comment is accounted when the ownership pre-pass recorded a
+     * render slot for it ({@link #ownership}) or it reached output through raw-preserved source ({@link #rawRendered}).
      *
-     * <p>This is the ownership-based sibling of the {@code printed}-based set {@link #assertAllCommentsAccounted} feeds
-     * to {@link FormatterGuardrails#assertAllCommentsAccounted}. Today "accounted" means "was claimed into
-     * {@link #printed} during the render"; the pure-content rail {@link #ownedComment} deliberately never touches
-     * {@code printed}, so the end-state moves the accounting question from "was it claimed" to "does it have a recorded
-     * owner". This method makes that alternative set computable and testable now, but nothing consumes it yet —
-     * {@link #assertAllCommentsAccounted} still uses {@code printed} — so strict-claims and drop-detection behavior are
-     * unchanged. It is the dormant accounting path a later slice switches on when the pure rail owns emptiness.
+     * <p>This is the accounting basis {@link #assertAllCommentsAccounted} feeds to
+     * {@link FormatterGuardrails#assertAllCommentsAccounted}: "accounted" means "has a recorded owner", not "was
+     * claimed" — every comment family renders through the claim-neutral {@link #ownedComment} rail, and that rail
+     * never mutates any per-render claim state, so a recorded owner is the only signal accounting has left to use.
      *
      * <p>Returns a fresh identity set (comments are compared by identity here, like every other comment set), so
      * mutating the result does not affect the tracker.
@@ -654,13 +596,10 @@ final class CommentTracker {
      * is evaluated.
      *
      * <p>Accounting is keyed on {@link #ownershipAccountedComments()} (the dry-run's recorded owners plus the
-     * raw-rendered set) rather than the build-time {@link #printed} set. The two sets are equivalent while every render
-     * family still mutates {@link #printed} through {@link #claim} — a comment that gets a recorded owner in the dry-run
-     * is exactly the one its owner claims into {@link #printed} in the real pass — so this switch is output- and
-     * guardrail-neutral today. It is the prerequisite for the claim-neutral cutover: once a render family moves onto the
-     * pure {@link #ownedComment} rail it no longer touches {@link #printed}, and only ownership-based accounting still
-     * sees those comments as rendered. The authoritative data-loss witness stays the output-level
-     * {@code CommentPresenceDiagnosticTest} lexer multiset, which is independent of this accounting basis.
+     * raw-rendered set): every render family renders through the claim-neutral {@link #ownedComment} rail, so a
+     * recorded owner is the only signal that a comment reached output through the structured render path. The
+     * authoritative data-loss witness stays the output-level {@code CommentPresenceDiagnosticTest} lexer multiset,
+     * which is independent of this accounting basis.
      */
     void assertAllCommentsAccounted(CompilationUnit unit) {
         FormatterGuardrails.assertAllCommentsAccounted(unit, ownershipAccountedComments(), rawRendered);
